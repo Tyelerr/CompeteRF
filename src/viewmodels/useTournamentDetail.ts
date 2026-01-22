@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Linking } from "react-native";
 import { supabase } from "../lib/supabase";
@@ -21,6 +21,7 @@ interface Tournament {
   is_recurring: boolean;
   status: string;
   director_id: number;
+  venue_id: number;
   venues: {
     id: number;
     venue: string;
@@ -41,8 +42,10 @@ interface UseTournamentDetailReturn {
 
   // Computed
   isDirector: boolean;
+  isVenueOwner: boolean;
   canEdit: boolean;
   isDeleted: boolean;
+  showActionBar: boolean;
 
   // Formatted values
   formattedDate: string;
@@ -61,12 +64,17 @@ export const useTournamentDetail = (
   tournamentId: string,
 ): UseTournamentDetailReturn => {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { profile } = useAuthContext();
 
   const [loading, setLoading] = useState(true);
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [isVenueOwner, setIsVenueOwner] = useState(false);
+
+  // Check if opened from bar owner dashboard
+  const fromBarOwner = params.fromBarOwner === "true";
 
   useEffect(() => {
     if (tournamentId) {
@@ -99,6 +107,11 @@ export const useTournamentDetail = (
         setError(fetchError.message);
       } else {
         setTournament(data);
+
+        // Check if current user is a venue owner for this tournament's venue
+        if (profile?.id_auto && data?.venue_id) {
+          checkVenueOwnership(data.venue_id);
+        }
       }
     } catch (err: any) {
       setError(err.message);
@@ -107,10 +120,35 @@ export const useTournamentDetail = (
     }
   };
 
+  const checkVenueOwnership = async (venueId: number) => {
+    if (!profile?.id_auto) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("venue_owners")
+        .select("id")
+        .eq("venue_id", venueId)
+        .eq("owner_id", profile.id_auto)
+        .is("archived_at", null)
+        .maybeSingle();
+
+      setIsVenueOwner(!!data && !error);
+    } catch {
+      setIsVenueOwner(false);
+    }
+  };
+
   // Computed values
   const isDirector = profile?.id_auto === tournament?.director_id;
   const isDeleted = tournament?.status === "cancelled";
-  const canEdit = isDirector && !isDeleted;
+
+  // Can edit if:
+  // 1. User is the director who created it AND it's not deleted
+  // 2. User is a venue owner (accessing from bar owner dashboard) AND it's not deleted
+  const canEdit = !isDeleted && (isDirector || (fromBarOwner && isVenueOwner));
+
+  // Show action bar if user is director OR venue owner (from bar owner dashboard)
+  const showActionBar = isDirector || (fromBarOwner && isVenueOwner);
 
   // Formatters
   const formatDate = (dateString: string): string => {
@@ -188,8 +226,7 @@ export const useTournamentDetail = (
           cancelled_by: profile.id_auto,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", tournament.id)
-        .eq("director_id", profile.id_auto);
+        .eq("id", tournament.id);
 
       if (updateError) throw updateError;
 
@@ -214,8 +251,10 @@ export const useTournamentDetail = (
 
     // Computed
     isDirector,
+    isVenueOwner,
     canEdit,
     isDeleted,
+    showActionBar,
 
     // Formatted values
     formattedDate: tournament ? formatDate(tournament.tournament_date) : "",

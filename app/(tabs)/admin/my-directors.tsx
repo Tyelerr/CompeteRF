@@ -8,14 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../src/theme/colors";
-import { SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
+import { COLORS } from "../../../src/theme/colors";
+import { SPACING } from "../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../src/theme/typography";
 import {
   DirectorWithVenue,
   useMyDirectors,
-} from "../../src/viewmodels/useMyDirectors";
-import { EmptyState } from "../../src/views/components/dashboard";
+} from "../../../src/viewmodels/useMyDirectors";
+import { EmptyState } from "../../../src/views/components/dashboard";
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);

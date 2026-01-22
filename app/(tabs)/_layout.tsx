@@ -46,16 +46,7 @@ export default function TabLayout() {
           href: canSubmitTournaments ? "/submit" : null,
         }}
       />
-      <Tabs.Screen
-        name="admin"
-        options={{
-          title: "Admin",
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 20 }}>📊</Text>
-          ),
-          href: canSubmitTournaments ? "/admin" : null,
-        }}
-      />
+
       <Tabs.Screen
         name="shop"
         options={{

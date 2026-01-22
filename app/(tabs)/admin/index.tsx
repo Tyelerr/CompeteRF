@@ -6,19 +6,19 @@ import {
   Text,
   View,
 } from "react-native";
-import { useAuthContext } from "../../src/providers/AuthProvider";
-import { COLORS } from "../../src/theme/colors";
-import { SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
-import { useBarOwnerDashboard } from "../../src/viewmodels/useBarOwnerDashboard";
-import { useTDDashboard } from "../../src/viewmodels/useTDDashboard";
-import { Button } from "../../src/views/components/common/button";
-import { Dropdown } from "../../src/views/components/common/dropdown";
+import { useAuthContext } from "../../../src/providers/AuthProvider";
+import { COLORS } from "../../../src/theme/colors";
+import { SPACING } from "../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../src/theme/typography";
+import { useBarOwnerDashboard } from "../../../src/viewmodels/useBarOwnerDashboard";
+import { useTDDashboard } from "../../../src/viewmodels/useTDDashboard";
+import { Button } from "../../../src/views/components/common/button";
+import { Dropdown } from "../../../src/views/components/common/dropdown";
 import {
   EventTypeChart,
   PerformanceCard,
   StatCard,
-} from "../../src/views/components/dashboard";
+} from "../../../src/views/components/dashboard";
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -115,19 +115,21 @@ const TDDashboard = () => {
           icon="🏆"
           value={vm.stats.myTournaments}
           label="My Tournaments"
-          onPress={() => router.push("/admin/my-tournaments")}
+          onPress={() => router.push("/(tabs)/admin/my-tournaments" as any)}
         />
         <StatCard
           icon="✅"
           value={vm.stats.activeEvents}
           label="Active Events"
-          onPress={() => router.push("/admin/my-tournaments?filter=active")}
+          onPress={() =>
+            router.push("/(tabs)/admin/my-tournaments?filter=active" as any)
+          }
         />
         <StatCard
           icon="🏢"
           value={vm.stats.venues}
           label="My Venues"
-          onPress={() => router.push("/admin/my-venues")}
+          onPress={() => router.push("/(tabs)/admin/my-venues" as any)}
         />
         <StatCard icon="❤️" value={vm.stats.totalFavorites} label="Favorites" />
       </View>
@@ -162,6 +164,9 @@ const TDDashboard = () => {
   );
 };
 
+// ============================================
+// BAR OWNER DASHBOARD
+// ============================================
 // ============================================
 // BAR OWNER DASHBOARD
 // ============================================
@@ -201,24 +206,50 @@ const BarOwnerDashboard = () => {
         <StatCard
           icon="🏢"
           value={vm.stats.totalVenues}
-          label="My Venues"
-          onPress={() => router.push("/admin/bar-owner-venues" as any)}
+          label="Venue Manager"
+          onPress={() => router.push("/(tabs)/admin/bar-owner-venues" as any)}
         />
         <StatCard
           icon="👤"
           value={vm.stats.totalDirectors}
           label="Directors"
-          onPress={() => router.push("/admin/my-directors" as any)}
+          onPress={() => router.push("/(tabs)/admin/my-directors" as any)}
         />
         <StatCard
           icon="🏆"
           value={vm.stats.activeTournaments}
-          label="Active Events"
+          label="Tournament Manager"
+          onPress={() =>
+            router.push("/(tabs)/admin/my-venues-tournaments" as any)
+          }
         />
         <StatCard icon="👁️" value={vm.stats.totalViews} label="Total Views" />
       </View>
 
-      {/* Analytics will go here in future */}
+      {/* Analytics Time Filter */}
+      <View style={styles.section}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Analytics Period</Text>
+          <View style={styles.filterDropdown}>
+            <Dropdown
+              options={vm.timePeriodOptions}
+              value={vm.timePeriod.value}
+              onSelect={vm.handleTimePeriodChange}
+              placeholder="Select Period"
+            />
+          </View>
+        </View>
+      </View>
+
+      {/* Analytics Row */}
+      <View style={styles.analyticsRow}>
+        <EventTypeChart data={vm.eventTypeStats} />
+        <PerformanceCard
+          totalViews={vm.stats.totalViews}
+          totalFavorites={vm.stats.totalFavorites}
+          activeEvents={vm.stats.activeTournaments}
+        />
+      </View>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>

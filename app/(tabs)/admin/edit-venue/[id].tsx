@@ -9,14 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../../src/theme/colors";
-import { SPACING } from "../../../src/theme/spacing";
-import { FONT_SIZES } from "../../../src/theme/typography";
-import { useEditVenue } from "../../../src/viewmodels/useEditVenue";
-import { useVenueTables } from "../../../src/viewmodels/useVenueTables";
-import { DetailsTab } from "../../../src/views/components/venues/DetailsTab";
-import { DirectorsTab } from "../../../src/views/components/venues/DirectorsTab";
-import { TablesTab } from "../../../src/views/components/venues/TablesTab";
+import { COLORS } from "../../../../src/theme/colors";
+import { SPACING } from "../../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../../src/theme/typography";
+import { useEditVenue } from "../../../../src/viewmodels/useEditVenue";
+import { useVenueTables } from "../../../../src/viewmodels/useVenueTables";
+import { DetailsTab } from "../../../../src/views/components/venues/DetailsTab";
+import { DirectorsTab } from "../../../../src/views/components/venues/DirectorsTab";
+import { TablesTab } from "../../../../src/views/components/venues/TablesTab";
 
 type TabType = "details" | "tables" | "directors";
 

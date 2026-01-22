@@ -4,22 +4,35 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../src/theme/colors";
-import { SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
-import { useMyVenues } from "../../src/viewmodels/useMyVenues";
-import { EmptyState, VenueCard } from "../../src/views/components/dashboard";
+import { COLORS } from "../../../src/theme/colors";
+import { SPACING } from "../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../src/theme/typography";
+import { useBarOwnerVenues } from "../../../src/viewmodels/useBarOwnerVenues";
+import { EmptyState } from "../../../src/views/components/dashboard";
+import { BarOwnerVenueCard } from "../../../src/views/components/venues";
 
-export default function MyVenuesScreen() {
+export default function BarOwnerVenuesScreen() {
   const router = useRouter();
-  const vm = useMyVenues();
+  const vm = useBarOwnerVenues();
 
   const handleVenuePress = (venueId: number) => {
-    // TODO: Create venue-detail screen
-    console.log("View venue:", venueId);
+    router.push(`/(tabs)/admin/edit-venue/${venueId}` as any);
+  };
+
+  const handleManageTables = (venueId: number) => {
+    router.push(`/(tabs)/admin/edit-venue/${venueId}?tab=tables` as any);
+  };
+
+  const handleManageDirectors = (venueId: number) => {
+    router.push(`/(tabs)/admin/edit-venue/${venueId}?tab=directors` as any);
+  };
+
+  const handleCreateVenue = () => {
+    router.push("/(tabs)/admin/create-venue" as any);
   };
 
   if (vm.loading) {
@@ -44,12 +57,18 @@ export default function MyVenuesScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Info Banner */}
-      <View style={styles.infoBanner}>
-        <Text style={styles.infoText}>
-          These are venues where you're assigned as a Tournament Director.
-          Contact the bar owner to be assigned to additional venues.
-        </Text>
+      {/* Search & Add Row */}
+      <View style={styles.controlsRow}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search venues..."
+          placeholderTextColor={COLORS.textSecondary}
+          value={vm.searchQuery}
+          onChangeText={vm.setSearchQuery}
+        />
+        <TouchableOpacity style={styles.addButton} onPress={handleCreateVenue}>
+          <Text style={styles.addButtonText}>+ Add Venue</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Venue List */}
@@ -65,12 +84,17 @@ export default function MyVenuesScreen() {
           />
         }
         renderItem={({ item }) => (
-          <VenueCard venue={item} onPress={() => handleVenuePress(item.id)} />
+          <BarOwnerVenueCard
+            venue={item}
+            onPress={() => handleVenuePress(item.id)}
+            onManageTables={() => handleManageTables(item.id)}
+            onManageDirectors={() => handleManageDirectors(item.id)}
+          />
         )}
         ListEmptyComponent={
           <EmptyState
-            message="No venues assigned"
-            submessage="Contact a bar owner to get assigned as a TD at their venue"
+            message="No venues yet"
+            submessage="Add your first venue to start managing tournaments"
           />
         }
       />
@@ -119,19 +143,35 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 50,
   },
-  infoBanner: {
-    backgroundColor: COLORS.surface,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.xl * 3,
+    marginBottom: SPACING.lg,
   },
-  infoText: {
+  searchInput: {
+    flex: 0.7,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  addButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+  },
+  addButtonText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
+    fontWeight: "600",
+    color: COLORS.surface,
   },
   listContent: {
     padding: SPACING.md,

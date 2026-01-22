@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import {
+  EventTypeStats,
+  TIME_PERIODS,
+  TimePeriod,
+} from "../models/dashboard-types";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export interface BarOwnerStats {
@@ -7,6 +12,7 @@ export interface BarOwnerStats {
   totalDirectors: number;
   activeTournaments: number;
   totalViews: number;
+  totalFavorites: number;
 }
 
 export interface BarOwnerVenueSummary {
@@ -23,6 +29,7 @@ export const useBarOwnerDashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>(TIME_PERIODS[5]); // Lifetime default
 
   // Stats
   const [stats, setStats] = useState<BarOwnerStats>({
@@ -30,22 +37,43 @@ export const useBarOwnerDashboard = () => {
     totalDirectors: 0,
     activeTournaments: 0,
     totalViews: 0,
+    totalFavorites: 0,
   });
 
   // Recent venues
   const [recentVenues, setRecentVenues] = useState<BarOwnerVenueSummary[]>([]);
 
+  // Analytics data
+  const [eventTypeStats, setEventTypeStats] = useState<EventTypeStats[]>([]);
+
   useEffect(() => {
     if (profile?.id_auto) {
       loadDashboardData();
     }
-  }, [profile?.id_auto]);
+  }, [profile?.id_auto, timePeriod]);
+
+  const getDateFilter = () => {
+    if (timePeriod.days === null) return null; // Lifetime
+    if (timePeriod.days === 0) {
+      // Today - start of today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return today.toISOString();
+    }
+    const date = new Date();
+    date.setDate(date.getDate() - timePeriod.days);
+    return date.toISOString();
+  };
 
   const loadDashboardData = async () => {
     if (!profile?.id_auto) return;
 
     try {
-      await Promise.all([loadStats(), loadRecentVenues()]);
+      await Promise.all([
+        loadStats(),
+        loadRecentVenues(),
+        loadEventTypeStats(),
+      ]);
     } catch (error) {
       console.error("Error loading bar owner dashboard:", error);
     } finally {
@@ -55,6 +83,8 @@ export const useBarOwnerDashboard = () => {
   };
 
   const loadStats = async () => {
+    const dateFilter = getDateFilter();
+
     // Get venues owned by this user
     const { data: venueOwners } = await supabase
       .from("venue_owners")
@@ -71,6 +101,7 @@ export const useBarOwnerDashboard = () => {
         totalDirectors: 0,
         activeTournaments: 0,
         totalViews: 0,
+        totalFavorites: 0,
       });
       return;
     }
@@ -91,7 +122,7 @@ export const useBarOwnerDashboard = () => {
       .gte("tournament_date", new Date().toISOString().split("T")[0]);
 
     // Count total views for tournaments at owned venues
-    const { count: viewsCount } = await supabase
+    let viewsQuery = supabase
       .from("tournament_analytics")
       .select("id, tournaments!inner(venue_id)", {
         count: "exact",
@@ -100,11 +131,33 @@ export const useBarOwnerDashboard = () => {
       .in("tournaments.venue_id", venueIds)
       .eq("event_type", "view");
 
+    if (dateFilter) {
+      viewsQuery = viewsQuery.gte("created_at", dateFilter);
+    }
+
+    const { count: viewsCount } = await viewsQuery;
+
+    // Count total favorites for tournaments at owned venues
+    let favoritesQuery = supabase
+      .from("favorites")
+      .select("id, tournaments!inner(venue_id)", {
+        count: "exact",
+        head: true,
+      })
+      .in("tournaments.venue_id", venueIds);
+
+    if (dateFilter) {
+      favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
+    }
+
+    const { count: favoritesCount } = await favoritesQuery;
+
     setStats({
       totalVenues,
       totalDirectors: directorCount || 0,
       activeTournaments: tournamentCount || 0,
       totalViews: viewsCount || 0,
+      totalFavorites: favoritesCount || 0,
     });
   };
 
@@ -165,19 +218,85 @@ export const useBarOwnerDashboard = () => {
     setRecentVenues(venuesWithStats);
   };
 
+  const loadEventTypeStats = async () => {
+    const dateFilter = getDateFilter();
+
+    // Get venues owned by this user
+    const { data: venueOwners } = await supabase
+      .from("venue_owners")
+      .select("venue_id")
+      .eq("owner_id", profile!.id_auto)
+      .is("archived_at", null);
+
+    const venueIds = venueOwners?.map((vo) => vo.venue_id) || [];
+
+    if (venueIds.length === 0) {
+      setEventTypeStats([]);
+      return;
+    }
+
+    let query = supabase
+      .from("tournaments")
+      .select("game_type")
+      .in("venue_id", venueIds);
+
+    if (dateFilter) {
+      query = query.gte("created_at", dateFilter);
+    }
+
+    const { data } = await query;
+
+    if (!data) {
+      setEventTypeStats([]);
+      return;
+    }
+
+    // Count by game type
+    const counts: Record<string, number> = {};
+    data.forEach((t: any) => {
+      const type = t.game_type || "Unknown";
+      counts[type] = (counts[type] || 0) + 1;
+    });
+
+    const stats: EventTypeStats[] = Object.entries(counts)
+      .map(([game_type, count]) => ({ game_type, count }))
+      .sort((a, b) => b.count - a.count);
+
+    setEventTypeStats(stats);
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     loadDashboardData();
   };
 
+  const handleTimePeriodChange = (value: string) => {
+    const period = TIME_PERIODS.find((p) => p.value === value);
+    if (period) {
+      setTimePeriod(period);
+    }
+  };
+
+  // Build time period options for dropdown
+  const timePeriodOptions = TIME_PERIODS.map((p) => ({
+    label: p.label,
+    value: p.value,
+  }));
+
   return {
     // State
     loading,
     refreshing,
+    timePeriod,
     stats,
     recentVenues,
+    eventTypeStats,
+
+    // Options
+    timePeriodOptions,
 
     // Actions
     onRefresh,
+    handleTimePeriodChange,
   };
 };

@@ -162,8 +162,8 @@ export default function TournamentDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom Action Bar - Only for Directors */}
-      {vm.isDirector && (
+      {/* Bottom Action Bar - For Directors and Venue Owners */}
+      {vm.showActionBar && (
         <View style={styles.bottomBar}>
           {vm.canEdit ? (
             <>

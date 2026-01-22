@@ -10,11 +10,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../src/theme/colors";
-import { SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
-import { useCreateVenue } from "../../src/viewmodels/useCreateVenue";
-import { Dropdown } from "../../src/views/components/common/dropdown";
+import { COLORS } from "../../../src/theme/colors";
+import { SPACING } from "../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../src/theme/typography";
+import { useCreateVenue } from "../../../src/viewmodels/useCreateVenue";
+import { Dropdown } from "../../../src/views/components/common/dropdown";
 
 export default function CreateVenueScreen() {
   const router = useRouter();
@@ -95,7 +95,7 @@ export default function CreateVenueScreen() {
 
             <TouchableOpacity
               style={styles.manualButton}
-              onPress={() => vm.clearSelection() || vm.selectPlace("")}
+              onPress={() => vm.setVenueSelected(true)}
             >
               <Text style={styles.manualButtonText}>
                 Enter address manually
