@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
@@ -11,6 +12,8 @@ import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBarOwnerDashboard } from "../../../src/viewmodels/useBarOwnerDashboard";
+import { useCompeteAdminDashboard } from "../../../src/viewmodels/useCompeteAdminDashboard";
+import { useSuperAdminDashboard } from "../../../src/viewmodels/useSuperAdminDashboard";
 import { useTDDashboard } from "../../../src/viewmodels/useTDDashboard";
 import { Button } from "../../../src/views/components/common/button";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
@@ -68,8 +71,9 @@ export default function AdminScreen() {
     case "bar_owner":
       return <BarOwnerDashboard />;
     case "compete_admin":
+      return <CompeteAdminDashboard />;
     case "super_admin":
-      return <PlaceholderDashboard title="ADMIN DASHBOARD" emoji="⚙️" />;
+      return <SuperAdminDashboard />;
     default:
       return null;
   }
@@ -167,9 +171,6 @@ const TDDashboard = () => {
 // ============================================
 // BAR OWNER DASHBOARD
 // ============================================
-// ============================================
-// BAR OWNER DASHBOARD
-// ============================================
 const BarOwnerDashboard = () => {
   const router = useRouter();
   const vm = useBarOwnerDashboard();
@@ -257,25 +258,257 @@ const BarOwnerDashboard = () => {
 };
 
 // ============================================
-// PLACEHOLDER
+// COMPETE ADMIN DASHBOARD
 // ============================================
-const PlaceholderDashboard = ({
-  title,
-  emoji,
-}: {
-  title: string;
-  emoji: string;
-}) => (
-  <View style={styles.container}>
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>{title}</Text>
-      <Text style={styles.headerSubtitle}>Coming soon...</Text>
-    </View>
-    <View style={styles.centerContainer}>
-      <Text style={styles.emoji}>{emoji}</Text>
-      <Text style={styles.subtitle}>This dashboard is under construction</Text>
-    </View>
-  </View>
+const CompeteAdminDashboard = () => {
+  const router = useRouter();
+  const vm = useCompeteAdminDashboard();
+
+  if (vm.loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={vm.refreshing}
+          onRefresh={vm.onRefresh}
+          tintColor={COLORS.primary}
+        />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>COMPETE ADMIN</Text>
+        <Text style={styles.headerSubtitle}>Platform management</Text>
+      </View>
+
+      {/* Management Grid - 2x3 */}
+      <View style={styles.statsGrid}>
+        <ManagementCard
+          icon="👥"
+          label="Users"
+          value={vm.stats.totalUsers}
+          onPress={() => router.push("/(tabs)/admin/user-management" as any)}
+        />
+        <ManagementCard
+          icon="🏆"
+          label="Tournaments"
+          value={vm.stats.totalTournaments}
+          subtitle={`${vm.stats.activeTournaments} active`}
+          onPress={() =>
+            router.push("/(tabs)/admin/tournament-management" as any)
+          }
+        />
+        <ManagementCard
+          icon="🏢"
+          label="Venues"
+          value={vm.stats.totalVenues}
+          onPress={() => router.push("/(tabs)/admin/venue-management" as any)}
+        />
+        <ManagementCard
+          icon="📊"
+          label="Analytics"
+          value={vm.stats.totalViews}
+          subtitle="total views"
+          onPress={() => router.push("/(tabs)/admin/analytics" as any)}
+        />
+        <ManagementCard
+          icon="⚠️"
+          label="Pending"
+          value={vm.stats.pendingApprovals}
+          subtitle="need review"
+          onPress={() => router.push("/(tabs)/admin/pending-approvals" as any)}
+        />
+        <ManagementCard
+          icon="📋"
+          label="Activity Log"
+          subtitle="Recent changes"
+          onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
+        />
+      </View>
+
+      {/* Analytics Time Filter */}
+      <View style={styles.section}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Analytics Period</Text>
+          <View style={styles.filterDropdown}>
+            <Dropdown
+              options={vm.timePeriodOptions}
+              value={vm.timePeriod.value}
+              onSelect={vm.handleTimePeriodChange}
+              placeholder="Select Period"
+            />
+          </View>
+        </View>
+      </View>
+
+      {/* Analytics Row */}
+      <View style={styles.analyticsRow}>
+        <EventTypeChart data={vm.eventTypeStats} />
+        <PerformanceCard
+          totalViews={vm.stats.totalViews}
+          totalFavorites={0}
+          activeEvents={vm.stats.activeTournaments}
+        />
+      </View>
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+  );
+};
+
+// ============================================
+// SUPER ADMIN DASHBOARD
+// ============================================
+const SuperAdminDashboard = () => {
+  const router = useRouter();
+  const vm = useSuperAdminDashboard();
+
+  if (vm.loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={vm.refreshing}
+          onRefresh={vm.onRefresh}
+          tintColor={COLORS.primary}
+        />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>SUPER ADMIN</Text>
+        <Text style={styles.headerSubtitle}>Full system access</Text>
+      </View>
+
+      {/* Management Grid - 2x4 */}
+      <View style={styles.statsGrid}>
+        <ManagementCard
+          icon="👥"
+          label="Users"
+          value={vm.stats.totalUsers}
+          onPress={() => router.push("/(tabs)/admin/user-management" as any)}
+        />
+        <ManagementCard
+          icon="🏆"
+          label="Tournaments"
+          value={vm.stats.totalTournaments}
+          subtitle={`${vm.stats.activeTournaments} active`}
+          onPress={() =>
+            router.push("/(tabs)/admin/tournament-management" as any)
+          }
+        />
+        <ManagementCard
+          icon="🏢"
+          label="Venues"
+          value={vm.stats.totalVenues}
+          onPress={() => router.push("/(tabs)/admin/venue-management" as any)}
+        />
+        <ManagementCard
+          icon="📊"
+          label="Analytics"
+          value={vm.stats.totalViews}
+          subtitle="total views"
+          onPress={() => router.push("/(tabs)/admin/analytics" as any)}
+        />
+        <ManagementCard
+          icon="⚠️"
+          label="Pending"
+          value={vm.stats.pendingApprovals}
+          subtitle="need review"
+          onPress={() => router.push("/(tabs)/admin/pending-approvals" as any)}
+        />
+        <ManagementCard
+          icon="📋"
+          label="Activity Log"
+          subtitle="Recent changes"
+          onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
+        />
+        <ManagementCard
+          icon="🎁"
+          label="Giveaways"
+          value={vm.stats.totalGiveaways}
+          onPress={() => router.push("/(tabs)/admin/giveaways" as any)}
+        />
+        <ManagementCard
+          icon="⚙️"
+          label="System Settings"
+          subtitle="App config"
+          onPress={() => router.push("/(tabs)/admin/system-settings" as any)}
+        />
+      </View>
+
+      {/* Analytics Time Filter */}
+      <View style={styles.section}>
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Analytics Period</Text>
+          <View style={styles.filterDropdown}>
+            <Dropdown
+              options={vm.timePeriodOptions}
+              value={vm.timePeriod.value}
+              onSelect={vm.handleTimePeriodChange}
+              placeholder="Select Period"
+            />
+          </View>
+        </View>
+      </View>
+
+      {/* Analytics Row */}
+      <View style={styles.analyticsRow}>
+        <EventTypeChart data={vm.eventTypeStats} />
+        <PerformanceCard
+          totalViews={vm.stats.totalViews}
+          totalFavorites={0}
+          activeEvents={vm.stats.activeTournaments}
+        />
+      </View>
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+  );
+};
+
+// ============================================
+// MANAGEMENT CARD COMPONENT
+// ============================================
+interface ManagementCardProps {
+  icon: string;
+  label: string;
+  value?: number;
+  subtitle?: string;
+  onPress: () => void;
+}
+
+const ManagementCard = ({
+  icon,
+  label,
+  value,
+  subtitle,
+  onPress,
+}: ManagementCardProps) => (
+  <TouchableOpacity style={styles.managementCard} onPress={onPress}>
+    <Text style={styles.managementIcon}>{icon}</Text>
+    {value !== undefined && (
+      <Text style={styles.managementValue}>{value.toLocaleString()}</Text>
+    )}
+    <Text style={styles.managementLabel}>{label}</Text>
+    {subtitle && <Text style={styles.managementSubtitle}>{subtitle}</Text>}
+  </TouchableOpacity>
 );
 
 // ============================================
@@ -435,5 +668,37 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: SPACING.xl * 2,
+  },
+  // Management Card Styles (compact)
+  managementCard: {
+    width: "48%",
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    minHeight: 80,
+  },
+  managementIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  managementValue: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  managementLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  managementSubtitle: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginTop: 1,
   },
 });

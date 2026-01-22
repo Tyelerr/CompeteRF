@@ -14,11 +14,11 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { usePagination } from "../../../src/viewmodels/hooks/use.pagination";
 import {
-  BarOwnerTournamentWithStats,
+  AdminTournamentWithStats,
   SortOption,
   TournamentStatusFilter,
-  useBarOwnerTournaments,
-} from "../../../src/viewmodels/useBarOwnerTournaments";
+  useAdminTournaments,
+} from "../../../src/viewmodels/useAdminTournaments";
 import { Pagination } from "../../../src/views/components/common/pagination";
 import { EmptyState } from "../../../src/views/components/dashboard/empty-state";
 
@@ -62,7 +62,7 @@ const TournamentCard = ({
   tournament,
   onPress,
 }: {
-  tournament: BarOwnerTournamentWithStats;
+  tournament: AdminTournamentWithStats;
   onPress: () => void;
 }) => {
   const statusColor = getStatusColor(tournament.status);
@@ -127,9 +127,9 @@ const TournamentCard = ({
   );
 };
 
-export default function MyVenuesTournamentsScreen() {
+export default function TournamentManagementScreen() {
   const router = useRouter();
-  const vm = useBarOwnerTournaments();
+  const vm = useAdminTournaments();
 
   // Pagination on filtered results
   const pagination = usePagination(vm.filteredTournaments, {
@@ -153,7 +153,6 @@ export default function MyVenuesTournamentsScreen() {
   };
 
   const handleTournamentPress = (tournamentId: number) => {
-    // Navigate to admin tournament detail
     router.push({
       pathname: "/(tabs)/admin/tournament-detail",
       params: { id: tournamentId.toString() },
@@ -178,19 +177,27 @@ export default function MyVenuesTournamentsScreen() {
         >
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tournament Manager</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>TOURNAMENT MANAGEMENT</Text>
+          <Text style={styles.headerSubtitle}>
+            {vm.totalCount} total tournaments
+          </Text>
+        </View>
         <View style={styles.placeholder} />
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search name, game type, venue, or director..."
-          placeholderTextColor={COLORS.textSecondary}
-          value={vm.searchQuery}
-          onChangeText={handleSearch}
-        />
+        <View style={styles.searchInputWrapper}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search name, game type, venue, or director..."
+            placeholderTextColor={COLORS.textSecondary}
+            value={vm.searchQuery}
+            onChangeText={handleSearch}
+          />
+        </View>
       </View>
 
       {/* Status Tabs with Counts */}
@@ -323,11 +330,7 @@ export default function MyVenuesTournamentsScreen() {
                     ? "No cancelled tournaments"
                     : "No tournaments found"
             }
-            submessage={
-              vm.tournaments.length === 0
-                ? "No tournaments have been created at your venues yet"
-                : "Try adjusting your search or filters"
-            }
+            submessage="Try adjusting your search or filters"
           />
         }
       />
@@ -355,7 +358,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
+    paddingTop: SPACING.xl + SPACING.sm,
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -364,35 +367,57 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
-    fontWeight: "600",
+    fontWeight: "500",
+  },
+  headerCenter: {
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
+    fontWeight: "600",
     color: COLORS.text,
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    opacity: 0.7,
+    marginTop: 2,
   },
   placeholder: {
     width: 50,
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
     paddingTop: SPACING.lg,
+    paddingBottom: SPACING.sm,
   },
-  searchInput: {
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.surface,
     borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
+    paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
+    height: 40,
+  },
+  searchIcon: {
+    fontSize: 14,
+    marginRight: SPACING.sm,
+    opacity: 0.6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    height: 40,
   },
   tabsScroll: {
-    maxHeight: 48,
+    flexGrow: 0,
+    marginTop: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -402,7 +427,7 @@ const styles = StyleSheet.create({
   },
   tab: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },

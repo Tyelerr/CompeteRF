@@ -71,7 +71,7 @@ export default function BilliardsScreen() {
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.7}
-        onPress={() => router.push(`/tournament-detail?id=${item.id}`)}
+        onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}`)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.badgesRow}>

@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../src/theme/colors";
-import { RADIUS, SPACING } from "../src/theme/spacing";
-import { FONT_SIZES } from "../src/theme/typography";
-import { useTournamentDetail } from "../src/viewmodels/useTournamentDetail";
-import { Button } from "../src/views/components/common/button";
-import { Loading } from "../src/views/components/common/loading";
+import { COLORS } from "../../src/theme/colors";
+import { RADIUS, SPACING } from "../../src/theme/spacing";
+import { FONT_SIZES } from "../../src/theme/typography";
+import { useTournamentDetail } from "../../src/viewmodels/useTournamentDetail";
+import { Button } from "../../src/views/components/common/button";
+import { Loading } from "../../src/views/components/common/loading";
 
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -157,51 +157,10 @@ export default function TournamentDetailScreen() {
             </View>
           </View>
 
-          {/* Spacer for bottom buttons */}
+          {/* Spacer for tab bar */}
           <View style={styles.bottomSpacer} />
         </View>
       </ScrollView>
-
-      {/* Bottom Action Bar - For Directors and Venue Owners */}
-      {vm.showActionBar && (
-        <View style={styles.bottomBar}>
-          {vm.canEdit ? (
-            <>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={vm.handleEdit}
-              >
-                <Text style={styles.actionIcon}>✏️</Text>
-                <Text style={styles.actionText}>Edit</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={vm.handleDelete}
-                disabled={vm.deleting}
-              >
-                <Text style={styles.actionIcon}>🗑️</Text>
-                <Text style={[styles.actionText, styles.deleteText]}>
-                  {vm.deleting ? "Deleting..." : "Delete"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} onPress={vm.goBack}>
-                <Text style={styles.actionIcon}>✕</Text>
-                <Text style={styles.actionText}>Close</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.fullWidthButton]}
-              onPress={vm.goBack}
-            >
-              <Text style={styles.actionIcon}>✕</Text>
-              <Text style={styles.actionText}>Close</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -369,36 +328,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   bottomSpacer: {
-    height: 100,
-  },
-  bottomBar: {
-    flexDirection: "row",
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.xl,
-  },
-  actionButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: SPACING.sm,
-  },
-  fullWidthButton: {
-    flex: 1,
-  },
-  actionIcon: {
-    fontSize: 24,
-    marginBottom: SPACING.xs,
-  },
-  actionText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  deleteText: {
-    color: COLORS.error,
+    height: SPACING.xl * 2,
   },
 });
