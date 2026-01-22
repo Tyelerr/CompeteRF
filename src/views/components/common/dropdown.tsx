@@ -23,6 +23,7 @@ interface DropdownProps {
   value?: string;
   onSelect: (value: string) => void;
   error?: string;
+  disabled?: boolean;
 }
 
 export const Dropdown = ({
@@ -32,23 +33,39 @@ export const Dropdown = ({
   value,
   onSelect,
   error,
+  disabled = false,
 }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((o) => o.value === value);
+
+  const handlePress = () => {
+    if (!disabled) {
+      setIsOpen(true);
+    }
+  };
 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TouchableOpacity
-        style={[styles.selector, error && styles.selectorError]}
-        onPress={() => setIsOpen(true)}
+        style={[
+          styles.selector,
+          error && styles.selectorError,
+          disabled && styles.selectorDisabled,
+        ]}
+        onPress={handlePress}
+        activeOpacity={disabled ? 1 : 0.7}
       >
         <Text
-          style={[styles.selectorText, !selectedOption && styles.placeholder]}
+          style={[
+            styles.selectorText,
+            !selectedOption && styles.placeholder,
+            disabled && styles.textDisabled,
+          ]}
         >
           {selectedOption?.label || placeholder}
         </Text>
-        <Text style={styles.arrow}>▼</Text>
+        <Text style={[styles.arrow, disabled && styles.textDisabled]}>▼</Text>
       </TouchableOpacity>
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -115,12 +132,19 @@ const styles = StyleSheet.create({
   selectorError: {
     borderColor: COLORS.error,
   },
+  selectorDisabled: {
+    backgroundColor: COLORS.background,
+    opacity: 0.6,
+  },
   selectorText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
   placeholder: {
     color: COLORS.textMuted,
+  },
+  textDisabled: {
+    color: COLORS.textSecondary,
   },
   arrow: {
     fontSize: FONT_SIZES.xs,

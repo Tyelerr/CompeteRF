@@ -10,6 +10,7 @@ import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useBarOwnerDashboard } from "../../src/viewmodels/useBarOwnerDashboard";
 import { useTDDashboard } from "../../src/viewmodels/useTDDashboard";
 import { Button } from "../../src/views/components/common/button";
 import { Dropdown } from "../../src/views/components/common/dropdown";
@@ -65,7 +66,7 @@ export default function AdminScreen() {
     case "tournament_director":
       return <TDDashboard />;
     case "bar_owner":
-      return <PlaceholderDashboard title="BAR OWNER DASHBOARD" emoji="🏢" />;
+      return <BarOwnerDashboard />;
     case "compete_admin":
     case "super_admin":
       return <PlaceholderDashboard title="ADMIN DASHBOARD" emoji="⚙️" />;
@@ -162,6 +163,69 @@ const TDDashboard = () => {
 };
 
 // ============================================
+// BAR OWNER DASHBOARD
+// ============================================
+const BarOwnerDashboard = () => {
+  const router = useRouter();
+  const vm = useBarOwnerDashboard();
+
+  if (vm.loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={vm.refreshing}
+          onRefresh={vm.onRefresh}
+          tintColor={COLORS.primary}
+        />
+      }
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>BAR OWNER DASHBOARD</Text>
+        <Text style={styles.headerSubtitle}>
+          Manage your venues and directors
+        </Text>
+      </View>
+
+      {/* Stats Grid - Clickable Cards */}
+      <View style={styles.statsGrid}>
+        <StatCard
+          icon="🏢"
+          value={vm.stats.totalVenues}
+          label="My Venues"
+          onPress={() => router.push("/admin/bar-owner-venues" as any)}
+        />
+        <StatCard
+          icon="👤"
+          value={vm.stats.totalDirectors}
+          label="Directors"
+          onPress={() => router.push("/admin/my-directors" as any)}
+        />
+        <StatCard
+          icon="🏆"
+          value={vm.stats.activeTournaments}
+          label="Active Events"
+        />
+        <StatCard icon="👁️" value={vm.stats.totalViews} label="Total Views" />
+      </View>
+
+      {/* Analytics will go here in future */}
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+  );
+};
+
+// ============================================
 // PLACEHOLDER
 // ============================================
 const PlaceholderDashboard = ({
@@ -242,6 +306,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.sm,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: SPACING.sm,
+  },
+  seeAllText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -267,6 +348,59 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
     gap: SPACING.sm,
+  },
+  quickActions: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  quickActionIcon: {
+    fontSize: 24,
+    marginBottom: SPACING.xs,
+  },
+  quickActionText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  venueItem: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  venueInfo: {
+    flex: 1,
+  },
+  venueName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  venueLocation: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  venueStats: {
+    alignItems: "flex-end",
+  },
+  venueStatText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
   },
   bottomSpacer: {
     height: SPACING.xl * 2,
