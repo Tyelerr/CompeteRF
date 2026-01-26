@@ -14,6 +14,7 @@ import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
+import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 
 interface Favorite {
   id: number;
@@ -128,26 +129,22 @@ export default function ProfileScreen() {
     router.replace("/(tabs)");
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase())
-      .slice(0, 2)
-      .join("");
+  const handleShare = async (tournament: any) => {
+    // TODO: Implement share functionality
+    console.log("Sharing tournament:", tournament.name);
   };
 
-  const formatDate = (dateString: string) => {
+  const formatMemberSince = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
+      year: "numeric",
+      month: "long",
+      day: "2-digit",
     });
   };
 
-  const removeFavorite = async (favoriteId: number) => {
-    await supabase.from("favorites").delete().eq("id", favoriteId);
-
-    setFavorites(favorites.filter((f) => f.id !== favoriteId));
+  const generatePlayerID = (idAuto: number) => {
+    return `PL-${String(idAuto).padStart(6, "0")}`;
   };
 
   if (loading) {
@@ -160,10 +157,12 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>PROFILE</Text>
+          <Text style={styles.headerSubtitle}>
+            View and manage your tournament history
+          </Text>
         </View>
 
         <View style={styles.notLoggedIn}>
-          <Text style={styles.icon}>👤</Text>
           <Text style={styles.message}>Log in to see your profile</Text>
           <View style={styles.spacer} />
           <Button
@@ -189,10 +188,12 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>PROFILE</Text>
+          <Text style={styles.headerSubtitle}>
+            View and manage your tournament history
+          </Text>
         </View>
 
         <View style={styles.notLoggedIn}>
-          <Text style={styles.icon}>👤</Text>
           <Text style={styles.message}>Complete your profile to continue</Text>
           <View style={styles.spacer} />
           <Button
@@ -219,29 +220,118 @@ export default function ProfileScreen() {
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>PROFILE</Text>
-      </View>
-
-      <View style={styles.profileSection}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(profile.name)}</Text>
-        </View>
-        <Text style={styles.name}>{profile.name}</Text>
-        <Text style={styles.username}>@{profile.user_name}</Text>
-
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>
-            🎱 {profile.role?.replace("_", " ") || "Player"}
-          </Text>
-        </View>
-
-        <Text style={styles.location}>📍 {profile.home_state}</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          ❤️ MY FAVORITES ({favorites.length})
+        <Text style={styles.headerSubtitle}>
+          View and manage your tournament history
         </Text>
+      </View>
 
+      <View style={styles.profileCard}>
+        <View style={styles.profileHeader}>
+          {/* Billiard Ball Avatar */}
+          <View style={styles.avatar}>
+            <View style={styles.ballRow}>
+              <View style={[styles.ball, styles.ball8]} />
+              <View style={[styles.ball, styles.ball9]} />
+              <View style={[styles.ball, styles.ball1]} />
+            </View>
+            <View style={styles.ballRow}>
+              <View style={[styles.ball, styles.ball15]} />
+              <View style={[styles.ball, styles.ball2]} />
+              <View style={[styles.ball, styles.ball10]} />
+            </View>
+            <View style={styles.ballRow}>
+              <View style={[styles.ball, styles.ball7]} />
+              <View style={[styles.ball, styles.ball3]} />
+              <View style={[styles.ball, styles.ball12]} />
+            </View>
+          </View>
+
+          {/* Profile Info */}
+          <View style={styles.profileInfo}>
+            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.playerID}>
+              {generatePlayerID(profile.id_auto)}
+            </Text>
+            <Text style={styles.memberSince}>
+              Member since {formatMemberSince(profile.created_at)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.editButton]}
+            onPress={() => router.push("/auth/complete-profile")}
+          >
+            <Text style={styles.editButtonText}>⚙️ Edit Profile</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.notificationButton]}
+            onPress={() => {
+              /* TODO: Navigate to notifications */
+            }}
+          >
+            <Text style={styles.notificationButtonText}>🔔 Notifications</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.signOutButton]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.signOutButtonText}>🚪 Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* User Details */}
+        <View style={styles.userDetails}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Home State</Text>
+            <Text style={styles.detailValue}>
+              {profile.home_state || "Not set"}
+            </Text>
+          </View>
+
+          {profile.favorite_player && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Favorite Player</Text>
+              <Text style={styles.detailValue}>{profile.favorite_player}</Text>
+            </View>
+          )}
+
+          {profile.preferred_game && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Favorite Game</Text>
+              <Text style={styles.detailValue}>{profile.preferred_game}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Bottom Navigation Buttons */}
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity
+          style={[styles.navButton, styles.favoritesButton]}
+          onPress={() => {
+            /* Current favorites functionality */
+          }}
+        >
+          <Text style={styles.navButtonText}>❤️ Favorite Tournaments</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.navButton, styles.alertsButton]}
+          onPress={() => {
+            /* TODO: Search alerts feature */
+          }}
+        >
+          <Text style={styles.navButtonText}>🔍 Search Alerts</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Favorites Section - Clean Card Design */}
+      <View style={styles.favoritesSection}>
         {favorites.length === 0 ? (
           <View style={styles.emptyFavorites}>
             <Text style={styles.emptyText}>No favorites yet</Text>
@@ -251,69 +341,34 @@ export default function ProfileScreen() {
           </View>
         ) : (
           favorites.map((fav) => (
-            <TouchableOpacity
+            <FavoriteTournamentCard
               key={fav.id}
-              style={styles.favoriteCard}
+              tournament={{
+                id: fav.tournament_id,
+                name: fav.tournaments?.name || "Unknown Tournament",
+                game_type: fav.tournaments?.game_type || "Unknown",
+                tournament_date: fav.tournaments?.tournament_date || "",
+                venues: {
+                  venue: fav.tournaments?.venues?.venue || "Unknown Venue",
+                  city: fav.tournaments?.venues?.city || "Unknown City",
+                  state: fav.tournaments?.venues?.state || "Unknown State",
+                },
+              }}
               onPress={() =>
                 router.push(`/tournament-detail?id=${fav.tournament_id}`)
               }
-            >
-              <View style={styles.favoriteInfo}>
-                <View style={styles.gameTypeBadge}>
-                  <Text style={styles.gameTypeText}>
-                    {fav.tournaments?.game_type}
-                  </Text>
-                </View>
-                <Text style={styles.favoriteName}>{fav.tournaments?.name}</Text>
-                <Text style={styles.favoriteVenue}>
-                  📍 {fav.tournaments?.venues?.venue} -{" "}
-                  {fav.tournaments?.venues?.city},{" "}
-                  {fav.tournaments?.venues?.state}
-                </Text>
-                <Text style={styles.favoriteDate}>
-                  📅 {formatDate(fav.tournaments?.tournament_date)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => removeFavorite(fav.id)}
-              >
-                <Text style={styles.removeIcon}>✕</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+              onToggleFavorite={() => {
+                // Remove from favorites
+                const removeFavorite = async () => {
+                  await supabase.from("favorites").delete().eq("id", fav.id);
+                  setFavorites(favorites.filter((f) => f.id !== fav.id));
+                };
+                removeFavorite();
+              }}
+              onShare={() => handleShare(fav.tournaments)}
+            />
           ))
         )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>⚙️ SETTINGS</Text>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>🔔</Text>
-          <Text style={styles.menuText}>Notifications</Text>
-          <Text style={styles.menuArrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>🔒</Text>
-          <Text style={styles.menuText}>Privacy</Text>
-          <Text style={styles.menuArrow}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem}>
-          <Text style={styles.menuIcon}>❓</Text>
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Text style={styles.menuArrow}>→</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.logoutSection}>
-        <Button
-          title="Log Out"
-          onPress={handleLogout}
-          variant="outline"
-          fullWidth
-        />
       </View>
     </ScrollView>
   );
@@ -327,11 +382,20 @@ const styles = StyleSheet.create({
   header: {
     padding: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
+    paddingBottom: SPACING.sm,
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
     color: COLORS.text,
+    textAlign: "center",
+  },
+  headerSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: SPACING.xs,
   },
   notLoggedIn: {
     flex: 1,
@@ -339,77 +403,162 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: SPACING.lg,
   },
-  icon: {
-    fontSize: 60,
-    marginBottom: SPACING.md,
-  },
   message: {
     fontSize: FONT_SIZES.lg,
     color: COLORS.textMuted,
     marginBottom: SPACING.lg,
+    textAlign: "center",
   },
-  profileSection: {
-    alignItems: "center",
+  profileCard: {
+    margin: SPACING.md,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     padding: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+  },
+  profileHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: SPACING.lg,
   },
   avatar: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: SPACING.md,
+    marginRight: SPACING.md,
   },
-  avatarText: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: "700",
-    color: COLORS.white,
+  ballRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  ball: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginHorizontal: 1,
+  },
+  // Billiard ball colors
+  ball1: { backgroundColor: "#FFD700" }, // Yellow
+  ball2: { backgroundColor: "#0066FF" }, // Blue
+  ball3: { backgroundColor: "#FF0000" }, // Red
+  ball7: { backgroundColor: "#8B0000" }, // Maroon
+  ball8: { backgroundColor: "#000000" }, // Black
+  ball9: { backgroundColor: "#FFD700", borderWidth: 2, borderColor: "#FFF" }, // Yellow stripe
+  ball10: { backgroundColor: "#0066FF", borderWidth: 2, borderColor: "#FFF" }, // Blue stripe
+  ball12: { backgroundColor: "#800080" }, // Purple
+  ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" }, // Maroon stripe
+  profileInfo: {
+    flex: 1,
   },
   name: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "600",
     color: COLORS.text,
+    marginBottom: SPACING.xs,
   },
-  username: {
+  playerID: {
     fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    marginBottom: SPACING.md,
-  },
-  badge: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.full,
-    marginBottom: SPACING.md,
-  },
-  badgeText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    textTransform: "capitalize",
-  },
-  location: {
-    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
   },
-  section: {
-    padding: SPACING.md,
+  memberSince: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
   },
-  sectionTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
+  actionButtons: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
-  emptyFavorites: {
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+  actionButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
     alignItems: "center",
+  },
+  editButton: {
+    backgroundColor: COLORS.secondary,
+  },
+  editButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  notificationButton: {
+    backgroundColor: COLORS.primary,
+  },
+  notificationButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  signOutButton: {
+    backgroundColor: COLORS.error,
+  },
+  signOutButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  userDetails: {
+    gap: SPACING.md,
+  },
+  detailItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingBottom: SPACING.sm,
+  },
+  detailLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  detailValue: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  bottomNavigation: {
+    flexDirection: "row",
+    margin: SPACING.md,
+    gap: SPACING.sm,
+  },
+  navButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+  },
+  favoritesButton: {
+    backgroundColor: COLORS.primary,
+  },
+  alertsButton: {
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  navButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.white,
+  },
+  favoritesSummary: {
+    margin: SPACING.md,
+    alignItems: "center",
+  },
+  favoritesCount: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+  },
+  // New clean favorites section
+  favoritesSection: {
+    padding: SPACING.md,
+  },
+  emptyFavorites: {
+    alignItems: "center",
+    padding: SPACING.lg,
   },
   emptyText: {
     fontSize: FONT_SIZES.md,
@@ -421,80 +570,24 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: "center",
   },
-  favoriteCard: {
+  favoritePreview: {
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    borderRadius: RADIUS.md,
+    padding: SPACING.sm,
+    marginBottom: SPACING.xs,
     borderWidth: 1,
     borderColor: COLORS.border,
-    flexDirection: "row",
-    alignItems: "center",
+    width: "100%",
   },
-  favoriteInfo: {
-    flex: 1,
-  },
-  gameTypeBadge: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 2,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: RADIUS.sm,
-    alignSelf: "flex-start",
-    marginBottom: SPACING.xs,
-  },
-  gameTypeText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-  },
-  favoriteName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
+  favoritePreviewName: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
+    fontWeight: "500",
     marginBottom: 2,
   },
-  favoriteVenue: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  favoriteDate: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  removeButton: {
-    padding: SPACING.sm,
-  },
-  removeIcon: {
-    fontSize: FONT_SIZES.lg,
+  favoritePreviewDetails: {
+    fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  menuIcon: {
-    fontSize: FONT_SIZES.lg,
-    marginRight: SPACING.md,
-  },
-  menuText: {
-    flex: 1,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
-  menuArrow: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-  },
-  logoutSection: {
-    padding: SPACING.lg,
-    paddingTop: SPACING.md,
   },
   spacer: {
     height: SPACING.lg,

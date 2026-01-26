@@ -443,7 +443,9 @@ const SuperAdminDashboard = () => {
           icon="🎁"
           label="Giveaways"
           value={vm.stats.totalGiveaways}
-          onPress={() => router.push("/(tabs)/admin/giveaways" as any)}
+          onPress={() =>
+            router.push("/(tabs)/admin/giveaway-management" as any)
+          }
         />
         <ManagementCard
           icon="⚙️"

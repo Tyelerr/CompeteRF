@@ -1,148 +1,282 @@
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { supabase } from "../../src/lib/supabase";
+import {
+  Linking,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
-import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
 
+interface RSSItem {
+  title: string;
+  description: string;
+  link: string;
+  pubDate: string;
+  author?: string;
+}
+
+type TabType = "latest" | "featured" | "bars";
+
 export default function HomeScreen() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [newsItems, setNewsItems] = useState<RSSItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>("latest");
+  const [newsLoading, setNewsLoading] = useState(true);
 
   useEffect(() => {
-    checkUser();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    fetchRSSFeed();
   }, []);
 
-  const checkUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    setUser(session?.user || null);
-    if (session?.user) {
-      await loadProfile(session.user.id);
+  const fetchRSSFeed = async () => {
+    try {
+      setNewsLoading(true);
+      const response = await fetch("https://www.azbilliards.com/feed/");
+      const text = await response.text();
+
+      // Parse RSS XML
+      const items = parseRSSFeed(text);
+      setNewsItems(items);
+    } catch (error) {
+      console.error("Failed to fetch RSS feed:", error);
+    } finally {
+      setNewsLoading(false);
     }
-    setLoading(false);
   };
 
-  const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    setProfile(data);
+  const parseRSSFeed = (xmlText: string): RSSItem[] => {
+    const items: RSSItem[] = [];
+
+    // Simple XML parsing - in production you might want to use a proper XML parser
+    const itemMatches = xmlText.match(/<item[^>]*>([\s\S]*?)<\/item>/g);
+
+    if (itemMatches) {
+      itemMatches.slice(0, 10).forEach((itemXml) => {
+        const title = extractXMLContent(itemXml, "title");
+        const description = extractXMLContent(itemXml, "description");
+        const link = extractXMLContent(itemXml, "link");
+        const pubDate = extractXMLContent(itemXml, "pubDate");
+        const author =
+          extractXMLContent(itemXml, "dc:creator") || "azbilliards";
+
+        if (title && description) {
+          items.push({
+            title: cleanText(title),
+            description: cleanText(description).substring(0, 200) + "...",
+            link,
+            pubDate: formatDate(pubDate),
+            author,
+          });
+        }
+      });
+    }
+
+    return items;
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-  };
-
-  if (loading) {
-    return <Loading fullScreen message="Loading..." />;
-  }
-
-  // Logged in user view
-  if (user && profile) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>HOME</Text>
-        </View>
-
-        <View style={styles.content}>
-          <Text style={styles.welcome}>Welcome back, {profile.name}! 👋</Text>
-          <Text style={styles.username}>@{profile.user_name}</Text>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoText}>📍 {profile.home_state}</Text>
-            <Text style={styles.infoText}>📧 {profile.email}</Text>
-          </View>
-        </View>
-
-        <View style={styles.buttons}>
-          <Button
-            title="Log Out"
-            onPress={handleLogout}
-            variant="outline"
-            fullWidth
-          />
-        </View>
-      </View>
+  const extractXMLContent = (xml: string, tag: string): string => {
+    const match = xml.match(
+      new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\/${tag}>`, "i"),
     );
-  }
+    if (!match) return "";
 
-  // Logged in but no profile yet
-  if (user && !profile) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.logo}>🎱</Text>
-          <Text style={styles.title}>COMPETE</Text>
-          <Text style={styles.subtitle}>Complete your profile to continue</Text>
-        </View>
+    let content = match[1].trim();
 
-        <View style={styles.buttons}>
-          <Button
-            title="Complete Profile"
-            onPress={() => router.push("/auth/complete-profile")}
-            fullWidth
-          />
-          <View style={styles.spacer} />
-          <Button
-            title="Log Out"
-            onPress={handleLogout}
-            variant="outline"
-            fullWidth
-          />
-        </View>
-      </View>
-    );
-  }
+    // Remove CDATA wrapper if present
+    if (content.startsWith("<![CDATA[") && content.endsWith("]]>")) {
+      content = content.slice(9, -3).trim();
+    }
 
-  // Not logged in view
+    return content;
+  };
+
+  const cleanText = (text: string): string => {
+    return text
+      .replace(/<[^>]*>/g, "") // Remove HTML tags
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#038;/g, "&") // Decode &#038; to &
+      .replace(/&#8220;/g, '"') // Decode &#8220; to opening quote
+      .replace(/&#8221;/g, '"') // Decode &#8221; to closing quote
+      .replace(/&#8217;/g, "'") // Decode &#8217; to apostrophe
+      .replace(/&#8216;/g, "'") // Decode &#8216; to opening single quote
+      .replace(/&#8230;/g, "...") // Decode &#8230; to ellipsis
+      .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec)) // Generic numeric entities
+      .trim();
+  };
+
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+
+      // Format like "Wed, 21 Jan" or "Tue, 15 Jan"
+      const options: Intl.DateTimeFormatOptions = {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      };
+
+      return date.toLocaleDateString("en-US", options);
+    } catch {
+      return "Recent";
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchRSSFeed();
+    setRefreshing(false);
+  };
+
+  const openArticle = (url: string) => {
+    if (url) {
+      Linking.openURL(url);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.logo}>🎱</Text>
-        <Text style={styles.title}>COMPETE</Text>
-        <Text style={styles.subtitle}>Find Billiards Tournaments Near You</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>BILLIARDS HUB</Text>
+        <Text style={styles.subtitle}>
+          Your source for the latest pool news and updates
+        </Text>
       </View>
 
-      <View style={styles.buttons}>
-        <Button
-          title="Create Account"
-          onPress={() => router.push("/auth/register")}
-          fullWidth
-        />
-        <View style={styles.spacer} />
-        <Button
-          title="Log In"
-          onPress={() => router.push("/auth/login")}
-          variant="outline"
-          fullWidth
-        />
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "latest" && styles.activeTab]}
+          onPress={() => setActiveTab("latest")}
+        >
+          <Text
+            style={[
+              styles.tabIcon,
+              activeTab === "latest" && styles.activeTabIcon,
+            ]}
+          >
+            📰
+          </Text>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "latest" && styles.activeTabText,
+            ]}
+          >
+            Latest News
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "featured" && styles.activeTab]}
+          onPress={() => setActiveTab("featured")}
+        >
+          <Text
+            style={[
+              styles.tabIcon,
+              activeTab === "featured" && styles.activeTabIcon,
+            ]}
+          >
+            🏆
+          </Text>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "featured" && styles.activeTabText,
+            ]}
+          >
+            Featured Player
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "bars" && styles.activeTab]}
+          onPress={() => setActiveTab("bars")}
+        >
+          <Text
+            style={[
+              styles.tabIcon,
+              activeTab === "bars" && styles.activeTabIcon,
+            ]}
+          >
+            📊
+          </Text>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "bars" && styles.activeTabText,
+            ]}
+          >
+            Featured Bar
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
+        {activeTab === "latest" && (
+          <>
+            {newsLoading ? (
+              <View style={styles.loadingContainer}>
+                <Loading message="Loading news..." />
+              </View>
+            ) : (
+              newsItems.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.newsCard}
+                  onPress={() => openArticle(item.link)}
+                >
+                  <View style={styles.newsHeader}>
+                    <Text style={styles.starIcon}>⭐</Text>
+                    <Text style={styles.newsTitle}>{item.title}</Text>
+                  </View>
+
+                  <Text style={styles.newsDescription}>{item.description}</Text>
+
+                  <View style={styles.newsFooter}>
+                    <View style={styles.newsInfo}>
+                      <Text style={styles.newsAuthor}>{item.author}</Text>
+                      <Text style={styles.newsDate}>📅 {item.pubDate}</Text>
+                    </View>
+                    <Text style={styles.externalIcon}>🔗</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </>
+        )}
+
+        {activeTab === "featured" && (
+          <View style={styles.comingSoon}>
+            <Text style={styles.comingSoonEmoji}>🏆</Text>
+            <Text style={styles.comingSoonTitle}>Featured Player</Text>
+            <Text style={styles.comingSoonText}>Coming Soon!</Text>
+          </View>
+        )}
+
+        {activeTab === "bars" && (
+          <View style={styles.comingSoon}>
+            <Text style={styles.comingSoonEmoji}>🍻</Text>
+            <Text style={styles.comingSoonTitle}>Featured Bar</Text>
+            <Text style={styles.comingSoonText}>Coming Soon!</Text>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -151,59 +285,140 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    padding: SPACING.lg,
   },
   header: {
     paddingTop: SPACING.xl,
-  },
-  content: {
-    flex: 1,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.md,
     alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: {
-    fontSize: 80,
-    marginBottom: SPACING.lg,
   },
   title: {
     fontSize: FONT_SIZES.title,
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   subtitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textAlign: "center",
   },
-  welcome: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
+  tabContainer: {
+    flexDirection: "row",
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.md,
   },
-  username: {
-    fontSize: FONT_SIZES.lg,
-    color: COLORS.primary,
-    marginBottom: SPACING.xl,
-  },
-  infoCard: {
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     backgroundColor: COLORS.backgroundCard,
-    padding: SPACING.lg,
+    marginHorizontal: SPACING.xs,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    width: "100%",
   },
-  infoText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
+  activeTab: {
+    backgroundColor: COLORS.primary,
+  },
+  tabIcon: {
+    fontSize: 20,
+    marginBottom: SPACING.xs,
+  },
+  activeTabIcon: {
+    // Keep same color for active tab icon
+  },
+  tabText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  activeTabText: {
+    color: COLORS.white,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.lg,
+  },
+  loadingContainer: {
+    padding: SPACING.xl,
+    alignItems: "center",
+  },
+  newsCard: {
+    backgroundColor: "#000000", // Pure black background
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: "#333333", // Thin gray border
+  },
+  newsHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     marginBottom: SPACING.sm,
   },
-  buttons: {
-    paddingBottom: SPACING.xl,
+  starIcon: {
+    fontSize: 18,
+    marginRight: SPACING.sm,
+    color: COLORS.warning,
+    marginTop: 2,
   },
-  spacer: {
-    height: SPACING.md,
+  newsTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "600",
+    color: COLORS.text,
+    lineHeight: 24,
+    flex: 1,
+  },
+  newsDescription: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+    marginBottom: SPACING.md,
+    marginLeft: 30, // Align with title (star + margin)
+  },
+  newsFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginLeft: 30, // Align with title (star + margin)
+  },
+  newsInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+  },
+  newsAuthor: {
+    fontSize: FONT_SIZES.sm,
+    color: "#ff8c00", // Orange color for author
+    fontWeight: "500",
+  },
+  newsDate: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+  },
+  externalIcon: {
+    fontSize: 16,
+    color: COLORS.success,
+  },
+  comingSoon: {
+    alignItems: "center",
+    paddingVertical: SPACING.xxl,
+  },
+  comingSoonEmoji: {
+    fontSize: 48,
+    marginBottom: SPACING.lg,
+  },
+  comingSoonTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: SPACING.sm,
+  },
+  comingSoonText: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.textSecondary,
   },
 });

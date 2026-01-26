@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -32,6 +33,13 @@ const TOURNAMENT_FORMATS = [
   { label: "Swiss", value: "swiss" },
 ];
 
+const TABLE_SIZES = [
+  { label: "All Table Sizes", value: "" },
+  { label: "7ft", value: "7ft" },
+  { label: "8ft", value: "8ft" },
+  { label: "9ft", value: "9ft" },
+];
+
 const DAYS_OF_WEEK = [
   { label: "M", value: 1 },
   { label: "T", value: 2 },
@@ -45,6 +53,8 @@ const DAYS_OF_WEEK = [
 export interface Filters {
   gameType: string;
   tournamentFormat: string;
+  tableSize: string;
+  equipment: string;
   daysOfWeek: number[];
   fromDate: string;
   toDate: string;
@@ -60,6 +70,8 @@ export interface Filters {
 export const defaultFilters: Filters = {
   gameType: "",
   tournamentFormat: "",
+  tableSize: "",
+  equipment: "",
   daysOfWeek: [],
   fromDate: "",
   toDate: "",
@@ -161,6 +173,29 @@ export const FilterModal = ({
               value={localFilters.tournamentFormat}
               onSelect={(value) =>
                 setLocalFilters({ ...localFilters, tournamentFormat: value })
+              }
+            />
+
+            {/* Table Size */}
+            <Dropdown
+              label="Table Size"
+              placeholder="All Table Sizes"
+              options={TABLE_SIZES}
+              value={localFilters.tableSize}
+              onSelect={(value) =>
+                setLocalFilters({ ...localFilters, tableSize: value })
+              }
+            />
+
+            {/* Equipment */}
+            <Text style={styles.label}>Equipment / Brand</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="e.g. Diamond, Brunswick, Olhausen"
+              placeholderTextColor={COLORS.textMuted}
+              value={localFilters.equipment}
+              onChangeText={(text) =>
+                setLocalFilters({ ...localFilters, equipment: text })
               }
             />
 
@@ -360,6 +395,16 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
+  },
+  textInput: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
   },
   daysRow: {
     flexDirection: "row",

@@ -13,19 +13,16 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { US_STATES } from "../../src/utils/constants";
-import {
-  formatCurrency,
-  formatDate,
-  formatTime,
-} from "../../src/utils/formatters";
 import { Tournament, useBilliards } from "../../src/viewmodels/useBilliards";
 import { usePagination } from "../../src/viewmodels/usePagination";
+import { BilliardsTournamentCard } from "../../src/views/components/billiards";
 import { Dropdown } from "../../src/views/components/common/dropdown";
 import { FilterModal } from "../../src/views/components/common/filter-modal";
 import { Loading } from "../../src/views/components/common/loading";
 import { Pagination } from "../../src/views/components/common/pagination";
 
 const ITEMS_PER_PAGE = 20;
+const NUM_COLUMNS = 2;
 
 export default function BilliardsScreen() {
   const router = useRouter();
@@ -68,60 +65,12 @@ export default function BilliardsScreen() {
     const isFavorited = vm.favorites.includes(item.id);
 
     return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.7}
+      <BilliardsTournamentCard
+        tournament={item}
+        isFavorited={isFavorited}
         onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}`)}
-      >
-        <View style={styles.cardHeader}>
-          <View style={styles.badgesRow}>
-            <View style={styles.gameTypeBadge}>
-              <Text style={styles.gameTypeText}>{item.game_type}</Text>
-            </View>
-            {item.is_recurring && (
-              <View style={styles.recurringBadge}>
-                <Text style={styles.recurringText}>🔄 Weekly</Text>
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
-              vm.toggleFavorite(item.id);
-            }}
-            style={styles.heartButton}
-          >
-            <Text style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
-              {isFavorited ? "♥" : "♡"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.tournamentName}>{item.name}</Text>
-
-        <Text style={styles.venue}>
-          📍 {item.venues?.venue} - {item.venues?.city}, {item.venues?.state}
-        </Text>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.dateTime}>
-            <Text style={styles.date}>
-              📅 {formatDate(item.tournament_date)}
-            </Text>
-            <Text style={styles.time}>🕐 {formatTime(item.start_time)}</Text>
-          </View>
-
-          <View style={styles.fees}>
-            <Text style={styles.entryFee}>
-              {formatCurrency(item.entry_fee)}
-            </Text>
-            {item.added_money > 0 && (
-              <Text style={styles.addedMoney}>+${item.added_money} added</Text>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+        onToggleFavorite={() => vm.toggleFavorite(item.id)}
+      />
     );
   };
 
@@ -133,7 +82,10 @@ export default function BilliardsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>BILLIARDS</Text>
+        <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
+        <Text style={styles.headerSubtitle}>
+          Browse all billiards tournaments by game type and location
+        </Text>
       </View>
 
       {/* Search Bar */}
@@ -172,15 +124,17 @@ export default function BilliardsScreen() {
         </View>
         <View style={styles.filterItem}>
           <Text style={styles.filterLabel}>Zip Code</Text>
-          <TextInput
-            style={styles.zipInput}
-            placeholder="Enter zip code"
-            placeholderTextColor={COLORS.textMuted}
-            value={vm.zipCode}
-            onChangeText={vm.setZipCode}
-            keyboardType="numeric"
-            maxLength={5}
-          />
+          <View style={styles.zipInputContainer}>
+            <TextInput
+              style={styles.zipInput}
+              placeholder="Enter zip code"
+              placeholderTextColor={COLORS.textMuted}
+              value={vm.zipCode}
+              onChangeText={vm.setZipCode}
+              keyboardType="numeric"
+              maxLength={5}
+            />
+          </View>
         </View>
       </View>
 
@@ -219,7 +173,9 @@ export default function BilliardsScreen() {
           data={pagination.paginatedItems}
           renderItem={renderTournament}
           keyExtractor={(item) => item.id.toString()}
+          numColumns={NUM_COLUMNS}
           contentContainerStyle={styles.list}
+          columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -254,11 +210,19 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
     color: COLORS.text,
+    textAlign: "center",
+  },
+  headerSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: SPACING.xs,
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -297,6 +261,9 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
   },
+  zipInputContainer: {
+    marginTop: SPACING.xs,
+  },
   zipInput: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
@@ -304,6 +271,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
+    marginHorizontal: SPACING.sm,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
@@ -339,98 +307,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   list: {
-    padding: SPACING.md,
-    paddingTop: 0,
+    padding: SPACING.sm,
   },
-  card: {
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardHeader: {
-    flexDirection: "row",
+  row: {
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: SPACING.sm,
-  },
-  badgesRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-    flex: 1,
-  },
-  gameTypeBadge: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: RADIUS.sm,
-  },
-  gameTypeText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-  },
-  recurringBadge: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
-    borderRadius: RADIUS.sm,
-  },
-  recurringText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.xs,
-  },
-  heartButton: {
-    padding: SPACING.xs,
-  },
-  heartIcon: {
-    fontSize: 32,
-    color: COLORS.primary,
-  },
-  heartFilled: {
-    color: COLORS.primary,
-  },
-  tournamentName: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  venue: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-  },
-  dateTime: {
-    gap: 2,
-  },
-  date: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-  },
-  time: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-  },
-  fees: {
-    alignItems: "flex-end",
-  },
-  entryFee: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  addedMoney: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.success,
   },
   errorContainer: {
     flex: 1,

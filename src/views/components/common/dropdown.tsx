@@ -110,7 +110,7 @@ export const Dropdown = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: SPACING.lg,
+    marginTop: SPACING.xs,
   },
   label: {
     fontSize: FONT_SIZES.sm,

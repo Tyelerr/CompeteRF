@@ -1,6 +1,9 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
+  Alert,
   FlatList,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -36,6 +39,18 @@ const formatDate = (dateString: string): string => {
   });
 };
 
+const formatDateTime = (dateString: string | null): string => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const formatTime = (timeString: string): string => {
   if (!timeString) return "";
   const [hours, minutes] = timeString.split(":");
@@ -53,25 +68,117 @@ const getStatusColor = (status: string): string => {
       return COLORS.primary;
     case "cancelled":
       return COLORS.error;
+    case "archived":
+      return COLORS.textSecondary;
     default:
       return COLORS.textSecondary;
   }
 };
 
+// Cancel Reason Modal Component
+const CancelModal = ({
+  visible,
+  tournamentName,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  tournamentName: string;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) => {
+  const [reason, setReason] = useState("");
+
+  const handleConfirm = () => {
+    if (!reason.trim()) {
+      Alert.alert("Required", "Please enter a cancellation reason.");
+      return;
+    }
+    onConfirm(reason.trim());
+    setReason("");
+  };
+
+  const handleCancel = () => {
+    setReason("");
+    onCancel();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Cancel Tournament</Text>
+          <Text style={styles.modalSubtitle}>"{tournamentName}"</Text>
+
+          <Text style={styles.modalLabel}>Cancellation Reason *</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Enter reason for cancellation..."
+            placeholderTextColor={COLORS.textSecondary}
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            numberOfLines={3}
+          />
+
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={styles.modalButtonCancel}
+              onPress={handleCancel}
+            >
+              <Text style={styles.modalButtonCancelText}>Back</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalButtonConfirm}
+              onPress={handleConfirm}
+            >
+              <Text style={styles.modalButtonConfirmText}>
+                Cancel Tournament
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Tournament Card Component
 const TournamentCard = ({
   tournament,
   onPress,
+  onEdit,
+  onArchive,
+  onCancel,
+  onRestore,
+  isProcessing,
 }: {
   tournament: AdminTournamentWithStats;
   onPress: () => void;
+  onEdit: () => void;
+  onArchive: () => void;
+  onCancel: () => void;
+  onRestore: () => void;
+  isProcessing: boolean;
 }) => {
   const statusColor = getStatusColor(tournament.status);
+  const isArchived = tournament.status === "archived";
+  const isCancelled = tournament.status === "cancelled";
+  const isActive = tournament.status === "active";
+  const isCompleted = tournament.status === "completed";
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[styles.card, isArchived && styles.cardArchived]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
       {/* Header: Name and Status */}
       <View style={styles.cardHeader}>
-        <Text style={styles.tournamentName} numberOfLines={1}>
+        <Text
+          style={[styles.tournamentName, isArchived && styles.textArchived]}
+          numberOfLines={1}
+        >
           {tournament.name}
         </Text>
         <View
@@ -84,7 +191,7 @@ const TournamentCard = ({
       </View>
 
       {/* Game Type & Format */}
-      <Text style={styles.gameType}>
+      <Text style={[styles.gameType, isArchived && styles.textArchived]}>
         {tournament.game_type} •{" "}
         {tournament.tournament_format.replace("_", " ")}
       </Text>
@@ -92,7 +199,7 @@ const TournamentCard = ({
       {/* Date & Time */}
       <View style={styles.infoRow}>
         <Text style={styles.infoIcon}>📅</Text>
-        <Text style={styles.infoText}>
+        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
           {formatDate(tournament.tournament_date)}
           {tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
         </Text>
@@ -101,7 +208,10 @@ const TournamentCard = ({
       {/* Venue */}
       <View style={styles.infoRow}>
         <Text style={styles.infoIcon}>📍</Text>
-        <Text style={styles.infoText} numberOfLines={1}>
+        <Text
+          style={[styles.infoText, isArchived && styles.textArchived]}
+          numberOfLines={1}
+        >
           {tournament.venue_name}
         </Text>
       </View>
@@ -109,19 +219,133 @@ const TournamentCard = ({
       {/* Director */}
       <View style={styles.infoRow}>
         <Text style={styles.infoIcon}>👤</Text>
-        <Text style={styles.infoText}>TD: {tournament.director_name}</Text>
+        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
+          TD: {tournament.director_name}
+        </Text>
       </View>
+
+      {/* Cancellation Info */}
+      {isCancelled && tournament.cancelled_at && (
+        <View style={styles.statusInfoBox}>
+          <Text style={styles.statusInfoTitle}>❌ Cancelled</Text>
+          <Text style={styles.statusInfoText}>
+            By: {tournament.cancelled_by_name || "Unknown"}
+          </Text>
+          <Text style={styles.statusInfoText}>
+            On: {formatDateTime(tournament.cancelled_at)}
+          </Text>
+          {tournament.cancellation_reason && (
+            <Text style={styles.statusInfoReason}>
+              Reason: {tournament.cancellation_reason}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Archived Info */}
+      {isArchived && tournament.archived_at && (
+        <View style={[styles.statusInfoBox, styles.statusInfoBoxArchived]}>
+          <Text style={styles.statusInfoTitle}>📦 Archived</Text>
+          <Text style={styles.statusInfoText}>
+            By: {tournament.archived_by_name || "Unknown"}
+          </Text>
+          <Text style={styles.statusInfoText}>
+            On: {formatDateTime(tournament.archived_at)}
+          </Text>
+        </View>
+      )}
 
       {/* Stats Row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{tournament.views_count}</Text>
+          <Text style={[styles.statValue, isArchived && styles.textArchived]}>
+            {tournament.views_count}
+          </Text>
           <Text style={styles.statLabel}>Views</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{tournament.favorites_count}</Text>
+          <Text style={[styles.statValue, isArchived && styles.textArchived]}>
+            {tournament.favorites_count}
+          </Text>
           <Text style={styles.statLabel}>Favorites</Text>
         </View>
+      </View>
+
+      {/* Action Buttons */}
+      <View style={styles.actionRow}>
+        {/* Edit - always available */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.editButton]}
+          onPress={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          disabled={isProcessing}
+        >
+          <Text style={styles.editButtonText}>✏️ Edit</Text>
+        </TouchableOpacity>
+
+        {/* Active tournaments: Cancel or Archive */}
+        {isActive && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.cancelButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              disabled={isProcessing}
+            >
+              <Text style={styles.cancelButtonText}>
+                {isProcessing ? "..." : "❌ Cancel"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.archiveButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                onArchive();
+              }}
+              disabled={isProcessing}
+            >
+              <Text style={styles.archiveButtonText}>
+                {isProcessing ? "..." : "📦 Archive"}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Completed tournaments: Archive */}
+        {isCompleted && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.archiveButton]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onArchive();
+            }}
+            disabled={isProcessing}
+          >
+            <Text style={styles.archiveButtonText}>
+              {isProcessing ? "..." : "📦 Archive"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Cancelled or Archived: Restore */}
+        {(isCancelled || isArchived) && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.restoreButton]}
+            onPress={(e) => {
+              e.stopPropagation();
+              onRestore();
+            }}
+            disabled={isProcessing}
+          >
+            <Text style={styles.restoreButtonText}>
+              {isProcessing ? "..." : "♻️ Restore"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -131,12 +355,16 @@ export default function TournamentManagementScreen() {
   const router = useRouter();
   const vm = useAdminTournaments();
 
-  // Pagination on filtered results
+  // Cancel modal state
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [tournamentToCancel, setTournamentToCancel] =
+    useState<AdminTournamentWithStats | null>(null);
+
+  // Pagination
   const pagination = usePagination(vm.filteredTournaments, {
     itemsPerPage: 10,
   });
 
-  // Reset pagination when filters change
   const handleStatusFilter = (filter: TournamentStatusFilter) => {
     vm.setStatusFilter(filter);
     pagination.resetPage();
@@ -159,6 +387,75 @@ export default function TournamentManagementScreen() {
     } as any);
   };
 
+  const handleEditTournament = (tournamentId: number) => {
+    router.push({
+      pathname: "/(tabs)/admin/edit-tournament/[id]",
+      params: { id: tournamentId.toString() },
+    } as any);
+  };
+
+  const handleArchiveTournament = (tournament: AdminTournamentWithStats) => {
+    Alert.alert(
+      "Archive Tournament",
+      `Are you sure you want to archive "${tournament.name}"? It will be hidden from public view but can be restored later.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Archive",
+          style: "destructive",
+          onPress: async () => {
+            const success = await vm.archiveTournament(tournament.id);
+            if (success) {
+              Alert.alert("Success", "Tournament archived successfully.");
+            } else {
+              Alert.alert("Error", "Failed to archive tournament.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCancelTournament = (tournament: AdminTournamentWithStats) => {
+    setTournamentToCancel(tournament);
+    setCancelModalVisible(true);
+  };
+
+  const handleConfirmCancel = async (reason: string) => {
+    if (!tournamentToCancel) return;
+
+    const success = await vm.cancelTournament(tournamentToCancel.id, reason);
+    setCancelModalVisible(false);
+    setTournamentToCancel(null);
+
+    if (success) {
+      Alert.alert("Success", "Tournament cancelled successfully.");
+    } else {
+      Alert.alert("Error", "Failed to cancel tournament.");
+    }
+  };
+
+  const handleRestoreTournament = (tournament: AdminTournamentWithStats) => {
+    Alert.alert(
+      "Restore Tournament",
+      `Are you sure you want to restore "${tournament.name}" to active status?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore",
+          onPress: async () => {
+            const success = await vm.restoreTournament(tournament.id);
+            if (success) {
+              Alert.alert("Success", "Tournament restored successfully.");
+            } else {
+              Alert.alert("Error", "Failed to restore tournament.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
@@ -169,6 +466,17 @@ export default function TournamentManagementScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Cancel Modal */}
+      <CancelModal
+        visible={cancelModalVisible}
+        tournamentName={tournamentToCancel?.name || ""}
+        onCancel={() => {
+          setCancelModalVisible(false);
+          setTournamentToCancel(null);
+        }}
+        onConfirm={handleConfirmCancel}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -200,62 +508,106 @@ export default function TournamentManagementScreen() {
         </View>
       </View>
 
-      {/* Status Tabs with Counts */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsContent}
-      >
-        <TouchableOpacity
-          style={[styles.tab, vm.statusFilter === "active" && styles.tabActive]}
-          onPress={() => handleStatusFilter("active")}
+      {/* Status Tabs */}
+      <View style={styles.tabsWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsContent}
         >
-          <Text
+          <TouchableOpacity
             style={[
-              styles.tabText,
-              vm.statusFilter === "active" && styles.tabTextActive,
+              styles.tab,
+              vm.statusFilter === "active" && styles.tabActive,
             ]}
+            onPress={() => handleStatusFilter("active")}
           >
-            Active
-            {vm.statusCounts.active > 0 ? ` (${vm.statusCounts.active})` : ""}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.tabText,
+                vm.statusFilter === "active" && styles.tabTextActive,
+              ]}
+            >
+              Active
+              {vm.statusCounts.active > 0 ? ` (${vm.statusCounts.active})` : ""}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            vm.statusFilter === "completed" && styles.tabActive,
-          ]}
-          onPress={() => handleStatusFilter("completed")}
-        >
-          <Text
+          <TouchableOpacity
             style={[
-              styles.tabText,
-              vm.statusFilter === "completed" && styles.tabTextActive,
+              styles.tab,
+              vm.statusFilter === "completed" && styles.tabActive,
             ]}
+            onPress={() => handleStatusFilter("completed")}
           >
-            Completed
-            {vm.statusCounts.completed > 0
-              ? ` (${vm.statusCounts.completed})`
-              : ""}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.tabText,
+                vm.statusFilter === "completed" && styles.tabTextActive,
+              ]}
+            >
+              Completed
+              {vm.statusCounts.completed > 0
+                ? ` (${vm.statusCounts.completed})`
+                : ""}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tab, vm.statusFilter === "all" && styles.tabActive]}
-          onPress={() => handleStatusFilter("all")}
-        >
-          <Text
+          <TouchableOpacity
             style={[
-              styles.tabText,
-              vm.statusFilter === "all" && styles.tabTextActive,
+              styles.tab,
+              vm.statusFilter === "cancelled" && styles.tabActive,
             ]}
+            onPress={() => handleStatusFilter("cancelled")}
           >
-            All{vm.statusCounts.all > 0 ? ` (${vm.statusCounts.all})` : ""}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+            <Text
+              style={[
+                styles.tabText,
+                vm.statusFilter === "cancelled" && styles.tabTextActive,
+              ]}
+            >
+              Cancelled
+              {vm.statusCounts.cancelled > 0
+                ? ` (${vm.statusCounts.cancelled})`
+                : ""}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              vm.statusFilter === "archived" && styles.tabActive,
+            ]}
+            onPress={() => handleStatusFilter("archived")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                vm.statusFilter === "archived" && styles.tabTextActive,
+              ]}
+            >
+              Archived
+              {vm.statusCounts.archived > 0
+                ? ` (${vm.statusCounts.archived})`
+                : ""}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, vm.statusFilter === "all" && styles.tabActive]}
+            onPress={() => handleStatusFilter("all")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                vm.statusFilter === "all" && styles.tabTextActive,
+              ]}
+            >
+              All{vm.statusCounts.all > 0 ? ` (${vm.statusCounts.all})` : ""}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
 
       {/* Sort Options */}
       <View style={styles.sortContainer}>
@@ -288,7 +640,7 @@ export default function TournamentManagementScreen() {
         </ScrollView>
       </View>
 
-      {/* Pagination Info */}
+      {/* Pagination */}
       <Pagination
         totalCount={pagination.totalCount}
         displayStart={pagination.displayRange.start}
@@ -317,6 +669,11 @@ export default function TournamentManagementScreen() {
           <TournamentCard
             tournament={item}
             onPress={() => handleTournamentPress(item.id)}
+            onEdit={() => handleEditTournament(item.id)}
+            onArchive={() => handleArchiveTournament(item)}
+            onCancel={() => handleCancelTournament(item)}
+            onRestore={() => handleRestoreTournament(item)}
+            isProcessing={vm.processing === item.id}
           />
         )}
         ListEmptyComponent={
@@ -328,7 +685,9 @@ export default function TournamentManagementScreen() {
                   ? "No completed tournaments"
                   : vm.statusFilter === "cancelled"
                     ? "No cancelled tournaments"
-                    : "No tournaments found"
+                    : vm.statusFilter === "archived"
+                      ? "No archived tournaments"
+                      : "No tournaments found"
             }
             submessage="Try adjusting your search or filters"
           />
@@ -415,15 +774,16 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     height: 40,
   },
-  tabsScroll: {
-    flexGrow: 0,
-    marginTop: SPACING.sm,
+  tabsWrapper: {
+    minHeight: 48,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   tabsContent: {
     paddingHorizontal: SPACING.md,
     gap: SPACING.xs,
+    alignItems: "center",
+    minHeight: 48,
   },
   tab: {
     paddingHorizontal: SPACING.md,
@@ -492,6 +852,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  cardArchived: {
+    opacity: 0.7,
+    borderColor: COLORS.textSecondary,
+  },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -504,6 +868,9 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     flex: 1,
     marginRight: SPACING.sm,
+  },
+  textArchived: {
+    color: COLORS.textSecondary,
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
@@ -536,6 +903,33 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     flex: 1,
   },
+  statusInfoBox: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    marginTop: SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.error,
+  },
+  statusInfoBoxArchived: {
+    borderLeftColor: COLORS.textSecondary,
+  },
+  statusInfoTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  statusInfoText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+  },
+  statusInfoReason: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.text,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
   statsRow: {
     flexDirection: "row",
     marginTop: SPACING.sm,
@@ -555,5 +949,133 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
+  },
+  actionRow: {
+    flexDirection: "row",
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: SPACING.xs,
+    flexWrap: "wrap",
+  },
+  actionButton: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    minWidth: 80,
+  },
+  editButton: {
+    backgroundColor: COLORS.primary + "20",
+    borderColor: COLORS.primary,
+  },
+  editButtonText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  cancelButton: {
+    backgroundColor: COLORS.error + "20",
+    borderColor: COLORS.error,
+  },
+  cancelButtonText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  archiveButton: {
+    backgroundColor: COLORS.textSecondary + "20",
+    borderColor: COLORS.textSecondary,
+  },
+  archiveButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  restoreButton: {
+    backgroundColor: COLORS.success + "20",
+    borderColor: COLORS.success,
+  },
+  restoreButtonText: {
+    color: COLORS.success,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    width: "100%",
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  modalSubtitle: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.lg,
+  },
+  modalLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+    fontWeight: "500",
+  },
+  modalInput: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    marginTop: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  modalButtonCancel: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalButtonCancelText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  modalButtonConfirm: {
+    flex: 1,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: COLORS.error,
+  },
+  modalButtonConfirmText: {
+    color: "#FFFFFF",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
   },
 });

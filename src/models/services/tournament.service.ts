@@ -125,6 +125,56 @@ export const tournamentService = {
         cancellation_reason: reason,
         cancelled_at: new Date().toISOString(),
         cancelled_by: cancelledBy,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async archiveTournament(id: number, archivedBy: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        status: "archived",
+        archived_at: new Date().toISOString(),
+        archived_by: archivedBy,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async restoreTournament(id: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        status: "active",
+        archived_at: null,
+        archived_by: null,
+        cancelled_at: null,
+        cancelled_by: null,
+        cancellation_reason: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async completeTournament(id: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        status: "completed",
+        updated_at: new Date().toISOString(),
       })
       .eq("id", id)
       .select()
