@@ -1,4 +1,5 @@
 import {
+  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -64,6 +65,63 @@ export default function SubmitScreen() {
     );
   }
 
+  const renderThumbnailOption = (thumb: any) => {
+    const isSelected = vm.formData.thumbnail === thumb.id;
+    const isUploadOption = thumb.id === "upload-custom";
+    const isCustomImage = vm.formData.thumbnail?.startsWith("custom:");
+    const showUploadedImage =
+      isUploadOption && isCustomImage && vm.customImageUri;
+
+    // Get the image URL for real images
+    const imageUrl = thumb.imageUrl ? vm.getThumbnailImageUrl(thumb.id) : null;
+
+    return (
+      <TouchableOpacity
+        key={thumb.id}
+        style={[
+          styles.thumbnailOption,
+          isSelected && styles.thumbnailSelected,
+          vm.uploadingImage && isUploadOption && styles.thumbnailUploading,
+        ]}
+        onPress={() => vm.handleThumbnailSelect(thumb.id)}
+        disabled={vm.uploadingImage && isUploadOption}
+      >
+        <View style={styles.thumbnailPlaceholder}>
+          {isUploadOption ? (
+            // Upload Custom Option
+            showUploadedImage ? (
+              <Image
+                source={{ uri: vm.customImageUri || undefined }}
+                style={styles.thumbnailImage}
+                resizeMode="cover"
+              />
+            ) : vm.uploadingImage ? (
+              <Text style={styles.uploadingText}>...</Text>
+            ) : (
+              <Text style={styles.thumbnailEmoji}>+</Text>
+            )
+          ) : imageUrl ? (
+            // Real Images (8-ball, 9-ball, 10-ball)
+            <Image
+              source={{ uri: imageUrl || undefined }}
+              style={styles.thumbnailImage}
+              resizeMode="cover"
+              onError={() => console.log("Image failed to load:", imageUrl)}
+            />
+          ) : (
+            // Emoji Placeholders (one-pocket, straight-pool, banks)
+            <Text style={styles.thumbnailEmoji}>🎱</Text>
+          )}
+          <Text
+            style={[styles.thumbnailText, isUploadOption && styles.uploadText]}
+          >
+            {thumb.name}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <KeyboardAwareView>
       <View style={styles.container}>
@@ -71,7 +129,7 @@ export default function SubmitScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>SUBMIT TOURNAMENT</Text>
           <Text style={styles.headerSubtitle}>
-            Submit your tournament for review and approval
+            Submit your tournament for approval
           </Text>
         </View>
 
@@ -352,22 +410,7 @@ export default function SubmitScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Tournament Image</Text>
           <View style={styles.thumbnailGrid}>
-            {THUMBNAIL_OPTIONS.map((thumb) => (
-              <TouchableOpacity
-                key={thumb.id}
-                style={[
-                  styles.thumbnailOption,
-                  vm.formData.thumbnail === thumb.id &&
-                    styles.thumbnailSelected,
-                ]}
-                onPress={() => vm.updateFormData("thumbnail", thumb.id)}
-              >
-                <View style={styles.thumbnailPlaceholder}>
-                  <Text style={styles.thumbnailEmoji}>🎱</Text>
-                  <Text style={styles.thumbnailText}>{thumb.name}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {THUMBNAIL_OPTIONS.map(renderThumbnailOption)}
           </View>
         </View>
 
@@ -380,9 +423,6 @@ export default function SubmitScreen() {
             disabled={vm.submitting}
             fullWidth
           />
-          <Text style={styles.submitHint}>
-            Your tournament will be reviewed before publishing.
-          </Text>
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -500,6 +540,12 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     marginBottom: SPACING.xs,
   },
+  hint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+    marginHorizontal: SPACING.sm,
+  },
   sidePotHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -573,6 +619,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderWidth: 3,
   },
+  thumbnailUploading: {
+    opacity: 0.6,
+  },
   thumbnailPlaceholder: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -580,8 +629,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: SPACING.xs,
   },
+  thumbnailImage: {
+    width: "100%",
+    height: "70%",
+    borderRadius: RADIUS.sm,
+  },
   thumbnailEmoji: {
-    fontSize: 24,
+    fontSize: 32,
   },
   thumbnailText: {
     color: COLORS.textMuted,
@@ -589,17 +643,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: SPACING.xs,
   },
+  uploadText: {
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  uploadingText: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.textMuted,
+    fontWeight: "bold",
+  },
   submitSection: {
-    padding: SPACING.lg,
+    padding: Math.floor(SPACING.lg * 0.7), // Reduced by 30%
     paddingTop: SPACING.xl,
   },
-  submitHint: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
-    textAlign: "center",
-    marginTop: SPACING.sm,
-  },
   bottomSpacer: {
-    height: SPACING.xl * 2,
+    height: Math.floor(SPACING.xl * 2 * 0.7), // Reduced by 30%
   },
 });

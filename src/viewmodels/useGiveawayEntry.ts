@@ -36,6 +36,10 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
 
   // Reset form when giveaway changes
   useEffect(() => {
+    console.log(
+      `🔍 Giveaway changed, resetting form. Giveaway ID:`,
+      giveaway?.id,
+    );
     setForm({
       ...INITIAL_ENTRY_FORM,
       email: profile?.email || "",
@@ -45,28 +49,40 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     setSubmitSuccess(false);
   }, [giveaway?.id, profile?.email]);
 
+  // Debug: Log form state changes
+  useEffect(() => {
+    console.log(`🔍 Form state updated:`, form);
+    console.log(`🔍 Birthday specifically:`, form.birthday);
+  }, [form]);
+
   const updateField = useCallback(
     <K extends keyof GiveawayEntryForm>(
       field: K,
-      value: GiveawayEntryForm[K]
+      value: GiveawayEntryForm[K],
     ) => {
       setForm((prev) => ({ ...prev, [field]: value }));
-      // Clear error for this field
       setErrors((prev) => ({ ...prev, [field]: undefined }));
       setSubmitError(null);
     },
-    []
+    [],
   );
 
+  // THE KEY FUNCTION FOR BIRTHDAY DROPDOWNS
   const updateBirthday = useCallback(
     (field: "month" | "day" | "year", value: string) => {
-      setForm((prev) => ({
-        ...prev,
-        birthday: { ...prev.birthday, [field]: value },
-      }));
+      console.log(`🔍 updateBirthday called:`, { field, value });
+      setForm((prev) => {
+        console.log(`🔍 Previous form birthday:`, prev.birthday);
+        const newForm = {
+          ...prev,
+          birthday: { ...prev.birthday, [field]: value },
+        };
+        console.log(`🔍 New form birthday:`, newForm.birthday);
+        return newForm;
+      });
       setErrors((prev) => ({ ...prev, birthday: undefined }));
     },
-    []
+    [],
   );
 
   const toggleCheckbox = useCallback((field: keyof GiveawayEntryForm) => {
@@ -77,9 +93,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     setErrors((prev) => ({ ...prev, checkboxes: undefined }));
   }, []);
 
-  /**
-   * Validate the form
-   */
   const validate = useCallback((): boolean => {
     const newErrors: ValidationErrors = {};
 
@@ -96,7 +109,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
       const birthDate = new Date(
         parseInt(year),
         parseInt(month) - 1,
-        parseInt(day)
+        parseInt(day),
       );
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
@@ -142,9 +155,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     return Object.keys(newErrors).length === 0;
   }, [form, giveaway?.min_age]);
 
-  /**
-   * Check if form is complete (for button enable state)
-   */
   const isFormComplete = useMemo(() => {
     const { month, day, year } = form.birthday;
     return (
@@ -161,9 +171,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     );
   }, [form]);
 
-  /**
-   * Submit the entry
-   */
   const submitEntry = useCallback(async (): Promise<boolean> => {
     if (!giveaway || !profile?.id_auto) {
       setSubmitError("Please log in to enter the giveaway");
@@ -181,7 +188,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
       const result = await giveawayService.createEntry(
         giveaway.id,
         profile.id_auto,
-        form
+        form,
       );
 
       if (result.success) {
@@ -200,9 +207,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     }
   }, [giveaway, profile?.id_auto, form, validate]);
 
-  /**
-   * Reset the form
-   */
   const resetForm = useCallback(() => {
     setForm({
       ...INITIAL_ENTRY_FORM,
@@ -213,7 +217,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     setSubmitSuccess(false);
   }, [profile?.email]);
 
-  // Generate month options
+  // Dropdown options
   const monthOptions = useMemo(
     () => [
       { label: "Month", value: "" },
@@ -230,10 +234,9 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
       { label: "November", value: "11" },
       { label: "December", value: "12" },
     ],
-    []
+    [],
   );
 
-  // Generate day options
   const dayOptions = useMemo(() => {
     const days = [{ label: "Day", value: "" }];
     for (let i = 1; i <= 31; i++) {
@@ -242,7 +245,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     return days;
   }, []);
 
-  // Generate year options (100 years back from current year)
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const years = [{ label: "Year", value: "" }];
@@ -259,7 +261,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
 
     // Actions
     updateField,
-    updateBirthday,
+    updateBirthday, // This fixes the birthday dropdown
     toggleCheckbox,
     submitEntry,
     resetForm,

@@ -271,19 +271,13 @@ export default function CreateGiveawayScreen() {
           </View>
         )}
 
-        {/* Min Age */}
+        {/* Age Requirement - Read Only */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Minimum Age</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="18"
-            placeholderTextColor={COLORS.textMuted}
-            value={vm.formData.min_age}
-            onChangeText={(text) =>
-              vm.updateField("min_age", text.replace(/[^0-9]/g, ""))
-            }
-            keyboardType="number-pad"
-          />
+          <Text style={styles.label}>Age Requirement</Text>
+          <View style={styles.ageRequirementContainer}>
+            <Text style={styles.ageRequirementText}>18+ years old</Text>
+            <Text style={styles.ageRequirementSubtext}>Required by law</Text>
+          </View>
         </View>
 
         {/* Rules Text */}
@@ -547,6 +541,28 @@ const styles = StyleSheet.create({
   },
   dateDropdownSmall: {
     flex: 1,
+  },
+
+  // Age Requirement - Read Only Styles
+  ageRequirementContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  ageRequirementText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  ageRequirementSubtext: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
+    fontStyle: "italic",
   },
 
   // Bottom

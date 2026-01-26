@@ -13,7 +13,7 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { US_STATES } from "../../src/utils/constants";
-import { Tournament, useBilliards } from "../../src/viewmodels/useBilliards";
+import { useBilliards } from "../../src/viewmodels/useBilliards";
 import { usePagination } from "../../src/viewmodels/usePagination";
 import { BilliardsTournamentCard } from "../../src/views/components/billiards";
 import { Dropdown } from "../../src/views/components/common/dropdown";
@@ -28,7 +28,7 @@ export default function BilliardsScreen() {
   const router = useRouter();
   const vm = useBilliards();
 
-  const pagination = usePagination(vm.filteredTournaments, {
+  const pagination = usePagination(vm.filteredTournaments as any, {
     itemsPerPage: ITEMS_PER_PAGE,
   });
 
@@ -61,15 +61,16 @@ export default function BilliardsScreen() {
     />
   );
 
-  const renderTournament = ({ item }: { item: Tournament }) => {
+  const renderTournament = ({ item }: { item: any }) => {
     const isFavorited = vm.favorites.includes(item.id);
 
     return (
       <BilliardsTournamentCard
-        tournament={item}
+        tournament={item as any}
         isFavorited={isFavorited}
         onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}`)}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
+        getTournamentImageUrl={vm.getTournamentImageUrl}
       />
     );
   };
@@ -172,7 +173,7 @@ export default function BilliardsScreen() {
         <FlatList
           data={pagination.paginatedItems}
           renderItem={renderTournament}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item: any) => item.id.toString()}
           numColumns={NUM_COLUMNS}
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.row}

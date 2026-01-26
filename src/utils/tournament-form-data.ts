@@ -127,10 +127,46 @@ export const EQUIPMENT_OPTIONS = [
 ];
 
 export const THUMBNAIL_OPTIONS = [
-  { id: "thumb-1", name: "8-Ball Classic" },
-  { id: "thumb-2", name: "9-Ball Action" },
-  { id: "thumb-3", name: "Pool Hall" },
-  { id: "thumb-4", name: "Tournament Night" },
-  { id: "thumb-5", name: "Championship" },
-  { id: "thumb-6", name: "Break Shot" },
+  {
+    id: "8-ball",
+    name: "8-Ball",
+    gameType: "8-ball",
+    imageUrl: "8-ball.jpeg",
+  },
+  {
+    id: "9-ball",
+    name: "9-Ball",
+    gameType: "9-ball",
+    imageUrl: "9-ball.jpeg",
+  },
+  {
+    id: "10-ball",
+    name: "10-Ball",
+    gameType: "10-ball",
+    imageUrl: "10-ball.jpeg",
+  },
+  {
+    id: "one-pocket",
+    name: "One Pocket",
+    gameType: "one-pocket",
+    imageUrl: null, // You'll need to upload this image
+  },
+  {
+    id: "straight-pool",
+    name: "Straight Pool",
+    gameType: "straight-pool",
+    imageUrl: null, // You'll need to upload this image
+  },
+  {
+    id: "banks",
+    name: "Banks",
+    gameType: "banks",
+    imageUrl: null, // You'll need to upload this image
+  },
+  {
+    id: "upload-custom",
+    name: "Upload Custom",
+    gameType: null,
+    imageUrl: null,
+  },
 ];

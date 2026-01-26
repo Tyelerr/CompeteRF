@@ -1,11 +1,13 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 import {
   TournamentFormData,
   initialFormData,
+  THUMBNAIL_OPTIONS,
 } from "../utils/tournament-form-data";
 
 interface Venue {
@@ -47,6 +49,11 @@ export const useSubmitTournament = () => {
   const [formData, setFormData] = useState<TournamentFormData>(initialFormData);
   const [sidePots, setSidePots] = useState<SidePot[]>([]);
 
+  // New state for thumbnail/image management
+  const [customImageUri, setCustomImageUri] = useState<string | null>(null);
+  const [hasManualSelection, setHasManualSelection] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   // Refs for auto-advance
   const refs = {
     name: useRef<TextInput>(null),
@@ -67,6 +74,19 @@ export const useSubmitTournament = () => {
       setDataLoading(false);
     }
   }, [authLoading, profile, canSubmitTournaments]);
+
+  // Auto-select thumbnail when game type changes (if not manually selected)
+  useEffect(() => {
+    if (formData.gameType && !hasManualSelection) {
+      const matchingThumb = THUMBNAIL_OPTIONS.find(
+        (thumb) => thumb.gameType === formData.gameType,
+      );
+
+      if (matchingThumb) {
+        setFormData((prev) => ({ ...prev, thumbnail: matchingThumb.id }));
+      }
+    }
+  }, [formData.gameType, hasManualSelection]);
 
   const loadFormData = async () => {
     try {
@@ -167,6 +187,11 @@ export const useSubmitTournament = () => {
           thumbnail: template.thumbnail || "",
         });
 
+        // Template selection counts as manual selection
+        if (template.thumbnail) {
+          setHasManualSelection(true);
+        }
+
         if (template.side_pots && Array.isArray(template.side_pots)) {
           setSidePots(template.side_pots);
         } else {
@@ -175,6 +200,87 @@ export const useSubmitTournament = () => {
       }
     } catch (error) {
       console.error("Error loading template:", error);
+    }
+  };
+
+  const handleThumbnailSelect = (thumbnailId: string) => {
+    if (thumbnailId === "upload-custom") {
+      handleImageUpload();
+    } else {
+      setHasManualSelection(true); // Prevent future auto-switching
+      setCustomImageUri(null); // Clear any custom upload
+      updateFormData("thumbnail", thumbnailId);
+    }
+  };
+
+  const handleImageUpload = async () => {
+    try {
+      // Request permissions
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission needed",
+          "Please grant photo library access to upload images.",
+        );
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9], // Tournament card aspect ratio
+        quality: 0.8,
+        exif: false,
+      });
+
+      if (result.canceled || !result.assets[0]) {
+        return;
+      }
+
+      setUploadingImage(true);
+      const asset = result.assets[0];
+
+      // Generate unique filename
+      const timestamp = new Date().getTime();
+      const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
+      const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const formData = new FormData();
+      formData.append("file", {
+        uri: asset.uri,
+        type: `image/${fileExt}`,
+        name: fileName,
+      } as any);
+
+      const { data, error } = await supabase.storage
+        .from("tournament-images")
+        .upload(fileName, formData, {
+          contentType: `image/${fileExt}`,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      // Get public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("tournament-images").getPublicUrl(fileName);
+
+      // Update state
+      setCustomImageUri(asset.uri); // Local preview
+      setHasManualSelection(true);
+      updateFormData("thumbnail", `custom:${publicUrl}`);
+
+      Alert.alert("Success", "Image uploaded successfully!");
+    } catch (error: any) {
+      console.error("Image upload error:", error);
+      Alert.alert("Upload Error", error.message || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -228,6 +334,8 @@ export const useSubmitTournament = () => {
     setFormData(initialFormData);
     setSidePots([]);
     setSelectedVenue(null);
+    setCustomImageUri(null);
+    setHasManualSelection(false);
   };
 
   const handleSubmit = async () => {
@@ -281,7 +389,7 @@ export const useSubmitTournament = () => {
 
       Alert.alert(
         "Success!",
-        "Your tournament has been submitted for review.",
+        "Your tournament has been submitted successfully!",
         [{ text: "OK", onPress: resetForm }],
       );
     } catch (error: any) {
@@ -309,6 +417,26 @@ export const useSubmitTournament = () => {
     ...templates.map((t) => ({ label: t.name, value: t.id.toString() })),
   ];
 
+  // Get thumbnail image URL helper
+  const getThumbnailImageUrl = (thumbnailId: string) => {
+    if (thumbnailId.startsWith("custom:")) {
+      return thumbnailId.replace("custom:", "");
+    }
+
+    const option = THUMBNAIL_OPTIONS.find((opt) => opt.id === thumbnailId);
+    if (option?.imageUrl) {
+      // Direct construction of Supabase Storage URL
+      const { data } = supabase.storage
+        .from("tournament-images")
+        .getPublicUrl(option.imageUrl);
+
+      console.log("Image URL for", thumbnailId, ":", data.publicUrl);
+      return data.publicUrl;
+    }
+
+    return null;
+  };
+
   return {
     // Auth state
     user,
@@ -321,6 +449,11 @@ export const useSubmitTournament = () => {
     sidePots,
     selectedVenue,
     submitting,
+
+    // Image/thumbnail state
+    customImageUri,
+    hasManualSelection,
+    uploadingImage,
 
     // Computed
     isMaxFargoDisabled: formData.openTournament === true,
@@ -338,6 +471,9 @@ export const useSubmitTournament = () => {
     updateFormData,
     handleVenueSelect,
     handleTemplateSelect,
+    handleThumbnailSelect,
+    handleImageUpload,
+    getThumbnailImageUrl,
     addSidePot,
     updateSidePot,
     removeSidePot,

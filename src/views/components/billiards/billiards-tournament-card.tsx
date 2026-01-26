@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getGameTypeImageUrl } from "../../../models/services/game-type-image.service";
 import { Tournament } from "../../../models/types/tournament.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -22,6 +21,7 @@ interface BilliardsTournamentCardProps {
   isFavorited: boolean;
   onPress: () => void;
   onToggleFavorite: () => void;
+  getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
 export const BilliardsTournamentCard = ({
@@ -29,8 +29,10 @@ export const BilliardsTournamentCard = ({
   isFavorited,
   onPress,
   onToggleFavorite,
+  getTournamentImageUrl,
 }: BilliardsTournamentCardProps) => {
   const venue = tournament.venues;
+  const imageUrl = getTournamentImageUrl(tournament);
 
   const handleAddressPress = () => {
     if (!venue) return;
@@ -42,16 +44,35 @@ export const BilliardsTournamentCard = ({
     Linking.openURL(mapsUrl);
   };
 
+  const renderImage = () => {
+    if (imageUrl) {
+      return (
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.gameTypeImage}
+          resizeMode="cover"
+          onError={(e) => {
+            console.log("Tournament image failed to load:", imageUrl);
+            console.log("Error details:", e.nativeEvent.error);
+          }}
+        />
+      );
+    } else {
+      // Fallback to emoji if no image available
+      return (
+        <View style={styles.fallbackImageContainer}>
+          <Text style={styles.fallbackEmoji}>🎱</Text>
+        </View>
+      );
+    }
+  };
+
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={onPress}>
       {/* Image Header Section */}
       <View style={styles.imageSection}>
-        {/* Background Image from Supabase */}
-        <Image
-          source={{ uri: getGameTypeImageUrl(tournament.game_type) }}
-          style={styles.gameTypeImage}
-          resizeMode="cover"
-        />
+        {/* Background Image from tournament-images bucket */}
+        {renderImage()}
 
         {/* ID Badge */}
         <View style={styles.idBadge}>
@@ -143,6 +164,17 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  fallbackImageContainer: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fallbackEmoji: {
+    fontSize: 48,
+    color: COLORS.textMuted,
+  },
   idBadge: {
     position: "absolute",
     top: SPACING.sm,
@@ -153,7 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
   },
   idText: {
-    color: COLORS.text,
+    color: COLORS.white,
     fontSize: FONT_SIZES.xs,
     fontWeight: "500",
   },

@@ -319,13 +319,7 @@ const CompeteAdminDashboard = () => {
           subtitle="total views"
           onPress={() => router.push("/(tabs)/admin/analytics" as any)}
         />
-        <ManagementCard
-          icon="⚠️"
-          label="Pending"
-          value={vm.stats.pendingApprovals}
-          subtitle="need review"
-          onPress={() => router.push("/(tabs)/admin/pending-approvals" as any)}
-        />
+
         <ManagementCard
           icon="📋"
           label="Activity Log"
@@ -427,11 +421,11 @@ const SuperAdminDashboard = () => {
           onPress={() => router.push("/(tabs)/admin/analytics" as any)}
         />
         <ManagementCard
-          icon="⚠️"
-          label="Pending"
-          value={vm.stats.pendingApprovals}
-          subtitle="need review"
-          onPress={() => router.push("/(tabs)/admin/pending-approvals" as any)}
+          icon="⭐"
+          label="Featured"
+          value={0} // Hard-code for now
+          subtitle="players & bars"
+          onPress={() => router.push("/(tabs)/admin/featured-content" as any)}
         />
         <ManagementCard
           icon="📋"

@@ -108,9 +108,14 @@ export const useEditTournament = (tournamentId: number) => {
 
       // Handle open_tournament / max_fargo constraint
       if (field === "open_tournament" && value === true) {
-        return { ...prev, [field]: value, max_fargo: null };
+        return {
+          ...prev,
+          [field]: value,
+          max_fargo: undefined, // ✅ Use undefined instead of null
+        };
       }
-      if (field === "max_fargo" && value !== null) {
+
+      if (field === "max_fargo" && value !== null && value !== undefined) {
         return { ...prev, [field]: value, open_tournament: false };
       }
 

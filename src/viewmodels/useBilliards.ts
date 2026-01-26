@@ -2,31 +2,11 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { Tournament } from "../models/types/tournament.types";
 import {
   Filters,
   defaultFilters,
 } from "../views/components/common/filter-modal";
-
-export interface Tournament {
-  id: number;
-  name: string;
-  description: string;
-  game_type: string;
-  tournament_format: string;
-  tournament_date: string;
-  start_time: string;
-  entry_fee: number;
-  added_money: number;
-  is_recurring: boolean;
-  reports_to_fargo: boolean;
-  open_tournament: boolean;
-  max_fargo: number | null;
-  venues: {
-    venue: string;
-    city: string;
-    state: string;
-  };
-}
 
 interface CityOption {
   label: string;
@@ -64,6 +44,7 @@ interface UseBilliardsReturn {
   toggleFavorite: (tournamentId: number) => void;
   resetAllFilters: () => void;
   onRefresh: () => Promise<void>;
+  getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
 export function useBilliards(): UseBilliardsReturn {
@@ -142,22 +123,41 @@ export function useBilliards(): UseBilliardsReturn {
         .select(
           `
           id,
+          venue_id,
+          director_id,
+          template_id,
           name,
           description,
           game_type,
           tournament_format,
+          game_spot,
+          race,
+          table_size,
+          equipment,
+          number_of_tables,
           tournament_date,
           start_time,
+          timezone,
           entry_fee,
           added_money,
-          is_recurring,
+          max_fargo,
+          required_fargo_games,
           reports_to_fargo,
           open_tournament,
-          max_fargo,
-          venues (
+          phone_number,
+          thumbnail,
+          is_recurring,
+          status,
+          created_at,
+          updated_at,
+          venues!inner (
+            id,
             venue,
+            address,
             city,
-            state
+            state,
+            zip_code,
+            phone
           )
         `,
         )
@@ -249,8 +249,8 @@ export function useBilliards(): UseBilliardsReturn {
     // Entry fee range
     filtered = filtered.filter(
       (t) =>
-        t.entry_fee >= filters.minEntryFee &&
-        t.entry_fee <= filters.maxEntryFee,
+        (t.entry_fee || 0) >= filters.minEntryFee &&
+        (t.entry_fee || 0) <= filters.maxEntryFee,
     );
 
     // Fargo range
@@ -356,6 +356,51 @@ export function useBilliards(): UseBilliardsReturn {
     setRefreshing(false);
   };
 
+  // Get tournament image URL helper (same logic as submit page)
+  const getTournamentImageUrl = (tournament: Tournament) => {
+    // First check if tournament has a custom thumbnail
+    if (tournament.thumbnail) {
+      if (tournament.thumbnail.startsWith("custom:")) {
+        // Custom uploaded image
+        return tournament.thumbnail.replace("custom:", "");
+      } else {
+        // Game type default selected
+        const gameTypeImageMap: Record<string, string> = {
+          "8-ball": "8-ball.jpeg",
+          "9-ball": "9-ball.jpeg",
+          "10-ball": "10-ball.jpeg",
+        };
+
+        const imageFile =
+          gameTypeImageMap[tournament.thumbnail] ||
+          gameTypeImageMap[tournament.game_type];
+        if (imageFile) {
+          const { data } = supabase.storage
+            .from("tournament-images")
+            .getPublicUrl(imageFile);
+          return data.publicUrl;
+        }
+      }
+    }
+
+    // Fallback: try to get default image for game type
+    const gameTypeImageMap: Record<string, string> = {
+      "8-ball": "8-ball.jpeg",
+      "9-ball": "9-ball.jpeg",
+      "10-ball": "10-ball.jpeg",
+    };
+
+    const imageFile = gameTypeImageMap[tournament.game_type];
+    if (imageFile) {
+      const { data } = supabase.storage
+        .from("tournament-images")
+        .getPublicUrl(imageFile);
+      return data.publicUrl;
+    }
+
+    return null;
+  };
+
   return {
     // Data
     tournaments,
@@ -387,5 +432,6 @@ export function useBilliards(): UseBilliardsReturn {
     toggleFavorite,
     resetAllFilters,
     onRefresh,
+    getTournamentImageUrl,
   };
 }

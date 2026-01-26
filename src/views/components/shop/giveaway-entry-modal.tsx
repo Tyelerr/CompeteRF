@@ -2,21 +2,23 @@ import React from "react";
 import {
   ActivityIndicator,
   Modal,
-  ScrollView,
-  StyleSheet,
+  View,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  ScrollView,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { Giveaway } from "../../../models/types/giveaway.types";
-import { useGiveawayEntry } from "../../../viewmodels/useGiveawayEntry";
 import { Dropdown } from "../common/dropdown";
+import { useGiveawayEntry } from "../../../viewmodels/useGiveawayEntry";
+import { Giveaway } from "../../../models/types/giveaway.types";
 
-interface GiveawayEntryModalProps {
+interface Props {
   visible: boolean;
   giveaway: Giveaway | null;
   onClose: () => void;
@@ -28,7 +30,7 @@ export function GiveawayEntryModal({
   giveaway,
   onClose,
   onSuccess,
-}: GiveawayEntryModalProps) {
+}: Props) {
   const vm = useGiveawayEntry(giveaway);
 
   const handleSubmit = async () => {
@@ -39,358 +41,310 @@ export function GiveawayEntryModal({
     }
   };
 
-  const handleClose = () => {
-    vm.resetForm();
-    onClose();
-  };
-
   if (!giveaway) return null;
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
-      onRequestClose={handleClose}
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Official Rules</Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            style={styles.scrollView}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Rules Text */}
-            {vm.rulesText && (
-              <View style={styles.rulesContainer}>
-                <Text style={styles.rulesText}>{vm.rulesText}</Text>
-              </View>
-            )}
-
-            {/* Form */}
-            <View style={styles.form}>
-              {/* Name */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>
-                  Name (As it appears on license) <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, vm.errors.name_as_on_id && styles.inputError]}
-                  placeholder="Full Name"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={vm.form.name_as_on_id}
-                  onChangeText={(text) => vm.updateField("name_as_on_id", text)}
-                  autoCapitalize="words"
-                />
-                {vm.errors.name_as_on_id && (
-                  <Text style={styles.errorText}>{vm.errors.name_as_on_id}</Text>
-                )}
-              </View>
-
-              {/* Birthday */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>
-                  Birthday <Text style={styles.required}>*</Text>
-                </Text>
-                <View style={styles.birthdayRow}>
-                  <View style={styles.birthdayDropdown}>
-                    <Dropdown
-                      options={vm.monthOptions}
-                      selectedValue={vm.form.birthday.month}
-                      onSelect={(value) => vm.updateBirthday("month", value)}
-                      placeholder="Month"
-                    />
-                  </View>
-                  <View style={styles.birthdayDropdownSmall}>
-                    <Dropdown
-                      options={vm.dayOptions}
-                      selectedValue={vm.form.birthday.day}
-                      onSelect={(value) => vm.updateBirthday("day", value)}
-                      placeholder="Day"
-                    />
-                  </View>
-                  <View style={styles.birthdayDropdownSmall}>
-                    <Dropdown
-                      options={vm.yearOptions}
-                      selectedValue={vm.form.birthday.year}
-                      onSelect={(value) => vm.updateBirthday("year", value)}
-                      placeholder="Year"
-                    />
-                  </View>
-                </View>
-                {vm.errors.birthday && (
-                  <Text style={styles.errorText}>{vm.errors.birthday}</Text>
-                )}
-              </View>
-
-              {/* Email */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>
-                  Email <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, vm.errors.email && styles.inputError]}
-                  placeholder="your.email@example.com"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={vm.form.email}
-                  onChangeText={(text) => vm.updateField("email", text)}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {vm.errors.email && (
-                  <Text style={styles.errorText}>{vm.errors.email}</Text>
-                )}
-              </View>
-
-              {/* Phone */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>
-                  Phone Number <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput
-                  style={[styles.input, vm.errors.phone && styles.inputError]}
-                  placeholder="(555) 123-4567"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={vm.form.phone}
-                  onChangeText={(text) => vm.updateField("phone", text)}
-                  keyboardType="phone-pad"
-                />
-                {vm.errors.phone && (
-                  <Text style={styles.errorText}>{vm.errors.phone}</Text>
-                )}
-              </View>
-
-              {/* Links */}
-              <View style={styles.linksContainer}>
-                <Text style={styles.linksTitle}>Links:</Text>
-                <TouchableOpacity>
-                  <Text style={styles.link}>Official Rules</Text>
-                </TouchableOpacity>
-                <TouchableOpacity>
-                  <Text style={styles.link}>Privacy Policy</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Required Checkboxes */}
-              <View style={styles.checkboxSection}>
-                <Text style={styles.checkboxSectionTitle}>Required:</Text>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => vm.toggleCheckbox("confirmed_age")}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      vm.form.confirmed_age && styles.checkboxChecked,
-                    ]}
-                  >
-                    {vm.form.confirmed_age && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.checkboxLabel}>
-                    I am {vm.minAge} or older and meet the eligibility requirements.
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => vm.toggleCheckbox("agreed_to_rules")}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      vm.form.agreed_to_rules && styles.checkboxChecked,
-                    ]}
-                  >
-                    {vm.form.agreed_to_rules && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.checkboxLabel}>
-                    I have read and agree to the Official Rules.
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => vm.toggleCheckbox("agreed_to_privacy")}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      vm.form.agreed_to_privacy && styles.checkboxChecked,
-                    ]}
-                  >
-                    {vm.form.agreed_to_privacy && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.checkboxLabel}>
-                    I have read and agree to the Privacy Policy.
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => vm.toggleCheckbox("understood_one_entry")}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      vm.form.understood_one_entry && styles.checkboxChecked,
-                    ]}
-                  >
-                    {vm.form.understood_one_entry && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.checkboxLabel}>
-                    I understand it's one entry per person and duplicate entries
-                    will be void.
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Optional Checkbox */}
-              <View style={styles.checkboxSection}>
-                <Text style={styles.checkboxSectionTitle}>Optional:</Text>
-
-                <TouchableOpacity
-                  style={styles.checkboxRow}
-                  onPress={() => vm.toggleCheckbox("opted_in_promotions")}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      vm.form.opted_in_promotions && styles.checkboxChecked,
-                    ]}
-                  >
-                    {vm.form.opted_in_promotions && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <Text style={styles.checkboxLabel}>
-                    Receive optional updates, announcements, and promotions from
-                    Compete.
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Error Messages */}
-              {vm.errors.checkboxes && (
-                <Text style={styles.errorText}>{vm.errors.checkboxes}</Text>
-              )}
-              {vm.submitError && (
-                <Text style={styles.submitErrorText}>{vm.submitError}</Text>
-              )}
-            </View>
-          </ScrollView>
-
-          {/* Bottom Buttons */}
-          <View style={styles.bottomButtons}>
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                !vm.isFormComplete && styles.submitButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={!vm.isFormComplete || vm.isSubmitting}
-            >
-              {vm.isSubmitting ? (
-                <ActivityIndicator color={COLORS.text} />
-              ) : (
-                <Text
-                  style={[
-                    styles.submitButtonText,
-                    !vm.isFormComplete && styles.submitButtonTextDisabled,
-                  ]}
-                >
-                  I Agree & Continue
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Enter Giveaway</Text>
+          <View style={styles.placeholder} />
         </View>
-      </View>
+
+        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.giveawayTitle}>{giveaway.name}</Text>
+
+          {/* Full Name */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Full Name (as on ID) *</Text>
+            <TextInput
+              style={[
+                styles.input,
+                vm.errors.name_as_on_id && styles.inputError,
+              ]}
+              value={vm.form.name_as_on_id}
+              onChangeText={(text) => vm.updateField("name_as_on_id", text)}
+              placeholder="Enter your full name"
+              placeholderTextColor={COLORS.textMuted}
+              autoCapitalize="words"
+            />
+            {vm.errors.name_as_on_id && (
+              <Text style={styles.errorText}>{vm.errors.name_as_on_id}</Text>
+            )}
+          </View>
+
+          {/* Birthday - THIS IS THE KEY SECTION */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Date of Birth *</Text>
+            <View style={styles.dateRow}>
+              <View style={styles.dateDropdown}>
+                <Dropdown
+                  options={vm.monthOptions}
+                  value={vm.form.birthday.month} // ✅ This will now persist!
+                  onSelect={(value) => {
+                    console.log("Month selected:", value); // Debug log
+                    vm.updateBirthday("month", value);
+                  }}
+                  placeholder="Month"
+                />
+              </View>
+              <View style={styles.dateDropdownSmall}>
+                <Dropdown
+                  options={vm.dayOptions}
+                  value={vm.form.birthday.day}
+                  onSelect={(value) => {
+                    console.log("Day selected:", value); // Debug log
+                    vm.updateBirthday("day", value);
+                  }}
+                  placeholder="Day"
+                />
+              </View>
+              <View style={styles.dateDropdownSmall}>
+                <Dropdown
+                  options={vm.yearOptions}
+                  value={vm.form.birthday.year}
+                  onSelect={(value) => {
+                    console.log("Year selected:", value); // Debug log
+                    vm.updateBirthday("year", value);
+                  }}
+                  placeholder="Year"
+                />
+              </View>
+            </View>
+            {vm.errors.birthday && (
+              <Text style={styles.errorText}>{vm.errors.birthday}</Text>
+            )}
+          </View>
+
+          {/* Email */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Email Address *</Text>
+            <TextInput
+              style={[styles.input, vm.errors.email && styles.inputError]}
+              value={vm.form.email}
+              onChangeText={(text) => vm.updateField("email", text)}
+              placeholder="Enter your email"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {vm.errors.email && (
+              <Text style={styles.errorText}>{vm.errors.email}</Text>
+            )}
+          </View>
+
+          {/* Phone */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Phone Number *</Text>
+            <TextInput
+              style={[styles.input, vm.errors.phone && styles.inputError]}
+              value={vm.form.phone}
+              onChangeText={(text) => vm.updateField("phone", text)}
+              placeholder="(555) 123-4567"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="phone-pad"
+            />
+            {vm.errors.phone && (
+              <Text style={styles.errorText}>{vm.errors.phone}</Text>
+            )}
+          </View>
+
+          {/* Checkboxes */}
+          <View style={styles.checkboxSection}>
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => vm.toggleCheckbox("confirmed_age")}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  vm.form.confirmed_age && styles.checkboxChecked,
+                ]}
+              >
+                {vm.form.confirmed_age && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text style={styles.checkboxText}>
+                I confirm I am {vm.minAge}+ years old
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => vm.toggleCheckbox("agreed_to_rules")}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  vm.form.agreed_to_rules && styles.checkboxChecked,
+                ]}
+              >
+                {vm.form.agreed_to_rules && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text style={styles.checkboxText}>
+                I agree to the official rules
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => vm.toggleCheckbox("agreed_to_privacy")}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  vm.form.agreed_to_privacy && styles.checkboxChecked,
+                ]}
+              >
+                {vm.form.agreed_to_privacy && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text style={styles.checkboxText}>
+                I agree to the privacy policy
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => vm.toggleCheckbox("understood_one_entry")}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  vm.form.understood_one_entry && styles.checkboxChecked,
+                ]}
+              >
+                {vm.form.understood_one_entry && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text style={styles.checkboxText}>
+                I understand this is one entry per person
+              </Text>
+            </TouchableOpacity>
+
+            {vm.errors.checkboxes && (
+              <Text style={styles.errorText}>{vm.errors.checkboxes}</Text>
+            )}
+          </View>
+
+          {/* Debug Info - REMOVE AFTER TESTING */}
+          <View style={styles.debugInfo}>
+            <Text style={styles.debugTitle}>
+              🔍 DEBUG INFO (remove after testing):
+            </Text>
+            <Text style={styles.debugText}>
+              Month: "{vm.form.birthday.month}"
+            </Text>
+            <Text style={styles.debugText}>Day: "{vm.form.birthday.day}"</Text>
+            <Text style={styles.debugText}>
+              Year: "{vm.form.birthday.year}"
+            </Text>
+          </View>
+
+          {/* Submit Error */}
+          {vm.submitError && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.submitError}>{vm.submitError}</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Bottom Buttons */}
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={onClose}
+            disabled={vm.isSubmitting}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              (!vm.isFormComplete || vm.isSubmitting) && styles.buttonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!vm.isFormComplete || vm.isSubmitting}
+          >
+            {vm.isSubmitting ? (
+              <ActivityIndicator color={COLORS.text} size="small" />
+            ) : (
+              <Text style={styles.submitButtonText}>Enter Giveaway</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "flex-end",
-  },
   container: {
+    flex: 1,
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "95%",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
   },
   closeButton: {
     padding: SPACING.xs,
   },
-  closeButtonText: {
-    fontSize: FONT_SIZES.xl,
+  closeText: {
+    fontSize: 18,
     color: COLORS.textSecondary,
   },
-  scrollView: {
+  headerTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  placeholder: {
+    width: 30,
+  },
+  content: {
+    flex: 1,
     padding: SPACING.md,
   },
-  rulesContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
+  giveawayTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "600",
+    color: COLORS.text,
+    textAlign: "center",
     marginBottom: SPACING.lg,
-  },
-  rulesText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-  },
-  form: {
-    marginBottom: SPACING.md,
   },
   fieldGroup: {
     marginBottom: SPACING.md,
   },
   label: {
     fontSize: FONT_SIZES.md,
+    fontWeight: "600",
     color: COLORS.text,
     marginBottom: SPACING.xs,
-    fontWeight: "500",
-  },
-  required: {
-    color: COLORS.error || "#ef4444",
   },
   input: {
     backgroundColor: COLORS.surface,
@@ -409,64 +363,34 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     marginTop: SPACING.xs,
   },
-  submitErrorText: {
-    color: COLORS.error || "#ef4444",
-    fontSize: FONT_SIZES.md,
-    textAlign: "center",
-    marginTop: SPACING.md,
-    padding: SPACING.sm,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderRadius: 8,
-  },
-  birthdayRow: {
+  dateRow: {
     flexDirection: "row",
     gap: SPACING.sm,
   },
-  birthdayDropdown: {
+  dateDropdown: {
     flex: 2,
   },
-  birthdayDropdownSmall: {
+  dateDropdownSmall: {
     flex: 1,
   },
-  linksContainer: {
-    marginBottom: SPACING.md,
-  },
-  linksTitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    fontWeight: "500",
-    marginBottom: SPACING.xs,
-  },
-  link: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    marginBottom: 4,
-    textDecorationLine: "underline",
-  },
   checkboxSection: {
-    marginBottom: SPACING.md,
-  },
-  checkboxSectionTitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    fontWeight: "600",
-    marginBottom: SPACING.sm,
+    marginTop: SPACING.md,
   },
   checkboxRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: SPACING.sm,
+    alignItems: "center",
+    marginBottom: SPACING.md,
   },
   checkbox: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     borderRadius: 4,
     borderWidth: 2,
     borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
     marginRight: SPACING.sm,
-    justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
+    justifyContent: "center",
   },
   checkboxChecked: {
     backgroundColor: COLORS.primary,
@@ -474,22 +398,58 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     color: COLORS.text,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "bold",
   },
-  checkboxLabel: {
+  checkboxText: {
     flex: 1,
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
-    lineHeight: 22,
+  },
+  debugInfo: {
+    backgroundColor: "#f0f0f0",
+    padding: SPACING.md,
+    margin: SPACING.md,
+    borderRadius: 8,
+    marginTop: SPACING.lg,
+  },
+  debugTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "bold",
+    marginBottom: SPACING.xs,
+  },
+  debugText: {
+    fontSize: FONT_SIZES.sm,
+    marginBottom: 2,
+  },
+  errorContainer: {
+    marginTop: SPACING.md,
+  },
+  submitError: {
+    color: COLORS.error || "#ef4444",
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
   },
   bottomButtons: {
+    flexDirection: "row",
     padding: SPACING.md,
-    paddingBottom: SPACING.xl,
+    gap: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    flexDirection: "row",
-    gap: SPACING.sm,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    paddingVertical: SPACING.md,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cancelButtonText: {
+    color: COLORS.text,
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
   },
   submitButton: {
     flex: 1,
@@ -498,27 +458,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  submitButtonDisabled: {
-    backgroundColor: COLORS.surfaceLight,
-  },
   submitButtonText: {
     color: COLORS.text,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
   },
-  submitButtonTextDisabled: {
-    color: COLORS.textMuted,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: COLORS.surfaceLight,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
