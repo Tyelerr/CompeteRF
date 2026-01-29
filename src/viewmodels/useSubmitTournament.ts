@@ -1,13 +1,14 @@
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 import {
-  TournamentFormData,
-  initialFormData,
   THUMBNAIL_OPTIONS,
+  TournamentFormData,
+  getRecurrencePreviewText,
+  initialFormData,
 } from "../utils/tournament-form-data";
 
 interface Venue {
@@ -49,7 +50,7 @@ export const useSubmitTournament = () => {
   const [formData, setFormData] = useState<TournamentFormData>(initialFormData);
   const [sidePots, setSidePots] = useState<SidePot[]>([]);
 
-  // New state for thumbnail/image management
+  // Image/thumbnail state
   const [customImageUri, setCustomImageUri] = useState<string | null>(null);
   const [hasManualSelection, setHasManualSelection] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -132,6 +133,15 @@ export const useSubmitTournament = () => {
         updated.openTournament = false;
       }
 
+      // If switching to non-recurring, clear recurring fields only
+      if (field === "isRecurring" && value === false) {
+        updated.recurrenceType = "";
+        updated.recurrenceDay = "";
+        updated.recurrenceWeek = undefined;
+        updated.seriesEndDate = null;
+        // DON'T clear tournamentDate or startTime - user keeps their selections!
+      }
+
       return updated;
     });
   };
@@ -207,15 +217,14 @@ export const useSubmitTournament = () => {
     if (thumbnailId === "upload-custom") {
       handleImageUpload();
     } else {
-      setHasManualSelection(true); // Prevent future auto-switching
-      setCustomImageUri(null); // Clear any custom upload
+      setHasManualSelection(true);
+      setCustomImageUri(null);
       updateFormData("thumbnail", thumbnailId);
     }
   };
 
   const handleImageUpload = async () => {
     try {
-      // Request permissions
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -227,11 +236,10 @@ export const useSubmitTournament = () => {
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [16, 9], // Tournament card aspect ratio
+        aspect: [16, 9],
         quality: 0.8,
         exif: false,
       });
@@ -243,12 +251,10 @@ export const useSubmitTournament = () => {
       setUploadingImage(true);
       const asset = result.assets[0];
 
-      // Generate unique filename
       const timestamp = new Date().getTime();
       const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
       const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
 
-      // Upload to Supabase Storage
       const formData = new FormData();
       formData.append("file", {
         uri: asset.uri,
@@ -265,13 +271,11 @@ export const useSubmitTournament = () => {
 
       if (error) throw error;
 
-      // Get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("tournament-images").getPublicUrl(fileName);
 
-      // Update state
-      setCustomImageUri(asset.uri); // Local preview
+      setCustomImageUri(asset.uri);
       setHasManualSelection(true);
       updateFormData("thumbnail", `custom:${publicUrl}`);
 
@@ -302,6 +306,154 @@ export const useSubmitTournament = () => {
     setSidePots(sidePots.filter((_, i) => i !== index));
   };
 
+  // 🎯 AUTO-DETERMINE DAY FROM SELECTED DATE
+  const getDayFromDate = (date: Date): string => {
+    const days = [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+    ];
+    return days[date.getDay()];
+  };
+
+  // 🎯 NEW: Calculate next tournament dates within 30-day horizon
+  const calculateNextTournamentDates = (
+    startDate: Date,
+    recurrenceType: string,
+  ): Date[] => {
+    const dates: Date[] = [];
+    const horizonDays = 30;
+    const maxDate = new Date(startDate);
+    maxDate.setDate(maxDate.getDate() + horizonDays);
+
+    console.log(
+      `📅 Calculating additional tournaments from ${startDate.toDateString()} for ${horizonDays} days`,
+    );
+
+    let nextDate = new Date(startDate);
+
+    while (true) {
+      // Calculate next occurrence
+      if (recurrenceType === "weekly") {
+        nextDate = new Date(nextDate);
+        nextDate.setDate(nextDate.getDate() + 7);
+      } else if (recurrenceType === "monthly") {
+        nextDate = new Date(nextDate);
+        nextDate.setMonth(nextDate.getMonth() + 1);
+      } else {
+        break;
+      }
+
+      // Check if within horizon
+      if (nextDate > maxDate) {
+        console.log(
+          `⏰ ${nextDate.toDateString()} is beyond 30-day horizon, stopping`,
+        );
+        break;
+      }
+
+      dates.push(new Date(nextDate));
+      console.log(`✅ Adding tournament date: ${nextDate.toDateString()}`);
+
+      // Safety check - don't create more than 10 tournaments
+      if (dates.length >= 10) {
+        console.log("🛡️ Safety limit reached, stopping at 10 tournaments");
+        break;
+      }
+    }
+
+    console.log(`📊 Will create ${dates.length} additional tournaments`);
+    return dates;
+  };
+
+  // 🎯 NEW: Create additional recurring tournaments
+  const createAdditionalTournaments = async (
+    templateId: number,
+  ): Promise<void> => {
+    console.log("🔄 Creating additional tournaments for 30-day horizon");
+
+    if (!formData.tournamentDate || !formData.recurrenceType) {
+      console.log("❌ Missing required data for additional tournaments");
+      return;
+    }
+
+    const nextDates = calculateNextTournamentDates(
+      formData.tournamentDate,
+      formData.recurrenceType,
+    );
+
+    if (nextDates.length === 0) {
+      console.log("ℹ️ No additional tournaments needed within 30-day horizon");
+      return;
+    }
+
+    const validSidePots = sidePots.filter(
+      (pot) => pot.name.trim() && pot.amount.trim(),
+    );
+
+    // Create base tournament data (same for all tournaments in series)
+    const baseTournamentData = {
+      director_id: profile!.id_auto,
+      venue_id: formData.venueId,
+      template_id: templateId,
+      parent_template_id: templateId, // Link to recurring template
+      name: formData.name.trim(),
+      description: formData.description.trim() || null,
+      game_type: formData.gameType,
+      tournament_format: formData.tournamentFormat,
+      game_spot: formData.gameSpot.trim() || null,
+      race: formData.race.trim() || null,
+      table_size: formData.tableSize || null,
+      equipment: formData.equipment || null,
+      number_of_tables: formData.numberOfTables
+        ? parseInt(formData.numberOfTables)
+        : null,
+      start_time: formData.startTime,
+      timezone: formData.timezone,
+      entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : 0,
+      added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : 0,
+      side_pots: validSidePots.length > 0 ? validSidePots : null,
+      max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
+      required_fargo_games: formData.requiredFargoGames
+        ? parseInt(formData.requiredFargoGames)
+        : null,
+      reports_to_fargo: formData.reportsToFargo,
+      open_tournament: formData.openTournament,
+      phone_number: formData.phoneNumber.trim() || null,
+      thumbnail: formData.thumbnail || null,
+      is_recurring: true,
+      status: "active",
+    };
+
+    // Create tournaments for each date
+    const tournamentsToInsert = nextDates.map((date) => ({
+      ...baseTournamentData,
+      tournament_date: date.toISOString().split("T")[0], // Different date for each
+    }));
+
+    console.log(
+      "📋 Inserting additional tournaments:",
+      tournamentsToInsert.length,
+    );
+
+    const { error } = await supabase
+      .from("tournaments")
+      .insert(tournamentsToInsert);
+
+    if (error) {
+      console.error("❌ Error creating additional tournaments:", error);
+      throw error;
+    }
+
+    console.log(
+      `✅ Successfully created ${tournamentsToInsert.length} additional tournaments`,
+    );
+  };
+
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
       Alert.alert("Error", "Please enter a tournament name.");
@@ -315,10 +467,6 @@ export const useSubmitTournament = () => {
       Alert.alert("Error", "Please select a tournament format.");
       return false;
     }
-    if (!formData.tournamentDate) {
-      Alert.alert("Error", "Please select a tournament date.");
-      return false;
-    }
     if (!formData.startTime) {
       Alert.alert("Error", "Please select a start time.");
       return false;
@@ -327,6 +475,25 @@ export const useSubmitTournament = () => {
       Alert.alert("Error", "Please select a venue.");
       return false;
     }
+    if (!formData.tournamentDate) {
+      Alert.alert(
+        "Error",
+        formData.isRecurring
+          ? "Please select when your series begins."
+          : "Please select a tournament date.",
+      );
+      return false;
+    }
+
+    // 🎯 SIMPLIFIED: Only check for frequency, not individual day selection
+    if (formData.isRecurring) {
+      if (!formData.recurrenceType) {
+        Alert.alert("Error", "Please select how often this repeats.");
+        return false;
+      }
+      // NO MORE manual day validation - it's auto-determined from date!
+    }
+
     return true;
   };
 
@@ -338,66 +505,222 @@ export const useSubmitTournament = () => {
     setHasManualSelection(false);
   };
 
+  const createTournamentTemplate = async (): Promise<number> => {
+    console.log("🔄 Creating tournament template with form data:", formData);
+
+    const validSidePots = sidePots.filter(
+      (pot) => pot.name.trim() && pot.amount.trim(),
+    );
+
+    // Use tournamentDate as series start date - much simpler!
+    if (!formData.tournamentDate) {
+      throw new Error("Tournament date is required");
+    }
+
+    // 🎯 AUTO-DETERMINE DAY FROM SELECTED DATE
+    const recurrenceDay = getDayFromDate(formData.tournamentDate);
+    console.log(
+      `📅 Auto-determined recurrence day: ${recurrenceDay} from date: ${formData.tournamentDate}`,
+    );
+
+    let startDateString: string;
+    if (formData.tournamentDate instanceof Date) {
+      startDateString = formData.tournamentDate.toISOString().split("T")[0];
+    } else if (typeof formData.tournamentDate === "string") {
+      startDateString = formData.tournamentDate;
+    } else {
+      throw new Error("Invalid tournament date format");
+    }
+
+    let endDateString: string | null = null;
+    if (formData.seriesEndDate) {
+      if (formData.seriesEndDate instanceof Date) {
+        endDateString = formData.seriesEndDate.toISOString().split("T")[0];
+      } else if (typeof formData.seriesEndDate === "string") {
+        endDateString = formData.seriesEndDate;
+      }
+    }
+
+    const templateData = {
+      director_id: profile!.id_auto,
+      venue_id: formData.venueId,
+      name: formData.name.trim(),
+      description: formData.description.trim() || null,
+      game_type: formData.gameType,
+      tournament_format: formData.tournamentFormat,
+      game_spot: formData.gameSpot.trim() || null,
+      race: formData.race.trim() || null,
+      table_size: formData.tableSize || null,
+      equipment: formData.equipment || null,
+      number_of_tables: formData.numberOfTables
+        ? parseInt(formData.numberOfTables)
+        : null,
+      entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : null,
+      added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : null,
+      side_pots: validSidePots.length > 0 ? validSidePots : null,
+      max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
+      required_fargo_games: formData.requiredFargoGames
+        ? parseInt(formData.requiredFargoGames)
+        : null,
+      reports_to_fargo: formData.reportsToFargo || false,
+      open_tournament: formData.openTournament || false,
+      phone_number: formData.phoneNumber.trim() || null,
+      thumbnail: formData.thumbnail || null,
+      recurrence_type: formData.recurrenceType,
+      recurrence_day: recurrenceDay, // 🎯 Use auto-determined day
+      recurrence_week: null, // 🎯 Simplified - no week selection needed
+      start_time: formData.startTime,
+      series_start_date: startDateString, // Use their tournament date as series start
+      series_end_date: endDateString,
+      horizon_days: 30, // Fixed value - users can't control this
+      status: "active",
+    };
+
+    console.log("📋 Template data being inserted:", templateData);
+
+    // Validate required fields before inserting
+    const requiredFields = {
+      game_type: templateData.game_type,
+      tournament_format: templateData.tournament_format,
+      recurrence_type: templateData.recurrence_type,
+      recurrence_day: templateData.recurrence_day,
+      start_time: templateData.start_time,
+      series_start_date: templateData.series_start_date,
+    };
+
+    console.log("✅ Required fields check:", requiredFields);
+
+    // Check if any required field is empty
+    for (const [field, value] of Object.entries(requiredFields)) {
+      if (!value || value === "") {
+        console.error(`❌ Required field '${field}' is missing or empty`);
+        throw new Error(`Required field '${field}' is missing or empty`);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("tournament_templates")
+      .insert(templateData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ Template creation error:", error);
+      throw error;
+    }
+
+    console.log("✅ Template created successfully:", data);
+    return data.id;
+  };
+
+  const createSingleTournament = async (templateId?: number): Promise<void> => {
+    console.log("🎯 Creating single tournament with templateId:", templateId);
+
+    const validSidePots = sidePots.filter(
+      (pot) => pot.name.trim() && pot.amount.trim(),
+    );
+
+    const tournamentData = {
+      director_id: profile!.id_auto,
+      venue_id: formData.venueId,
+      template_id: templateId || formData.templateId,
+      parent_template_id: templateId, // Link to recurring template if created
+      name: formData.name.trim(),
+      description: formData.description.trim() || null,
+      game_type: formData.gameType,
+      tournament_format: formData.tournamentFormat,
+      game_spot: formData.gameSpot.trim() || null,
+      race: formData.race.trim() || null,
+      table_size: formData.tableSize || null,
+      equipment: formData.equipment || null,
+      number_of_tables: formData.numberOfTables
+        ? parseInt(formData.numberOfTables)
+        : null,
+      tournament_date: formData.tournamentDate!.toISOString().split("T")[0], // Use the date they selected
+      start_time: formData.startTime,
+      timezone: formData.timezone,
+      entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : 0,
+      added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : 0,
+      side_pots: validSidePots.length > 0 ? validSidePots : null,
+      max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
+      required_fargo_games: formData.requiredFargoGames
+        ? parseInt(formData.requiredFargoGames)
+        : null,
+      reports_to_fargo: formData.reportsToFargo,
+      open_tournament: formData.openTournament,
+      phone_number: formData.phoneNumber.trim() || null,
+      thumbnail: formData.thumbnail || null,
+      is_recurring: formData.isRecurring,
+      status: "active",
+    };
+
+    console.log("🎯 Tournament data being inserted:", tournamentData);
+
+    const { error } = await supabase.from("tournaments").insert(tournamentData);
+
+    if (error) {
+      console.error("❌ Tournament creation error:", error);
+      throw error;
+    }
+
+    console.log("✅ Tournament created successfully");
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!profile) return;
 
     setSubmitting(true);
     try {
-      const validSidePots = sidePots.filter(
-        (pot) => pot.name.trim() && pot.amount.trim(),
-      );
+      if (formData.isRecurring) {
+        console.log("🔄 Starting recurring tournament creation process");
 
-      const tournamentData = {
-        director_id: profile.id_auto,
-        venue_id: formData.venueId,
-        template_id: formData.templateId,
-        name: formData.name.trim(),
-        description: formData.description.trim() || null,
-        game_type: formData.gameType,
-        tournament_format: formData.tournamentFormat,
-        game_spot: formData.gameSpot.trim() || null,
-        race: formData.race.trim() || null,
-        table_size: formData.tableSize || null,
-        equipment: formData.equipment || null,
-        number_of_tables: formData.numberOfTables
-          ? parseInt(formData.numberOfTables)
-          : null,
-        tournament_date: formData.tournamentDate,
-        start_time: formData.startTime,
-        timezone: formData.timezone,
-        entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : 0,
-        added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : 0,
-        side_pots: validSidePots.length > 0 ? validSidePots : null,
-        max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
-        required_fargo_games: formData.requiredFargoGames
-          ? parseInt(formData.requiredFargoGames)
-          : null,
-        reports_to_fargo: formData.reportsToFargo,
-        open_tournament: formData.openTournament,
-        phone_number: formData.phoneNumber.trim() || null,
-        thumbnail: formData.thumbnail || null,
-        is_recurring: formData.isRecurring,
-        status: "active",
-      };
+        // Create tournament template first
+        const templateId = await createTournamentTemplate();
+        console.log("✅ Template created with ID:", templateId);
 
-      const { error } = await supabase
-        .from("tournaments")
-        .insert(tournamentData);
+        // Create the first tournament instance
+        await createSingleTournament(templateId);
+        console.log("✅ First tournament instance created");
 
-      if (error) throw error;
+        // 🎯 NEW: Create additional tournaments within 30-day horizon
+        await createAdditionalTournaments(templateId);
+        console.log("✅ Additional tournaments created");
 
-      Alert.alert(
-        "Success!",
-        "Your tournament has been submitted successfully!",
-        [{ text: "OK", onPress: resetForm }],
-      );
+        const additionalCount = calculateNextTournamentDates(
+          formData.tournamentDate!,
+          formData.recurrenceType,
+        ).length;
+
+        Alert.alert(
+          "Success!",
+          `Your recurring tournament series "${formData.name}" has been created! ` +
+            `${additionalCount + 1} tournaments have been scheduled within the next 30 days.`,
+          [{ text: "OK", onPress: resetForm }],
+        );
+      } else {
+        console.log("🎯 Creating single tournament");
+
+        // Create single tournament
+        await createSingleTournament();
+        console.log("✅ Single tournament created");
+
+        Alert.alert(
+          "Success!",
+          "Your tournament has been submitted successfully!",
+          [{ text: "OK", onPress: resetForm }],
+        );
+      }
     } catch (error: any) {
-      console.error("Submit error:", error);
+      console.error("❌ Submit error:", error);
       Alert.alert("Error", error.message || "Failed to submit tournament.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const getRecurrencePreview = (): string => {
+    return getRecurrencePreviewText(formData);
   };
 
   const navigateToLogin = () => router.push("/auth/login");
@@ -417,7 +740,6 @@ export const useSubmitTournament = () => {
     ...templates.map((t) => ({ label: t.name, value: t.id.toString() })),
   ];
 
-  // Get thumbnail image URL helper
   const getThumbnailImageUrl = (thumbnailId: string) => {
     if (thumbnailId.startsWith("custom:")) {
       return thumbnailId.replace("custom:", "");
@@ -425,12 +747,10 @@ export const useSubmitTournament = () => {
 
     const option = THUMBNAIL_OPTIONS.find((opt) => opt.id === thumbnailId);
     if (option?.imageUrl) {
-      // Direct construction of Supabase Storage URL
       const { data } = supabase.storage
         .from("tournament-images")
         .getPublicUrl(option.imageUrl);
 
-      console.log("Image URL for", thumbnailId, ":", data.publicUrl);
       return data.publicUrl;
     }
 
@@ -478,6 +798,7 @@ export const useSubmitTournament = () => {
     updateSidePot,
     removeSidePot,
     handleSubmit,
+    getRecurrencePreview,
     navigateToLogin,
     navigateToFaq,
   };

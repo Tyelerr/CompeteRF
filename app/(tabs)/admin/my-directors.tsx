@@ -137,6 +137,16 @@ export default function MyDirectorsScreen() {
         />
       </View>
 
+      {/* Add Director Button */}
+      <View style={styles.addButtonContainer}>
+        <TouchableOpacity
+          style={styles.addDirectorButton}
+          onPress={() => router.push("/(tabs)/admin/add-director" as any)}
+        >
+          <Text style={styles.addDirectorButtonText}>+ Add Director</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Directors List */}
       <FlatList
         data={vm.directors}
@@ -158,7 +168,7 @@ export default function MyDirectorsScreen() {
         ListEmptyComponent={
           <EmptyState
             message="No directors yet"
-            submessage="Add directors to your venues from the venue edit screen"
+            submessage="Add directors to manage your tournaments"
           />
         }
       />
@@ -221,7 +231,8 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
   },
   searchInput: {
     backgroundColor: COLORS.surface,
@@ -232,6 +243,29 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  addButtonContainer: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+  },
+  addDirectorButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addDirectorButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.surface,
   },
   listContent: {
     padding: SPACING.md,

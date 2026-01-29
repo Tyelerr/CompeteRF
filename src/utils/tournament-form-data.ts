@@ -12,8 +12,8 @@ export interface TournamentFormData {
   openTournament: boolean;
   entryFee: string;
   addedMoney: string;
-  tournamentDate: string;
-  startTime: string;
+  tournamentDate: Date | null; // This becomes series start date if recurring
+  startTime: string; // This is used for all recurring instances
   timezone: string;
   isRecurring: boolean;
   venueId: number | null;
@@ -22,6 +22,11 @@ export interface TournamentFormData {
   equipment: string;
   numberOfTables: string;
   thumbnail: string;
+  // Simplified recurring fields - no duplicate date/time
+  recurrenceType: string;
+  recurrenceDay: string;
+  recurrenceWeek: string | undefined;
+  seriesEndDate: Date | null; // Optional end date only
 }
 
 const getUserTimezone = (): string => {
@@ -46,7 +51,7 @@ export const initialFormData: TournamentFormData = {
   openTournament: false,
   entryFee: "",
   addedMoney: "",
-  tournamentDate: "",
+  tournamentDate: null,
   startTime: "",
   timezone: getUserTimezone(),
   isRecurring: false,
@@ -56,6 +61,11 @@ export const initialFormData: TournamentFormData = {
   equipment: "",
   numberOfTables: "",
   thumbnail: "",
+  // Simplified recurring fields
+  recurrenceType: "",
+  recurrenceDay: "",
+  recurrenceWeek: undefined,
+  seriesEndDate: null,
 };
 
 export const GAME_TYPES = [
@@ -149,19 +159,19 @@ export const THUMBNAIL_OPTIONS = [
     id: "one-pocket",
     name: "One Pocket",
     gameType: "one-pocket",
-    imageUrl: null, // You'll need to upload this image
+    imageUrl: null,
   },
   {
     id: "straight-pool",
     name: "Straight Pool",
     gameType: "straight-pool",
-    imageUrl: null, // You'll need to upload this image
+    imageUrl: null,
   },
   {
     id: "banks",
     name: "Banks",
     gameType: "banks",
-    imageUrl: null, // You'll need to upload this image
+    imageUrl: null,
   },
   {
     id: "upload-custom",
@@ -170,3 +180,85 @@ export const THUMBNAIL_OPTIONS = [
     imageUrl: null,
   },
 ];
+
+// Recurring tournament constants
+export const RECURRENCE_TYPES = [
+  { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
+];
+
+export const DAYS_OF_WEEK = [
+  { label: "Monday", value: "monday" },
+  { label: "Tuesday", value: "tuesday" },
+  { label: "Wednesday", value: "wednesday" },
+  { label: "Thursday", value: "thursday" },
+  { label: "Friday", value: "friday" },
+  { label: "Saturday", value: "saturday" },
+  { label: "Sunday", value: "sunday" },
+];
+
+export const RECURRENCE_WEEKS = [
+  { label: "1st Week", value: "1" },
+  { label: "2nd Week", value: "2" },
+  { label: "3rd Week", value: "3" },
+  { label: "4th Week", value: "4" },
+  { label: "Last Week", value: "last" },
+];
+
+// Helper function to generate recurrence preview text
+export const getRecurrencePreviewText = (
+  formData: TournamentFormData,
+): string => {
+  if (!formData.tournamentDate || !formData.startTime) {
+    return "Select date and time first";
+  }
+
+  if (!formData.recurrenceType || !formData.recurrenceDay) {
+    return "Configure frequency and day to see preview";
+  }
+
+  const dateStr = formData.tournamentDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const dayName =
+    formData.recurrenceDay.charAt(0).toUpperCase() +
+    formData.recurrenceDay.slice(1);
+  const timeStr = formatTime(formData.startTime);
+
+  if (formData.recurrenceType === "weekly") {
+    return `🔄 Every ${dayName} at ${timeStr}, starting ${dateStr}`;
+  }
+
+  if (formData.recurrenceType === "monthly" && formData.recurrenceWeek) {
+    const weekText =
+      formData.recurrenceWeek === "last"
+        ? "last"
+        : `${formData.recurrenceWeek}${getOrdinalSuffix(formData.recurrenceWeek)}`;
+    return `🔄 Every ${weekText} ${dayName} at ${timeStr}, starting ${dateStr}`;
+  }
+
+  return "Please complete the configuration";
+};
+
+// Helper function to format time
+const formatTime = (time: string): string => {
+  if (!time) return "[time not set]";
+  const [hours, minutes] = time.split(":");
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minutes} ${ampm}`;
+};
+
+// Helper function for ordinal suffixes (1st, 2nd, 3rd, 4th)
+const getOrdinalSuffix = (num: string): string => {
+  const n = parseInt(num);
+  if (n === 1) return "st";
+  if (n === 2) return "nd";
+  if (n === 3) return "rd";
+  return "th";
+};
