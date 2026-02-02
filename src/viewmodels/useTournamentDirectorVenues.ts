@@ -102,6 +102,8 @@ export const useTournamentDirectorVenues = () => {
     if (!profile?.id_auto) return;
 
     try {
+      console.log("Loading venues for director:", profile.id_auto);
+
       // Get venues where this director is assigned
       let query = supabase
         .from("venue_directors")
@@ -115,7 +117,6 @@ export const useTournamentDirectorVenues = () => {
             city,
             state,
             zip_code,
-            phone_number,
             status
           ),
           assigned_by_profile:profiles!venue_directors_assigned_by_fkey (
@@ -137,6 +138,8 @@ export const useTournamentDirectorVenues = () => {
 
       const { data, error } = await query;
       if (error) throw error;
+
+      console.log("Found venue assignments:", data?.length || 0);
 
       let venueDirectorships = data || [];
 
@@ -163,23 +166,39 @@ export const useTournamentDirectorVenues = () => {
       // Add computed stats for each venue
       const venuesWithStats = await Promise.all(
         venueDirectorships.map(async (vd: any) => {
-          // Get tournament stats for this director at this venue
+          // Get all tournaments for this director at this venue
           const { data: tournaments } = await supabase
             .from("tournaments")
-            .select("id, status, views_count, favorites_count, tournament_date")
+            .select("id, status, tournament_date")
             .eq("director_id", profile.id_auto)
             .eq("venue_id", vd.venue_id);
 
           const tournamentCount = tournaments?.length || 0;
           const activeTournaments =
             tournaments?.filter((t) => t.status === "active").length || 0;
-          const totalViews =
-            tournaments?.reduce((sum, t) => sum + (t.views_count || 0), 0) || 0;
-          const totalFavorites =
-            tournaments?.reduce(
-              (sum, t) => sum + (t.favorites_count || 0),
-              0,
-            ) || 0;
+
+          let totalViews = 0;
+          let totalFavorites = 0;
+
+          if (tournaments && tournaments.length > 0) {
+            const tournamentIds = tournaments.map((t) => t.id);
+
+            // Get views count from tournament_analytics table
+            const { count: viewsCount } = await supabase
+              .from("tournament_analytics")
+              .select("id", { count: "exact", head: true })
+              .in("tournament_id", tournamentIds)
+              .eq("event_type", "view");
+
+            // Get favorites count from favorites table
+            const { count: favoritesCount } = await supabase
+              .from("favorites")
+              .select("id", { count: "exact", head: true })
+              .in("tournament_id", tournamentIds);
+
+            totalViews = viewsCount || 0;
+            totalFavorites = favoritesCount || 0;
+          }
 
           // Get last tournament date
           const sortedTournaments = tournaments?.sort(

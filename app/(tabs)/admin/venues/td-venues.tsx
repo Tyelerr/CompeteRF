@@ -13,36 +13,67 @@ import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { useTournamentDirectorVenues } from "../../../../src/viewmodels/useTournamentDirectorVenues";
-import { EmptyState } from "../../../../src/views/components/dashboard";
-import { TDVenueCard } from "../../../../src/views/components/venues/TDVenueCard";
 
-const StatusTab = ({
-  label,
-  count,
-  isActive,
+// TD Venue Card Component (bar owner style but read-only)
+const TDVenueCard = ({
+  venue,
   onPress,
 }: {
-  label: string;
-  count: number;
-  isActive: boolean;
+  venue: any;
   onPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={[styles.statusTab, isActive && styles.statusTabActive]}
-    onPress={onPress}
-  >
-    <Text
-      style={[styles.statusTabText, isActive && styles.statusTabTextActive]}
+}) => {
+  if (!venue.venues) return null;
+
+  const venueData = venue.venues;
+
+  return (
+    <TouchableOpacity
+      style={styles.venueCard}
+      onPress={onPress}
+      activeOpacity={0.8}
     >
-      {label}
-    </Text>
-    <Text
-      style={[styles.statusTabCount, isActive && styles.statusTabCountActive]}
-    >
-      {count}
-    </Text>
-  </TouchableOpacity>
-);
+      {/* Header */}
+      <View style={styles.cardHeader}>
+        <Text style={styles.venueName}>{venueData.venue}</Text>
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusText}>TD</Text>
+        </View>
+      </View>
+
+      {/* Address */}
+      <Text style={styles.address}>{venueData.address}</Text>
+      <Text style={styles.location}>
+        {venueData.city}, {venueData.state} {venueData.zip_code}
+      </Text>
+
+      {/* Stats Row - Black background like bar owner cards */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{venue.tournament_count || 0}</Text>
+          <Text style={styles.statLabel}>Tournaments</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{venue.active_tournaments || 0}</Text>
+          <Text style={styles.statLabel}>Active Events</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{venue.total_views || 0}</Text>
+          <Text style={styles.statLabel}>Views</Text>
+        </View>
+      </View>
+
+      {/* Assignment Info */}
+      <View style={styles.roleSection}>
+        <Text style={styles.roleText}>
+          🎯 Tournament Director - Assigned{" "}
+          {new Date(venue.assigned_at).toLocaleDateString()}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 export default function TDVenuesScreen() {
   const router = useRouter();
@@ -59,11 +90,10 @@ export default function TDVenuesScreen() {
   const renderVenue = ({ item }: { item: any }) => (
     <TDVenueCard
       venue={item}
-      onPress={() => vm.handleVenuePress(item)}
-      onCreateTournament={() => vm.handleCreateTournament(item)}
-      isProcessing={false}
-      showActions={true}
-      canCreateTournaments={vm.canCreateTournaments}
+      onPress={() => {
+        // Navigate to venue details (read-only)
+        console.log("View venue details:", item);
+      }}
     />
   );
 
@@ -77,68 +107,24 @@ export default function TDVenuesScreen() {
         >
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Venues</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      {/* Stats Summary */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{vm.stats.totalVenues}</Text>
-            <Text style={styles.statLabel}>Total Venues</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{vm.stats.totalTournaments}</Text>
-            <Text style={styles.statLabel}>Total Tournaments</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{vm.stats.activeTournaments}</Text>
-            <Text style={styles.statLabel}>Active Events</Text>
-          </View>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>My Venues</Text>
+          <Text style={styles.headerSubtitle}>
+            Venues where you're assigned as TD
+          </Text>
         </View>
+        <View style={styles.placeholder} />
       </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by venue name, city, or state..."
+          placeholder="Search venues..."
           placeholderTextColor={COLORS.textMuted}
           value={vm.filters.search}
           onChangeText={vm.updateSearch}
         />
-      </View>
-
-      {/* Status Tabs */}
-      <View style={styles.statusTabs}>
-        <StatusTab
-          label="Active"
-          count={vm.statusCounts.active}
-          isActive={vm.filters.status === "active"}
-          onPress={() => vm.updateStatusFilter("active")}
-        />
-        <StatusTab
-          label="Archived"
-          count={vm.statusCounts.archived}
-          isActive={vm.filters.status === "archived"}
-          onPress={() => vm.updateStatusFilter("archived")}
-        />
-        <StatusTab
-          label="All"
-          count={vm.statusCounts.all}
-          isActive={vm.filters.status === "all"}
-          onPress={() => vm.updateStatusFilter("all")}
-        />
-      </View>
-
-      {/* Info Banner */}
-      <View style={styles.infoBanner}>
-        <Text style={styles.infoBannerIcon}>ℹ️</Text>
-        <Text style={styles.infoBannerText}>
-          These are venues where you have been assigned as a tournament
-          director. You can create tournaments at these locations.
-        </Text>
       </View>
 
       {/* Venues List */}
@@ -155,32 +141,17 @@ export default function TDVenuesScreen() {
           />
         }
         ListEmptyComponent={
-          <EmptyState
-            message={
-              vm.filters.status === "active"
-                ? "No active venue assignments"
-                : vm.filters.status === "archived"
-                  ? "No archived venue assignments"
-                  : "No venue assignments found"
-            }
-            submessage={
-              vm.filters.search
-                ? "Try adjusting your search terms"
-                : "Venue assignments will appear here when added by venue owners or admins"
-            }
-          />
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🏢</Text>
+            <Text style={styles.emptyTitle}>No venue assignments</Text>
+            <Text style={styles.emptyText}>
+              Venue assignments will appear here when added by venue owners or
+              admins
+            </Text>
+          </View>
         }
         showsVerticalScrollIndicator={false}
       />
-
-      {/* Help Text */}
-      <View style={styles.helpSection}>
-        <Text style={styles.helpTitle}>Need access to a venue?</Text>
-        <Text style={styles.helpText}>
-          Contact the venue owner or an administrator to request tournament
-          director access.
-        </Text>
-      </View>
     </View>
   );
 }
@@ -218,37 +189,21 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
+  headerCenter: {
+    alignItems: "center",
+  },
   headerTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: "700",
     color: COLORS.text,
   },
-  placeholder: {
-    width: 50,
-  },
-  statsContainer: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  statLabel: {
+  headerSubtitle: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    marginTop: 2,
+  },
+  placeholder: {
+    width: 50,
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -265,82 +220,111 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
-  statusTabs: {
-    flexDirection: "row",
-    backgroundColor: COLORS.surface,
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    borderRadius: 8,
-    padding: SPACING.xs,
-    gap: SPACING.xs,
-  },
-  statusTab: {
-    flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  statusTabActive: {
-    backgroundColor: COLORS.primary,
-  },
-  statusTabText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  statusTabTextActive: {
-    color: COLORS.white,
-  },
-  statusTabCount: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  statusTabCountActive: {
-    color: COLORS.white,
-    opacity: 0.8,
-  },
-  infoBanner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: COLORS.primary + "10",
-    marginHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
-  },
-  infoBannerIcon: {
-    fontSize: 16,
-    marginRight: SPACING.sm,
-  },
-  infoBannerText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    flex: 1,
-    lineHeight: 20,
-  },
   listContent: {
     padding: SPACING.md,
-    paddingBottom: SPACING.xl * 3,
+    paddingBottom: SPACING.xl * 2,
   },
-  helpSection: {
+  venueCard: {
     backgroundColor: COLORS.surface,
+    borderRadius: 12,
     padding: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  helpTitle: {
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: SPACING.sm,
+  },
+  venueName: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    color: COLORS.text,
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  statusBadge: {
+    backgroundColor: COLORS.success,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: COLORS.white,
+  },
+  address: {
     fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: 2,
+  },
+  location: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+  },
+  statsRow: {
+    backgroundColor: "#000000",
+    borderRadius: 8,
+    flexDirection: "row",
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    color: COLORS.white,
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.white,
+    opacity: 0.7,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: COLORS.white,
+    opacity: 0.2,
+    marginVertical: SPACING.xs,
+  },
+  roleSection: {
+    backgroundColor: COLORS.primary + "10",
+    borderRadius: 6,
+    padding: SPACING.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  roleText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  emptyState: {
+    alignItems: "center",
+    padding: SPACING.xl * 2,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: SPACING.md,
+  },
+  emptyTitle: {
+    fontSize: FONT_SIZES.lg,
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
   },
-  helpText: {
-    fontSize: FONT_SIZES.xs,
+  emptyText: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    lineHeight: 16,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

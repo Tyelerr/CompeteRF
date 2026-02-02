@@ -139,7 +139,7 @@ const TDDashboard = () => {
           icon="🏢"
           value={vm.stats.venues}
           label="My Venues"
-          onPress={() => router.push("/(tabs)/admin/my-venues" as any)}
+          onPress={() => router.push(vm.navigateToVenues() as any)}
         />
         <StatCard icon="❤️" value={vm.stats.totalFavorites} label="Favorites" />
       </View>

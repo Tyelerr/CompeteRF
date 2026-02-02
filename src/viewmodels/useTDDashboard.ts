@@ -303,6 +303,19 @@ export const useTDDashboard = () => {
     }
   };
 
+  // Navigation helpers
+  const navigateToTournaments = () => {
+    return "/(tabs)/admin/tournaments/td-tournaments";
+  };
+
+  const navigateToVenues = () => {
+    return "/(tabs)/admin/venues/td-venues";
+  };
+
+  const navigateToActiveEvents = () => {
+    return "/(tabs)/admin/tournaments/td-tournaments?status=active";
+  };
+
   // Build time period options for dropdown
   const timePeriodOptions = TIME_PERIODS.map((p) => ({
     label: p.label,
@@ -325,5 +338,10 @@ export const useTDDashboard = () => {
     // Actions
     onRefresh,
     handleTimePeriodChange,
+
+    // Navigation
+    navigateToTournaments,
+    navigateToVenues,
+    navigateToActiveEvents,
   };
 };
