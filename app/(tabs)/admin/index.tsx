@@ -119,14 +119,20 @@ const TDDashboard = () => {
           icon="🏆"
           value={vm.stats.myTournaments}
           label="My Tournaments"
-          onPress={() => router.push("/(tabs)/admin/my-tournaments" as any)}
+          onPress={() =>
+            router.push(
+              "/(tabs)/admin/tournaments/tournament-director-manager" as any,
+            )
+          }
         />
         <StatCard
           icon="✅"
           value={vm.stats.activeEvents}
           label="Active Events"
           onPress={() =>
-            router.push("/(tabs)/admin/my-tournaments?filter=active" as any)
+            router.push(
+              "/(tabs)/admin/tournaments/tournament-director-manager?filter=active" as any,
+            )
           }
         />
         <StatCard
@@ -221,7 +227,9 @@ const BarOwnerDashboard = () => {
           value={vm.stats.activeTournaments}
           label="Tournament Manager"
           onPress={() =>
-            router.push("/(tabs)/admin/my-venues-tournaments" as any)
+            router.push(
+              "/(tabs)/admin/tournaments/bar-tournament-manager" as any,
+            )
           }
         />
         <StatCard icon="👁️" value={vm.stats.totalViews} label="Total Views" />
@@ -303,7 +311,9 @@ const CompeteAdminDashboard = () => {
           value={vm.stats.totalTournaments}
           subtitle={`${vm.stats.activeTournaments} active`}
           onPress={() =>
-            router.push("/(tabs)/admin/tournament-management" as any)
+            router.push(
+              "/(tabs)/admin/tournaments/admin-tournament-manager" as any,
+            )
           }
         />
         <ManagementCard
@@ -404,7 +414,9 @@ const SuperAdminDashboard = () => {
           value={vm.stats.totalTournaments}
           subtitle={`${vm.stats.activeTournaments} active`}
           onPress={() =>
-            router.push("/(tabs)/admin/tournament-management" as any)
+            router.push(
+              "/(tabs)/admin/tournaments/super-admin-tournament-manager" as any,
+            )
           }
         />
         <ManagementCard

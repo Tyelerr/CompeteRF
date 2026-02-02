@@ -49,7 +49,7 @@ const DirectorCard = ({
 }) => {
   return (
     <View style={styles.card}>
-      {/* Top Row: Avatar, Info, Delete Button */}
+      {/* Top Row: Avatar, Info, Remove Button */}
       <View style={styles.cardHeader}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -61,8 +61,11 @@ const DirectorCard = ({
           <Text style={styles.directorEmail}>{director.email}</Text>
           <Text style={styles.directorId}>ID: {director.director_id}</Text>
         </View>
-        <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-          <Text style={styles.deleteIcon}>🗑️</Text>
+        <TouchableOpacity
+          style={styles.removeDirectorButton}
+          onPress={onDelete}
+        >
+          <Text style={styles.removeDirectorButtonText}>Remove Director</Text>
         </TouchableOpacity>
       </View>
 
@@ -316,16 +319,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-  deleteButton: {
-    width: 44,
-    height: 44,
+  removeDirectorButton: {
+    backgroundColor: "#ef4444", // Red
+    borderWidth: 1,
+    borderColor: "#dc2626",
     borderRadius: 8,
-    backgroundColor: COLORS.error + "15",
-    justifyContent: "center",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
     alignItems: "center",
+    justifyContent: "center",
+    minWidth: 120,
   },
-  deleteIcon: {
-    fontSize: 24,
+  removeDirectorButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: "#ffffff",
   },
   statsBox: {
     backgroundColor: COLORS.background,
