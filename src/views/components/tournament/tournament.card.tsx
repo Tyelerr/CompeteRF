@@ -106,7 +106,7 @@ export const TournamentCard = ({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      {/* Header: Name, Status, and Action Icons */}
+      {/* Header: Name, Status, and ID */}
       <View style={styles.cardHeader}>
         <Text
           style={[styles.tournamentName, isArchived && styles.textArchived]}
@@ -116,7 +116,7 @@ export const TournamentCard = ({
         </Text>
 
         <View style={styles.headerRight}>
-          {/* Status Badge */}
+          {/* Status Badge - No icon, just text */}
           <View
             style={[
               styles.statusBadge,
@@ -128,7 +128,10 @@ export const TournamentCard = ({
             </Text>
           </View>
 
-          {/* Action Icons - MOVED TO BOTTOM */}
+          {/* Tournament ID Badge - Below status */}
+          <View style={styles.idBadge}>
+            <Text style={styles.idText}>ID: {tournament.id}</Text>
+          </View>
         </View>
       </View>
 
@@ -320,7 +323,7 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     alignItems: "flex-end",
-    flexDirection: "row",
+    flexDirection: "column",
     gap: SPACING.xs,
   },
   tournamentName: {
@@ -342,6 +345,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: "600",
     textTransform: "capitalize",
+  },
+  idBadge: {
+    backgroundColor: "#000000",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  idText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: COLORS.white,
   },
   actionIcons: {
     flexDirection: "row",

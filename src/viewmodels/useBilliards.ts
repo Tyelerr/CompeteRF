@@ -358,46 +358,39 @@ export function useBilliards(): UseBilliardsReturn {
 
   // Get tournament image URL helper (same logic as submit page)
   const getTournamentImageUrl = (tournament: Tournament) => {
-    // First check if tournament has a custom thumbnail
-    if (tournament.thumbnail) {
-      if (tournament.thumbnail.startsWith("custom:")) {
-        // Custom uploaded image
-        return tournament.thumbnail.replace("custom:", "");
-      } else {
-        // Game type default selected
-        const gameTypeImageMap: Record<string, string> = {
-          "8-ball": "8-ball.jpeg",
-          "9-ball": "9-ball.jpeg",
-          "10-ball": "10-ball.jpeg",
-        };
-
-        const imageFile =
-          gameTypeImageMap[tournament.thumbnail] ||
-          gameTypeImageMap[tournament.game_type];
-        if (imageFile) {
-          const { data } = supabase.storage
-            .from("tournament-images")
-            .getPublicUrl(imageFile);
-          return data.publicUrl;
-        }
-      }
-    }
-
-    // Fallback: try to get default image for game type
+    // Complete game type to image file mapping
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
       "9-ball": "9-ball.jpeg",
       "10-ball": "10-ball.jpeg",
+      "one-pocket": "One-Pocket.jpeg",
+      "straight-pool": "Straight-Pool.jpeg",
+      banks: "Banks.jpeg",
     };
 
-    const imageFile = gameTypeImageMap[tournament.game_type];
-    if (imageFile) {
-      const { data } = supabase.storage
-        .from("tournament-images")
-        .getPublicUrl(imageFile);
-      return data.publicUrl;
+    // First check if tournament has a custom thumbnail
+    if (tournament.thumbnail) {
+      if (tournament.thumbnail.startsWith("custom:")) {
+        // Custom uploaded image - return the full Supabase URL
+        return tournament.thumbnail.replace("custom:", "");
+      } else {
+        // Game type image selected during submission
+        const imageFile = gameTypeImageMap[tournament.thumbnail];
+        if (imageFile) {
+          // Use the correct Supabase project URL
+          return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
+        }
+      }
     }
 
+    // Fallback: try to get default image based on game type
+    const imageFile = gameTypeImageMap[tournament.game_type];
+    if (imageFile) {
+      // Use the correct Supabase project URL
+      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
+    }
+
+    // No image available
     return null;
   };
 

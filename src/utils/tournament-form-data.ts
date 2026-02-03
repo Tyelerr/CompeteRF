@@ -159,19 +159,19 @@ export const THUMBNAIL_OPTIONS = [
     id: "one-pocket",
     name: "One Pocket",
     gameType: "one-pocket",
-    imageUrl: null,
+    imageUrl: "One-Pocket.jpeg",
   },
   {
     id: "straight-pool",
     name: "Straight Pool",
     gameType: "straight-pool",
-    imageUrl: null,
+    imageUrl: "Straight-Pool.jpeg",
   },
   {
     id: "banks",
     name: "Banks",
     gameType: "banks",
-    imageUrl: null,
+    imageUrl: "Banks.jpeg",
   },
   {
     id: "upload-custom",

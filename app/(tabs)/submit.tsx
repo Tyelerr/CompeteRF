@@ -142,7 +142,7 @@ export default function SubmitScreen() {
               <Text style={styles.thumbnailEmoji}>+</Text>
             )
           ) : imageUrl ? (
-            // Real Images (8-ball, 9-ball, 10-ball)
+            // Real Images (8-ball, 9-ball, 10-ball, banks, one-pocket, straight-pool)
             <Image
               source={{ uri: imageUrl || undefined }}
               style={styles.thumbnailImage}
@@ -150,7 +150,7 @@ export default function SubmitScreen() {
               onError={() => console.log("Image failed to load:", imageUrl)}
             />
           ) : (
-            // Emoji Placeholders (one-pocket, straight-pool, banks)
+            // Emoji Placeholders (if any images still don't have URLs)
             <Text style={styles.thumbnailEmoji}>🎱</Text>
           )}
           <Text

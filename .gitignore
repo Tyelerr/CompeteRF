@@ -41,3 +41,13 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Credentials
+credentials/
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local

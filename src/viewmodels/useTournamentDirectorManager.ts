@@ -21,6 +21,7 @@ export type TournamentStatusFilter =
   | "archived"
   | "all";
 export type SortOption = "date" | "name";
+export type SortDirection = "asc" | "desc";
 
 interface StatusCounts {
   active: number;
@@ -50,6 +51,7 @@ export const useTournamentDirectorManager = () => {
   const [statusFilter, setStatusFilter] =
     useState<TournamentStatusFilter>("active");
   const [sortOption, setSortOption] = useState<SortOption>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc"); // Default ascending
   const [searchQuery, setSearchQuery] = useState("");
 
   // Counts
@@ -71,7 +73,7 @@ export const useTournamentDirectorManager = () => {
 
   useEffect(() => {
     applyFilters();
-  }, [tournaments, statusFilter, sortOption, searchQuery]);
+  }, [tournaments, statusFilter, sortOption, sortDirection, searchQuery]);
 
   // Load tournaments created by this tournament director
   const loadTournaments = async () => {
@@ -182,19 +184,55 @@ export const useTournamentDirectorManager = () => {
       );
     }
 
-    // Sort
+    // Sort with direction toggle
     filtered.sort((a, b) => {
+      let compareResult = 0;
+
       if (sortOption === "date") {
-        return (
-          new Date(b.tournament_date).getTime() -
-          new Date(a.tournament_date).getTime()
-        );
+        compareResult =
+          new Date(a.tournament_date).getTime() -
+          new Date(b.tournament_date).getTime();
       } else {
-        return a.name.localeCompare(b.name);
+        compareResult = a.name.localeCompare(b.name);
       }
+
+      // Apply sort direction
+      return sortDirection === "asc" ? compareResult : -compareResult;
     });
 
     setFilteredTournaments(filtered);
+  };
+
+  // Toggle sort direction when same option is clicked
+  const handleSortOptionChange = (newSortOption: SortOption) => {
+    if (sortOption === newSortOption) {
+      // Same option clicked, toggle direction
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // Different option clicked, set new option and default to ascending
+      setSortOption(newSortOption);
+      setSortDirection("asc");
+    }
+  };
+
+  // Get sort button labels with arrows
+  const getSortLabel = (option: SortOption) => {
+    const isActive = sortOption === option;
+    const direction = isActive ? sortDirection : "asc";
+
+    if (option === "date") {
+      if (direction === "asc") {
+        return "Oldest ↑";
+      } else {
+        return "Newest ↓";
+      }
+    } else {
+      if (direction === "asc") {
+        return "A to Z ↑";
+      } else {
+        return "Z to A ↓";
+      }
+    }
   };
 
   // Actions
@@ -283,6 +321,7 @@ export const useTournamentDirectorManager = () => {
     // Filters
     statusFilter,
     sortOption,
+    sortDirection,
     searchQuery,
     statusCounts,
 
@@ -290,6 +329,8 @@ export const useTournamentDirectorManager = () => {
     setStatusFilter,
     setSortOption,
     setSearchQuery,
+    handleSortOptionChange, // New toggle handler
+    getSortLabel, // New label generator
 
     // Tournament actions
     archiveTournament,

@@ -2,6 +2,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
+import { ImageContentScanner } from "../../image-scanner"; // 🔍 Add image scanner
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 import {
@@ -54,6 +55,7 @@ export const useSubmitTournament = () => {
   const [customImageUri, setCustomImageUri] = useState<string | null>(null);
   const [hasManualSelection, setHasManualSelection] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [scanningImage, setScanningImage] = useState(false); // 🔍 Add scanning state
 
   // Refs for auto-advance
   const refs = {
@@ -223,10 +225,10 @@ export const useSubmitTournament = () => {
     }
   };
 
+  // 🔍 Updated handleImageUpload with image scanning
   const handleImageUpload = async () => {
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== "granted") {
         Alert.alert(
@@ -249,8 +251,35 @@ export const useSubmitTournament = () => {
       }
 
       setUploadingImage(true);
+      setScanningImage(true); // Start scanning state
       const asset = result.assets[0];
 
+      // 🔍 STEP 1: Scan image for inappropriate content FIRST
+      console.log("🔍 Scanning image for inappropriate content...");
+      const scanResult = await ImageContentScanner.scanImage(asset.uri, profile?.id_auto?.toString());
+
+      console.log("Scan result:", {
+        appropriate: scanResult.isAppropriate,
+        violations: scanResult.violations,
+      });
+
+      setScanningImage(false); // End scanning state
+
+      // 🚫 STEP 2: Block inappropriate images
+      if (!scanResult.isAppropriate) {
+        Alert.alert(
+          "🚫 Image Not Allowed",
+          `This image contains inappropriate content and cannot be used for tournaments:\n\n${scanResult.violations.join('\n')}`,
+          [
+            { text: "Try Different Image", onPress: () => handleImageUpload() },
+            { text: "Cancel", style: "cancel" }
+          ]
+        );
+        setUploadingImage(false);
+        return;
+      }
+
+      // ✅ STEP 3: Upload appropriate images to Supabase
       const timestamp = new Date().getTime();
       const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
       const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
@@ -279,12 +308,14 @@ export const useSubmitTournament = () => {
       setHasManualSelection(true);
       updateFormData("thumbnail", `custom:${publicUrl}`);
 
-      Alert.alert("Success", "Image uploaded successfully!");
+      Alert.alert("Success", "✅ Image scanned and uploaded successfully!");
+      
     } catch (error: any) {
       console.error("Image upload error:", error);
-      Alert.alert("Upload Error", error.message || "Failed to upload image");
+      Alert.alert("Upload Error", error.message || "Failed to upload image. Please check your internet connection.");
     } finally {
       setUploadingImage(false);
+      setScanningImage(false);
     }
   };
 
@@ -747,11 +778,8 @@ export const useSubmitTournament = () => {
 
     const option = THUMBNAIL_OPTIONS.find((opt) => opt.id === thumbnailId);
     if (option?.imageUrl) {
-      const { data } = supabase.storage
-        .from("tournament-images")
-        .getPublicUrl(option.imageUrl);
-
-      return data.publicUrl;
+      // Use the correct Supabase project URL format
+      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${option.imageUrl}`;
     }
 
     return null;
@@ -774,6 +802,7 @@ export const useSubmitTournament = () => {
     customImageUri,
     hasManualSelection,
     uploadingImage,
+    scanningImage, // 🔍 Add to return object
 
     // Computed
     isMaxFargoDisabled: formData.openTournament === true,

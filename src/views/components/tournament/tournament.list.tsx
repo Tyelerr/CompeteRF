@@ -38,6 +38,17 @@ export const TournamentList = ({
     );
   }
 
+  // Transform Tournament data to TournamentCardData format
+  const transformTournamentData = (tournament: Tournament) => {
+    return {
+      ...tournament,
+      venue_name: (tournament as any).venue?.venue || "TBD",
+      director_name: (tournament as any).director?.name || "Unknown",
+      views_count: (tournament as any).views_count || 0,
+      favorites_count: (tournament as any).favorites_count || 0,
+    } as any;
+  };
+
   return (
     <FlatList
       data={tournaments}
@@ -47,10 +58,8 @@ export const TournamentList = ({
       contentContainerStyle={styles.list}
       renderItem={({ item }) => (
         <TournamentCard
-          tournament={item}
+          tournament={transformTournamentData(item)}
           onPress={() => onTournamentPress(item)}
-          onFavoritePress={() => onFavoritePress(item)}
-          isFavorited={favoritedIds.includes(item.id)}
         />
       )}
       onRefresh={onRefresh}
