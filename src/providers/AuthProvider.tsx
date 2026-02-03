@@ -7,19 +7,8 @@ import {
   useState,
 } from "react";
 import { supabase } from "../lib/supabase";
-
-interface Profile {
-  id: string;
-  id_auto: number;
-  name: string;
-  user_name: string;
-  email: string;
-  role: string;
-  home_state: string;
-  home_city: string | null;
-  avatar_url: string | null;
-  status: string;
-}
+import { profileService } from "../models/services/profile.service";
+import { Profile, ProfileInsert } from "../models/types/profile.types";
 
 interface AuthContextType {
   session: Session | null;
@@ -31,6 +20,7 @@ interface AuthContextType {
   isAdmin: boolean;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  createProfile: (profileData: ProfileInsert) => Promise<void>;
 }
 
 const SUBMIT_ALLOWED_ROLES = [
@@ -52,6 +42,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   refreshProfile: async () => {},
   signOut: async () => {},
+  createProfile: async () => {},
 });
 
 interface AuthProviderProps {
@@ -115,6 +106,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const createProfile = async (profileData: ProfileInsert) => {
+    try {
+      const newProfile = await profileService.createProfile(profileData);
+      setProfile(newProfile);
+      // Force refresh the auth state to trigger navigation
+      await refreshProfile();
+    } catch (error) {
+      console.error("Create profile error:", error);
+      throw error;
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -134,9 +137,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAdmin: profile ? ADMIN_ROLES.includes(profile.role) : false,
     refreshProfile,
     signOut,
+    createProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuthContext = () => useContext(AuthContext);
+
+// Keep backward compatibility
+export const useAuth = useAuthContext;
