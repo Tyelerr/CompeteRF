@@ -70,9 +70,12 @@ export const initialFormData: TournamentFormData = {
 
 export const GAME_TYPES = [
   { label: "Select The Game Type", value: "" },
-  { label: "8-Ball", value: "8-ball" },
-  { label: "9-Ball", value: "9-ball" },
-  { label: "10-Ball", value: "10-ball" },
+  { label: "8 Ball", value: "8-ball" },
+  { label: "9 Ball", value: "9-ball" },
+  { label: "10 Ball", value: "10-ball" },
+  { label: "8 Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "9 Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "10 Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
   { label: "One Pocket", value: "one-pocket" },
   { label: "Straight Pool", value: "straight-pool" },
   { label: "Banks", value: "banks" },
@@ -139,21 +142,39 @@ export const EQUIPMENT_OPTIONS = [
 export const THUMBNAIL_OPTIONS = [
   {
     id: "8-ball",
-    name: "8-Ball",
+    name: "8 Ball",
     gameType: "8-ball",
     imageUrl: "8-ball.jpeg",
   },
   {
     id: "9-ball",
-    name: "9-Ball",
+    name: "9 Ball",
     gameType: "9-ball",
     imageUrl: "9-ball.jpeg",
   },
   {
     id: "10-ball",
-    name: "10-Ball",
+    name: "10 Ball",
     gameType: "10-ball",
     imageUrl: "10-ball.jpeg",
+  },
+  {
+    id: "8-ball-scotch-doubles",
+    name: "8 Ball Scotch Doubles",
+    gameType: "8-ball-scotch-doubles",
+    imageUrl: "8-ball.jpeg", // Reuse 8-ball image
+  },
+  {
+    id: "9-ball-scotch-doubles",
+    name: "9 Ball Scotch Doubles",
+    gameType: "9-ball-scotch-doubles",
+    imageUrl: "9-ball.jpeg", // Reuse 9-ball image
+  },
+  {
+    id: "10-ball-scotch-doubles",
+    name: "10 Ball Scotch Doubles",
+    gameType: "10-ball-scotch-doubles",
+    imageUrl: "10-ball.jpeg", // Reuse 10-ball image
   },
   {
     id: "one-pocket",

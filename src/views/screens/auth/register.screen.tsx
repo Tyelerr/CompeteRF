@@ -1,12 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useCheckUsername } from "../../../../hooks/use-profile";
 import { supabase } from "../../../lib/supabase";
 import { profileService } from "../../../models/services/profile.service";
@@ -138,7 +133,38 @@ export const RegisterScreen = () => {
 
       await profileService.createProfile(profileData);
 
-      // Step 3: Navigate to main app
+      // Step 3: Wait for profile to be available in auth context
+      let attempts = 0;
+      const maxAttempts = 10;
+      let profileFound = false;
+
+      while (attempts < maxAttempts && !profileFound) {
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+
+        try {
+          // Check if profile is now available
+          const session = await supabase.auth.getSession();
+          if (session.data.session?.user) {
+            const profile = await profileService.getProfile(
+              session.data.session.user.id,
+            );
+            if (profile) {
+              profileFound = true;
+              break;
+            }
+          }
+        } catch (profileError) {
+          // Continue trying
+          console.log(
+            `Profile check attempt ${attempts + 1} failed:`,
+            profileError,
+          );
+        }
+
+        attempts++;
+      }
+
+      // Step 4: Navigate to main app (profile should be loaded now)
       router.replace("/(tabs)");
     } catch (err: any) {
       setError(err.message || "Registration failed");
@@ -167,8 +193,27 @@ export const RegisterScreen = () => {
     isAvailable &&
     !isChecking;
 
+  // Show simple loading screen during registration
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingTitle}>Creating Your Account</Text>
+        <Text style={styles.loadingSubtitle}>Setting up your profile...</Text>
+        <View style={styles.loadingSpinner}>
+          <Text style={styles.loadingText}>⏳</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      enableOnAndroid={true}
+      keyboardShouldPersistTaps="handled"
+      extraScrollHeight={20}
+    >
       <TouchableOpacity onPress={() => router.back()} style={styles.back}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
@@ -303,7 +348,7 @@ export const RegisterScreen = () => {
           <Text style={styles.footerLink}>Log In</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 };
 
@@ -311,7 +356,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  scrollContent: {
     padding: SPACING.lg,
+    paddingBottom: SPACING.xl * 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: SPACING.xl,
+  },
+  loadingTitle: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: SPACING.sm,
+    textAlign: "center",
+  },
+  loadingSubtitle: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xl,
+    textAlign: "center",
+  },
+  loadingSpinner: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    fontSize: 40,
+    marginBottom: SPACING.md,
   },
   back: {
     marginTop: SPACING.xl,

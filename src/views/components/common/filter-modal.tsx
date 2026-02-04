@@ -17,9 +17,12 @@ import { RangeSlider } from "./range-slider";
 
 const GAME_TYPES = [
   { label: "All Game Types", value: "" },
-  { label: "8-Ball", value: "8-ball" },
-  { label: "9-Ball", value: "9-ball" },
-  { label: "10-Ball", value: "10-ball" },
+  { label: "8 Ball", value: "8-ball" },
+  { label: "9 Ball", value: "9-ball" },
+  { label: "10 Ball", value: "10-ball" },
+  { label: "8 Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "9 Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "10 Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
   { label: "One Pocket", value: "one-pocket" },
   { label: "Straight Pool", value: "straight-pool" },
   { label: "Banks", value: "banks" },

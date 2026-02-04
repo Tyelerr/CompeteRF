@@ -126,7 +126,7 @@ export default function ProfileScreen() {
     setUser(null);
     setProfile(null);
     setFavorites([]);
-    router.replace("/(tabs)");
+    router.replace("/(tabs)" as any);
   };
 
   const handleShare = async (tournament: any) => {
@@ -167,13 +167,13 @@ export default function ProfileScreen() {
           <View style={styles.spacer} />
           <Button
             title="Log In"
-            onPress={() => router.push("/auth/login")}
+            onPress={() => router.push("/auth/login" as any)}
             fullWidth
           />
           <View style={styles.spacerSm} />
           <Button
             title="Create Account"
-            onPress={() => router.push("/auth/register")}
+            onPress={() => router.push("/auth/register" as any)}
             variant="outline"
             fullWidth
           />
@@ -182,31 +182,7 @@ export default function ProfileScreen() {
     );
   }
 
-  // Logged in but no profile
-  if (!profile) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>PROFILE</Text>
-          <Text style={styles.headerSubtitle}>
-            View and manage your tournament history
-          </Text>
-        </View>
-
-        <View style={styles.notLoggedIn}>
-          <Text style={styles.message}>Complete your profile to continue</Text>
-          <View style={styles.spacer} />
-          <Button
-            title="Complete Profile"
-            onPress={() => router.push("/auth/complete-profile")}
-            fullWidth
-          />
-        </View>
-      </View>
-    );
-  }
-
-  // Logged in with profile
+  // Logged in - show profile (even if incomplete)
   return (
     <ScrollView
       style={styles.container}
@@ -248,12 +224,15 @@ export default function ProfileScreen() {
 
           {/* Profile Info */}
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.name}>
+              {profile?.name || user.email?.split("@")[0] || "Player"}
+            </Text>
             <Text style={styles.playerID}>
-              {generatePlayerID(profile.id_auto)}
+              {profile ? generatePlayerID(profile.id_auto) : "No ID"}
             </Text>
             <Text style={styles.memberSince}>
-              Member since {formatMemberSince(profile.created_at)}
+              Member since{" "}
+              {formatMemberSince(profile?.created_at || user.created_at)}
             </Text>
           </View>
         </View>
@@ -262,7 +241,7 @@ export default function ProfileScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.actionButton, styles.editButton]}
-            onPress={() => router.push("/auth/complete-profile")}
+            onPress={() => router.push("../edit-profile" as any)}
           >
             <Text style={styles.editButtonText}>⚙️ Edit Profile</Text>
           </TouchableOpacity>
@@ -284,29 +263,33 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* User Details */}
-        <View style={styles.userDetails}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Home State</Text>
-            <Text style={styles.detailValue}>
-              {profile.home_state || "Not set"}
-            </Text>
+        {/* User Details - Show available info */}
+        {profile && (
+          <View style={styles.userDetails}>
+            {profile.home_state && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Home State</Text>
+                <Text style={styles.detailValue}>{profile.home_state}</Text>
+              </View>
+            )}
+
+            {profile.favorite_player && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Favorite Player</Text>
+                <Text style={styles.detailValue}>
+                  {profile.favorite_player}
+                </Text>
+              </View>
+            )}
+
+            {profile.preferred_game && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Favorite Game</Text>
+                <Text style={styles.detailValue}>{profile.preferred_game}</Text>
+              </View>
+            )}
           </View>
-
-          {profile.favorite_player && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Favorite Player</Text>
-              <Text style={styles.detailValue}>{profile.favorite_player}</Text>
-            </View>
-          )}
-
-          {profile.preferred_game && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Favorite Game</Text>
-              <Text style={styles.detailValue}>{profile.preferred_game}</Text>
-            </View>
-          )}
-        </View>
+        )}
       </View>
 
       {/* Bottom Navigation Buttons */}
@@ -355,7 +338,7 @@ export default function ProfileScreen() {
                 },
               }}
               onPress={() =>
-                router.push(`/tournament-detail?id=${fav.tournament_id}`)
+                router.push(`/tournament-detail?id=${fav.tournament_id}` as any)
               }
               onToggleFavorite={() => {
                 // Remove from favorites
@@ -543,15 +526,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.white,
   },
-  favoritesSummary: {
-    margin: SPACING.md,
-    alignItems: "center",
-  },
-  favoritesCount: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.md,
-  },
   // New clean favorites section
   favoritesSection: {
     padding: SPACING.md,
@@ -569,25 +543,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textMuted,
     textAlign: "center",
-  },
-  favoritePreview: {
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
-    marginBottom: SPACING.xs,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    width: "100%",
-  },
-  favoritePreviewName: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  favoritePreviewDetails: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
   },
   spacer: {
     height: SPACING.lg,

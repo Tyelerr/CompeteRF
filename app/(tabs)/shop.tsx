@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -8,8 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { supabase } from "../../src/lib/supabase";
 import { Giveaway } from "../../src/models/types/giveaway.types";
-import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -26,9 +26,13 @@ import {
 
 export default function ShopScreen() {
   const router = useRouter();
-  const { profile } = useAuthContext();
   const shopVm = useShop();
   const giveawaysVm = useGiveaways();
+
+  // Direct auth state like FAQ page
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Modal state
   const [selectedGiveaway, setSelectedGiveaway] = useState<Giveaway | null>(
@@ -36,6 +40,34 @@ export default function ShopScreen() {
   );
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(false);
+
+  // Check user and profile directly like FAQ page
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  const checkUser = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+
+      if (session?.user) {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+
+        setProfile(profileData);
+      }
+    } catch (error) {
+      console.error("Error checking user:", error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const handleViewGiveaway = (giveaway: Giveaway) => {
     setSelectedGiveaway(giveaway);
@@ -144,8 +176,8 @@ export default function ShopScreen() {
           {/* Stats Card */}
           <GiveawayStatsCard stats={giveawaysVm.stats} />
 
-          {/* Not logged in banner */}
-          {!profile && (
+          {/* Not logged in banner - NOW USES DIRECT AUTH CHECK */}
+          {!authLoading && !profile && (
             <View style={styles.loginBanner}>
               <Text style={styles.loginBannerText}>
                 Log in to enter giveaways!

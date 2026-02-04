@@ -356,16 +356,19 @@ export function useBilliards(): UseBilliardsReturn {
     setRefreshing(false);
   };
 
-  // Get tournament image URL helper (same logic as submit page)
+  // Get tournament image URL helper (updated with Scotch Doubles support)
   const getTournamentImageUrl = (tournament: Tournament) => {
-    // Complete game type to image file mapping
+    // Updated game type to image file mapping with Scotch Doubles
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
       "9-ball": "9-ball.jpeg",
       "10-ball": "10-ball.jpeg",
+      "8-ball-scotch-doubles": "8-ball.jpeg", // Reuse 8-ball image
+      "9-ball-scotch-doubles": "9-ball.jpeg", // Reuse 9-ball image
+      "10-ball-scotch-doubles": "10-ball.jpeg", // Reuse 10-ball image
       "one-pocket": "One-Pocket.jpeg",
       "straight-pool": "Straight-Pool.jpeg",
-      banks: "Banks.jpeg",
+      "banks": "Banks.jpeg",
     };
 
     // First check if tournament has a custom thumbnail
