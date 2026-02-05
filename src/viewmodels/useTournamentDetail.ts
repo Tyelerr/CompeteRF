@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Linking } from "react-native";
 import { supabase } from "../lib/supabase";
+import { analyticsService, ENTITY_TYPES } from "../models/services/analytics.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 interface Tournament {
@@ -72,6 +73,7 @@ export const useTournamentDetail = (
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [isVenueOwner, setIsVenueOwner] = useState(false);
+  const viewRecorded = useRef<string | null>(null);
 
   // Check if opened from bar owner dashboard
   const fromBarOwner = params.fromBarOwner === "true";
@@ -79,6 +81,16 @@ export const useTournamentDetail = (
   useEffect(() => {
     if (tournamentId) {
       loadTournament();
+    }
+  }, [tournamentId]);
+
+  // Record a view once per unique tournament ID (non-blocking, fire-and-forget)
+  useEffect(() => {
+    if (tournamentId && viewRecorded.current !== tournamentId) {
+      viewRecorded.current = tournamentId;
+      analyticsService.trackTournamentViewed(parseInt(tournamentId, 10), {
+        source_screen: fromBarOwner ? "bar_owner_dashboard" : "tournament_detail",
+      });
     }
   }, [tournamentId]);
 
@@ -180,11 +192,25 @@ export const useTournamentDetail = (
     if (!tournament?.venues) return;
     const address = `${tournament.venues.address}, ${tournament.venues.city}, ${tournament.venues.state} ${tournament.venues.zip_code}`;
     const url = `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+
+    analyticsService.trackDirectionsClicked(
+      ENTITY_TYPES.TOURNAMENT,
+      tournament.id,
+      { venue_name: tournament.venues.venue },
+    );
+
     Linking.openURL(url);
   };
 
   const callVenue = () => {
     if (!tournament?.venues?.phone) return;
+
+    analyticsService.trackVenueContactClicked(
+      ENTITY_TYPES.TOURNAMENT,
+      tournament.id,
+      { contact_type: "phone", venue_name: tournament.venues.venue },
+    );
+
     Linking.openURL(`tel:${tournament.venues.phone}`);
   };
 
