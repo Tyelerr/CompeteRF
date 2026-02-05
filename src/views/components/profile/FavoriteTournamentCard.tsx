@@ -1,5 +1,12 @@
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -10,25 +17,29 @@ interface FavoriteTournamentCardProps {
     name: string;
     game_type: string;
     tournament_date: string;
+    thumbnail?: string;
     venues: {
       venue: string;
       city: string;
       state: string;
-      image_url?: string;
     };
   };
   isFavorited?: boolean;
   onPress: () => void;
   onToggleFavorite: () => void;
   onShare: () => void;
+  onViewImage?: () => void;
+  getTournamentImageUrl: (tournament: any) => string | null;
 }
 
 export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
   tournament,
-  isFavorited = true, // Default to true since these are favorites
+  isFavorited = true,
   onPress,
   onToggleFavorite,
   onShare,
+  onViewImage,
+  getTournamentImageUrl,
 }) => {
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -46,27 +57,32 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
   };
 
   const { dateStr, timeStr } = formatDateTime(tournament.tournament_date);
+  const imageUrl = getTournamentImageUrl(tournament);
+
+  const handleUnfavorite = () => {
+    Alert.alert(
+      "Remove Favorite",
+      "Are you sure you want to remove this tournament from your favorites?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: onToggleFavorite,
+        },
+      ],
+      { cancelable: true },
+    );
+  };
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.cardContent}>
-        {/* Tournament Image */}
-        <View style={styles.imageContainer}>
-          {tournament.venues.image_url ? (
-            <Image
-              source={{ uri: tournament.venues.image_url }}
-              style={styles.tournamentImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.placeholderImage}>
-              <Text style={styles.placeholderText}>🎱</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Tournament Info */}
-        <View style={styles.infoContainer}>
+        {/* Left Content */}
+        <View style={styles.leftContent}>
           {/* Header Row with Game Badge and Heart */}
           <View style={styles.headerRow}>
             <View style={styles.gameTypeBadge}>
@@ -74,16 +90,9 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
             </View>
             <TouchableOpacity
               style={styles.favoriteButton}
-              onPress={onToggleFavorite}
+              onPress={handleUnfavorite}
             >
-              <Text
-                style={[
-                  styles.heartIcon,
-                  isFavorited && styles.heartIconFilled,
-                ]}
-              >
-                {isFavorited ? "♥" : "♡"}
-              </Text>
+              <Text style={styles.heartIcon}>♥</Text>
             </TouchableOpacity>
           </View>
 
@@ -103,13 +112,41 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
             📅 {dateStr} • ⏰ {timeStr}
           </Text>
 
-          {/* Share Button */}
+          {/* Share Button - moved left */}
           <View style={styles.shareRow}>
             <TouchableOpacity style={styles.shareButton} onPress={onShare}>
               <Text style={styles.shareIcon}>📤</Text>
               <Text style={styles.shareText}>Share</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Right Side - Image Section (bigger) */}
+        <View style={styles.rightContent}>
+          <View style={styles.imageContainer}>
+            {imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.tournamentImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.placeholderImage}>
+                <Text style={styles.placeholderText}>🎱</Text>
+              </View>
+            )}
+          </View>
+
+          {/* View Image Button (bigger) */}
+          {imageUrl && onViewImage && (
+            <TouchableOpacity
+              style={styles.viewImageButton}
+              onPress={onViewImage}
+            >
+              <Text style={styles.viewImageIcon}>🔍</Text>
+              <Text style={styles.viewImageText}>View Image</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -122,34 +159,61 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: SPACING.sm, // Back to smaller margin
+    marginBottom: SPACING.sm,
     overflow: "hidden",
   },
   cardContent: {
     flexDirection: "row",
-    padding: SPACING.md + 2, // Medium padding - between small and large
+    padding: SPACING.md + 2,
+  },
+  leftContent: {
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  rightContent: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    minWidth: 110, // Increased for bigger image
   },
   imageContainer: {
-    marginRight: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   tournamentImage: {
-    width: 70, // Medium size - between 60 and 80
-    height: 70,
+    width: 110, // Increased from 80 to 110
+    height: 110, // Increased from 80 to 110
     borderRadius: RADIUS.md,
   },
   placeholderImage: {
-    width: 70, // Medium size - between 60 and 80
-    height: 70,
+    width: 110, // Increased from 80 to 110
+    height: 110, // Increased from 80 to 110
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
   },
   placeholderText: {
-    fontSize: FONT_SIZES.xl + 2, // Medium emoji size
+    fontSize: FONT_SIZES.xl + 8, // Bigger emoji
   },
-  infoContainer: {
-    flex: 1,
+  viewImageButton: {
+    backgroundColor: COLORS.primary + "20",
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm, // Increased padding
+    paddingHorizontal: SPACING.md, // Increased padding
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 110, // Match image width
+    justifyContent: "center",
+  },
+  viewImageIcon: {
+    fontSize: FONT_SIZES.sm, // Bigger icon
+    marginRight: SPACING.xs,
+  },
+  viewImageText: {
+    fontSize: FONT_SIZES.sm, // Bigger text
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   headerRow: {
     flexDirection: "row",
@@ -159,7 +223,7 @@ const styles = StyleSheet.create({
   },
   gameTypeBadge: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 3, // Medium badge size
+    paddingVertical: 3,
     paddingHorizontal: SPACING.sm + 1,
     borderRadius: RADIUS.sm,
   },
@@ -173,31 +237,28 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   heartIcon: {
-    fontSize: FONT_SIZES.lg,
-    color: COLORS.border,
-  },
-  heartIconFilled: {
-    color: COLORS.error, // Red color for filled heart
+    fontSize: FONT_SIZES.lg * 2, // Double the size
+    color: COLORS.error, // Always red since these are favorites
   },
   tournamentName: {
-    fontSize: FONT_SIZES.md + 1, // Medium font size
+    fontSize: FONT_SIZES.md + 1,
     fontWeight: "600",
     color: COLORS.text,
     marginBottom: SPACING.sm,
     lineHeight: (FONT_SIZES.md + 1) * 1.2,
   },
   venueInfo: {
-    fontSize: FONT_SIZES.sm + 1, // Slightly larger
+    fontSize: FONT_SIZES.sm + 1,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
   dateTimeInfo: {
-    fontSize: FONT_SIZES.sm + 1, // Slightly larger
+    fontSize: FONT_SIZES.sm + 1,
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
   shareRow: {
-    alignItems: "flex-end", // Align to right
+    alignItems: "flex-start", // Moved to left
     marginTop: SPACING.xs,
   },
   shareButton: {

@@ -1,5 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,11 +13,55 @@ import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { useTournamentDetail } from "../../src/viewmodels/useTournamentDetail";
 import { Button } from "../../src/views/components/common/button";
+import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
 
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
   const vm = useTournamentDetail(id as string);
+
+  // Image viewer state
+  const [showImageViewer, setShowImageViewer] = useState(false);
+
+  // Get tournament image URL (same logic as useBilliards)
+  const getTournamentImageUrl = (tournament: any) => {
+    const gameTypeImageMap: Record<string, string> = {
+      "8-ball": "8-ball.jpeg",
+      "9-ball": "9-ball.jpeg",
+      "10-ball": "10-ball.jpeg",
+      "one-pocket": "One-Pocket.jpeg",
+      "straight-pool": "Straight-Pool.jpeg",
+      banks: "Banks.jpeg",
+    };
+
+    if (tournament.thumbnail) {
+      if (tournament.thumbnail.startsWith("custom:")) {
+        return tournament.thumbnail.replace("custom:", "");
+      } else {
+        const imageFile = gameTypeImageMap[tournament.thumbnail];
+        if (imageFile) {
+          return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
+        }
+      }
+    }
+
+    const imageFile = gameTypeImageMap[tournament.game_type];
+    if (imageFile) {
+      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
+    }
+
+    return null;
+  };
+
+  const openImageViewer = () => {
+    if (tournament && getTournamentImageUrl(tournament)) {
+      setShowImageViewer(true);
+    }
+  };
+
+  const closeImageViewer = () => {
+    setShowImageViewer(false);
+  };
 
   if (vm.loading) {
     return <Loading fullScreen message="Loading tournament..." />;
@@ -39,6 +85,7 @@ export default function TournamentDetailScreen() {
   }
 
   const tournament = vm.tournament;
+  const imageUrl = getTournamentImageUrl(tournament);
 
   return (
     <View style={styles.container}>
@@ -59,28 +106,64 @@ export default function TournamentDetailScreen() {
             </View>
           )}
 
-          {/* Badges */}
-          <View style={styles.badges}>
-            <View style={styles.gameTypeBadge}>
-              <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
-            </View>
-            <View style={styles.formatBadge}>
-              <Text style={styles.formatText}>
-                {tournament.tournament_format.replace("_", " ")}
-              </Text>
-            </View>
-            {tournament.is_recurring && (
-              <View style={styles.recurringBadge}>
-                <Text style={styles.recurringText}>🔄 Weekly</Text>
+          {/* Top Section with Badges, Title and Image */}
+          <View style={styles.topSection}>
+            {/* Left Side - Badges and Title */}
+            <View style={styles.leftContent}>
+              {/* Badges */}
+              <View style={styles.badges}>
+                <View style={styles.gameTypeBadge}>
+                  <Text style={styles.gameTypeText}>
+                    {tournament.game_type}
+                  </Text>
+                </View>
+                <View style={styles.formatBadge}>
+                  <Text style={styles.formatText}>
+                    {tournament.tournament_format.replace("_", " ")}
+                  </Text>
+                </View>
+                {tournament.is_recurring && (
+                  <View style={styles.recurringBadge}>
+                    <Text style={styles.recurringText}>🔄 Weekly</Text>
+                  </View>
+                )}
               </View>
-            )}
+
+              <Text style={styles.title}>{tournament.name}</Text>
+
+              {tournament.description && (
+                <Text style={styles.description}>{tournament.description}</Text>
+              )}
+            </View>
+
+            {/* Right Side - Tournament Image */}
+            <View style={styles.imageSection}>
+              <View style={styles.imageContainer}>
+                {imageUrl ? (
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.tournamentImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.placeholderImage}>
+                    <Text style={styles.placeholderText}>🎱</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* View Image Button */}
+              {imageUrl && (
+                <TouchableOpacity
+                  style={styles.viewImageButton}
+                  onPress={openImageViewer}
+                >
+                  <Text style={styles.viewImageIcon}>🔍</Text>
+                  <Text style={styles.viewImageText}>View Image</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-
-          <Text style={styles.title}>{tournament.name}</Text>
-
-          {tournament.description && (
-            <Text style={styles.description}>{tournament.description}</Text>
-          )}
 
           {/* Date & Time */}
           <View style={styles.section}>
@@ -161,6 +244,14 @@ export default function TournamentDetailScreen() {
           <View style={styles.bottomSpacer} />
         </View>
       </ScrollView>
+
+      {/* Full Screen Image Viewer */}
+      <FullScreenImageViewer
+        visible={showImageViewer}
+        imageUrl={imageUrl}
+        title={tournament.name}
+        onClose={closeImageViewer}
+      />
     </View>
   );
 }
@@ -199,6 +290,61 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     textAlign: "center",
+  },
+  topSection: {
+    flexDirection: "row",
+    marginBottom: SPACING.lg,
+    alignItems: "flex-start",
+  },
+  leftContent: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  imageSection: {
+    alignItems: "center",
+    minWidth: 100,
+  },
+  imageContainer: {
+    marginBottom: SPACING.sm,
+  },
+  tournamentImage: {
+    width: 100,
+    height: 100,
+    borderRadius: RADIUS.md,
+  },
+  placeholderImage: {
+    width: 100,
+    height: 100,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  placeholderText: {
+    fontSize: FONT_SIZES.xl + 8,
+  },
+  viewImageButton: {
+    backgroundColor: COLORS.primary + "20",
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    minWidth: 100,
+    justifyContent: "center",
+  },
+  viewImageIcon: {
+    fontSize: FONT_SIZES.xs,
+    marginRight: SPACING.xs / 2,
+  },
+  viewImageText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   badges: {
     flexDirection: "row",

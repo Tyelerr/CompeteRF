@@ -2,7 +2,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   FlatList,
+  Image,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +19,33 @@ import { FONT_SIZES } from "../../../src/theme/typography";
 import { Loading } from "../../../src/views/components/common/loading";
 import { Pagination } from "../../../src/views/components/common/pagination";
 
-// Tournament Card Component
+// Game type to image mapping (same as profile/billiards)
+const gameTypeImageMap: Record<string, string> = {
+  "8-ball": "8-ball.jpeg",
+  "9-ball": "9-ball.jpeg",
+  "10-ball": "10-ball.jpeg",
+  "one-pocket": "One-Pocket.jpeg",
+  "straight-pool": "Straight-Pool.jpeg",
+  banks: "Banks.jpeg",
+};
+
+const SUPABASE_STORAGE_URL =
+  "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images";
+
+function getTournamentImageUrl(tournament: any): string | null {
+  if (tournament.thumbnail) {
+    if (tournament.thumbnail.startsWith("custom:")) {
+      return tournament.thumbnail.replace("custom:", "");
+    }
+    const imageFile = gameTypeImageMap[tournament.thumbnail];
+    if (imageFile) return `${SUPABASE_STORAGE_URL}/${imageFile}`;
+  }
+  const imageFile = gameTypeImageMap[tournament.game_type];
+  if (imageFile) return `${SUPABASE_STORAGE_URL}/${imageFile}`;
+  return null;
+}
+
+// Tournament Card Component — matches FavoriteTournamentCard design
 function TournamentCard({ match }: { match: AlertMatch }) {
   const router = useRouter();
   const tournament = (match as any).tournaments;
@@ -26,6 +54,19 @@ function TournamentCard({ match }: { match: AlertMatch }) {
 
   const handlePress = () => {
     router.push(`/tournament-detail?id=${tournament.id}` as any);
+  };
+
+  const handleShare = async () => {
+    try {
+      const venue = tournament.venues
+        ? `${tournament.venues.venue} • ${tournament.venues.city}, ${tournament.venues.state}`
+        : "";
+      await Share.share({
+        message: `Check out this tournament: ${tournament.name}${venue ? `\n📍 ${venue}` : ""}\n📅 ${dateStr}`,
+      });
+    } catch (err) {
+      console.log("Share error:", err);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -37,65 +78,90 @@ function TournamentCard({ match }: { match: AlertMatch }) {
     });
   };
 
-  const formatTime = (timeString: string) => {
-    const [hours, minutes] = timeString.split(":");
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const dateStr = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const timeStr = date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return { dateStr, timeStr };
   };
 
-  const isUpcoming = new Date(tournament.tournament_date) >= new Date();
+  const { dateStr, timeStr } = formatDateTime(tournament.tournament_date);
+  const imageUrl = getTournamentImageUrl(tournament);
 
   return (
     <TouchableOpacity style={styles.tournamentCard} onPress={handlePress}>
-      <View
-        style={[
-          styles.statusBadge,
-          isUpcoming ? styles.upcomingBadge : styles.pastBadge,
-        ]}
-      >
-        <Text
-          style={[
-            styles.statusText,
-            isUpcoming ? styles.upcomingText : styles.pastText,
-          ]}
-        >
-          {isUpcoming ? "Upcoming" : "Past"}
-        </Text>
-      </View>
+      <View style={styles.cardContent}>
+        {/* Main Content Area */}
+        <View style={styles.mainContent}>
+          {/* Game Type Badge */}
+          <View style={styles.headerRow}>
+            <View style={styles.gameTypeBadge}>
+              <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+            </View>
+          </View>
 
-      <Text style={styles.tournamentName} numberOfLines={2}>
-        {tournament.name}
-      </Text>
-
-      <Text style={styles.gameType}>{tournament.game_type}</Text>
-
-      {tournament.venues && (
-        <Text style={styles.venueInfo} numberOfLines={1}>
-          📍 {tournament.venues.venue} • {tournament.venues.city},{" "}
-          {tournament.venues.state}
-        </Text>
-      )}
-
-      <View style={styles.dateTimeRow}>
-        <Text style={styles.dateText}>
-          📅 {formatDate(tournament.tournament_date)}
-        </Text>
-        {(tournament as any).start_time && (
-          <Text style={styles.timeText}>
-            🕐 {formatTime((tournament as any).start_time)}
+          {/* Tournament Name */}
+          <Text style={styles.tournamentName} numberOfLines={2}>
+            {tournament.name}
           </Text>
-        )}
+
+          {/* Venue Info */}
+          {tournament.venues && (
+            <Text style={styles.venueInfo} numberOfLines={1}>
+              📍 {tournament.venues.venue} • {tournament.venues.city},{" "}
+              {tournament.venues.state}
+            </Text>
+          )}
+
+          {/* Date and Time */}
+          <Text style={styles.dateTimeInfo}>
+            📅 {dateStr} • ⏰ {timeStr}
+          </Text>
+
+          {/* Entry Fee */}
+          {tournament.entry_fee != null && (
+            <Text style={styles.entryFee}>💰 ${tournament.entry_fee}</Text>
+          )}
+
+          {/* Matched Date */}
+          <View style={styles.matchedRow}>
+            <Text style={styles.matchedDate}>
+              Matched: {formatDate(match.created_at)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Image Section — Top Right */}
+        <View style={styles.imageSection}>
+          <View style={styles.imageContainer}>
+            {imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.tournamentImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.placeholderImage}>
+                <Text style={styles.placeholderText}>🎱</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Share Button */}
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <Text style={styles.shareIcon}>📤</Text>
+            <Text style={styles.shareText}>Share</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {(tournament as any).entry_fee && (
-        <Text style={styles.entryFee}>💰 ${(tournament as any).entry_fee}</Text>
-      )}
-
-      <Text style={styles.matchedDate}>
-        Matched: {formatDate(match.created_at)}
-      </Text>
     </TouchableOpacity>
   );
 }
@@ -508,90 +574,107 @@ const styles = StyleSheet.create({
   tournamentCard: {
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    position: "relative",
-    shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statusBadge: {
-    position: "absolute",
-    top: SPACING.sm,
-    right: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.sm,
-  },
-  upcomingBadge: {
-    backgroundColor: COLORS.primary + "20",
-  },
-  pastBadge: {
-    backgroundColor: COLORS.textMuted + "20",
-  },
-  statusText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  upcomingText: {
-    color: COLORS.primary,
-  },
-  pastText: {
-    color: COLORS.textMuted,
-  },
-  tournamentName: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
     marginBottom: SPACING.sm,
-    paddingRight: SPACING.xl,
-    lineHeight: 22,
+    overflow: "hidden",
   },
-  gameType: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    fontWeight: "500",
-    marginBottom: SPACING.sm,
-    textTransform: "uppercase",
+  cardContent: {
+    flexDirection: "row",
+    padding: SPACING.lg,
   },
-  venueInfo: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-    lineHeight: 18,
+  mainContent: {
+    flex: 1,
+    marginRight: SPACING.md,
   },
-  dateTimeRow: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: SPACING.sm,
   },
-  dateText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: "500",
+  gameTypeBadge: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 3,
+    paddingHorizontal: SPACING.sm + 1,
+    borderRadius: RADIUS.sm,
   },
-  timeText: {
-    fontSize: FONT_SIZES.sm,
+  gameTypeText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  tournamentName: {
+    fontSize: FONT_SIZES.md + 1,
+    fontWeight: "600",
     color: COLORS.text,
-    fontWeight: "500",
+    marginBottom: SPACING.sm,
+    lineHeight: (FONT_SIZES.md + 1) * 1.2,
+  },
+  venueInfo: {
+    fontSize: FONT_SIZES.sm + 1,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  dateTimeInfo: {
+    fontSize: FONT_SIZES.sm + 1,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
   },
   entryFee: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.sm + 1,
     color: COLORS.primary,
     fontWeight: "600",
     marginBottom: SPACING.sm,
+  },
+  matchedRow: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: SPACING.sm,
   },
   matchedDate: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
     fontStyle: "italic",
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: SPACING.sm,
+  },
+  imageSection: {
+    alignItems: "center",
+    minWidth: 100,
+  },
+  imageContainer: {
+    marginBottom: SPACING.sm,
+  },
+  tournamentImage: {
+    width: 100,
+    height: 100,
+    borderRadius: RADIUS.md,
+  },
+  placeholderImage: {
+    width: 100,
+    height: 100,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderText: {
+    fontSize: FONT_SIZES.xl + 8,
+  },
+  shareButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+  },
+  shareIcon: {
+    fontSize: FONT_SIZES.md,
+    marginRight: SPACING.xs,
+  },
+  shareText: {
+    fontSize: FONT_SIZES.sm + 1,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   emptyState: {
     flex: 1,
