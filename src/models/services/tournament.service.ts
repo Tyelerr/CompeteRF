@@ -4,6 +4,7 @@ import {
   TournamentFilters,
   TournamentTemplate,
 } from "../types/tournament.types";
+import { searchAlertService } from "./search-alert.service";
 
 export const tournamentService = {
   async getTournaments(
@@ -93,9 +94,26 @@ export const tournamentService = {
     const { data, error } = await supabase
       .from("tournaments")
       .insert(tournament)
-      .select()
+      .select("*, venues(*)")
       .single();
+
     if (error) throw error;
+
+    // Debug logging
+    console.log("🏆 Created tournament:", data?.name, data?.game_type);
+    console.log("🏆 Tournament data:", data);
+
+    // Check new tournament against search alerts
+    if (data) {
+      console.log("🔍 Starting alert check for tournament:", data.name);
+      try {
+        await searchAlertService.checkTournamentAgainstAlerts(data);
+        console.log("✅ Alert checking completed");
+      } catch (err) {
+        console.error("❌ Error checking tournament against alerts:", err);
+      }
+    }
+
     return data;
   },
 
@@ -107,9 +125,34 @@ export const tournamentService = {
       .from("tournaments")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .select()
+      .select("*, venues(*)")
       .single();
+
     if (error) throw error;
+
+    // Re-check alerts if significant fields changed
+    const significantFields = [
+      "game_type",
+      "tournament_format",
+      "entry_fee",
+      "max_fargo",
+      "tournament_date",
+      "table_size",
+    ];
+    const hasSignificantChanges = Object.keys(updates).some((key) =>
+      significantFields.includes(key),
+    );
+
+    if (hasSignificantChanges && data) {
+      console.log("🔄 Tournament updated, re-checking alerts for:", data.name);
+      try {
+        await searchAlertService.checkTournamentAgainstAlerts(data);
+        console.log("✅ Alert re-check completed");
+      } catch (err) {
+        console.error("❌ Error re-checking tournament against alerts:", err);
+      }
+    }
+
     return data;
   },
 

@@ -305,9 +305,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={[styles.navButton, styles.alertsButton]}
-          onPress={() => {
-            /* TODO: Search alerts feature */
-          }}
+          onPress={() => router.push("/search-alerts" as any)}
         >
           <Text style={styles.navButtonText}>🔍 Search Alerts</Text>
         </TouchableOpacity>

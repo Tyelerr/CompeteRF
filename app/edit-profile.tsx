@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../src/theme/colors";
-import { RADIUS, SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
-import { useEditProfile } from "../../src/viewmodels/useEditProfile";
-import { Button } from "../../src/views/components/common/button";
-import { Dropdown } from "../../src/views/components/common/dropdown";
-import { Loading } from "../../src/views/components/common/loading";
+import { COLORS } from "../src/theme/colors";
+import { RADIUS, SPACING } from "../src/theme/spacing";
+import { FONT_SIZES } from "../src/theme/typography";
+import { useEditProfile } from "../src/viewmodels/useEditProfile";
+import { Button } from "../src/views/components/common/button";
+import { Dropdown } from "../src/views/components/common/dropdown";
+import { Loading } from "../src/views/components/common/loading";
 
 export default function EditProfileScreen() {
   const vm = useEditProfile();
