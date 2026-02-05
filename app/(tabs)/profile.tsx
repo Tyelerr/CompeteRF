@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -258,23 +259,34 @@ export default function ProfileScreen() {
 
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            {/* Billiard Ball Avatar */}
-            <View style={styles.avatar}>
-              <View style={styles.ballRow}>
-                <View style={[styles.ball, styles.ball8]} />
-                <View style={[styles.ball, styles.ball9]} />
-                <View style={[styles.ball, styles.ball1]} />
-              </View>
-              <View style={styles.ballRow}>
-                <View style={[styles.ball, styles.ball15]} />
-                <View style={[styles.ball, styles.ball2]} />
-                <View style={[styles.ball, styles.ball10]} />
-              </View>
-              <View style={styles.ballRow}>
-                <View style={[styles.ball, styles.ball7]} />
-                <View style={[styles.ball, styles.ball3]} />
-                <View style={[styles.ball, styles.ball12]} />
-              </View>
+            {/* Profile Avatar - User Image or Billiard Ball Fallback */}
+            <View style={styles.avatarContainer}>
+              {profile?.avatar_url ? (
+                <Image
+                  source={{ uri: profile.avatar_url }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                // Billiard Ball Avatar Fallback
+                <View style={styles.avatar}>
+                  <View style={styles.ballRow}>
+                    <View style={[styles.ball, styles.ball8]} />
+                    <View style={[styles.ball, styles.ball9]} />
+                    <View style={[styles.ball, styles.ball1]} />
+                  </View>
+                  <View style={styles.ballRow}>
+                    <View style={[styles.ball, styles.ball15]} />
+                    <View style={[styles.ball, styles.ball2]} />
+                    <View style={[styles.ball, styles.ball10]} />
+                  </View>
+                  <View style={styles.ballRow}>
+                    <View style={[styles.ball, styles.ball7]} />
+                    <View style={[styles.ball, styles.ball3]} />
+                    <View style={[styles.ball, styles.ball12]} />
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Profile Info */}
@@ -414,7 +426,7 @@ export default function ProfileScreen() {
                     removeFavorite();
                   }}
                   onShare={() => handleShare(fav.tournaments)}
-                  onViewImage={() => handleViewImage(tournamentData)} // ← Added this
+                  onViewImage={() => handleViewImage(tournamentData)}
                   getTournamentImageUrl={getTournamentImageUrl}
                 />
               );
@@ -485,10 +497,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: SPACING.lg,
   },
-  avatar: {
+  avatarContainer: {
     width: 80,
     height: 80,
     marginRight: SPACING.md,
+  },
+  profileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40, // Make it circular
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  avatar: {
+    width: 80,
+    height: 80,
   },
   ballRow: {
     flexDirection: "row",
