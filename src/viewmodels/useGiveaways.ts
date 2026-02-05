@@ -1,5 +1,6 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
+import { analyticsService } from "../models/services/analytics.service";
 import { giveawayService } from "../models/services/giveaway.service";
 import { Giveaway, GiveawayStats } from "../models/types/giveaway.types";
 import { useAuthContext } from "../providers/AuthProvider";
@@ -83,6 +84,13 @@ export function useGiveaways() {
   }, []);
 
   /**
+   * Track a giveaway being viewed (call this from the giveaway detail/card)
+   */
+  const trackGiveawayView = useCallback((giveawayId: number) => {
+    analyticsService.trackGiveawayViewed(giveawayId);
+  }, []);
+
+  /**
    * Calculate days remaining until giveaway ends
    */
   const getDaysRemaining = useCallback((endDate: string | null): string => {
@@ -113,6 +121,7 @@ export function useGiveaways() {
     refresh,
     isEntered,
     markAsEntered,
+    trackGiveawayView,
 
     // Helpers
     getDaysRemaining,

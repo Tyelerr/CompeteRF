@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { analyticsService } from "../../../models/services/analytics.service";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -110,6 +111,38 @@ export const FilterModal = ({
 
   const handleApply = () => {
     onApply(localFilters);
+
+    // Track which filters were actually set (non-default values only)
+    const activeFilters: Record<string, any> = {};
+    if (localFilters.gameType) activeFilters.gameType = localFilters.gameType;
+    if (localFilters.tournamentFormat)
+      activeFilters.tournamentFormat = localFilters.tournamentFormat;
+    if (localFilters.tableSize)
+      activeFilters.tableSize = localFilters.tableSize;
+    if (localFilters.equipment)
+      activeFilters.equipment = localFilters.equipment;
+    if (localFilters.daysOfWeek.length > 0)
+      activeFilters.daysOfWeek = localFilters.daysOfWeek;
+    if (localFilters.fromDate) activeFilters.fromDate = localFilters.fromDate;
+    if (localFilters.toDate) activeFilters.toDate = localFilters.toDate;
+    if (localFilters.minEntryFee > 0)
+      activeFilters.minEntryFee = localFilters.minEntryFee;
+    if (localFilters.maxEntryFee < 1000)
+      activeFilters.maxEntryFee = localFilters.maxEntryFee;
+    if (localFilters.minFargo > 0)
+      activeFilters.minFargo = localFilters.minFargo;
+    if (localFilters.maxFargo < 900)
+      activeFilters.maxFargo = localFilters.maxFargo;
+    if (localFilters.requiresFargoGames)
+      activeFilters.requiresFargoGames = true;
+    if (localFilters.reportsToFargo) activeFilters.reportsToFargo = true;
+    if (localFilters.openTournament) activeFilters.openTournament = true;
+
+    analyticsService.trackFiltersChanged({
+      filters: activeFilters,
+      source_screen: "billiards",
+    });
+
     onClose();
   };
 
