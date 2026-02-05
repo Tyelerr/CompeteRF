@@ -25,7 +25,7 @@ function TournamentCard({ match }: { match: AlertMatch }) {
   if (!tournament) return null;
 
   const handlePress = () => {
-    router.push(`/(tabs)/tournament/${tournament.id}` as any);
+    router.push(`/tournament-detail?id=${tournament.id}` as any);
   };
 
   const formatDate = (dateString: string) => {
@@ -90,9 +90,7 @@ function TournamentCard({ match }: { match: AlertMatch }) {
       </View>
 
       {(tournament as any).entry_fee && (
-        <Text style={styles.entryFee}>
-          💰 ${(tournament as any).entry_fee}
-        </Text>
+        <Text style={styles.entryFee}>💰 ${(tournament as any).entry_fee}</Text>
       )}
 
       <Text style={styles.matchedDate}>
