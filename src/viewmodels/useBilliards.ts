@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { analyticsService } from "../models/services/analytics.service";
 import { Tournament } from "../models/types/tournament.types";
 import {
   Filters,
@@ -328,6 +329,9 @@ export function useBilliards(): UseBilliardsReturn {
         .eq("tournament_id", tournamentId);
 
       setFavorites(favorites.filter((id) => id !== tournamentId));
+
+      // Track analytics (fire-and-forget)
+      analyticsService.trackTournamentUnfavorited(tournamentId);
     } else {
       await supabase.from("favorites").insert({
         user_id: profile.id_auto,
@@ -336,6 +340,9 @@ export function useBilliards(): UseBilliardsReturn {
       });
 
       setFavorites([...favorites, tournamentId]);
+
+      // Track analytics (fire-and-forget)
+      analyticsService.trackTournamentFavorited(tournamentId);
     }
   };
 

@@ -1,5 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import { Favorite } from "../types/tournament.types";
+import { analyticsService } from "./analytics.service";
 
 export const favoriteService = {
   async getFavorites(userId: number): Promise<Favorite[]> {
@@ -47,6 +48,10 @@ export const favoriteService = {
       .select()
       .single();
     if (error) throw error;
+
+    // Track analytics (fire-and-forget)
+    analyticsService.trackTournamentFavorited(tournamentId);
+
     return data;
   },
 
@@ -64,6 +69,10 @@ export const favoriteService = {
       .select()
       .single();
     if (error) throw error;
+
+    // Track analytics (fire-and-forget)
+    analyticsService.trackTournamentFavorited(templateId);
+
     return data;
   },
 
@@ -77,6 +86,9 @@ export const favoriteService = {
       .eq("user_id", userId)
       .eq("tournament_id", tournamentId);
     if (error) throw error;
+
+    // Track analytics (fire-and-forget)
+    analyticsService.trackTournamentUnfavorited(tournamentId);
   },
 
   async removeFavoriteSeries(
@@ -89,6 +101,9 @@ export const favoriteService = {
       .eq("user_id", userId)
       .eq("template_id", templateId);
     if (error) throw error;
+
+    // Track analytics (fire-and-forget)
+    analyticsService.trackTournamentUnfavorited(templateId);
   },
 
   async isFavorited(
