@@ -72,6 +72,7 @@ export default function ShopScreen() {
   const handleViewGiveaway = (giveaway: Giveaway) => {
     setSelectedGiveaway(giveaway);
     setShowDetailModal(true);
+    giveawaysVm.trackGiveawayView(giveaway.id);
   };
 
   const handleEnterGiveaway = (giveaway: Giveaway) => {
