@@ -181,7 +181,9 @@ export default function FaqScreen() {
         {!showContactForm ? (
           <View style={styles.contactCard}>
             <Text style={styles.contactText}>
-              Can't find what you're looking for? Have feedback or questions?
+              {
+                "Can't find what you're looking for? Have feedback or questions?"
+              }
             </Text>
             <Button
               title="Send Us a Message"
