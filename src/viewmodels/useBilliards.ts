@@ -33,6 +33,7 @@ interface UseBilliardsReturn {
   selectedState: string;
   selectedCity: string;
   zipCode: string;
+  searchRadius: number;
   filters: Filters;
 
   // Actions
@@ -40,6 +41,7 @@ interface UseBilliardsReturn {
   setSelectedState: (state: string) => void;
   setSelectedCity: (city: string) => void;
   setZipCode: (zip: string) => void;
+  setSearchRadius: (radius: number) => void;
   setFilters: (filters: Filters) => void;
   setFilterModalVisible: (visible: boolean) => void;
   toggleFavorite: (tournamentId: number) => void;
@@ -71,6 +73,12 @@ export function useBilliards(): UseBilliardsReturn {
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   const [zipCode, setZipCode] = useState("");
+  const [searchRadius, setSearchRadius] = useState(25);
+  const [activeZip, setActiveZip] = useState(""); // The "committed" zip used for filtering
+  const [zipCoords, setZipCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
 
   // Initialize
@@ -95,7 +103,28 @@ export function useBilliards(): UseBilliardsReturn {
   // Apply filters when dependencies change
   useEffect(() => {
     applyFilters();
-  }, [tournaments, searchQuery, selectedState, selectedCity, zipCode, filters]);
+  }, [
+    tournaments,
+    searchQuery,
+    selectedState,
+    selectedCity,
+    activeZip,
+    searchRadius,
+    zipCoords,
+    filters,
+  ]);
+
+  // Auto-geocode and apply when zip reaches 5 digits, clear when less
+  useEffect(() => {
+    if (zipCode.length === 5) {
+      setActiveZip(zipCode);
+      lookupZipCoords(zipCode);
+      console.log("🔍 Zip auto-applied:", zipCode);
+    } else {
+      setActiveZip("");
+      setZipCoords(null);
+    }
+  }, [zipCode]);
 
   // Load cities when state changes
   useEffect(() => {
@@ -158,7 +187,9 @@ export function useBilliards(): UseBilliardsReturn {
             city,
             state,
             zip_code,
-            phone
+            phone,
+            latitude,
+            longitude
           )
         `,
         )
@@ -195,6 +226,71 @@ export function useBilliards(): UseBilliardsReturn {
     }
   };
 
+  // Haversine formula — returns distance in miles between two lat/lng points
+  const getDistanceMiles = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number => {
+    const R = 3958.8; // Earth's radius in miles
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Look up lat/lng for any US zip code using free geocoding API
+  const lookupZipCoords = async (zip: string) => {
+    if (zip.length !== 5) {
+      setZipCoords(null);
+      return;
+    }
+    try {
+      const response = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("📍 Zip geocode response:", JSON.stringify(data));
+        if (data.places && data.places.length > 0) {
+          setZipCoords({
+            lat: parseFloat(data.places[0].latitude),
+            lng: parseFloat(data.places[0].longitude),
+          });
+          return;
+        }
+      } else {
+        console.warn("📍 Zip geocode failed with status:", response.status);
+      }
+    } catch (err) {
+      console.warn("Zip geocode failed, falling back to venue lookup:", err);
+    }
+
+    // Fallback: try to find coords from our own venues table
+    const { data } = await supabase
+      .from("venues")
+      .select("latitude, longitude")
+      .eq("zip_code", zip)
+      .not("latitude", "is", null)
+      .not("longitude", "is", null)
+      .limit(1)
+      .single();
+
+    if (data && data.latitude && data.longitude) {
+      setZipCoords({ lat: Number(data.latitude), lng: Number(data.longitude) });
+    } else {
+      setZipCoords(null);
+    }
+  };
+
+  // Called when user taps the blue checkmark to commit their zip code
+  // (kept for backwards compat but auto-apply handles it now)
+
   const applyFilters = () => {
     let filtered = [...tournaments];
 
@@ -216,6 +312,43 @@ export function useBilliards(): UseBilliardsReturn {
     // City filter
     if (selectedCity) {
       filtered = filtered.filter((t) => t.venues?.city === selectedCity);
+    }
+
+    // Zip code + radius filter — uses real distance when coordinates available
+    if (activeZip && activeZip.length === 5) {
+      if (zipCoords) {
+        // Real Haversine distance filtering
+        if (searchRadius === 0) {
+          // Exact zip match
+          filtered = filtered.filter(
+            (t) => (t.venues as any)?.zip_code === activeZip,
+          );
+        } else {
+          filtered = filtered.filter((t) => {
+            const venueLat = Number((t.venues as any)?.latitude);
+            const venueLng = Number((t.venues as any)?.longitude);
+            // If venue has no coords, exclude it
+            if (!venueLat || !venueLng) return false;
+            const distance = getDistanceMiles(
+              zipCoords.lat,
+              zipCoords.lng,
+              venueLat,
+              venueLng,
+            );
+            return distance <= searchRadius;
+          });
+        }
+      } else {
+        // No coordinates for this zip — try exact zip match, but if nothing
+        // matches show all results rather than empty
+        const zipMatches = filtered.filter(
+          (t) => (t.venues as any)?.zip_code === activeZip,
+        );
+        if (zipMatches.length > 0) {
+          filtered = zipMatches;
+        }
+        // else: keep all results (can't filter by distance without coords)
+      }
     }
 
     // Game type filter
@@ -351,6 +484,9 @@ export function useBilliards(): UseBilliardsReturn {
     setSelectedState("");
     setSelectedCity("");
     setZipCode("");
+    setActiveZip("");
+    setSearchRadius(25);
+    setZipCoords(null);
     setFilters(defaultFilters);
   };
 
@@ -365,42 +501,34 @@ export function useBilliards(): UseBilliardsReturn {
 
   // Get tournament image URL helper (updated with Scotch Doubles support)
   const getTournamentImageUrl = (tournament: Tournament) => {
-    // Updated game type to image file mapping with Scotch Doubles
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
       "9-ball": "9-ball.jpeg",
       "10-ball": "10-ball.jpeg",
-      "8-ball-scotch-doubles": "8-ball.jpeg", // Reuse 8-ball image
-      "9-ball-scotch-doubles": "9-ball.jpeg", // Reuse 9-ball image
-      "10-ball-scotch-doubles": "10-ball.jpeg", // Reuse 10-ball image
+      "8-ball-scotch-doubles": "8-ball.jpeg",
+      "9-ball-scotch-doubles": "9-ball.jpeg",
+      "10-ball-scotch-doubles": "10-ball.jpeg",
       "one-pocket": "One-Pocket.jpeg",
       "straight-pool": "Straight-Pool.jpeg",
-      "banks": "Banks.jpeg",
+      banks: "Banks.jpeg",
     };
 
-    // First check if tournament has a custom thumbnail
     if (tournament.thumbnail) {
       if (tournament.thumbnail.startsWith("custom:")) {
-        // Custom uploaded image - return the full Supabase URL
         return tournament.thumbnail.replace("custom:", "");
       } else {
-        // Game type image selected during submission
         const imageFile = gameTypeImageMap[tournament.thumbnail];
         if (imageFile) {
-          // Use the correct Supabase project URL
           return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
         }
       }
     }
 
-    // Fallback: try to get default image based on game type
     const imageFile = gameTypeImageMap[tournament.game_type];
     if (imageFile) {
-      // Use the correct Supabase project URL
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
     }
 
-    // No image available
     return null;
   };
 
@@ -423,6 +551,7 @@ export function useBilliards(): UseBilliardsReturn {
     selectedState,
     selectedCity,
     zipCode,
+    searchRadius,
     filters,
 
     // Actions
@@ -430,6 +559,7 @@ export function useBilliards(): UseBilliardsReturn {
     setSelectedState,
     setSelectedCity,
     setZipCode,
+    setSearchRadius,
     setFilters,
     setFilterModalVisible,
     toggleFavorite,

@@ -1,7 +1,10 @@
+import Slider from "@react-native-community/slider";
+
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
 import {
   FlatList,
+  Keyboard,
   RefreshControl,
   StyleSheet,
   Text,
@@ -40,12 +43,15 @@ export default function BilliardsScreen() {
     vm.selectedState,
     vm.selectedCity,
     vm.zipCode,
+    vm.searchRadius,
     vm.filters,
   ]);
 
   const stateOptions = [{ label: "State", value: "" }, ...US_STATES];
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
+
+  const showRadiusBar = vm.zipCode.length > 0;
 
   const renderPagination = () => (
     <Pagination
@@ -125,19 +131,45 @@ export default function BilliardsScreen() {
         </View>
         <View style={styles.filterItem}>
           <Text style={styles.filterLabel}>Zip Code</Text>
-          <View style={styles.zipInputContainer}>
-            <TextInput
-              style={styles.zipInput}
-              placeholder="Enter zip code"
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.zipCode}
-              onChangeText={vm.setZipCode}
-              keyboardType="numeric"
-              maxLength={5}
-            />
-          </View>
+          <TextInput
+            style={styles.zipInput}
+            placeholder="Zip"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.zipCode}
+            onChangeText={vm.setZipCode}
+            keyboardType="numeric"
+            maxLength={5}
+          />
         </View>
       </View>
+
+      {/* Radius Slider — shows when zip has content */}
+      {showRadiusBar && (
+        <View style={styles.radiusContainer}>
+          <View style={styles.radiusHeader}>
+            <Text style={styles.radiusLabel}>Search Radius</Text>
+            <Text style={styles.radiusValue}>
+              {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
+            </Text>
+          </View>
+          <Slider
+            style={styles.radiusSlider}
+            minimumValue={0}
+            maximumValue={100}
+            step={5}
+            value={vm.searchRadius}
+            onValueChange={vm.setSearchRadius}
+            onSlidingStart={() => Keyboard.dismiss()}
+            minimumTrackTintColor={COLORS.primary}
+            maximumTrackTintColor={COLORS.border}
+            thumbTintColor={COLORS.primary}
+          />
+          <View style={styles.radiusLabels}>
+            <Text style={styles.radiusMinMax}>0 mile</Text>
+            <Text style={styles.radiusMinMax}>100 miles</Text>
+          </View>
+        </View>
+      )}
 
       {/* Filter Buttons */}
       <View style={styles.filterButtonsRow}>
@@ -252,7 +284,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
     gap: SPACING.sm,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   filterItem: {
     flex: 1,
@@ -262,20 +294,53 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
   },
-  zipInputContainer: {
-    marginTop: SPACING.xs,
-  },
+  // ── Zip input ──────────────────────────────────────────────────────
   zipInput: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.md,
-    marginHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
+    marginTop: SPACING.xs,
   },
+  // ── Radius slider ─────────────────────────────────────────────────
+  radiusContainer: {
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  radiusHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.xs,
+  },
+  radiusLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  radiusValue: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  radiusSlider: {
+    width: "100%",
+    height: 36,
+  },
+  radiusLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: -4,
+  },
+  radiusMinMax: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+  },
+  // ── Filter buttons ────────────────────────────────────────────────
   filterButtonsRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
