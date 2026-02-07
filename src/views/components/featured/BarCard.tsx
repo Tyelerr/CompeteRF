@@ -1,7 +1,10 @@
 import {
   CreateFeaturedBarData,
   FeaturedBar,
+  PlacePrediction,
   featuredImageService,
+  getGooglePlaceDetails,
+  searchGooglePlaces,
 } from "@/src/models/services/featured-content.service";
 import { useFeaturedContent } from "@/src/viewmodels/useFeaturedContent";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,18 +35,30 @@ export function BarCard({ bar }: BarCardProps) {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Google Places search state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
+
   const venueName = bar.venues?.venue || bar.name || "Unknown Bar";
 
   const handleEdit = () => {
     setEditing(true);
     setSelectedImageUri(null);
+    setShowSearch(false);
     setEditData({
       name: bar.name,
       description: bar.description,
       photo_url: bar.photo_url,
       location: bar.location,
+      address: bar.address,
+      phone: bar.phone,
       hours_of_operation: bar.hours_of_operation,
       special_features: bar.special_features,
+      google_place_id: bar.google_place_id,
+      latitude: bar.latitude,
+      longitude: bar.longitude,
       featured_priority: bar.featured_priority,
     });
   };
@@ -73,6 +88,7 @@ export function BarCard({ bar }: BarCardProps) {
         setEditing(false);
         setEditData({});
         setSelectedImageUri(null);
+        setShowSearch(false);
       }
     } catch (err) {
       setUploadingImage(false);
@@ -84,8 +100,57 @@ export function BarCard({ bar }: BarCardProps) {
     setEditing(false);
     setEditData({});
     setSelectedImageUri(null);
+    setShowSearch(false);
+    setPredictions([]);
+    setSearchQuery("");
   };
 
+  // ─────────────────────────────────────────────────
+  // Google Places
+  // ─────────────────────────────────────────────────
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 3) {
+      setPredictions([]);
+      return;
+    }
+    setSearching(true);
+    const results = await searchGooglePlaces(query);
+    setPredictions(results);
+    setSearching(false);
+  };
+
+  const handleSelectPlace = async (placeId: string) => {
+    setSearching(true);
+    const details = await getGooglePlaceDetails(placeId);
+    setSearching(false);
+
+    if (details) {
+      const location = [details.city, details.state].filter(Boolean).join(", ");
+
+      setEditData({
+        ...editData,
+        name: details.name,
+        location,
+        address: details.address
+          ? `${details.address}, ${details.city}, ${details.state} ${details.zip_code}`
+          : "",
+        phone: details.phone,
+        hours_of_operation: details.hours || editData.hours_of_operation,
+        google_place_id: details.google_place_id,
+        latitude: details.latitude ?? undefined,
+        longitude: details.longitude ?? undefined,
+      });
+
+      setShowSearch(false);
+      setPredictions([]);
+      setSearchQuery("");
+    }
+  };
+
+  // ─────────────────────────────────────────────────
+  // Image Picker
+  // ─────────────────────────────────────────────────
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -165,19 +230,26 @@ export function BarCard({ bar }: BarCardProps) {
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Hours</Text>
-            <Text style={styles.statValue}>
+            <Text style={styles.statValue} numberOfLines={1}>
               {bar.hours_of_operation || "—"}
             </Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Special Features</Text>
-            <Text style={styles.statValue}>{bar.special_features || "—"}</Text>
+            <Text style={styles.statLabel}>Phone</Text>
+            <Text style={styles.statValue}>{bar.phone || "—"}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Priority</Text>
             <Text style={styles.statValue}>{bar.featured_priority || 0}</Text>
           </View>
         </View>
+
+        {bar.address ? (
+          <View style={styles.addressDisplay}>
+            <Text style={styles.addressLabel}>📍 Address</Text>
+            <Text style={styles.addressText}>{bar.address}</Text>
+          </View>
+        ) : null}
 
         {bar.description ? (
           <View style={styles.bioDisplay}>
@@ -225,6 +297,69 @@ export function BarCard({ bar }: BarCardProps) {
             trackColor={{ false: "#333", true: "#3B82F6" }}
             thumbColor={bar.is_active ? "#FFF" : "#9CA3AF"}
           />
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* GOOGLE PLACES SEARCH (toggle) */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.searchToggle}
+            onPress={() => setShowSearch(!showSearch)}
+          >
+            <Ionicons name="search" size={16} color="#3B82F6" />
+            <Text style={styles.searchToggleText}>
+              {showSearch ? "Hide Search" : "Search Google Maps"}
+            </Text>
+          </TouchableOpacity>
+
+          {showSearch && (
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.fieldInput}
+                value={searchQuery}
+                onChangeText={handleSearch}
+                placeholder="Type bar name to search..."
+                placeholderTextColor="#555"
+                autoFocus
+              />
+
+              {searching && (
+                <ActivityIndicator color="#3B82F6" style={{ marginTop: 8 }} />
+              )}
+
+              {predictions.length > 0 && (
+                <View style={styles.predictions}>
+                  {predictions.map((prediction) => (
+                    <TouchableOpacity
+                      key={prediction.place_id}
+                      style={styles.predictionItem}
+                      onPress={() => handleSelectPlace(prediction.place_id)}
+                    >
+                      <Ionicons
+                        name="location-outline"
+                        size={14}
+                        color="#3B82F6"
+                        style={{ marginRight: 8, marginTop: 2 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.predictionMain}>
+                          {prediction.structured_formatting.main_text}
+                        </Text>
+                        <Text style={styles.predictionSecondary}>
+                          {prediction.structured_formatting.secondary_text}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <Text style={styles.searchHint}>
+                Selecting a result will auto-fill name, address, phone & hours
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.divider} />
@@ -312,16 +447,40 @@ export function BarCard({ bar }: BarCardProps) {
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Hours of Operation</Text>
+            <Text style={styles.fieldLabel}>Address</Text>
             <TextInput
               style={styles.fieldInput}
-              value={editData.hours_of_operation || ""}
-              onChangeText={(t) =>
-                setEditData({ ...editData, hours_of_operation: t })
-              }
-              placeholder="e.g. Mon-Sun 11am-2am"
+              value={editData.address || ""}
+              onChangeText={(t) => setEditData({ ...editData, address: t })}
+              placeholder="Full street address"
               placeholderTextColor="#555"
             />
+          </View>
+
+          <View style={styles.inlineRow}>
+            <View style={styles.halfField}>
+              <Text style={styles.fieldLabel}>Phone</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editData.phone || ""}
+                onChangeText={(t) => setEditData({ ...editData, phone: t })}
+                placeholder="(555) 555-5555"
+                placeholderTextColor="#555"
+                keyboardType="phone-pad"
+              />
+            </View>
+            <View style={styles.halfField}>
+              <Text style={styles.fieldLabel}>Hours</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={editData.hours_of_operation || ""}
+                onChangeText={(t) =>
+                  setEditData({ ...editData, hours_of_operation: t })
+                }
+                placeholder="10am-2am"
+                placeholderTextColor="#555"
+              />
+            </View>
           </View>
         </View>
 
@@ -444,7 +603,6 @@ const styles = StyleSheet.create({
   },
   displaySub: { fontSize: 12, color: "#888" },
 
-  // Thumbnail (display)
   thumbGlow: {
     width: 50,
     height: 50,
@@ -475,7 +633,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Stats grid
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -499,6 +656,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statValue: { fontSize: 14, fontWeight: "500", color: "#FFF" },
+
+  addressDisplay: { marginBottom: 12 },
+  addressLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#888",
+    marginBottom: 3,
+  },
+  addressText: { fontSize: 13, color: "#AAA" },
 
   bioDisplay: { marginBottom: 12 },
   bioLabel: {
@@ -562,6 +728,42 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
+  // Google search toggle
+  searchToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(59,130,246,0.3)",
+    backgroundColor: "rgba(59,130,246,0.06)",
+  },
+  searchToggleText: { fontSize: 14, fontWeight: "600", color: "#3B82F6" },
+  searchContainer: { marginTop: 8, gap: 8 },
+  searchHint: {
+    fontSize: 11,
+    color: "#666",
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+
+  predictions: {
+    backgroundColor: "#111",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  predictionItem: {
+    flexDirection: "row",
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A2A",
+  },
+  predictionMain: { fontSize: 13, fontWeight: "600", color: "#FFF" },
+  predictionSecondary: { fontSize: 11, color: "#888", marginTop: 1 },
+
   field: { gap: 5 },
   fieldLabel: { fontSize: 13, fontWeight: "600", color: "#CCC" },
   fieldInput: {
@@ -574,9 +776,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#FFF",
   },
-  textArea: { minHeight: 80, textAlignVertical: "top" },
+  textArea: { minHeight: 70, textAlignVertical: "top" },
 
-  // Photo (edit)
+  inlineRow: { flexDirection: "row", gap: 12 },
+  halfField: { flex: 1, gap: 5 },
+
+  // Photo
   photoRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   photoGlow: {
     width: 78,
@@ -640,7 +845,7 @@ const styles = StyleSheet.create({
   },
   uploadText: { fontSize: 12, color: "#3B82F6" },
 
-  // Action buttons
+  // Actions
   actions: { padding: 16, gap: 10 },
   saveBtn: {
     flexDirection: "row",

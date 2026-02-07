@@ -208,8 +208,8 @@ export default function HomeScreen() {
           description: activeBar.description,
           city: barLocation.split(",")[0]?.trim(),
           state: barLocation.split(",")[1]?.trim(),
-          address: activeBar.venues?.address,
-          phone: undefined,
+          address: (activeBar as any).address || activeBar.venues?.address,
+          phone: (activeBar as any).phone,
           website: undefined,
           hours_of_operation: activeBar.hours_of_operation,
           photo_url: activeBar.photo_url,
@@ -594,22 +594,53 @@ export default function HomeScreen() {
                 {/* Bar Info */}
                 <View style={styles.barInfoContainer}>
                   {featuredBar.address && (
-                    <View style={styles.infoRow}>
+                    <TouchableOpacity
+                      style={styles.infoRow}
+                      onPress={() => {
+                        const address = encodeURIComponent(
+                          featuredBar.address!,
+                        );
+                        const url =
+                          Platform.select({
+                            ios: `maps:0,0?q=${address}`,
+                            android: `geo:0,0?q=${address}`,
+                          }) || `https://maps.google.com/?q=${address}`;
+                        Linking.openURL(url);
+                      }}
+                    >
                       <Text style={styles.infoIcon}>📍</Text>
-                      <Text style={styles.infoText}>{featuredBar.address}</Text>
-                    </View>
+                      <Text style={[styles.infoText, styles.infoLink]}>
+                        {featuredBar.address}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                   {featuredBar.phone && (
-                    <View style={styles.infoRow}>
+                    <TouchableOpacity
+                      style={styles.infoRow}
+                      onPress={() => {
+                        const phone = featuredBar.phone!.replace(
+                          /[^0-9+]/g,
+                          "",
+                        );
+                        Linking.openURL(`tel:${phone}`);
+                      }}
+                    >
                       <Text style={styles.infoIcon}>📞</Text>
-                      <Text style={styles.infoText}>{featuredBar.phone}</Text>
-                    </View>
+                      <Text style={[styles.infoText, styles.infoLink]}>
+                        {featuredBar.phone}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                   {featuredBar.website && (
-                    <View style={styles.infoRow}>
+                    <TouchableOpacity
+                      style={styles.infoRow}
+                      onPress={() => Linking.openURL(featuredBar.website!)}
+                    >
                       <Text style={styles.infoIcon}>🌐</Text>
-                      <Text style={styles.infoText}>{featuredBar.website}</Text>
-                    </View>
+                      <Text style={[styles.infoText, styles.infoLink]}>
+                        {featuredBar.website}
+                      </Text>
+                    </TouchableOpacity>
                   )}
                   {featuredBar.hours_of_operation && (
                     <View style={styles.infoRow}>
@@ -955,5 +986,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     flex: 1,
+  },
+  infoLink: {
+    color: "#3B82F6",
+    textDecorationLine: "underline",
   },
 });

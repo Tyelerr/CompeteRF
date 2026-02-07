@@ -34,9 +34,14 @@ export interface FeaturedBar {
   description?: string;
   photo_url?: string;
   location?: string;
+  address?: string;
+  phone?: string;
   hours_of_operation?: string;
   special_features?: string;
   highlights?: string[];
+  google_place_id?: string;
+  latitude?: number;
+  longitude?: number;
   venue_id?: number;
   is_active?: boolean;
   featured_until?: string;
@@ -71,9 +76,14 @@ export interface CreateFeaturedBarData {
   description?: string;
   photo_url?: string;
   location?: string;
+  address?: string;
+  phone?: string;
   hours_of_operation?: string;
   special_features?: string;
   highlights?: string[];
+  google_place_id?: string;
+  latitude?: number;
+  longitude?: number;
   venue_id?: number;
   is_active?: boolean;
   featured_until?: string;
@@ -472,6 +482,129 @@ class FeaturedImageService {
       console.error("❌ Delete failed:", err);
       return false;
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Google Places Helper (for Featured Bars)
+// ─────────────────────────────────────────────────────────────
+
+const GOOGLE_PLACES_API_KEY = "AIzaSyC8ih2uZXpyubGDgVGJ1D32NLRS9LSs0gw";
+
+export interface PlacePrediction {
+  place_id: string;
+  description: string;
+  structured_formatting: {
+    main_text: string;
+    secondary_text: string;
+  };
+}
+
+export interface PlaceDetails {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  phone: string;
+  hours: string;
+  google_place_id: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export async function searchGooglePlaces(
+  query: string,
+): Promise<PlacePrediction[]> {
+  if (query.length < 3) return [];
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
+      query,
+    )}&types=establishment&key=${GOOGLE_PLACES_API_KEY}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.predictions || [];
+  } catch (error) {
+    console.error("Error searching places:", error);
+    return [];
+  }
+}
+
+export async function getGooglePlaceDetails(
+  placeId: string,
+): Promise<PlaceDetails | null> {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,address_components,geometry,formatted_phone_number,opening_hours&key=${GOOGLE_PLACES_API_KEY}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!data.result) return null;
+
+    const result = data.result;
+    const components = result.address_components || [];
+
+    let streetNumber = "";
+    let route = "";
+    let city = "";
+    let state = "";
+    let zipCode = "";
+
+    components.forEach((component: any) => {
+      const types = component.types;
+      if (types.includes("street_number")) {
+        streetNumber = component.long_name;
+      } else if (types.includes("route")) {
+        route = component.long_name;
+      } else if (types.includes("locality")) {
+        city = component.long_name;
+      } else if (types.includes("administrative_area_level_1")) {
+        state = component.short_name;
+      } else if (types.includes("postal_code")) {
+        zipCode = component.long_name;
+      }
+    });
+
+    const address = streetNumber ? `${streetNumber} ${route}` : route;
+
+    // Parse hours
+    let hours = "";
+    if (result.opening_hours?.weekday_text) {
+      // Simplify: take first and last day range or join all
+      const weekdayText = result.opening_hours.weekday_text as string[];
+      // Try to create a compact summary
+      if (weekdayText.length > 0) {
+        // Check if all days have same hours
+        const hoursParts = weekdayText.map((d: string) =>
+          d.split(": ").slice(1).join(": "),
+        );
+        const uniqueHours = [...new Set(hoursParts)];
+        if (uniqueHours.length === 1) {
+          hours = `Daily: ${uniqueHours[0]}`;
+        } else {
+          // Just join them with semicolons for compactness
+          hours = weekdayText.join("; ");
+        }
+      }
+    }
+
+    return {
+      name: result.name || "",
+      address,
+      city,
+      state,
+      zip_code: zipCode,
+      phone: result.formatted_phone_number || "",
+      hours,
+      google_place_id: placeId,
+      latitude: result.geometry?.location?.lat || null,
+      longitude: result.geometry?.location?.lng || null,
+    };
+  } catch (error) {
+    console.error("Error getting place details:", error);
+    return null;
   }
 }
 
