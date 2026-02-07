@@ -48,7 +48,7 @@ export default function EditUserScreen() {
       <View style={styles.centerContainer}>
         <Text style={styles.errorIcon}>🔒</Text>
         <Text style={styles.errorText}>
-          You don't have permission to edit this user
+          You don{"'"}t have permission to edit this user
         </Text>
         <TouchableOpacity
           style={styles.backButton}

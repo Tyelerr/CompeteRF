@@ -14,9 +14,8 @@ export const imageUploadService = {
 
     // Launch image picker
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
+      mediaTypes: ["images"],
+      allowsEditing: false,
       quality: 0.8,
     });
 
@@ -36,8 +35,11 @@ export const imageUploadService = {
     folder?: string,
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     try {
-      // Get file extension
-      const ext = uri.split(".").pop()?.toLowerCase() || "jpg";
+      // Get file extension, convert HEIC/HEIF to jpg
+      let ext = uri.split(".").pop()?.toLowerCase() || "jpg";
+      if (ext === "heic" || ext === "heif") {
+        ext = "jpg";
+      }
       const fileName = `${folder ? folder + "/" : ""}${Date.now()}.${ext}`;
 
       // Fetch the image and convert to blob

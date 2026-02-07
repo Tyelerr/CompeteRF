@@ -72,7 +72,7 @@ export function CreatePlayerModal({
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: [1, 1], // Square crop for circular display
       quality: 0.8,
     });

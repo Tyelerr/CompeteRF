@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { imageUploadService } from "../models/services/image-upload.services";
 import { useAuthContext } from "../providers/AuthProvider";
 import { US_STATES } from "../utils/constants";
 
@@ -19,13 +20,19 @@ interface UseEditProfileReturn {
   saving: boolean;
   error: string;
 
+  // Avatar
+  avatarUrl: string | null;
+  uploadingAvatar: boolean;
+  handlePickAvatar: () => Promise<void>;
+  handleRemoveAvatar: () => void;
+
   // Computed
   isValid: boolean;
   hasChanges: boolean;
 
   // Options
-  stateOptions: Array<{ label: string; value: string }>;
-  gameOptions: Array<{ label: string; value: string }>;
+  stateOptions: { label: string; value: string }[];
+  gameOptions: { label: string; value: string }[];
 
   // Actions
   updateField: (field: keyof ProfileData, value: string) => void;
@@ -51,6 +58,11 @@ export const useEditProfile = (): UseEditProfileReturn => {
     favorite_player: "",
     preferred_game: "",
   });
+
+  // Avatar state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [originalAvatarUrl, setOriginalAvatarUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,6 +99,8 @@ export const useEditProfile = (): UseEditProfileReturn => {
         
         setOriginalData(data);
         setProfileData(data);
+        setAvatarUrl(profileData.avatar_url || null);
+        setOriginalAvatarUrl(profileData.avatar_url || null);
       } else {
         // No profile exists - redirect to create one
         Alert.alert(
@@ -100,6 +114,58 @@ export const useEditProfile = (): UseEditProfileReturn => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Pick and upload avatar
+  const handlePickAvatar = async () => {
+    try {
+      setUploadingAvatar(true);
+      const uri = await imageUploadService.pickImage();
+      
+      if (!uri) {
+        setUploadingAvatar(false);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error("No authenticated user found");
+      }
+
+      // Upload to profile-images bucket with user-specific folder
+      const result = await imageUploadService.uploadImage(
+        uri,
+        "profile-images",
+        `avatars/${session.user.id}`,
+      );
+
+      if (!result.success || !result.url) {
+        throw new Error(result.error || "Upload failed");
+      }
+
+      setAvatarUrl(result.url);
+    } catch (err: any) {
+      console.error("Avatar upload error:", err);
+      Alert.alert("Error", err.message || "Failed to upload image");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Remove avatar
+  const handleRemoveAvatar = () => {
+    Alert.alert(
+      "Remove Photo",
+      "Are you sure you want to remove your profile photo?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => setAvatarUrl(null),
+        },
+      ],
+    );
   };
 
   // Options for dropdowns
@@ -125,7 +191,8 @@ export const useEditProfile = (): UseEditProfileReturn => {
     profileData.name !== originalData.name ||
     profileData.home_state !== originalData.home_state ||
     profileData.favorite_player !== originalData.favorite_player ||
-    profileData.preferred_game !== originalData.preferred_game;
+    profileData.preferred_game !== originalData.preferred_game ||
+    avatarUrl !== originalAvatarUrl;
 
   // Actions
   const updateField = (field: keyof ProfileData, value: string) => {
@@ -157,23 +224,36 @@ export const useEditProfile = (): UseEditProfileReturn => {
         throw new Error("No authenticated user found");
       }
 
-      const result = await supabase
+      // Delete old avatar from storage if it was replaced or removed
+      if (originalAvatarUrl && avatarUrl !== originalAvatarUrl) {
+        await imageUploadService.deleteImage(originalAvatarUrl, "profile-images");
+      }
+
+      const { data, error: updateError } = await supabase
         .from("profiles")
         .update({
           name: profileData.name.trim(),
           home_state: profileData.home_state || null,
           favorite_player: profileData.favorite_player.trim() || null,
           preferred_game: profileData.preferred_game || null,
+          avatar_url: avatarUrl,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", session.user.id);
+        .eq("id", session.user.id)
+        .select()
+        .single();
 
-      if (result.error) {
-        throw result.error;
+      if (updateError) {
+        throw updateError;
+      }
+
+      if (!data) {
+        throw new Error("Update failed — no rows were modified.");
       }
 
       // Update original data to reflect saved state
       setOriginalData({ ...profileData });
+      setOriginalAvatarUrl(avatarUrl);
 
       Alert.alert(
         "Success",
@@ -203,7 +283,10 @@ export const useEditProfile = (): UseEditProfileReturn => {
           { 
             text: "Reset", 
             style: "destructive",
-            onPress: () => setProfileData({ ...originalData })
+            onPress: () => {
+              setProfileData({ ...originalData });
+              setAvatarUrl(originalAvatarUrl);
+            }
           }
         ]
       );
@@ -232,6 +315,12 @@ export const useEditProfile = (): UseEditProfileReturn => {
     loading,
     saving,
     error,
+
+    // Avatar
+    avatarUrl,
+    uploadingAvatar,
+    handlePickAvatar,
+    handleRemoveAvatar,
 
     // Computed
     isValid,

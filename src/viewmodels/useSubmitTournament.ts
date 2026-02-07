@@ -242,7 +242,7 @@ export const useSubmitTournament = () => {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         aspect: [16, 9],
         quality: 0.8,
         exif: false,

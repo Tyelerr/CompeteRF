@@ -1,4 +1,6 @@
 import {
+  ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +12,6 @@ import { COLORS } from "../src/theme/colors";
 import { RADIUS, SPACING } from "../src/theme/spacing";
 import { FONT_SIZES } from "../src/theme/typography";
 import { useEditProfile } from "../src/viewmodels/useEditProfile";
-import { Button } from "../src/views/components/common/button";
 import { Dropdown } from "../src/views/components/common/dropdown";
 import { Loading } from "../src/views/components/common/loading";
 
@@ -26,6 +27,7 @@ export default function EditProfileScreen() {
       <ScrollView
         style={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContentContainer}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -45,6 +47,54 @@ export default function EditProfileScreen() {
               <Text style={styles.errorText}>{vm.error}</Text>
             </View>
           ) : null}
+
+          {/* Avatar Section */}
+          <View style={styles.avatarSection}>
+            <TouchableOpacity
+              onPress={vm.handlePickAvatar}
+              disabled={vm.uploadingAvatar || vm.saving}
+              style={styles.avatarTouchable}
+              activeOpacity={0.7}
+            >
+              {vm.uploadingAvatar ? (
+                <View style={styles.avatarContainer}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+              ) : vm.avatarUrl ? (
+                <Image
+                  source={{ uri: vm.avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <View style={styles.avatarContainer}>
+                  <Text style={styles.avatarPlaceholderIcon}>📷</Text>
+                  <Text style={styles.avatarPlaceholderText}>Add Photo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.avatarActions}>
+              <TouchableOpacity
+                onPress={vm.handlePickAvatar}
+                disabled={vm.uploadingAvatar || vm.saving}
+                style={styles.avatarActionButton}
+              >
+                <Text style={styles.avatarActionText}>
+                  {vm.avatarUrl ? "Change Photo" : "Upload Photo"}
+                </Text>
+              </TouchableOpacity>
+
+              {vm.avatarUrl && (
+                <TouchableOpacity
+                  onPress={vm.handleRemoveAvatar}
+                  disabled={vm.uploadingAvatar || vm.saving}
+                  style={styles.avatarActionButton}
+                >
+                  <Text style={styles.avatarRemoveText}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
           {/* Form */}
           <View style={styles.form}>
@@ -130,29 +180,6 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
-            <Button
-              title={vm.saving ? "Saving..." : "Save Changes"}
-              onPress={vm.handleSave}
-              disabled={!vm.isValid || !vm.hasChanges || vm.saving}
-              loading={vm.saving}
-              fullWidth
-            />
-
-            {vm.hasChanges && <View style={styles.spacerSm} />}
-
-            {vm.hasChanges && (
-              <Button
-                title="Reset Changes"
-                onPress={vm.handleReset}
-                variant="outline"
-                disabled={vm.saving}
-                fullWidth
-              />
-            )}
-          </View>
-
           {/* Changes Indicator */}
           {vm.hasChanges && (
             <View style={styles.changesIndicator}>
@@ -161,11 +188,35 @@ export default function EditProfileScreen() {
               </Text>
             </View>
           )}
-
-          {/* Bottom Spacer */}
-          <View style={styles.bottomSpacer} />
         </View>
       </ScrollView>
+
+      {/* Fixed Bottom Buttons */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={vm.goBack}
+          disabled={vm.saving}
+        >
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.saveButton,
+            (!vm.isValid || !vm.hasChanges || vm.saving) &&
+              styles.buttonDisabled,
+          ]}
+          onPress={vm.handleSave}
+          disabled={!vm.isValid || !vm.hasChanges || vm.saving}
+        >
+          {vm.saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save Changes</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -177,6 +228,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: SPACING.xl,
   },
   header: {
     padding: SPACING.md,
@@ -222,6 +276,62 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     textAlign: "center",
   },
+  // Avatar styles
+  avatarSection: {
+    alignItems: "center",
+    marginBottom: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  avatarTouchable: {
+    marginBottom: SPACING.sm,
+  },
+  avatarImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: COLORS.primary,
+  },
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: COLORS.surface,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarPlaceholderIcon: {
+    fontSize: 32,
+    marginBottom: SPACING.xs,
+  },
+  avatarPlaceholderText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+  },
+  avatarActions: {
+    flexDirection: "row",
+    gap: SPACING.md,
+    marginTop: SPACING.xs,
+  },
+  avatarActionButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+  },
+  avatarActionText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  avatarRemoveText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  // Form styles
   form: {
     gap: SPACING.lg,
   },
@@ -275,14 +385,8 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 18,
   },
-  buttonContainer: {
-    marginTop: SPACING.xl,
-  },
-  spacerSm: {
-    height: SPACING.sm,
-  },
   changesIndicator: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.lg,
     backgroundColor: COLORS.primary + "20",
     borderColor: COLORS.primary,
     borderWidth: 1,
@@ -295,7 +399,46 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "500",
   },
-  bottomSpacer: {
-    height: SPACING.xl * 2,
+  // Fixed bottom bar
+  bottomBar: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xl + SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cancelButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+  saveButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });
