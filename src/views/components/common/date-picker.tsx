@@ -24,7 +24,7 @@ export const DatePicker = ({
   useEffect(() => {
     if (showModal) {
       setTempDate(value ? new Date(value) : new Date());
-      setHasSelected(!!value);
+      setHasSelected(true);
     }
   }, [showModal]);
 
