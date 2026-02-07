@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   Image,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -50,6 +51,14 @@ export default function TournamentDetailScreen() {
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
     }
 
+    // Partial match fallback (e.g., "9-ball-scotch-doubles" → "9-ball")
+    const partialMatch = Object.keys(gameTypeImageMap).find((key) =>
+      tournament.game_type?.toLowerCase().includes(key),
+    );
+    if (partialMatch) {
+      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${gameTypeImageMap[partialMatch]}`;
+    }
+
     return null;
   };
 
@@ -61,6 +70,33 @@ export default function TournamentDetailScreen() {
 
   const closeImageViewer = () => {
     setShowImageViewer(false);
+  };
+
+  const handleShare = async () => {
+    if (!tournament) return;
+    try {
+      const chipInfo = chipRanges
+        ? "\n\n🎰 Chip Chart:\n" +
+          chipRanges
+            .map(
+              (r: any) =>
+                `${r.label || `${r.minRating}–${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
+            )
+            .join("\n")
+        : "";
+
+      const message =
+        `🎱 ${tournament.name}\n\n` +
+        `📅 ${vm.formattedDate} at ${vm.formattedTime}\n` +
+        `🏠 ${tournament.venues?.venue || "TBD"}\n` +
+        `💰 Entry: ${vm.formattedEntryFee}` +
+        chipInfo +
+        `\n\n📍 ${tournament.venues?.address || ""}, ${tournament.venues?.city || ""}, ${tournament.venues?.state || ""} ${tournament.venues?.zip_code || ""}`;
+
+      await Share.share({ message });
+    } catch (error) {
+      console.error("Share error:", error);
+    }
   };
 
   if (vm.loading) {
@@ -84,8 +120,19 @@ export default function TournamentDetailScreen() {
     );
   }
 
-  const tournament = vm.tournament;
+  // Cast to any so we can access chip_ranges, game_spot, race without TS errors
+  const tournament: any = vm.tournament;
   const imageUrl = getTournamentImageUrl(tournament);
+
+  // 🎰 Determine if this is a chip tournament with valid chip data
+  const isChipTournament = tournament.tournament_format === "chip-tournament";
+  const chipRanges =
+    isChipTournament &&
+    tournament.chip_ranges &&
+    Array.isArray(tournament.chip_ranges) &&
+    tournament.chip_ranges.length > 0
+      ? tournament.chip_ranges
+      : null;
 
   return (
     <View style={styles.container}>
@@ -165,6 +212,21 @@ export default function TournamentDetailScreen() {
             </View>
           </View>
 
+          {/* 🎰 Chip Breakdown — poster style with blue border */}
+          {chipRanges && (
+            <View style={styles.chipCard}>
+              <Text style={styles.chipTitle}>RATING / CHIP CHART</Text>
+              {chipRanges.map((range: any, index: number) => (
+                <Text key={index} style={styles.chipLine}>
+                  {range.label || `${range.minRating}–${range.maxRating}`}:{" "}
+                  <Text style={styles.chipLineCount}>
+                    {range.chips} Chip{range.chips !== 1 ? "s" : ""}
+                  </Text>
+                </Text>
+              ))}
+            </View>
+          )}
+
           {/* Date & Time */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>📅 Date & Time</Text>
@@ -196,16 +258,30 @@ export default function TournamentDetailScreen() {
                 {tournament.reports_to_fargo ? "Yes" : "No"}
               </Text>
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Open Tournament:</Text>
-              <Text style={styles.detailValue}>
-                {tournament.open_tournament ? "Yes" : "No"}
-              </Text>
-            </View>
-            {tournament.max_fargo && (
+            {!isChipTournament && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Open Tournament:</Text>
+                <Text style={styles.detailValue}>
+                  {tournament.open_tournament ? "Yes" : "No"}
+                </Text>
+              </View>
+            )}
+            {tournament.max_fargo && !isChipTournament && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Max Fargo:</Text>
                 <Text style={styles.detailValue}>{tournament.max_fargo}</Text>
+              </View>
+            )}
+            {tournament.game_spot && !isChipTournament && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Game Spot:</Text>
+                <Text style={styles.detailValue}>{tournament.game_spot}</Text>
+              </View>
+            )}
+            {tournament.race && !isChipTournament && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Race:</Text>
+                <Text style={styles.detailValue}>{tournament.race}</Text>
               </View>
             )}
           </View>
@@ -238,6 +314,16 @@ export default function TournamentDetailScreen() {
                 />
               )}
             </View>
+          </View>
+
+          {/* Share & Close buttons */}
+          <View style={styles.bottomActions}>
+            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+              <Text style={styles.shareButtonText}>📤 Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeButton} onPress={vm.goBack}>
+              <Text style={styles.closeButtonText}>✕ Close</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Spacer for tab bar */}
@@ -475,5 +561,66 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: SPACING.xl * 2,
+  },
+
+  // ── 🎰 Chip chart — poster style with blue border ────────────────
+  chipCard: {
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  chipTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "800",
+    color: COLORS.text,
+    textAlign: "center",
+    letterSpacing: 1,
+    marginBottom: SPACING.sm,
+  },
+  chipLine: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+    paddingVertical: 3,
+    textAlign: "center",
+  },
+  chipLineCount: {
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+
+  // ── Bottom actions ────────────────────────────────────────────────
+  bottomActions: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  shareButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + "15",
+    alignItems: "center",
+  },
+  shareButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.primary,
+  },
+  closeButton: {
+    flex: 1,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.error,
+    alignItems: "center",
+  },
+  closeButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.white,
   },
 });

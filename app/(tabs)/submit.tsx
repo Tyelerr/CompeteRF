@@ -249,29 +249,197 @@ export default function SubmitScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Game Spot</Text>
-            <TextInput
-              ref={vm.refs.gameSpot}
-              style={styles.input}
-              value={vm.formData.gameSpot}
-              onChangeText={(v) => vm.updateFormData("gameSpot", v)}
-              placeholder="e.g., The Ball"
-              placeholderTextColor={COLORS.textMuted}
-              returnKeyType="next"
-              onSubmitEditing={() => vm.refs.race.current?.focus()}
-            />
+            {/* 🎰 CHIP TOURNAMENT CONFIGURATION — shown when format is "chip-tournament" */}
+            {vm.isChipTournament && (
+              <View style={styles.chipSection}>
+                <View style={styles.chipHeader}>
+                  <Text style={styles.chipTitle}>🎰 Chip Configuration</Text>
+                  <TouchableOpacity
+                    style={styles.chipResetButton}
+                    onPress={vm.resetChipRangesToDefault}
+                  >
+                    <Text style={styles.chipResetText}>Reset Defaults</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.chipDescription}>
+                  Set Fargo rating ranges and how many chips each range
+                  receives. Lower-rated players typically get more chips.
+                </Text>
 
-            <Text style={styles.label}>Race</Text>
-            <TextInput
-              ref={vm.refs.race}
-              style={styles.input}
-              value={vm.formData.race}
-              onChangeText={(v) => vm.updateFormData("race", v)}
-              placeholder="e.g., Race to 5"
-              placeholderTextColor={COLORS.textMuted}
-              returnKeyType="next"
-              onSubmitEditing={() => vm.refs.description.current?.focus()}
-            />
+                {/* Column Headers */}
+                <View style={styles.chipRowHeader}>
+                  <Text style={[styles.chipColumnLabel, { flex: 1.4 }]}>
+                    Label
+                  </Text>
+                  <Text style={[styles.chipColumnLabel, { flex: 0.8 }]}>
+                    Min
+                  </Text>
+                  <Text style={[styles.chipColumnLabel, { flex: 0.8 }]}>
+                    Max
+                  </Text>
+                  <Text style={[styles.chipColumnLabel, { flex: 0.6 }]}>
+                    Chips
+                  </Text>
+                  <View style={{ width: 36 }} />
+                </View>
+
+                {/* Chip Range Rows */}
+                {vm.formData.chipRanges.map((range, index) => (
+                  <View key={index} style={styles.chipRow}>
+                    <TextInput
+                      style={[
+                        styles.chipInput,
+                        styles.chipLabelInput,
+                        { flex: 1.4 },
+                      ]}
+                      value={range.label}
+                      onChangeText={(v) =>
+                        vm.updateChipRange(index, "label", v)
+                      }
+                      placeholder="e.g., SL7"
+                      placeholderTextColor={COLORS.textMuted}
+                    />
+                    <TextInput
+                      style={[styles.chipInput, { flex: 0.8 }]}
+                      value={range.minRating.toString()}
+                      onChangeText={(v) =>
+                        vm.updateChipRange(index, "minRating", v)
+                      }
+                      placeholder="0"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={[styles.chipInput, { flex: 0.8 }]}
+                      value={range.maxRating.toString()}
+                      onChangeText={(v) =>
+                        vm.updateChipRange(index, "maxRating", v)
+                      }
+                      placeholder="299"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
+                    <TextInput
+                      style={[styles.chipInput, { flex: 0.6 }]}
+                      value={range.chips.toString()}
+                      onChangeText={(v) =>
+                        vm.updateChipRange(index, "chips", v)
+                      }
+                      placeholder="8"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
+                    <TouchableOpacity
+                      style={styles.chipRemoveButton}
+                      onPress={() => vm.removeChipRange(index)}
+                    >
+                      <Text style={styles.removeButton}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {/* Add Row Button */}
+                <TouchableOpacity
+                  style={styles.chipAddButton}
+                  onPress={vm.addChipRange}
+                >
+                  <Text style={styles.chipAddButtonText}>+ Add Range</Text>
+                </TouchableOpacity>
+
+                {/* Preview Summary */}
+                {vm.formData.chipRanges.length > 0 && (
+                  <View style={styles.chipPreview}>
+                    <Text style={styles.chipPreviewTitle}>
+                      📋 Chip Breakdown
+                    </Text>
+                    {vm.formData.chipRanges.map((range, index) => (
+                      <Text key={index} style={styles.chipPreviewRow}>
+                        {range.label || `${range.minRating}–${range.maxRating}`}{" "}
+                        → {range.chips} chip{range.chips !== 1 ? "s" : ""}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* 🎰 Game Spot — disabled for chip tournaments */}
+            <View
+              style={
+                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
+              }
+            >
+              <Text
+                style={[
+                  styles.label,
+                  vm.isChipTournament && styles.labelDisabled,
+                ]}
+              >
+                Game Spot
+              </Text>
+              <TextInput
+                ref={vm.refs.gameSpot}
+                style={[
+                  styles.input,
+                  vm.isChipTournament && styles.inputDisabled,
+                ]}
+                value={vm.formData.gameSpot}
+                onChangeText={(v) => vm.updateFormData("gameSpot", v)}
+                placeholder={
+                  vm.isChipTournament
+                    ? "N/A for Chip Tournament"
+                    : "e.g., The Ball"
+                }
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="next"
+                onSubmitEditing={() => vm.refs.race.current?.focus()}
+                editable={!vm.isChipTournament}
+              />
+              {vm.isChipTournament && (
+                <Text style={styles.chipDisabledHint}>
+                  Chip tournaments use chip ranges instead
+                </Text>
+              )}
+            </View>
+
+            {/* 🎰 Race — disabled for chip tournaments */}
+            <View
+              style={
+                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
+              }
+            >
+              <Text
+                style={[
+                  styles.label,
+                  vm.isChipTournament && styles.labelDisabled,
+                ]}
+              >
+                Race
+              </Text>
+              <TextInput
+                ref={vm.refs.race}
+                style={[
+                  styles.input,
+                  vm.isChipTournament && styles.inputDisabled,
+                ]}
+                value={vm.formData.race}
+                onChangeText={(v) => vm.updateFormData("race", v)}
+                placeholder={
+                  vm.isChipTournament
+                    ? "N/A for Chip Tournament"
+                    : "e.g., Race to 5"
+                }
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="next"
+                onSubmitEditing={() => vm.refs.description.current?.focus()}
+                editable={!vm.isChipTournament}
+              />
+              {vm.isChipTournament && (
+                <Text style={styles.chipDisabledHint}>
+                  Chip tournaments use chip ranges instead
+                </Text>
+              )}
+            </View>
 
             <Text style={styles.label}>Description</Text>
             <TextInput
@@ -294,30 +462,60 @@ export default function SubmitScreen() {
 
       case "fargo":
         return (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Fargo Requirements</Text>
+          <View
+            style={[
+              styles.section,
+              vm.isChipTournament && styles.sectionDisabled,
+            ]}
+          >
+            <Text
+              style={[
+                styles.sectionTitle,
+                vm.isChipTournament && styles.labelDisabled,
+              ]}
+            >
+              Fargo Requirements
+            </Text>
 
-            <Text style={styles.label}>Maximum Fargo</Text>
+            {vm.isChipTournament && (
+              <View style={styles.chipDisabledBanner}>
+                <Text style={styles.chipDisabledBannerText}>
+                  🎰 Fargo ranges are configured in the Chip Configuration above
+                </Text>
+              </View>
+            )}
+
+            <Text
+              style={[
+                styles.label,
+                vm.isChipTournament && styles.labelDisabled,
+              ]}
+            >
+              Maximum Fargo
+            </Text>
             <TextInput
               ref={vm.refs.maxFargo}
               style={[
                 styles.input,
-                vm.isMaxFargoDisabled && styles.inputDisabled,
+                (vm.isMaxFargoDisabled || vm.isChipTournament) &&
+                  styles.inputDisabled,
               ]}
               value={vm.formData.maxFargo}
               onChangeText={(v) => vm.updateFormData("maxFargo", v)}
               placeholder={
-                vm.isMaxFargoDisabled
-                  ? "Disabled (Open Tournament is ON)"
-                  : "e.g., 550 (leave blank for open)"
+                vm.isChipTournament
+                  ? "N/A for Chip Tournament"
+                  : vm.isMaxFargoDisabled
+                    ? "Disabled (Open Tournament is ON)"
+                    : "e.g., 550 (leave blank for open)"
               }
               placeholderTextColor={COLORS.textMuted}
               keyboardType="numeric"
               returnKeyType="next"
               onSubmitEditing={() => vm.refs.requiredFargo.current?.focus()}
-              editable={!vm.isMaxFargoDisabled}
+              editable={!vm.isMaxFargoDisabled && !vm.isChipTournament}
             />
-            {vm.isMaxFargoDisabled && (
+            {!vm.isChipTournament && vm.isMaxFargoDisabled && (
               <Text style={styles.hintWarning}>
                 Disabled when Open Tournament is ON
               </Text>
@@ -390,17 +588,28 @@ export default function SubmitScreen() {
               onValueChange={(v) => vm.updateFormData("reportsToFargo", v)}
             />
 
-            <ToggleSwitch
-              label="Open Tournament"
-              value={vm.formData.openTournament}
-              onValueChange={(v) => vm.updateFormData("openTournament", v)}
-              disabled={vm.isOpenTournamentDisabled}
-            />
-            {vm.isOpenTournamentDisabled && (
-              <Text style={styles.hintWarning}>
-                Disabled when Max Fargo is set
-              </Text>
-            )}
+            {/* 🎰 Open Tournament — disabled for chip tournaments */}
+            <View
+              style={
+                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
+              }
+            >
+              <ToggleSwitch
+                label="Open Tournament"
+                value={vm.formData.openTournament}
+                onValueChange={(v) => vm.updateFormData("openTournament", v)}
+                disabled={vm.isOpenTournamentDisabled || vm.isChipTournament}
+              />
+              {vm.isChipTournament ? (
+                <Text style={styles.chipDisabledHint}>
+                  Chip tournaments use rating-based chip allocation instead
+                </Text>
+              ) : vm.isOpenTournamentDisabled ? (
+                <Text style={styles.hintWarning}>
+                  Disabled when Max Fargo is set
+                </Text>
+              ) : null}
+            </View>
 
             <ToggleSwitch
               label="Recurring Tournament"
@@ -713,6 +922,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
+  // 🎰 Grayed-out section when chip tournament disables it
+  sectionDisabled: {
+    opacity: 0.45,
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: "700",
@@ -724,6 +937,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
     marginTop: SPACING.lg,
+  },
+  // 🎰 Grayed-out label
+  labelDisabled: {
+    color: COLORS.textMuted,
+    opacity: 0.6,
   },
   input: {
     backgroundColor: COLORS.surface,
@@ -742,7 +960,7 @@ const styles = StyleSheet.create({
   },
   inputDisabled: {
     backgroundColor: COLORS.border,
-    opacity: 0.6,
+    opacity: 0.5,
   },
   readOnlyCard: {
     backgroundColor: COLORS.surface,
@@ -937,5 +1155,138 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: "center",
     marginTop: SPACING.sm,
+  },
+
+  // ── 🎰 Chip Tournament Styles ──────────────────────────────────────
+  chipSection: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+  },
+  chipHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.xs,
+  },
+  chipTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  chipResetButton: {
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.textMuted,
+  },
+  chipResetText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    fontWeight: "500",
+  },
+  chipDescription: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
+  },
+  chipRowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  chipColumnLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  chipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  chipInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    textAlign: "center",
+  },
+  chipLabelInput: {
+    textAlign: "left",
+  },
+  chipRemoveButton: {
+    width: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipAddButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.sm,
+    alignSelf: "flex-start",
+    marginTop: SPACING.xs,
+  },
+  chipAddButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  chipPreview: {
+    backgroundColor: COLORS.primary + "10",
+    borderRadius: RADIUS.sm,
+    padding: SPACING.md,
+    marginTop: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  chipPreviewTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  chipPreviewRow: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginBottom: 2,
+  },
+  // 🎰 Disabled field wrapper and hints for chip tournament
+  disabledFieldWrapper: {
+    opacity: 0.45,
+  },
+  chipDisabledHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+    marginHorizontal: SPACING.sm,
+    fontStyle: "italic",
+  },
+  chipDisabledBanner: {
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  chipDisabledBannerText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "500",
   },
 });

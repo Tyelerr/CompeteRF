@@ -13,6 +13,7 @@ export type TournamentFormat =
   | "round-robin"
   | "swiss"
   | "modified-single"
+  | "chip-tournament"
   | "other";
 
 export type TableSize = "7ft" | "8ft" | "9ft";
@@ -51,4 +52,11 @@ export interface TableInfo {
   brand: string;
   size: TableSize;
   count: number;
+}
+
+// Chip Tournament: rating range → chip count mapping
+export interface ChipRange {
+  minRating: number;
+  maxRating: number;
+  chips: number;
 }

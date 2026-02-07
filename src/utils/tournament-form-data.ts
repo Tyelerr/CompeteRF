@@ -1,3 +1,24 @@
+// Chip Tournament: rating range → chip count mapping
+export interface ChipRange {
+  label: string;
+  minRating: number;
+  maxRating: number;
+  chips: number;
+}
+
+// ── Default chip ranges for Chip Tournament ──────────────────────────
+// Tournament directors can customize these, but this provides a sensible starting point
+export const DEFAULT_CHIP_RANGES: ChipRange[] = [
+  { label: "299 & Under", minRating: 0, maxRating: 299, chips: 8 },
+  { label: "300-349", minRating: 300, maxRating: 349, chips: 7 },
+  { label: "350-399", minRating: 350, maxRating: 399, chips: 6 },
+  { label: "400-449", minRating: 400, maxRating: 449, chips: 5 },
+  { label: "450-499", minRating: 450, maxRating: 499, chips: 4 },
+  { label: "500-549", minRating: 500, maxRating: 549, chips: 3 },
+  { label: "550-599", minRating: 550, maxRating: 599, chips: 2 },
+  { label: "600 & Above", minRating: 600, maxRating: 999, chips: 1 },
+];
+
 export interface TournamentFormData {
   templateId: number | null;
   name: string;
@@ -27,6 +48,8 @@ export interface TournamentFormData {
   recurrenceDay: string;
   recurrenceWeek: string | undefined;
   seriesEndDate: Date | null; // Optional end date only
+  // Chip Tournament fields
+  chipRanges: ChipRange[];
 }
 
 const getUserTimezone = (): string => {
@@ -66,6 +89,8 @@ export const initialFormData: TournamentFormData = {
   recurrenceDay: "",
   recurrenceWeek: undefined,
   seriesEndDate: null,
+  // Chip Tournament defaults (empty until format is selected)
+  chipRanges: [],
 };
 
 export const GAME_TYPES = [
@@ -85,6 +110,7 @@ export const TOURNAMENT_FORMATS = [
   { label: "Select The Format", value: "" },
   { label: "Single Elimination", value: "single-elimination" },
   { label: "Double Elimination", value: "double-elimination" },
+  { label: "Chip Tournament", value: "chip-tournament" },
   { label: "Round Robin", value: "round-robin" },
   { label: "Swiss", value: "swiss" },
   { label: "Modified Double Elimination", value: "modified-double" },
@@ -162,19 +188,19 @@ export const THUMBNAIL_OPTIONS = [
     id: "8-ball-scotch-doubles",
     name: "8 Ball Scotch Doubles",
     gameType: "8-ball-scotch-doubles",
-    imageUrl: "8-ball.jpeg", // Reuse 8-ball image
+    imageUrl: "8-ball.jpeg",
   },
   {
     id: "9-ball-scotch-doubles",
     name: "9 Ball Scotch Doubles",
     gameType: "9-ball-scotch-doubles",
-    imageUrl: "9-ball.jpeg", // Reuse 9-ball image
+    imageUrl: "9-ball.jpeg",
   },
   {
     id: "10-ball-scotch-doubles",
     name: "10 Ball Scotch Doubles",
     gameType: "10-ball-scotch-doubles",
-    imageUrl: "10-ball.jpeg", // Reuse 10-ball image
+    imageUrl: "10-ball.jpeg",
   },
   {
     id: "one-pocket",

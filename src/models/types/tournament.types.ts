@@ -1,4 +1,5 @@
 import {
+  ChipRange,
   GameType,
   RecurrenceType,
   SidePot,
@@ -35,6 +36,8 @@ export interface Tournament {
   phone_number?: string;
   thumbnail?: string;
   is_recurring: boolean;
+  // Chip Tournament data
+  chip_ranges?: ChipRange[];
   status: TournamentStatus;
   cancellation_reason?: string;
   cancelled_at?: string;
@@ -83,6 +86,8 @@ export interface TournamentTemplate {
   open_tournament: boolean;
   phone_number?: string;
   thumbnail?: string;
+  // Chip Tournament data
+  chip_ranges?: ChipRange[];
   recurrence_type: RecurrenceType;
   recurrence_day: string;
   recurrence_week?: number;
@@ -117,6 +122,8 @@ export interface TournamentTemplateUser {
   number_of_tables?: number;
   equipment?: string;
   thumbnail?: string;
+  // Chip Tournament data
+  chip_ranges?: ChipRange[];
   created_at: string;
   updated_at: string;
 }

@@ -7,6 +7,8 @@ import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
 import { useAuthContext } from "../providers/AuthProvider";
 import {
+  ChipRange,
+  DEFAULT_CHIP_RANGES,
   THUMBNAIL_OPTIONS,
   TournamentFormData,
   getRecurrencePreviewText,
@@ -83,7 +85,9 @@ export const useSubmitTournament = () => {
   useEffect(() => {
     if (formData.gameType && !hasManualSelection) {
       const matchingThumb = THUMBNAIL_OPTIONS.find(
-        (thumb) => thumb.gameType === formData.gameType,
+        (thumb) =>
+          thumb.gameType === formData.gameType ||
+          (thumb.gameType && formData.gameType?.toLowerCase().includes(thumb.gameType)),
       );
 
       if (matchingThumb) {
@@ -91,6 +95,31 @@ export const useSubmitTournament = () => {
       }
     }
   }, [formData.gameType, hasManualSelection]);
+
+  // 🎰 Auto-populate default chip ranges when "Chip Tournament" is selected
+  // Also clear fields that don't apply to chip tournaments
+  useEffect(() => {
+    if (formData.tournamentFormat === "chip-tournament") {
+      setFormData((prev) => ({
+        ...prev,
+        // Only populate defaults if chipRanges is currently empty
+        chipRanges:
+          prev.chipRanges.length === 0
+            ? [...DEFAULT_CHIP_RANGES]
+            : prev.chipRanges,
+        // Clear fields that don't apply to chip tournaments
+        gameSpot: "",
+        race: "",
+        maxFargo: "",
+        openTournament: false,
+      }));
+    } else {
+      // Clear chip ranges when switching away from chip tournament
+      if (formData.chipRanges.length > 0) {
+        setFormData((prev) => ({ ...prev, chipRanges: [] }));
+      }
+    }
+  }, [formData.tournamentFormat]);
 
   const loadFormData = async () => {
     try {
@@ -149,6 +178,62 @@ export const useSubmitTournament = () => {
     });
   };
 
+  // ── Chip Range CRUD (ViewModel actions) ──────────────────────────────
+
+  const addChipRange = () => {
+    setFormData((prev) => {
+      const ranges = [...prev.chipRanges];
+      // Smart default: start after the last range's max rating
+      const lastMax =
+        ranges.length > 0 ? ranges[ranges.length - 1].maxRating : -1;
+      const newMin = lastMax + 1;
+      const newMax = lastMax + 50;
+      const newRange: ChipRange = {
+        label: `${newMin}-${newMax}`,
+        minRating: newMin,
+        maxRating: newMax,
+        chips: 1,
+      };
+      return { ...prev, chipRanges: [...ranges, newRange] };
+    });
+  };
+
+  const updateChipRange = (
+    index: number,
+    field: keyof ChipRange,
+    value: string,
+  ) => {
+    setFormData((prev) => {
+      const ranges = [...prev.chipRanges];
+      if (field === "label") {
+        // Label is a string — store as-is
+        ranges[index] = { ...ranges[index], label: value };
+      } else {
+        // Numeric fields
+        const numValue = parseInt(value) || 0;
+        ranges[index] = { ...ranges[index], [field]: numValue };
+      }
+      return { ...prev, chipRanges: ranges };
+    });
+  };
+
+  const removeChipRange = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      chipRanges: prev.chipRanges.filter((_, i) => i !== index),
+    }));
+  };
+
+  const resetChipRangesToDefault = () => {
+    setFormData((prev) => ({
+      ...prev,
+      chipRanges: [...DEFAULT_CHIP_RANGES],
+    }));
+  };
+
+  // ── Computed: is this a chip tournament? ──────────────────────────────
+  const isChipTournament = formData.tournamentFormat === "chip-tournament";
+
   const handleVenueSelect = (venueId: string) => {
     const venue = venues.find((v) => v.id.toString() === venueId);
     setSelectedVenue(venue || null);
@@ -198,6 +283,12 @@ export const useSubmitTournament = () => {
           equipment: template.equipment || "",
           numberOfTables: template.number_of_tables?.toString() || "",
           thumbnail: template.thumbnail || "",
+          // 🎰 Load chip ranges from template if present
+          chipRanges:
+            template.tournament_format === "chip-tournament" &&
+            template.chip_ranges
+              ? template.chip_ranges
+              : [],
         });
 
         // Template selection counts as manual selection
@@ -292,8 +383,8 @@ export const useSubmitTournament = () => {
       const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
       const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
 
-      const formData = new FormData();
-      formData.append("file", {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", {
         uri: asset.uri,
         type: `image/${fileExt}`,
         name: fileName,
@@ -301,7 +392,7 @@ export const useSubmitTournament = () => {
 
       const { data, error } = await supabase.storage
         .from("tournament-images")
-        .upload(fileName, formData, {
+        .upload(fileName, formDataUpload, {
           contentType: `image/${fileExt}`,
           upsert: false,
         });
@@ -412,6 +503,15 @@ export const useSubmitTournament = () => {
     return dates;
   };
 
+  // ── Build the chip_ranges payload for database ────────────────────────
+  const getChipRangesPayload = (): ChipRange[] | null => {
+    if (!isChipTournament || formData.chipRanges.length === 0) return null;
+    // Only include ranges that have valid data
+    return formData.chipRanges.filter(
+      (r) => r.maxRating > 0 && r.chips > 0,
+    );
+  };
+
   // 🎯 NEW: Create additional recurring tournaments
   const createAdditionalTournaments = async (
     templateId: number,
@@ -467,6 +567,8 @@ export const useSubmitTournament = () => {
       open_tournament: formData.openTournament,
       phone_number: formData.phoneNumber.trim() || null,
       thumbnail: formData.thumbnail || null,
+      // 🎰 Include chip ranges
+      chip_ranges: getChipRangesPayload(),
       is_recurring: true,
       status: "active",
     };
@@ -509,6 +611,43 @@ export const useSubmitTournament = () => {
       Alert.alert("Error", "Please select a tournament format.");
       return false;
     }
+
+    // 🎰 Validate chip ranges when chip tournament is selected
+    if (isChipTournament) {
+      if (formData.chipRanges.length === 0) {
+        Alert.alert(
+          "Error",
+          "Please add at least one chip range for your Chip Tournament.",
+        );
+        return false;
+      }
+
+      for (let i = 0; i < formData.chipRanges.length; i++) {
+        const range = formData.chipRanges[i];
+        if (!range.label.trim()) {
+          Alert.alert(
+            "Error",
+            `Chip range row ${i + 1}: Please enter a label (e.g., "299 & Under", "SL7").`,
+          );
+          return false;
+        }
+        if (range.minRating > range.maxRating) {
+          Alert.alert(
+            "Error",
+            `Chip range row ${i + 1}: Min rating cannot be greater than max rating.`,
+          );
+          return false;
+        }
+        if (range.chips < 1) {
+          Alert.alert(
+            "Error",
+            `Chip range row ${i + 1}: Chips must be at least 1.`,
+          );
+          return false;
+        }
+      }
+    }
+
     if (!formData.startTime) {
       Alert.alert("Error", "Please select a start time.");
       return false;
@@ -533,7 +672,6 @@ export const useSubmitTournament = () => {
         Alert.alert("Error", "Please select how often this repeats.");
         return false;
       }
-      // NO MORE manual day validation - it's auto-determined from date!
     }
 
     return true;
@@ -608,6 +746,8 @@ export const useSubmitTournament = () => {
       open_tournament: formData.openTournament || false,
       phone_number: formData.phoneNumber.trim() || null,
       thumbnail: formData.thumbnail || null,
+      // 🎰 Include chip ranges in template
+      chip_ranges: getChipRangesPayload(),
       recurrence_type: formData.recurrenceType,
       recurrence_day: recurrenceDay, // 🎯 Use auto-determined day
       recurrence_week: null, // 🎯 Simplified - no week selection needed
@@ -680,7 +820,7 @@ export const useSubmitTournament = () => {
       number_of_tables: formData.numberOfTables
         ? parseInt(formData.numberOfTables)
         : null,
-      tournament_date: formData.tournamentDate!.toISOString().split("T")[0], // Use the date they selected
+      tournament_date: formData.tournamentDate!.toISOString().split("T")[0],
       start_time: formData.startTime,
       timezone: formData.timezone,
       entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : 0,
@@ -694,6 +834,8 @@ export const useSubmitTournament = () => {
       open_tournament: formData.openTournament,
       phone_number: formData.phoneNumber.trim() || null,
       thumbnail: formData.thumbnail || null,
+      // 🎰 Include chip ranges
+      chip_ranges: getChipRangesPayload(),
       is_recurring: formData.isRecurring,
       status: "active",
     };
@@ -704,7 +846,6 @@ export const useSubmitTournament = () => {
       JSON.stringify(tournamentData, null, 2),
     );
 
-    // Also log your user info for debugging
     console.log("🔍 USER INFO:", {
       userId: profile?.id,
       userIdAuto: profile?.id_auto,
@@ -715,7 +856,6 @@ export const useSubmitTournament = () => {
     console.log("🎯 Tournament data being inserted:", tournamentData);
 
     try {
-      // 🎯 USE TOURNAMENT SERVICE WITH TYPE CASTING TO BYPASS TYPESCRIPT ERRORS
       const createdTournament = await tournamentService.createTournament(
         tournamentData as any,
       );
@@ -739,15 +879,12 @@ export const useSubmitTournament = () => {
       if (formData.isRecurring) {
         console.log("🔄 Starting recurring tournament creation process");
 
-        // Create tournament template first
         const templateId = await createTournamentTemplate();
         console.log("✅ Template created with ID:", templateId);
 
-        // Create the first tournament instance
         await createSingleTournament(templateId);
         console.log("✅ First tournament instance created");
 
-        // 🎯 NEW: Create additional tournaments within 30-day horizon
         await createAdditionalTournaments(templateId);
         console.log("✅ Additional tournaments created");
 
@@ -765,7 +902,6 @@ export const useSubmitTournament = () => {
       } else {
         console.log("🎯 Creating single tournament");
 
-        // Create single tournament
         await createSingleTournament();
         console.log("✅ Single tournament created");
 
@@ -811,7 +947,6 @@ export const useSubmitTournament = () => {
 
     const option = THUMBNAIL_OPTIONS.find((opt) => opt.id === thumbnailId);
     if (option?.imageUrl) {
-      // Use the correct Supabase project URL format
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${option.imageUrl}`;
     }
 
@@ -835,11 +970,12 @@ export const useSubmitTournament = () => {
     customImageUri,
     hasManualSelection,
     uploadingImage,
-    scanningImage, // 🔍 Add to return object
+    scanningImage,
 
     // Computed
     isMaxFargoDisabled: formData.openTournament === true,
     isOpenTournamentDisabled: formData.maxFargo.trim() !== "",
+    isChipTournament, // 🎰 Expose to View — used to disable irrelevant fields
 
     // Dropdown options
     venueOptions,
@@ -863,5 +999,11 @@ export const useSubmitTournament = () => {
     getRecurrencePreview,
     navigateToLogin,
     navigateToFaq,
+
+    // 🎰 Chip Tournament actions
+    addChipRange,
+    updateChipRange,
+    removeChipRange,
+    resetChipRangesToDefault,
   };
 };
