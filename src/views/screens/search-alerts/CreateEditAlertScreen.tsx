@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -21,7 +22,8 @@ import { useAuthContext } from "../../../providers/AuthProvider";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { Button } from "../../components/common/button";
+import { US_STATES } from "../../../utils/constants";
+import { US_CITIES_BY_STATE } from "../../../utils/us-cities";
 import { Dropdown } from "../../components/common/dropdown";
 import { Loading } from "../../components/common/loading";
 
@@ -266,6 +268,14 @@ export default function CreateEditAlertScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Location dropdowns
+  const stateOptions = [{ label: "Any State", value: "" }, ...US_STATES];
+  const cityList = form.state ? US_CITIES_BY_STATE[form.state] || [] : [];
+  const cityOptions = [
+    { label: "Any City", value: "" },
+    ...cityList.map((city: string) => ({ label: city, value: city })),
+  ];
+
   // Load existing alert for edit mode
   useEffect(() => {
     if (isEditMode && alertId) {
@@ -290,7 +300,14 @@ export default function CreateEditAlertScreen() {
   };
 
   const updateField = (field: keyof FormState, value: any) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      const updated = { ...prev, [field]: value };
+      // Clear city when state changes
+      if (field === "state" && value !== prev.state) {
+        updated.city = "";
+      }
+      return updated;
+    });
   };
 
   const cycleTriState = (field: "reportsToFargo" | "openTournament") => {
@@ -392,6 +409,7 @@ export default function CreateEditAlertScreen() {
           style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContentContainer}
         >
           {/* Header */}
           <View style={styles.header}>
@@ -459,7 +477,7 @@ export default function CreateEditAlertScreen() {
                 <View style={styles.switchInfo}>
                   <Text style={styles.fieldLabel}>Alert Active</Text>
                   <Text style={styles.switchDescription}>
-                    Inactive alerts won't match new tournaments
+                    {"Inactive alerts won\u0027t match new tournaments"}
                   </Text>
                 </View>
                 <Switch
@@ -537,28 +555,29 @@ export default function CreateEditAlertScreen() {
 
               <View style={styles.fieldContainer}>
                 <Text style={styles.fieldLabel}>State</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder='e.g. "AZ", "CA", "TX"'
-                  placeholderTextColor={COLORS.textMuted}
+                <Dropdown
+                  placeholder="Any State"
+                  options={stateOptions}
                   value={form.state}
-                  onChangeText={(v) => updateField("state", v.toUpperCase())}
-                  editable={!saving}
-                  autoCapitalize="characters"
-                  maxLength={2}
+                  onSelect={(v: string) => updateField("state", v)}
+                  disabled={saving}
+                  searchable
+                  searchPlaceholder="Search states..."
                 />
               </View>
 
               <View style={styles.fieldContainer}>
                 <Text style={styles.fieldLabel}>City</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Phoenix, Los Angeles"
-                  placeholderTextColor={COLORS.textMuted}
+                <Dropdown
+                  placeholder={
+                    !form.state ? "Select a state first" : "Any City"
+                  }
+                  options={cityOptions}
                   value={form.city}
-                  onChangeText={(v) => updateField("city", v)}
-                  editable={!saving}
-                  autoCapitalize="words"
+                  onSelect={(v: string) => updateField("city", v)}
+                  disabled={saving || !form.state}
+                  searchable
+                  searchPlaceholder="Search cities..."
                 />
               </View>
             </View>
@@ -653,38 +672,36 @@ export default function CreateEditAlertScreen() {
                 {form.name.trim() || "Untitled Alert"} — {generatePreview()}
               </Text>
             </View>
-
-            {/* ─── Action Buttons ──────────────────────────────────── */}
-            <View style={styles.buttonContainer}>
-              <Button
-                title={
-                  saving
-                    ? "Saving..."
-                    : isEditMode
-                      ? "Save Changes"
-                      : "Create Alert"
-                }
-                onPress={handleSave}
-                disabled={!form.name.trim() || saving}
-                loading={saving}
-                fullWidth
-              />
-
-              <View style={styles.spacerSm} />
-
-              <Button
-                title="Cancel"
-                onPress={() => router.back()}
-                variant="outline"
-                disabled={saving}
-                fullWidth
-              />
-            </View>
-
-            {/* Bottom Spacer */}
-            <View style={styles.bottomSpacer} />
           </View>
         </ScrollView>
+
+        {/* ─── Fixed Bottom Buttons ──────────────────────────────── */}
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              (!form.name.trim() || saving) && styles.buttonDisabled,
+            ]}
+            onPress={handleSave}
+            disabled={!form.name.trim() || saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>
+                {isEditMode ? "Save Changes" : "Create Alert"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => router.back()}
+            disabled={saving}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
@@ -702,6 +719,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: SPACING.xl,
   },
 
   // Header
@@ -939,14 +959,46 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Buttons
-  buttonContainer: {
-    marginTop: SPACING.md,
+  // Fixed bottom bar
+  bottomBar: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xl + SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.background,
   },
-  spacerSm: {
-    height: SPACING.sm,
+  cancelButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  bottomSpacer: {
-    height: SPACING.xl * 2,
+  cancelButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+  saveButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 });

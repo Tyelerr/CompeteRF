@@ -4,6 +4,7 @@ import {
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -24,6 +25,8 @@ interface DropdownProps {
   onSelect: (value: string) => void;
   error?: string;
   disabled?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
 
 export const Dropdown = ({
@@ -34,15 +37,26 @@ export const Dropdown = ({
   onSelect,
   error,
   disabled = false,
+  searchable = false,
+  searchPlaceholder = "Search...",
 }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
   const selectedOption = options.find((o) => o.value === value);
 
   const handlePress = () => {
     if (!disabled) {
+      setSearchText("");
       setIsOpen(true);
     }
   };
+
+  const filteredOptions =
+    searchable && searchText.trim()
+      ? options.filter((o) =>
+          o.label.toLowerCase().includes(searchText.toLowerCase()),
+        )
+      : options;
 
   return (
     <View style={styles.container}>
@@ -76,9 +90,29 @@ export const Dropdown = ({
           activeOpacity={1}
         >
           <View style={styles.dropdown}>
+            {searchable && (
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder={searchPlaceholder}
+                  placeholderTextColor={COLORS.textMuted}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            )}
             <FlatList
-              data={options}
+              data={filteredOptions}
               keyExtractor={(item) => item.value}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No results found</Text>
+                </View>
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
@@ -164,7 +198,30 @@ const styles = StyleSheet.create({
   dropdown: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
-    maxHeight: 300,
+    maxHeight: 400,
+  },
+  searchContainer: {
+    padding: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  searchInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+  },
+  emptyContainer: {
+    paddingVertical: SPACING.lg,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
   },
   option: {
     paddingVertical: SPACING.md,
