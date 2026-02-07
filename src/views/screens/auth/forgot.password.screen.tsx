@@ -43,7 +43,7 @@ export const ForgotPasswordScreen = () => {
           <Text style={styles.icon}>✉️</Text>
           <Text style={styles.title}>CHECK YOUR EMAIL</Text>
           <Text style={styles.message}>
-            We've sent a password reset link to:
+            {"We've sent a password reset link to:"}
           </Text>
           <Text style={styles.email}>{email}</Text>
           <Text style={styles.message}>
@@ -69,8 +69,9 @@ export const ForgotPasswordScreen = () => {
       <Text style={styles.title}>FORGOT PASSWORD</Text>
 
       <Text style={styles.description}>
-        Enter your email address and we'll send you a link to reset your
-        password.
+        {
+          "Enter your email address and we'll send you a link to reset your password."
+        }
       </Text>
 
       <View style={styles.form}>
