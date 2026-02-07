@@ -1,8 +1,12 @@
+import { featuredImageService } from "@/src/models/services/featured-content.service";
 import { useCreateFeaturedBar } from "@/src/viewmodels/useFeaturedContent";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -35,10 +39,15 @@ export function CreateBarModal({
   const [showVenueDropdown, setShowVenueDropdown] = useState(false);
   const [currentHighlight, setCurrentHighlight] = useState("");
 
+  // Image state
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const [formData, setFormData] = useState({
     venue_id: undefined as number | undefined,
     name: "",
     description: "",
+    photo_url: "",
     location: "",
     hours_of_operation: "",
     special_features: "",
@@ -47,6 +56,39 @@ export function CreateBarModal({
     is_active: true,
   });
 
+  // ─────────────────────────────────────────────────
+  // Image Picker
+  // ─────────────────────────────────────────────────
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Please allow access to your photo library to upload bar images.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1], // Square crop for circular display
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImageUri(result.assets[0].uri);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImageUri(null);
+    setFormData((prev) => ({ ...prev, photo_url: "" }));
+  };
+
+  // ─────────────────────────────────────────────────
+  // Create handler (with image upload)
+  // ─────────────────────────────────────────────────
   const handleCreate = async () => {
     if (!formData.venue_id) {
       Alert.alert("Error", "Please select a venue");
@@ -57,12 +99,37 @@ export function CreateBarModal({
       return;
     }
 
-    const success = await createBar(formData);
-    if (success) {
-      resetForm();
-      onClose();
-      onSuccess();
-      Alert.alert("Success", "Featured bar created successfully!");
+    try {
+      const success = await createBar(formData);
+
+      if (success) {
+        if (selectedImageUri) {
+          setUploadingImage(true);
+          const publicUrl = await featuredImageService.uploadImage(
+            selectedImageUri,
+            "bars",
+            formData.venue_id || Date.now(),
+          );
+
+          if (publicUrl) {
+            console.log("✅ Bar image uploaded:", publicUrl);
+          } else {
+            Alert.alert(
+              "Note",
+              "Bar created but image upload failed. You can add the image later from the edit screen.",
+            );
+          }
+          setUploadingImage(false);
+        }
+
+        resetForm();
+        onClose();
+        onSuccess();
+        Alert.alert("Success", "Featured bar created successfully!");
+      }
+    } catch (error) {
+      setUploadingImage(false);
+      Alert.alert("Error", "Failed to create bar");
     }
   };
 
@@ -71,6 +138,7 @@ export function CreateBarModal({
       venue_id: undefined,
       name: "",
       description: "",
+      photo_url: "",
       location: "",
       hours_of_operation: "",
       special_features: "",
@@ -79,6 +147,7 @@ export function CreateBarModal({
       is_active: true,
     });
     setCurrentHighlight("");
+    setSelectedImageUri(null);
   };
 
   const addHighlight = () => {
@@ -106,6 +175,8 @@ export function CreateBarModal({
     onClose();
   };
 
+  const isLoading = creating || uploadingImage;
+
   return (
     <Modal
       visible={visible}
@@ -125,16 +196,83 @@ export function CreateBarModal({
             <Text style={styles.title}>Create Featured Bar</Text>
             <TouchableOpacity
               onPress={handleCreate}
-              disabled={creating}
-              style={[styles.saveButton, creating && styles.disabledButton]}
+              disabled={isLoading}
+              style={[styles.saveButton, isLoading && styles.disabledButton]}
             >
               <Text style={styles.saveButtonText}>
-                {creating ? "Creating..." : "Create"}
+                {isLoading ? "Creating..." : "Create"}
               </Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content}>
+            {/* ─────────────────────────────────────── */}
+            {/* Bar Photo Upload Section                */}
+            {/* ─────────────────────────────────────── */}
+            <View style={styles.formRow}>
+              <Text style={styles.label}>Bar Photo</Text>
+              <Text style={styles.labelHint}>
+                Square image recommended for circular display
+              </Text>
+
+              <View style={styles.imagePickerContainer}>
+                {selectedImageUri ? (
+                  <View style={styles.imagePreviewContainer}>
+                    <View style={styles.imagePreviewGlow}>
+                      <View style={styles.imagePreviewBorder}>
+                        <Image
+                          source={{ uri: selectedImageUri }}
+                          style={styles.imagePreview}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.imageActions}>
+                      <TouchableOpacity
+                        style={styles.changeImageButton}
+                        onPress={pickImage}
+                      >
+                        <Ionicons name="camera" size={16} color="#3B82F6" />
+                        <Text style={styles.changeImageText}>Change</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={removeImage}
+                      >
+                        <Ionicons name="trash" size={16} color="#EF4444" />
+                        <Text style={styles.removeImageText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={pickImage}
+                  >
+                    <View style={styles.uploadIconContainer}>
+                      <Ionicons
+                        name="camera-outline"
+                        size={32}
+                        color="#3B82F6"
+                      />
+                    </View>
+                    <Text style={styles.uploadText}>Tap to add photo</Text>
+                    <Text style={styles.uploadHint}>
+                      JPG, PNG or WebP • Max 5MB
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {uploadingImage && (
+                  <View style={styles.uploadingOverlay}>
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <Text style={styles.uploadingText}>Uploading photo...</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
             {/* Venue Selection */}
             <View style={styles.formRow}>
               <Text style={styles.label}>Select Venue</Text>
@@ -380,6 +518,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+  labelHint: {
+    fontSize: 12,
+    color: "#666666",
+    marginTop: -4,
+  },
   input: {
     backgroundColor: "#2A2A2A",
     borderWidth: 1,
@@ -394,6 +537,125 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: "top",
   },
+
+  // ─────────────────────────────────────────
+  // Image Picker Styles
+  // ─────────────────────────────────────────
+  imagePickerContainer: {
+    marginTop: 4,
+  },
+  uploadButton: {
+    backgroundColor: "#1A1A1A",
+    borderWidth: 1.5,
+    borderColor: "#333333",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    paddingVertical: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  uploadText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3B82F6",
+    marginBottom: 4,
+  },
+  uploadHint: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  imagePreviewContainer: {
+    alignItems: "center",
+    gap: 12,
+  },
+  imagePreviewGlow: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  imagePreviewBorder: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imagePreview: {
+    width: 98,
+    height: 98,
+    borderRadius: 49,
+  },
+  imageActions: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  changeImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.3)",
+  },
+  changeImageText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+  removeImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+  },
+  removeImageText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#EF4444",
+  },
+  uploadingOverlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 8,
+    backgroundColor: "rgba(59, 130, 246, 0.08)",
+    borderRadius: 8,
+  },
+  uploadingText: {
+    fontSize: 13,
+    color: "#3B82F6",
+  },
+
+  // ─────────────────────────────────────────
+  // Dropdown & Form Styles
+  // ─────────────────────────────────────────
   dropdown: {
     flexDirection: "row",
     justifyContent: "space-between",

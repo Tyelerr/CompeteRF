@@ -1,4 +1,8 @@
 import { supabase } from "@/src/lib/supabase";
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
+
+const BUCKET_NAME = "featured-content-images";
 
 // Interfaces matching your EXISTING table structure
 export interface FeaturedPlayer {
@@ -8,14 +12,15 @@ export interface FeaturedPlayer {
   photo_url?: string;
   location?: string;
   bio?: string;
+  fargo_rating?: number;
+  preferred_game?: string;
   achievements?: string[];
-  user_id?: number; // References profiles.id_auto (integer)
+  user_id?: number;
   is_active?: boolean;
   featured_until?: string;
   featured_priority?: number;
   created_at?: string;
   updated_at?: string;
-  // Joined data from profiles table
   profiles?: {
     user_name: string;
     name: string;
@@ -32,15 +37,14 @@ export interface FeaturedBar {
   hours_of_operation?: string;
   special_features?: string;
   highlights?: string[];
-  venue_id?: number; // References venues.id (integer)
+  venue_id?: number;
   is_active?: boolean;
   featured_until?: string;
   featured_priority?: number;
   created_at?: string;
   updated_at?: string;
-  // Joined data from venues table
   venues?: {
-    venue: string; // Fixed: was 'name', now 'venue'
+    venue: string;
     address: string;
     city: string;
     state: string;
@@ -53,8 +57,10 @@ export interface CreateFeaturedPlayerData {
   photo_url?: string;
   location?: string;
   bio?: string;
+  fargo_rating?: number;
+  preferred_game?: string;
   achievements?: string[];
-  user_id?: number; // profiles.id_auto
+  user_id?: number;
   is_active?: boolean;
   featured_until?: string;
   featured_priority?: number;
@@ -68,14 +74,17 @@ export interface CreateFeaturedBarData {
   hours_of_operation?: string;
   special_features?: string;
   highlights?: string[];
-  venue_id?: number; // venues.id
+  venue_id?: number;
   is_active?: boolean;
   featured_until?: string;
   featured_priority?: number;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Featured Content Service (CRUD)
+// ─────────────────────────────────────────────────────────────
+
 class FeaturedContentService {
-  // Featured Players - using your existing table structure
   async getFeaturedPlayers(): Promise<FeaturedPlayer[]> {
     const { data, error } = await supabase
       .from("featured_players")
@@ -190,7 +199,6 @@ class FeaturedContentService {
     if (error) throw error;
   }
 
-  // Featured Bars
   async getFeaturedBars(): Promise<FeaturedBar[]> {
     const { data, error } = await supabase
       .from("featured_bars")
@@ -309,11 +317,10 @@ class FeaturedContentService {
     if (error) throw error;
   }
 
-  // Helper methods for dropdowns
   async getAvailableProfiles() {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id_auto, user_name, name, email") // Using id_auto instead of id
+      .select("id_auto, user_name, name, email")
       .eq("status", "active")
       .order("user_name");
 
@@ -324,12 +331,149 @@ class FeaturedContentService {
   async getAvailableVenues() {
     const { data, error } = await supabase
       .from("venues")
-      .select("id, venue, address, city, state") // Fixed: was 'name', now 'venue'
-      .order("venue"); // Fixed: was 'name', now 'venue'
+      .select("id, venue, address, city, state")
+      .order("venue");
 
     if (error) throw error;
     return data || [];
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Featured Image Service (Upload / Delete)
+// ─────────────────────────────────────────────────────────────
+
+class FeaturedImageService {
+  async ensureBucketExists(): Promise<void> {
+    try {
+      const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
+        public: true,
+        fileSizeLimit: 5 * 1024 * 1024,
+        allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      });
+
+      if (error && !error.message.includes("already exists")) {
+        console.error("❌ Error creating bucket:", error.message);
+      }
+    } catch (err) {
+      console.error("❌ Bucket creation error:", err);
+    }
+  }
+
+  async uploadImage(
+    uri: string,
+    type: "players" | "bars",
+    entityId: number | string,
+  ): Promise<string | null> {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: "base64",
+      });
+
+      const extension = uri.split(".").pop()?.toLowerCase() || "jpg";
+      const contentType =
+        extension === "png"
+          ? "image/png"
+          : extension === "webp"
+            ? "image/webp"
+            : "image/jpeg";
+
+      const timestamp = Date.now();
+      const filePath = `${type}/${type.slice(0, -1)}_${entityId}_${timestamp}.${extension}`;
+
+      const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, decode(base64), {
+          contentType,
+          upsert: true,
+        });
+
+      if (error) {
+        console.error("❌ Upload error:", error.message);
+        return null;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET_NAME).getPublicUrl(data.path);
+
+      console.log("✅ Image uploaded:", publicUrl);
+      return publicUrl;
+    } catch (err) {
+      console.error("❌ Upload failed:", err);
+      return null;
+    }
+  }
+
+  async uploadPlayerImage(
+    uri: string,
+    playerId: number,
+  ): Promise<string | null> {
+    const publicUrl = await this.uploadImage(uri, "players", playerId);
+
+    if (publicUrl) {
+      const { error } = await supabase
+        .from("featured_players")
+        .update({
+          photo_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", playerId);
+
+      if (error) {
+        console.error("❌ Failed to update player photo_url:", error.message);
+        return null;
+      }
+    }
+
+    return publicUrl;
+  }
+
+  async uploadBarImage(uri: string, barId: number): Promise<string | null> {
+    const publicUrl = await this.uploadImage(uri, "bars", barId);
+
+    if (publicUrl) {
+      const { error } = await supabase
+        .from("featured_bars")
+        .update({
+          photo_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", barId);
+
+      if (error) {
+        console.error("❌ Failed to update bar photo_url:", error.message);
+        return null;
+      }
+    }
+
+    return publicUrl;
+  }
+
+  async deleteImage(publicUrl: string): Promise<boolean> {
+    try {
+      const parts = publicUrl.split(`${BUCKET_NAME}/`);
+      if (parts.length < 2) return false;
+
+      const filePath = parts[1];
+
+      const { error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .remove([filePath]);
+
+      if (error) {
+        console.error("❌ Delete error:", error.message);
+        return false;
+      }
+
+      console.log("✅ Image deleted:", filePath);
+      return true;
+    } catch (err) {
+      console.error("❌ Delete failed:", err);
+      return false;
+    }
+  }
+}
+
 export const featuredContentService = new FeaturedContentService();
+export const featuredImageService = new FeaturedImageService();

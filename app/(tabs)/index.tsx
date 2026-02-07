@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Image,
   Linking,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { featuredContentService } from "../../src/models/services/featured-content.service";
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -34,7 +36,7 @@ interface FeaturedPlayer {
   profile_image_url?: string;
   avatar_url?: string;
   preferred_game?: string;
-  skill_level?: string;
+  fargo_rating?: number;
   favorite_player?: string;
   achievements?: string[];
 }
@@ -49,10 +51,97 @@ interface FeaturedBar {
   phone?: string;
   website?: string;
   hours_of_operation?: string;
+  photo_url?: string;
   highlights?: string[];
 }
 
 type TabType = "latest" | "featured" | "bars";
+
+// =============================================================
+// Circular Overlapping Image Component
+// Reusable for both Featured Player and Featured Bar
+// =============================================================
+interface CircularFeaturedImageProps {
+  imageUrl?: string | null;
+  fallbackEmoji: string;
+  size?: number;
+  overlapAmount?: number;
+}
+
+function CircularFeaturedImage({
+  imageUrl,
+  fallbackEmoji,
+  size = 140,
+  overlapAmount = 20,
+}: CircularFeaturedImageProps) {
+  const [imageError, setImageError] = useState(false);
+  const hasValidImage = !!imageUrl && !imageError;
+  const ringThickness = 4;
+  const glowPadding = 8;
+
+  return (
+    <View
+      style={[
+        styles.circularImageWrapper,
+        {
+          marginTop: -overlapAmount,
+          width: size + glowPadding * 2,
+          height: size + glowPadding * 2,
+        },
+      ]}
+    >
+      {/* Outer glow layer */}
+      <View
+        style={[
+          styles.circularImageGlow,
+          {
+            width: size + glowPadding * 2,
+            height: size + glowPadding * 2,
+            borderRadius: (size + glowPadding * 2) / 2,
+          },
+        ]}
+      >
+        {/* Blue border ring */}
+        <View
+          style={[
+            styles.circularImageBorder,
+            {
+              width: size + ringThickness * 2,
+              height: size + ringThickness * 2,
+              borderRadius: (size + ringThickness * 2) / 2,
+            },
+          ]}
+        >
+          {/* Inner image container */}
+          <View
+            style={[
+              styles.circularImageInner,
+              { width: size, height: size, borderRadius: size / 2 },
+            ]}
+          >
+            {hasValidImage ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={[
+                  styles.circularImage,
+                  { width: size, height: size, borderRadius: size / 2 },
+                ]}
+                onError={() => setImageError(true)}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text
+                style={[styles.circularImageFallback, { fontSize: size * 0.4 }]}
+              >
+                {fallbackEmoji}
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   // State Management (View Model Layer)
@@ -75,51 +164,63 @@ export default function HomeScreen() {
   // Data Layer Functions
   const fetchFeaturedContent = async () => {
     try {
-      console.log("🔄 Fetching featured content...");
+      console.log("🔄 Fetching featured content from Supabase...");
 
-      const mockPlayer = {
-        id: 1,
-        name: "Sarah Martinez",
-        user_name: "sarah_pool_pro",
-        label_about_the_person: "Pro 8-Ball Champion",
-        description:
-          "Sarah has been dominating the Arizona pool scene for over 8 years. Known for her precision and tactical play, she's won multiple state championships and recently qualified for the US Open 9-Ball Championship. When not competing, she coaches junior players at local pool halls.",
-        home_city: "Phoenix",
-        home_state: "Arizona",
-        preferred_game: "9-Ball",
-        skill_level: "Expert",
-        achievements: [
-          "2024 Arizona State 8-Ball Champion",
-          "US Open 9-Ball Championship Qualifier",
-          "Phoenix League MVP (3 consecutive years)",
-          "Featured in Arizona Billiards Magazine",
-        ],
-      };
+      const [players, bars] = await Promise.all([
+        featuredContentService.getFeaturedPlayers(),
+        featuredContentService.getFeaturedBars(),
+      ]);
 
-      const mockBar = {
-        id: 1,
-        name: "The Rack Room",
-        description:
-          "Welcome to Phoenix's premier billiards destination! Come experience our newly renovated tables and enjoy our happy hour specials every weekday from 4-7pm. Tournament players always welcome!",
-        city: "Phoenix",
-        state: "Arizona",
-        address: "123 Main St, Phoenix, AZ",
-        phone: "(602) 555-0123",
-        website: "therackroom.com",
-        hours_of_operation: "Mon-Sun 11am-2am",
-        highlights: [
-          "12 Championship Diamond tables",
-          "Weekly tournaments every Tuesday & Friday",
-          "Full bar with craft beer selection",
-          "Rated #1 pool hall in Phoenix area",
-        ],
-      };
+      // Get the first active player
+      const activePlayer = players.find((p) => p.is_active);
+      if (activePlayer) {
+        const mapped: FeaturedPlayer = {
+          id: activePlayer.id,
+          name: activePlayer.name || activePlayer.profiles?.name,
+          user_name: activePlayer.profiles?.user_name,
+          label_about_the_person: activePlayer.nickname,
+          description: activePlayer.bio,
+          home_city: activePlayer.location?.split(",")[0]?.trim(),
+          home_state: activePlayer.location?.split(",")[1]?.trim(),
+          profile_image_url: activePlayer.photo_url,
+          fargo_rating: (activePlayer as any).fargo_rating,
+          preferred_game: (activePlayer as any).preferred_game,
+          achievements: activePlayer.achievements,
+        };
+        console.log("✅ Setting featured player:", mapped.name);
+        setFeaturedPlayer(mapped);
+      } else {
+        console.log("ℹ️ No active featured player found");
+        setFeaturedPlayer(null);
+      }
 
-      console.log("✅ Setting featured player:", mockPlayer.name);
-      setFeaturedPlayer(mockPlayer);
-
-      console.log("✅ Setting featured bar:", mockBar.name);
-      setFeaturedBar(mockBar);
+      // Get the first active bar
+      const activeBar = bars.find((b) => b.is_active);
+      if (activeBar) {
+        const barLocation =
+          activeBar.location ||
+          (activeBar.venues
+            ? `${activeBar.venues.city}, ${activeBar.venues.state}`
+            : "");
+        const mapped: FeaturedBar = {
+          id: activeBar.id,
+          name: activeBar.name || activeBar.venues?.venue,
+          description: activeBar.description,
+          city: barLocation.split(",")[0]?.trim(),
+          state: barLocation.split(",")[1]?.trim(),
+          address: activeBar.venues?.address,
+          phone: undefined,
+          website: undefined,
+          hours_of_operation: activeBar.hours_of_operation,
+          photo_url: activeBar.photo_url,
+          highlights: activeBar.highlights,
+        };
+        console.log("✅ Setting featured bar:", mapped.name);
+        setFeaturedBar(mapped);
+      } else {
+        console.log("ℹ️ No active featured bar found");
+        setFeaturedBar(null);
+      }
     } catch (error) {
       console.error("Failed to fetch featured content:", error);
     }
@@ -363,23 +464,22 @@ export default function HomeScreen() {
           <View style={styles.featuredContainer}>
             {featuredPlayer ? (
               <>
-                {/* Featured Player Header */}
+                {/* Spacer for the overlapping image */}
+                <View style={styles.imageOverlapSpacer} />
+
+                {/* Featured Player Header Card */}
                 <View style={styles.featuredHeader}>
-                  <View style={styles.playerImageContainer}>
-                    {featuredPlayer.profile_image_url ||
-                    featuredPlayer.avatar_url ? (
-                      <Image
-                        source={{
-                          uri:
-                            featuredPlayer.profile_image_url ||
-                            featuredPlayer.avatar_url,
-                        }}
-                        style={styles.playerImage}
-                      />
-                    ) : (
-                      <Text style={styles.playerImagePlaceholder}>👤</Text>
-                    )}
-                  </View>
+                  {/* Circular Overlapping Player Image */}
+                  <CircularFeaturedImage
+                    imageUrl={
+                      featuredPlayer.profile_image_url ||
+                      featuredPlayer.avatar_url
+                    }
+                    fallbackEmoji="👤"
+                    size={180}
+                    overlapAmount={0}
+                  />
+
                   <Text style={styles.playerName}>
                     {featuredPlayer.name || featuredPlayer.user_name}
                   </Text>
@@ -413,9 +513,9 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.statCard}>
                     <Text style={styles.statNumber}>
-                      {featuredPlayer.skill_level || "Local"}
+                      {featuredPlayer.fargo_rating || "N/A"}
                     </Text>
-                    <Text style={styles.statLabel}>Skill Level</Text>
+                    <Text style={styles.statLabel}>Fargo Rating</Text>
                   </View>
                 </View>
 
@@ -450,11 +550,19 @@ export default function HomeScreen() {
           <View style={styles.featuredContainer}>
             {featuredBar ? (
               <>
-                {/* Featured Bar Header */}
+                {/* Spacer for the overlapping image */}
+                <View style={styles.imageOverlapSpacer} />
+
+                {/* Featured Bar Header Card */}
                 <View style={styles.featuredHeader}>
-                  <View style={styles.barImageContainer}>
-                    <Text style={styles.barEmoji}>🍻</Text>
-                  </View>
+                  {/* Circular Overlapping Bar Image */}
+                  <CircularFeaturedImage
+                    imageUrl={featuredBar.photo_url}
+                    fallbackEmoji="🍻"
+                    size={180}
+                    overlapAmount={0}
+                  />
+
                   <Text style={styles.barName}>{featuredBar.name}</Text>
                   <Text style={styles.barLocation}>
                     {featuredBar.city}, {featuredBar.state}
@@ -525,32 +633,37 @@ export default function HomeScreen() {
   );
 }
 
+const OVERLAP_AMOUNT = 24;
+const PLAYER_IMAGE_SIZE = 180;
+const BAR_IMAGE_SIZE = 180;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   header: {
-    paddingTop: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    padding: SPACING.md,
+    paddingTop: SPACING.xl + SPACING.lg,
+    paddingBottom: SPACING.sm,
     alignItems: "center",
   },
   title: {
-    fontSize: FONT_SIZES.title,
+    fontSize: FONT_SIZES.xl,
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textAlign: "center",
+    marginTop: SPACING.xs,
   },
   tabContainer: {
     flexDirection: "row",
     paddingHorizontal: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   tab: {
     flex: 1,
@@ -647,59 +760,81 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.success,
   },
-  // Featured Content Styles
+
+  // =========================================================
+  // Featured Content Styles (Player & Bar)
+  // =========================================================
   featuredContainer: {
     flex: 1,
   },
+
+  // Spacer above the card to reserve room for the overlapping circle
+  imageOverlapSpacer: {
+    height: 10,
+  },
+
   featuredHeader: {
     backgroundColor: COLORS.backgroundCard,
     alignItems: "center",
-    paddingVertical: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
-    marginHorizontal: -SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginHorizontal: 0,
     marginTop: 0,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: COLORS.primary,
   },
-  playerImageContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.backgroundCard,
-    marginBottom: SPACING.md,
-    overflow: "hidden",
-    justifyContent: "center",
+
+  // ---------------------------------------------------------
+  // Circular Overlapping Image Styles
+  // ---------------------------------------------------------
+  circularImageWrapper: {
     alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
-  playerImage: {
-    width: "100%",
-    height: "100%",
+  circularImageGlow: {
+    alignItems: "center",
+    justifyContent: "center",
+    // Soft blue glow (works on iOS via shadow, Android via elevation)
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  playerImagePlaceholder: {
-    fontSize: 40,
+  circularImageBorder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+    // The 3px blue ring is achieved by the size difference
+    // between border (size+6) and inner (size) = 3px per side
+  },
+  circularImageInner: {
+    backgroundColor: COLORS.backgroundCard,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  circularImage: {
+    // Dimensions applied inline via props
+  },
+  circularImageFallback: {
     color: COLORS.textSecondary,
   },
-  barImageContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: SPACING.md,
-  },
-  barEmoji: {
-    fontSize: 32,
-  },
+
+  // ---------------------------------------------------------
+  // Player-specific styles
+  // ---------------------------------------------------------
   playerName: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "bold",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  barName: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "bold",
     color: COLORS.text,
@@ -714,10 +849,24 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
+
+  // ---------------------------------------------------------
+  // Bar-specific styles
+  // ---------------------------------------------------------
+  barName: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: "bold",
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
   barLocation: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
+
+  // ---------------------------------------------------------
+  // Shared content styles
+  // ---------------------------------------------------------
   descriptionContainer: {
     marginBottom: SPACING.lg,
   },

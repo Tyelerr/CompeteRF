@@ -1,8 +1,12 @@
+import { featuredImageService } from "@/src/models/services/featured-content.service";
 import { useCreateFeaturedPlayer } from "@/src/viewmodels/useFeaturedContent";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -35,17 +39,57 @@ export function CreatePlayerModal({
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [currentAchievement, setCurrentAchievement] = useState("");
 
+  // Image state
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const [formData, setFormData] = useState({
     user_id: undefined as number | undefined,
     name: "",
     nickname: "",
+    photo_url: "",
     location: "",
     bio: "",
+    fargo_rating: undefined as number | undefined,
     achievements: [] as string[],
     featured_priority: 0,
     is_active: true,
   });
 
+  // ─────────────────────────────────────────────────
+  // Image Picker
+  // ─────────────────────────────────────────────────
+  const pickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Please allow access to your photo library to upload player images.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1], // Square crop for circular display
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImageUri(result.assets[0].uri);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImageUri(null);
+    setFormData((prev) => ({ ...prev, photo_url: "" }));
+  };
+
+  // ─────────────────────────────────────────────────
+  // Create handler (with image upload)
+  // ─────────────────────────────────────────────────
   const handleCreate = async () => {
     if (!formData.user_id) {
       Alert.alert("Error", "Please select a profile");
@@ -56,12 +100,46 @@ export function CreatePlayerModal({
       return;
     }
 
-    const success = await createPlayer(formData);
-    if (success) {
-      resetForm();
-      onClose();
-      onSuccess();
-      Alert.alert("Success", "Featured player created successfully!");
+    try {
+      // Step 1: Create the player record first (to get the ID)
+      const success = await createPlayer(formData);
+
+      if (success) {
+        // Step 2: If we have a selected image, upload it
+        // Note: Since createPlayer doesn't return the ID directly,
+        // we upload with a temp ID. For a cleaner approach, you could
+        // modify createPlayer to return the created record.
+        if (selectedImageUri) {
+          setUploadingImage(true);
+          // Upload using the user_id as identifier since we don't have
+          // the featured_player ID yet. Alternatively, modify your
+          // createPlayer to return the new record's ID.
+          const publicUrl = await featuredImageService.uploadImage(
+            selectedImageUri,
+            "players",
+            formData.user_id || Date.now(),
+          );
+
+          if (publicUrl) {
+            // The photo_url was set during upload via the service
+            console.log("✅ Player image uploaded:", publicUrl);
+          } else {
+            Alert.alert(
+              "Note",
+              "Player created but image upload failed. You can add the image later from the edit screen.",
+            );
+          }
+          setUploadingImage(false);
+        }
+
+        resetForm();
+        onClose();
+        onSuccess();
+        Alert.alert("Success", "Featured player created successfully!");
+      }
+    } catch (error) {
+      setUploadingImage(false);
+      Alert.alert("Error", "Failed to create player");
     }
   };
 
@@ -70,13 +148,16 @@ export function CreatePlayerModal({
       user_id: undefined,
       name: "",
       nickname: "",
+      photo_url: "",
       location: "",
       bio: "",
+      fargo_rating: undefined,
       achievements: [],
       featured_priority: 0,
       is_active: true,
     });
     setCurrentAchievement("");
+    setSelectedImageUri(null);
   };
 
   const addAchievement = () => {
@@ -104,6 +185,8 @@ export function CreatePlayerModal({
     onClose();
   };
 
+  const isLoading = creating || uploadingImage;
+
   return (
     <Modal
       visible={visible}
@@ -123,16 +206,84 @@ export function CreatePlayerModal({
             <Text style={styles.title}>Create Featured Player</Text>
             <TouchableOpacity
               onPress={handleCreate}
-              disabled={creating}
-              style={[styles.saveButton, creating && styles.disabledButton]}
+              disabled={isLoading}
+              style={[styles.saveButton, isLoading && styles.disabledButton]}
             >
               <Text style={styles.saveButtonText}>
-                {creating ? "Creating..." : "Create"}
+                {isLoading ? "Creating..." : "Create"}
               </Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content}>
+            {/* ─────────────────────────────────────── */}
+            {/* Player Photo Upload Section             */}
+            {/* ─────────────────────────────────────── */}
+            <View style={styles.formRow}>
+              <Text style={styles.label}>Player Photo</Text>
+              <Text style={styles.labelHint}>
+                Square image recommended for circular display
+              </Text>
+
+              <View style={styles.imagePickerContainer}>
+                {selectedImageUri ? (
+                  <View style={styles.imagePreviewContainer}>
+                    {/* Circular preview mimicking the home page style */}
+                    <View style={styles.imagePreviewGlow}>
+                      <View style={styles.imagePreviewBorder}>
+                        <Image
+                          source={{ uri: selectedImageUri }}
+                          style={styles.imagePreview}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.imageActions}>
+                      <TouchableOpacity
+                        style={styles.changeImageButton}
+                        onPress={pickImage}
+                      >
+                        <Ionicons name="camera" size={16} color="#3B82F6" />
+                        <Text style={styles.changeImageText}>Change</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={removeImage}
+                      >
+                        <Ionicons name="trash" size={16} color="#EF4444" />
+                        <Text style={styles.removeImageText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={pickImage}
+                  >
+                    <View style={styles.uploadIconContainer}>
+                      <Ionicons
+                        name="camera-outline"
+                        size={32}
+                        color="#3B82F6"
+                      />
+                    </View>
+                    <Text style={styles.uploadText}>Tap to add photo</Text>
+                    <Text style={styles.uploadHint}>
+                      JPG, PNG or WebP • Max 5MB
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {uploadingImage && (
+                  <View style={styles.uploadingOverlay}>
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                    <Text style={styles.uploadingText}>Uploading photo...</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
             {/* Profile Selection */}
             <View style={styles.formRow}>
               <Text style={styles.label}>Select Profile</Text>
@@ -238,6 +389,25 @@ export function CreatePlayerModal({
                 placeholderTextColor="#666666"
                 multiline
                 numberOfLines={4}
+              />
+            </View>
+
+            <View style={styles.formRow}>
+              <Text style={styles.label}>Fargo Rating</Text>
+              <TextInput
+                style={styles.input}
+                value={
+                  formData.fargo_rating ? String(formData.fargo_rating) : ""
+                }
+                onChangeText={(text) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    fargo_rating: parseInt(text) || undefined,
+                  }))
+                }
+                placeholder="e.g. 625"
+                placeholderTextColor="#666666"
+                keyboardType="numeric"
               />
             </View>
 
@@ -364,6 +534,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+  labelHint: {
+    fontSize: 12,
+    color: "#666666",
+    marginTop: -4,
+  },
   input: {
     backgroundColor: "#2A2A2A",
     borderWidth: 1,
@@ -378,6 +553,126 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: "top",
   },
+
+  // ─────────────────────────────────────────
+  // Image Picker Styles
+  // ─────────────────────────────────────────
+  imagePickerContainer: {
+    marginTop: 4,
+  },
+  uploadButton: {
+    backgroundColor: "#1A1A1A",
+    borderWidth: 1.5,
+    borderColor: "#333333",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    paddingVertical: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  uploadText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3B82F6",
+    marginBottom: 4,
+  },
+  uploadHint: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  imagePreviewContainer: {
+    alignItems: "center",
+    gap: 12,
+  },
+  // Circular preview with blue glow (matches home page style)
+  imagePreviewGlow: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  imagePreviewBorder: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imagePreview: {
+    width: 98,
+    height: 98,
+    borderRadius: 49,
+  },
+  imageActions: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  changeImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.3)",
+  },
+  changeImageText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+  removeImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.3)",
+  },
+  removeImageText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#EF4444",
+  },
+  uploadingOverlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 8,
+    backgroundColor: "rgba(59, 130, 246, 0.08)",
+    borderRadius: 8,
+  },
+  uploadingText: {
+    fontSize: 13,
+    color: "#3B82F6",
+  },
+
+  // ─────────────────────────────────────────
+  // Dropdown & Form Styles (unchanged)
+  // ─────────────────────────────────────────
   dropdown: {
     flexDirection: "row",
     justifyContent: "space-between",
