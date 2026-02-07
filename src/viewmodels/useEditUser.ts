@@ -162,21 +162,28 @@ export const useEditUser = (userId: string) => {
     setSaving(true);
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          name,
-          role,
-          status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
+      const { data, error } = await supabase
+  .from("profiles")
+  .update({
+    name,
+    role,
+    status,
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", userId)
+  .select()
+  .single();
 
-      if (error) {
-        console.error("Error saving user:", error);
-        Alert.alert("Error", `Failed to save: ${error.message}`);
-        return false;
-      }
+if (error) {
+  console.error("Error saving user:", error);
+  Alert.alert("Error", `Failed to save: ${error.message}`);
+  return false;
+}
+
+if (!data) {
+  Alert.alert("Error", "Update failed — no rows were modified. Check database permissions.");
+  return false;
+}
 
       // Update local state
       setUser((prev) =>
