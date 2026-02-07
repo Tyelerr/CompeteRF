@@ -25,9 +25,14 @@ import {
 interface CreateBarModalProps {
   visible: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export function CreateBarModal({ visible, onClose }: CreateBarModalProps) {
+export function CreateBarModal({
+  visible,
+  onClose,
+  onSuccess,
+}: CreateBarModalProps) {
   const { createBar, loading } = useCreateFeaturedBar();
 
   // Google Places search state
@@ -152,6 +157,7 @@ export function CreateBarModal({ visible, onClose }: CreateBarModalProps) {
       const success = await createBar(formData);
       if (success) {
         resetForm();
+        onSuccess?.();
         onClose();
       }
     } catch (err) {
