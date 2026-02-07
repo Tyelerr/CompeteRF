@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { analyticsService, ENTITY_TYPES } from "../models/services/analytics.service";
 import { useAuthContext } from "../providers/AuthProvider";
@@ -191,7 +191,12 @@ export const useTournamentDetail = (
   const openMaps = () => {
     if (!tournament?.venues) return;
     const address = `${tournament.venues.address}, ${tournament.venues.city}, ${tournament.venues.state} ${tournament.venues.zip_code}`;
-    const url = `https://maps.google.com/?q=${encodeURIComponent(address)}`;
+    const encodedAddress = encodeURIComponent(address);
+
+    const url = Platform.select({
+      ios: `https://maps.apple.com/?q=${encodedAddress}`,
+      android: `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`,
+    }) || `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
 
     analyticsService.trackDirectionsClicked(
       ENTITY_TYPES.TOURNAMENT,
@@ -211,7 +216,8 @@ export const useTournamentDetail = (
       { contact_type: "phone", venue_name: tournament.venues.venue },
     );
 
-    Linking.openURL(`tel:${tournament.venues.phone}`);
+    const phone = tournament.venues.phone.replace(/[^0-9+]/g, "");
+    Linking.openURL(`tel:${phone}`);
   };
 
   const handleEdit = () => {

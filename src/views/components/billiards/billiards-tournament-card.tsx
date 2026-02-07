@@ -1,11 +1,4 @@
-import {
-  Image,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Tournament } from "../../../models/types/tournament.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -33,16 +26,6 @@ export const BilliardsTournamentCard = ({
 }: BilliardsTournamentCardProps) => {
   const venue = tournament.venues;
   const imageUrl = getTournamentImageUrl(tournament);
-
-  const handleAddressPress = () => {
-    if (!venue) return;
-
-    const address = `${venue.address}, ${venue.city}, ${venue.state} ${venue.zip_code}`;
-    const encodedAddress = encodeURIComponent(address);
-    const mapsUrl = `https://maps.google.com/?q=${encodedAddress}`;
-
-    Linking.openURL(mapsUrl);
-  };
 
   const renderImage = () => {
     if (imageUrl) {
@@ -123,13 +106,11 @@ export const BilliardsTournamentCard = ({
           </Text>
         )}
 
-        {/* Clickable Address */}
+        {/* Address */}
         {venue?.address && (
-          <TouchableOpacity onPress={handleAddressPress}>
-            <Text style={styles.addressLink} numberOfLines={2}>
-              {venue.address}
-            </Text>
-          </TouchableOpacity>
+          <Text style={styles.venueAddress} numberOfLines={2}>
+            {venue.address}
+          </Text>
         )}
 
         {/* Tournament Fee */}
@@ -244,12 +225,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: SPACING.xs,
   },
-  addressLink: {
+  venueAddress: {
     fontSize: FONT_SIZES.xs,
-    color: COLORS.primary,
+    color: COLORS.textSecondary,
     textAlign: "center",
     marginTop: SPACING.xs,
-    textDecorationLine: "underline",
   },
   feeSection: {
     marginTop: SPACING.md,
