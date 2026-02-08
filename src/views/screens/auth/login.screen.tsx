@@ -52,7 +52,7 @@ export const LoginScreen = () => {
       if (profile) {
         router.replace("/(tabs)");
       } else {
-        router.replace("/auth/complete-profile");
+        router.replace("/auth/register");
       }
     } catch (err: any) {
       setError(err.message || "Login failed");
@@ -68,6 +68,9 @@ export const LoginScreen = () => {
       </TouchableOpacity>
 
       <Text style={styles.title}>LOG IN</Text>
+
+      {/* Pushes the form down to roughly the upper-middle of the screen */}
+      <View style={styles.spacer} />
 
       <View style={styles.form}>
         <Input
@@ -95,14 +98,18 @@ export const LoginScreen = () => {
           loading={loading}
           fullWidth
         />
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>{"Don't have an account? "}</Text>
+          <TouchableOpacity onPress={() => router.push("/auth/register")}>
+            <Text style={styles.footerLink}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Don't have an account? </Text>
-        <TouchableOpacity onPress={() => router.push("/auth/register")}>
-          <Text style={styles.footerLink}>Sign Up</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Bottom spacer balances the layout — flex:2 vs flex:1 above
+          keeps the form in the upper-middle area */}
+      <View style={styles.bottomSpacer} />
     </View>
   );
 };
@@ -125,11 +132,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xxl,
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: SPACING.xl,
   },
-  form: {
+  spacer: {
     flex: 1,
   },
+  form: {},
   error: {
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
@@ -138,7 +145,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row",
     justifyContent: "center",
-    paddingBottom: SPACING.xl,
+    marginTop: SPACING.lg,
   },
   footerText: {
     color: COLORS.textSecondary,
@@ -148,5 +155,8 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
+  },
+  bottomSpacer: {
+    flex: 2,
   },
 });

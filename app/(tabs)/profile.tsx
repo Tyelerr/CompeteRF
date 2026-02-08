@@ -1,6 +1,8 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   Image,
   RefreshControl,
   ScrollView,
@@ -34,6 +36,108 @@ interface Favorite {
     };
   };
 }
+
+// ── Animated logged-out view ─────────────────────────────────────────
+const LoggedOutView = ({ router }: { router: any }) => {
+  const welcomeFade = useRef(new Animated.Value(0)).current;
+  const welcomeSlide = useRef(new Animated.Value(-30)).current;
+  const messageFade = useRef(new Animated.Value(0)).current;
+  const buttonsFade = useRef(new Animated.Value(0)).current;
+  const buttonsSlide = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      // 1. "Welcome!" slides in
+      Animated.parallel([
+        Animated.timing(welcomeFade, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(welcomeSlide, {
+          toValue: 0,
+          duration: 600,
+          easing: Easing.out(Easing.back(1.2)),
+          useNativeDriver: true,
+        }),
+      ]),
+      // 2. Message + buttons fade in
+      Animated.parallel([
+        Animated.timing(messageFade, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonsFade, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonsSlide, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>PROFILE</Text>
+        <Text style={styles.headerSubtitle}>
+          View and manage your tournament history
+        </Text>
+      </View>
+
+      <View style={styles.notLoggedIn}>
+        {/* Animated "Welcome!" */}
+        <Animated.Text
+          style={[
+            styles.welcomeText,
+            {
+              opacity: welcomeFade,
+              transform: [{ translateY: welcomeSlide }],
+            },
+          ]}
+        >
+          Welcome!
+        </Animated.Text>
+
+        {/* Message */}
+        <Animated.Text style={[styles.message, { opacity: messageFade }]}>
+          Log in to see your profile
+        </Animated.Text>
+
+        {/* Buttons */}
+        <Animated.View
+          style={[
+            styles.buttonGroup,
+            {
+              opacity: buttonsFade,
+              transform: [{ translateY: buttonsSlide }],
+            },
+          ]}
+        >
+          <Button
+            title="Log In"
+            onPress={() => router.push("/auth/login" as any)}
+            fullWidth
+          />
+          <View style={styles.spacerSm} />
+          <Button
+            title="Create Account"
+            onPress={() => router.push("/auth/register" as any)}
+            variant="outline"
+            fullWidth
+          />
+        </Animated.View>
+      </View>
+    </View>
+  );
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -139,11 +243,9 @@ export default function ProfileScreen() {
   };
 
   const handleShare = async (tournament: any) => {
-    // TODO: Implement share functionality
     console.log("Sharing tournament:", tournament.name);
   };
 
-  // Get tournament image URL helper (same logic as useBilliards)
   const getTournamentImageUrl = (tournament: any) => {
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
@@ -173,7 +275,6 @@ export default function ProfileScreen() {
     return null;
   };
 
-  // Handle viewing tournament image in full screen
   const handleViewImage = (tournament: any) => {
     const imageUrl = getTournamentImageUrl(tournament);
     if (imageUrl) {
@@ -206,35 +307,9 @@ export default function ProfileScreen() {
     return <Loading fullScreen message="Loading..." />;
   }
 
-  // Not logged in
+  // Not logged in — show animated welcome
   if (!user) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>PROFILE</Text>
-          <Text style={styles.headerSubtitle}>
-            View and manage your tournament history
-          </Text>
-        </View>
-
-        <View style={styles.notLoggedIn}>
-          <Text style={styles.message}>Log in to see your profile</Text>
-          <View style={styles.spacer} />
-          <Button
-            title="Log In"
-            onPress={() => router.push("/auth/login" as any)}
-            fullWidth
-          />
-          <View style={styles.spacerSm} />
-          <Button
-            title="Create Account"
-            onPress={() => router.push("/auth/register" as any)}
-            variant="outline"
-            fullWidth
-          />
-        </View>
-      </View>
-    );
+    return <LoggedOutView router={router} />;
   }
 
   // Logged in - show profile
@@ -259,7 +334,6 @@ export default function ProfileScreen() {
 
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            {/* Profile Avatar - User Image or Billiard Ball Fallback */}
             <View style={styles.avatarContainer}>
               {profile?.avatar_url ? (
                 <Image
@@ -268,7 +342,6 @@ export default function ProfileScreen() {
                   resizeMode="cover"
                 />
               ) : (
-                // Billiard Ball Avatar Fallback
                 <View style={styles.avatar}>
                   <View style={styles.ballRow}>
                     <View style={[styles.ball, styles.ball8]} />
@@ -289,7 +362,6 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            {/* Profile Info */}
             <View style={styles.profileInfo}>
               <Text style={styles.name}>
                 {profile?.name || user.email?.split("@")[0] || "Player"}
@@ -304,7 +376,6 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.actionButton, styles.editButton]}
@@ -332,7 +403,6 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* User Details - Show available info */}
           {profile && (
             <View style={styles.userDetails}>
               {profile.home_state && (
@@ -363,7 +433,6 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Bottom Navigation Buttons */}
         <View style={styles.bottomNavigation}>
           <TouchableOpacity
             style={[styles.navButton, styles.favoritesButton]}
@@ -382,7 +451,6 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Favorites Section */}
         <View style={styles.favoritesSection}>
           {favorites.length === 0 ? (
             <View style={styles.emptyFavorites}>
@@ -435,7 +503,6 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* Full Screen Image Viewer */}
       <FullScreenImageViewer
         visible={showImageViewer}
         imageUrl={currentImageUrl}
@@ -472,18 +539,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: SPACING.xs,
   },
+  // ── Logged-out animated styles ───────────────────────────────────
   notLoggedIn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: SPACING.lg,
   },
+  welcomeText: {
+    fontSize: 36,
+    fontWeight: "700",
+    color: "#4A90D9",
+    marginBottom: SPACING.xl,
+    letterSpacing: 1,
+  },
   message: {
     fontSize: FONT_SIZES.lg,
     color: COLORS.textMuted,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
     textAlign: "center",
   },
+  buttonGroup: {
+    width: "100%",
+  },
+  // ── Logged-in styles ─────────────────────────────────────────────
   profileCard: {
     margin: SPACING.md,
     backgroundColor: COLORS.backgroundCard,
@@ -505,7 +584,7 @@ const styles = StyleSheet.create({
   profileImage: {
     width: 80,
     height: 80,
-    borderRadius: 40, // Make it circular
+    borderRadius: 40,
     borderWidth: 2,
     borderColor: COLORS.border,
   },
@@ -524,7 +603,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 1,
   },
-  // Billiard ball colors
   ball1: { backgroundColor: "#FFD700" },
   ball2: { backgroundColor: "#0066FF" },
   ball3: { backgroundColor: "#FF0000" },

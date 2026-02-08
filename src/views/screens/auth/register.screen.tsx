@@ -1,6 +1,12 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useState } from "react";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useCheckUsername } from "../../../../hooks/use-profile";
 import { supabase } from "../../../lib/supabase";
@@ -14,6 +20,11 @@ import { containsBadWord, isValidUsername } from "../../../utils/validation";
 import { Button } from "../../components/common/button";
 import { Dropdown } from "../../components/common/dropdown";
 import { Input } from "../../components/common/input";
+
+const IS_IOS = Platform.OS === "ios";
+
+const PASSWORD_RULES =
+  "minlength: 8; required: lower; required: upper; required: digit;";
 
 export const RegisterScreen = () => {
   const router = useRouter();
@@ -38,18 +49,46 @@ export const RegisterScreen = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // iOS-only: toggle between strong password and manual entry.
+  // Android always uses manual entry (no strong password feature).
+  const [useAutoPassword, setUseAutoPassword] = useState(IS_IOS);
+  const [formKey, setFormKey] = useState(() => Date.now());
+
   const { isAvailable, isChecking } = useCheckUsername(username);
+
+  const togglePasswordMode = useCallback(() => {
+    setPassword("");
+    setConfirmPassword("");
+    setUseAutoPassword((prev) => !prev);
+    setFormKey(Date.now());
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setName("");
+    setUsername("");
+    setHomeState("");
+    setHomeCity("");
+    setZipCode("");
+    setPreferredGame("");
+    setFavoritePlayer("");
+    setAgreeTerms(false);
+    setAgreeAge(false);
+    setError("");
+    setUseAutoPassword(IS_IOS);
+    setFormKey(Date.now());
+  }, []);
 
   const validateForm = () => {
     setError("");
 
-    // Email validation
     if (!email.includes("@")) {
       setError("Please enter a valid email");
       return false;
     }
 
-    // Password validation
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return false;
@@ -60,7 +99,6 @@ export const RegisterScreen = () => {
       return false;
     }
 
-    // Profile validation
     if (!name.trim()) {
       setError("Please enter your full name");
       return false;
@@ -86,7 +124,6 @@ export const RegisterScreen = () => {
       return false;
     }
 
-    // Terms validation
     if (!agreeTerms || !agreeAge) {
       setError("Please agree to the terms and confirm your age");
       return false;
@@ -100,7 +137,6 @@ export const RegisterScreen = () => {
 
     setLoading(true);
     try {
-      // Step 1: Create auth account
       const { data: authData, error: signUpError } = await supabase.auth.signUp(
         {
           email,
@@ -118,7 +154,6 @@ export const RegisterScreen = () => {
         return;
       }
 
-      // Step 2: Create profile immediately
       const profileData = {
         id: authData.user.id,
         email: authData.user.email!,
@@ -133,16 +168,14 @@ export const RegisterScreen = () => {
 
       await profileService.createProfile(profileData);
 
-      // Step 3: Wait for profile to be available in auth context
       let attempts = 0;
       const maxAttempts = 10;
       let profileFound = false;
 
       while (attempts < maxAttempts && !profileFound) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1 second
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         try {
-          // Check if profile is now available
           const session = await supabase.auth.getSession();
           if (session.data.session?.user) {
             const profile = await profileService.getProfile(
@@ -154,7 +187,6 @@ export const RegisterScreen = () => {
             }
           }
         } catch (profileError) {
-          // Continue trying
           console.log(
             `Profile check attempt ${attempts + 1} failed:`,
             profileError,
@@ -164,7 +196,6 @@ export const RegisterScreen = () => {
         attempts++;
       }
 
-      // Step 4: Navigate to main app (profile should be loaded now)
       router.replace("/(tabs)");
     } catch (err: any) {
       setError(err.message || "Registration failed");
@@ -193,7 +224,6 @@ export const RegisterScreen = () => {
     isAvailable &&
     !isChecking;
 
-  // Show simple loading screen during registration
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -205,6 +235,19 @@ export const RegisterScreen = () => {
       </View>
     );
   }
+
+  // Determine password field props based on platform and mode
+  const passwordProps = useAutoPassword
+    ? {
+        textContentType: "newPassword" as const,
+        autoComplete: "new-password" as const,
+        passwordRules: PASSWORD_RULES,
+      }
+    : {
+        textContentType: "none" as const,
+        autoComplete: "off" as const,
+        passwordRules: undefined,
+      };
 
   return (
     <KeyboardAwareScrollView
@@ -222,7 +265,6 @@ export const RegisterScreen = () => {
       <Text style={styles.subtitle}>Complete registration in one step</Text>
 
       <View style={styles.form}>
-        {/* Account Information */}
         <Text style={styles.sectionTitle}>Account Information</Text>
 
         <Input
@@ -232,25 +274,58 @@ export const RegisterScreen = () => {
           placeholder="your.email@example.com"
           keyboardType="email-address"
           autoCapitalize="none"
+          textContentType={IS_IOS ? "username" : undefined}
+          autoComplete="email"
         />
 
         <Input
+          key={`password-${formKey}`}
           label="Password *"
           value={password}
           onChangeText={setPassword}
-          placeholder="••••••••"
+          placeholder={
+            useAutoPassword
+              ? "Tap to generate strong password"
+              : "Enter your password"
+          }
           secureTextEntry
+          textContentType={passwordProps.textContentType}
+          autoComplete={passwordProps.autoComplete}
+          passwordRules={passwordProps.passwordRules}
+          autoFillActive={useAutoPassword && password.length > 0}
         />
 
         <Input
+          key={`confirm-${formKey}`}
           label="Confirm Password *"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          placeholder="••••••••"
+          placeholder={
+            useAutoPassword
+              ? "Auto-filled with strong password"
+              : "Confirm your password"
+          }
           secureTextEntry
+          textContentType={passwordProps.textContentType}
+          autoComplete={passwordProps.autoComplete}
+          passwordRules={passwordProps.passwordRules}
+          autoFillActive={useAutoPassword && confirmPassword.length > 0}
         />
 
-        {/* Profile Information */}
+        {/* Only show the toggle on iOS — Android has no strong password feature */}
+        {IS_IOS && (
+          <TouchableOpacity
+            onPress={togglePasswordMode}
+            style={styles.toggleButton}
+          >
+            <Text style={styles.toggleText}>
+              {useAutoPassword
+                ? "✏️  Enter password manually instead"
+                : "🔐  Use suggested strong password"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.sectionTitle}>Profile Information</Text>
 
         <Input
@@ -259,6 +334,8 @@ export const RegisterScreen = () => {
           onChangeText={setName}
           placeholder="Your Full Name"
           autoCapitalize="words"
+          textContentType={IS_IOS ? "name" : undefined}
+          autoComplete="name"
         />
 
         <Input
@@ -267,6 +344,8 @@ export const RegisterScreen = () => {
           onChangeText={(text) => setUsername(text.toLowerCase())}
           placeholder="username"
           autoCapitalize="none"
+          textContentType={IS_IOS ? "nickname" : undefined}
+          autoComplete="username-new"
           helper={getUsernameHelper()}
         />
 
@@ -292,6 +371,8 @@ export const RegisterScreen = () => {
           onChangeText={setZipCode}
           placeholder="12345 (optional)"
           keyboardType="numeric"
+          textContentType={IS_IOS ? "postalCode" : undefined}
+          autoComplete="postal-code"
         />
 
         <Input
@@ -310,7 +391,6 @@ export const RegisterScreen = () => {
           autoCapitalize="words"
         />
 
-        {/* Terms */}
         <Text style={styles.sectionTitle}>Terms & Conditions</Text>
 
         <TouchableOpacity
@@ -417,6 +497,15 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
+  },
+  toggleButton: {
+    paddingVertical: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  toggleText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "500",
   },
   checkbox: {
     flexDirection: "row",
