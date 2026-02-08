@@ -16,6 +16,7 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { US_STATES } from "../../src/utils/constants";
+import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useBilliards } from "../../src/viewmodels/useBilliards";
 import { usePagination } from "../../src/viewmodels/usePagination";
 import { BilliardsTournamentCard } from "../../src/views/components/billiards";
@@ -30,6 +31,7 @@ const NUM_COLUMNS = 2;
 export default function BilliardsScreen() {
   const router = useRouter();
   const vm = useBilliards();
+  const scrollRef = useScrollToTopOnFocus();
 
   const pagination = usePagination(vm.filteredTournaments as any, {
     itemsPerPage: ITEMS_PER_PAGE,
@@ -203,6 +205,7 @@ export default function BilliardsScreen() {
         </View>
       ) : (
         <FlatList
+          ref={scrollRef}
           data={pagination.paginatedItems}
           renderItem={renderTournament}
           keyExtractor={(item: any) => item.id.toString()}

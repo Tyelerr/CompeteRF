@@ -14,6 +14,7 @@ import { featuredContentService } from "../../src/models/services/featured-conte
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { Loading } from "../../src/views/components/common/loading";
 
 // Types/Models
@@ -154,6 +155,9 @@ export default function HomeScreen() {
   );
   const [featuredBar, setFeaturedBar] = useState<FeaturedBar | null>(null);
   const [userState, setUserState] = useState<string>("Arizona");
+
+  // Scroll-to-top on tab switch
+  const scrollRef = useScrollToTopOnFocus();
 
   // Effects
   useEffect(() => {
@@ -420,6 +424,7 @@ export default function HomeScreen() {
 
       {/* Content */}
       <ScrollView
+        ref={scrollRef}
         style={styles.content}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />

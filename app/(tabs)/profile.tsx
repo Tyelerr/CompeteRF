@@ -15,6 +15,7 @@ import { supabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
@@ -146,6 +147,9 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+
+  // Scroll-to-top on tab switch (logged-in ScrollView)
+  const scrollRef = useScrollToTopOnFocus();
 
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -316,6 +320,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollContent}
         refreshControl={
           <RefreshControl

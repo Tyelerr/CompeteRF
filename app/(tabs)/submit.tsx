@@ -21,6 +21,7 @@ import {
   THUMBNAIL_OPTIONS,
   TOURNAMENT_FORMATS,
 } from "../../src/utils/tournament-form-data";
+import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useSubmitTournament } from "../../src/viewmodels/useSubmitTournament";
 import { Button } from "../../src/views/components/common/button";
 import { DatePicker } from "../../src/views/components/common/date-picker";
@@ -29,6 +30,7 @@ import { ToggleSwitch } from "../../src/views/components/common/toggle-switch";
 
 export default function SubmitScreen() {
   const vm = useSubmitTournament();
+  const scrollRef = useScrollToTopOnFocus();
 
   // 🔧 DISABLE GLOBAL KEYBOARD HANDLING
   useEffect(() => {
@@ -848,6 +850,7 @@ export default function SubmitScreen() {
   return (
     <View style={styles.container}>
       <FlatList
+        ref={scrollRef}
         data={formSections}
         renderItem={renderFormSection}
         keyExtractor={(item) => item.key}

@@ -13,6 +13,7 @@ import { Giveaway } from "../../src/models/types/giveaway.types";
 import { COLORS } from "../../src/theme/colors";
 import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useGiveaways } from "../../src/viewmodels/useGiveaways";
 import { useShop } from "../../src/viewmodels/useShop";
 import { Button } from "../../src/views/components/common/button";
@@ -28,6 +29,9 @@ export default function ShopScreen() {
   const router = useRouter();
   const shopVm = useShop();
   const giveawaysVm = useGiveaways();
+
+  // Scroll-to-top on tab switch
+  const scrollRef = useScrollToTopOnFocus();
 
   // Direct auth state like FAQ page
   const [user, setUser] = useState<any>(null);
@@ -163,6 +167,7 @@ export default function ShopScreen() {
       ) : (
         // Giveaways Tab
         <ScrollView
+          ref={scrollRef}
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
