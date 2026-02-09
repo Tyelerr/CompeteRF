@@ -27,8 +27,7 @@ export const StatCard = ({ icon, value, label, onPress }: StatCardProps) => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    minWidth: "45%",
+    width: "48%",
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
