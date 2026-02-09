@@ -13,6 +13,7 @@ export interface SuperAdminStats {
   activeTournaments: number;
   pendingApprovals: number;
   totalViews: number;
+  totalFavorites: number;
   totalGiveaways: number;
 }
 
@@ -28,6 +29,7 @@ export const useSuperAdminDashboard = () => {
     activeTournaments: 0,
     pendingApprovals: 0,
     totalViews: 0,
+    totalFavorites: 0,
     totalGiveaways: 0,
   });
 
@@ -102,16 +104,29 @@ export const useSuperAdminDashboard = () => {
       const pendingApprovals =
         (pendingVenueCount || 0) + (pendingTournamentCount || 0);
 
+      // Get total views from app_events
       let viewsQuery = supabase
-        .from("tournament_analytics")
+        .from("app_events")
         .select("id", { count: "exact", head: true })
-        .eq("event_type", "view");
+        .eq("event_type", "tournament_viewed");
 
       if (dateFilter) {
         viewsQuery = viewsQuery.gte("created_at", dateFilter);
       }
 
       const { count: viewsCount } = await viewsQuery;
+
+      // Get total favorites from app_events
+      let favoritesQuery = supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_favorited");
+
+      if (dateFilter) {
+        favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
+      }
+
+      const { count: favoritesCount } = await favoritesQuery;
 
       const giveawayCount = 0;
 
@@ -122,6 +137,7 @@ export const useSuperAdminDashboard = () => {
         activeTournaments: activeCount || 0,
         pendingApprovals,
         totalViews: viewsCount || 0,
+        totalFavorites: favoritesCount || 0,
         totalGiveaways: giveawayCount || 0,
       });
     } catch (error) {

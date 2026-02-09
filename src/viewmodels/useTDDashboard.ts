@@ -90,43 +90,53 @@ export const useTDDashboard = () => {
       .eq("director_id", profile!.id_auto)
       .is("archived_at", null);
 
-    // Get total favorites
-    let favoritesQuery = supabase
-      .from("favorites")
-      .select("id, tournaments!inner(director_id)", {
-        count: "exact",
-        head: true,
-      })
-      .eq("tournaments.director_id", profile!.id_auto);
+    // Get tournament IDs for this director
+    const { data: myTournaments } = await supabase
+      .from("tournaments")
+      .select("id")
+      .eq("director_id", profile!.id_auto);
 
-    if (dateFilter) {
-      favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
+    const tournamentIds = myTournaments?.map((t: any) => t.id) || [];
+
+    let viewsCount = 0;
+    let favoritesCount = 0;
+
+    if (tournamentIds.length > 0) {
+      // Get total views from app_events
+      let viewsQuery = supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_viewed")
+        .in("entity_id", tournamentIds);
+
+      if (dateFilter) {
+        viewsQuery = viewsQuery.gte("created_at", dateFilter);
+      }
+
+      const { count: vc } = await viewsQuery;
+      viewsCount = vc || 0;
+
+      // Get total favorites from app_events
+      let favoritesQuery = supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_favorited")
+        .in("entity_id", tournamentIds);
+
+      if (dateFilter) {
+        favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
+      }
+
+      const { count: fc } = await favoritesQuery;
+      favoritesCount = fc || 0;
     }
-
-    const { count: favoritesCount } = await favoritesQuery;
-
-    // Get total views
-    let viewsQuery = supabase
-      .from("tournament_analytics")
-      .select("id, tournaments!inner(director_id)", {
-        count: "exact",
-        head: true,
-      })
-      .eq("tournaments.director_id", profile!.id_auto)
-      .eq("event_type", "view");
-
-    if (dateFilter) {
-      viewsQuery = viewsQuery.gte("created_at", dateFilter);
-    }
-
-    const { count: viewsCount } = await viewsQuery;
 
     setStats({
       myTournaments: tournamentCount || 0,
       activeEvents: activeCount || 0,
       venues: venueCount || 0,
-      totalFavorites: favoritesCount || 0,
-      totalViews: viewsCount || 0,
+      totalFavorites: favoritesCount,
+      totalViews: viewsCount,
     });
   };
 
@@ -167,15 +177,25 @@ export const useTDDashboard = () => {
           .eq("director_id", profile!.id_auto)
           .eq("status", "active");
 
-        // Count favorites for tournaments at this venue
-        const { count: favoritesCount } = await supabase
-          .from("favorites")
-          .select("id, tournaments!inner(venue_id, director_id)", {
-            count: "exact",
-            head: true,
-          })
-          .eq("tournaments.venue_id", venue.id)
-          .eq("tournaments.director_id", profile!.id_auto);
+        // Count favorites for tournaments at this venue from app_events
+        const { data: venueTournaments } = await supabase
+          .from("tournaments")
+          .select("id")
+          .eq("venue_id", venue.id)
+          .eq("director_id", profile!.id_auto);
+
+        const venueTournamentIds =
+          venueTournaments?.map((t: any) => t.id) || [];
+
+        let favoritesCount = 0;
+        if (venueTournamentIds.length > 0) {
+          const { count: fc } = await supabase
+            .from("app_events")
+            .select("id", { count: "exact", head: true })
+            .eq("event_type", "tournament_favorited")
+            .in("entity_id", venueTournamentIds);
+          favoritesCount = fc || 0;
+        }
 
         return {
           id: venue.id,
@@ -185,7 +205,7 @@ export const useTDDashboard = () => {
           state: venue.state,
           zip_code: venue.zip_code,
           activeTournaments: tournamentCount || 0,
-          totalFavorites: favoritesCount || 0,
+          totalFavorites: favoritesCount,
         };
       }),
     );
@@ -228,16 +248,19 @@ export const useTDDashboard = () => {
     // Get stats for each tournament
     const tournamentsWithStats: TournamentWithStats[] = await Promise.all(
       tournamentsData.map(async (t: any) => {
+        // Favorites from app_events
         const { count: favoritesCount } = await supabase
-          .from("favorites")
+          .from("app_events")
           .select("id", { count: "exact", head: true })
-          .eq("tournament_id", t.id);
+          .eq("event_type", "tournament_favorited")
+          .eq("entity_id", t.id);
 
+        // Views from app_events
         const { count: viewsCount } = await supabase
-          .from("tournament_analytics")
+          .from("app_events")
           .select("id", { count: "exact", head: true })
-          .eq("tournament_id", t.id)
-          .eq("event_type", "view");
+          .eq("event_type", "tournament_viewed")
+          .eq("entity_id", t.id);
 
         return {
           id: t.id,

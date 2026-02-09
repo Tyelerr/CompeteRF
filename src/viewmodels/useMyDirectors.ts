@@ -23,6 +23,7 @@ export const useMyDirectors = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [venueIds, setVenueIds] = useState<number[]>([]);
 
+   
   useEffect(() => {
     if (profile?.id_auto) {
       loadDirectors();
@@ -119,23 +120,39 @@ export const useMyDirectors = () => {
   };
 
   const confirmRemoveDirector = (director: DirectorWithVenue) => {
-    Alert.alert(
-      `Remove ${director.name}?`,
-      `Remove from ${director.venue_name} only, or remove from all your venues?`,
-      [
-        {
-          text: "All Venues",
-          style: "destructive",
-          onPress: () => removeFromAllVenues(director),
-        },
-        {
-          text: "This Venue",
-          style: "destructive",
-          onPress: () => removeFromVenue(director),
-        },
-        { text: "Cancel", style: "cancel" },
-      ],
-    );
+    // If owner only has one venue, no need for "All Venues" option
+    if (venueIds.length <= 1) {
+      Alert.alert(
+        `Remove ${director.name}?`,
+        `Remove ${director.name} from ${director.venue_name}?`,
+        [
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: () => removeFromVenue(director),
+          },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+    } else {
+      Alert.alert(
+        `Remove ${director.name}?`,
+        `Remove from ${director.venue_name} only, or remove from all your venues?`,
+        [
+          {
+            text: "All Your Venues",
+            style: "destructive",
+            onPress: () => removeFromAllVenues(director),
+          },
+          {
+            text: "This Venue",
+            style: "destructive",
+            onPress: () => removeFromVenue(director),
+          },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+    }
   };
 
   const removeFromVenue = async (director: DirectorWithVenue) => {
@@ -155,7 +172,7 @@ export const useMyDirectors = () => {
         return;
       }
 
-      // Check if director has any remaining assignments
+      // Check if director has any remaining assignments — downgrade if none
       await checkAndDowngradeIfNeeded(director.director_id);
 
       // Update local state
@@ -188,7 +205,7 @@ export const useMyDirectors = () => {
         return;
       }
 
-      // Check if director has any remaining assignments
+      // Check if director has any remaining assignments — downgrade if none
       await checkAndDowngradeIfNeeded(director.director_id);
 
       // Update local state - remove all entries for this director
@@ -202,24 +219,43 @@ export const useMyDirectors = () => {
     }
   };
 
+  // FIX: Added .select().single() to catch RLS failures on downgrade
   const checkAndDowngradeIfNeeded = async (directorId: number) => {
-    // Check if director has any remaining active venue assignments
-    const { count } = await supabase
-      .from("venue_directors")
-      .select("id", { count: "exact", head: true })
-      .eq("director_id", directorId)
-      .is("archived_at", null);
+    try {
+      // Check if director has any remaining active venue assignments
+      const { count } = await supabase
+        .from("venue_directors")
+        .select("id", { count: "exact", head: true })
+        .eq("director_id", directorId)
+        .is("archived_at", null);
 
-    // If no remaining assignments, downgrade to basic_user
-    if (count === 0) {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ role: "basic_user" })
-        .eq("id_auto", directorId);
+      // Only downgrade if NO remaining assignments anywhere
+      if (count === 0) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .update({ role: "basic_user" })
+          .eq("id_auto", directorId)
+          .select("id_auto, role")
+          .single();
 
-      if (error) {
-        console.error("Error downgrading user:", error);
+        if (error) {
+          console.error("Error downgrading user role:", error);
+          // Don't alert — the venue removal itself succeeded
+          return;
+        }
+
+        if (!data) {
+          console.error("Role downgrade returned null — likely RLS block");
+          return;
+        }
+
+        console.log(
+          `Director ${directorId} downgraded to basic_user (no remaining venues)`,
+        );
       }
+    } catch (error) {
+      console.error("Error in checkAndDowngradeIfNeeded:", error);
+      // Don't alert — the venue removal itself succeeded
     }
   };
 

@@ -139,9 +139,13 @@ const TDDashboard = () => {
           icon="🏢"
           value={vm.stats.venues}
           label="My Venues"
-          onPress={() => router.push("/(tabs)/admin/venues/td-venues" as any)} // ✅ Fixed
+          onPress={() => router.push("/(tabs)/admin/venues/td-venues" as any)}
         />
-        <StatCard icon="❤️" value={vm.stats.totalFavorites} label="Favorites" />
+        <StatCard
+          icon="📊"
+          label="Analytics"
+          onPress={() => router.push("/(tabs)/admin/director-analytics" as any)}
+        />
       </View>
 
       {/* Analytics Time Filter */}
@@ -234,7 +238,6 @@ const BarOwnerDashboard = () => {
         />
         <StatCard
           icon="📊"
-          value={vm.stats.totalViews}
           label="Analytics"
           onPress={() =>
             router.push("/(tabs)/admin/bar-owner-analytics" as any)
@@ -260,19 +263,11 @@ const BarOwnerDashboard = () => {
       {/* Analytics Row */}
       <View style={styles.analyticsRow}>
         <EventTypeChart data={vm.eventTypeStats} />
-        <TouchableOpacity
-          style={{ flex: 1 }}
-          onPress={() =>
-            router.push("/(tabs)/admin/bar-owner-analytics" as any)
-          }
-          activeOpacity={0.7}
-        >
-          <PerformanceCard
-            totalViews={vm.stats.totalViews}
-            totalFavorites={vm.stats.totalFavorites}
-            activeEvents={vm.stats.activeTournaments}
-          />
-        </TouchableOpacity>
+        <PerformanceCard
+          totalViews={vm.stats.totalViews}
+          totalFavorites={vm.stats.totalFavorites}
+          activeEvents={vm.stats.activeTournaments}
+        />
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -342,9 +337,10 @@ const CompeteAdminDashboard = () => {
           label="Analytics"
           value={vm.stats.totalViews}
           subtitle="total views"
-          onPress={() => router.push("/(tabs)/admin/analytics" as any)}
+          onPress={() =>
+            router.push("/(tabs)/admin/super-admin-analytics" as any)
+          }
         />
-
         <ManagementCard
           icon="📋"
           label="Activity Log"
@@ -445,12 +441,14 @@ const SuperAdminDashboard = () => {
           label="Analytics"
           value={vm.stats.totalViews}
           subtitle="total views"
-          onPress={() => router.push("/(tabs)/admin/analytics" as any)}
+          onPress={() =>
+            router.push("/(tabs)/admin/super-admin-analytics" as any)
+          }
         />
         <ManagementCard
           icon="⭐"
           label="Featured"
-          value={0} // Hard-code for now
+          value={0}
           subtitle="players & bars"
           onPress={() => router.push("/(tabs)/admin/featured-content" as any)}
         />
@@ -692,7 +690,6 @@ const styles = StyleSheet.create({
   bottomSpacer: {
     height: SPACING.xl * 2,
   },
-  // Management Card Styles (compact)
   managementCard: {
     width: "48%",
     backgroundColor: COLORS.surface,

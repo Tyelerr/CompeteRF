@@ -5,12 +5,14 @@ import { FONT_SIZES } from "../../../theme/typography";
 
 interface StatCardProps {
   icon: string;
-  value: number;
+  value?: number;
   label: string;
   onPress?: () => void;
 }
 
 export const StatCard = ({ icon, value, label, onPress }: StatCardProps) => {
+  const noValue = value === undefined;
+
   return (
     <TouchableOpacity
       style={styles.container}
@@ -18,9 +20,9 @@ export const StatCard = ({ icon, value, label, onPress }: StatCardProps) => {
       disabled={!onPress}
       activeOpacity={onPress ? 0.7 : 1}
     >
-      <Text style={styles.icon}>{icon}</Text>
-      <Text style={styles.value}>{value}</Text>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.icon, noValue && styles.iconLarge]}>{icon}</Text>
+      {value !== undefined && <Text style={styles.value}>{value}</Text>}
+      <Text style={[styles.label, noValue && styles.labelLarge]}>{label}</Text>
     </TouchableOpacity>
   );
 };
@@ -32,12 +34,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
+    minHeight: 100,
   },
   icon: {
     fontSize: 24,
     marginBottom: SPACING.xs,
+  },
+  iconLarge: {
+    fontSize: 32,
   },
   value: {
     fontSize: FONT_SIZES.xxl,
@@ -49,5 +56,9 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     textAlign: "center",
+  },
+  labelLarge: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
   },
 });

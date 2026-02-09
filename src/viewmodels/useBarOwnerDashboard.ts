@@ -121,43 +121,53 @@ export const useBarOwnerDashboard = () => {
       .eq("status", "active")
       .gte("tournament_date", new Date().toISOString().split("T")[0]);
 
-    // Count total views for tournaments at owned venues
-    let viewsQuery = supabase
-      .from("tournament_analytics")
-      .select("id, tournaments!inner(venue_id)", {
-        count: "exact",
-        head: true,
-      })
-      .in("tournaments.venue_id", venueIds)
-      .eq("event_type", "view");
+    // Get tournament IDs for owned venues
+    const { data: venueTournaments } = await supabase
+      .from("tournaments")
+      .select("id")
+      .in("venue_id", venueIds);
 
-    if (dateFilter) {
-      viewsQuery = viewsQuery.gte("created_at", dateFilter);
+    const tournamentIds = venueTournaments?.map((t: any) => t.id) || [];
+
+    let viewsCount = 0;
+    let favoritesCount = 0;
+
+    if (tournamentIds.length > 0) {
+      // Get total views from app_events
+      let viewsQuery = supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_viewed")
+        .in("entity_id", tournamentIds);
+
+      if (dateFilter) {
+        viewsQuery = viewsQuery.gte("created_at", dateFilter);
+      }
+
+      const { count: vc } = await viewsQuery;
+      viewsCount = vc || 0;
+
+      // Get total favorites from app_events
+      let favoritesQuery = supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_favorited")
+        .in("entity_id", tournamentIds);
+
+      if (dateFilter) {
+        favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
+      }
+
+      const { count: fc } = await favoritesQuery;
+      favoritesCount = fc || 0;
     }
-
-    const { count: viewsCount } = await viewsQuery;
-
-    // Count total favorites for tournaments at owned venues
-    let favoritesQuery = supabase
-      .from("favorites")
-      .select("id, tournaments!inner(venue_id)", {
-        count: "exact",
-        head: true,
-      })
-      .in("tournaments.venue_id", venueIds);
-
-    if (dateFilter) {
-      favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
-    }
-
-    const { count: favoritesCount } = await favoritesQuery;
 
     setStats({
       totalVenues,
       totalDirectors: directorCount || 0,
       activeTournaments: tournamentCount || 0,
-      totalViews: viewsCount || 0,
-      totalFavorites: favoritesCount || 0,
+      totalViews: viewsCount,
+      totalFavorites: favoritesCount,
     });
   };
 

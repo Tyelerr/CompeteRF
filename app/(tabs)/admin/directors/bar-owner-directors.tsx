@@ -106,11 +106,11 @@ export default function BarOwnerDirectorsScreen() {
         />
       </View>
 
-      {/* Add Director Button */}
+      {/* Add Director Button — FIX: Navigate to add-director page instead of dead modal */}
       {vm.canAddDirectors && (
         <TouchableOpacity
           style={styles.addButton}
-          onPress={() => vm.setShowAddModal(true)}
+          onPress={() => router.push("/(tabs)/admin/add-director" as any)}
         >
           <Text style={styles.addButtonText}>+ Add Director</Text>
         </TouchableOpacity>
@@ -182,9 +182,6 @@ export default function BarOwnerDirectorsScreen() {
         onConfirm={vm.confirmRemoveDirector}
         isProcessing={vm.processing !== null}
       />
-
-      {/* TODO: Add Director Modal would go here */}
-      {/* This would be a separate component for selecting venue and director */}
     </View>
   );
 }
