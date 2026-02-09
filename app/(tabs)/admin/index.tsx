@@ -232,7 +232,14 @@ const BarOwnerDashboard = () => {
             )
           }
         />
-        <StatCard icon="👁️" value={vm.stats.totalViews} label="Total Views" />
+        <StatCard
+          icon="📊"
+          value={vm.stats.totalViews}
+          label="Analytics"
+          onPress={() =>
+            router.push("/(tabs)/admin/bar-owner-analytics" as any)
+          }
+        />
       </View>
 
       {/* Analytics Time Filter */}
@@ -253,11 +260,19 @@ const BarOwnerDashboard = () => {
       {/* Analytics Row */}
       <View style={styles.analyticsRow}>
         <EventTypeChart data={vm.eventTypeStats} />
-        <PerformanceCard
-          totalViews={vm.stats.totalViews}
-          totalFavorites={vm.stats.totalFavorites}
-          activeEvents={vm.stats.activeTournaments}
-        />
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          onPress={() =>
+            router.push("/(tabs)/admin/bar-owner-analytics" as any)
+          }
+          activeOpacity={0.7}
+        >
+          <PerformanceCard
+            totalViews={vm.stats.totalViews}
+            totalFavorites={vm.stats.totalFavorites}
+            activeEvents={vm.stats.activeTournaments}
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.bottomSpacer} />

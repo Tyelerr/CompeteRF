@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { analyticsService } from "../../src/models/services/analytics.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -94,6 +95,7 @@ export default function TournamentDetailScreen() {
         `\n\n📍 ${tournament.venues?.address || ""}, ${tournament.venues?.city || ""}, ${tournament.venues?.state || ""} ${tournament.venues?.zip_code || ""}`;
 
       await Share.share({ message });
+      analyticsService.trackTournamentShared(tournament.id);
     } catch (error) {
       console.error("Share error:", error);
     }
@@ -212,7 +214,7 @@ export default function TournamentDetailScreen() {
             </View>
           </View>
 
-          {/* 🎰 Chip Breakdown — poster style with blue border */}
+          {/* 🎰 Chip Breakdown – poster style with blue border */}
           {chipRanges && (
             <View style={styles.chipCard}>
               <Text style={styles.chipTitle}>RATING / CHIP CHART</Text>
@@ -563,7 +565,7 @@ const styles = StyleSheet.create({
     height: SPACING.xl * 2,
   },
 
-  // ── 🎰 Chip chart — poster style with blue border ────────────────
+  // ── 🎰 Chip chart – poster style with blue border ────────────────────
   chipCard: {
     borderWidth: 1.5,
     borderColor: COLORS.primary,
@@ -591,7 +593,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Bottom actions ────────────────────────────────────────────────
+  // ── Bottom actions ────────────────────────────────────────────────────
   bottomActions: {
     flexDirection: "row",
     gap: SPACING.sm,
