@@ -24,6 +24,9 @@ export interface Director {
   };
 }
 
+// Roles that CANNOT be added as directors
+const PROTECTED_ROLES = ["super_admin", "compete_admin", "bar_owner"];
+
 export const useEditVenue = (venueId: number) => {
   const { profile } = useAuthContext();
 
@@ -41,6 +44,7 @@ export const useEditVenue = (venueId: number) => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
+   
   useEffect(() => {
     if (venueId) {
       loadVenueData();
@@ -150,20 +154,24 @@ export const useEditVenue = (venueId: number) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id_auto, name, email, role")
-        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+        .select("id_auto, name, email, user_name, role")
+        .or(
+          `name.ilike.%${query}%,email.ilike.%${query}%,user_name.ilike.%${query}%`,
+        )
         .eq("status", "active")
-        .limit(10);
+        .limit(20);
 
       if (error) {
         console.error("Error searching directors:", error);
         return;
       }
 
-      // Filter out already assigned directors
+      // Filter out already assigned directors and self
       const assignedIds = directors.map((d) => d.director_id);
       const filtered = (data || []).filter(
-        (p) => !assignedIds.includes(p.id_auto),
+        (p) =>
+          !assignedIds.includes(p.id_auto) &&
+          p.id_auto !== profile?.id_auto,
       );
 
       setSearchResults(filtered);
@@ -175,20 +183,121 @@ export const useEditVenue = (venueId: number) => {
   };
 
   const addDirector = async (directorId: number) => {
-    try {
-      const { error } = await supabase.from("venue_directors").insert({
-        venue_id: venueId,
-        director_id: directorId,
-        assigned_by: profile?.id_auto,
-      });
+    // Find the user in search results to check their role
+    const user = searchResults.find((r) => r.id_auto === directorId);
+    if (!user) return;
 
-      if (error) {
-        Alert.alert("Error", "Failed to add director");
-        console.error("Error adding director:", error);
-        return;
+    // Block protected roles
+    if (PROTECTED_ROLES.includes(user.role)) {
+      Alert.alert(
+        "Cannot Add",
+        `${user.name} has an elevated account role and cannot be added as a venue director.`,
+      );
+      return;
+    }
+
+    // Confirm promotion for basic_user
+    if (user.role === "basic_user") {
+      Alert.alert(
+        "Promote & Add Director?",
+        `${user.name} will be promoted to Tournament Director and assigned to this venue.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Promote & Add",
+            onPress: () => executeAddDirector(user),
+          },
+        ],
+      );
+    } else {
+      // Already a tournament_director, just add
+      await executeAddDirector(user);
+    }
+  };
+
+  const executeAddDirector = async (user: any) => {
+    try {
+      // Promote basic_user → tournament_director
+      if (user.role === "basic_user") {
+        const { data: updatedProfile, error: roleError } = await supabase
+          .from("profiles")
+          .update({ role: "tournament_director" })
+          .eq("id_auto", user.id_auto)
+          .select("id_auto, role")
+          .single();
+
+        if (roleError) {
+          console.error("Failed to update user role:", roleError);
+          Alert.alert("Error", `Failed to promote user: ${roleError.message}`);
+          return;
+        }
+
+        if (!updatedProfile) {
+          console.error("Role update returned null — likely RLS block");
+          Alert.alert(
+            "Permission Error",
+            "The database blocked the role update. Please ensure the RLS policy has been applied.",
+          );
+          return;
+        }
+
+        if (updatedProfile.role !== "tournament_director") {
+          console.error("Role did not change:", updatedProfile.role);
+          Alert.alert("Error", "Role update did not take effect.");
+          return;
+        }
       }
 
-      // Reload directors
+      // Check if an archived record exists (previously removed)
+      const { data: archivedRecord } = await supabase
+        .from("venue_directors")
+        .select("id")
+        .eq("venue_id", venueId)
+        .eq("director_id", user.id_auto)
+        .not("archived_at", "is", null)
+        .single();
+
+      if (archivedRecord) {
+        // Reactivate the archived record
+        const { error: reactivateError } = await supabase
+          .from("venue_directors")
+          .update({
+            archived_at: null,
+            archived_by: null,
+            assigned_by: profile?.id_auto,
+            assigned_at: new Date().toISOString(),
+          })
+          .eq("id", archivedRecord.id);
+
+        if (reactivateError) {
+          Alert.alert("Error", "Failed to add director");
+          console.error("Error reactivating director:", reactivateError);
+          return;
+        }
+      } else {
+        // Insert new record
+        const { error } = await supabase.from("venue_directors").insert({
+          venue_id: venueId,
+          director_id: user.id_auto,
+          assigned_by: profile?.id_auto,
+          assigned_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          Alert.alert("Error", "Failed to add director");
+          console.error("Error adding director:", error);
+          return;
+        }
+      }
+
+      const msg =
+        user.role === "basic_user"
+          ? `${user.name} has been promoted to Tournament Director and assigned to the venue!`
+          : `${user.name} has been assigned as a director!`;
+
+      Alert.alert("Success", msg);
+
+      // Reload directors and clear search
       await loadDirectors();
       setSearchQuery("");
       setSearchResults([]);
@@ -199,9 +308,13 @@ export const useEditVenue = (venueId: number) => {
   };
 
   const removeDirector = async (venueDirectorId: number) => {
+    // Find the director to get their name and ID
+    const director = directors.find((d) => d.id === venueDirectorId);
+    const directorName = director?.profile?.name || "this director";
+
     Alert.alert(
-      "Remove Director",
-      "Are you sure you want to remove this director from the venue?",
+      `Remove ${directorName}?`,
+      `Are you sure you want to remove ${directorName} from this venue?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -223,7 +336,17 @@ export const useEditVenue = (venueId: number) => {
                 return;
               }
 
-              setDirectors(directors.filter((d) => d.id !== venueDirectorId));
+              // Update local state
+              setDirectors(
+                directors.filter((d) => d.id !== venueDirectorId),
+              );
+
+              // Downgrade to basic_user if no remaining venues
+              if (director) {
+                await checkAndDowngradeIfNeeded(director.director_id);
+              }
+
+              Alert.alert("Success", `${directorName} removed from venue`);
             } catch (error) {
               console.error("Error removing director:", error);
               Alert.alert("Error", "Failed to remove director");
@@ -232,6 +355,42 @@ export const useEditVenue = (venueId: number) => {
         },
       ],
     );
+  };
+
+  // FIX: Downgrade role if director has no remaining venue assignments
+  const checkAndDowngradeIfNeeded = async (directorId: number) => {
+    try {
+      const { count } = await supabase
+        .from("venue_directors")
+        .select("id", { count: "exact", head: true })
+        .eq("director_id", directorId)
+        .is("archived_at", null);
+
+      if (count === 0) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .update({ role: "basic_user" })
+          .eq("id_auto", directorId)
+          .select("id_auto, role")
+          .single();
+
+        if (error) {
+          console.error("Error downgrading user role:", error);
+          return;
+        }
+
+        if (!data) {
+          console.error("Role downgrade returned null — likely RLS block");
+          return;
+        }
+
+        console.log(
+          `Director ${directorId} downgraded to basic_user (no remaining venues)`,
+        );
+      }
+    } catch (error) {
+      console.error("Error in checkAndDowngradeIfNeeded:", error);
+    }
   };
 
   const onRefresh = () => {
