@@ -1,184 +1,238 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Tournament } from "../../../models/types/tournament.types";
+import Slider from "@react-native-community/slider";
+import { useRouter } from "expo-router";
+import { useEffect } from "react";
+import {
+  FlatList,
+  Keyboard,
+  RefreshControl,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { COLORS } from "../../../theme/colors";
-import { SPACING } from "../../../theme/spacing";
-import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
-import { useAuth } from "../../../viewmodels/hooks/use.auth";
-import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
-import { useTournaments } from "../../../viewmodels/hooks/use.tournaments";
-import { useFilterStore } from "../../../viewmodels/stores/filter.store";
-import { useUIStore } from "../../../viewmodels/stores/ui.store";
+import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
+import { useBilliards } from "../../../viewmodels/useBilliards";
+import { usePagination } from "../../../viewmodels/usePagination";
+import { BilliardsTournamentCard } from "../../components/billiards";
 import { Dropdown } from "../../components/common/dropdown";
-import { Modal } from "../../components/common/modal";
-import { TournamentDetail } from "../../components/tournament/tournament.detail";
-import { TournamentList } from "../../components/tournament/tournament.list";
+import { FilterModal } from "../../components/common/filter-modal";
+import { Loading } from "../../components/common/loading";
+import { Pagination } from "../../components/common/pagination";
+import { styles } from "./billiards.styles";
+
+const ITEMS_PER_PAGE = 20;
+const NUM_COLUMNS = 2;
 
 export const BilliardsScreen = () => {
-  const { profile } = useAuth();
-  const { tournaments, totalCount, isLoading, refetch } = useTournaments();
-  const { favorites, addFavoriteTournament, removeFavoriteTournament } =
-    useFavorites();
-  const { filters, setFilter, resetFilters } = useFilterStore();
-  const {
-    isTournamentModalOpen,
-    selectedTournamentId,
-    openTournamentModal,
-    closeTournamentModal,
-  } = useUIStore();
+  const router = useRouter();
+  const vm = useBilliards();
+  const scrollRef = useScrollToTopOnFocus();
 
-  const [selectedTournament, setSelectedTournament] =
-    useState<Tournament | null>(null);
+  const pagination = usePagination(vm.filteredTournaments as any, {
+    itemsPerPage: ITEMS_PER_PAGE,
+  });
 
+  // Reset pagination when filters change
   useEffect(() => {
-    if (profile?.home_state && !filters.state) {
-      setFilter("state", profile.home_state);
-    }
-  }, [profile?.home_state]);
+    pagination.resetPage();
+  }, [
+    vm.searchQuery,
+    vm.selectedState,
+    vm.selectedCity,
+    vm.zipCode,
+    vm.searchRadius,
+    vm.filters,
+  ]);
 
-  useEffect(() => {
-    if (selectedTournamentId) {
-      const tournament = tournaments.find((t) => t.id === selectedTournamentId);
-      setSelectedTournament(tournament || null);
-    }
-  }, [selectedTournamentId, tournaments]);
+  const stateOptions = [{ label: "State", value: "" }, ...US_STATES];
+  const cityOptions =
+    vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
+  const showRadiusBar = vm.zipCode.length > 0;
 
-  const handleTournamentPress = (tournament: Tournament) => {
-    openTournamentModal(tournament.id);
-  };
+  // ── Render helpers ─────────────────────────────────────────────────────
 
-  const handleFavoritePress = async (tournament: Tournament) => {
-    const isFav = favorites.some((f) => f.tournament_id === tournament.id);
-    if (isFav) {
-      await removeFavoriteTournament(tournament.id);
-    } else {
-      await addFavoriteTournament(tournament.id);
-    }
-  };
+  const renderPagination = () => (
+    <Pagination
+      totalCount={pagination.totalCount}
+      displayStart={pagination.displayRange.start}
+      displayEnd={pagination.displayRange.end}
+      currentPage={pagination.currentPage}
+      totalPages={pagination.totalPages}
+      onPrevPage={pagination.prevPage}
+      onNextPage={pagination.nextPage}
+      canGoPrev={pagination.canGoPrev}
+      canGoNext={pagination.canGoNext}
+    />
+  );
 
-  const favoritedIds = favorites
-    .filter((f) => f.tournament_id)
-    .map((f) => f.tournament_id as number);
+  const renderTournament = ({ item }: { item: any }) => (
+    <BilliardsTournamentCard
+      tournament={item as any}
+      isFavorited={vm.favorites.includes(item.id)}
+      onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}`)}
+      onToggleFavorite={() => vm.toggleFavorite(item.id)}
+      getTournamentImageUrl={vm.getTournamentImageUrl}
+    />
+  );
+
+  // ── Loading state ──────────────────────────────────────────────────────
+
+  if (vm.loading) {
+    return <Loading fullScreen message="Loading tournaments..." />;
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>BILLIARDS TOURNAMENTS</Text>
-        <Text style={styles.subtitle}>Browse all billiards tournaments</Text>
+        <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
+        <Text style={styles.headerSubtitle}>
+          Browse all billiards tournaments by game type and location
+        </Text>
       </View>
 
-      <View style={styles.filters}>
-        <View style={styles.filterRow}>
-          <View style={styles.filterItem}>
-            <Dropdown
-              placeholder="State"
-              options={US_STATES}
-              value={filters.state}
-              onSelect={(value) => setFilter("state", value)}
-            />
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tournaments..."
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.searchQuery}
+            onChangeText={vm.setSearchQuery}
+          />
+        </View>
+      </View>
+
+      {/* State, City, Zip Row */}
+      <View style={styles.filterRow}>
+        <View style={styles.filterItem}>
+          <Text style={styles.filterLabel}>State</Text>
+          <Dropdown
+            placeholder="State"
+            options={stateOptions}
+            value={vm.selectedState}
+            onSelect={vm.setSelectedState}
+          />
+        </View>
+        <View style={styles.filterItem}>
+          <Text style={styles.filterLabel}>City</Text>
+          <Dropdown
+            placeholder="City"
+            options={cityOptions}
+            value={vm.selectedCity}
+            onSelect={vm.setSelectedCity}
+          />
+        </View>
+        <View style={styles.filterItem}>
+          <Text style={styles.filterLabel}>Zip Code</Text>
+          <TextInput
+            style={styles.zipInput}
+            placeholder="Zip"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.zipCode}
+            onChangeText={vm.setZipCode}
+            keyboardType="numeric"
+            maxLength={5}
+          />
+        </View>
+      </View>
+
+      {/* Radius Slider */}
+      {showRadiusBar && (
+        <View style={styles.radiusContainer}>
+          <View style={styles.radiusHeader}>
+            <Text style={styles.radiusLabel}>Search Radius</Text>
+            <Text style={styles.radiusValue}>
+              {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
+            </Text>
+          </View>
+          <Slider
+            style={styles.radiusSlider}
+            minimumValue={0}
+            maximumValue={100}
+            step={5}
+            value={vm.searchRadius}
+            onValueChange={vm.setSearchRadius}
+            onSlidingStart={() => Keyboard.dismiss()}
+            minimumTrackTintColor={COLORS.primary}
+            maximumTrackTintColor={COLORS.border}
+            thumbTintColor={COLORS.primary}
+          />
+          <View style={styles.radiusLabels}>
+            <Text style={styles.radiusMinMax}>0 mile</Text>
+            <Text style={styles.radiusMinMax}>100 miles</Text>
           </View>
         </View>
+      )}
 
-        <View style={styles.filterActions}>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterButtonText}>☰ Filters</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
-            <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.count}>Total count: {totalCount}</Text>
+      {/* Filter Buttons */}
+      <View style={styles.filterButtonsRow}>
+        <TouchableOpacity
+          style={styles.filtersButton}
+          onPress={() => vm.setFilterModalVisible(true)}
+        >
+          <Text style={styles.filtersButtonText}>☰ Filters</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.resetButton}
+          onPress={vm.resetAllFilters}
+        >
+          <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
+        </TouchableOpacity>
       </View>
 
-      <TournamentList
-        tournaments={tournaments}
-        isLoading={isLoading}
-        onTournamentPress={handleTournamentPress}
-        onFavoritePress={handleFavoritePress}
-        favoritedIds={favoritedIds}
-        onRefresh={refetch}
-        refreshing={isLoading}
-      />
+      {/* Top Pagination */}
+      {renderPagination()}
 
-      <Modal
-        visible={isTournamentModalOpen}
-        onClose={closeTournamentModal}
-        title="Tournament Details"
-      >
-        {selectedTournament && (
-          <TournamentDetail
-            tournament={selectedTournament}
-            favoriteCount={0}
-            isFavorited={favoritedIds.includes(selectedTournament.id)}
-            onFavoritePress={() => handleFavoritePress(selectedTournament)}
-            onClose={closeTournamentModal}
-          />
-        )}
-      </Modal>
+      {/* Content */}
+      {vm.error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{vm.error}</Text>
+        </View>
+      ) : pagination.paginatedItems.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🎱</Text>
+          <Text style={styles.emptyText}>No tournaments found</Text>
+          <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={scrollRef}
+          data={pagination.paginatedItems}
+          renderItem={renderTournament}
+          keyExtractor={(item: any) => item.id.toString()}
+          numColumns={NUM_COLUMNS}
+          contentContainerStyle={styles.list}
+          columnWrapperStyle={styles.row}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={vm.refreshing}
+              onRefresh={vm.onRefresh}
+              tintColor={COLORS.primary}
+            />
+          }
+          ListFooterComponent={
+            pagination.totalCount > 0 ? renderPagination() : null
+          }
+        />
+      )}
+
+      {/* Filter Modal */}
+      <FilterModal
+        visible={vm.filterModalVisible}
+        onClose={() => vm.setFilterModalVisible(false)}
+        filters={vm.filters}
+        onApply={vm.setFilters}
+      />
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl,
-  },
-  title: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  subtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  filters: {
-    padding: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  filterItem: {
-    flex: 1,
-  },
-  filterActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: SPACING.sm,
-  },
-  filterButton: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  filterButtonText: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.sm,
-  },
-  resetButton: {
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-  },
-  resetButtonText: {
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZES.sm,
-  },
-  count: {
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZES.sm,
-    marginTop: SPACING.sm,
-  },
-});
+export default BilliardsScreen;

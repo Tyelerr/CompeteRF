@@ -1,1 +1,2 @@
-export * from "./billiards.screen";
+export { BilliardsScreen } from "./billiards.screen";
+

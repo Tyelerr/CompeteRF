@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
+import { Filters, defaultFilters } from "../../../models/types/filter.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -53,40 +54,6 @@ const DAYS_OF_WEEK = [
   { label: "Sa", value: 6 },
   { label: "Su", value: 0 },
 ];
-
-export interface Filters {
-  gameType: string;
-  tournamentFormat: string;
-  tableSize: string;
-  equipment: string;
-  daysOfWeek: number[];
-  fromDate: string;
-  toDate: string;
-  minEntryFee: number;
-  maxEntryFee: number;
-  minFargo: number;
-  maxFargo: number;
-  requiresFargoGames: boolean;
-  reportsToFargo: boolean;
-  openTournament: boolean;
-}
-
-export const defaultFilters: Filters = {
-  gameType: "",
-  tournamentFormat: "",
-  tableSize: "",
-  equipment: "",
-  daysOfWeek: [],
-  fromDate: "",
-  toDate: "",
-  minEntryFee: 0,
-  maxEntryFee: 1000,
-  minFargo: 0,
-  maxFargo: 900,
-  requiresFargoGames: false,
-  reportsToFargo: false,
-  openTournament: false,
-};
 
 interface FilterModalProps {
   visible: boolean;

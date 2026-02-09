@@ -1,1 +1,2 @@
-export * from "./submit.screen";
+export { SubmitScreen } from "./submit.screen";
+
