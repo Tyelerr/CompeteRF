@@ -12,7 +12,7 @@ export const isValidPassword = (password: string): boolean => {
 export const isValidUsername = (username: string): boolean => {
   if (username.length < 3) return false;
   if (username.length > 20) return false;
-  const regex = /^[a-zA-Z]+$/;
+  const regex = /^[a-zA-Z0-9]+$/;
   return regex.test(username);
 };
 
@@ -38,265 +38,53 @@ export const normalizeText = (input: string): string => {
 
 /**
  * Legitimate words that contain bad word fragments as substrings.
- *
- * How it works:
- *  - Bad words are checked longest-first, so explicit compound bad words
- *    like "dumbass" are caught before their shorter component "ass".
- *  - A safe word only excuses a bad word if it is strictly longer than
- *    the bad word OR it matches the entire normalized input exactly.
- *  - The safe word must fully cover the position where the bad word
- *    appears in the input (position-aware matching).
- *
- * Add more as needed when users report false positives.
  */
 const SAFE_WORDS: string[] = [
-  // --- anal ---
-  "canal",
-  "analysis",
-  "analyst",
-  "analysts",
-  "analyze",
-  "analyzed",
-  "analog",
-  "analogy",
-  "analogous",
-  "banal",
-
-  // --- ass ---
-  "assassin",
-  "assault",
-  "assemble",
-  "assembly",
-  "assert",
-  "assertion",
-  "assess",
-  "assessment",
-  "asset",
-  "assign",
-  "assignment",
-  "assist",
-  "assistant",
-  "associate",
-  "association",
-  "assume",
-  "assumption",
-  "assurance",
-  "assure",
-  "bass",
-  "bassist",
-  "bassoon",
-  "bassman",
-  "bassmaster",
-  "seabass",
-  "brass",
-  "class",
-  "classic",
-  "classified",
-  "classy",
-  "compass",
-  "compassion",
-  "crass",
-  "embassy",
-  "embarrass",
-  "glass",
-  "grass",
-  "grasshopper",
-  "grassroots",
-  "harass",
-  "harassment",
-  "lass",
-  "lasso",
-  "mass",
-  "massacre",
-  "massage",
-  "massive",
-  "morass",
-  "pass",
-  "passage",
-  "passenger",
-  "passion",
-  "passionate",
-  "passive",
-  "passport",
-  "sass",
-  "sassy",
-  "trespass",
-  "ambassador",
-  "renaissance",
-
-  // --- cock ---
-  "cockpit",
-  "cocktail",
-  "cockatoo",
-  "cockatiel",
-  "peacock",
-  "hancock",
-  "hitchcock",
-  "babcock",
-  "woodcock",
-  "shuttlecock",
-  "gamecock",
-  "cockroach",
-
-  // --- coon ---
-  "raccoon",
-  "tycoon",
-
-  // --- crap ---
-  "scrap",
-  "scrappy",
-  "scrapper",
-  "scrape",
-  "scraper",
-  "skyscraper",
-  "scrapbook",
-
-  // --- cum ---
-  "cumulus",
-  "cucumber",
-  "cumberland",
-  "cumulative",
-  "document",
-  "documentary",
-  "circumstance",
-  "circumference",
-  "circuit",
-
-  // --- damn ---
+  "canal", "analysis", "analyst", "analysts", "analyze", "analyzed",
+  "analog", "analogy", "analogous", "banal",
+  "assassin", "assault", "assemble", "assembly", "assert", "assertion",
+  "assess", "assessment", "asset", "assign", "assignment", "assist",
+  "assistant", "associate", "association", "assume", "assumption",
+  "assurance", "assure", "bass", "bassist", "bassoon", "bassman",
+  "bassmaster", "seabass", "brass", "class", "classic", "classified",
+  "classy", "compass", "compassion", "crass", "embassy", "embarrass",
+  "glass", "grass", "grasshopper", "grassroots", "harass", "harassment",
+  "lass", "lasso", "mass", "massacre", "massage", "massive", "morass",
+  "pass", "passage", "passenger", "passion", "passionate", "passive",
+  "passport", "sass", "sassy", "trespass", "ambassador", "renaissance",
+  "cockpit", "cocktail", "cockatoo", "cockatiel", "peacock", "hancock",
+  "hitchcock", "babcock", "woodcock", "shuttlecock", "gamecock", "cockroach",
+  "raccoon", "tycoon",
+  "scrap", "scrappy", "scrapper", "scrape", "scraper", "skyscraper", "scrapbook",
+  "cumulus", "cucumber", "cumberland", "cumulative", "document",
+  "documentary", "circumstance", "circumference", "circuit",
   "amsterdam",
-
-  // --- dick ---
-  "dickens",
-  "dickerson",
-  "dickinson",
-
-  // --- dink ---
-  "drinking",
-  "thinking",
-  "shrinking",
-  "stinking",
-  "winking",
-  "blinking",
-  "sinking",
-  "linking",
-  "inking",
-
-  // --- hell ---
-  "hello",
-  "shell",
-  "shelling",
-  "seashell",
-  "eggshell",
-  "bombshell",
-  "nutshell",
-  "shellfish",
-  "michelle",
-  "rochelle",
-  "hellraiser",
-
-  // --- homo ---
-  "homogeneous",
-  "homonym",
-
-  // --- horny ---
+  "dickens", "dickerson", "dickinson",
+  "drinking", "thinking", "shrinking", "stinking", "winking",
+  "blinking", "sinking", "linking", "inking",
+  "hello", "shell", "shelling", "seashell", "eggshell", "bombshell",
+  "nutshell", "shellfish", "michelle", "rochelle", "hellraiser",
+  "homogeneous", "homonym",
   "thorny",
-
-  // --- jap ---
-  "japan",
-  "japanese",
-
-  // --- muff ---
-  "muffin",
-  "muffins",
-  "muffler",
-
-  // --- pecker ---
+  "japan", "japanese",
+  "muffin", "muffins", "muffler",
   "woodpecker",
-
-  // --- poon ---
-  "spoon",
-  "harpoon",
-  "teaspoon",
-  "tablespoon",
-
-  // --- rape ---
-  "grape",
-  "drape",
-  "raptor",
-  "rapid",
-  "rapport",
-  "wrapper",
-  "trapper",
-
-  // --- rapist ---
+  "spoon", "harpoon", "teaspoon", "tablespoon",
+  "grape", "drape", "raptor", "rapid", "rapport", "wrapper", "trapper",
   "therapist",
-
-  // --- screw ---
   "corkscrew",
-
-  // --- shit ---
   "shiitake",
-
-  // --- spic ---
-  "spice",
-  "spicy",
-  "spices",
-
-  // --- tard ---
-  "mustard",
-  "custard",
-  "leotard",
-
-  // --- tit / tits / titty ---
-  "title",
-  "titled",
-  "titillate",
-  "titanium",
-  "titan",
-  "competition",
-  "competitive",
-  "competitor",
-  "petition",
-  "repetition",
-  "appetizer",
+  "spice", "spicy", "spices",
+  "mustard", "custard", "leotard",
+  "title", "titled", "titillate", "titanium", "titan", "competition",
+  "competitive", "competitor", "petition", "repetition", "appetizer",
   "superstition",
-
-  // --- vag ---
-  "vague",
-  "vagrant",
-  "vagabond",
-  "extravagant",
-  "extravagance",
-
-  // --- wank ---
-  "swank",
-  "swanky",
-
-  // --- whore ---
-  "warehouse",
-  "shore",
-  "lakeshore",
-  "seashore",
-  "offshore",
-
-  // --- sex ---
-  "sextant",
-  "sextet",
-  "sexton",
-  "essex",
-  "sussex",
-  "middlesex",
-
-  // --- billiards / pool app relevant ---
-  "pool",
-  "carpool",
-  "poolhall",
-  "poolshark",
-  "billiard",
-  "billiards",
-  "snooker",
-  "spotlight",
-  "hotspot",
+  "vague", "vagrant", "vagabond", "extravagant", "extravagance",
+  "swank", "swanky",
+  "warehouse", "shore", "lakeshore", "seashore", "offshore",
+  "sextant", "sextet", "sexton", "essex", "sussex", "middlesex",
+  "pool", "carpool", "poolhall", "poolshark", "billiard", "billiards",
+  "snooker", "spotlight", "hotspot",
 ];
 
 /**
@@ -312,8 +100,6 @@ function allIndexesOf(haystack: string, needle: string): number[] {
   return indices;
 }
 
-// Sort bad words longest-first so compound bad words like "dumbass"
-// are checked before their shorter component "ass".
 const SORTED_BAD_WORDS = [...BAD_WORDS].sort((a, b) => b.length - a.length);
 
 /**
@@ -321,11 +107,6 @@ const SORTED_BAD_WORDS = [...BAD_WORDS].sort((a, b) => b.length - a.length);
  *  1. Leet-speak normalization (a55hole → asshole)
  *  2. Longest-first matching (dumbass caught before ass)
  *  3. Position-aware safe word allowlist (assassin → allowed)
- *
- * A safe word excuses a bad word match only if:
- *  - It is strictly longer than the bad word, OR
- *  - It matches the entire normalized input exactly (e.g. username "bass")
- * AND it fully covers the position where the bad word appears.
  */
 export const containsBadWord = (text: string): boolean => {
   const normalized = normalizeText(text);
@@ -341,14 +122,10 @@ export const containsBadWord = (text: string): boolean => {
         const safeNorm = normalizeText(safeWord);
         if (!safeNorm.includes(badWord)) return false;
 
-        // Safe word must be strictly longer than the bad word,
-        // OR match the entire input exactly (e.g. username "bass")
         if (safeNorm.length <= badWord.length && safeNorm !== normalized) {
           return false;
         }
 
-        // Check if any occurrence of the safe word in the input
-        // fully covers this occurrence of the bad word
         const safePositions = allIndexesOf(normalized, safeNorm);
         return safePositions.some((safeStart) => {
           const safeEnd = safeStart + safeNorm.length;

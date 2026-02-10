@@ -1,3 +1,8 @@
+// app/(tabs)/admin/edit-user/[id].tsx
+// ═══════════════════════════════════════════════════════════
+// UPDATED: Split "Name" into "First Name" + "Last Name"
+// ═══════════════════════════════════════════════════════════
+
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -48,7 +53,7 @@ export default function EditUserScreen() {
       <View style={styles.centerContainer}>
         <Text style={styles.errorIcon}>🔒</Text>
         <Text style={styles.errorText}>
-          You don{"'"}t have permission to edit this user
+          You do not have permission to edit this user
         </Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -113,16 +118,34 @@ export default function EditUserScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Edit Details</Text>
           <View style={styles.editCard}>
-            {/* Name Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Name</Text>
-              <TextInput
-                style={styles.textInput}
-                value={vm.name}
-                onChangeText={vm.setName}
-                placeholder="Enter name"
-                placeholderTextColor={COLORS.textSecondary}
-              />
+            {/* NAME CHANGE: First Name + Last Name side by side */}
+            <View style={styles.nameRow}>
+              <View style={styles.nameField}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>First Name</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={vm.firstName}
+                    onChangeText={vm.setFirstName}
+                    placeholder="First Name"
+                    placeholderTextColor={COLORS.textSecondary}
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+              <View style={styles.nameField}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Last Name</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={vm.lastName}
+                    onChangeText={vm.setLastName}
+                    placeholder="Last Name"
+                    placeholderTextColor={COLORS.textSecondary}
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
             </View>
 
             {/* Role Dropdown */}
@@ -197,9 +220,6 @@ const InfoRow = ({
   </View>
 );
 
-// ============================================
-// STYLES
-// ============================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -317,6 +337,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     padding: SPACING.md,
     gap: SPACING.md,
+  },
+  // NAME CHANGE: Side-by-side name fields
+  nameRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  nameField: {
+    flex: 1,
   },
   inputGroup: {
     gap: SPACING.xs,

@@ -1,3 +1,5 @@
+// app/(tabs)/profile.tsx
+
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -40,7 +42,7 @@ interface Favorite {
   };
 }
 
-// ── Animated logged-out view ─────────────────────────────────────────
+// ── Animated logged-out view ─────────────────────────────
 const LoggedOutView = ({ router }: { router: any }) => {
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
@@ -340,7 +342,6 @@ export default function ProfileScreen() {
       await supabase.from("favorites").delete().eq("id", favId);
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
-      // If removing the last item on the current page, go back a page
       const newTotalPages = Math.ceil(updated.length / 5);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         prevPage();
@@ -422,8 +423,11 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.profileInfo}>
+              {/* CHANGED: Show username as primary display */}
               <Text style={styles.name}>
-                {profile?.name || user.email?.split("@")[0] || "Player"}
+                {profile?.user_name
+                  ? `@${profile.user_name}`
+                  : user.email?.split("@")[0] || "Player"}
               </Text>
               <Text style={styles.playerID}>
                 {profile ? generatePlayerID(profile.id_auto) : "No ID"}
@@ -518,7 +522,18 @@ export default function ProfileScreen() {
             </View>
           ) : (
             <>
-              <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />{paginatedFavorites.map((fav) => {
+              <Pagination
+                totalCount={totalCount}
+                displayStart={displayRange.start}
+                displayEnd={displayRange.end}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPrevPage={prevPage}
+                onNextPage={nextPage}
+                canGoPrev={canGoPrev}
+                canGoNext={canGoNext}
+              />
+              {paginatedFavorites.map((fav) => {
                 const tournamentData = {
                   id: fav.tournament_id,
                   name: fav.tournaments?.name || "Unknown Tournament",

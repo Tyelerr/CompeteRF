@@ -1,3 +1,5 @@
+// src/viewmodels/useEditProfile.ts
+
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
@@ -5,9 +7,11 @@ import { supabase } from "../lib/supabase";
 import { imageUploadService } from "../models/services/image-upload.services";
 import { useAuthContext } from "../providers/AuthProvider";
 import { US_STATES } from "../utils/constants";
+import { buildFullName } from "../utils/name.utils";
 
 interface ProfileData {
-  name: string;
+  first_name: string;
+  last_name: string;
   home_state: string;
   favorite_player: string;
   preferred_game: string;
@@ -19,6 +23,9 @@ interface UseEditProfileReturn {
   loading: boolean;
   saving: boolean;
   error: string;
+
+  // Read-only
+  username: string;
 
   // Avatar
   avatarUrl: string | null;
@@ -46,18 +53,23 @@ export const useEditProfile = (): UseEditProfileReturn => {
   const { profile } = useAuthContext();
 
   const [originalData, setOriginalData] = useState<ProfileData>({
-    name: "",
+    first_name: "",
+    last_name: "",
     home_state: "",
     favorite_player: "",
     preferred_game: "",
   });
 
   const [profileData, setProfileData] = useState<ProfileData>({
-    name: "",
+    first_name: "",
+    last_name: "",
     home_state: "",
     favorite_player: "",
     preferred_game: "",
   });
+
+  // Read-only username
+  const [username, setUsername] = useState("");
 
   // Avatar state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -75,14 +87,13 @@ export const useEditProfile = (): UseEditProfileReturn => {
   const loadProfile = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session?.user) {
         setError("Please log in to continue");
         setLoading(false);
         return;
       }
 
-      // Load current profile data
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -90,19 +101,29 @@ export const useEditProfile = (): UseEditProfileReturn => {
         .single();
 
       if (profileData) {
+        let firstName = profileData.first_name || "";
+        let lastName = profileData.last_name || "";
+
+        if (!firstName && !lastName && profileData.name) {
+          const parts = profileData.name.trim().split(/\s+/);
+          firstName = parts[0] || "";
+          lastName = parts.slice(1).join(" ") || "";
+        }
+
         const data: ProfileData = {
-          name: profileData.name || "",
+          first_name: firstName,
+          last_name: lastName,
           home_state: profileData.home_state || "",
           favorite_player: profileData.favorite_player || "",
           preferred_game: profileData.preferred_game || "",
         };
-        
+
         setOriginalData(data);
         setProfileData(data);
+        setUsername(profileData.user_name || "");
         setAvatarUrl(profileData.avatar_url || null);
         setOriginalAvatarUrl(profileData.avatar_url || null);
       } else {
-        // No profile exists - redirect to create one
         Alert.alert(
           "No Profile Found",
           "You need to create a profile first.",
@@ -116,12 +137,11 @@ export const useEditProfile = (): UseEditProfileReturn => {
     }
   };
 
-  // Pick and upload avatar
   const handlePickAvatar = async () => {
     try {
       setUploadingAvatar(true);
       const uri = await imageUploadService.pickImage();
-      
+
       if (!uri) {
         setUploadingAvatar(false);
         return;
@@ -132,7 +152,6 @@ export const useEditProfile = (): UseEditProfileReturn => {
         throw new Error("No authenticated user found");
       }
 
-      // Upload to profile-images bucket with user-specific folder
       const result = await imageUploadService.uploadImage(
         uri,
         "profile-images",
@@ -152,7 +171,6 @@ export const useEditProfile = (): UseEditProfileReturn => {
     }
   };
 
-  // Remove avatar
   const handleRemoveAvatar = () => {
     Alert.alert(
       "Remove Photo",
@@ -168,7 +186,6 @@ export const useEditProfile = (): UseEditProfileReturn => {
     );
   };
 
-  // Options for dropdowns
   const stateOptions = [
     { label: "Select State", value: "" },
     ...US_STATES
@@ -184,17 +201,18 @@ export const useEditProfile = (): UseEditProfileReturn => {
     { label: "Banks", value: "banks" },
   ];
 
-  // Computed values
-  const isValid = profileData.name.trim().length >= 2;
-  
-  const hasChanges = 
-    profileData.name !== originalData.name ||
+  const isValid =
+    profileData.first_name.trim().length >= 1 &&
+    profileData.last_name.trim().length >= 1;
+
+  const hasChanges =
+    profileData.first_name !== originalData.first_name ||
+    profileData.last_name !== originalData.last_name ||
     profileData.home_state !== originalData.home_state ||
     profileData.favorite_player !== originalData.favorite_player ||
     profileData.preferred_game !== originalData.preferred_game ||
     avatarUrl !== originalAvatarUrl;
 
-  // Actions
   const updateField = (field: keyof ProfileData, value: string) => {
     setProfileData(prev => ({
       ...prev,
@@ -205,7 +223,7 @@ export const useEditProfile = (): UseEditProfileReturn => {
 
   const handleSave = async () => {
     if (!isValid) {
-      setError("Please enter a name (at least 2 characters)");
+      setError("Please enter both first and last name");
       return;
     }
 
@@ -219,20 +237,24 @@ export const useEditProfile = (): UseEditProfileReturn => {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session?.user) {
         throw new Error("No authenticated user found");
       }
 
-      // Delete old avatar from storage if it was replaced or removed
       if (originalAvatarUrl && avatarUrl !== originalAvatarUrl) {
         await imageUploadService.deleteImage(originalAvatarUrl, "profile-images");
       }
 
+      const trimmedFirst = profileData.first_name.trim();
+      const trimmedLast = profileData.last_name.trim();
+
       const { data, error: updateError } = await supabase
         .from("profiles")
         .update({
-          name: profileData.name.trim(),
+          name: buildFullName(trimmedFirst, trimmedLast),
+          first_name: trimmedFirst,
+          last_name: trimmedLast,
           home_state: profileData.home_state || null,
           favorite_player: profileData.favorite_player.trim() || null,
           preferred_game: profileData.preferred_game || null,
@@ -251,7 +273,6 @@ export const useEditProfile = (): UseEditProfileReturn => {
         throw new Error("Update failed — no rows were modified.");
       }
 
-      // Update original data to reflect saved state
       setOriginalData({ ...profileData });
       setOriginalAvatarUrl(avatarUrl);
 
@@ -280,8 +301,8 @@ export const useEditProfile = (): UseEditProfileReturn => {
         "Are you sure you want to discard your changes?",
         [
           { text: "Cancel", style: "cancel" },
-          { 
-            text: "Reset", 
+          {
+            text: "Reset",
             style: "destructive",
             onPress: () => {
               setProfileData({ ...originalData });
@@ -310,27 +331,19 @@ export const useEditProfile = (): UseEditProfileReturn => {
   };
 
   return {
-    // Form state
     profileData,
     loading,
     saving,
     error,
-
-    // Avatar
+    username,
     avatarUrl,
     uploadingAvatar,
     handlePickAvatar,
     handleRemoveAvatar,
-
-    // Computed
     isValid,
     hasChanges,
-
-    // Options
     stateOptions,
     gameOptions,
-
-    // Actions
     updateField,
     handleSave,
     handleReset,

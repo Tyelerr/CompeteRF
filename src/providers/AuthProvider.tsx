@@ -7,7 +7,7 @@
 //   that calls get_auth_session() RPC (1 query instead of 1)
 // - Populates Zustand store directly (kills the double fetch)
 // - Context still exists for backward compat but reads from store
-// - Push notifications still work exactly the same
+// - Push notifications wait for profile to exist before registering
 // ═══════════════════════════════════════════════════════════
 
 import { Session, User } from "@supabase/supabase-js";
@@ -34,8 +34,8 @@ interface AuthContextType {
   canSubmitTournaments: boolean;
   isAdmin: boolean;
   pushToken: string | null;
-  refreshSession: () => Promise<void>; // renamed from refreshProfile
-  refreshProfile: () => Promise<void>; // kept for backward compat
+  refreshSession: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
 }
@@ -77,7 +77,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { profile, hydrateSession, reset: resetStore } = useAuthStore();
 
   // 🔔 Push notification registration
-  const { pushToken } = useNotifications(user?.id);
+  // Only fires after profile exists (prevents foreign key error on push_tokens)
+  const { pushToken } = useNotifications(profile ? user?.id : undefined);
 
   // ── Session hydration via RPC ──────────────────────────
   const hydrateAuthSession = async (userId: string) => {
@@ -86,18 +87,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (error) {
         console.error("Auth session RPC error:", error);
-        // Fallback: fetch profile directly (in case RPC isn't deployed yet)
         await fallbackFetchProfile(userId);
         return;
       }
 
       if (!data || !data.profile) {
-        // New user — no profile yet
         hydrateSession(null, [], []);
         return;
       }
 
-      // Hydrate the Zustand store with everything from one call
       hydrateSession(
         data.profile as Profile,
         data.owned_venue_ids || [],
@@ -112,7 +110,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Fallback in case the RPC isn't deployed yet
-  // (remove this once you've confirmed the RPC works)
   const fallbackFetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -133,7 +130,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // ── Auth state listener ────────────────────────────────
   useEffect(() => {
-    // Check for existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -145,7 +141,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     });
 
-    // Listen for auth changes (login, logout, token refresh)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -173,7 +168,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const createProfile = async (profileData: ProfileInsert) => {
     try {
       await profileService.createProfile(profileData);
-      // Re-hydrate the full session so venue IDs etc. are loaded
       if (user?.id) {
         await hydrateAuthSession(user.id);
       }
@@ -185,7 +179,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // ── Sign out ───────────────────────────────────────────
   const signOut = async () => {
-    // Clean up push token
     if (user?.id) {
       try {
         const { notificationService } =
@@ -203,11 +196,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // ── Context value ──────────────────────────────────────
-  // Profile is read from Zustand store (single source of truth)
   const value: AuthContextType = {
     session,
     user,
-    profile, // ← from Zustand via destructuring above
+    profile,
     loading,
     isAuthenticated: !!profile,
     canSubmitTournaments: profile
@@ -216,7 +208,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAdmin: profile ? ADMIN_ROLES.includes(profile.role) : false,
     pushToken,
     refreshSession,
-    refreshProfile: refreshSession, // backward compat alias
+    refreshProfile: refreshSession,
     signOut,
     createProfile,
   };

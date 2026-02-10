@@ -1,10 +1,18 @@
-import { UserRole, UserStatus, Language } from './common.types';
+// src/models/types/profile.types.ts
+// ═══════════════════════════════════════════════════════════
+// UPDATED: Added first_name and last_name fields
+// "name" kept for backward compat during transition
+// ═══════════════════════════════════════════════════════════
+
+import { Language, UserRole, UserStatus } from "./common.types";
 
 export interface Profile {
   id: string;
   id_auto: number;
   email: string;
-  name: string;
+  name: string;                // kept during transition
+  first_name?: string;         // NEW
+  last_name?: string;          // NEW
   user_name: string;
   avatar_url?: string;
   home_state: string;
@@ -32,7 +40,9 @@ export interface Profile {
 export interface ProfileInsert {
   id: string;
   email: string;
-  name: string;
+  name: string;                // kept: still written for backward compat
+  first_name: string;          // NEW
+  last_name: string;           // NEW
   user_name: string;
   home_state: string;
   home_city?: string;
@@ -43,7 +53,9 @@ export interface ProfileInsert {
 }
 
 export interface ProfileUpdate {
-  name?: string;
+  name?: string;               // kept: still written for backward compat
+  first_name?: string;         // NEW
+  last_name?: string;          // NEW
   avatar_url?: string;
   home_state?: string;
   home_city?: string;

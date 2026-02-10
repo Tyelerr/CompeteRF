@@ -1,3 +1,5 @@
+// src/views/screens/auth/register.screen.tsx
+
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -35,7 +37,8 @@ export const RegisterScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   // Profile fields
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [homeState, setHomeState] = useState("");
   const [preferredGame, setPreferredGame] = useState("");
@@ -48,11 +51,11 @@ export const RegisterScreen = () => {
   const [loading, setLoading] = useState(false);
 
   // iOS-only: toggle between strong password and manual entry.
-  // Android always uses manual entry (no strong password feature).
   const [useAutoPassword, setUseAutoPassword] = useState(IS_IOS);
   const [formKey, setFormKey] = useState(() => Date.now());
 
-  const { isAvailable, isChecking } = useCheckUsername(username);
+  // Check availability using lowercase version
+  const { isAvailable, isChecking } = useCheckUsername(username.toLowerCase());
 
   const togglePasswordMode = useCallback(() => {
     setPassword("");
@@ -65,7 +68,8 @@ export const RegisterScreen = () => {
     setEmail("");
     setPassword("");
     setConfirmPassword("");
-    setName("");
+    setFirstName("");
+    setLastName("");
     setUsername("");
     setHomeState("");
     setPreferredGame("");
@@ -76,6 +80,10 @@ export const RegisterScreen = () => {
     setUseAutoPassword(IS_IOS);
     setFormKey(Date.now());
   }, []);
+
+  // Password mismatch check (only show after user starts typing confirm)
+  const passwordsMatch = password === confirmPassword;
+  const showPasswordMismatch = confirmPassword.length > 0 && !passwordsMatch;
 
   const validateForm = () => {
     setError("");
@@ -90,18 +98,23 @@ export const RegisterScreen = () => {
       return false;
     }
 
-    if (password !== confirmPassword) {
+    if (!passwordsMatch) {
       setError("Passwords do not match");
       return false;
     }
 
-    if (!name.trim()) {
-      setError("Please enter your full name");
+    if (!firstName.trim()) {
+      setError("Please enter your first name");
+      return false;
+    }
+
+    if (!lastName.trim()) {
+      setError("Please enter your last name");
       return false;
     }
 
     if (!isValidUsername(username)) {
-      setError("Username must be 3-20 letters only (no numbers)");
+      setError("Username must be 3-20 letters or numbers");
       return false;
     }
 
@@ -150,11 +163,16 @@ export const RegisterScreen = () => {
         return;
       }
 
+      const trimmedFirst = toTitleCase(firstName.trim());
+      const trimmedLast = toTitleCase(lastName.trim());
+
       const profileData = {
         id: authData.user.id,
         email: authData.user.email!,
-        name: toTitleCase(name),
-        user_name: username.toLowerCase(),
+        name: `${trimmedFirst} ${trimmedLast}`,
+        first_name: trimmedFirst,
+        last_name: trimmedLast,
+        user_name: username.toLowerCase(), // always store lowercase
         home_state: homeState,
         preferred_game: preferredGame || undefined,
         favorite_player: favoritePlayer || undefined,
@@ -198,18 +216,26 @@ export const RegisterScreen = () => {
     }
   };
 
+  // Green/red username helper
   const getUsernameHelper = () => {
-    if (username.length < 3) return "Username cannot be changed later";
-    if (isChecking) return "Checking availability...";
-    if (isAvailable) return "✓ Username available";
-    return "✗ Username taken";
+    if (username.length < 3)
+      return {
+        text: "Username cannot be changed later",
+        color: COLORS.textSecondary,
+      };
+    if (isChecking)
+      return { text: "Checking availability...", color: COLORS.textSecondary };
+    if (isAvailable) return { text: "✓ Username available", color: "#22C55E" };
+    return { text: "✗ Username taken", color: "#EF4444" };
   };
 
   const isFormValid =
     email &&
     password &&
     confirmPassword &&
-    name &&
+    passwordsMatch &&
+    firstName.trim() &&
+    lastName.trim() &&
     username &&
     homeState &&
     agreeTerms &&
@@ -230,7 +256,6 @@ export const RegisterScreen = () => {
     );
   }
 
-  // Determine password field props based on platform and mode
   const passwordProps = useAutoPassword
     ? {
         textContentType: "newPassword" as const,
@@ -242,6 +267,8 @@ export const RegisterScreen = () => {
         autoComplete: "off" as const,
         passwordRules: undefined,
       };
+
+  const usernameHelper = getUsernameHelper();
 
   return (
     <KeyboardAwareScrollView
@@ -289,24 +316,30 @@ export const RegisterScreen = () => {
           autoFillActive={useAutoPassword && password.length > 0}
         />
 
-        <Input
-          key={`confirm-${formKey}`}
-          label="Confirm Password *"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          placeholder={
-            useAutoPassword
-              ? "Auto-filled with strong password"
-              : "Confirm your password"
-          }
-          secureTextEntry
-          textContentType={passwordProps.textContentType}
-          autoComplete={passwordProps.autoComplete}
-          passwordRules={passwordProps.passwordRules}
-          autoFillActive={useAutoPassword && confirmPassword.length > 0}
-        />
+        {/* Confirm password with red border on mismatch */}
+        <View>
+          <Input
+            key={`confirm-${formKey}`}
+            label="Confirm Password *"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder={
+              useAutoPassword
+                ? "Auto-filled with strong password"
+                : "Confirm your password"
+            }
+            secureTextEntry
+            textContentType={passwordProps.textContentType}
+            autoComplete={passwordProps.autoComplete}
+            passwordRules={passwordProps.passwordRules}
+            autoFillActive={useAutoPassword && confirmPassword.length > 0}
+          />
+          {showPasswordMismatch && (
+            <Text style={styles.mismatchText}>Passwords do not match</Text>
+          )}
+        </View>
 
-        {/* Only show the toggle on iOS — Android has no strong password feature */}
+        {/* Only show the toggle on iOS */}
         {IS_IOS && (
           <TouchableOpacity
             onPress={togglePasswordMode}
@@ -322,26 +355,51 @@ export const RegisterScreen = () => {
 
         <Text style={styles.sectionTitle}>Profile Information</Text>
 
-        <Input
-          label="Full Name *"
-          value={name}
-          onChangeText={setName}
-          placeholder="Your Full Name"
-          autoCapitalize="words"
-          textContentType={IS_IOS ? "name" : undefined}
-          autoComplete="name"
-        />
+        {/* First Name + Last Name side by side */}
+        <View style={styles.nameRow}>
+          <View style={styles.nameField}>
+            <Input
+              label="First Name *"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="First Name"
+              autoCapitalize="words"
+              textContentType={IS_IOS ? "givenName" : undefined}
+              autoComplete="given-name"
+            />
+          </View>
+          <View style={styles.nameField}>
+            <Input
+              label="Last Name *"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Last Name"
+              autoCapitalize="words"
+              textContentType={IS_IOS ? "familyName" : undefined}
+              autoComplete="family-name"
+            />
+          </View>
+        </View>
 
-        <Input
-          label="Username *"
-          value={username}
-          onChangeText={(text) => setUsername(text.toLowerCase())}
-          placeholder="username"
-          autoCapitalize="none"
-          textContentType={IS_IOS ? "nickname" : undefined}
-          autoComplete="username-new"
-          helper={getUsernameHelper()}
-        />
+        {/* Username — user can type mixed case, stored as lowercase */}
+        <View>
+          <Input
+            label="Username *"
+            value={username}
+            onChangeText={setUsername}
+            placeholder="username"
+            autoCapitalize="none"
+            textContentType={IS_IOS ? "nickname" : undefined}
+            autoComplete="username-new"
+          />
+          {username.length > 0 && (
+            <Text
+              style={[styles.usernameHelper, { color: usernameHelper.color }]}
+            >
+              {usernameHelper.text}
+            </Text>
+          )}
+        </View>
 
         <Dropdown
           label="Home State *"
@@ -473,6 +531,30 @@ const styles = StyleSheet.create({
   },
   form: {
     flex: 1,
+  },
+  nameRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  nameField: {
+    flex: 1,
+  },
+  usernameHelper: {
+    fontSize: FONT_SIZES.xs,
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: "500",
+  },
+  inputError: {
+    borderColor: "#EF4444",
+    borderWidth: 1,
+  },
+  mismatchText: {
+    color: "#EF4444",
+    fontSize: FONT_SIZES.xs,
+    marginTop: 4,
+    marginLeft: 4,
+    fontWeight: "500",
   },
   toggleButton: {
     paddingVertical: SPACING.xs,

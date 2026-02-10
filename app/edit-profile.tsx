@@ -1,3 +1,5 @@
+// app/edit-profile.tsx
+
 import {
   ActivityIndicator,
   Image,
@@ -98,32 +100,77 @@ export default function EditProfileScreen() {
 
           {/* Form */}
           <View style={styles.form}>
-            {/* Name Field - Required */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>
-                Full Name <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[
-                  styles.textInput,
-                  !vm.isValid &&
-                    vm.profileData.name.length > 0 &&
-                    styles.inputError,
-                ]}
-                placeholder="Enter your full name"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.profileData.name}
-                onChangeText={(value) => vm.updateField("name", value)}
-                editable={!vm.saving}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-              {!vm.isValid && vm.profileData.name.length > 0 && (
+            {/* Username - Read Only */}
+            {vm.username ? (
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Username</Text>
+                <TextInput
+                  style={[styles.textInput, styles.disabledInput]}
+                  value={`@${vm.username}`}
+                  editable={false}
+                />
+                <Text style={styles.disabledHint}>
+                  Username cannot be changed
+                </Text>
+              </View>
+            ) : null}
+
+            {/* First Name + Last Name side by side */}
+            <View style={styles.nameRow}>
+              <View style={styles.nameField}>
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.fieldLabel}>
+                    First Name <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      !vm.profileData.first_name.trim() &&
+                        vm.profileData.first_name.length > 0 &&
+                        styles.inputError,
+                    ]}
+                    placeholder="First Name"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={vm.profileData.first_name}
+                    onChangeText={(value) =>
+                      vm.updateField("first_name", value)
+                    }
+                    editable={!vm.saving}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+              <View style={styles.nameField}>
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.fieldLabel}>
+                    Last Name <Text style={styles.required}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      !vm.profileData.last_name.trim() &&
+                        vm.profileData.last_name.length > 0 &&
+                        styles.inputError,
+                    ]}
+                    placeholder="Last Name"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={vm.profileData.last_name}
+                    onChangeText={(value) => vm.updateField("last_name", value)}
+                    editable={!vm.saving}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+            </View>
+            {!vm.isValid &&
+              (vm.profileData.first_name.length > 0 ||
+                vm.profileData.last_name.length > 0) && (
                 <Text style={styles.fieldError}>
-                  Name must be at least 2 characters
+                  Both first and last name are required
                 </Text>
               )}
-            </View>
 
             {/* Home State Field */}
             <View style={styles.fieldContainer}>
@@ -174,8 +221,8 @@ export default function EditProfileScreen() {
             <View style={styles.infoContainer}>
               <Text style={styles.infoIcon}>ℹ️</Text>
               <Text style={styles.infoText}>
-                Only your name is required. Other fields help personalize your
-                experience.
+                First and last name are required. Other fields help personalize
+                your experience.
               </Text>
             </View>
           </View>
@@ -335,6 +382,13 @@ const styles = StyleSheet.create({
   form: {
     gap: SPACING.lg,
   },
+  nameRow: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  nameField: {
+    flex: 1,
+  },
   fieldContainer: {
     gap: SPACING.sm,
   },
@@ -356,6 +410,15 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
+  disabledInput: {
+    opacity: 0.5,
+    color: COLORS.textMuted,
+  },
+  disabledHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginTop: -SPACING.xs,
+  },
   inputError: {
     borderColor: COLORS.error,
     backgroundColor: COLORS.error + "10",
@@ -363,7 +426,7 @@ const styles = StyleSheet.create({
   fieldError: {
     color: COLORS.error,
     fontSize: FONT_SIZES.xs,
-    marginTop: SPACING.xs,
+    marginTop: -SPACING.sm,
   },
   infoContainer: {
     flexDirection: "row",
