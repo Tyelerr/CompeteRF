@@ -114,6 +114,18 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="compose-message"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="conversation-detail"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -1,10 +1,11 @@
 // app/(tabs)/notifications.tsx
 // ═══════════════════════════════════════════════════════════
-// Notification Inbox - Polished message center for users
+// Unified Message Center - Push notifications + Conversations
+// Two tabs: Notifications (broadcasts) and Messages (threads)
 // ═══════════════════════════════════════════════════════════
 
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -15,12 +16,17 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
+import {
+  ConversationPreview,
+  conversationService,
+} from "../../src/models/services/conversation.service";
 import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 
-interface InboxMessage {
+// ── Push notification type ──
+interface InboxNotification {
   id: string;
   message_id: string;
   read_at: string | null;
@@ -37,15 +43,66 @@ interface InboxMessage {
   };
 }
 
-// ── Individual message card with animations ──
-const MessageCard = ({
+// ── Time formatting ──
+const getTimeAgo = (dateString: string): string => {
+  const now = new Date();
+  const date = new Date(dateString);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+// ── Sender info ──
+const getSenderInfo = (
+  senderRole: string,
+): { label: string; color: string; icon: string } => {
+  switch (senderRole) {
+    case "tournament_director":
+      return { label: "Tournament Director", color: "#2ECC71", icon: "🏆" };
+    case "bar_owner":
+      return { label: "Venue", color: "#E67E22", icon: "🏢" };
+    case "super_admin":
+    case "compete_admin":
+      return { label: "Compete", color: "#3498DB", icon: "📢" };
+    default:
+      return { label: "Message", color: "#95A5A6", icon: "✉️" };
+  }
+};
+
+const getCategoryLabel = (cat: string | null): string => {
+  const map: Record<string, string> = {
+    tournament_issues: "Tournament Issues",
+    report_problem: "Report a Problem",
+    feedback_suggestions: "Feedback",
+    account_issues: "Account",
+    fargo_rating: "Fargo Rating",
+    become_td: "Become a TD",
+    tournament_submission: "Submission",
+    general: "General",
+    other: "Other",
+  };
+  return cat ? map[cat] || cat : "";
+};
+
+// ══════════════════════════════════════════════════════════
+// Notification Card (broadcast messages)
+// ══════════════════════════════════════════════════════════
+const NotificationCard = ({
   msg,
   isExpanded,
   onPress,
   onDelete,
   onTournamentPress,
 }: {
-  msg: InboxMessage;
+  msg: InboxNotification;
   isExpanded: boolean;
   onPress: () => void;
   onDelete: () => void;
@@ -54,60 +111,24 @@ const MessageCard = ({
   const notif = msg.notification_messages;
   if (!notif) return null;
   const isUnread = !msg.read_at;
-
-  const getSenderInfo = (
-    senderRole: string,
-  ): { label: string; color: string; icon: string } => {
-    switch (senderRole) {
-      case "tournament_director":
-        return { label: "Tournament Director", color: "#2ECC71", icon: "🏆" };
-      case "bar_owner":
-        return { label: "Venue", color: "#E67E22", icon: "🏢" };
-      case "super_admin":
-      case "compete_admin":
-        return { label: "CompeteRF", color: "#3498DB", icon: "📢" };
-      default:
-        return { label: "Message", color: "#95A5A6", icon: "✉️" };
-    }
-  };
-
-  const getTimeAgo = (dateString: string): string => {
-    const now = new Date();
-    const date = new Date(dateString);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
-
   const sender = getSenderInfo(notif.sender_role);
 
   return (
     <TouchableOpacity
       style={[styles.card, isUnread && styles.cardUnread]}
       onPress={onPress}
-      onLongPress={() => {
-        Alert.alert("Delete Message", "Remove this message from your inbox?", [
+      onLongPress={() =>
+        Alert.alert("Delete", "Remove this notification?", [
           { text: "Cancel", style: "cancel" },
           { text: "Delete", style: "destructive", onPress: onDelete },
-        ]);
-      }}
+        ])
+      }
       activeOpacity={0.7}
     >
-      {/* Accent bar for unread */}
       {isUnread && (
         <View style={[styles.accentBar, { backgroundColor: sender.color }]} />
       )}
-
       <View style={styles.cardContent}>
-        {/* Top row: sender + time */}
         <View style={styles.cardTopRow}>
           <View style={styles.senderRow}>
             <View
@@ -119,30 +140,24 @@ const MessageCard = ({
           </View>
           <Text style={styles.timeText}>{getTimeAgo(msg.created_at)}</Text>
         </View>
-
-        {/* Subject */}
         <Text
           style={[styles.subjectText, isUnread && styles.subjectTextUnread]}
         >
           {notif.subject}
         </Text>
-
-        {/* Body preview or full */}
         {isExpanded ? (
           <View style={styles.expandedBody}>
             <Text style={styles.bodyText}>{notif.body}</Text>
-
             {notif.tournament_id && (
               <TouchableOpacity
                 style={styles.tournamentLink}
                 onPress={() => onTournamentPress(notif.tournament_id!)}
               >
                 <Text style={styles.tournamentLinkText}>
-                  🏆 View Tournament Details
+                  🏆 View Tournament
                 </Text>
               </TouchableOpacity>
             )}
-
             <View style={styles.cardActions}>
               <TouchableOpacity
                 style={styles.deleteTextButton}
@@ -162,87 +177,188 @@ const MessageCard = ({
   );
 };
 
-// ── Main screen ──
+// ══════════════════════════════════════════════════════════
+// Conversation Card (DM threads)
+// ══════════════════════════════════════════════════════════
+const ConversationCard = ({
+  convo,
+  onPress,
+  onDelete,
+}: {
+  convo: ConversationPreview;
+  onPress: () => void;
+  onDelete: () => void;
+}) => {
+  const hasUnread = convo.unread_count > 0;
+  const roleInfo = convo.other_participant_role
+    ? getSenderInfo(convo.other_participant_role)
+    : { color: "#95A5A6", icon: "💬" };
+
+  return (
+    <TouchableOpacity
+      style={[styles.card, hasUnread && styles.cardUnread]}
+      onPress={onPress}
+      onLongPress={() =>
+        Alert.alert("Delete", "Remove this conversation?", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: onDelete },
+        ])
+      }
+      activeOpacity={0.7}
+    >
+      {hasUnread && (
+        <View style={[styles.accentBar, { backgroundColor: roleInfo.color }]} />
+      )}
+      <View style={styles.cardContent}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.senderRow}>
+            <View
+              style={[styles.senderDot, { backgroundColor: roleInfo.color }]}
+            />
+            <Text style={styles.senderText}>
+              {convo.is_support
+                ? "📢 Compete Support"
+                : `${roleInfo.icon} ${convo.other_participant_name || "Unknown"}`}
+            </Text>
+          </View>
+          <View style={styles.timeRow}>
+            {hasUnread && (
+              <View style={styles.unreadCountBadge}>
+                <Text style={styles.unreadCountText}>{convo.unread_count}</Text>
+              </View>
+            )}
+            <Text style={styles.timeText}>
+              {getTimeAgo(convo.last_message_at || convo.updated_at)}
+            </Text>
+          </View>
+        </View>
+
+        <Text
+          style={[styles.subjectText, hasUnread && styles.subjectTextUnread]}
+        >
+          {convo.subject || getCategoryLabel(convo.category) || "Message"}
+        </Text>
+
+        {convo.last_message && (
+          <Text style={styles.previewText} numberOfLines={1}>
+            {convo.last_message}
+          </Text>
+        )}
+
+        {convo.category && (
+          <View style={styles.categoryBadgeRow}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryBadgeText}>
+                {getCategoryLabel(convo.category)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
+
+// ══════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ══════════════════════════════════════════════════════════
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user } = useAuthContext();
-  const [messages, setMessages] = useState<InboxMessage[]>([]);
+
+  const [activeTab, setActiveTab] = useState<"notifications" | "messages">(
+    "messages",
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const loadMessages = useCallback(async () => {
+  // Notifications state
+  const [notifications, setNotifications] = useState<InboxNotification[]>([]);
+  const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
+
+  // Conversations state
+  const [conversations, setConversations] = useState<ConversationPreview[]>([]);
+
+  // ── Load data ──
+  const loadNotifications = useCallback(async () => {
     if (!user?.id) return;
-
     try {
       const { data, error } = await supabase
         .from("notification_message_recipients")
         .select(
-          `
-          id,
-          message_id,
-          read_at,
-          created_at,
-          notification_messages (
-            id,
-            subject,
-            body,
-            message_type,
-            sender_role,
-            tournament_id,
-            venue_id,
-            created_at
-          )
-        `,
+          `id, message_id, read_at, created_at,
+          notification_messages (id, subject, body, message_type, sender_role, tournament_id, venue_id, created_at)`,
         )
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      setMessages((data as unknown as InboxMessage[]) || []);
+      setNotifications((data as unknown as InboxNotification[]) || []);
     } catch (err) {
-      console.error("Error loading inbox:", err);
-    } finally {
-      setLoading(false);
+      console.error("Error loading notifications:", err);
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
+  const loadConversations = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const convos = await conversationService.getConversations(user.id);
+      setConversations(convos);
+    } catch (err) {
+      console.error("Error loading conversations:", err);
+    }
+  }, [user?.id]);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadNotifications(), loadConversations()]);
+    setLoading(false);
+  }, [loadNotifications, loadConversations]);
+
+  // Refresh on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) loadAll();
+    }, [user?.id, loadAll]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadMessages();
+    await loadAll();
     setRefreshing(false);
-  }, [loadMessages]);
+  }, [loadAll]);
 
-  const markAsRead = async (recipientId: string) => {
+  // ── Notification actions ──
+  const markNotifAsRead = async (recipientId: string) => {
     await supabase
       .from("notification_message_recipients")
       .update({ read_at: new Date().toISOString() })
       .eq("id", recipientId);
-
-    setMessages((prev) =>
+    setNotifications((prev) =>
       prev.map((m) =>
         m.id === recipientId ? { ...m, read_at: new Date().toISOString() } : m,
       ),
     );
   };
 
-  const markAllAsRead = async () => {
-    if (!user?.id) return;
-    const unread = messages.filter((m) => !m.read_at);
-    if (unread.length === 0) return;
+  const deleteNotification = async (recipientId: string) => {
+    await supabase
+      .from("notification_message_recipients")
+      .delete()
+      .eq("id", recipientId);
+    setNotifications((prev) => prev.filter((m) => m.id !== recipientId));
+    if (expandedNotifId === recipientId) setExpandedNotifId(null);
+  };
 
+  const markAllNotifsRead = async () => {
+    if (!user?.id) return;
     await supabase
       .from("notification_message_recipients")
       .update({ read_at: new Date().toISOString() })
       .eq("user_id", user.id)
       .is("read_at", null);
-
-    setMessages((prev) =>
+    setNotifications((prev) =>
       prev.map((m) => ({
         ...m,
         read_at: m.read_at || new Date().toISOString(),
@@ -250,26 +366,30 @@ export default function NotificationsScreen() {
     );
   };
 
-  const deleteMessage = async (recipientId: string) => {
-    await supabase
-      .from("notification_message_recipients")
-      .delete()
-      .eq("id", recipientId);
-
-    setMessages((prev) => prev.filter((m) => m.id !== recipientId));
-    if (expandedId === recipientId) setExpandedId(null);
+  // ── Conversation actions ──
+  const deleteConversation = async (convoId: string) => {
+    if (!user?.id) return;
+    await conversationService.leaveConversation(convoId, user.id);
+    setConversations((prev) => prev.filter((c) => c.id !== convoId));
   };
 
-  const handlePress = (msg: InboxMessage) => {
-    if (!msg.read_at) markAsRead(msg.id);
-    setExpandedId((prev) => (prev === msg.id ? null : msg.id));
+  const openConversation = (convo: ConversationPreview) => {
+    const title =
+      convo.subject ||
+      convo.other_participant_name ||
+      (convo.is_support ? "Support" : "Conversation");
+    router.push(
+      `/conversation-detail?id=${convo.id}&title=${encodeURIComponent(title)}` as any,
+    );
   };
 
-  const handleTournamentPress = (tournamentId: number) => {
-    router.push(`/tournament-detail?id=${tournamentId}` as any);
-  };
-
-  const unreadCount = messages.filter((m) => !m.read_at).length;
+  // ── Counts ──
+  const unreadNotifCount = notifications.filter((n) => !n.read_at).length;
+  const unreadConvoCount = conversations.reduce(
+    (sum, c) => sum + c.unread_count,
+    0,
+  );
+  const totalUnread = unreadNotifCount + unreadConvoCount;
 
   if (loading) {
     return (
@@ -290,30 +410,68 @@ export default function NotificationsScreen() {
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>MESSAGES</Text>
-        <View style={styles.headerRight}>
-          {unreadCount > 0 && (
-            <TouchableOpacity onPress={markAllAsRead}>
-              <Text style={styles.markAllReadText}>Mark all read</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <View style={styles.backButton} />
       </View>
 
-      {/* Unread count pill */}
-      {unreadCount > 0 && (
-        <View style={styles.unreadBar}>
-          <View style={styles.unreadPill}>
-            <Text style={styles.unreadPillText}>
-              {unreadCount} unread {unreadCount === 1 ? "message" : "messages"}
-            </Text>
-          </View>
-        </View>
-      )}
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === "messages" && styles.tabActive]}
+          onPress={() => setActiveTab("messages")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "messages" && styles.tabTextActive,
+            ]}
+          >
+            💬 Conversations
+          </Text>
+          {unreadConvoCount > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{unreadConvoCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === "notifications" && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab("notifications")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "notifications" && styles.tabTextActive,
+            ]}
+          >
+            🔔 Notifications
+          </Text>
+          {unreadNotifCount > 0 && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>{unreadNotifCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* New Message Button */}
+      <TouchableOpacity
+        style={styles.newMessageButton}
+        onPress={() => router.push("/compose-message" as any)}
+      >
+        <Text style={styles.newMessageButtonText}>✉️ New Message</Text>
+      </TouchableOpacity>
 
       <ScrollView
         style={styles.scrollContent}
         contentContainerStyle={
-          messages.length === 0 ? styles.emptyContainer : undefined
+          (activeTab === "notifications"
+            ? notifications.length
+            : conversations.length) === 0
+            ? styles.emptyContainer
+            : undefined
         }
         refreshControl={
           <RefreshControl
@@ -323,37 +481,84 @@ export default function NotificationsScreen() {
           />
         }
       >
-        {messages.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📬</Text>
-            <Text style={styles.emptyTitle}>All caught up!</Text>
-            <Text style={styles.emptySubtitle}>
-              Messages from tournament directors and venues you follow will show
-              up here.
-            </Text>
-            <View style={styles.emptyDivider} />
-            <Text style={styles.emptyHint}>
-              💡 Favorite a tournament to start receiving updates
-            </Text>
-          </View>
-        ) : (
+        {/* ═══ NOTIFICATIONS TAB ═══ */}
+        {activeTab === "notifications" && (
           <>
-            {/* Group: Today / Earlier */}
-            {messages.map((msg) => (
-              <MessageCard
-                key={msg.id}
-                msg={msg}
-                isExpanded={expandedId === msg.id}
-                onPress={() => handlePress(msg)}
-                onDelete={() => deleteMessage(msg.id)}
-                onTournamentPress={handleTournamentPress}
-              />
-            ))}
+            {unreadNotifCount > 0 && (
+              <View style={styles.actionBar}>
+                <TouchableOpacity onPress={markAllNotifsRead}>
+                  <Text style={styles.actionBarText}>Mark all as read</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {/* Long press hint */}
-            <Text style={styles.hintText}>
-              Long press a message to delete it
-            </Text>
+            {notifications.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>🔔</Text>
+                <Text style={styles.emptyTitle}>No notifications</Text>
+                <Text style={styles.emptySubtitle}>
+                  Broadcasts from tournament directors and venues you follow
+                  will appear here.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {notifications.map((msg) => (
+                  <NotificationCard
+                    key={msg.id}
+                    msg={msg}
+                    isExpanded={expandedNotifId === msg.id}
+                    onPress={() => {
+                      if (!msg.read_at) markNotifAsRead(msg.id);
+                      setExpandedNotifId((prev) =>
+                        prev === msg.id ? null : msg.id,
+                      );
+                    }}
+                    onDelete={() => deleteNotification(msg.id)}
+                    onTournamentPress={(id) =>
+                      router.push(`/tournament-detail?id=${id}` as any)
+                    }
+                  />
+                ))}
+                <Text style={styles.hintText}>Long press to delete</Text>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ═══ MESSAGES TAB ═══ */}
+        {activeTab === "messages" && (
+          <>
+            {conversations.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>💬</Text>
+                <Text style={styles.emptyTitle}>No conversations yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Send a message to a tournament director, venue owner, or
+                  Compete support.
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyComposeButton}
+                  onPress={() => router.push("/compose-message" as any)}
+                >
+                  <Text style={styles.emptyComposeText}>
+                    ✏️ Start a Conversation
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {conversations.map((convo) => (
+                  <ConversationCard
+                    key={convo.id}
+                    convo={convo}
+                    onPress={() => openConversation(convo)}
+                    onDelete={() => deleteConversation(convo.id)}
+                  />
+                ))}
+                <Text style={styles.hintText}>Long press to delete</Text>
+              </>
+            )}
           </>
         )}
 
@@ -376,7 +581,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.lg,
   },
   loadingText: {
     fontSize: FONT_SIZES.md,
@@ -393,7 +597,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.sm,
   },
   backButton: {
-    width: 80,
+    width: 70,
   },
   backButtonText: {
     fontSize: FONT_SIZES.md,
@@ -406,30 +610,75 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: 1,
   },
-  headerRight: {
-    width: 80,
-    alignItems: "flex-end",
+  // ── New Message Button ──
+  newMessageButton: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
   },
-  markAllReadText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.primary,
-    fontWeight: "600",
+  newMessageButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
-  // ── Unread bar ──
-  unreadBar: {
-    alignItems: "center",
-    paddingBottom: SPACING.sm,
-  },
-  unreadPill: {
-    backgroundColor: COLORS.primary + "20",
-    borderRadius: 20,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 4,
+  // ── Tabs ──
+  tabRow: {
+    flexDirection: "row",
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xs,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: 3,
     borderWidth: 1,
-    borderColor: COLORS.primary + "40",
+    borderColor: COLORS.border,
   },
-  unreadPillText: {
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md - 2,
+    gap: 4,
+  },
+  tabActive: {
+    backgroundColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  tabTextActive: {
+    color: "#FFFFFF",
+  },
+  tabBadge: {
+    backgroundColor: "#E74C3C",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  tabBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+
+  // ── Action bar ──
+  actionBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  actionBarText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
     fontWeight: "600",
@@ -438,6 +687,7 @@ const styles = StyleSheet.create({
   // ── Cards ──
   scrollContent: {
     flex: 1,
+    marginTop: SPACING.sm,
   },
   emptyContainer: {
     flex: 1,
@@ -453,7 +703,6 @@ const styles = StyleSheet.create({
   },
   cardUnread: {
     borderColor: COLORS.primary + "60",
-    backgroundColor: COLORS.surface,
   },
   accentBar: {
     height: 3,
@@ -472,6 +721,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flex: 1,
   },
   senderDot: {
     width: 8,
@@ -483,9 +733,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
+  timeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   timeText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
+  },
+  unreadCountBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  unreadCountText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   subjectText: {
     fontSize: FONT_SIZES.md,
@@ -500,6 +769,21 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textMuted,
     lineHeight: 18,
+  },
+  categoryBadgeRow: {
+    flexDirection: "row",
+    marginTop: 6,
+  },
+  categoryBadge: {
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
 
   // ── Expanded ──
@@ -549,7 +833,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // ── Empty state ──
+  // ── Empty ──
   emptyState: {
     flex: 1,
     alignItems: "center",
@@ -572,17 +856,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  emptyDivider: {
-    width: 40,
-    height: 2,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.lg,
-    borderRadius: 1,
+  emptyComposeButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    marginTop: SPACING.lg,
   },
-  emptyHint: {
+  emptyComposeText: {
     fontSize: FONT_SIZES.sm,
-    color: COLORS.textMuted,
-    textAlign: "center",
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   bottomSpacer: {

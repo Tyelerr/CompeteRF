@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -23,12 +24,25 @@ export default function FaqScreen() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
+
+  // Form state
   const [category, setCategory] = useState("");
-  const [tournamentId, setTournamentId] = useState("");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+
+  // Tournament search state
+  const [tournamentSearch, setTournamentSearch] = useState("");
+  const [tournamentResults, setTournamentResults] = useState<
+    { id: number; name: string; venue_name: string }[]
+  >([]);
+  const [selectedTournament, setSelectedTournament] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [showTournamentResults, setShowTournamentResults] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -41,12 +55,13 @@ export default function FaqScreen() {
     setUser(session?.user || null);
 
     if (session?.user) {
-      const { data: profileData } = await supabase
+      const { data: profileData, error } = await supabase
         .from("profiles")
-        .select("id_auto, username, first_name, last_name")
+        .select("id, id_auto, username, first_name, last_name, name")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
 
+      if (error) console.log("Profile fetch error:", error);
       setProfile(profileData);
     }
   };
@@ -55,8 +70,47 @@ export default function FaqScreen() {
     setExpandedIndex(expandedIndex === index ? null : index);
   };
 
-  const selectedCategory = SUPPORT_CATEGORIES.find((c) => c.value === category);
-  const showTournamentId = selectedCategory?.requiresTournamentId;
+  // ── Tournament search (starts at 1 char) ──
+  const handleTournamentSearch = useCallback(async (query: string) => {
+    setTournamentSearch(query);
+    if (query.length < 1) {
+      setTournamentResults([]);
+      setShowTournamentResults(false);
+      return;
+    }
+    setShowTournamentResults(true);
+    try {
+      const { data, error } = await supabase
+        .from("tournaments")
+        .select("id, name, venues(venue)")
+        .ilike("name", `%${query}%`)
+        .limit(15);
+
+      if (error) throw error;
+
+      setTournamentResults(
+        (data || []).map(
+          (t: { id: number; name: string; venues: unknown }) => ({
+            id: t.id,
+            name: t.name,
+            venue_name:
+              (t.venues as { venue: string } | null)?.venue || "Unknown Venue",
+          }),
+        ),
+      );
+    } catch (err) {
+      console.error("Tournament search error:", err);
+    }
+  }, []);
+
+  const getDisplayName = (): string => {
+    if (profile?.username) return `@${profile.username}`;
+    if (profile?.first_name)
+      return `${profile.first_name} ${profile.last_name || ""}`.trim();
+    if (profile?.name) return profile.name;
+    if (user?.email) return user.email;
+    return "Unknown";
+  };
 
   const handleSendMessage = async () => {
     if (!category) {
@@ -64,13 +118,13 @@ export default function FaqScreen() {
       return;
     }
 
-    if (!message.trim()) {
-      Alert.alert("Error", "Please enter a message.");
+    if (!subject.trim()) {
+      Alert.alert("Error", "Please enter a subject.");
       return;
     }
 
-    if (showTournamentId && !tournamentId.trim()) {
-      Alert.alert("Error", "Please enter the Tournament ID.");
+    if (!message.trim()) {
+      Alert.alert("Error", "Please enter a message.");
       return;
     }
 
@@ -82,24 +136,25 @@ export default function FaqScreen() {
       return;
     }
 
-    if (!profile) {
-      Alert.alert("Error", "Please complete your profile first.");
-      return;
-    }
-
     setSending(true);
     try {
-      // Build subject from category
-      const categoryLabel =
-        SUPPORT_CATEGORIES.find((c) => c.value === category)?.label ||
-        "General";
-      const subject = showTournamentId
-        ? `${categoryLabel} - Tournament #${tournamentId}`
-        : categoryLabel;
+      const fullSubject = selectedTournament
+        ? `${subject.trim()} - Tournament: ${selectedTournament.name}`
+        : subject.trim();
+
+      // support_tickets.user_id is an integer (id_auto), not UUID
+      if (!profile?.id_auto) {
+        Alert.alert(
+          "Error",
+          "Could not find your profile. Please try logging out and back in.",
+        );
+        setSending(false);
+        return;
+      }
 
       const { error } = await supabase.from("support_tickets").insert({
         user_id: profile.id_auto,
-        subject: subject,
+        subject: fullSubject,
         description: message.trim(),
         category: category,
         status: "open",
@@ -112,11 +167,9 @@ export default function FaqScreen() {
         "Success",
         "Your message has been sent! We'll get back to you soon.",
       );
-      setCategory("");
-      setTournamentId("");
-      setMessage("");
-      setShowContactForm(false);
+      resetForm();
     } catch (err: any) {
+      console.error("FAQ send error:", err);
       Alert.alert("Error", err.message || "Failed to send message.");
     } finally {
       setSending(false);
@@ -126,8 +179,12 @@ export default function FaqScreen() {
   const resetForm = () => {
     setShowContactForm(false);
     setCategory("");
-    setTournamentId("");
+    setSubject("");
     setMessage("");
+    setSelectedTournament(null);
+    setTournamentSearch("");
+    setTournamentResults([]);
+    setShowTournamentResults(false);
   };
 
   return (
@@ -194,20 +251,10 @@ export default function FaqScreen() {
         ) : (
           <View style={styles.contactForm}>
             {/* User Info */}
-            {profile ? (
+            {user ? (
               <View style={styles.userInfo}>
                 <Text style={styles.userInfoLabel}>Sending as:</Text>
-                <Text style={styles.userInfoValue}>
-                  @{profile.username} ({profile.first_name} {profile.last_name})
-                </Text>
-              </View>
-            ) : user ? (
-              <View style={styles.userInfo}>
-                <Text style={styles.userInfoLabel}>Sending as:</Text>
-                <Text style={styles.userInfoValue}>{user.email}</Text>
-                <Text style={styles.userInfoWarning}>
-                  Please complete your profile for better support.
-                </Text>
+                <Text style={styles.userInfoValue}>{getDisplayName()}</Text>
               </View>
             ) : (
               <View style={styles.userInfo}>
@@ -231,30 +278,105 @@ export default function FaqScreen() {
                 value: c.value,
               }))}
               value={category}
-              onSelect={setCategory}
+              onSelect={(val: string) => {
+                setCategory(val);
+                if (val !== "tournament" && val !== "tournament_submission") {
+                  setSelectedTournament(null);
+                  setTournamentSearch("");
+                  setTournamentResults([]);
+                  setShowTournamentResults(false);
+                }
+              }}
             />
 
-            {/* Tournament ID (conditional) */}
-            {showTournamentId && (
+            {/* Subject (required) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>
+                Subject <Text style={styles.requiredStar}>*</Text>
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={subject}
+                onChangeText={setSubject}
+                placeholder="Brief description of your issue..."
+                placeholderTextColor={COLORS.textMuted}
+                maxLength={100}
+              />
+            </View>
+
+            {/* Tournament Search (only for tournament-related categories) */}
+            {(category === "tournament" ||
+              category === "tournament_submission") && (
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Tournament ID</Text>
-                <TextInput
-                  style={styles.input}
-                  value={tournamentId}
-                  onChangeText={setTournamentId}
-                  placeholder="Enter the tournament ID"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.inputHint}>
-                  You can find this on the tournament detail page
+                <Text style={styles.inputLabel}>
+                  Tournament <Text style={styles.optionalText}>(optional)</Text>
                 </Text>
+                {!selectedTournament ? (
+                  <View style={styles.searchWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      value={tournamentSearch}
+                      onChangeText={handleTournamentSearch}
+                      placeholder="Search tournaments..."
+                      placeholderTextColor={COLORS.textMuted}
+                      onFocus={() => {
+                        if (tournamentSearch.length >= 1)
+                          setShowTournamentResults(true);
+                      }}
+                    />
+                    {showTournamentResults && tournamentResults.length > 0 && (
+                      <View style={styles.autocompleteDropdown}>
+                        <ScrollView
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                          style={styles.autocompleteScroll}
+                        >
+                          {tournamentResults.map((t) => (
+                            <TouchableOpacity
+                              key={t.id}
+                              style={styles.autocompleteItem}
+                              onPress={() => {
+                                setSelectedTournament({
+                                  id: t.id,
+                                  name: t.name,
+                                });
+                                setTournamentResults([]);
+                                setShowTournamentResults(false);
+                                setTournamentSearch("");
+                              }}
+                            >
+                              <Text style={styles.autocompleteItemName}>
+                                🏆 {t.name}
+                              </Text>
+                              <Text style={styles.autocompleteItemRole}>
+                                {t.venue_name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.selectedBadge}>
+                    <Text style={styles.selectedBadgeText}>
+                      🏆 {selectedTournament.name}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedTournament(null)}
+                    >
+                      <Text style={styles.removeBadge}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
 
             {/* Message */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Message</Text>
+              <Text style={styles.inputLabel}>
+                Message <Text style={styles.requiredStar}>*</Text>
+              </Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={message}
@@ -264,7 +386,9 @@ export default function FaqScreen() {
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
+                maxLength={2000}
               />
+              <Text style={styles.charCount}>{message.length}/2000</Text>
             </View>
 
             {/* Buttons */}
@@ -418,6 +542,15 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
     fontWeight: "500",
   },
+  requiredStar: {
+    color: "#E74C3C",
+    fontWeight: "700",
+  },
+  optionalText: {
+    fontWeight: "400",
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+  },
   input: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
@@ -433,9 +566,83 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: SPACING.xs,
   },
+  charCount: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    textAlign: "right",
+    marginTop: 4,
+  },
   textArea: {
     minHeight: 120,
   },
+
+  // ── Tournament search ──
+  searchWrapper: {
+    position: "relative",
+    zIndex: 50,
+  },
+  autocompleteDropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    marginTop: 2,
+    zIndex: 999,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    overflow: "hidden",
+  },
+  autocompleteScroll: {
+    maxHeight: 200,
+  },
+  autocompleteItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  autocompleteItemName: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: "500",
+    flex: 1,
+  },
+  autocompleteItemRole: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginLeft: SPACING.sm,
+  },
+  selectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary + "20",
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+  },
+  selectedBadgeText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: "600",
+    flex: 1,
+  },
+  removeBadge: {
+    fontSize: FONT_SIZES.lg,
+    color: COLORS.textMuted,
+    paddingLeft: SPACING.sm,
+  },
+
   formButtons: {
     flexDirection: "row",
     marginTop: SPACING.sm,
