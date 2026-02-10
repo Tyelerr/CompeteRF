@@ -851,8 +851,8 @@ export const useSubmitTournament = () => {
     return getRecurrencePreviewText(formData);
   };
 
-  const navigateToLogin = () => router.push("/auth/login");
-  const navigateToFaq = () => router.push("/(tabs)/faq");
+ const navigateToLogin = () => router.push("/auth/login" as any);
+const navigateToFaq = () => router.push("/(tabs)/faq" as any);
 
   // ── Dropdown options ───────────────────────────────────────────────────
 

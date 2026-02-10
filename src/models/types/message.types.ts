@@ -65,19 +65,3 @@ export interface Notification {
   scheduled_for: string;
   created_at: string;
 }
-```
-
----
-
-# 🎉 All TypeScript Types Complete!
-
-You now have:
-```
-src/models/types/
-├── index.ts
-├── common.types.ts
-├── profile.types.ts
-├── venue.types.ts
-├── tournament.types.ts
-├── giveaway.types.ts
-└── message.types.ts

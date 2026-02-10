@@ -1,3 +1,9 @@
+// app/(tabs)/admin/index.tsx
+// ═══════════════════════════════════════════════════════════
+// UPDATED: Added Messages card to every role dashboard
+// Changes marked with // 🔔 NEW
+// ═══════════════════════════════════════════════════════════
+
 import { useRouter } from "expo-router";
 import {
   RefreshControl,
@@ -146,6 +152,12 @@ const TDDashboard = () => {
           label="Analytics"
           onPress={() => router.push("/(tabs)/admin/director-analytics" as any)}
         />
+        {/* 🔔 NEW: Messages card */}
+        <StatCard
+          icon="✉️"
+          label="Messages"
+          onPress={() => router.push("/(tabs)/admin/messages" as any)}
+        />
       </View>
 
       {/* Analytics Time Filter */}
@@ -242,6 +254,12 @@ const BarOwnerDashboard = () => {
           onPress={() =>
             router.push("/(tabs)/admin/bar-owner-analytics" as any)
           }
+        />
+        {/* 🔔 NEW: Messages card */}
+        <StatCard
+          icon="✉️"
+          label="Messages"
+          onPress={() => router.push("/(tabs)/admin/messages" as any)}
         />
       </View>
 
@@ -347,6 +365,13 @@ const CompeteAdminDashboard = () => {
           subtitle="Recent changes"
           onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
         />
+        {/* 🔔 NEW: Messages card */}
+        <ManagementCard
+          icon="✉️"
+          label="Messages"
+          subtitle="Broadcasts"
+          onPress={() => router.push("/(tabs)/admin/messages" as any)}
+        />
       </View>
 
       {/* Analytics Time Filter */}
@@ -411,7 +436,7 @@ const SuperAdminDashboard = () => {
         <Text style={styles.headerSubtitle}>Full system access</Text>
       </View>
 
-      {/* Management Grid - 2x4 */}
+      {/* Management Grid - 2x5 */}
       <View style={styles.statsGrid}>
         <ManagementCard
           icon="👥"
@@ -465,6 +490,13 @@ const SuperAdminDashboard = () => {
           onPress={() =>
             router.push("/(tabs)/admin/giveaway-management" as any)
           }
+        />
+        {/* 🔔 NEW: Messages card */}
+        <ManagementCard
+          icon="✉️"
+          label="Messages"
+          subtitle="Broadcasts & alerts"
+          onPress={() => router.push("/(tabs)/admin/messages" as any)}
         />
         <ManagementCard
           icon="⚙️"

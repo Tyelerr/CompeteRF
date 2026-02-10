@@ -48,7 +48,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
 
   useEffect(() => {
     Animated.sequence([
-      // 1. "Welcome!" slides in
       Animated.parallel([
         Animated.timing(welcomeFade, {
           toValue: 1,
@@ -62,7 +61,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
           useNativeDriver: true,
         }),
       ]),
-      // 2. Message + buttons fade in
       Animated.parallel([
         Animated.timing(messageFade, {
           toValue: 1,
@@ -94,7 +92,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
       </View>
 
       <View style={styles.notLoggedIn}>
-        {/* Animated "Welcome!" */}
         <Animated.Text
           style={[
             styles.welcomeText,
@@ -107,12 +104,10 @@ const LoggedOutView = ({ router }: { router: any }) => {
           Welcome!
         </Animated.Text>
 
-        {/* Message */}
         <Animated.Text style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
 
-        {/* Buttons */}
         <Animated.View
           style={[
             styles.buttonGroup,
@@ -147,11 +142,10 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // Scroll-to-top on tab switch (logged-in ScrollView)
   const scrollRef = useScrollToTopOnFocus();
 
-  // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
@@ -165,9 +159,11 @@ export default function ProfileScreen() {
       setUser(session?.user || null);
       if (session?.user) {
         loadProfile(session.user.id);
+        loadUnreadCount(session.user.id);
       } else {
         setProfile(null);
         setFavorites([]);
+        setUnreadCount(0);
         setLoading(false);
       }
     });
@@ -182,6 +178,7 @@ export default function ProfileScreen() {
     setUser(session?.user || null);
     if (session?.user) {
       await loadProfile(session.user.id);
+      await loadUnreadCount(session.user.id);
     } else {
       setLoading(false);
     }
@@ -230,10 +227,24 @@ export default function ProfileScreen() {
     }
   };
 
+  const loadUnreadCount = async (userId: string) => {
+    try {
+      const { count } = await supabase
+        .from("notification_message_recipients")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .is("read_at", null);
+      setUnreadCount(count || 0);
+    } catch (err) {
+      console.error("Error loading unread count:", err);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     if (user) {
       await loadProfile(user.id);
+      await loadUnreadCount(user.id);
     }
     setRefreshing(false);
   };
@@ -243,6 +254,7 @@ export default function ProfileScreen() {
     setUser(null);
     setProfile(null);
     setFavorites([]);
+    setUnreadCount(0);
     router.replace("/(tabs)" as any);
   };
 
@@ -311,12 +323,10 @@ export default function ProfileScreen() {
     return <Loading fullScreen message="Loading..." />;
   }
 
-  // Not logged in — show animated welcome
   if (!user) {
     return <LoggedOutView router={router} />;
   }
 
-  // Logged in - show profile
   return (
     <View style={styles.container}>
       <ScrollView
@@ -338,6 +348,20 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.profileCard}>
+          {/* ✉️ Messages button - top right */}
+          <TouchableOpacity
+            style={styles.messagesFloatingButton}
+            onPress={() => router.push("/notifications" as any)}
+          >
+            <Text style={styles.messagesFloatingIcon}>✉️</Text>
+            <Text style={styles.messagesFloatingText}>Messages</Text>
+            {unreadCount > 0 && (
+              <View style={styles.messagesUnreadBadge}>
+                <Text style={styles.messagesUnreadText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <View style={styles.profileHeader}>
             <View style={styles.avatarContainer}>
               {profile?.avatar_url ? (
@@ -391,9 +415,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={[styles.actionButton, styles.notificationButton]}
-              onPress={() => {
-                /* TODO: Navigate to notifications */
-              }}
+              onPress={() => router.push("/notifications" as any)}
             >
               <Text style={styles.notificationButtonText}>
                 🔔 Notifications
@@ -544,7 +566,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: SPACING.xs,
   },
-  // ── Logged-out animated styles ───────────────────────────────────
   notLoggedIn: {
     flex: 1,
     alignItems: "center",
@@ -567,7 +588,6 @@ const styles = StyleSheet.create({
   buttonGroup: {
     width: "100%",
   },
-  // ── Logged-in styles ─────────────────────────────────────────────
   profileCard: {
     margin: SPACING.md,
     backgroundColor: COLORS.backgroundCard,
@@ -575,6 +595,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.lg,
+  },
+  messagesFloatingButton: {
+    position: "absolute",
+    top: SPACING.md,
+    right: SPACING.md,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    zIndex: 1,
+  },
+  messagesFloatingIcon: {
+    fontSize: 14,
+  },
+  messagesFloatingText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  messagesUnreadBadge: {
+    backgroundColor: "#E74C3C",
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    marginLeft: 2,
+  },
+  messagesUnreadText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   profileHeader: {
     flexDirection: "row",

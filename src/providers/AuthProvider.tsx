@@ -1,3 +1,9 @@
+// src/providers/AuthProvider.tsx
+// ═══════════════════════════════════════════════════════════
+// UPDATED: Added push notification registration on login
+// Changes marked with // 🔔 NEW
+// ═══════════════════════════════════════════════════════════
+
 import { Session, User } from "@supabase/supabase-js";
 import {
   createContext,
@@ -9,6 +15,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { profileService } from "../models/services/profile.service";
 import { Profile, ProfileInsert } from "../models/types/profile.types";
+import { useNotifications } from "../viewmodels/hooks/use.notifications"; // 🔔 NEW
 
 interface AuthContextType {
   session: Session | null;
@@ -18,6 +25,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   canSubmitTournaments: boolean;
   isAdmin: boolean;
+  pushToken: string | null; // 🔔 NEW
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
@@ -40,6 +48,7 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   canSubmitTournaments: false,
   isAdmin: false,
+  pushToken: null, // 🔔 NEW
   refreshProfile: async () => {},
   signOut: async () => {},
   createProfile: async () => {},
@@ -54,6 +63,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 🔔 NEW: Push notification registration
+  // Automatically registers token when user.id becomes available
+  const { pushToken } = useNotifications(user?.id);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -110,7 +123,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const newProfile = await profileService.createProfile(profileData);
       setProfile(newProfile);
-      // Force refresh the auth state to trigger navigation
       await refreshProfile();
     } catch (error) {
       console.error("Create profile error:", error);
@@ -119,6 +131,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const signOut = async () => {
+    // 🔔 NEW: Clean up push token on sign out
+    if (user?.id) {
+      try {
+        const { notificationService } =
+          await import("../models/services/notification.service");
+        await notificationService.removeUserTokens(user.id);
+      } catch (err) {
+        console.error("Error removing push tokens on sign out:", err);
+      }
+    }
+
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
@@ -135,6 +158,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       ? SUBMIT_ALLOWED_ROLES.includes(profile.role)
       : false,
     isAdmin: profile ? ADMIN_ROLES.includes(profile.role) : false,
+    pushToken, // 🔔 NEW
     refreshProfile,
     signOut,
     createProfile,

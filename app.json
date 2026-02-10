@@ -38,11 +38,24 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2E86C1"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8387f5f4-466c-444e-b562-0979b6ce001e"
+      }
+    },
+    "owner": "tyelerr"
   }
 }
