@@ -13,7 +13,6 @@ import { styles } from "./home.styles";
 export default function HomeScreen() {
   const scrollRef = useScrollToTopOnFocus();
   const {
-    firstName,
     newsItems,
     newsLoading,
     refreshing,
@@ -33,8 +32,6 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>HOME</Text>
       </View>
-
-      <Text style={styles.welcome}>Welcome back, {firstName}! 👋</Text>
 
       <HomeTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 

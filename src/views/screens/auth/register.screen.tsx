@@ -38,8 +38,6 @@ export const RegisterScreen = () => {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [homeState, setHomeState] = useState("");
-  const [homeCity, setHomeCity] = useState("");
-  const [zipCode, setZipCode] = useState("");
   const [preferredGame, setPreferredGame] = useState("");
   const [favoritePlayer, setFavoritePlayer] = useState("");
 
@@ -70,8 +68,6 @@ export const RegisterScreen = () => {
     setName("");
     setUsername("");
     setHomeState("");
-    setHomeCity("");
-    setZipCode("");
     setPreferredGame("");
     setFavoritePlayer("");
     setAgreeTerms(false);
@@ -160,8 +156,6 @@ export const RegisterScreen = () => {
         name: toTitleCase(name),
         user_name: username.toLowerCase(),
         home_state: homeState,
-        home_city: homeCity || undefined,
-        zip_code: zipCode || undefined,
         preferred_game: preferredGame || undefined,
         favorite_player: favoritePlayer || undefined,
       };
@@ -355,24 +349,6 @@ export const RegisterScreen = () => {
           options={US_STATES}
           value={homeState}
           onSelect={setHomeState}
-        />
-
-        <Input
-          label="Home City"
-          value={homeCity}
-          onChangeText={setHomeCity}
-          placeholder="City (optional)"
-          autoCapitalize="words"
-        />
-
-        <Input
-          label="Zip Code"
-          value={zipCode}
-          onChangeText={setZipCode}
-          placeholder="12345 (optional)"
-          keyboardType="numeric"
-          textContentType={IS_IOS ? "postalCode" : undefined}
-          autoComplete="postal-code"
         />
 
         <Input

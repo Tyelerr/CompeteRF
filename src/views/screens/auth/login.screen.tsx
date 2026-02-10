@@ -47,7 +47,7 @@ export const LoginScreen = () => {
         .from("profiles")
         .select("id")
         .eq("id", data.user?.id)
-        .single();
+        .maybeSingle();
 
       if (profile) {
         router.replace("/(tabs)");

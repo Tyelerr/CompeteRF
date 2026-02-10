@@ -161,6 +161,9 @@ export default function TournamentDetailScreen() {
             <View style={styles.leftContent}>
               {/* Badges */}
               <View style={styles.badges}>
+                <View style={styles.idBadge}>
+                  <Text style={styles.idText}>ID: {tournament.id}</Text>
+                </View>
                 <View style={styles.gameTypeBadge}>
                   <Text style={styles.gameTypeText}>
                     {tournament.game_type}
@@ -254,6 +257,12 @@ export default function TournamentDetailScreen() {
           {/* Details */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>🎱 Details</Text>
+            {tournament.table_size && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Table Size:</Text>
+                <Text style={styles.detailValue}>{tournament.table_size}</Text>
+              </View>
+            )}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Reports to Fargo:</Text>
               <Text style={styles.detailValue}>
@@ -439,6 +448,19 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: SPACING.sm,
     marginBottom: SPACING.md,
+  },
+  idBadge: {
+    backgroundColor: "#000000",
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  idText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
   },
   gameTypeBadge: {
     backgroundColor: COLORS.primary,
