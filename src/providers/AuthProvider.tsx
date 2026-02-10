@@ -1,7 +1,13 @@
 // src/providers/AuthProvider.tsx
 // ═══════════════════════════════════════════════════════════
-// UPDATED: Added push notification registration on login
-// Changes marked with // 🔔 NEW
+// UPDATED: Single auth session hydration via RPC
+//
+// WHAT CHANGED:
+// - Replaced fetchProfile() with hydrateAuthSession()
+//   that calls get_auth_session() RPC (1 query instead of 1)
+// - Populates Zustand store directly (kills the double fetch)
+// - Context still exists for backward compat but reads from store
+// - Push notifications still work exactly the same
 // ═══════════════════════════════════════════════════════════
 
 import { Session, User } from "@supabase/supabase-js";
@@ -15,8 +21,10 @@ import {
 import { supabase } from "../lib/supabase";
 import { profileService } from "../models/services/profile.service";
 import { Profile, ProfileInsert } from "../models/types/profile.types";
-import { useNotifications } from "../viewmodels/hooks/use.notifications"; // 🔔 NEW
+import { useNotifications } from "../viewmodels/hooks/use.notifications";
+import { useAuthStore } from "../viewmodels/stores/auth.store";
 
+// ── Context type (kept for backward compat) ────────────────
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -25,8 +33,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   canSubmitTournaments: boolean;
   isAdmin: boolean;
-  pushToken: string | null; // 🔔 NEW
-  refreshProfile: () => Promise<void>;
+  pushToken: string | null;
+  refreshSession: () => Promise<void>; // renamed from refreshProfile
+  refreshProfile: () => Promise<void>; // kept for backward compat
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
 }
@@ -48,7 +57,8 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   canSubmitTournaments: false,
   isAdmin: false,
-  pushToken: null, // 🔔 NEW
+  pushToken: null,
+  refreshSession: async () => {},
   refreshProfile: async () => {},
   signOut: async () => {},
   createProfile: async () => {},
@@ -61,41 +71,49 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔔 NEW: Push notification registration
-  // Automatically registers token when user.id becomes available
+  // Zustand store — single source of truth
+  const { profile, hydrateSession, reset: resetStore } = useAuthStore();
+
+  // 🔔 Push notification registration
   const { pushToken } = useNotifications(user?.id);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setLoading(false);
+  // ── Session hydration via RPC ──────────────────────────
+  const hydrateAuthSession = async (userId: string) => {
+    try {
+      const { data, error } = await supabase.rpc("get_auth_session");
+
+      if (error) {
+        console.error("Auth session RPC error:", error);
+        // Fallback: fetch profile directly (in case RPC isn't deployed yet)
+        await fallbackFetchProfile(userId);
+        return;
       }
-    });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
+      if (!data || !data.profile) {
+        // New user — no profile yet
+        hydrateSession(null, [], []);
+        return;
       }
-    });
 
-    return () => subscription.unsubscribe();
-  }, []);
+      // Hydrate the Zustand store with everything from one call
+      hydrateSession(
+        data.profile as Profile,
+        data.owned_venue_ids || [],
+        data.directed_venue_ids || [],
+      );
+    } catch (error) {
+      console.error("Auth session hydration error:", error);
+      await fallbackFetchProfile(userId);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const fetchProfile = async (userId: string) => {
+  // Fallback in case the RPC isn't deployed yet
+  // (remove this once you've confirmed the RPC works)
+  const fallbackFetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -104,34 +122,70 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         .maybeSingle();
 
       if (error) throw error;
-      setProfile(data);
+      hydrateSession(data as Profile | null, [], []);
     } catch (error) {
-      console.error("Fetch profile error:", error);
-      setProfile(null);
+      console.error("Fallback profile fetch error:", error);
+      hydrateSession(null, [], []);
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshProfile = async () => {
+  // ── Auth state listener ────────────────────────────────
+  useEffect(() => {
+    // Check for existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        hydrateAuthSession(session.user.id);
+      } else {
+        hydrateSession(null, [], []);
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes (login, logout, token refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        hydrateAuthSession(session.user.id);
+      } else {
+        resetStore();
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Refresh the full session (re-calls RPC) ───────────
+  const refreshSession = async () => {
     if (user?.id) {
-      await fetchProfile(user.id);
+      await hydrateAuthSession(user.id);
     }
   };
 
+  // ── Create profile (new user signup) ───────────────────
   const createProfile = async (profileData: ProfileInsert) => {
     try {
-      const newProfile = await profileService.createProfile(profileData);
-      setProfile(newProfile);
-      await refreshProfile();
+      await profileService.createProfile(profileData);
+      // Re-hydrate the full session so venue IDs etc. are loaded
+      if (user?.id) {
+        await hydrateAuthSession(user.id);
+      }
     } catch (error) {
       console.error("Create profile error:", error);
       throw error;
     }
   };
 
+  // ── Sign out ───────────────────────────────────────────
   const signOut = async () => {
-    // 🔔 NEW: Clean up push token on sign out
+    // Clean up push token
     if (user?.id) {
       try {
         const { notificationService } =
@@ -145,21 +199,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
-    setProfile(null);
+    resetStore();
   };
 
+  // ── Context value ──────────────────────────────────────
+  // Profile is read from Zustand store (single source of truth)
   const value: AuthContextType = {
     session,
     user,
-    profile,
+    profile, // ← from Zustand via destructuring above
     loading,
-    isAuthenticated: !!user,
+    isAuthenticated: !!profile,
     canSubmitTournaments: profile
       ? SUBMIT_ALLOWED_ROLES.includes(profile.role)
       : false,
     isAdmin: profile ? ADMIN_ROLES.includes(profile.role) : false,
-    pushToken, // 🔔 NEW
-    refreshProfile,
+    pushToken,
+    refreshSession,
+    refreshProfile: refreshSession, // backward compat alias
     signOut,
     createProfile,
   };

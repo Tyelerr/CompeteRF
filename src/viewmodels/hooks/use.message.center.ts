@@ -22,7 +22,7 @@ import {
 } from "../../models/types/notification.types";
 import { useAuthContext } from "../../providers/AuthProvider";
 
-// ── Types ──
+// —— Types ——
 
 interface MessageTarget {
   id: number | string;
@@ -60,28 +60,38 @@ export function useMessageCenter(): UseMessageCenterReturn {
   const userId = user?.id;
   const role = (profile?.role || "basic_user") as SenderRole;
 
-  // ── State ──
+  // —— State ——
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<"send" | "sent">("send");
   const [form, setForm] = useState<ComposeMessageForm>(INITIAL_COMPOSE_FORM);
   const [targets, setTargets] = useState<MessageTarget[]>([]);
-  const [selectedTargetId, setSelectedTargetId] = useState<
-    number | string | null
-  >(null);
+  const [selectedTargetId, setSelectedTargetId] = useState<number | string | null>(null);
   const [recipientCount, setRecipientCount] = useState(0);
   const [rateLimit, setRateLimit] = useState<RateLimitStatus | null>(null);
   const [sentMessages, setSentMessages] = useState<MessageStats[]>([]);
 
-  // ── Load Targets (tournaments/venues the user can message) ──
+  // —— Load Targets (tournaments/venues the user can message) ——
   const loadTargets = useCallback(async () => {
     if (!userId) return;
 
     try {
       const loadedTargets: MessageTarget[] = [];
 
-      if (role === "tournament_director") {
+      if (role === "super_admin") {
+        // Super admin can message all users
+        const { count } = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true });
+
+        loadedTargets.push({
+          id: "all_users",
+          name: "All Users",
+          type: "venue",
+          favoriteCount: count || 0,
+        });
+      } else if (role === "tournament_director") {
         const { data: tournaments } = await supabase
           .from("tournaments")
           .select("id, name")
@@ -139,12 +149,17 @@ export function useMessageCenter(): UseMessageCenterReturn {
       }
 
       setTargets(loadedTargets);
+
+      // Auto-select for super admin since there's only one option
+      if (role === "super_admin" && loadedTargets.length === 1) {
+        selectTarget("all_users", "all_users", "All Users");
+      }
     } catch (err) {
       console.error("Error loading targets:", err);
     }
   }, [userId, role]);
 
-  // ── Load Rate Limit ──
+  // —— Load Rate Limit ——
   const loadRateLimit = useCallback(async () => {
     if (!userId) return;
     try {
@@ -155,7 +170,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, role]);
 
-  // ── Load Sent Messages ──
+  // —— Load Sent Messages ——
   const loadSentMessages = useCallback(async () => {
     if (!userId) return;
     try {
@@ -199,7 +214,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId]);
 
-  // ── Load All ──
+  // —— Load All ——
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -215,7 +230,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, loadAll]);
 
-  // ── Select Target ──
+  // —— Select Target ——
   const updateRecipientCount = useCallback(
     async (type: TargetType, id: number | string | null) => {
       try {
@@ -268,7 +283,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     updateRecipientCount(type, id);
   }
 
-  // ── Form Updates ──
+  // —— Form Updates ——
   function updateSubject(subject: string) {
     setForm((prev) => ({ ...prev, subject }));
   }
@@ -285,7 +300,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
       form.target_type === "state") &&
     recipientCount > 0;
 
-  // ── Resolve Recipients ──
+  // —— Resolve Recipients ——
   async function resolveRecipients(
     targetType: TargetType,
     tournamentId: number | null,
@@ -346,7 +361,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }
 
-  // ── Send Message ──
+  // —— Send Message ——
   async function handleSend(): Promise<void> {
     if (!userId || !isFormValid || !rateLimit?.allowed) return;
 
@@ -466,7 +481,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     );
   }
 
-  // ── Refresh ──
+  // —— Refresh ——
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadAll();
