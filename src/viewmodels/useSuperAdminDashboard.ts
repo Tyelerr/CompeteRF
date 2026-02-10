@@ -15,6 +15,7 @@ export interface SuperAdminStats {
   totalViews: number;
   totalFavorites: number;
   totalGiveaways: number;
+  pendingBarRequests: number;
 }
 
 export const useSuperAdminDashboard = () => {
@@ -31,6 +32,7 @@ export const useSuperAdminDashboard = () => {
     totalViews: 0,
     totalFavorites: 0,
     totalGiveaways: 0,
+    pendingBarRequests: 0,
   });
 
   const [eventTypeStats, setEventTypeStats] = useState<EventTypeStats[]>([]);
@@ -130,6 +132,12 @@ export const useSuperAdminDashboard = () => {
 
       const giveawayCount = 0;
 
+      // Get pending bar requests count
+      const { count: barRequestCount } = await supabase
+        .from("bar_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+
       setStats({
         totalUsers: userCount || 0,
         totalTournaments: tournamentCount || 0,
@@ -139,6 +147,7 @@ export const useSuperAdminDashboard = () => {
         totalViews: viewsCount || 0,
         totalFavorites: favoritesCount || 0,
         totalGiveaways: giveawayCount || 0,
+        pendingBarRequests: barRequestCount || 0,
       });
     } catch (error) {
       console.error("Error loading stats:", error);

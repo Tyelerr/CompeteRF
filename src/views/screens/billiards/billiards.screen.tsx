@@ -11,7 +11,10 @@ import {
   View,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
+import { SPACING } from "../../../theme/spacing";
+import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
+import { useRecommendVenue } from "../../../viewmodels/hooks/use.recommend.venue";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useBilliards } from "../../../viewmodels/useBilliards";
 import { usePagination } from "../../../viewmodels/usePagination";
@@ -20,6 +23,7 @@ import { Dropdown } from "../../components/common/dropdown";
 import { FilterModal } from "../../components/common/filter-modal";
 import { Loading } from "../../components/common/loading";
 import { Pagination } from "../../components/common/pagination";
+import { RecommendVenueModal } from "../../components/common/RecommendVenueModal";
 import { styles } from "./billiards.styles";
 
 const ITEMS_PER_PAGE = 20;
@@ -28,6 +32,7 @@ const NUM_COLUMNS = 2;
 export const BilliardsScreen = () => {
   const router = useRouter();
   const vm = useBilliards();
+  const recommend = useRecommendVenue();
   const scrollRef = useScrollToTopOnFocus();
 
   const pagination = usePagination(vm.filteredTournaments as any, {
@@ -46,12 +51,18 @@ export const BilliardsScreen = () => {
     vm.filters,
   ]);
 
-  const stateOptions = [{ label: "State", value: "" }, ...US_STATES];
+  const stateOptions = [{ label: "All States", value: "" }, ...US_STATES];
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
   const showRadiusBar = vm.zipCode.length > 0;
 
-  // ── Render helpers ─────────────────────────────────────────────────────
+  // Get display name for a state abbreviation
+  const getStateName = (abbrev: string) => {
+    const found = US_STATES.find((s) => s.value === abbrev);
+    return found ? found.label : abbrev;
+  };
+
+  // —— Render helpers —————————————————————————————————————————————————
 
   const renderPagination = () => (
     <Pagination
@@ -71,19 +82,161 @@ export const BilliardsScreen = () => {
     <BilliardsTournamentCard
       tournament={item as any}
       isFavorited={vm.favorites.includes(item.id)}
-      onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`)}
+      onPress={() =>
+        router.push(
+          `/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`,
+        )
+      }
       onToggleFavorite={() => vm.toggleFavorite(item.id)}
       getTournamentImageUrl={vm.getTournamentImageUrl}
     />
   );
 
-  // ── Loading state ──────────────────────────────────────────────────────
+  const renderRecommendCard = () => {
+    if (!vm.user || vm.filteredTournaments.length >= 15) return null;
+
+    return (
+      <View
+        style={{
+          backgroundColor: COLORS.surface,
+          borderRadius: 12,
+          padding: SPACING.md,
+          marginHorizontal: SPACING.xs,
+          marginTop: SPACING.md,
+          marginBottom: SPACING.md,
+          borderWidth: 1,
+          borderColor: COLORS.primary + "30",
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ fontSize: 24, marginBottom: 8 }}>🎱</Text>
+        <Text
+          style={{
+            fontSize: FONT_SIZES.md,
+            fontWeight: "600",
+            color: COLORS.text,
+            textAlign: "center",
+          }}
+        >
+          Know a spot that hosts pool tournaments?
+        </Text>
+        <Text
+          style={{
+            fontSize: FONT_SIZES.sm,
+            color: COLORS.textSecondary,
+            textAlign: "center",
+            marginTop: 4,
+            marginBottom: 12,
+          }}
+        >
+          Help us grow the community — recommend a venue!
+        </Text>
+        <TouchableOpacity
+          style={{
+            backgroundColor: COLORS.primary,
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            borderRadius: 8,
+          }}
+          onPress={recommend.open}
+        >
+          <Text
+            style={{
+              color: "#fff",
+              fontWeight: "600",
+              fontSize: FONT_SIZES.sm,
+            }}
+          >
+            Recommend a Venue
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderEmptyState = () => {
+    // State is selected but has no tournaments — suggest search alert
+    if (vm.isStateFilterEmpty && vm.selectedState) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🎱</Text>
+          <Text style={styles.emptyText}>
+            No tournaments in {getStateName(vm.selectedState)} yet
+          </Text>
+          <Text style={styles.emptySubtext}>
+            Get notified when tournaments are added here
+          </Text>
+          {vm.user ? (
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.primary,
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 8,
+                marginTop: 16,
+              }}
+              onPress={() =>
+                router.push(
+                  `/search-alerts/create?state=${vm.selectedState}` as any,
+                )
+              }
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+                Create Search Alert
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={{
+                backgroundColor: COLORS.primary,
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 8,
+                marginTop: 16,
+              }}
+              onPress={() => router.push("/auth/register")}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+                Sign Up for Alerts
+              </Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={{ marginTop: 12 }}
+            onPress={() => vm.setSelectedState("")}
+          >
+            <Text style={{ color: COLORS.primary, fontSize: 14 }}>
+              View all tournaments instead
+            </Text>
+          </TouchableOpacity>
+          {vm.user && (
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={recommend.open}>
+              <Text style={{ color: COLORS.primary, fontSize: 14 }}>
+                Or recommend a venue in this area
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    }
+
+    // Generic empty
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyIcon}>🎱</Text>
+        <Text style={styles.emptyText}>No tournaments found</Text>
+        <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+      </View>
+    );
+  };
+
+  // —— Loading state ——————————————————————————————————————————————————
 
   if (vm.loading) {
     return <Loading fullScreen message="Loading tournaments..." />;
   }
 
-  // ── Main render ────────────────────────────────────────────────────────
+  // —— Main render ————————————————————————————————————————————————————
 
   return (
     <View style={styles.container}>
@@ -94,6 +247,32 @@ export const BilliardsScreen = () => {
           Browse all billiards tournaments by game type and location
         </Text>
       </View>
+
+      {/* Home state banner */}
+      {vm.isHomeStateEmpty && (
+        <View
+          style={{
+            backgroundColor: COLORS.primary + "15",
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            marginHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: COLORS.primary + "30",
+          }}
+        >
+          <Text
+            style={{
+              color: COLORS.text,
+              fontSize: 13,
+              textAlign: "center",
+            }}
+          >
+            No tournaments in your state yet — showing all tournaments
+          </Text>
+        </View>
+      )}
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
@@ -114,7 +293,7 @@ export const BilliardsScreen = () => {
         <View style={styles.filterItem}>
           <Text style={styles.filterLabel}>State</Text>
           <Dropdown
-            placeholder="State"
+            placeholder="All States"
             options={stateOptions}
             value={vm.selectedState}
             onSelect={vm.setSelectedState}
@@ -196,11 +375,7 @@ export const BilliardsScreen = () => {
           <Text style={styles.errorText}>{vm.error}</Text>
         </View>
       ) : pagination.paginatedItems.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🎱</Text>
-          <Text style={styles.emptyText}>No tournaments found</Text>
-          <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
-        </View>
+        renderEmptyState()
       ) : (
         <FlatList
           ref={scrollRef}
@@ -219,7 +394,10 @@ export const BilliardsScreen = () => {
             />
           }
           ListFooterComponent={
-            pagination.totalCount > 0 ? renderPagination() : null
+            <>
+              {pagination.totalCount > 0 && renderPagination()}
+              {renderRecommendCard()}
+            </>
           }
         />
       )}
@@ -231,6 +409,9 @@ export const BilliardsScreen = () => {
         filters={vm.filters}
         onApply={vm.setFilters}
       />
+
+      {/* Recommend Venue Modal */}
+      <RecommendVenueModal vm={recommend} />
     </View>
   );
 };

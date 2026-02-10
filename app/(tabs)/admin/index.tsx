@@ -1,7 +1,7 @@
 // app/(tabs)/admin/index.tsx
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Added Messages card to every role dashboard
-// Changes marked with // 🔔 NEW
+// UPDATED: Replaced Activity Log with Bar Requests (super admin)
 // ═══════════════════════════════════════════════════════════
 
 import { useRouter } from "expo-router";
@@ -152,7 +152,6 @@ const TDDashboard = () => {
           label="Analytics"
           onPress={() => router.push("/(tabs)/admin/director-analytics" as any)}
         />
-        {/* 🔔 NEW: Messages card */}
         <StatCard
           icon="✉️"
           label="Messages"
@@ -255,7 +254,6 @@ const BarOwnerDashboard = () => {
             router.push("/(tabs)/admin/bar-owner-analytics" as any)
           }
         />
-        {/* 🔔 NEW: Messages card */}
         <StatCard
           icon="✉️"
           label="Messages"
@@ -365,7 +363,6 @@ const CompeteAdminDashboard = () => {
           subtitle="Recent changes"
           onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
         />
-        {/* 🔔 NEW: Messages card */}
         <ManagementCard
           icon="✉️"
           label="Messages"
@@ -478,10 +475,11 @@ const SuperAdminDashboard = () => {
           onPress={() => router.push("/(tabs)/admin/featured-content" as any)}
         />
         <ManagementCard
-          icon="📋"
-          label="Activity Log"
-          subtitle="Recent changes"
-          onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
+          icon="📩"
+          label="Bar Requests"
+          value={vm.stats.pendingBarRequests}
+          subtitle="pending reviews"
+          onPress={() => router.push("/(tabs)/admin/bar-requests" as any)}
         />
         <ManagementCard
           icon="🎁"
@@ -491,7 +489,6 @@ const SuperAdminDashboard = () => {
             router.push("/(tabs)/admin/giveaway-management" as any)
           }
         />
-        {/* 🔔 NEW: Messages card */}
         <ManagementCard
           icon="✉️"
           label="Messages"
