@@ -145,15 +145,15 @@ export default function SearchAlertsScreen() {
   };
 
   const handleCreate = () => {
-    router.push("/search-alerts/create" as any);
+    router.push("/(tabs)/search-alerts/create" as any);
   };
 
   const handleEdit = (alertId: number) => {
-    router.push(`/search-alerts/edit/${alertId}` as any);
+    router.push(`/(tabs)/search-alerts/edit/${alertId}` as any);
   };
 
   const handleViewMatches = (alertId: number) => {
-    router.push(`/search-alerts/matches/${alertId}` as any);
+    router.push(`/(tabs)/search-alerts/matches/${alertId}` as any);
   };
 
   const handleDelete = (alert: SearchAlert) => {
@@ -250,7 +250,7 @@ export default function SearchAlertsScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push("/(tabs)/profile" as any)}
         >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>

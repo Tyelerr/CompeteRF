@@ -507,7 +507,7 @@ export default function ProfileScreen() {
                   tournament={tournamentData}
                   onPress={() =>
                     router.push(
-                      `/tournament-detail?id=${fav.tournament_id}` as any,
+                      `/(tabs)/tournament-detail?id=${fav.tournament_id}&from=/(tabs)/profile` as any,
                     )
                   }
                   onToggleFavorite={() => {

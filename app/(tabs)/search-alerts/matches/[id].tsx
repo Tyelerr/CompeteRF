@@ -53,7 +53,7 @@ function TournamentCard({ match }: { match: AlertMatch }) {
   if (!tournament) return null;
 
   const handlePress = () => {
-    router.push(`/tournament-detail?id=${tournament.id}` as any);
+    router.push(`/(tabs)/tournament-detail?id=${tournament.id}&from=/(tabs)/search-alerts` as any);
   };
 
   const handleShare = async () => {

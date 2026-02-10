@@ -272,7 +272,16 @@ export const useTournamentDetail = (
     }
   };
 
-  const goBack = () => router.back();
+  const goBack = () => {
+    const from = (params as any).from;
+    if (from) {
+      router.push(from as any);
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push("/(tabs)/billiards" as any);
+    }
+  };
 
   return {
     // State

@@ -71,7 +71,7 @@ export const BilliardsScreen = () => {
     <BilliardsTournamentCard
       tournament={item as any}
       isFavorited={vm.favorites.includes(item.id)}
-      onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}`)}
+      onPress={() => router.push(`/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`)}
       onToggleFavorite={() => vm.toggleFavorite(item.id)}
       getTournamentImageUrl={vm.getTournamentImageUrl}
     />

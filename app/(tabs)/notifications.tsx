@@ -516,7 +516,7 @@ export default function NotificationsScreen() {
                     }}
                     onDelete={() => deleteNotification(msg.id)}
                     onTournamentPress={(id) =>
-                      router.push(`/tournament-detail?id=${id}` as any)
+                      router.push(`/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any)
                     }
                   />
                 ))}
