@@ -15,10 +15,12 @@ import { supabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
+import { Pagination } from "../../src/views/components/common/pagination";
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 
 interface Favorite {
@@ -149,6 +151,20 @@ export default function ProfileScreen() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
+
+  // Pagination - 5 favorites per page
+  const {
+    paginatedItems: paginatedFavorites,
+    currentPage,
+    totalPages,
+    totalCount,
+    displayRange,
+    nextPage,
+    prevPage,
+    canGoNext,
+    canGoPrev,
+    resetPage,
+  } = usePagination(favorites, { itemsPerPage: 5 });
 
   useEffect(() => {
     checkUser();
@@ -319,6 +335,20 @@ export default function ProfileScreen() {
     return `PL-${String(idAuto).padStart(6, "0")}`;
   };
 
+  const handleRemoveFavorite = (favId: number) => {
+    const removeFavorite = async () => {
+      await supabase.from("favorites").delete().eq("id", favId);
+      const updated = favorites.filter((f) => f.id !== favId);
+      setFavorites(updated);
+      // If removing the last item on the current page, go back a page
+      const newTotalPages = Math.ceil(updated.length / 5);
+      if (currentPage > newTotalPages && newTotalPages > 0) {
+        prevPage();
+      }
+    };
+    removeFavorite();
+  };
+
   if (loading) {
     return <Loading fullScreen message="Loading..." />;
   }
@@ -487,45 +517,50 @@ export default function ProfileScreen() {
               </Text>
             </View>
           ) : (
-            favorites.map((fav) => {
-              const tournamentData = {
-                id: fav.tournament_id,
-                name: fav.tournaments?.name || "Unknown Tournament",
-                game_type: fav.tournaments?.game_type || "Unknown",
-                tournament_date: fav.tournaments?.tournament_date || "",
-                thumbnail: fav.tournaments?.thumbnail,
-                venues: {
-                  venue: fav.tournaments?.venues?.venue || "Unknown Venue",
-                  city: fav.tournaments?.venues?.city || "Unknown City",
-                  state: fav.tournaments?.venues?.state || "Unknown State",
-                },
-              };
+            <>
+              <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />{paginatedFavorites.map((fav) => {
+                const tournamentData = {
+                  id: fav.tournament_id,
+                  name: fav.tournaments?.name || "Unknown Tournament",
+                  game_type: fav.tournaments?.game_type || "Unknown",
+                  tournament_date: fav.tournaments?.tournament_date || "",
+                  thumbnail: fav.tournaments?.thumbnail,
+                  venues: {
+                    venue: fav.tournaments?.venues?.venue || "Unknown Venue",
+                    city: fav.tournaments?.venues?.city || "Unknown City",
+                    state: fav.tournaments?.venues?.state || "Unknown State",
+                  },
+                };
 
-              return (
-                <FavoriteTournamentCard
-                  key={fav.id}
-                  tournament={tournamentData}
-                  onPress={() =>
-                    router.push(
-                      `/(tabs)/tournament-detail?id=${fav.tournament_id}&from=/(tabs)/profile` as any,
-                    )
-                  }
-                  onToggleFavorite={() => {
-                    const removeFavorite = async () => {
-                      await supabase
-                        .from("favorites")
-                        .delete()
-                        .eq("id", fav.id);
-                      setFavorites(favorites.filter((f) => f.id !== fav.id));
-                    };
-                    removeFavorite();
-                  }}
-                  onShare={() => handleShare(fav.tournaments)}
-                  onViewImage={() => handleViewImage(tournamentData)}
-                  getTournamentImageUrl={getTournamentImageUrl}
-                />
-              );
-            })
+                return (
+                  <FavoriteTournamentCard
+                    key={fav.id}
+                    tournament={tournamentData}
+                    onPress={() =>
+                      router.push(
+                        `/(tabs)/tournament-detail?id=${fav.tournament_id}&from=/(tabs)/profile` as any,
+                      )
+                    }
+                    onToggleFavorite={() => handleRemoveFavorite(fav.id)}
+                    onShare={() => handleShare(fav.tournaments)}
+                    onViewImage={() => handleViewImage(tournamentData)}
+                    getTournamentImageUrl={getTournamentImageUrl}
+                  />
+                );
+              })}
+
+              <Pagination
+                totalCount={totalCount}
+                displayStart={displayRange.start}
+                displayEnd={displayRange.end}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPrevPage={prevPage}
+                onNextPage={nextPage}
+                canGoPrev={canGoPrev}
+                canGoNext={canGoNext}
+              />
+            </>
           )}
         </View>
       </ScrollView>
