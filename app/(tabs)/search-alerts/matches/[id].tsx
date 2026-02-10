@@ -11,13 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { searchAlertService } from "../../../src/models/services/search-alert.service";
-import { AlertMatch } from "../../../src/models/types/search-alert.types";
-import { COLORS } from "../../../src/theme/colors";
-import { RADIUS, SPACING } from "../../../src/theme/spacing";
-import { FONT_SIZES } from "../../../src/theme/typography";
-import { Loading } from "../../../src/views/components/common/loading";
-import { Pagination } from "../../../src/views/components/common/pagination";
+import { searchAlertService } from "../../../../src/models/services/search-alert.service";
+import { AlertMatch } from "../../../../src/models/types/search-alert.types";
+import { COLORS } from "../../../../src/theme/colors";
+import { RADIUS, SPACING } from "../../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../../src/theme/typography";
+import { Loading } from "../../../../src/views/components/common/loading";
+import { Pagination } from "../../../../src/views/components/common/pagination";
 
 // Game type to image mapping (same as profile/billiards)
 const gameTypeImageMap: Record<string, string> = {
