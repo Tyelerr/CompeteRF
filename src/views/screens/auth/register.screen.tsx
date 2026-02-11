@@ -3,6 +3,7 @@
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -430,10 +431,35 @@ export const RegisterScreen = () => {
         <TouchableOpacity
           style={styles.checkbox}
           onPress={() => setAgreeTerms(!agreeTerms)}
+          activeOpacity={0.7}
         >
           <Text style={styles.checkboxIcon}>{agreeTerms ? "☑" : "☐"}</Text>
           <Text style={styles.checkboxText}>
-            I agree to the Terms of Service and Privacy Policy
+            I agree to the{" "}
+            <Text
+              style={styles.policyLink}
+              onPress={() => Linking.openURL("https://TheCompeteApp.com/terms")}
+            >
+              Terms of Service
+            </Text>
+            ,{" "}
+            <Text
+              style={styles.policyLink}
+              onPress={() =>
+                Linking.openURL("https://TheCompeteApp.com/privacy")
+              }
+            >
+              Privacy Policy
+            </Text>
+            , and{" "}
+            <Text
+              style={styles.policyLink}
+              onPress={() =>
+                Linking.openURL("https://TheCompeteApp.com/content-policy")
+              }
+            >
+              Content Policy
+            </Text>
           </Text>
         </TouchableOpacity>
 
@@ -581,6 +607,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlignVertical: "center",
     lineHeight: 28,
+  },
+  policyLink: {
+    color: COLORS.primary,
+    textDecorationLine: "underline",
+    fontWeight: "600",
   },
   error: {
     color: COLORS.error,
