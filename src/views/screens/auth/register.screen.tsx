@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   Linking,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -428,12 +429,18 @@ export const RegisterScreen = () => {
 
         <Text style={styles.sectionTitle}>Terms & Conditions</Text>
 
-        <TouchableOpacity
+        <Pressable
           style={styles.checkbox}
           onPress={() => setAgreeTerms(!agreeTerms)}
-          activeOpacity={0.7}
         >
-          <Text style={styles.checkboxIcon}>{agreeTerms ? "☑" : "☐"}</Text>
+          <View
+            style={[
+              styles.checkboxBox,
+              agreeTerms && styles.checkboxBoxChecked,
+            ]}
+          >
+            {agreeTerms && <Text style={styles.checkboxCheck}>✓</Text>}
+          </View>
           <Text style={styles.checkboxText}>
             I agree to the{" "}
             <Text
@@ -461,15 +468,19 @@ export const RegisterScreen = () => {
               Content Policy
             </Text>
           </Text>
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
+        <Pressable
           style={styles.checkbox}
           onPress={() => setAgreeAge(!agreeAge)}
         >
-          <Text style={styles.checkboxIcon}>{agreeAge ? "☑" : "☐"}</Text>
+          <View
+            style={[styles.checkboxBox, agreeAge && styles.checkboxBoxChecked]}
+          >
+            {agreeAge && <Text style={styles.checkboxCheck}>✓</Text>}
+          </View>
           <Text style={styles.checkboxText}>I am 18 years or older</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -595,11 +606,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: SPACING.md,
+    minHeight: 40,
   },
-  checkboxIcon: {
-    fontSize: 32,
-    color: COLORS.primary,
+  checkboxBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.textSecondary,
     marginRight: SPACING.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxBoxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  checkboxCheck: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   checkboxText: {
     color: COLORS.textSecondary,
