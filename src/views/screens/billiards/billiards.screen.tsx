@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
   FlatList,
   Keyboard,
+  Pressable,
   RefreshControl,
   Text,
   TextInput,
@@ -62,7 +63,7 @@ export const BilliardsScreen = () => {
     return found ? found.label : abbrev;
   };
 
-  // —— Render helpers —————————————————————————————————————————————————
+  // —— Render helpers ————————————————————————————————————————————————
 
   const renderPagination = () => (
     <Pagination
@@ -92,8 +93,10 @@ export const BilliardsScreen = () => {
     />
   );
 
+  // —— Recommend Venue Card (reused in empty state + footer) ——————————
+
   const renderRecommendCard = () => {
-    if (!vm.user || vm.filteredTournaments.length >= 15) return null;
+    if (!vm.user) return null;
 
     return (
       <View
@@ -154,8 +157,10 @@ export const BilliardsScreen = () => {
     );
   };
 
+  // —— Empty State ————————————————————————————————————————————————————
+
   const renderEmptyState = () => {
-    // State is selected but has no tournaments — suggest search alert
+    // State is selected but has no tournaments — suggest search alert + recommend
     if (vm.isStateFilterEmpty && vm.selectedState) {
       return (
         <View style={styles.emptyContainer}>
@@ -201,21 +206,21 @@ export const BilliardsScreen = () => {
               </Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={{ marginTop: 12 }}
-            onPress={() => vm.setSelectedState("")}
-          >
-            <Text style={{ color: COLORS.primary, fontSize: 14 }}>
-              View all tournaments instead
-            </Text>
-          </TouchableOpacity>
-          {vm.user && (
-            <TouchableOpacity style={{ marginTop: 8 }} onPress={recommend.open}>
-              <Text style={{ color: COLORS.primary, fontSize: 14 }}>
-                Or recommend a venue in this area
-              </Text>
-            </TouchableOpacity>
-          )}
+
+          {/* Recommend Venue Card */}
+          {renderRecommendCard()}
+        </View>
+      );
+    }
+
+    // Home state had no tournaments — showing all, with a note
+    if (vm.isHomeStateEmpty) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>🎱</Text>
+          <Text style={styles.emptyText}>No tournaments found</Text>
+          <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+          {renderRecommendCard()}
         </View>
       );
     }
@@ -226,6 +231,7 @@ export const BilliardsScreen = () => {
         <Text style={styles.emptyIcon}>🎱</Text>
         <Text style={styles.emptyText}>No tournaments found</Text>
         <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+        {renderRecommendCard()}
       </View>
     );
   };
@@ -239,7 +245,7 @@ export const BilliardsScreen = () => {
   // —— Main render ————————————————————————————————————————————————————
 
   return (
-    <View style={styles.container}>
+    <Pressable style={styles.container} onPress={Keyboard.dismiss}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
@@ -284,6 +290,8 @@ export const BilliardsScreen = () => {
             placeholderTextColor={COLORS.textMuted}
             value={vm.searchQuery}
             onChangeText={vm.setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={Keyboard.dismiss}
           />
         </View>
       </View>
@@ -318,6 +326,8 @@ export const BilliardsScreen = () => {
             onChangeText={vm.setZipCode}
             keyboardType="numeric"
             maxLength={5}
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
           />
         </View>
       </View>
@@ -386,6 +396,8 @@ export const BilliardsScreen = () => {
           contentContainerStyle={styles.list}
           columnWrapperStyle={styles.row}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={vm.refreshing}
@@ -396,7 +408,7 @@ export const BilliardsScreen = () => {
           ListFooterComponent={
             <>
               {pagination.totalCount > 0 && renderPagination()}
-              {renderRecommendCard()}
+              {vm.filteredTournaments.length < 15 && renderRecommendCard()}
             </>
           }
         />
@@ -412,7 +424,7 @@ export const BilliardsScreen = () => {
 
       {/* Recommend Venue Modal */}
       <RecommendVenueModal vm={recommend} />
-    </View>
+    </Pressable>
   );
 };
 

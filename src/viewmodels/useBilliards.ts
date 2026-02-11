@@ -116,10 +116,13 @@ export function useBilliards(): UseBilliardsReturn {
     }
   }, [loading, tournaments, profile?.home_state, hasSetHomeState]);
 
-  // Auto-geocode when zip reaches 5 digits
+  // Auto-geocode when zip reaches 5 digits — clears state & city
   useEffect(() => {
     if (zipCode.length === 5) {
       setActiveZip(zipCode);
+      setSelectedState("");
+      setSelectedCity("");
+      setHasSetHomeState(true); // prevent home state from re-applying
       geoService.lookupZipCoords(zipCode).then(setZipCoords);
     } else {
       setActiveZip("");
@@ -308,6 +311,7 @@ export function useBilliards(): UseBilliardsReturn {
     setSearchRadius(25);
     setZipCoords(null);
     setFilters(defaultFilters);
+    setHasSetHomeState(false); // re-trigger home state default
   }, []);
 
   const onRefresh = useCallback(async () => {
