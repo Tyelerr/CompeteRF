@@ -25,7 +25,7 @@ import ReportModal from "../../src/views/components/common/ReportModal";
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
   const vm = useTournamentDetail(id as string);
-  const { session } = useAuth();
+  const { session, isAdmin } = useAuth(); // ← UPDATED: added isAdmin
 
   const {
     isModalVisible,
@@ -179,6 +179,16 @@ export default function TournamentDetailScreen() {
             </View>
           )}
 
+          {/* ═══ NEW: Hidden Banner (admin only) ═══ */}
+          {vm.isHidden && isAdmin && (
+            <View style={styles.hiddenBanner}>
+              <Ionicons name="eye-off" size={16} color="#fff" />
+              <Text style={styles.hiddenText}>
+                HIDDEN — This tournament has been hidden by an admin
+              </Text>
+            </View>
+          )}
+
           {/* Top Section with Badges, Title and Image */}
           <View style={styles.topSection}>
             {/* Left Side - Badges and Title */}
@@ -201,6 +211,12 @@ export default function TournamentDetailScreen() {
                 {tournament.is_recurring && (
                   <View style={styles.recurringBadge}>
                     <Text style={styles.recurringText}>🔄 Weekly</Text>
+                  </View>
+                )}
+                {/* ═══ NEW: HIDDEN badge inline ═══ */}
+                {vm.isHidden && isAdmin && (
+                  <View style={styles.hiddenInlineBadge}>
+                    <Text style={styles.hiddenInlineText}>HIDDEN</Text>
                   </View>
                 )}
               </View>
@@ -241,7 +257,7 @@ export default function TournamentDetailScreen() {
             </View>
           </View>
 
-          {/* 🎰 Chip Breakdown – poster style with blue border */}
+          {/* 🎰 Chip Breakdown — poster style with blue border */}
           {chipRanges && (
             <View style={styles.chipCard}>
               <Text style={styles.chipTitle}>RATING / CHIP CHART</Text>
@@ -370,6 +386,13 @@ export default function TournamentDetailScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Tournament Disclaimer */}
+          <Text style={styles.disclaimerText}>
+            This tournament is organized by{" "}
+            {tournament.venues?.venue || "an independent venue"}. Compete is not
+            the organizer and is not responsible for tournament operations.
+          </Text>
+
           {/* Spacer for tab bar */}
           <View style={styles.bottomSpacer} />
         </View>
@@ -433,6 +456,34 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     textAlign: "center",
+  },
+  // ═══ NEW: Hidden banner styles ═══
+  hiddenBanner: {
+    backgroundColor: "#E53935",
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+  },
+  hiddenText: {
+    color: "#fff",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  hiddenInlineBadge: {
+    backgroundColor: "#E53935",
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+  },
+  hiddenInlineText: {
+    color: "#fff",
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
   },
   topSection: {
     flexDirection: "row",
@@ -632,8 +683,17 @@ const styles = StyleSheet.create({
   bottomSpacer: {
     height: SPACING.xl * 2,
   },
+  disclaimerText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: SPACING.lg,
+    marginHorizontal: SPACING.md,
+    lineHeight: 16,
+    opacity: 0.6,
+  },
 
-  // ── 🎰 Chip chart – poster style with blue border ────────────────────
+  // — 🎰 Chip chart — poster style with blue border
   chipCard: {
     borderWidth: 1.5,
     borderColor: COLORS.primary,
@@ -661,7 +721,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Bottom actions ────────────────────────────────────────────────────
+  // — Bottom actions
   bottomActions: {
     flexDirection: "row",
     gap: SPACING.sm,

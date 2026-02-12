@@ -3,6 +3,9 @@
 // Admin Report Management Screen
 // Allows super_admin and compete_admin to view, review,
 // and resolve user-submitted content reports.
+//
+// UPDATED: Added "Hide Tournament" action button for
+//          App Store compliance (remove objectionable content).
 // ═══════════════════════════════════════════════════════════
 
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +25,7 @@ import {
   getReports,
   updateReportStatus,
 } from "../../../src/models/services/report.service";
+import { tournamentService } from "../../../src/models/services/tournament.service"; // ← NEW
 import {
   CONTENT_TYPE_LABELS,
   Report,
@@ -129,13 +133,61 @@ export default function ReportManagementScreen() {
     );
   };
 
+  // ═══════════════════════════════════════════════════════
+  // NEW: Hide Tournament + auto-resolve report
+  // ═══════════════════════════════════════════════════════
+  const handleHideTournament = async (report: Report) => {
+    if (!user?.id) return;
+
+    Alert.alert(
+      "Hide Tournament?",
+      "This will hide the tournament from all public listings and auto-resolve this report. The tournament can be unhidden later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Hide Tournament",
+          style: "destructive",
+          onPress: async () => {
+            setProcessingId(report.id);
+            try {
+              // 1. Hide the tournament
+              const tournamentId = parseInt(report.content_id, 10);
+              await tournamentService.hideTournament(tournamentId);
+
+              // 2. Auto-resolve the report
+              await updateReportStatus(report.id, {
+                status: "resolved",
+                reviewed_by: user.id,
+                reviewed_at: new Date().toISOString(),
+              });
+
+              Alert.alert(
+                "Tournament Hidden",
+                "The tournament has been hidden from public view and the report has been resolved.",
+              );
+
+              await fetchReports();
+            } catch (error) {
+              console.error("[ReportManagement] hide tournament error:", error);
+              Alert.alert(
+                "Error",
+                "Failed to hide tournament. Please try again.",
+              );
+            } finally {
+              setProcessingId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleViewContent = (report: Report) => {
     switch (report.content_type) {
       case "tournament":
         router.push(`/tournament-detail?id=${report.content_id}` as any);
         break;
       case "profile":
-        // Adjust to your profile viewing route
         Alert.alert(
           "View Profile",
           `Profile ID: ${report.content_id}\n\nNavigate to user management to view this profile.`,
@@ -315,6 +367,31 @@ export default function ReportManagementScreen() {
                     />
                     <Text style={styles.viewButtonText}>View Content</Text>
                   </TouchableOpacity>
+
+                  {/* ═══ NEW: Hide Tournament button ═══ */}
+                  {report.content_type === "tournament" &&
+                    report.status !== "resolved" && (
+                      <TouchableOpacity
+                        style={styles.hideButton}
+                        onPress={() => handleHideTournament(report)}
+                        disabled={processingId === report.id}
+                      >
+                        {processingId === report.id ? (
+                          <ActivityIndicator size="small" color="#E53935" />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="eye-off-outline"
+                              size={14}
+                              color="#E53935"
+                            />
+                            <Text style={styles.hideButtonText}>
+                              Hide Tournament
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
 
                   {report.status === "pending" && (
                     <TouchableOpacity
@@ -561,6 +638,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
@@ -581,6 +659,23 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: "600",
     color: COLORS.primary,
+  },
+  // ═══ NEW: Hide Tournament button styles ═══
+  hideButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: "#E53935",
+    backgroundColor: "rgba(229, 57, 53, 0.1)",
+  },
+  hideButtonText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "600",
+    color: "#E53935",
   },
   reviewButton: {
     flexDirection: "row",

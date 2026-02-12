@@ -1,8 +1,10 @@
 // app/(tabs)/admin/edit-user/[id].tsx
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Split "Name" into "First Name" + "Last Name"
+// UPDATED: Added Disable/Enable User button (App Store compliance)
 // ═══════════════════════════════════════════════════════════
 
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -98,6 +100,16 @@ export default function EditUserScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* ═══ NEW: Disabled User Banner ═══ */}
+        {vm.user.is_disabled && (
+          <View style={styles.disabledBanner}>
+            <Ionicons name="ban-outline" size={16} color="#fff" />
+            <Text style={styles.disabledBannerText}>
+              This user account is currently disabled
+            </Text>
+          </View>
+        )}
+
         {/* Read-only Info Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>User Info</Text>
@@ -109,6 +121,12 @@ export default function EditUserScreen() {
             <InfoRow
               label="Last Login"
               value={formatDate(vm.user.last_login_at)}
+            />
+            {/* ═══ NEW: Account status row ═══ */}
+            <InfoRow
+              label="Account"
+              value={vm.user.is_disabled ? "DISABLED" : "Active"}
+              valueColor={vm.user.is_disabled ? "#E53935" : "#4CAF50"}
               isLast
             />
           </View>
@@ -172,6 +190,74 @@ export default function EditUserScreen() {
           </View>
         </View>
 
+        {/* ═══ NEW: Disable / Enable User Section ═══ */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account Access</Text>
+          <View style={styles.disableCard}>
+            <View style={styles.disableInfo}>
+              <Ionicons
+                name={
+                  vm.user.is_disabled
+                    ? "lock-closed-outline"
+                    : "shield-checkmark-outline"
+                }
+                size={20}
+                color={vm.user.is_disabled ? "#E53935" : "#4CAF50"}
+              />
+              <View style={styles.disableTextContainer}>
+                <Text style={styles.disableTitle}>
+                  {vm.user.is_disabled ? "Account Disabled" : "Account Active"}
+                </Text>
+                <Text style={styles.disableDescription}>
+                  {vm.user.is_disabled
+                    ? "This user cannot log in or submit content. They will see a disabled message."
+                    : "This user can log in and use the app normally."}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.disableButton,
+                vm.user.is_disabled
+                  ? styles.enableButtonStyle
+                  : styles.disableButtonStyle,
+              ]}
+              onPress={vm.toggleDisabled}
+              disabled={vm.togglingDisable}
+            >
+              {vm.togglingDisable ? (
+                <ActivityIndicator
+                  size="small"
+                  color={vm.user.is_disabled ? "#4CAF50" : "#fff"}
+                />
+              ) : (
+                <>
+                  <Ionicons
+                    name={
+                      vm.user.is_disabled
+                        ? "checkmark-circle-outline"
+                        : "ban-outline"
+                    }
+                    size={16}
+                    color={vm.user.is_disabled ? "#4CAF50" : "#fff"}
+                  />
+                  <Text
+                    style={[
+                      styles.disableButtonText,
+                      vm.user.is_disabled
+                        ? styles.enableButtonText
+                        : styles.disableButtonTextWhite,
+                    ]}
+                  >
+                    {vm.user.is_disabled ? "Enable User" : "Disable User"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
@@ -204,19 +290,28 @@ export default function EditUserScreen() {
   );
 }
 
-// Info Row Component
+// Info Row Component — UPDATED: optional valueColor prop
 const InfoRow = ({
   label,
   value,
+  valueColor,
   isLast = false,
 }: {
   label: string;
   value: string;
+  valueColor?: string;
   isLast?: boolean;
 }) => (
   <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
     <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value}</Text>
+    <Text
+      style={[
+        styles.infoValue,
+        valueColor ? { color: valueColor, fontWeight: "700" } : undefined,
+      ]}
+    >
+      {value}
+    </Text>
   </View>
 );
 
@@ -290,6 +385,22 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: SPACING.md,
+  },
+  // ═══ NEW: Disabled banner ═══
+  disabledBanner: {
+    backgroundColor: "#E53935",
+    borderRadius: 8,
+    padding: SPACING.sm,
+    marginBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+  },
+  disabledBannerText: {
+    color: "#fff",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
   },
   section: {
     marginBottom: SPACING.lg,
@@ -365,6 +476,61 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     height: 40,
+  },
+  // ═══ NEW: Disable/Enable section styles ═══
+  disableCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    gap: SPACING.md,
+  },
+  disableInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: SPACING.sm,
+  },
+  disableTextContainer: {
+    flex: 1,
+  },
+  disableTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  disableDescription: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  disableButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    height: 44,
+  },
+  disableButtonStyle: {
+    backgroundColor: "#E53935",
+  },
+  enableButtonStyle: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  disableButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  disableButtonTextWhite: {
+    color: "#fff",
+  },
+  enableButtonText: {
+    color: "#4CAF50",
   },
   actions: {
     flexDirection: "row",

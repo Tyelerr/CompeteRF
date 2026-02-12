@@ -1,6 +1,7 @@
 // src/models/types/profile.types.ts
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Added first_name and last_name fields
+// UPDATED: Added is_disabled for App Store compliance
 // "name" kept for backward compat during transition
 // ═══════════════════════════════════════════════════════════
 
@@ -23,6 +24,7 @@ export interface Profile {
   language_preference: Language;
   role: UserRole;
   status: UserStatus;
+  is_disabled?: boolean;       // App Store compliance: eject user
   notify_saved_search_matches: boolean;
   notify_favorite_updates: boolean;
   notify_tournament_reminders: boolean;

@@ -1,7 +1,7 @@
 // src/viewmodels/useEditUser.ts
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Split "name" into "first_name" + "last_name"
-// Search for "NAME CHANGE" to see what changed
+// UPDATED: Added disable/enable user toggle (App Store compliance)
 // ═══════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from "react";
@@ -30,6 +30,7 @@ export interface EditableUser {
   user_name: string;
   role: UserRole;
   status: UserStatus;
+  is_disabled: boolean;   // ← NEW: App Store compliance
   created_at: string;
   last_login_at: string | null;
 }
@@ -49,6 +50,7 @@ export const useEditUser = (userId: string) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingDisable, setTogglingDisable] = useState(false); // ← NEW
   const [user, setUser] = useState<EditableUser | null>(null);
 
   // NAME CHANGE: Two name fields instead of one
@@ -81,10 +83,11 @@ export const useEditUser = (userId: string) => {
   const loadUser = async () => {
     try {
       // NAME CHANGE: Select first_name and last_name too
+      // NEW: Also select is_disabled
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, id_auto, email, name, first_name, last_name, user_name, role, status, created_at, last_login_at",
+          "id, id_auto, email, name, first_name, last_name, user_name, role, status, is_disabled, created_at, last_login_at",
         )
         .eq("id", userId)
         .single();
@@ -116,6 +119,7 @@ export const useEditUser = (userId: string) => {
           user_name: data.user_name,
           role: data.role as UserRole,
           status: data.status as UserStatus,
+          is_disabled: data.is_disabled ?? false,   // ← NEW
           created_at: data.created_at,
           last_login_at: data.last_login_at,
         };
@@ -243,6 +247,76 @@ export const useEditUser = (userId: string) => {
     }
   }, [user, userId, firstName, lastName, role, status, canEdit]);
 
+  // ═══════════════════════════════════════════════════════
+  // NEW: Toggle disable/enable user (App Store compliance)
+  // ═══════════════════════════════════════════════════════
+  const toggleDisabled = useCallback(async () => {
+    if (!user || !canEdit()) {
+      Alert.alert("Error", "You do not have permission to modify this user.");
+      return;
+    }
+
+    const newDisabledState = !user.is_disabled;
+    const actionLabel = newDisabledState ? "Disable" : "Enable";
+    const confirmMessage = newDisabledState
+      ? `This will immediately prevent "${user.first_name || user.user_name}" from logging in or using the app. They will see a "disabled" message on their next login attempt.`
+      : `This will re-enable "${user.first_name || user.user_name}"'s account. They will be able to log in and use the app normally.`;
+
+    Alert.alert(
+      `${actionLabel} User?`,
+      confirmMessage,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: actionLabel,
+          style: newDisabledState ? "destructive" : "default",
+          onPress: async () => {
+            setTogglingDisable(true);
+            try {
+              const { data, error } = await supabase
+                .from("profiles")
+                .update({
+                  is_disabled: newDisabledState,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", userId)
+                .select()
+                .single();
+
+              if (error) {
+                console.error("Error toggling disabled:", error);
+                Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user: ${error.message}`);
+                return;
+              }
+
+              if (!data) {
+                Alert.alert("Error", "Update failed — no rows modified. Check database permissions.");
+                return;
+              }
+
+              // Update local state
+              setUser((prev) =>
+                prev ? { ...prev, is_disabled: newDisabledState } : null,
+              );
+
+              Alert.alert(
+                "Success",
+                newDisabledState
+                  ? `User has been disabled. They will be signed out on their next action.`
+                  : `User has been re-enabled. They can now log in normally.`,
+              );
+            } catch (error) {
+              console.error("Error toggling disabled:", error);
+              Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user.`);
+            } finally {
+              setTogglingDisable(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [user, userId, canEdit]);
+
   // Reset form to original values
   const resetForm = useCallback(() => {
     if (user) {
@@ -257,6 +331,7 @@ export const useEditUser = (userId: string) => {
     // State
     loading,
     saving,
+    togglingDisable,           // ← NEW
     user,
     hasChanges,
 
@@ -282,6 +357,7 @@ export const useEditUser = (userId: string) => {
     // Actions
     saveUser,
     resetForm,
+    toggleDisabled,            // ← NEW
 
     // DEPRECATED: kept for any code still using "name"
     name: buildFullName(firstName, lastName),

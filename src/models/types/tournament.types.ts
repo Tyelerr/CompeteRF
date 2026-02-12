@@ -36,6 +36,7 @@ export interface Tournament {
   phone_number?: string;
   thumbnail?: string;
   is_recurring: boolean;
+  is_hidden?: boolean;         // App Store compliance: soft-hide
   // Chip Tournament data
   chip_ranges?: ChipRange[];
   status: TournamentStatus;

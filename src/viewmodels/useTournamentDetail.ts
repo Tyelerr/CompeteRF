@@ -20,6 +20,7 @@ interface Tournament {
   reports_to_fargo: boolean;
   open_tournament: boolean;
   is_recurring: boolean;
+  is_hidden: boolean;         // ← NEW
   status: string;
   director_id: number;
   venue_id: number;
@@ -46,6 +47,7 @@ interface UseTournamentDetailReturn {
   isVenueOwner: boolean;
   canEdit: boolean;
   isDeleted: boolean;
+  isHidden: boolean;          // ← NEW
   showActionBar: boolean;
 
   // Formatted values
@@ -153,6 +155,7 @@ export const useTournamentDetail = (
   // Computed values
   const isDirector = profile?.id_auto === tournament?.director_id;
   const isDeleted = tournament?.status === "cancelled";
+  const isHidden = tournament?.is_hidden === true;   // ← NEW
 
   // Can edit if:
   // 1. User is the director who created it AND it's not deleted
@@ -295,6 +298,7 @@ export const useTournamentDetail = (
     isVenueOwner,
     canEdit,
     isDeleted,
+    isHidden,                // ← NEW
     showActionBar,
 
     // Formatted values

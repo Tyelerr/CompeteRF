@@ -2,12 +2,16 @@
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Single auth session hydration via RPC
 //
-// WHAT CHANGED:
+// WHAT CHANGED (original):
 // - Replaced fetchProfile() with hydrateAuthSession()
 //   that calls get_auth_session() RPC (1 query instead of 1)
 // - Populates Zustand store directly (kills the double fetch)
 // - Context still exists for backward compat but reads from store
 // - Push notifications wait for profile to exist before registering
+//
+// WHAT CHANGED (App Store compliance):
+// - After profile fetch, checks is_disabled flag
+// - If disabled → shows Alert + signs out immediately
 // ═══════════════════════════════════════════════════════════
 
 import { Session, User } from "@supabase/supabase-js";
@@ -18,6 +22,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { Alert } from "react-native"; // ← NEW import
 import { supabase } from "../lib/supabase";
 import { profileService } from "../models/services/profile.service";
 import { Profile, ProfileInsert } from "../models/types/profile.types";
@@ -80,6 +85,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Only fires after profile exists (prevents foreign key error on push_tokens)
   const { pushToken } = useNotifications(profile ? user?.id : undefined);
 
+  // ═══════════════════════════════════════════════════════
+  // NEW: Check if user is disabled and eject them
+  // ═══════════════════════════════════════════════════════
+  const checkDisabledAndEject = async (profileData: any): Promise<boolean> => {
+    if (profileData?.is_disabled === true) {
+      // Clear state immediately so the UI doesn't flash authenticated content
+      hydrateSession(null, [], []);
+      setLoading(false);
+
+      // Show alert then sign out
+      Alert.alert(
+        "Account Disabled",
+        "Your account has been disabled. Contact support at support@competerf.com.",
+        [
+          {
+            text: "OK",
+            onPress: async () => {
+              await supabase.auth.signOut();
+              setSession(null);
+              setUser(null);
+              resetStore();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+      return true; // was disabled
+    }
+    return false; // not disabled
+  };
+
   // ── Session hydration via RPC ──────────────────────────
   const hydrateAuthSession = async (userId: string) => {
     try {
@@ -95,6 +131,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         hydrateSession(null, [], []);
         return;
       }
+
+      // ── NEW: Block disabled users ──
+      const wasDisabled = await checkDisabledAndEject(data.profile);
+      if (wasDisabled) return;
 
       hydrateSession(
         data.profile as Profile,
@@ -119,6 +159,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         .maybeSingle();
 
       if (error) throw error;
+
+      // ── NEW: Block disabled users (fallback path) ──
+      const wasDisabled = await checkDisabledAndEject(data);
+      if (wasDisabled) return;
+
       hydrateSession(data as Profile | null, [], []);
     } catch (error) {
       console.error("Fallback profile fetch error:", error);

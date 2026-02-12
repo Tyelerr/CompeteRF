@@ -16,6 +16,7 @@ export const tournamentService = {
       .from("tournaments")
       .select("*, venues(*), profiles!director_id(*)", { count: "exact" })
       .eq("status", "active")
+      .eq("is_hidden", false)                                        // ← NEW: exclude hidden
       .gte("tournament_date", new Date().toISOString().split("T")[0])
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);
@@ -72,6 +73,7 @@ export const tournamentService = {
       .select("*")
       .eq("venue_id", venueId)
       .eq("status", "active")
+      .eq("is_hidden", false)                                        // ← NEW
       .gte("tournament_date", new Date().toISOString().split("T")[0])
       .order("tournament_date", { ascending: true });
     if (error) throw error;
@@ -223,6 +225,42 @@ export const tournamentService = {
       .select()
       .single();
     if (error) throw error;
+    return data;
+  },
+
+  // ═══════════════════════════════════════════════════════
+  // NEW: Hide / Unhide tournament (App Store compliance)
+  // ═══════════════════════════════════════════════════════
+
+  async hideTournament(id: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        is_hidden: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error("Hide failed — no rows modified (possible RLS block).");
+    return data;
+  },
+
+  async unhideTournament(id: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        is_hidden: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error("Unhide failed — no rows modified (possible RLS block).");
     return data;
   },
 
