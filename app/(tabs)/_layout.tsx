@@ -1,11 +1,11 @@
 import { Tabs } from "expo-router";
 import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
+import AnimatedTabBarButton from "../../src/views/components/common/AnimatedTabBarButton";
 import TabBarIcon from "../../src/views/components/common/tabbaricon";
 
 export default function TabLayout() {
   const { canSubmitTournaments, profile } = useAuthContext();
-  // Check if user has admin access (not basic_user)
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
 
   return (
@@ -23,11 +23,12 @@ export default function TabLayout() {
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarLabelStyle: {
           fontSize: 12,
-          marginTop: 5,
+          marginTop: 2,
         },
         tabBarIconStyle: {
-          marginTop: 5,
+          marginBottom: 0,
         },
+        tabBarButton: (props) => <AnimatedTabBarButton {...props} />,
       }}
     >
       <Tabs.Screen
@@ -55,7 +56,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon emoji="➕" color={color} focused={focused} />
           ),
-          href: canSubmitTournaments ? "/submit" : null,
+          href: canSubmitTournaments ? undefined : null,
         }}
       />
       <Tabs.Screen
@@ -65,7 +66,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon emoji="⚙️" color={color} focused={focused} />
           ),
-          href: hasAdminAccess ? "/(tabs)/admin" : null,
+          href: hasAdminAccess ? undefined : null,
         }}
       />
       <Tabs.Screen
