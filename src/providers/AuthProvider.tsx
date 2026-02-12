@@ -181,8 +181,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signOut = async () => {
     if (user?.id) {
       try {
-        const { notificationService } =
-          await import("../models/services/notification.service");
+        const { notificationService } = await import(
+          "../models/services/notification.service"
+        );
         await notificationService.removeUserTokens(user.id);
       } catch (err) {
         console.error("Error removing push tokens on sign out:", err);

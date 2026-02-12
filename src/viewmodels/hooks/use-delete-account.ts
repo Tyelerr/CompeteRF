@@ -20,7 +20,7 @@ export function useDeleteAccount() {
   }, []);
 
   const closeModal = useCallback(() => {
-    if (deleting) return; // prevent closing mid-deletion
+    if (deleting) return;
     setConfirmText("");
     setModalVisible(false);
   }, [deleting]);
@@ -31,17 +31,23 @@ export function useDeleteAccount() {
     setDeleting(true);
     try {
       await accountService.deleteAccount();
-      await accountService.signOut();
 
+      // Close modal and navigate BEFORE clearing the local session.
+      // Go to the profile tab specifically so the user sees the
+      // logged-out Welcome view, not the home tab.
       setModalVisible(false);
       setConfirmText("");
+      router.replace("/(tabs)/profile" as any);
 
-      // Navigate to auth screen — use replace so they can't go back
-      router.replace("/auth/login");
+      // Delay local signOut so navigation settles first.
+      // The auth user is already deleted server-side by the RPC,
+      // this just clears the cached token on the client.
+      setTimeout(() => {
+        accountService.signOut().catch(() => {});
+      }, 500);
     } catch (err: any) {
       const message = err.message || "Failed to delete account";
 
-      // Surface last-admin-block error clearly
       if (message.includes("Cannot delete the last admin")) {
         Alert.alert(
           "Cannot Delete",
@@ -50,7 +56,6 @@ export function useDeleteAccount() {
       } else {
         Alert.alert("Deletion Failed", message);
       }
-    } finally {
       setDeleting(false);
     }
   }, [isConfirmed, deleting, router]);

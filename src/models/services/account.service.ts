@@ -4,6 +4,13 @@ import { supabase } from "../../lib/supabase";
 
 class AccountService {
   /**
+   * Flag to indicate a deletion is in progress.
+   * Used to prevent auth state change listeners from
+   * redirecting before navigation completes.
+   */
+  public deletionInProgress = false;
+
+  /**
    * Deletes the current user's profile images from storage
    * using the Supabase Storage API (not direct SQL).
    */
@@ -12,7 +19,6 @@ class AccountService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // List all files in the user's profile-images folder
       const { data: files, error: listError } = await supabase.storage
         .from("profile-images")
         .list(user.id);
@@ -27,7 +33,6 @@ class AccountService {
 
       if (removeError) {
         console.warn("Failed to delete profile images:", removeError.message);
-        // Non-fatal — continue with account deletion
       }
     } catch (err) {
       console.warn("Error cleaning up profile images:", err);
@@ -40,6 +45,8 @@ class AccountService {
    * 2. Calls the `delete_user_account` RPC which handles all DB cleanup
    */
   async deleteAccount(): Promise<void> {
+    this.deletionInProgress = true;
+
     // Step 1: Delete storage files via API
     await this.deleteProfileImages();
 
@@ -47,6 +54,7 @@ class AccountService {
     const { error } = await supabase.rpc("delete_user_account");
 
     if (error) {
+      this.deletionInProgress = false;
       console.error("delete_user_account RPC error:", error);
       throw new Error(error.message || "Failed to delete account");
     }
@@ -57,6 +65,7 @@ class AccountService {
    */
   async signOut(): Promise<void> {
     await supabase.auth.signOut();
+    this.deletionInProgress = false;
   }
 }
 
