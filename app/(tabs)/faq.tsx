@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -247,6 +248,16 @@ export default function FaqScreen() {
               onPress={() => setShowContactForm(true)}
               fullWidth
             />
+            <View style={styles.emailDivider} />
+            <Text style={styles.emailLabel}>Or email us directly:</Text>
+            <TouchableOpacity
+              onPress={() =>
+                Linking.openURL("mailto:support@thecompeteapp.com")
+              }
+              style={styles.emailLink}
+            >
+              <Text style={styles.contactEmail}>support@thecompeteapp.com</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.contactForm}>
@@ -543,6 +554,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.md,
     textAlign: "center",
+  },
+  emailDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  emailLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginBottom: SPACING.xs,
+  },
+  emailLink: {
+    marginTop: SPACING.md,
+    alignItems: "center",
+  },
+  contactEmail: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    textAlign: "center",
+    textDecorationLine: "underline",
   },
   contactForm: {
     backgroundColor: COLORS.backgroundCard,

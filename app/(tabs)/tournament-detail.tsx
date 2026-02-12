@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,17 +11,34 @@ import {
   View,
 } from "react-native";
 import { analyticsService } from "../../src/models/services/analytics.service";
+import { useAuth } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useReport } from "../../src/viewmodels/hooks/useReport";
 import { useTournamentDetail } from "../../src/viewmodels/useTournamentDetail";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
+import ReportModal from "../../src/views/components/common/ReportModal";
 
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
   const vm = useTournamentDetail(id as string);
+  const { session } = useAuth();
+
+  const {
+    isModalVisible,
+    openReportModal,
+    closeReportModal,
+    reason,
+    setReason,
+    details,
+    setDetails,
+    handleSubmit,
+    isSubmitting,
+    contentType,
+  } = useReport({ userId: session?.user?.id });
 
   // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -81,7 +99,9 @@ export default function TournamentDetailScreen() {
           chipRanges
             .map(
               (r: any) =>
-                `${r.label || `${r.minRating}–${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
+                `${r.label || `${r.minRating}–${r.maxRating}`}: ${
+                  r.chips
+                } Chip${r.chips !== 1 ? "s" : ""}`,
             )
             .join("\n")
         : "";
@@ -92,7 +112,11 @@ export default function TournamentDetailScreen() {
         `🏠 ${tournament.venues?.venue || "TBD"}\n` +
         `💰 Entry: ${vm.formattedEntryFee}` +
         chipInfo +
-        `\n\n📍 ${tournament.venues?.address || ""}, ${tournament.venues?.city || ""}, ${tournament.venues?.state || ""} ${tournament.venues?.zip_code || ""}`;
+        `\n\n📍 ${tournament.venues?.address || ""}, ${
+          tournament.venues?.city || ""
+        }, ${tournament.venues?.state || ""} ${
+          tournament.venues?.zip_code || ""
+        }`;
 
       await Share.share({ message });
       analyticsService.trackTournamentShared(tournament.id);
@@ -327,10 +351,19 @@ export default function TournamentDetailScreen() {
             </View>
           </View>
 
-          {/* Share & Close buttons */}
+          {/* Share, Report & Close buttons */}
           <View style={styles.bottomActions}>
             <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
               <Text style={styles.shareButtonText}>📤 Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.reportButton}
+              onPress={() =>
+                openReportModal("tournament", tournament.id.toString())
+              }
+            >
+              <Ionicons name="flag-outline" size={14} color="#E53935" />
+              <Text style={styles.reportButtonText}>Report</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.closeButton} onPress={vm.goBack}>
               <Text style={styles.closeButtonText}>✕ Close</Text>
@@ -348,6 +381,19 @@ export default function TournamentDetailScreen() {
         imageUrl={imageUrl}
         title={tournament.name}
         onClose={closeImageViewer}
+      />
+
+      {/* Report Modal */}
+      <ReportModal
+        visible={isModalVisible}
+        onClose={closeReportModal}
+        contentType={contentType}
+        reason={reason}
+        onReasonChange={setReason}
+        details={details}
+        onDetailsChange={setDetails}
+        onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
       />
     </View>
   );
@@ -634,6 +680,23 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.primary,
+  },
+  reportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: "#E53935",
+    backgroundColor: "rgba(229, 57, 53, 0.1)",
+  },
+  reportButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: "#E53935",
   },
   closeButton: {
     flex: 1,

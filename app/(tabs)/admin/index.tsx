@@ -1,7 +1,6 @@
 // app/(tabs)/admin/index.tsx
 // ═══════════════════════════════════════════════════════════
-// UPDATED: Added Messages card to every role dashboard
-// UPDATED: Replaced Activity Log with Bar Requests (super admin)
+// UPDATED: Added Reports card to Super Admin & Compete Admin
 // ═══════════════════════════════════════════════════════════
 
 import { useRouter } from "expo-router";
@@ -323,7 +322,7 @@ const CompeteAdminDashboard = () => {
         <Text style={styles.headerSubtitle}>Platform management</Text>
       </View>
 
-      {/* Management Grid - 2x3 */}
+      {/* Management Grid - 2x4 */}
       <View style={styles.statsGrid}>
         <ManagementCard
           icon="👥"
@@ -356,6 +355,12 @@ const CompeteAdminDashboard = () => {
           onPress={() =>
             router.push("/(tabs)/admin/super-admin-analytics" as any)
           }
+        />
+        <ManagementCard
+          icon="🚩"
+          label="Reports"
+          subtitle="Content reports"
+          onPress={() => router.push("/(tabs)/admin/report-management" as any)}
         />
         <ManagementCard
           icon="📋"
@@ -488,6 +493,12 @@ const SuperAdminDashboard = () => {
           onPress={() =>
             router.push("/(tabs)/admin/giveaway-management" as any)
           }
+        />
+        <ManagementCard
+          icon="🚩"
+          label="Reports"
+          subtitle="Content reports"
+          onPress={() => router.push("/(tabs)/admin/report-management" as any)}
         />
         <ManagementCard
           icon="✉️"
