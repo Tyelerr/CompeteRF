@@ -233,7 +233,7 @@ export default function FaqScreen() {
 
       {/* Contact Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📬 CONTACT US</Text>
+        <Text style={styles.sectionTitle}>{"\uD83D\uDCEC"} CONTACT US</Text>
 
         {!showContactForm ? (
           <View style={styles.contactCard}>
@@ -346,7 +346,7 @@ export default function FaqScreen() {
                               }}
                             >
                               <Text style={styles.autocompleteItemName}>
-                                🏆 {t.name}
+                                {"\uD83C\uDFC6"} {t.name}
                               </Text>
                               <Text style={styles.autocompleteItemRole}>
                                 {t.venue_name}
@@ -360,12 +360,12 @@ export default function FaqScreen() {
                 ) : (
                   <View style={styles.selectedBadge}>
                     <Text style={styles.selectedBadgeText}>
-                      🏆 {selectedTournament.name}
+                      {"\uD83C\uDFC6"} {selectedTournament.name}
                     </Text>
                     <TouchableOpacity
                       onPress={() => setSelectedTournament(null)}
                     >
-                      <Text style={styles.removeBadge}>✕</Text>
+                      <Text style={styles.removeBadge}>{"\u2715"}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -406,12 +406,51 @@ export default function FaqScreen() {
         )}
       </View>
 
+      {/* Legal Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{"\uD83D\uDCC4"} LEGAL</Text>
+        <View style={styles.legalCard}>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push("/legal/terms")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.legalRowText}>Terms of Service</Text>
+            <Text style={styles.legalRowChevron}>{"\u203A"}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.legalDivider} />
+
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push("/legal/privacy")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.legalRowText}>Privacy Policy</Text>
+            <Text style={styles.legalRowChevron}>{"\u203A"}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.legalDivider} />
+
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => router.push("/legal/terms")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.legalRowText}>
+              Acceptable Use & Content Policy
+            </Text>
+            <Text style={styles.legalRowChevron}>{"\u203A"}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* App Info */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📱 APP INFO</Text>
+        <Text style={styles.sectionTitle}>{"\uD83D\uDCF1"} APP INFO</Text>
         <View style={styles.infoCard}>
           <Text style={styles.infoText}>CompeteRF v1.0.0</Text>
-          <Text style={styles.infoText}>© 2026 CompeteRF</Text>
+          <Text style={styles.infoText}>{"\u00A9"} 2026 CompeteRF</Text>
         </View>
       </View>
 
@@ -650,6 +689,39 @@ const styles = StyleSheet.create({
   buttonSpacer: {
     width: SPACING.md,
   },
+
+  // ── Legal ──
+  legalCard: {
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+  },
+  legalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+  },
+  legalRowText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  legalRowChevron: {
+    fontSize: 22,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  legalDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginHorizontal: SPACING.lg,
+  },
+
+  // ── App Info ──
   infoCard: {
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,

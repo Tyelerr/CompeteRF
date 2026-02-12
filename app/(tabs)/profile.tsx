@@ -17,12 +17,14 @@ import { supabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useDeleteAccount } from "../../src/viewmodels/hooks/use-delete-account";
 import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
 import { Pagination } from "../../src/views/components/common/pagination";
+import { DeleteAccountModal } from "../../src/views/components/profile/DeleteAccountModal";
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 
 interface Favorite {
@@ -167,6 +169,18 @@ export default function ProfileScreen() {
     canGoPrev,
     resetPage,
   } = usePagination(favorites, { itemsPerPage: 5 });
+
+  // Delete account
+  const {
+    modalVisible,
+    confirmText,
+    setConfirmText,
+    deleting,
+    isConfirmed,
+    openModal,
+    closeModal,
+    handleDelete,
+  } = useDeleteAccount();
 
   useEffect(() => {
     checkUser();
@@ -384,7 +398,7 @@ export default function ProfileScreen() {
             style={styles.messagesFloatingButton}
             onPress={() => router.push("/notifications" as any)}
           >
-            <Text style={styles.messagesFloatingIcon}>✉️</Text>
+            <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
             <Text style={styles.messagesFloatingText}>Messages</Text>
             {unreadCount > 0 && (
               <View style={styles.messagesUnreadBadge}>
@@ -423,7 +437,6 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.profileInfo}>
-              {/* CHANGED: Show username as primary display */}
               <Text style={styles.name}>
                 {profile?.user_name
                   ? `@${profile.user_name}`
@@ -444,7 +457,9 @@ export default function ProfileScreen() {
               style={[styles.actionButton, styles.editButton]}
               onPress={() => router.push("../edit-profile" as any)}
             >
-              <Text style={styles.editButtonText}>⚙️ Edit Profile</Text>
+              <Text style={styles.editButtonText}>
+                {"\u2699\uFE0F"} Edit Profile
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -452,7 +467,7 @@ export default function ProfileScreen() {
               onPress={() => router.push("/notifications" as any)}
             >
               <Text style={styles.notificationButtonText}>
-                🔔 Notifications
+                {"\uD83D\uDD14"} Notifications
               </Text>
             </TouchableOpacity>
 
@@ -460,9 +475,19 @@ export default function ProfileScreen() {
               style={[styles.actionButton, styles.signOutButton]}
               onPress={handleLogout}
             >
-              <Text style={styles.signOutButtonText}>🚪 Sign Out</Text>
+              <Text style={styles.signOutButtonText}>
+                {"\uD83D\uDEAA"} Sign Out
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Delete Account */}
+          <TouchableOpacity
+            style={styles.deleteAccountButton}
+            onPress={openModal}
+          >
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </TouchableOpacity>
 
           {profile && (
             <View style={styles.userDetails}>
@@ -501,14 +526,18 @@ export default function ProfileScreen() {
               /* Current favorites functionality */
             }}
           >
-            <Text style={styles.navButtonText}>❤️ Favorite Tournaments</Text>
+            <Text style={styles.navButtonText}>
+              {"\u2764\uFE0F"} Favorite Tournaments
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.navButton, styles.alertsButton]}
             onPress={() => router.push("/search-alerts" as any)}
           >
-            <Text style={styles.navButtonText}>🔍 Search Alerts</Text>
+            <Text style={styles.navButtonText}>
+              {"\uD83D\uDD0D"} Search Alerts
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -579,6 +608,17 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        visible={modalVisible}
+        confirmText={confirmText}
+        onChangeConfirmText={setConfirmText}
+        isConfirmed={isConfirmed}
+        deleting={deleting}
+        onCancel={closeModal}
+        onDelete={handleDelete}
+      />
 
       <FullScreenImageViewer
         visible={showImageViewer}
@@ -744,7 +784,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: "row",
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   actionButton: {
     flex: 1,
@@ -775,6 +815,16 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
+  },
+  deleteAccountButton: {
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  deleteAccountText: {
+    color: "#EF4444",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "500",
   },
   userDetails: {
     gap: SPACING.md,

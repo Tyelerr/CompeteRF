@@ -4,7 +4,7 @@ import {
   EventTypeStats,
   TIME_PERIODS,
   TimePeriod,
-} from "../models/dashboard-types";
+} from "../models/types/dashboard-types";
 
 export interface CompeteAdminStats {
   totalUsers: number;

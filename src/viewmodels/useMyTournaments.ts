@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
-import { TournamentWithStats } from "../models/dashboard-types";
+import { TournamentWithStats } from "../models/types/dashboard-types";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export type TournamentFilter = "all" | "active" | "completed" | "cancelled";

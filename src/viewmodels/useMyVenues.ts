@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { VenueWithStats } from "../models/dashboard-types";
+import { VenueWithStats } from "../models/types/dashboard-types";
 import { useAuthContext } from "../providers/AuthProvider";
 
 interface UseMyVenuesReturn {

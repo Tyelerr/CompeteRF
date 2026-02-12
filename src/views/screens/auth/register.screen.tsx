@@ -3,7 +3,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -227,8 +226,9 @@ export const RegisterScreen = () => {
       };
     if (isChecking)
       return { text: "Checking availability...", color: COLORS.textSecondary };
-    if (isAvailable) return { text: "✓ Username available", color: "#22C55E" };
-    return { text: "✗ Username taken", color: "#EF4444" };
+    if (isAvailable)
+      return { text: "\u2713 Username available", color: "#22C55E" };
+    return { text: "\u2717 Username taken", color: "#EF4444" };
   };
 
   const isFormValid =
@@ -252,7 +252,7 @@ export const RegisterScreen = () => {
         <Text style={styles.loadingTitle}>Creating Your Account</Text>
         <Text style={styles.loadingSubtitle}>Setting up your profile...</Text>
         <View style={styles.loadingSpinner}>
-          <Text style={styles.loadingText}>⏳</Text>
+          <Text style={styles.loadingText}>{"\u23F3"}</Text>
         </View>
       </View>
     );
@@ -281,7 +281,7 @@ export const RegisterScreen = () => {
       extraScrollHeight={20}
     >
       <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>{"\u2190"} Back</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>CREATE ACCOUNT</Text>
@@ -349,8 +349,8 @@ export const RegisterScreen = () => {
           >
             <Text style={styles.toggleText}>
               {useAutoPassword
-                ? "✏️  Enter password manually instead"
-                : "🔐  Use suggested strong password"}
+                ? "\u270F\uFE0F  Enter password manually instead"
+                : "\uD83D\uDD10  Use suggested strong password"}
             </Text>
           </TouchableOpacity>
         )}
@@ -439,31 +439,27 @@ export const RegisterScreen = () => {
               agreeTerms && styles.checkboxBoxChecked,
             ]}
           >
-            {agreeTerms && <Text style={styles.checkboxCheck}>✓</Text>}
+            {agreeTerms && <Text style={styles.checkboxCheck}>{"\u2713"}</Text>}
           </View>
           <Text style={styles.checkboxText}>
             I agree to the{" "}
             <Text
               style={styles.policyLink}
-              onPress={() => Linking.openURL("https://TheCompeteApp.com/terms")}
+              onPress={() => router.push("/legal/terms")}
             >
               Terms of Service
             </Text>
             ,{" "}
             <Text
               style={styles.policyLink}
-              onPress={() =>
-                Linking.openURL("https://TheCompeteApp.com/privacy")
-              }
+              onPress={() => router.push("/legal/privacy")}
             >
               Privacy Policy
             </Text>
             , and{" "}
             <Text
               style={styles.policyLink}
-              onPress={() =>
-                Linking.openURL("https://TheCompeteApp.com/content-policy")
-              }
+              onPress={() => router.push("/legal/terms")}
             >
               Content Policy
             </Text>
@@ -477,7 +473,7 @@ export const RegisterScreen = () => {
           <View
             style={[styles.checkboxBox, agreeAge && styles.checkboxBoxChecked]}
           >
-            {agreeAge && <Text style={styles.checkboxCheck}>✓</Text>}
+            {agreeAge && <Text style={styles.checkboxCheck}>{"\u2713"}</Text>}
           </View>
           <Text style={styles.checkboxText}>I am 18 years or older</Text>
         </Pressable>

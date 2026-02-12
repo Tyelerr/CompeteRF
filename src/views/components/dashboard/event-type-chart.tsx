@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { EventTypeStats } from "../../../models/dashboard-types";
+import { EventTypeStats } from "../../../models/types/dashboard-types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";

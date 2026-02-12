@@ -6,7 +6,7 @@ import {
   TIME_PERIODS,
   TournamentWithStats,
   VenueWithStats,
-} from "../models/dashboard-types";
+} from "../models/types/dashboard-types";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export const useTDDashboard = () => {
