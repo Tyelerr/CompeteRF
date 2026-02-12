@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Animated } from "react-native";
+import { Animated, Text } from "react-native";
 
 interface TabBarIconProps {
   emoji: string;
@@ -12,25 +12,29 @@ const TabBarIcon = ({ emoji, color, focused }: TabBarIconProps) => {
 
   useEffect(() => {
     if (focused) {
+      console.log(`[BOUNCE START] ${emoji}`);
+      scale.setValue(1);
       Animated.sequence([
         Animated.timing(scale, {
-          toValue: 1.2,
-          duration: 150,
+          toValue: 2.0,
+          duration: 500,
           useNativeDriver: true,
         }),
         Animated.timing(scale, {
           toValue: 1,
-          duration: 150,
+          duration: 500,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(({ finished }) => {
+        console.log(`[BOUNCE END] ${emoji} finished=${finished}`);
+      });
     }
   }, [focused]);
 
   return (
-    <Animated.Text style={{ color, fontSize: 24, transform: [{ scale }] }}>
-      {emoji}
-    </Animated.Text>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Text style={{ color, fontSize: 24 }}>{emoji}</Text>
+    </Animated.View>
   );
 };
 

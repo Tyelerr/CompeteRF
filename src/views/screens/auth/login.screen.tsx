@@ -20,12 +20,12 @@ export const LoginScreen = () => {
     setError("");
 
     if (!email.includes("@")) {
-      setError("Please enter a valid email");
+      setError("Invalid email or password");
       return;
     }
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+    if (!password) {
+      setError("Invalid email or password");
       return;
     }
 
@@ -38,7 +38,7 @@ export const LoginScreen = () => {
         });
 
       if (signInError) {
-        setError(signInError.message);
+        setError("Invalid email or password");
         return;
       }
 
@@ -55,7 +55,7 @@ export const LoginScreen = () => {
         router.replace("/auth/register");
       }
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError("Invalid email or password");
     } finally {
       setLoading(false);
     }

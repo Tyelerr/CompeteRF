@@ -5,7 +5,6 @@ import TabBarIcon from "../../src/views/components/common/tabbaricon";
 
 export default function TabLayout() {
   const { canSubmitTournaments, profile } = useAuthContext();
-
   // Check if user has admin access (not basic_user)
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
 
