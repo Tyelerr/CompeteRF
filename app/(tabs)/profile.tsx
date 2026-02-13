@@ -17,14 +17,12 @@ import { supabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
-import { useDeleteAccount } from "../../src/viewmodels/hooks/use-delete-account";
 import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
 import { Pagination } from "../../src/views/components/common/pagination";
-import { DeleteAccountModal } from "../../src/views/components/profile/DeleteAccountModal";
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 
 interface Favorite {
@@ -44,7 +42,7 @@ interface Favorite {
   };
 }
 
-// ── Animated logged-out view ─────────────────────────────
+// —— Animated logged-out view ————————————————————————————————
 const LoggedOutView = ({ router }: { router: any }) => {
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
@@ -169,18 +167,6 @@ export default function ProfileScreen() {
     canGoPrev,
     resetPage,
   } = usePagination(favorites, { itemsPerPage: 5 });
-
-  // Delete account
-  const {
-    modalVisible,
-    confirmText,
-    setConfirmText,
-    deleting,
-    isConfirmed,
-    openModal,
-    closeModal,
-    handleDelete,
-  } = useDeleteAccount();
 
   useEffect(() => {
     checkUser();
@@ -481,14 +467,6 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Delete Account */}
-          <TouchableOpacity
-            style={styles.deleteAccountButton}
-            onPress={openModal}
-          >
-            <Text style={styles.deleteAccountText}>Delete Account</Text>
-          </TouchableOpacity>
-
           {profile && (
             <View style={styles.userDetails}>
               {profile.home_state && (
@@ -608,17 +586,6 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* Delete Account Modal */}
-      <DeleteAccountModal
-        visible={modalVisible}
-        confirmText={confirmText}
-        onChangeConfirmText={setConfirmText}
-        isConfirmed={isConfirmed}
-        deleting={deleting}
-        onCancel={closeModal}
-        onDelete={handleDelete}
-      />
 
       <FullScreenImageViewer
         visible={showImageViewer}
@@ -815,16 +782,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
-  },
-  deleteAccountButton: {
-    alignItems: "center",
-    paddingVertical: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
-  deleteAccountText: {
-    color: "#EF4444",
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "500",
   },
   userDetails: {
     gap: SPACING.md,

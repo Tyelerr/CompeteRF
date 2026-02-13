@@ -1,6 +1,6 @@
 import { supabase } from "../../lib/supabase";
 
-// ─── Event type constants ───────────────────────────────────────────
+// ——— Event type constants ———————————————————————————————————
 export const EVENT_TYPES = {
   TOURNAMENT_VIEWED: "tournament_viewed",
   DIRECTIONS_CLICKED: "directions_clicked",
@@ -18,7 +18,7 @@ export const EVENT_TYPES = {
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
 
-// ─── Entity types ───────────────────────────────────────────────────
+// ——— Entity types ———————————————————————————————————————————
 export const ENTITY_TYPES = {
   TOURNAMENT: "tournament",
   VENUE: "venue",
@@ -28,7 +28,7 @@ export const ENTITY_TYPES = {
 
 export type EntityType = (typeof ENTITY_TYPES)[keyof typeof ENTITY_TYPES];
 
-// ─── Core event interface ───────────────────────────────────────────
+// ——— Core event interface ———————————————————————————————————
 interface TrackEventParams {
   eventType: EventType;
   entityType?: EntityType | string;
@@ -36,7 +36,7 @@ interface TrackEventParams {
   metadata?: Record<string, any>;
 }
 
-// ─── View stats interface ───────────────────────────────────────────
+// ——— View stats interface ———————————————————————————————————
 export interface EventStats {
   total: number;
   today: number;
@@ -44,7 +44,7 @@ export interface EventStats {
   thisMonth: number;
 }
 
-// ─── Service ────────────────────────────────────────────────────────
+// ——— Service ————————————————————————————————————————————————
 export const analyticsService = {
   /**
    * Core method: track any event. All typed helpers below call this.
@@ -70,14 +70,18 @@ export const analyticsService = {
       });
 
       if (error) {
-        console.error(`[Analytics] Failed to track ${eventType}:`, error.message);
+        // Use console.warn to avoid red LogBox screen in dev
+        console.warn(`[Analytics] Failed to track ${eventType}:`, error.message);
       }
     } catch (err: any) {
-      console.error(`[Analytics] Error tracking ${eventType}:`, err.message);
+      // Silently swallow — analytics should never disrupt the user
+      if (__DEV__) {
+        console.warn(`[Analytics] Error tracking ${eventType}:`, err.message);
+      }
     }
   },
 
-  // ─── Typed helpers (one per event) ────────────────────────────
+  // ——— Typed helpers (one per event) ————————————————————————
 
   /** User opened a tournament detail screen */
   trackTournamentViewed(
@@ -216,7 +220,7 @@ export const analyticsService = {
     });
   },
 
-  // ─── Query helpers (for dashboards) ───────────────────────────
+  // ——— Query helpers (for dashboards) ———————————————————————
 
   /**
    * Get counts for a specific event type + entity over time ranges.
@@ -297,7 +301,7 @@ export const analyticsService = {
     const { data, error } = await query;
 
     if (error || !data) {
-      console.error("[Analytics] getTopEntities error:", error?.message);
+      console.warn("[Analytics] getTopEntities error:", error?.message);
       return [];
     }
 

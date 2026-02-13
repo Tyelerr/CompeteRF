@@ -14,16 +14,12 @@ export const giveawayService = {
 
   /**
    * Get all active giveaways with entry counts
+   * Uses RPC for counts since regular users can't see other users' entries
    */
   async getActiveGiveaways(): Promise<Giveaway[]> {
     const { data, error } = await supabase
       .from("giveaways")
-      .select(
-        `
-        *,
-        entry_count:giveaway_entries(count)
-      `,
-      )
+      .select("*")
       .eq("status", "active")
       .order("end_date", { ascending: true });
 
@@ -32,25 +28,31 @@ export const giveawayService = {
       throw error;
     }
 
-    // Transform the count from array to number
-    return (data || []).map((g) => ({
-      ...g,
-      entry_count: g.entry_count?.[0]?.count || 0,
-    }));
+    // Fetch entry counts via RPC (bypasses RLS safely)
+    const giveawaysWithCounts = await Promise.all(
+      (data || []).map(async (g) => {
+        const { data: count } = await supabase.rpc(
+          "get_giveaway_entry_count",
+          { p_giveaway_id: g.id },
+        );
+        return {
+          ...g,
+          entry_count: count || 0,
+        };
+      }),
+    );
+
+    return giveawaysWithCounts;
   },
 
   /**
    * Get single giveaway by ID with entry count
+   * Uses RPC for count since regular users can't see other users' entries
    */
   async getGiveawayById(id: number): Promise<Giveaway | null> {
     const { data, error } = await supabase
       .from("giveaways")
-      .select(
-        `
-        *,
-        entry_count:giveaway_entries(count)
-      `,
-      )
+      .select("*")
       .eq("id", id)
       .single();
 
@@ -59,9 +61,14 @@ export const giveawayService = {
       return null;
     }
 
+    // Get count via RPC
+    const { data: count } = await supabase.rpc("get_giveaway_entry_count", {
+      p_giveaway_id: id,
+    });
+
     return {
       ...data,
-      entry_count: data.entry_count?.[0]?.count || 0,
+      entry_count: count || 0,
     };
   },
 
@@ -127,6 +134,7 @@ export const giveawayService = {
 
   /**
    * Get all entries for current user (to check which giveaways they've entered)
+   * Works with new RLS — users can read their own entries
    */
   async getUserEntries(userId: number): Promise<GiveawayEntry[]> {
     const { data, error } = await supabase
@@ -144,6 +152,7 @@ export const giveawayService = {
 
   /**
    * Check if user has already entered a specific giveaway
+   * Works with new RLS — users can read their own entries
    */
   async hasUserEntered(giveawayId: number, userId: number): Promise<boolean> {
     const { data, error } = await supabase
@@ -210,10 +219,11 @@ export const giveawayService = {
       .single();
 
     if (giveaway?.max_entries) {
-      const { count } = await supabase
-        .from("giveaway_entries")
-        .select("*", { count: "exact", head: true })
-        .eq("giveaway_id", giveawayId);
+      // Use RPC for accurate count (bypasses RLS)
+      const { data: count } = await supabase.rpc(
+        "get_giveaway_entry_count",
+        { p_giveaway_id: giveawayId },
+      );
 
       if (count && count >= giveaway.max_entries) {
         await supabase
@@ -231,12 +241,13 @@ export const giveawayService = {
 
   /**
    * Get entry count for a specific giveaway
+   * Uses RPC to bypass RLS safely (returns count only, no PII)
    */
   async getEntryCount(giveawayId: number): Promise<number> {
-    const { count, error } = await supabase
-      .from("giveaway_entries")
-      .select("*", { count: "exact", head: true })
-      .eq("giveaway_id", giveawayId);
+    const { data: count, error } = await supabase.rpc(
+      "get_giveaway_entry_count",
+      { p_giveaway_id: giveawayId },
+    );
 
     if (error) {
       console.error("Error fetching entry count:", error);
@@ -247,11 +258,12 @@ export const giveawayService = {
   },
 
   // ============================================
-  // ADMIN METHODS
+  // ADMIN METHODS (super_admin RLS covers these)
   // ============================================
 
   /**
    * Get all giveaways for admin (includes all statuses)
+   * Super admin RLS policy allows reading all entry rows
    */
   async getAllGiveaways(): Promise<Giveaway[]> {
     const { data, error } = await supabase
@@ -280,6 +292,7 @@ export const giveawayService = {
 
   /**
    * Get admin overview stats
+   * Super admin RLS policy allows reading all entry rows
    */
   async getAdminStats(): Promise<{
     activeCount: number;
@@ -409,6 +422,7 @@ export const giveawayService = {
 
   /**
    * Draw a random winner for a giveaway
+   * Super admin RLS policy allows reading all entry rows
    */
   async drawWinner(
     giveawayId: number,
@@ -576,6 +590,7 @@ export const giveawayService = {
 
   /**
    * Get all entries (for admin participants view)
+   * Super admin RLS policy allows reading all entry rows
    */
   async getAllEntries(
     giveawayId?: number,
@@ -612,6 +627,7 @@ export const giveawayService = {
 
   /**
    * Get past winners
+   * Uses RPC for entry counts since this may be called by non-admins
    */
   async getPastWinners(): Promise<
     {
@@ -632,8 +648,7 @@ export const giveawayService = {
         name,
         prize_value,
         winner_drawn_at,
-        winner:profiles!giveaways_winner_id_fkey(name, email),
-        entry_count:giveaway_entries(count)
+        winner:profiles!giveaways_winner_id_fkey(name, email)
       `,
       )
       .eq("status", "awarded")
@@ -645,19 +660,30 @@ export const giveawayService = {
       return [];
     }
 
-    return (data || []).map((g: any) => ({
-      giveaway_id: g.id,
-      giveaway_name: g.name,
-      prize_value: g.prize_value || 0,
-      winner_name: g.winner?.name || "Unknown",
-      winner_email: g.winner?.email || "",
-      drawn_at: g.winner_drawn_at,
-      entry_count: g.entry_count?.[0]?.count || 0,
-    }));
+    // Fetch entry counts via RPC for each giveaway
+    const winnersWithCounts = await Promise.all(
+      (data || []).map(async (g: any) => {
+        const { data: count } = await supabase.rpc(
+          "get_giveaway_entry_count",
+          { p_giveaway_id: g.id },
+        );
+        return {
+          giveaway_id: g.id,
+          giveaway_name: g.name,
+          prize_value: g.prize_value || 0,
+          winner_name: g.winner?.name || "Unknown",
+          winner_email: g.winner?.email || "",
+          drawn_at: g.winner_drawn_at,
+          entry_count: count || 0,
+        };
+      }),
+    );
+
+    return winnersWithCounts;
   },
 
   // ============================================
-  // REDRAW WINNER METHODS
+  // REDRAW WINNER METHODS (admin only — RLS covers these)
   // ============================================
 
   /**
@@ -690,6 +716,7 @@ export const giveawayService = {
 
   /**
    * Get count of eligible entries (excludes disqualified users)
+   * Admin only — super admin RLS covers this
    */
   async getEligibleEntryCount(giveawayId: number): Promise<number> {
     // Get all disqualified user IDs for this giveaway
@@ -723,6 +750,7 @@ export const giveawayService = {
 
   /**
    * Get current winner details for a giveaway
+   * Admin only — super admin RLS covers this
    */
   async getCurrentWinner(giveawayId: number): Promise<{
     id: number;
@@ -763,6 +791,7 @@ export const giveawayService = {
 
   /**
    * Redraw a new winner (disqualifies current winner)
+   * Admin only — super admin RLS covers this
    */
   async redrawWinner(
     giveawayId: number,

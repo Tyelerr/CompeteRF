@@ -13,12 +13,25 @@ import {
 import { COLORS } from "../src/theme/colors";
 import { RADIUS, SPACING } from "../src/theme/spacing";
 import { FONT_SIZES } from "../src/theme/typography";
+import { useDeleteAccount } from "../src/viewmodels/hooks/use-delete-account";
 import { useEditProfile } from "../src/viewmodels/useEditProfile";
 import { Dropdown } from "../src/views/components/common/dropdown";
 import { Loading } from "../src/views/components/common/loading";
+import { DeleteAccountModal } from "../src/views/components/profile/DeleteAccountModal";
 
 export default function EditProfileScreen() {
   const vm = useEditProfile();
+
+  const {
+    modalVisible,
+    confirmText,
+    setConfirmText,
+    deleting,
+    isConfirmed,
+    openModal,
+    closeModal,
+    handleDelete,
+  } = useDeleteAccount();
 
   if (vm.loading) {
     return <Loading fullScreen message="Loading profile..." />;
@@ -235,6 +248,22 @@ export default function EditProfileScreen() {
               </Text>
             </View>
           )}
+
+          {/* Delete Account Section */}
+          <View style={styles.deleteSection}>
+            <View style={styles.deleteDivider} />
+            <Text style={styles.deleteSectionTitle}>Danger Zone</Text>
+            <Text style={styles.deleteSectionDescription}>
+              Permanently delete your account and all associated data. This
+              action cannot be undone.
+            </Text>
+            <TouchableOpacity
+              style={styles.deleteAccountButton}
+              onPress={openModal}
+            >
+              <Text style={styles.deleteAccountText}>Delete Account</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
 
@@ -264,6 +293,17 @@ export default function EditProfileScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        visible={modalVisible}
+        confirmText={confirmText}
+        onChangeConfirmText={setConfirmText}
+        isConfirmed={isConfirmed}
+        deleting={deleting}
+        onCancel={closeModal}
+        onDelete={handleDelete}
+      />
     </View>
   );
 }
@@ -461,6 +501,41 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: FONT_SIZES.sm,
     fontWeight: "500",
+  },
+  // Delete account section
+  deleteSection: {
+    marginTop: SPACING.xl,
+    paddingTop: SPACING.md,
+  },
+  deleteDivider: {
+    height: 1,
+    backgroundColor: COLORS.error + "30",
+    marginBottom: SPACING.lg,
+  },
+  deleteSectionTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.error,
+    marginBottom: SPACING.xs,
+  },
+  deleteSectionDescription: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
+  },
+  deleteAccountButton: {
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.error + "40",
+    backgroundColor: COLORS.error + "10",
+  },
+  deleteAccountText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
   },
   // Fixed bottom bar
   bottomBar: {
