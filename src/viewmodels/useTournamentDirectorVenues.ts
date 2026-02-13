@@ -102,8 +102,6 @@ export const useTournamentDirectorVenues = () => {
     if (!profile?.id_auto) return;
 
     try {
-      console.log("Loading venues for director:", profile.id_auto);
-
       // Get venues where this director is assigned
       let query = supabase
         .from("venue_directors")
@@ -138,8 +136,6 @@ export const useTournamentDirectorVenues = () => {
 
       const { data, error } = await query;
       if (error) throw error;
-
-      console.log("Found venue assignments:", data?.length || 0);
 
       let venueDirectorships = data || [];
 
@@ -296,14 +292,12 @@ export const useTournamentDirectorVenues = () => {
   };
 
   // Actions
-  const handleVenuePress = (venue: TDVenue) => {
+  const handleVenuePress = (_venue: TDVenue) => {
     // Navigate to venue tournaments or details
-    console.log("Navigate to venue:", venue);
   };
 
-  const handleCreateTournament = (venue: TDVenue) => {
+  const handleCreateTournament = (_venue: TDVenue) => {
     // Navigate to create tournament with venue pre-selected
-    console.log("Create tournament for venue:", venue);
   };
 
   // Filter helpers

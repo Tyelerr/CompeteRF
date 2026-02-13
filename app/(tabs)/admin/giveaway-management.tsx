@@ -222,6 +222,7 @@ export default function GiveawayManagementScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
         contentContainerStyle={styles.filterRow}
       >
         {STATUS_FILTERS.map((filter) => (
@@ -360,10 +361,10 @@ export default function GiveawayManagementScreen() {
           <Text style={styles.statCardLabel}>Total{"\n"}Awarded</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statCardValue, { color: COLORS.white }]}>
-            {vm.stats.frequency}
+          <Text style={[styles.statCardValue, { color: COLORS.teal }]}>
+            {vm.stats.activeCount}
           </Text>
-          <Text style={styles.statCardLabel}>Giveaway{"\n"}Frequency</Text>
+          <Text style={styles.statCardLabel}>Currently{"\n"}Active</Text>
         </View>
       </View>
     </ScrollView>
@@ -465,6 +466,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     gap: SPACING.sm,
+    alignItems: "center",
   },
   filterChip: {
     backgroundColor: COLORS.card,
@@ -473,6 +475,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
   },
   filterChipActive: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
   filterChipText: { color: COLORS.lightGray, fontSize: FONT_SIZES.sm },

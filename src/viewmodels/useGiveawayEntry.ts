@@ -36,10 +36,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
 
   // Reset form when giveaway changes
   useEffect(() => {
-    console.log(
-      `🔍 Giveaway changed, resetting form. Giveaway ID:`,
-      giveaway?.id,
-    );
     setForm({
       ...INITIAL_ENTRY_FORM,
       email: profile?.email || "",
@@ -48,12 +44,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     setSubmitError(null);
     setSubmitSuccess(false);
   }, [giveaway?.id, profile?.email]);
-
-  // Debug: Log form state changes
-  useEffect(() => {
-    console.log(`🔍 Form state updated:`, form);
-    console.log(`🔍 Birthday specifically:`, form.birthday);
-  }, [form]);
 
   const updateField = useCallback(
     <K extends keyof GiveawayEntryForm>(
@@ -70,14 +60,11 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
   // THE KEY FUNCTION FOR BIRTHDAY DROPDOWNS
   const updateBirthday = useCallback(
     (field: "month" | "day" | "year", value: string) => {
-      console.log(`🔍 updateBirthday called:`, { field, value });
       setForm((prev) => {
-        console.log(`🔍 Previous form birthday:`, prev.birthday);
         const newForm = {
           ...prev,
           birthday: { ...prev.birthday, [field]: value },
         };
-        console.log(`🔍 New form birthday:`, newForm.birthday);
         return newForm;
       });
       setErrors((prev) => ({ ...prev, birthday: undefined }));

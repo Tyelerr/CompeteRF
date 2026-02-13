@@ -110,10 +110,8 @@ export const useMyVenues = (): UseMyVenuesReturn => {
     loadVenues();
   }, [profile?.id_auto]);
 
-  const onViewVenue = useCallback((venueId: number) => {
+  const onViewVenue = useCallback((_venueId: number) => {
     // Navigation will be handled by the view
-    // This is here for any pre-navigation logic if needed
-    console.log("View venue:", venueId);
   }, []);
 
   return {

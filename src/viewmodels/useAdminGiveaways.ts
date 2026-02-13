@@ -399,11 +399,9 @@ export const useAdminGiveaways = () => {
 
   // Open Redraw Confirm Modal
   const openRedrawModal = useCallback(() => {
-    console.log("openRedrawModal called!");
     setWinnerDetailsModalVisible(false);
     setRedrawReason("");
     setRedrawModalVisible(true);
-    console.log("redrawModalVisible set to true");
   }, []);
 
   // Close Redraw Confirm Modal

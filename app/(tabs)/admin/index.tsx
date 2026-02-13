@@ -1,7 +1,7 @@
 // app/(tabs)/admin/index.tsx
-// ═══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 // UPDATED: Added Reports card to Super Admin & Compete Admin
-// ═══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
 
 import { useRouter } from "expo-router";
 import {
@@ -438,7 +438,7 @@ const SuperAdminDashboard = () => {
         <Text style={styles.headerSubtitle}>Full system access</Text>
       </View>
 
-      {/* Management Grid - 2x5 */}
+      {/* Management Grid */}
       <View style={styles.statsGrid}>
         <ManagementCard
           icon="👥"
@@ -505,12 +505,6 @@ const SuperAdminDashboard = () => {
           label="Messages"
           subtitle="Broadcasts & alerts"
           onPress={() => router.push("/(tabs)/admin/messages" as any)}
-        />
-        <ManagementCard
-          icon="⚙️"
-          label="System Settings"
-          subtitle="App config"
-          onPress={() => router.push("/(tabs)/admin/system-settings" as any)}
         />
       </View>
 

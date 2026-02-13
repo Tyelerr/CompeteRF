@@ -460,8 +460,8 @@ export default function FaqScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{"\uD83D\uDCF1"} APP INFO</Text>
         <View style={styles.infoCard}>
-          <Text style={styles.infoText}>CompeteRF v1.0.0</Text>
-          <Text style={styles.infoText}>{"\u00A9"} 2026 CompeteRF</Text>
+          <Text style={styles.infoText}>Compete v1.0.0</Text>
+          <Text style={styles.infoText}>{"\u00A9"} 2026 Compete</Text>
         </View>
       </View>
 

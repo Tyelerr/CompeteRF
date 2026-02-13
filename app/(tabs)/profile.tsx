@@ -1,11 +1,13 @@
 // app/(tabs)/profile.tsx
 
+import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
   Image,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
+import { authService } from "../../src/models/services/auth.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -42,8 +45,11 @@ interface Favorite {
   };
 }
 
-// —— Animated logged-out view ————————————————————————————————
+// —— Animated logged-out view ————————————————————————————
 const LoggedOutView = ({ router }: { router: any }) => {
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
   const messageFade = useRef(new Animated.Value(0)).current;
@@ -86,6 +92,49 @@ const LoggedOutView = ({ router }: { router: any }) => {
     ]).start();
   }, []);
 
+  const handleAppleSignIn = async () => {
+    setError("");
+    setAppleLoading(true);
+
+    try {
+      const result = await authService.signInWithApple();
+
+      if (!result.user) {
+        setError("Sign in failed. Please try again.");
+        return;
+      }
+
+      // Check if user already has a profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", result.user.id)
+        .maybeSingle();
+
+      if (profile) {
+        // Existing user — go straight to the app
+        router.replace("/(tabs)");
+      } else {
+        // New Apple user — needs to complete their profile
+        const firstName = result.fullName?.givenName || "";
+        const lastName = result.fullName?.familyName || "";
+
+        router.replace({
+          pathname: "/auth/complete-profile",
+          params: { firstName, lastName },
+        } as any);
+      }
+    } catch (err: any) {
+      if (err.code === "ERR_REQUEST_CANCELED") {
+        return;
+      }
+      console.error("Apple Sign In error:", err);
+      setError("Apple Sign In failed. Please try again.");
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -121,6 +170,34 @@ const LoggedOutView = ({ router }: { router: any }) => {
             },
           ]}
         >
+          {/* Apple Sign In — iOS only */}
+          {Platform.OS === "ios" && (
+            <>
+              <View style={styles.appleButtonWrapper}>
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={
+                    AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                  }
+                  buttonStyle={
+                    AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  }
+                  cornerRadius={8}
+                  style={styles.appleButton}
+                  onPress={handleAppleSignIn}
+                />
+                {appleLoading && (
+                  <Text style={styles.loadingHint}>Signing in...</Text>
+                )}
+              </View>
+
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+            </>
+          )}
+
           <Button
             title="Log In"
             onPress={() => router.push("/auth/login" as any)}
@@ -133,6 +210,8 @@ const LoggedOutView = ({ router }: { router: any }) => {
             variant="outline"
             fullWidth
           />
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
       </View>
     </View>
@@ -644,6 +723,40 @@ const styles = StyleSheet.create({
   },
   buttonGroup: {
     width: "100%",
+  },
+  appleButtonWrapper: {
+    alignItems: "center",
+    marginBottom: SPACING.sm,
+  },
+  appleButton: {
+    width: "100%",
+    height: 50,
+  },
+  loadingHint: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xs,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: SPACING.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginHorizontal: SPACING.md,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
+    marginTop: SPACING.md,
   },
   profileCard: {
     margin: SPACING.md,

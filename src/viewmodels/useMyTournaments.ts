@@ -127,10 +127,8 @@ export const useMyTournaments = (
     loadTournaments();
   }, [profile?.id_auto, filter]);
 
-  const onEditTournament = useCallback((tournamentId: number) => {
+  const onEditTournament = useCallback((_tournamentId: number) => {
     // Navigation will be handled by the view
-    // This is here for any pre-navigation logic if needed
-    console.log("Edit tournament:", tournamentId);
   }, []);
 
   const onCancelTournament = useCallback(
@@ -179,10 +177,8 @@ export const useMyTournaments = (
     [profile?.id_auto],
   );
 
-  const onDuplicateTournament = useCallback((tournamentId: number) => {
+  const onDuplicateTournament = useCallback((_tournamentId: number) => {
     // Navigation will be handled by the view
-    // This is here for any pre-navigation logic if needed
-    console.log("Duplicate tournament:", tournamentId);
   }, []);
 
   return {

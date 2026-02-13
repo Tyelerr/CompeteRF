@@ -5,9 +5,9 @@ export interface FAQItem {
 
 export const FAQ_DATA: FAQItem[] = [
   {
-    question: "What is CompeteRF?",
+    question: "What is Compete?",
     answer:
-      "CompeteRF is a platform for finding billiards tournaments near you. Browse tournaments, save your favorites, and never miss a competition.",
+      "Compete is a platform for finding billiards tournaments near you. Browse tournaments, save your favorites, and never miss a competition.",
   },
   {
     question: "How do I find tournaments?",
@@ -33,11 +33,6 @@ export const FAQ_DATA: FAQItem[] = [
     question: "How do I submit my own tournament?",
     answer:
       "Tournament submission is available for Tournament Directors. Contact us through the form below to learn more about becoming a TD.",
-  },
-  {
-    question: "How do I change my home state?",
-    answer:
-      "Currently, you set your home state when creating your profile. Contact support if you need to change it.",
   },
   {
     question: "Is the app free to use?",

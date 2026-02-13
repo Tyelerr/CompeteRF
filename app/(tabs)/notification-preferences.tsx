@@ -108,8 +108,8 @@ export default function NotificationPreferencesScreen() {
 
         {/* Description */}
         <Text style={styles.sectionDescription}>
-          Choose which notifications you'd like to receive. You can change these
-          at any time.
+          Choose which notifications you{"'"}d like to receive. You can change
+          these at any time.
         </Text>
 
         {/* Notification Categories */}

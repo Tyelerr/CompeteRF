@@ -23,7 +23,7 @@ export const useMyDirectors = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [venueIds, setVenueIds] = useState<number[]>([]);
 
-   
+
   useEffect(() => {
     if (profile?.id_auto) {
       loadDirectors();
@@ -240,7 +240,6 @@ export const useMyDirectors = () => {
 
         if (error) {
           console.error("Error downgrading user role:", error);
-          // Don't alert — the venue removal itself succeeded
           return;
         }
 
@@ -248,14 +247,9 @@ export const useMyDirectors = () => {
           console.error("Role downgrade returned null — likely RLS block");
           return;
         }
-
-        console.log(
-          `Director ${directorId} downgraded to basic_user (no remaining venues)`,
-        );
       }
     } catch (error) {
       console.error("Error in checkAndDowngradeIfNeeded:", error);
-      // Don't alert — the venue removal itself succeeded
     }
   };
 

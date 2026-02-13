@@ -43,6 +43,219 @@ const FONT_SIZES = {
   xl: 20,
 };
 
+// ============================================
+// OFFICIAL GIVEAWAY RULES
+// ============================================
+const OFFICIAL_RULES_SECTIONS = [
+  {
+    heading: "",
+    body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law.",
+  },
+  {
+    heading: "1. Eligibility",
+    body: "Giveaways hosted on the Compete app are open to legal residents of the United States who are 18 years of age or older at the time of entry. Employees, officers, and directors of Compete and its affiliates, and their immediate family members, are not eligible to participate. Void where prohibited or restricted by law.",
+  },
+  {
+    heading: "2. How to Enter",
+    body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name (as it appears on your government-issued ID), date of birth, email address, and phone number. All information must be accurate and truthful. Limit one (1) entry per person per giveaway. Multiple entries, duplicate accounts, or fraudulent information will result in disqualification. Entry is free and open to all eligible participants.",
+  },
+  {
+    heading: "3. Entry Period",
+    body: "Each giveaway has a specific start and end date displayed on the giveaway listing. Entries must be received before the posted end date and time. Late entries will not be accepted.",
+  },
+  {
+    heading: "4. Winner Selection",
+    body: "Winners are selected at random from all eligible entries received during the entry period. The random drawing is conducted by Compete administrators. The odds of winning depend on the number of eligible entries received.",
+  },
+  {
+    heading: "5. Winner Notification",
+    body: "The winner will be notified via the email address and/or phone number provided at the time of entry. The winner must respond within seven (7) days of notification to claim their prize. If the winner does not respond within the specified timeframe, the prize may be forfeited and an alternate winner may be selected.",
+  },
+  {
+    heading: "6. Prizes",
+    body: "The prize for each giveaway is described on the giveaway listing page. Prize values are approximate. Prizes are non-transferable and cannot be exchanged for cash or other items. Compete reserves the right to substitute a prize of equal or greater value. Winners are solely responsible for any applicable taxes, fees, or other costs associated with the prize.",
+  },
+  {
+    heading: "7. Identity Verification",
+    body: "Winners may be required to present a valid government-issued photo ID to verify their identity and age before receiving their prize. The name on the ID must match the name provided at the time of entry. Failure to verify identity may result in forfeiture of the prize.",
+  },
+  {
+    heading: "8. General Conditions",
+    body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason. Compete is not responsible for any technical failures, errors, or other issues that may affect entry submissions. Entrants agree to release Compete, its officers, directors, employees, and agents from any liability arising from participation in the giveaway or acceptance of the prize.",
+  },
+  {
+    heading: "9. Privacy",
+    body: "Information collected during giveaway entry is subject to the Compete Privacy Policy. Your information will be used for giveaway administration, winner notification, and prize fulfillment. Your information will not be sold to third parties.",
+  },
+  {
+    heading: "10. Governing Law",
+    body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates, without regard to conflict of law provisions.",
+  },
+  {
+    heading: "11. Apple Disclaimer",
+    body: "This giveaway is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or any of its subsidiaries or affiliates. By entering, you acknowledge and agree that Apple has no responsibility or liability whatsoever in connection with this giveaway, including but not limited to the administration of the giveaway, the selection of winners, or the provision of prizes. Any questions, comments, or complaints regarding the giveaway should be directed to Compete, not Apple.",
+  },
+];
+
+// ============================================
+// PRIVACY POLICY SUMMARY (for giveaway context)
+// ============================================
+const PRIVACY_SECTIONS = [
+  {
+    heading: "What We Collect",
+    body: "When you enter a giveaway on Compete, we collect the personal information you provide in the entry form: your full legal name, date of birth, email address, and phone number. This information is required for giveaway administration and winner verification.",
+  },
+  {
+    heading: "How We Use Your Information",
+    body: "Your giveaway entry information is used solely for: verifying your eligibility, administering the giveaway drawing, contacting the winner, and fulfilling the prize. We may also use your email to send you giveaway-related updates if you have opted in to notifications.",
+  },
+  {
+    heading: "Information Sharing",
+    body: "We do not sell, rent, or trade your personal information to third parties. Your giveaway entry data may be shared with prize sponsors solely for the purpose of prize fulfillment. We may disclose information if required by law.",
+  },
+  {
+    heading: "Data Retention",
+    body: "Giveaway entry data is retained for a reasonable period after the giveaway concludes for record-keeping and compliance purposes. You may request deletion of your data by contacting support@thecompeteapp.com.",
+  },
+  {
+    heading: "Your Rights",
+    body: "You have the right to access, correct, or delete your personal information at any time. To exercise these rights, contact us at support@thecompeteapp.com. For the full Compete Privacy Policy, visit the Privacy Policy page in the app settings.",
+  },
+  {
+    heading: "Security",
+    body: "We implement reasonable technical and organizational measures to protect your personal information from unauthorized access, alteration, or destruction. However, no method of transmission or storage is 100% secure.",
+  },
+  {
+    heading: "Contact",
+    body: "If you have questions about how your data is handled in connection with giveaways, please contact us at support@thecompeteapp.com.",
+  },
+];
+
+// ============================================
+// LEGAL VIEWER SUB-MODAL
+// ============================================
+function LegalViewerModal({
+  visible,
+  title,
+  sections,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  sections: { heading: string; body: string }[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={legalStyles.overlay}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <View style={legalStyles.container}>
+          {/* Header */}
+          <View style={legalStyles.header}>
+            <Pressable onPress={onClose} style={legalStyles.closeButton}>
+              <Ionicons name="close" size={24} color={COLORS.white} />
+            </Pressable>
+            <Text style={legalStyles.headerTitle}>{title}</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <View style={legalStyles.divider} />
+
+          {/* Content */}
+          <ScrollView
+            style={legalStyles.scrollView}
+            contentContainerStyle={legalStyles.scrollContent}
+            showsVerticalScrollIndicator
+          >
+            {sections.map((section, index) => (
+              <View key={index} style={legalStyles.section}>
+                <Text style={legalStyles.heading}>{section.heading}</Text>
+                <Text style={legalStyles.body}>{section.body}</Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Accept Button */}
+          <View style={legalStyles.bottomBar}>
+            <Pressable style={legalStyles.acceptButton} onPress={onClose}>
+              <Text style={legalStyles.acceptButtonText}>Accept & Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const legalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  container: {
+    backgroundColor: "#0F1117",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+    minHeight: "60%",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+  },
+  divider: { height: 1, backgroundColor: COLORS.cardBorder },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: SPACING.xl, paddingBottom: SPACING.lg },
+  section: { marginBottom: 20 },
+  heading: {
+    color: COLORS.blue,
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  body: {
+    color: "#D1D5DB",
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  bottomBar: {
+    padding: SPACING.lg,
+    paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  acceptButton: {
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: COLORS.blue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  acceptButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});
+
+// ============================================
+// MAIN ENTRY MODAL
+// ============================================
 interface Props {
   visible: boolean;
   giveaway: Giveaway | null;
@@ -59,6 +272,8 @@ export function GiveawayEntryModal({
   onSuccess,
 }: Props) {
   const vm = useGiveawayEntry(giveaway);
+  const [showRulesModal, setShowRulesModal] = React.useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = React.useState(false);
 
   const handleSubmit = async () => {
     if (!giveaway) return;
@@ -82,6 +297,7 @@ export function GiveawayEntryModal({
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardView}
         >
+          <Pressable style={styles.dismissArea} onPress={handleClose} />
           <View style={styles.modalContainer}>
             {/* Header */}
             <View style={styles.header}>
@@ -181,15 +397,19 @@ export function GiveawayEntryModal({
                   checked={vm.form.confirmed_age}
                   onToggle={() => vm.toggleCheckbox("confirmed_age")}
                 />
-                <CheckboxRow
-                  label="I agree to the official rules"
+                <CheckboxRowWithLink
+                  prefix="I agree to the "
+                  linkText="official rules"
                   checked={vm.form.agreed_to_rules}
                   onToggle={() => vm.toggleCheckbox("agreed_to_rules")}
+                  onLinkPress={() => setShowRulesModal(true)}
                 />
-                <CheckboxRow
-                  label="I agree to the privacy policy"
+                <CheckboxRowWithLink
+                  prefix="I agree to the "
+                  linkText="privacy policy"
                   checked={vm.form.agreed_to_privacy}
                   onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
+                  onLinkPress={() => setShowPrivacyModal(true)}
                 />
                 <CheckboxRow
                   label="I understand this is one entry per person"
@@ -228,10 +448,29 @@ export function GiveawayEntryModal({
           </View>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Official Rules Sub-Modal */}
+      <LegalViewerModal
+        visible={showRulesModal}
+        title="Official Giveaway Rules"
+        sections={OFFICIAL_RULES_SECTIONS}
+        onClose={() => setShowRulesModal(false)}
+      />
+
+      {/* Privacy Policy Sub-Modal */}
+      <LegalViewerModal
+        visible={showPrivacyModal}
+        title="Giveaway Privacy Policy"
+        sections={PRIVACY_SECTIONS}
+        onClose={() => setShowPrivacyModal(false)}
+      />
     </Modal>
   );
 }
 
+// ============================================
+// DROPDOWN
+// ============================================
 function Dropdown({
   options,
   value,
@@ -310,6 +549,9 @@ function Dropdown({
   );
 }
 
+// ============================================
+// CHECKBOX COMPONENTS
+// ============================================
 function CheckboxRow({
   label,
   checked,
@@ -331,18 +573,59 @@ function CheckboxRow({
   );
 }
 
+function CheckboxRowWithLink({
+  prefix,
+  linkText,
+  checked,
+  onToggle,
+  onLinkPress,
+}: {
+  prefix: string;
+  linkText: string;
+  checked: boolean;
+  onToggle: () => void;
+  onLinkPress: () => void;
+}) {
+  return (
+    <View style={styles.checkboxRow}>
+      <Pressable onPress={onToggle}>
+        <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+          {checked && (
+            <Ionicons name="checkmark" size={14} color={COLORS.white} />
+          )}
+        </View>
+      </Pressable>
+      <Text style={styles.checkboxLabel}>
+        {prefix}
+        <Text style={styles.linkText} onPress={onLinkPress}>
+          {linkText}
+        </Text>
+      </Text>
+    </View>
+  );
+}
+
+// ============================================
+// STYLES
+// ============================================
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  keyboardView: {
+    flex: 1,
     justifyContent: "flex-end",
   },
-  keyboardView: { flex: 1, justifyContent: "flex-end" },
+  dismissArea: {
+    flex: 1,
+  },
   modalContainer: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "92%",
+    minHeight: "75%",
   },
   header: {
     flexDirection: "row",
@@ -364,8 +647,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   divider: { height: 1, backgroundColor: COLORS.cardBorder },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: SPACING.xl, paddingBottom: SPACING.lg },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    flexGrow: 1,
+  },
   giveawayName: {
     color: COLORS.blue,
     fontSize: FONT_SIZES.lg,
@@ -427,7 +716,11 @@ const styles = StyleSheet.create({
   dropdownOptionText: { color: COLORS.white, fontSize: FONT_SIZES.md },
   dropdownOptionTextActive: { fontWeight: "700" },
   checkboxSection: { marginTop: SPACING.xl, gap: SPACING.md },
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+  },
   checkbox: {
     width: 24,
     height: 24,
@@ -439,6 +732,11 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
   checkboxLabel: { color: COLORS.lightGray, fontSize: FONT_SIZES.sm, flex: 1 },
+  linkText: {
+    color: COLORS.blue,
+    textDecorationLine: "underline",
+    fontSize: FONT_SIZES.sm,
+  },
   errorField: {
     color: COLORS.red,
     fontSize: FONT_SIZES.xs,

@@ -39,12 +39,12 @@ export const useEditVenue = (venueId: number) => {
   const [editedVenue, setEditedVenue] = useState<VenueDetails | null>(null);
 
   // Directors
-  const [directors, setDirectors] = useState<Director[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [directors, setDirectors] = useState<Director[]>([]);
 
-   
+
   useEffect(() => {
     if (venueId) {
       loadVenueData();
@@ -383,10 +383,6 @@ export const useEditVenue = (venueId: number) => {
           console.error("Role downgrade returned null — likely RLS block");
           return;
         }
-
-        console.log(
-          `Director ${directorId} downgraded to basic_user (no remaining venues)`,
-        );
       }
     } catch (error) {
       console.error("Error in checkAndDowngradeIfNeeded:", error);
