@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
@@ -61,10 +61,38 @@ export const LoginScreen = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email.trim() || !email.includes("@")) {
+      Alert.alert(
+        "Enter Your Email",
+        "Please enter your email address above, then tap Forgot Password again.",
+      );
+      return;
+    }
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+      );
+
+      if (resetError) {
+        Alert.alert("Error", "Failed to send reset email. Please try again.");
+        return;
+      }
+
+      Alert.alert(
+        "Check Your Email",
+        "If an account exists with that email, you will receive a password reset link.",
+      );
+    } catch {
+      Alert.alert("Error", "Something went wrong. Please try again.");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-        <Text style={styles.backText}>← Back</Text>
+        <Text style={styles.backText}>{"\u2190"} Back</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>LOG IN</Text>
@@ -86,9 +114,16 @@ export const LoginScreen = () => {
           label="Password"
           value={password}
           onChangeText={setPassword}
-          placeholder="••••••••"
+          placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}
           secureTextEntry
         />
+
+        <TouchableOpacity
+          onPress={handleForgotPassword}
+          style={styles.forgotPassword}
+        >
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -107,8 +142,7 @@ export const LoginScreen = () => {
         </View>
       </View>
 
-      {/* Bottom spacer balances the layout — flex:2 vs flex:1 above
-          keeps the form in the upper-middle area */}
+      {/* Bottom spacer balances the layout */}
       <View style={styles.bottomSpacer} />
     </View>
   );
@@ -137,6 +171,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   form: {},
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginBottom: SPACING.md,
+    marginTop: -SPACING.xs,
+  },
+  forgotPasswordText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "500",
+  },
   error: {
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
