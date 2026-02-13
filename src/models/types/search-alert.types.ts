@@ -5,25 +5,26 @@ export interface SearchAlertFilterCriteria {
   tournamentFormat?: string;
   tableSize?: string;
   equipment?: string;
-  
+
   // Fee and skill constraints
   entryFeeMin?: number;
   entryFeeMax?: number;
   fargoMax?: number;
-  
+
   // Boolean flags
   reportsToFargo?: boolean;
+  calcutta?: boolean;
   openTournament?: boolean;
-  
+
   // Location
   state?: string;
   city?: string;
-  
+
   // Date constraints
   dateFrom?: string;
   dateTo?: string;
   daysOfWeek?: string[];
-  
+
   // Legacy properties (keep for backward compatibility)
   game_types?: string[];
   states?: string[];
@@ -130,13 +131,13 @@ export interface AlertMatchesResponse {
 // Game type options for dropdowns
 export const GAME_TYPE_OPTIONS = [
   "8-ball",
-  "9-ball", 
+  "9-ball",
   "10-ball",
   "8 Ball",
   "9 Ball",
   "10 Ball",
   "8 Ball Scotch Doubles",
-  "9 Ball Scotch Doubles", 
+  "9 Ball Scotch Doubles",
   "10 Ball Scotch Doubles",
   "Straight Pool",
   "One Pocket",

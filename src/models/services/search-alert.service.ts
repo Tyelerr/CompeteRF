@@ -6,6 +6,7 @@ import {
   UpdateSearchAlertRequest,
 } from "../types/search-alert.types";
 import { Tournament } from "../types/tournament.types";
+import { notificationDispatcher } from "./notification-dispatcher.service";
 
 export const searchAlertService = {
   // Get all alerts for a user
@@ -198,9 +199,64 @@ export const searchAlertService = {
         console.log(
           `📊 Updated match counts for ${newMatchingAlerts.length} alerts`,
         );
+
+        // ══════════════════════════════════════════════════════════
+        // 🔔 Send push notifications to users with new matches
+        // ══════════════════════════════════════════════════════════
+        await this.notifyMatchingUsers(newMatchingAlerts, tournament);
       }
     } catch (error) {
       console.error("❌ Error checking tournament against alerts:", error);
+    }
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // 🔔 Send push notifications for search alert matches
+  // ══════════════════════════════════════════════════════════════
+  async notifyMatchingUsers(
+    matchingAlerts: SearchAlert[],
+    tournament: Tournament,
+  ): Promise<void> {
+    try {
+      // Deduplicate user IDs (one user might have multiple matching alerts)
+      const uniqueUserIds = [
+        ...new Set(matchingAlerts.map((alert) => alert.user_id)),
+      ];
+
+      if (uniqueUserIds.length === 0) return;
+
+      // Build a readable location string
+      const venue = tournament.venues;
+      const locationParts: string[] = [];
+      if (venue?.city) locationParts.push(venue.city);
+      if (venue?.state) locationParts.push(venue.state);
+      const locationStr =
+        locationParts.length > 0 ? ` in ${locationParts.join(", ")}` : "";
+
+      // Build a readable entry fee string
+      const feeStr =
+        tournament.entry_fee && tournament.entry_fee > 0
+          ? ` — $${tournament.entry_fee} entry`
+          : "";
+
+      const result = await notificationDispatcher.send({
+        category: "search_alert_match",
+        recipientIdAutos: uniqueUserIds,
+        title: "🔔 Tournament Matches Your Alert!",
+        body: `${tournament.name}${locationStr}${feeStr}`,
+        data: {
+          tournament_id: tournament.id,
+          deep_link: `/tournament-detail?id=${tournament.id}`,
+          type: "search_alert_match",
+        },
+      });
+
+      console.log(
+        `🔔 Search alert notifications: ${result.sentCount} sent, ${result.filteredCount} filtered, ${result.eligibleCount} eligible`,
+      );
+    } catch (error) {
+      // Never let notification errors break tournament submission
+      console.error("⚠️ Error sending search alert notifications:", error);
     }
   },
 
@@ -296,6 +352,15 @@ export const searchAlertService = {
     ) {
       console.log(
         `📈 Fargo reporting mismatch: alert wants ${criteria.reportsToFargo}, tournament is ${tournament.reports_to_fargo}`,
+      );
+      return false;
+    }
+    if (
+      criteria.calcutta !== undefined &&
+      tournament.calcutta !== criteria.calcutta
+    ) {
+      console.log(
+        `💵 Calcutta mismatch: alert wants ${criteria.calcutta}, tournament is ${tournament.calcutta}`,
       );
       return false;
     }

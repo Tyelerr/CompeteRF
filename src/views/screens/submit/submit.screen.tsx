@@ -491,8 +491,8 @@ export const SubmitScreen = () => {
                 vm.isChipTournament
                   ? "N/A for Chip Tournament"
                   : vm.isMaxFargoDisabled
-                    ? "Disabled (Open Tournament is ON)"
-                    : "e.g., 550 (leave blank for open)"
+                  ? "Disabled (Open Tournament is ON)"
+                  : "e.g., 550 (leave blank for open)"
               }
               placeholderTextColor={COLORS.textMuted}
               keyboardType="numeric"
@@ -522,6 +522,12 @@ export const SubmitScreen = () => {
               placeholder="$ 0.00"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="decimal-pad"
+            />
+
+            <ToggleSwitch
+              label="Calcutta"
+              value={vm.formData.calcutta}
+              onValueChange={(v) => vm.updateFormData("calcutta", v)}
             />
 
             <View style={styles.sidePotHeader}>
@@ -783,7 +789,7 @@ export const SubmitScreen = () => {
                   ))}
                 </View>
 
-                {/* Table Size — dynamic from venue_tables */}
+                {/* Table Size – dynamic from venue_tables */}
                 <View style={styles.dropdownContainer}>
                   <Dropdown
                     label="Table Size *"
@@ -794,7 +800,7 @@ export const SubmitScreen = () => {
                   />
                 </View>
 
-                {/* Equipment — from venue brands if available, else defaults */}
+                {/* Equipment – from venue brands if available, else defaults */}
                 <View style={styles.dropdownContainer}>
                   <Dropdown
                     label="Equipment"
@@ -844,8 +850,8 @@ export const SubmitScreen = () => {
                 vm.submitting
                   ? "Creating..."
                   : vm.formData.isRecurring
-                    ? "Create Tournament Series"
-                    : "Submit Tournament"
+                  ? "Create Tournament Series"
+                  : "Submit Tournament"
               }
               onPress={vm.handleSubmit}
               loading={vm.submitting}

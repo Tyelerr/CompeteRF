@@ -6,7 +6,7 @@ export interface ChipRange {
   chips: number;
 }
 
-// ── Default chip ranges for Chip Tournament ──────────────────────────
+// ── Default chip ranges for Chip Tournament ──────────────────────────────
 // Tournament directors can customize these, but this provides a sensible starting point
 export const DEFAULT_CHIP_RANGES: ChipRange[] = [
   { label: "299 & Under", minRating: 0, maxRating: 299, chips: 8 },
@@ -30,6 +30,7 @@ export interface TournamentFormData {
   maxFargo: string;
   requiredFargoGames: string;
   reportsToFargo: boolean;
+  calcutta: boolean;
   openTournament: boolean;
   entryFee: string;
   addedMoney: string;
@@ -71,6 +72,7 @@ export const initialFormData: TournamentFormData = {
   maxFargo: "",
   requiredFargoGames: "",
   reportsToFargo: false,
+  calcutta: false,
   openTournament: false,
   entryFee: "",
   addedMoney: "",

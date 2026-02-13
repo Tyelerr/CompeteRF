@@ -12,7 +12,7 @@ import {
 import { useAuth } from "./hooks/use.auth";
 import { useFavorites } from "./hooks/use.favorites";
 
-// ——— Types ———————————————————————————————————————————————————————————
+// ——— Types ———————————————————————————————————————————————————
 
 interface CityOption {
   label: string;
@@ -59,7 +59,7 @@ export interface UseBilliardsReturn {
   getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
-// ——— Hook ————————————————————————————————————————————————————————————
+// ——— Hook ————————————————————————————————————————————————————
 
 export function useBilliards(): UseBilliardsReturn {
   const router = useRouter();
@@ -68,19 +68,19 @@ export function useBilliards(): UseBilliardsReturn {
     profile?.id_auto,
   );
 
-  // —— Tournament data ————————————————————————————————————————————————
+  // —— Tournament data ————————————————————————————————————————
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [hasSetHomeState, setHasSetHomeState] = useState(false);
 
-  // —— Location helpers ———————————————————————————————————————————————
+  // —— Location helpers ———————————————————————————————————————
   const [cities, setCities] = useState<CityOption[]>([]);
   const [zipCoords, setZipCoords] = useState<ZipCoords | null>(null);
   const [activeZip, setActiveZip] = useState("");
 
-  // —— Filter state (local — resets on navigation) ————————————————————
+  // —— Filter state (local — resets on navigation) ————————————
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
@@ -89,7 +89,7 @@ export function useBilliards(): UseBilliardsReturn {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // —— Effects ————————————————————————————————————————————————————————
+  // —— Effects ————————————————————————————————————————————————
 
   // Initial load
   useEffect(() => {
@@ -145,7 +145,7 @@ export function useBilliards(): UseBilliardsReturn {
     }
   }, [selectedState]);
 
-  // —— Data fetching ——————————————————————————————————————————————————
+  // —— Data fetching ——————————————————————————————————————————
 
   const loadTournaments = async () => {
     try {
@@ -158,7 +158,7 @@ export function useBilliards(): UseBilliardsReturn {
     }
   };
 
-  // —— Client-side filtering ——————————————————————————————————————————
+  // —— Client-side filtering ——————————————————————————————————
 
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
@@ -213,7 +213,7 @@ export function useBilliards(): UseBilliardsReturn {
       }
     }
 
-    // —— Modal filters ————————————————————————————————————————————————
+    // —— Modal filters ————————————————————————————————————————
     if (filters.gameType) {
       filtered = filtered.filter((t) => t.game_type === filters.gameType);
     }
@@ -247,6 +247,9 @@ export function useBilliards(): UseBilliardsReturn {
     if (filters.reportsToFargo) {
       filtered = filtered.filter((t) => t.reports_to_fargo === true);
     }
+    if (filters.calcutta) {
+      filtered = filtered.filter((t) => t.calcutta === true);
+    }
     if (filters.openTournament) {
       filtered = filtered.filter((t) => t.open_tournament === true);
     }
@@ -263,7 +266,7 @@ export function useBilliards(): UseBilliardsReturn {
     filters,
   ]);
 
-  // —— Empty state helpers ————————————————————————————————————————————
+  // —— Empty state helpers ————————————————————————————————————
 
   // True when a state is selected but yields no results
   const isStateFilterEmpty = useMemo(() => {
@@ -278,7 +281,7 @@ export function useBilliards(): UseBilliardsReturn {
     return !tournaments.some((t) => t.venues?.state === profile.home_state);
   }, [profile?.home_state, selectedState, tournaments]);
 
-  // —— Actions ————————————————————————————————————————————————————————
+  // —— Actions ————————————————————————————————————————————————
 
   const toggleFavorite = useCallback(
     async (tournamentId: number) => {
@@ -320,7 +323,7 @@ export function useBilliards(): UseBilliardsReturn {
     setRefreshing(false);
   }, []);
 
-  // —— Public API (flat object the screen destructures) ———————————————
+  // —— Public API (flat object the screen destructures) ———————
 
   return {
     // Data

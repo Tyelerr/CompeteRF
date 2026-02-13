@@ -17,6 +17,7 @@ export interface Filters {
   maxFargo: number;
   requiresFargoGames: boolean;
   reportsToFargo: boolean;
+  calcutta: boolean;
   openTournament: boolean;
 }
 
@@ -34,5 +35,6 @@ export const defaultFilters: Filters = {
   maxFargo: 900,
   requiresFargoGames: false,
   reportsToFargo: false,
+  calcutta: false,
   openTournament: false,
 };

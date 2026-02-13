@@ -32,6 +32,7 @@ export interface Tournament {
   max_fargo?: number;
   required_fargo_games?: number;
   reports_to_fargo: boolean;
+  calcutta: boolean;
   open_tournament: boolean;
   phone_number?: string;
   thumbnail?: string;
@@ -84,6 +85,7 @@ export interface TournamentTemplate {
   max_fargo?: number;
   required_fargo_games?: number;
   reports_to_fargo: boolean;
+  calcutta: boolean;
   open_tournament: boolean;
   phone_number?: string;
   thumbnail?: string;
@@ -118,6 +120,7 @@ export interface TournamentTemplateUser {
   added_money?: number;
   side_pots?: SidePot[];
   reports_to_fargo: boolean;
+  calcutta: boolean;
   open_tournament: boolean;
   table_size?: TableSize;
   number_of_tables?: number;
@@ -155,5 +158,6 @@ export interface TournamentFilters {
   fargoMin?: number;
   fargoMax?: number;
   reportsToFargo?: boolean;
+  calcutta?: boolean;
   openTournament?: boolean;
 }

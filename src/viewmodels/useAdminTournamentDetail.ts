@@ -17,6 +17,7 @@ interface Tournament {
   added_money: number;
   max_fargo: number | null;
   reports_to_fargo: boolean;
+  calcutta: boolean;
   open_tournament: boolean;
   is_recurring: boolean;
   status: string;

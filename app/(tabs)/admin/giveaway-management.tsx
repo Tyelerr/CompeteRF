@@ -1,758 +1,617 @@
-import { COLORS } from "@/src/theme/colors";
-import { SPACING } from "@/src/theme/spacing";
-import { FONT_SIZES } from "@/src/theme/typography";
-import {
-  AdminGiveaway,
-  GiveawaySortOption,
-  GiveawayStatusFilter,
-  useAdminGiveaways,
-} from "@/src/viewmodels/useAdminGiveaways";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import {
-  DrawWinnerModal,
-  GiveawayCard,
-  RedrawConfirmModal,
-  WinnerDetailsModal,
-  WinnerResultModal,
-} from "../../../src/views/components/giveaway";
+  AdminGiveaway,
+  GiveawayStatusFilter,
+  useAdminGiveaways,
+} from "../../../src/viewmodels/useAdminGiveaways";
 
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-
-const formatCurrency = (value: number | null): string => {
-  if (!value) return "$0";
-  return `$${value.toLocaleString()}`;
+const COLORS = {
+  background: "#000000",
+  card: "#1C1C1E",
+  cardBorder: "#2C2C2E",
+  blue: "#007AFF",
+  white: "#FFFFFF",
+  gray: "#8E8E93",
+  lightGray: "#AEAEB2",
+  darkGray: "#3A3A3C",
+  green: "#30D158",
+  red: "#FF453A",
+  orange: "#FF9F0A",
+  teal: "#64D2FF",
 };
 
-// ============================================
-// GIVEAWAYS TAB CONTENT
-// ============================================
-
-interface GiveawaysTabProps {
-  vm: ReturnType<typeof useAdminGiveaways>;
-  onEdit: (giveaway: AdminGiveaway) => void;
-  onEnd: (giveaway: AdminGiveaway) => void;
-  onArchive: (giveaway: AdminGiveaway) => void;
-  onRestore: (giveaway: AdminGiveaway) => void;
-}
-
-const GiveawaysTab = ({
-  vm,
-  onEdit,
-  onEnd,
-  onArchive,
-  onRestore,
-}: GiveawaysTabProps) => {
-  return (
-    <View style={styles.tabContent}>
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search giveaways..."
-            placeholderTextColor={COLORS.textMuted}
-            value={vm.searchQuery}
-            onChangeText={vm.setSearchQuery}
-          />
-        </View>
-      </View>
-
-      {/* Status Tabs */}
-      <View style={styles.statusTabsWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statusTabsContent}
-        >
-          {(
-            [
-              "active",
-              "ended",
-              "awarded",
-              "archived",
-              "all",
-            ] as GiveawayStatusFilter[]
-          ).map((status) => (
-            <TouchableOpacity
-              key={status}
-              style={[
-                styles.statusTab,
-                vm.statusFilter === status && styles.statusTabActive,
-              ]}
-              onPress={() => vm.setStatusFilter(status)}
-            >
-              <Text
-                style={[
-                  styles.statusTabText,
-                  vm.statusFilter === status && styles.statusTabTextActive,
-                ]}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-                {vm.statusCounts[status] > 0
-                  ? ` (${vm.statusCounts[status]})`
-                  : ""}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Sort Options */}
-      <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Sort:</Text>
-        {(["date", "name", "entries"] as GiveawaySortOption[]).map((option) => (
-          <TouchableOpacity
-            key={option}
-            style={[
-              styles.sortPill,
-              vm.sortOption === option && styles.sortPillActive,
-            ]}
-            onPress={() => vm.setSortOption(option)}
-          >
-            <Text
-              style={[
-                styles.sortPillText,
-                vm.sortOption === option && styles.sortPillTextActive,
-              ]}
-            >
-              {option.charAt(0).toUpperCase() + option.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Giveaway List */}
-      <FlatList
-        data={vm.giveaways}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
-        }
-        renderItem={({ item }) => (
-          <GiveawayCard
-            giveaway={item}
-            daysRemaining={vm.getDaysRemaining(item.end_date)}
-            isProcessing={vm.processing === item.id}
-            onEdit={() => onEdit(item)}
-            onEnd={() => onEnd(item)}
-            onDraw={() => vm.openDrawModal(item)}
-            onArchive={() => onArchive(item)}
-            onRestore={() => onRestore(item)}
-            onViewWinner={() => vm.openWinnerDetailsModal(item)}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🎁</Text>
-            <Text style={styles.emptyText}>No giveaways found</Text>
-            <Text style={styles.emptySubtext}>
-              Switch to the Manage tab to create one!
-            </Text>
-          </View>
-        }
-      />
-    </View>
-  );
+const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
 };
 
-// ============================================
-// MANAGE TAB CONTENT
-// ============================================
-
-interface ManageTabProps {
-  vm: ReturnType<typeof useAdminGiveaways>;
-  router: ReturnType<typeof useRouter>;
-}
-
-const ManageTab = ({ vm, router }: ManageTabProps) => {
-  return (
-    <ScrollView
-      style={styles.tabContent}
-      contentContainerStyle={styles.manageContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Quick Actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push("/(tabs)/admin/create-giveaway" as any)}
-        >
-          <Text style={styles.actionCardIcon}>+</Text>
-          <Text style={styles.actionCardText}>Create New Giveaway</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() =>
-            router.push("/(tabs)/admin/giveaway-participants" as any)
-          }
-        >
-          <Text style={styles.actionCardIcon}>👥</Text>
-          <Text style={styles.actionCardText}>View All Participants</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push("/(tabs)/admin/giveaway-winners" as any)}
-        >
-          <Text style={styles.actionCardIcon}>🏆</Text>
-          <Text style={styles.actionCardText}>Past Winners</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Overview */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Overview</Text>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{vm.stats.activeCount}</Text>
-            <Text style={styles.statLabel}>Active{"\n"}Giveaways</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{vm.stats.totalEntries}</Text>
-            <Text style={styles.statLabel}>Total{"\n"}Entries</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {formatCurrency(vm.stats.totalPrizeValue)}
-            </Text>
-            <Text style={styles.statLabel}>Active Prize{"\n"}Value</Text>
-          </View>
-        </View>
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{vm.stats.totalGiveaways}</Text>
-            <Text style={styles.statLabel}>Total{"\n"}Giveaways</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              {formatCurrency(vm.stats.totalAwarded)}
-            </Text>
-            <Text style={styles.statLabel}>Total{"\n"}Awarded</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{vm.stats.frequency}</Text>
-            <Text style={styles.statLabel}>Giveaway{"\n"}Frequency</Text>
-          </View>
-        </View>
-      </View>
-    </ScrollView>
-  );
+const FONT_SIZES = {
+  xs: 11,
+  sm: 13,
+  md: 15,
+  lg: 17,
+  xl: 20,
+  xxl: 24,
 };
 
-// ============================================
-// MAIN SCREEN
-// ============================================
+const STATUS_FILTERS: { label: string; value: GiveawayStatusFilter }[] = [
+  { label: "Active", value: "active" },
+  { label: "Ended", value: "ended" },
+  { label: "Awarded", value: "awarded" },
+  { label: "Archived", value: "archived" },
+  { label: "All", value: "all" },
+];
 
 export default function GiveawayManagementScreen() {
   const router = useRouter();
   const vm = useAdminGiveaways();
 
-  // ============================================
-  // HANDLERS
-  // ============================================
-
-  const handleEdit = (giveaway: AdminGiveaway) => {
-    Alert.alert("Edit", `Edit ${giveaway.name} - Coming soon!`);
-  };
-
-  const handleEnd = (giveaway: AdminGiveaway) => {
-    Alert.alert(
-      "End Giveaway",
-      `Are you sure you want to end "${giveaway.name}" early?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "End",
-          style: "destructive",
-          onPress: async () => {
-            const success = await vm.endGiveaway(giveaway.id);
-            if (success) {
-              Alert.alert("Success", "Giveaway ended successfully.");
-            } else {
-              Alert.alert("Error", "Failed to end giveaway.");
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleArchive = (giveaway: AdminGiveaway) => {
-    Alert.alert(
-      "Archive Giveaway",
-      `Are you sure you want to archive "${giveaway.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Archive",
-          onPress: async () => {
-            const success = await vm.archiveGiveaway(giveaway.id);
-            if (success) {
-              Alert.alert("Success", "Giveaway archived successfully.");
-            } else {
-              Alert.alert("Error", "Failed to archive giveaway.");
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleRestore = (giveaway: AdminGiveaway) => {
-    Alert.alert(
-      "Restore Giveaway",
-      `Are you sure you want to restore "${giveaway.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Restore",
-          onPress: async () => {
-            const success = await vm.restoreGiveaway(giveaway.id);
-            if (success) {
-              Alert.alert("Success", "Giveaway restored successfully.");
-            } else {
-              Alert.alert("Error", "Failed to restore giveaway.");
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleDrawWinner = async () => {
-    if (!vm.selectedGiveaway) return;
-
-    if ((vm.selectedGiveaway.entry_count || 0) === 0) {
-      Alert.alert("No Entries", "This giveaway has no entries yet.");
-      vm.closeDrawModal();
-      return;
-    }
-
-    const success = await vm.drawWinner(vm.selectedGiveaway.id);
-    if (!success) {
-      Alert.alert("Error", "Failed to draw winner. Please try again.");
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active":
+        return COLORS.green;
+      case "ended":
+        return COLORS.orange;
+      case "awarded":
+        return COLORS.blue;
+      case "archived":
+        return COLORS.gray;
+      default:
+        return COLORS.gray;
     }
   };
 
-  const handleRedrawWinner = async () => {
-    const success = await vm.handleRedrawWinner();
-    if (success) {
-      Alert.alert("Success", "New winner has been drawn successfully!");
-    } else {
-      Alert.alert("Error", "Failed to redraw winner. Please try again.");
-    }
-  };
-
-  // ============================================
-  // LOADING STATE
-  // ============================================
-
-  if (vm.loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading giveaways...</Text>
+  const renderGiveawayCard = ({ item }: { item: AdminGiveaway }) => (
+    <View style={styles.giveawayCard}>
+      <View style={styles.giveawayHeader}>
+        <Text style={styles.giveawayName} numberOfLines={1}>
+          {item.name}
+        </Text>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(item.status) + "20" },
+          ]}
+        >
+          <Text
+            style={[styles.statusText, { color: getStatusColor(item.status) }]}
+          >
+            {item.status?.charAt(0).toUpperCase() + item.status?.slice(1)}
+          </Text>
+        </View>
       </View>
-    );
-  }
 
-  // ============================================
-  // RENDER
-  // ============================================
+      <View style={styles.giveawayInfo}>
+        <Text style={styles.giveawayDetail}>
+          💰 ${item.prize_value?.toLocaleString() || "0"}
+        </Text>
+        <Text style={styles.giveawayDetail}>
+          👥 {item.entry_count || 0}
+          {item.max_entries ? ` / ${item.max_entries}` : ""} entries
+        </Text>
+      </View>
+
+      {item.end_date && (
+        <Text style={styles.giveawayDate}>
+          📅 {vm.getDaysRemaining(item.end_date)}
+        </Text>
+      )}
+
+      {item.status === "awarded" && item.winner_name && (
+        <View style={styles.winnerRow}>
+          <Text style={styles.winnerText}>🏆 {item.winner_name}</Text>
+        </View>
+      )}
+
+      <View style={styles.actionRow}>
+        <Pressable
+          style={styles.actionButton}
+          onPress={() =>
+            router.push(`/(tabs)/admin/edit-giveaway/${item.id}` as any)
+          }
+        >
+          <Text style={[styles.actionText, { color: COLORS.green }]}>Edit</Text>
+        </Pressable>
+
+        {item.status === "active" && (
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => vm.endGiveaway(item.id)}
+            disabled={vm.processing === item.id}
+          >
+            <Text style={[styles.actionText, { color: COLORS.red }]}>
+              {vm.processing === item.id ? "..." : "End Early"}
+            </Text>
+          </Pressable>
+        )}
+
+        {item.status === "ended" && (
+          <>
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => vm.openDrawModal(item)}
+            >
+              <Text style={[styles.actionText, { color: COLORS.blue }]}>
+                Draw Winner
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => vm.archiveGiveaway(item.id)}
+              disabled={vm.processing === item.id}
+            >
+              <Text style={[styles.actionText, { color: COLORS.gray }]}>
+                🗄️
+              </Text>
+            </Pressable>
+          </>
+        )}
+
+        {item.status === "awarded" && (
+          <>
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => vm.openWinnerDetailsModal(item)}
+            >
+              <Text style={[styles.actionText, { color: COLORS.blue }]}>
+                View Winner
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.actionButton}
+              onPress={() => vm.archiveGiveaway(item.id)}
+              disabled={vm.processing === item.id}
+            >
+              <Text style={[styles.actionText, { color: COLORS.gray }]}>
+                🗄️
+              </Text>
+            </Pressable>
+          </>
+        )}
+
+        {item.status === "archived" && (
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => vm.restoreGiveaway(item.id)}
+            disabled={vm.processing === item.id}
+          >
+            <Text style={[styles.actionText, { color: COLORS.teal }]}>
+              {vm.processing === item.id ? "..." : "Restore"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderGiveawaysTab = () => (
+    <>
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={16} color={COLORS.gray} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search giveaways..."
+          placeholderTextColor={COLORS.gray}
+          value={vm.searchQuery}
+          onChangeText={vm.setSearchQuery}
+        />
+        {vm.searchQuery.length > 0 && (
+          <Pressable onPress={() => vm.setSearchQuery("")}>
+            <Ionicons name="close-circle" size={18} color={COLORS.gray} />
+          </Pressable>
+        )}
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {STATUS_FILTERS.map((filter) => (
+          <Pressable
+            key={filter.value}
+            style={[
+              styles.filterChip,
+              vm.statusFilter === filter.value && styles.filterChipActive,
+            ]}
+            onPress={() => vm.setStatusFilter(filter.value)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                vm.statusFilter === filter.value && styles.filterChipTextActive,
+              ]}
+            >
+              {filter.label}
+              {vm.statusCounts[filter.value] > 0
+                ? ` (${vm.statusCounts[filter.value]})`
+                : ""}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {vm.loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.blue} />
+        </View>
+      ) : vm.giveaways.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="gift-outline" size={48} color={COLORS.darkGray} />
+          <Text style={styles.emptyTitle}>No Giveaways</Text>
+          <Text style={styles.emptySubtitle}>
+            {vm.statusFilter === "all"
+              ? "Create your first giveaway to get started"
+              : `No ${vm.statusFilter} giveaways`}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={vm.giveaways}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderGiveawayCard}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={vm.refreshing}
+              onRefresh={vm.onRefresh}
+              tintColor={COLORS.blue}
+            />
+          }
+        />
+      )}
+    </>
+  );
+
+  const renderManageTab = () => (
+    <ScrollView
+      contentContainerStyle={styles.manageContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={vm.refreshing}
+          onRefresh={vm.onRefresh}
+          tintColor={COLORS.blue}
+        />
+      }
+    >
+      <Text style={styles.sectionTitle}>Quick Actions</Text>
+
+      <Pressable
+        style={styles.quickActionButton}
+        onPress={() => router.push("/(tabs)/admin/create-giveaway" as any)}
+      >
+        <Text style={styles.quickActionIcon}>+</Text>
+        <Text style={styles.quickActionText}>Create New Giveaway</Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.quickActionButton}
+        onPress={() =>
+          router.push("/(tabs)/admin/giveaway-participants" as any)
+        }
+      >
+        <Text style={styles.quickActionIcon}>👥</Text>
+        <Text style={styles.quickActionText}>View All Participants</Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.quickActionButton}
+        onPress={() =>
+          router.push("/(tabs)/admin/giveaway-past-winners" as any)
+        }
+      >
+        <Text style={styles.quickActionIcon}>🏆</Text>
+        <Text style={styles.quickActionText}>Past Winners</Text>
+      </Pressable>
+
+      <Text style={[styles.sectionTitle, { marginTop: SPACING.xxl }]}>
+        Overview
+      </Text>
+
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.blue }]}>
+            {vm.stats.activeCount}
+          </Text>
+          <Text style={styles.statCardLabel}>Active{"\n"}Giveaways</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.white }]}>
+            {vm.stats.totalEntries}
+          </Text>
+          <Text style={styles.statCardLabel}>Total{"\n"}Entries</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.green }]}>
+            ${vm.stats.totalPrizeValue?.toLocaleString() || "0"}
+          </Text>
+          <Text style={styles.statCardLabel}>Active Prize{"\n"}Value</Text>
+        </View>
+      </View>
+
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.white }]}>
+            {vm.stats.totalGiveaways}
+          </Text>
+          <Text style={styles.statCardLabel}>Total{"\n"}Giveaways</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.green }]}>
+            ${vm.stats.totalAwarded?.toLocaleString() || "0"}
+          </Text>
+          <Text style={styles.statCardLabel}>Total{"\n"}Awarded</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statCardValue, { color: COLORS.white }]}>
+            {vm.stats.frequency}
+          </Text>
+          <Text style={styles.statCardLabel}>Giveaway{"\n"}Frequency</Text>
+        </View>
+      </View>
+    </ScrollView>
+  );
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={24} color={COLORS.blue} />
+          <Text style={styles.backText}>Back</Text>
+        </Pressable>
         <Text style={styles.headerTitle}>GIVEAWAY MANAGEMENT</Text>
-        <View style={styles.placeholder} />
+        <View style={{ width: 70 }} />
       </View>
 
-      {/* Main Tabs */}
-      <View style={styles.mainTabs}>
-        <TouchableOpacity
-          style={[
-            styles.mainTab,
-            vm.activeTab === "giveaways" && styles.mainTabActive,
-          ]}
+      <View style={styles.tabBar}>
+        <Pressable
+          style={[styles.tab, vm.activeTab === "giveaways" && styles.tabActive]}
           onPress={() => vm.setActiveTab("giveaways")}
         >
           <Text
             style={[
-              styles.mainTabText,
-              vm.activeTab === "giveaways" && styles.mainTabTextActive,
+              styles.tabText,
+              vm.activeTab === "giveaways" && styles.tabTextActive,
             ]}
           >
             Giveaways
           </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.mainTab,
-            vm.activeTab === "manage" && styles.mainTabActive,
-          ]}
+        </Pressable>
+        <Pressable
+          style={[styles.tab, vm.activeTab === "manage" && styles.tabActive]}
           onPress={() => vm.setActiveTab("manage")}
         >
           <Text
             style={[
-              styles.mainTabText,
-              vm.activeTab === "manage" && styles.mainTabTextActive,
+              styles.tabText,
+              vm.activeTab === "manage" && styles.tabTextActive,
             ]}
           >
             Manage
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
-      {/* Tab Content */}
-      {vm.activeTab === "giveaways" ? (
-        <GiveawaysTab
-          vm={vm}
-          onEdit={handleEdit}
-          onEnd={handleEnd}
-          onArchive={handleArchive}
-          onRestore={handleRestore}
-        />
-      ) : (
-        <ManageTab vm={vm} router={router} />
-      )}
-
-      {/* ============================================ */}
-      {/* MODALS */}
-      {/* ============================================ */}
-
-      {/* Draw Winner Modal */}
-      <DrawWinnerModal
-        visible={vm.drawModalVisible}
-        giveaway={vm.selectedGiveaway}
-        isProcessing={vm.processing === vm.selectedGiveaway?.id}
-        onClose={vm.closeDrawModal}
-        onDraw={handleDrawWinner}
-      />
-
-      {/* Winner Result Modal (shown after initial draw) */}
-      <WinnerResultModal
-        visible={vm.winnerModalVisible}
-        winner={vm.drawnWinner}
-        giveaway={vm.selectedGiveaway}
-        onClose={vm.closeWinnerModal}
-      />
-
-      {/* Winner Details Modal (viewing existing winner + redraw option) */}
-      <WinnerDetailsModal
-        visible={vm.winnerDetailsModalVisible}
-        giveaway={vm.selectedGiveaway}
-        currentWinner={vm.currentWinner}
-        winnerHistory={vm.winnerHistory}
-        eligibleCount={vm.eligibleCount}
-        loading={vm.loadingWinnerDetails}
-        onClose={vm.closeWinnerDetailsModal}
-        onRedraw={vm.openRedrawModal}
-      />
-
-      {/* Redraw Confirm Modal */}
-      {(() => {
-        console.log("About to render RedrawConfirmModal:", {
-          visible: vm.redrawModalVisible,
-          giveaway: vm.selectedGiveaway?.name,
-          currentWinner: vm.currentWinner?.name,
-        });
-        return null;
-      })()}
-      <RedrawConfirmModal
-        visible={vm.redrawModalVisible}
-        giveaway={vm.selectedGiveaway}
-        currentWinner={vm.currentWinner}
-        eligibleCount={vm.eligibleCount}
-        reason={vm.redrawReason}
-        onReasonChange={vm.setRedrawReason}
-        isRedrawing={vm.redrawing}
-        onClose={vm.closeRedrawModal}
-        onConfirm={handleRedrawWinner}
-      />
+      {vm.activeTab === "giveaways" ? renderGiveawaysTab() : renderManageTab()}
     </View>
   );
 }
 
-// ============================================
-// STYLES
-// ============================================
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  centerContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.md,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.sm,
+    paddingTop: 60,
+    paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  backText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: "500",
-  },
+  backButton: { flexDirection: "row", alignItems: "center", width: 70 },
+  backText: { color: COLORS.blue, fontSize: FONT_SIZES.md },
   headerTitle: {
+    color: COLORS.white,
     fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    letterSpacing: 0.5,
-  },
-  placeholder: {
-    width: 50,
-  },
-
-  // Main Tabs
-  mainTabs: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  mainTab: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  mainTabActive: {
-    borderBottomColor: COLORS.primary,
-  },
-  mainTabText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  mainTabTextActive: {
-    color: COLORS.primary,
-  },
-
-  // Tab Content
-  tabContent: {
-    flex: 1,
-  },
-
-  // Search
-  searchContainer: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.sm,
-  },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    height: 40,
-  },
-  searchIcon: {
-    fontSize: 14,
-    marginRight: SPACING.sm,
-    opacity: 0.6,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    height: 40,
-  },
-
-  // Status Tabs
-  statusTabsWrapper: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  statusTabsContent: {
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.xs,
-  },
-  statusTab: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  statusTabActive: {
-    borderBottomColor: COLORS.primary,
-  },
-  statusTabText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  statusTabTextActive: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  // Sort
-  sortContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.xs,
-  },
-  sortLabel: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginRight: SPACING.xs,
-  },
-  sortPill: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sortPillActive: {
-    backgroundColor: COLORS.primary + "20",
-    borderColor: COLORS.primary,
-  },
-  sortPillText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  sortPillTextActive: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  // List
-  listContent: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xl * 2,
-  },
-
-  // Empty state
-  emptyContainer: {
-    alignItems: "center",
-    padding: SPACING.xl,
-    marginTop: SPACING.xl,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: SPACING.md,
-  },
-  emptyText: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  emptySubtext: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
+    fontWeight: "700",
     textAlign: "center",
   },
-
-  // Manage Tab
-  manageContent: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xl * 2,
+  tabBar: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.cardBorder,
   },
-  section: {
-    marginBottom: SPACING.lg,
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
-  sectionTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  actionCard: {
+  tabActive: { borderBottomColor: COLORS.blue },
+  tabText: { color: COLORS.gray, fontSize: FONT_SIZES.md, fontWeight: "600" },
+  tabTextActive: { color: COLORS.blue },
+  searchBox: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
-    borderRadius: 12,
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.card,
+    borderRadius: 10,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    height: 40,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.cardBorder,
+    gap: SPACING.sm,
   },
-  actionCardIcon: {
-    fontSize: 20,
-    marginRight: SPACING.md,
+  searchInput: { flex: 1, color: COLORS.white, fontSize: FONT_SIZES.sm },
+  filterRow: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
   },
-  actionCardText: {
+  filterChip: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  filterChipActive: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
+  filterChipText: { color: COLORS.lightGray, fontSize: FONT_SIZES.sm },
+  filterChipTextActive: { color: COLORS.white, fontWeight: "600" },
+  listContent: { paddingHorizontal: SPACING.lg, paddingBottom: 100 },
+  giveawayCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  giveawayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.sm,
+  },
+  giveawayName: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: SPACING.sm,
+  },
+  statusBadge: {
+    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  statusText: { fontSize: FONT_SIZES.xs, fontWeight: "700" },
+  giveawayInfo: {
+    flexDirection: "row",
+    gap: SPACING.lg,
+    marginBottom: SPACING.xs,
+  },
+  giveawayDetail: { color: COLORS.lightGray, fontSize: FONT_SIZES.sm },
+  giveawayDate: {
+    color: COLORS.gray,
+    fontSize: FONT_SIZES.sm,
+    marginBottom: SPACING.sm,
+  },
+  winnerRow: {
+    backgroundColor: COLORS.darkGray,
+    borderRadius: 8,
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  winnerText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  actionButton: { paddingVertical: SPACING.xs, paddingHorizontal: SPACING.sm },
+  actionText: { fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  manageContent: { padding: SPACING.lg, paddingBottom: 100 },
+  sectionTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    marginBottom: SPACING.md,
+  },
+  quickActionButton: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: SPACING.lg,
+    marginBottom: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  quickActionIcon: {
+    fontSize: FONT_SIZES.xl,
+    color: COLORS.white,
+    width: 30,
+    textAlign: "center",
+  },
+  quickActionText: {
+    color: COLORS.white,
     fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   statsGrid: {
     flexDirection: "row",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
   },
   statCard: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.card,
     borderRadius: 12,
     padding: SPACING.md,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.cardBorder,
   },
-  statValue: {
+  statCardValue: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
-    color: COLORS.text,
+    marginBottom: SPACING.xs,
   },
-  statLabel: {
+  statCardLabel: {
+    color: COLORS.gray,
     fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 80,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+    gap: SPACING.sm,
+  },
+  emptyTitle: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "600",
+    marginTop: SPACING.md,
+  },
+  emptySubtitle: {
+    color: COLORS.gray,
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
   },
 });

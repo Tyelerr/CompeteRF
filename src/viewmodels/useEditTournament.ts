@@ -16,6 +16,7 @@ interface EditTournamentForm {
   maxFargo: string;
   entryFee: string;
   reportsToFargo: boolean;
+  calcutta: boolean;
   openTournament: boolean;
   tournamentDate: Date | null;
   startTime: string;
@@ -55,6 +56,7 @@ export const useEditTournament = () => {
     maxFargo: "",
     entryFee: "",
     reportsToFargo: false,
+    calcutta: false,
     openTournament: false,
     tournamentDate: null,
     startTime: "",
@@ -143,6 +145,7 @@ export const useEditTournament = () => {
         maxFargo: tournamentData.max_fargo?.toString() || "",
         entryFee: tournamentData.entry_fee?.toString() || "",
         reportsToFargo: tournamentData.reports_to_fargo || false,
+        calcutta: tournamentData.calcutta || false,
         openTournament: tournamentData.open_tournament || false,
         tournamentDate: tournamentData.tournament_date
           ? new Date(tournamentData.tournament_date)
@@ -319,6 +322,7 @@ export const useEditTournament = () => {
             amount: pot.amount ? parseFloat(pot.amount) : 0,
           })) as any,
         reports_to_fargo: formData.reportsToFargo,
+        calcutta: formData.calcutta,
         open_tournament: formData.openTournament,
         tournament_date: formData.tournamentDate.toISOString().split("T")[0],
         start_time: formData.startTime,

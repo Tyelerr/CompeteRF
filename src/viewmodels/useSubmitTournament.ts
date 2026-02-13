@@ -332,6 +332,7 @@ export const useSubmitTournament = () => {
           maxFargo: template.max_fargo?.toString() || "",
           requiredFargoGames: template.required_fargo_games?.toString() || "",
           reportsToFargo: template.reports_to_fargo || false,
+          calcutta: template.calcutta || false,
           openTournament: template.open_tournament ?? true,
           entryFee: template.entry_fee?.toString() || "",
           addedMoney: template.added_money?.toString() || "",
@@ -599,6 +600,7 @@ export const useSubmitTournament = () => {
         ? parseInt(formData.requiredFargoGames)
         : null,
       reports_to_fargo: formData.reportsToFargo,
+      calcutta: formData.calcutta,
       open_tournament: formData.openTournament,
       phone_number: formData.phoneNumber.trim() || null,
       thumbnail: formData.thumbnail || null,
@@ -659,6 +661,7 @@ export const useSubmitTournament = () => {
         ? parseInt(formData.requiredFargoGames)
         : null,
       reports_to_fargo: formData.reportsToFargo || false,
+      calcutta: formData.calcutta || false,
       open_tournament: formData.openTournament || false,
       phone_number: formData.phoneNumber.trim() || null,
       thumbnail: formData.thumbnail || null,
@@ -851,8 +854,8 @@ export const useSubmitTournament = () => {
     return getRecurrencePreviewText(formData);
   };
 
- const navigateToLogin = () => router.push("/auth/login" as any);
-const navigateToFaq = () => router.push("/(tabs)/faq" as any);
+  const navigateToLogin = () => router.push("/auth/login" as any);
+  const navigateToFaq = () => router.push("/(tabs)/faq" as any);
 
   // ── Dropdown options ───────────────────────────────────────────────────
 

@@ -309,6 +309,12 @@ export default function TournamentDetailScreen() {
                 {tournament.reports_to_fargo ? "Yes" : "No"}
               </Text>
             </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Calcutta:</Text>
+              <Text style={styles.detailValue}>
+                {tournament.calcutta ? "Yes" : "No"}
+              </Text>
+            </View>
             {!isChipTournament && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Open Tournament:</Text>

@@ -261,6 +261,7 @@ export default function ShopScreen() {
       <GiveawayEntryModal
         visible={showEntryModal}
         giveaway={selectedGiveaway}
+        userId={profile?.id_auto}
         onClose={() => setShowEntryModal(false)}
         onSuccess={handleEntrySuccess}
       />

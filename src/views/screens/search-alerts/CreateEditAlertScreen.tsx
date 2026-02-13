@@ -27,7 +27,7 @@ import { US_CITIES_BY_STATE } from "../../../utils/us-cities";
 import { Dropdown } from "../../components/common/dropdown";
 import { Loading } from "../../components/common/loading";
 
-// ─── Option Data ──────────────────────────────────────────────────────────────
+// ——— Option Data ————————————————————————————————————————————————————
 
 const GAME_TYPE_OPTIONS = [
   { label: "Any Game Type", value: "" },
@@ -69,7 +69,7 @@ const DAYS_OF_WEEK_OPTIONS = [
   { label: "Saturday", value: "6" },
 ];
 
-// ─── Form State ───────────────────────────────────────────────────────────────
+// ——— Form State ————————————————————————————————————————————————————
 
 interface FormState {
   name: string;
@@ -84,6 +84,7 @@ interface FormState {
   entryFeeMax: string;
   fargoMax: string;
   reportsToFargo: boolean | undefined;
+  calcutta: boolean | undefined;
   openTournament: boolean | undefined;
   daysOfWeek: string[];
   isActive: boolean;
@@ -102,12 +103,13 @@ const initialFormState: FormState = {
   entryFeeMax: "",
   fargoMax: "",
   reportsToFargo: undefined,
+  calcutta: undefined,
   openTournament: undefined,
   daysOfWeek: [],
   isActive: true,
 };
 
-// ─── Helper: Convert form to criteria ─────────────────────────────────────────
+// ——— Helper: Convert form to criteria ——————————————————————————————
 
 function formToCriteria(form: FormState): SearchAlertFilters {
   const criteria: Record<string, any> = {};
@@ -125,6 +127,7 @@ function formToCriteria(form: FormState): SearchAlertFilters {
   if (form.fargoMax.trim()) criteria.fargoMax = parseInt(form.fargoMax);
   if (form.reportsToFargo !== undefined)
     criteria.reportsToFargo = form.reportsToFargo;
+  if (form.calcutta !== undefined) criteria.calcutta = form.calcutta;
   if (form.openTournament !== undefined)
     criteria.openTournament = form.openTournament;
   if (form.daysOfWeek.length > 0) criteria.daysOfWeek = form.daysOfWeek;
@@ -132,7 +135,7 @@ function formToCriteria(form: FormState): SearchAlertFilters {
   return criteria as SearchAlertFilters;
 }
 
-// ─── Helper: Convert criteria to form ─────────────────────────────────────────
+// ——— Helper: Convert criteria to form ——————————————————————————————
 
 function criteriaToForm(alert: SearchAlert): FormState {
   const c: Record<string, any> = alert.filter_criteria || {};
@@ -149,13 +152,14 @@ function criteriaToForm(alert: SearchAlert): FormState {
     entryFeeMax: c.entryFeeMax !== undefined ? c.entryFeeMax.toString() : "",
     fargoMax: c.fargoMax !== undefined ? c.fargoMax.toString() : "",
     reportsToFargo: c.reportsToFargo,
+    calcutta: c.calcutta,
     openTournament: c.openTournament,
     daysOfWeek: c.daysOfWeek || [],
     isActive: alert.is_active,
   };
 }
 
-// ─── Day Picker ───────────────────────────────────────────────────────────────
+// ——— Day Picker ————————————————————————————————————————————————————
 
 function DayPicker({
   selected,
@@ -201,7 +205,7 @@ function DayPicker({
   );
 }
 
-// ─── Toggle Row ───────────────────────────────────────────────────────────────
+// ——— Toggle Row ————————————————————————————————————————————————————
 
 function ToggleRow({
   label,
@@ -253,7 +257,7 @@ function ToggleRow({
   );
 }
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ——— Main Screen ————————————————————————————————————————————————————
 
 export default function CreateEditAlertScreen() {
   const router = useRouter();
@@ -310,7 +314,9 @@ export default function CreateEditAlertScreen() {
     });
   };
 
-  const cycleTriState = (field: "reportsToFargo" | "openTournament") => {
+  const cycleTriState = (
+    field: "reportsToFargo" | "calcutta" | "openTournament",
+  ) => {
     setForm((prev) => {
       const current = prev[field];
       // undefined → true → false → undefined
@@ -437,7 +443,7 @@ export default function CreateEditAlertScreen() {
               </View>
             )}
 
-            {/* ─── Alert Info Section ──────────────────────────────── */}
+            {/* ——— Alert Info Section ———————————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Alert Info</Text>
 
@@ -493,7 +499,7 @@ export default function CreateEditAlertScreen() {
               </View>
             </View>
 
-            {/* ─── Game Filters Section ────────────────────────────── */}
+            {/* ——— Game Filters Section ——————————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Game Filters</Text>
 
@@ -539,7 +545,7 @@ export default function CreateEditAlertScreen() {
                 <Text style={styles.fieldLabel}>Equipment</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder='e.g. "Diamond", "Brunswick"'
+                  placeholder='"Diamond", "Brunswick"'
                   placeholderTextColor={COLORS.textMuted}
                   value={form.equipment}
                   onChangeText={(v) => updateField("equipment", v)}
@@ -549,7 +555,7 @@ export default function CreateEditAlertScreen() {
               </View>
             </View>
 
-            {/* ─── Location Section ────────────────────────────────── */}
+            {/* ——— Location Section —————————————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Location</Text>
 
@@ -582,7 +588,7 @@ export default function CreateEditAlertScreen() {
               </View>
             </View>
 
-            {/* ─── Entry Fee & Fargo Section ───────────────────────── */}
+            {/* ——— Entry Fee & Fargo Section —————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Entry Fee & Skill Level</Text>
 
@@ -627,7 +633,7 @@ export default function CreateEditAlertScreen() {
               </View>
             </View>
 
-            {/* ─── Toggle Filters Section ──────────────────────────── */}
+            {/* ——— Toggle Filters Section ————————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Additional Filters</Text>
               <Text style={styles.sectionHint}>
@@ -643,6 +649,14 @@ export default function CreateEditAlertScreen() {
               />
 
               <ToggleRow
+                label="Calcutta"
+                description="Tournament includes a Calcutta auction"
+                value={form.calcutta}
+                onToggle={() => cycleTriState("calcutta")}
+                disabled={saving}
+              />
+
+              <ToggleRow
                 label="Open Tournament"
                 description="No skill cap restriction"
                 value={form.openTournament}
@@ -651,7 +665,7 @@ export default function CreateEditAlertScreen() {
               />
             </View>
 
-            {/* ─── Days of Week Section ─────────────────────────────── */}
+            {/* ——— Days of Week Section ——————————————————————————— */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Days of Week</Text>
               <Text style={styles.sectionHint}>
@@ -665,7 +679,7 @@ export default function CreateEditAlertScreen() {
               />
             </View>
 
-            {/* ─── Preview Section ──────────────────────────────────── */}
+            {/* ——— Preview Section ————————————————————————————————— */}
             <View style={styles.previewContainer}>
               <Text style={styles.previewLabel}>Alert Preview</Text>
               <Text style={styles.previewText}>
@@ -675,7 +689,7 @@ export default function CreateEditAlertScreen() {
           </View>
         </ScrollView>
 
-        {/* ─── Fixed Bottom Buttons ──────────────────────────────── */}
+        {/* ——— Fixed Bottom Buttons ———————————————————————————————— */}
         <View style={styles.bottomBar}>
           <TouchableOpacity
             style={[
@@ -707,7 +721,7 @@ export default function CreateEditAlertScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ——— Styles ————————————————————————————————————————————————————————
 
 const styles = StyleSheet.create({
   container: {

@@ -103,6 +103,7 @@ export const FilterModal = ({
     if (localFilters.requiresFargoGames)
       activeFilters.requiresFargoGames = true;
     if (localFilters.reportsToFargo) activeFilters.reportsToFargo = true;
+    if (localFilters.calcutta) activeFilters.calcutta = true;
     if (localFilters.openTournament) activeFilters.openTournament = true;
 
     analyticsService.trackFiltersChanged({
@@ -132,7 +133,11 @@ export const FilterModal = ({
   };
 
   const toggleCheckbox = (
-    field: "requiresFargoGames" | "reportsToFargo" | "openTournament",
+    field:
+      | "requiresFargoGames"
+      | "reportsToFargo"
+      | "calcutta"
+      | "openTournament",
   ) => {
     setLocalFilters({ ...localFilters, [field]: !localFilters[field] });
   };
@@ -299,12 +304,29 @@ export const FilterModal = ({
                 ]}
               >
                 {localFilters.requiresFargoGames && (
-                  <Text style={styles.checkmark}>✓</Text>
+                  <Text style={styles.checkmark}>✔</Text>
                 )}
               </View>
               <Text style={styles.checkboxLabel}>
                 Minimum Required Fargo Games
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => toggleCheckbox("calcutta")}
+            >
+              <View
+                style={[
+                  styles.checkbox,
+                  localFilters.calcutta && styles.checkboxActive,
+                ]}
+              >
+                {localFilters.calcutta && (
+                  <Text style={styles.checkmark}>✔</Text>
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>Calcutta</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -318,7 +340,7 @@ export const FilterModal = ({
                 ]}
               >
                 {localFilters.openTournament && (
-                  <Text style={styles.checkmark}>✓</Text>
+                  <Text style={styles.checkmark}>✔</Text>
                 )}
               </View>
               <Text style={styles.checkboxLabel}>Open Tournament</Text>
