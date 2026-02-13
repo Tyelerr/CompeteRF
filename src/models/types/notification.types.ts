@@ -171,7 +171,7 @@ export const PREFERENCE_CATEGORIES: PreferenceCategory[] = [
   {
     key: "app_announcements",
     label: "App Announcements",
-    description: "New features, updates, and CompeteRF news",
+    description: "New features, updates, and Compete news",
     icon: "📢",
   },
   {

@@ -1,17 +1,25 @@
-import { useNavigation } from "@react-navigation/native";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, View } from "react-native";
-import { AuthStackParamList } from "../../../navigation/navigation.types";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { supabase } from "../../../lib/supabase";
+import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { Button } from "../../components/common/button";
 
-type WelcomeNavigationProp = StackNavigationProp<AuthStackParamList, "Welcome">;
-
 export const WelcomeScreen = () => {
-  const navigation = useNavigation<WelcomeNavigationProp>();
+  const router = useRouter();
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // ── Animations ─────────────────────────────────────────────────────
   const welcomeFade = useRef(new Animated.Value(0)).current;
@@ -110,6 +118,52 @@ export const WelcomeScreen = () => {
     ).start();
   }, []);
 
+  // ── Apple Sign In Handler ──────────────────────────────────────────
+  const handleAppleSignIn = async () => {
+    setError("");
+    setAppleLoading(true);
+
+    try {
+      const result = await authService.signInWithApple();
+
+      if (!result.user) {
+        setError("Sign in failed. Please try again.");
+        return;
+      }
+
+      // Check if user already has a profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", result.user.id)
+        .maybeSingle();
+
+      if (profile) {
+        // Existing user — go straight to the app
+        router.replace("/(tabs)");
+      } else {
+        // New Apple user — needs to complete their profile
+        // Pass along the name Apple gave us (only available on first sign-in)
+        const firstName = result.fullName?.givenName || "";
+        const lastName = result.fullName?.familyName || "";
+
+        router.replace({
+          pathname: "/auth/complete-profile",
+          params: { firstName, lastName },
+        } as any);
+      }
+    } catch (err: any) {
+      // User cancelled the Apple dialog — not an error
+      if (err.code === "ERR_REQUEST_CANCELED") {
+        return;
+      }
+      console.error("Apple Sign In error:", err);
+      setError("Apple Sign In failed. Please try again.");
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -174,18 +228,49 @@ export const WelcomeScreen = () => {
           },
         ]}
       >
+        {/* Apple Sign In — iOS only */}
+        {Platform.OS === "ios" && (
+          <View style={styles.appleButtonWrapper}>
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={
+                AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+              }
+              buttonStyle={
+                AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={8}
+              style={styles.appleButton}
+              onPress={handleAppleSignIn}
+            />
+            {appleLoading && (
+              <Text style={styles.loadingHint}>Signing in...</Text>
+            )}
+          </View>
+        )}
+
+        {/* Divider */}
+        {Platform.OS === "ios" && (
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+        )}
+
         <Button
           title="Create Account"
-          onPress={() => navigation.navigate("Register")}
+          onPress={() => router.push("/auth/register")}
           fullWidth
         />
         <View style={styles.spacer} />
         <Button
           title="Log In"
-          onPress={() => navigation.navigate("Login")}
+          onPress={() => router.push("/auth/login")}
           variant="outline"
           fullWidth
         />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
       </Animated.View>
     </View>
   );
@@ -217,7 +302,6 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
   },
-  // Outer blue glow
   glowRing: {
     position: "absolute",
     width: 140,
@@ -232,7 +316,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
-  // Inner blue glow (tighter, brighter)
   glowRingInner: {
     position: "absolute",
     width: 110,
@@ -259,7 +342,41 @@ const styles = StyleSheet.create({
   buttons: {
     paddingBottom: SPACING.xl,
   },
+  appleButtonWrapper: {
+    alignItems: "center",
+    marginBottom: SPACING.sm,
+  },
+  appleButton: {
+    width: "100%",
+    height: 50,
+  },
+  loadingHint: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xs,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: SPACING.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginHorizontal: SPACING.md,
+  },
   spacer: {
     height: SPACING.md,
+  },
+  error: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
+    marginTop: SPACING.md,
   },
 });

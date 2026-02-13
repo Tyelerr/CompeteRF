@@ -1,7 +1,7 @@
 // app/(tabs)/notifications.tsx
 // ═══════════════════════════════════════════════════════════
-// Unified Message Center - Push notifications + Conversations
-// Two tabs: Notifications (broadcasts) and Messages (threads)
+// Unified Inbox - Conversations + Notifications
+// Notifications tab merges broadcast messages + push notifications
 // ═══════════════════════════════════════════════════════════
 
 import { useFocusEffect, useRouter } from "expo-router";
@@ -25,8 +25,8 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 
-// ── Push notification type ──
-interface InboxNotification {
+// ── Broadcast notification type (notification_messages table) ──
+interface BroadcastNotification {
   id: string;
   message_id: string;
   read_at: string | null;
@@ -41,6 +41,35 @@ interface InboxNotification {
     venue_id: number | null;
     created_at: string;
   };
+}
+
+// ── Push notification type (notifications table) ──
+interface PushNotification {
+  id: number;
+  user_id: number;
+  title: string;
+  body: string;
+  category: string | null;
+  data: Record<string, any> | null;
+  read_at: string | null;
+  status: string;
+  created_at: string;
+}
+
+// ── Unified notification item for display ──
+interface UnifiedNotification {
+  id: string;
+  source: "broadcast" | "push";
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  badge: { label: string; color: string; icon: string };
+  tournament_id: number | null;
+  deep_link: string | null;
+  // For marking read / deleting
+  broadcastRecipientId?: string;
+  pushNotificationId?: number;
 }
 
 // ── Time formatting ──
@@ -60,23 +89,45 @@ const getTimeAgo = (dateString: string): string => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
-// ── Sender info ──
-const getSenderInfo = (
+// ── Badge info by source ──
+const getBroadcastBadge = (
   senderRole: string,
 ): { label: string; color: string; icon: string } => {
   switch (senderRole) {
     case "tournament_director":
-      return { label: "Tournament Director", color: "#2ECC71", icon: "🏆" };
+      return { label: "Broadcast", color: "#2ECC71", icon: "📣" };
     case "bar_owner":
-      return { label: "Venue", color: "#E67E22", icon: "🏢" };
+      return { label: "Broadcast", color: "#E67E22", icon: "📣" };
     case "super_admin":
     case "compete_admin":
-      return { label: "Compete", color: "#3498DB", icon: "📢" };
+      return { label: "Broadcast", color: "#3498DB", icon: "📣" };
     default:
-      return { label: "Message", color: "#95A5A6", icon: "✉️" };
+      return { label: "Broadcast", color: "#95A5A6", icon: "📣" };
   }
 };
 
+const getPushBadge = (
+  category: string | null,
+): { label: string; color: string; icon: string } => {
+  switch (category) {
+    case "search_alert_match":
+      return { label: "Search Alert", color: "#9B59B6", icon: "🔔" };
+    case "tournament_update":
+      return { label: "Tournament", color: "#2ECC71", icon: "🏆" };
+    case "giveaway_update":
+      return { label: "Giveaway", color: "#E67E22", icon: "🎁" };
+    case "venue_promotion":
+      return { label: "Venue", color: "#E67E22", icon: "🏢" };
+    case "app_announcement":
+      return { label: "Announcement", color: "#3498DB", icon: "📢" };
+    case "admin_alert":
+      return { label: "Admin", color: "#E74C3C", icon: "🚩" };
+    default:
+      return { label: "Notification", color: "#3498DB", icon: "🔔" };
+  }
+};
+
+// ── Conversation helpers ──
 const getCategoryLabel = (cat: string | null): string => {
   const map: Record<string, string> = {
     tournament_issues: "Tournament Issues",
@@ -92,26 +143,41 @@ const getCategoryLabel = (cat: string | null): string => {
   return cat ? map[cat] || cat : "";
 };
 
-// ══════════════════════════════════════════════════════════
-// Notification Card (broadcast messages)
-// ══════════════════════════════════════════════════════════
+const getConvoRoleInfo = (
+  role: string | null,
+): { color: string; icon: string } => {
+  switch (role) {
+    case "tournament_director":
+      return { color: "#2ECC71", icon: "🏆" };
+    case "bar_owner":
+      return { color: "#E67E22", icon: "🏢" };
+    case "super_admin":
+    case "compete_admin":
+      return { color: "#3498DB", icon: "📢" };
+    default:
+      return { color: "#95A5A6", icon: "💬" };
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// Unified Notification Card
+// ═══════════════════════════════════════════════════════════
 const NotificationCard = ({
-  msg,
+  item,
   isExpanded,
   onPress,
   onDelete,
   onTournamentPress,
+  onDeepLink,
 }: {
-  msg: InboxNotification;
+  item: UnifiedNotification;
   isExpanded: boolean;
   onPress: () => void;
   onDelete: () => void;
   onTournamentPress: (id: number) => void;
+  onDeepLink: (link: string) => void;
 }) => {
-  const notif = msg.notification_messages;
-  if (!notif) return null;
-  const isUnread = !msg.read_at;
-  const sender = getSenderInfo(notif.sender_role);
+  const isUnread = !item.read_at;
 
   return (
     <TouchableOpacity
@@ -126,36 +192,51 @@ const NotificationCard = ({
       activeOpacity={0.7}
     >
       {isUnread && (
-        <View style={[styles.accentBar, { backgroundColor: sender.color }]} />
+        <View
+          style={[styles.accentBar, { backgroundColor: item.badge.color }]}
+        />
       )}
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
           <View style={styles.senderRow}>
             <View
-              style={[styles.senderDot, { backgroundColor: sender.color }]}
-            />
-            <Text style={styles.senderText}>
-              {sender.icon} {sender.label}
-            </Text>
+              style={[
+                styles.typeBadge,
+                { backgroundColor: item.badge.color + "20" },
+              ]}
+            >
+              <Text style={styles.typeBadgeIcon}>{item.badge.icon}</Text>
+              <Text style={[styles.typeBadgeText, { color: item.badge.color }]}>
+                {item.badge.label}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.timeText}>{getTimeAgo(msg.created_at)}</Text>
+          <Text style={styles.timeText}>{getTimeAgo(item.created_at)}</Text>
         </View>
         <Text
           style={[styles.subjectText, isUnread && styles.subjectTextUnread]}
         >
-          {notif.subject}
+          {item.title}
         </Text>
         {isExpanded ? (
           <View style={styles.expandedBody}>
-            <Text style={styles.bodyText}>{notif.body}</Text>
-            {notif.tournament_id && (
+            <Text style={styles.bodyText}>{item.body}</Text>
+            {item.tournament_id && (
               <TouchableOpacity
                 style={styles.tournamentLink}
-                onPress={() => onTournamentPress(notif.tournament_id!)}
+                onPress={() => onTournamentPress(item.tournament_id!)}
               >
                 <Text style={styles.tournamentLinkText}>
                   🏆 View Tournament
                 </Text>
+              </TouchableOpacity>
+            )}
+            {item.deep_link && !item.tournament_id && (
+              <TouchableOpacity
+                style={styles.tournamentLink}
+                onPress={() => onDeepLink(item.deep_link!)}
+              >
+                <Text style={styles.tournamentLinkText}>View Details →</Text>
               </TouchableOpacity>
             )}
             <View style={styles.cardActions}>
@@ -169,7 +250,7 @@ const NotificationCard = ({
           </View>
         ) : (
           <Text style={styles.previewText} numberOfLines={1}>
-            {notif.body}
+            {item.body}
           </Text>
         )}
       </View>
@@ -177,9 +258,9 @@ const NotificationCard = ({
   );
 };
 
-// ══════════════════════════════════════════════════════════
-// Conversation Card (DM threads)
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// Conversation Card
+// ═══════════════════════════════════════════════════════════
 const ConversationCard = ({
   convo,
   onPress,
@@ -191,7 +272,7 @@ const ConversationCard = ({
 }) => {
   const hasUnread = convo.unread_count > 0;
   const roleInfo = convo.other_participant_role
-    ? getSenderInfo(convo.other_participant_role)
+    ? getConvoRoleInfo(convo.other_participant_role)
     : { color: "#95A5A6", icon: "💬" };
 
   return (
@@ -259,29 +340,33 @@ const ConversationCard = ({
   );
 };
 
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // MAIN SCREEN
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
 
-  const [activeTab, setActiveTab] = useState<"notifications" | "messages">(
-    "messages",
+  const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(
+    "conversations",
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Notifications state
-  const [notifications, setNotifications] = useState<InboxNotification[]>([]);
+  // Notifications state (unified)
+  const [unifiedNotifications, setUnifiedNotifications] = useState<
+    UnifiedNotification[]
+  >([]);
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
 
   // Conversations state
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
 
-  // ── Load data ──
-  const loadNotifications = useCallback(async () => {
-    if (!user?.id) return;
+  // ── Load broadcast notifications ──
+  const loadBroadcasts = useCallback(async (): Promise<
+    UnifiedNotification[]
+  > => {
+    if (!user?.id) return [];
     try {
       const { data, error } = await supabase
         .from("notification_message_recipients")
@@ -294,12 +379,62 @@ export default function NotificationsScreen() {
         .limit(50);
 
       if (error) throw error;
-      setNotifications((data as unknown as InboxNotification[]) || []);
+
+      return ((data as unknown as BroadcastNotification[]) || []).map((msg) => {
+        const notif = msg.notification_messages;
+        return {
+          id: `broadcast-${msg.id}`,
+          source: "broadcast" as const,
+          title: notif?.subject || "Message",
+          body: notif?.body || "",
+          read_at: msg.read_at,
+          created_at: msg.created_at,
+          badge: getBroadcastBadge(notif?.sender_role || ""),
+          tournament_id: notif?.tournament_id || null,
+          deep_link: null,
+          broadcastRecipientId: msg.id,
+        };
+      });
     } catch (err) {
-      console.error("Error loading notifications:", err);
+      console.error("Error loading broadcasts:", err);
+      return [];
     }
   }, [user?.id]);
 
+  // ── Load push notifications ──
+  const loadPushNotifications = useCallback(async (): Promise<
+    UnifiedNotification[]
+  > => {
+    if (!profile?.id_auto) return [];
+    try {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", profile.id_auto)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      return ((data as PushNotification[]) || []).map((notif) => ({
+        id: `push-${notif.id}`,
+        source: "push" as const,
+        title: notif.title,
+        body: notif.body,
+        read_at: notif.read_at,
+        created_at: notif.created_at,
+        badge: getPushBadge(notif.category),
+        tournament_id: (notif.data?.tournament_id as number) || null,
+        deep_link: (notif.data?.deep_link as string) || null,
+        pushNotificationId: notif.id,
+      }));
+    } catch (err) {
+      console.error("Error loading push notifications:", err);
+      return [];
+    }
+  }, [profile?.id_auto]);
+
+  // ── Load conversations ──
   const loadConversations = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -310,11 +445,24 @@ export default function NotificationsScreen() {
     }
   }, [user?.id]);
 
+  // ── Load all ──
   const loadAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([loadNotifications(), loadConversations()]);
+    const [broadcasts, pushNotifs] = await Promise.all([
+      loadBroadcasts(),
+      loadPushNotifications(),
+    ]);
+    await loadConversations();
+
+    // Merge and sort by date (newest first)
+    const merged = [...broadcasts, ...pushNotifs].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+    setUnifiedNotifications(merged);
     setLoading(false);
-  }, [loadNotifications, loadConversations]);
+  }, [loadBroadcasts, loadPushNotifications, loadConversations]);
 
   // Refresh on screen focus
   useFocusEffect(
@@ -330,38 +478,64 @@ export default function NotificationsScreen() {
   }, [loadAll]);
 
   // ── Notification actions ──
-  const markNotifAsRead = async (recipientId: string) => {
-    await supabase
-      .from("notification_message_recipients")
-      .update({ read_at: new Date().toISOString() })
-      .eq("id", recipientId);
-    setNotifications((prev) =>
-      prev.map((m) =>
-        m.id === recipientId ? { ...m, read_at: new Date().toISOString() } : m,
+  const markNotifAsRead = async (item: UnifiedNotification) => {
+    if (item.source === "broadcast" && item.broadcastRecipientId) {
+      await supabase
+        .from("notification_message_recipients")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", item.broadcastRecipientId);
+    } else if (item.source === "push" && item.pushNotificationId) {
+      await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", item.pushNotificationId);
+    }
+    setUnifiedNotifications((prev) =>
+      prev.map((n) =>
+        n.id === item.id ? { ...n, read_at: new Date().toISOString() } : n,
       ),
     );
   };
 
-  const deleteNotification = async (recipientId: string) => {
-    await supabase
-      .from("notification_message_recipients")
-      .delete()
-      .eq("id", recipientId);
-    setNotifications((prev) => prev.filter((m) => m.id !== recipientId));
-    if (expandedNotifId === recipientId) setExpandedNotifId(null);
+  const deleteNotification = async (item: UnifiedNotification) => {
+    if (item.source === "broadcast" && item.broadcastRecipientId) {
+      await supabase
+        .from("notification_message_recipients")
+        .delete()
+        .eq("id", item.broadcastRecipientId);
+    } else if (item.source === "push" && item.pushNotificationId) {
+      await supabase
+        .from("notifications")
+        .delete()
+        .eq("id", item.pushNotificationId);
+    }
+    setUnifiedNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    if (expandedNotifId === item.id) setExpandedNotifId(null);
   };
 
-  const markAllNotifsRead = async () => {
-    if (!user?.id) return;
-    await supabase
-      .from("notification_message_recipients")
-      .update({ read_at: new Date().toISOString() })
-      .eq("user_id", user.id)
-      .is("read_at", null);
-    setNotifications((prev) =>
-      prev.map((m) => ({
-        ...m,
-        read_at: m.read_at || new Date().toISOString(),
+  const markAllRead = async () => {
+    // Mark broadcast notifications read
+    if (user?.id) {
+      await supabase
+        .from("notification_message_recipients")
+        .update({ read_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .is("read_at", null);
+    }
+
+    // Mark push notifications read
+    if (profile?.id_auto) {
+      await supabase
+        .from("notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("user_id", profile.id_auto)
+        .is("read_at", null);
+    }
+
+    setUnifiedNotifications((prev) =>
+      prev.map((n) => ({
+        ...n,
+        read_at: n.read_at || new Date().toISOString(),
       })),
     );
   };
@@ -384,17 +558,18 @@ export default function NotificationsScreen() {
   };
 
   // ── Counts ──
-  const unreadNotifCount = notifications.filter((n) => !n.read_at).length;
+  const unreadNotifCount = unifiedNotifications.filter(
+    (n) => !n.read_at,
+  ).length;
   const unreadConvoCount = conversations.reduce(
     (sum, c) => sum + c.unread_count,
     0,
   );
-  const totalUnread = unreadNotifCount + unreadConvoCount;
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading messages...</Text>
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -404,25 +579,28 @@ export default function NotificationsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.headerSide}
           onPress={() => router.back()}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>MESSAGES</Text>
-        <View style={styles.backButton} />
+        <Text style={styles.headerTitle}>INBOX</Text>
+        <View style={styles.headerSide} />
       </View>
 
       {/* Tabs */}
       <View style={styles.tabRow}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === "messages" && styles.tabActive]}
-          onPress={() => setActiveTab("messages")}
+          style={[
+            styles.tab,
+            activeTab === "conversations" && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab("conversations")}
         >
           <Text
             style={[
               styles.tabText,
-              activeTab === "messages" && styles.tabTextActive,
+              activeTab === "conversations" && styles.tabTextActive,
             ]}
           >
             💬 Conversations
@@ -456,19 +634,21 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* New Message Button */}
-      <TouchableOpacity
-        style={styles.newMessageButton}
-        onPress={() => router.push("/compose-message" as any)}
-      >
-        <Text style={styles.newMessageButtonText}>✉️ New Message</Text>
-      </TouchableOpacity>
+      {/* New Message Button — only on Conversations tab */}
+      {activeTab === "conversations" && (
+        <TouchableOpacity
+          style={styles.newMessageButton}
+          onPress={() => router.push("/compose-message" as any)}
+        >
+          <Text style={styles.newMessageButtonText}>✉️ New Message</Text>
+        </TouchableOpacity>
+      )}
 
       <ScrollView
         style={styles.scrollContent}
         contentContainerStyle={
           (activeTab === "notifications"
-            ? notifications.length
+            ? unifiedNotifications.length
             : conversations.length) === 0
             ? styles.emptyContainer
             : undefined
@@ -484,40 +664,55 @@ export default function NotificationsScreen() {
         {/* ═══ NOTIFICATIONS TAB ═══ */}
         {activeTab === "notifications" && (
           <>
-            {unreadNotifCount > 0 && (
-              <View style={styles.actionBar}>
-                <TouchableOpacity onPress={markAllNotifsRead}>
+            {/* Settings + Mark all read row */}
+            <View style={styles.notifActionRow}>
+              <TouchableOpacity
+                style={styles.settingsLink}
+                onPress={() =>
+                  router.push("/(tabs)/notification-preferences" as any)
+                }
+              >
+                <Text style={styles.settingsLinkIcon}>⚙️</Text>
+                <Text style={styles.settingsLinkText}>
+                  Notification Settings
+                </Text>
+              </TouchableOpacity>
+              {unreadNotifCount > 0 && (
+                <TouchableOpacity onPress={markAllRead}>
                   <Text style={styles.actionBarText}>Mark all as read</Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              )}
+            </View>
 
-            {notifications.length === 0 ? (
+            {unifiedNotifications.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>🔔</Text>
                 <Text style={styles.emptyTitle}>No notifications</Text>
                 <Text style={styles.emptySubtitle}>
-                  Broadcasts from tournament directors and venues you follow
-                  will appear here.
+                  Search alert matches, tournament updates, giveaway news, and
+                  broadcasts will appear here.
                 </Text>
               </View>
             ) : (
               <>
-                {notifications.map((msg) => (
+                {unifiedNotifications.map((item) => (
                   <NotificationCard
-                    key={msg.id}
-                    msg={msg}
-                    isExpanded={expandedNotifId === msg.id}
+                    key={item.id}
+                    item={item}
+                    isExpanded={expandedNotifId === item.id}
                     onPress={() => {
-                      if (!msg.read_at) markNotifAsRead(msg.id);
+                      if (!item.read_at) markNotifAsRead(item);
                       setExpandedNotifId((prev) =>
-                        prev === msg.id ? null : msg.id,
+                        prev === item.id ? null : item.id,
                       );
                     }}
-                    onDelete={() => deleteNotification(msg.id)}
+                    onDelete={() => deleteNotification(item)}
                     onTournamentPress={(id) =>
-                      router.push(`/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any)
+                      router.push(
+                        `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
+                      )
                     }
+                    onDeepLink={(link) => router.push(link as any)}
                   />
                 ))}
                 <Text style={styles.hintText}>Long press to delete</Text>
@@ -526,8 +721,8 @@ export default function NotificationsScreen() {
           </>
         )}
 
-        {/* ═══ MESSAGES TAB ═══ */}
-        {activeTab === "messages" && (
+        {/* ═══ CONVERSATIONS TAB ═══ */}
+        {activeTab === "conversations" && (
           <>
             {conversations.length === 0 ? (
               <View style={styles.emptyState}>
@@ -596,7 +791,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
   },
-  backButton: {
+  headerSide: {
     width: 70,
   },
   backButtonText: {
@@ -610,6 +805,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: 1,
   },
+
   // ── New Message Button ──
   newMessageButton: {
     marginHorizontal: SPACING.md,
@@ -672,11 +868,25 @@ const styles = StyleSheet.create({
   },
 
   // ── Action bar ──
-  actionBar: {
+  notifActionRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    paddingVertical: SPACING.sm,
+  },
+  settingsLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  settingsLinkIcon: {
+    fontSize: 16,
+  },
+  settingsLinkText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   actionBarText: {
     fontSize: FONT_SIZES.xs,
@@ -694,7 +904,7 @@ const styles = StyleSheet.create({
   },
   card: {
     marginHorizontal: SPACING.md,
-    marginTop: SPACING.sm,
+    marginTop: SPACING.md,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
@@ -733,6 +943,24 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
+
+  // ── Type Badge (Broadcast / Search Alert / Giveaway etc.) ──
+  typeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  typeBadgeIcon: {
+    fontSize: 12,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
   timeRow: {
     flexDirection: "row",
     alignItems: "center",

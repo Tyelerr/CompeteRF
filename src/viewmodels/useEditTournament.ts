@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
 import { supabase } from "../lib/supabase";
+import { notificationDispatcher } from "../models/services/notification-dispatcher.service";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
 import { useAuthContext } from "../providers/AuthProvider";
@@ -335,6 +336,21 @@ export const useEditTournament = () => {
       };
 
       await tournamentService.updateTournament(tournament.id, updateData);
+
+      // ══════════════════════════════════════════════════════════
+      // 🔔 Phase 2: Notify users who favorited this tournament
+      // ══════════════════════════════════════════════════════════
+      notificationDispatcher
+        .sendToTournamentFavorites(
+          tournament.id,
+          profile.id_auto, // exclude the editor
+          "📋 Tournament Updated",
+          `${formData.name.trim()} has been updated — check the new details`,
+          { deep_link: `/tournament-detail?id=${tournament.id}` },
+        )
+        .catch((err) =>
+          console.error("⚠️ Error sending update notifications:", err),
+        );
 
       Alert.alert("Success", "Tournament updated successfully", [
         { text: "OK", onPress: () => router.back() },

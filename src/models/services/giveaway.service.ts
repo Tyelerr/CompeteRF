@@ -6,6 +6,7 @@ import {
   GiveawayStats,
   WinnerHistoryRecord,
 } from "../types/giveaway.types";
+import { notificationDispatcher } from "./notification-dispatcher.service";
 
 export const giveawayService = {
   // ============================================
@@ -134,7 +135,7 @@ export const giveawayService = {
 
   /**
    * Get all entries for current user (to check which giveaways they've entered)
-   * Works with new RLS — users can read their own entries
+   * Works with new RLS - users can read their own entries
    */
   async getUserEntries(userId: number): Promise<GiveawayEntry[]> {
     const { data, error } = await supabase
@@ -152,7 +153,7 @@ export const giveawayService = {
 
   /**
    * Check if user has already entered a specific giveaway
-   * Works with new RLS — users can read their own entries
+   * Works with new RLS - users can read their own entries
    */
   async hasUserEntered(giveawayId: number, userId: number): Promise<boolean> {
     const { data, error } = await supabase
@@ -364,6 +365,28 @@ export const giveawayService = {
       return { success: false, error: error.message };
     }
 
+    // ══════════════════════════════════════════════════════════
+    // 🔔 Phase 3a: Notify all users about new giveaway
+    // ══════════════════════════════════════════════════════════
+    const prizeStr =
+      giveaway.prize_value > 0
+        ? ` — $${giveaway.prize_value} value!`
+        : "";
+    notificationDispatcher
+      .sendToAllUsers(
+        "giveaway_update",
+        "🎁 New Giveaway!",
+        `${giveaway.name.trim()}${prizeStr} Enter now for a chance to win!`,
+        {
+          giveaway_id: data.id,
+          deep_link: "/(tabs)/shop",
+          type: "new_giveaway",
+        },
+      )
+      .catch((err) =>
+        console.error("⚠️ Error sending new giveaway notifications:", err),
+      );
+
     return { success: true, data };
   },
 
@@ -460,11 +483,12 @@ export const giveawayService = {
     // Get the giveaway prize value for updating total_winnings
     const { data: giveaway } = await supabase
       .from("giveaways")
-      .select("prize_value")
+      .select("prize_value, name")
       .eq("id", giveawayId)
       .single();
 
     const prizeValue = giveaway?.prize_value || 0;
+    const giveawayName = giveaway?.name || "Giveaway";
 
     // Update giveaway with winner
     const { error: updateError } = await supabase
@@ -519,6 +543,51 @@ export const giveawayService = {
           })
           .eq("id_auto", winnerEntry.user_id);
       }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 🔔 Phase 3b: Notify winner
+    // ══════════════════════════════════════════════════════════
+    notificationDispatcher
+      .send({
+        category: "giveaway_update",
+        recipientIdAutos: [winnerEntry.user_id],
+        title: "🏆 You Won!",
+        body: `Congratulations! You won ${giveawayName}!`,
+        data: {
+          giveaway_id: giveawayId,
+          deep_link: "/(tabs)/shop",
+          type: "giveaway_winner",
+        },
+      })
+      .catch((err) =>
+        console.error("⚠️ Error sending winner notification:", err),
+      );
+
+    // 🔔 Phase 3b: Notify other entrants
+    const otherEntrantIds = entries
+      .filter((e) => e.user_id !== winnerEntry.user_id)
+      .map((e) => e.user_id);
+
+    if (otherEntrantIds.length > 0) {
+      // Deduplicate (a user could theoretically appear once, but just in case)
+      const uniqueOtherIds = [...new Set(otherEntrantIds)];
+
+      notificationDispatcher
+        .send({
+          category: "giveaway_update",
+          recipientIdAutos: uniqueOtherIds,
+          title: "🎁 Giveaway Results",
+          body: `The winner of ${giveawayName} has been drawn. Stay tuned for the next one!`,
+          data: {
+            giveaway_id: giveawayId,
+            deep_link: "/(tabs)/shop",
+            type: "giveaway_result",
+          },
+        })
+        .catch((err) =>
+          console.error("⚠️ Error sending entrant notifications:", err),
+        );
     }
 
     return {
@@ -683,7 +752,7 @@ export const giveawayService = {
   },
 
   // ============================================
-  // REDRAW WINNER METHODS (admin only — RLS covers these)
+  // REDRAW WINNER METHODS (admin only - RLS covers these)
   // ============================================
 
   /**
@@ -716,7 +785,7 @@ export const giveawayService = {
 
   /**
    * Get count of eligible entries (excludes disqualified users)
-   * Admin only — super admin RLS covers this
+   * Admin only - super admin RLS covers this
    */
   async getEligibleEntryCount(giveawayId: number): Promise<number> {
     // Get all disqualified user IDs for this giveaway
@@ -750,7 +819,7 @@ export const giveawayService = {
 
   /**
    * Get current winner details for a giveaway
-   * Admin only — super admin RLS covers this
+   * Admin only - super admin RLS covers this
    */
   async getCurrentWinner(giveawayId: number): Promise<{
     id: number;
@@ -791,7 +860,7 @@ export const giveawayService = {
 
   /**
    * Redraw a new winner (disqualifies current winner)
-   * Admin only — super admin RLS covers this
+   * Admin only - super admin RLS covers this
    */
   async redrawWinner(
     giveawayId: number,
@@ -811,7 +880,7 @@ export const giveawayService = {
     // Get current giveaway info
     const { data: giveaway, error: giveawayError } = await supabase
       .from("giveaways")
-      .select("winner_id, prize_value")
+      .select("winner_id, prize_value, name")
       .eq("id", giveawayId)
       .single();
 
@@ -820,6 +889,7 @@ export const giveawayService = {
     }
 
     const prizeValue = giveaway.prize_value || 0;
+    const giveawayName = giveaway.name || "Giveaway";
     const oldWinnerId = giveaway.winner_id;
 
     // Get all disqualified user IDs for this giveaway
@@ -945,6 +1015,25 @@ export const giveawayService = {
         })
         .eq("id_auto", newWinnerEntry.user_id);
     }
+
+    // ══════════════════════════════════════════════════════════
+    // 🔔 Notify new winner after redraw
+    // ══════════════════════════════════════════════════════════
+    notificationDispatcher
+      .send({
+        category: "giveaway_update",
+        recipientIdAutos: [newWinnerEntry.user_id],
+        title: "🏆 You Won!",
+        body: `Congratulations! You won ${giveawayName}!`,
+        data: {
+          giveaway_id: giveawayId,
+          deep_link: "/(tabs)/shop",
+          type: "giveaway_winner",
+        },
+      })
+      .catch((err) =>
+        console.error("⚠️ Error sending redraw winner notification:", err),
+      );
 
     return {
       success: true,

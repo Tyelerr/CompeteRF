@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -8,6 +9,7 @@ import { Button } from "../../components/common/button";
 import { Card } from "../../components/common/card";
 
 export const ProfileScreen = () => {
+  const router = useRouter();
   const { profile, signOut } = useAuth();
 
   const handleSignOut = async () => {
@@ -77,7 +79,9 @@ export const ProfileScreen = () => {
           </View>
         </Card>
 
-        <Card onPress={() => {}}>
+        <Card
+          onPress={() => router.push("/(tabs)/notification-preferences" as any)}
+        >
           <View style={styles.menuItem}>
             <Text style={styles.menuIcon}>🔔</Text>
             <Text style={styles.menuText}>Notification Preferences</Text>

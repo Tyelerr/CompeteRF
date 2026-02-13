@@ -19,7 +19,6 @@ import {
 Notifications.setNotificationHandler({
   handleNotification: async () => {
     return {
-      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
       shouldShowBanner: true,
@@ -134,7 +133,10 @@ export const notificationService = {
   ): Promise<{ sent: number; failed: string[] }> {
     if (tokens.length === 0) return { sent: 0, failed: [] };
 
-    const messages = tokens.map((token) => ({
+    // Deduplicate tokens — same device registered under multiple accounts
+    const uniqueTokens = [...new Set(tokens)];
+
+    const messages = uniqueTokens.map((token) => ({
       to: token,
       sound: "default" as const,
       title,

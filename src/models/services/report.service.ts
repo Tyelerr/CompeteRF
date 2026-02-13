@@ -1,7 +1,8 @@
 // src/models/services/report.service.ts
 // Follows same pattern as giveaway.service.ts
 
-import { supabase } from '@/src/lib/supabase'; // Adjust path to match your project
+import { supabase } from '@/src/lib/supabase';
+import { notificationDispatcher } from '@/src/models/services/notification-dispatcher.service';
 import {
   CreateReportPayload,
   Report,
@@ -32,6 +33,26 @@ export async function submitReport(payload: CreateReportPayload): Promise<Report
     throw new Error(error.message);
   }
 
+  // ══════════════════════════════════════════════════════════
+  // 🔔 Phase 4: Notify admins about new report
+  // ══════════════════════════════════════════════════════════
+  const contentLabel = payload.content_type.replace('_', ' ');
+  notificationDispatcher
+    .sendToAdmins(
+      '🚩 New Report Submitted',
+      `A ${contentLabel} has been reported for: ${payload.reason}`,
+      {
+        report_id: data.id,
+        content_type: payload.content_type,
+        content_id: payload.content_id,
+        deep_link: '/admin/reports',
+        type: 'admin_report',
+      },
+    )
+    .catch((err) =>
+      console.error('⚠️ Error sending report notification to admins:', err),
+    );
+
   return data as Report;
 }
 
@@ -60,7 +81,7 @@ export async function hasUserReported(
 }
 
 /**
- * Get all reports — admin only (guarded by RLS).
+ * Get all reports - admin only (guarded by RLS).
  * Supports filtering by status and content_type.
  */
 export async function getReports(filters?: {
@@ -98,9 +119,7 @@ export async function getReports(filters?: {
 }
 
 /**
- * Update a report's status — admin only (guarded by RLS).
- * Uses .select().single() to catch silent RLS failures
- * (same pattern as the fix in useEditUser.ts).
+ * Update a report's status - admin only (guarded by RLS).
  */
 export async function updateReportStatus(
   reportId: string,
@@ -123,7 +142,7 @@ export async function updateReportStatus(
   }
 
   if (!data) {
-    throw new Error('Report update failed — no data returned (possible RLS block).');
+    throw new Error('Report update failed - no data returned (possible RLS block).');
   }
 
   return data as Report;

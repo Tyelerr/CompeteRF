@@ -3,11 +3,9 @@ import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import AnimatedTabBarButton from "../../src/views/components/common/AnimatedTabBarButton";
 import TabBarIcon from "../../src/views/components/common/tabbaricon";
-
 export default function TabLayout() {
   const { canSubmitTournaments, profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
-
   return (
     <Tabs
       screenOptions={{
@@ -128,6 +126,12 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="search-alerts"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="notification-preferences"
         options={{
           href: null,
         }}

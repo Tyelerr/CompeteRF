@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { analyticsService, ENTITY_TYPES } from "../models/services/analytics.service";
+import { notificationDispatcher } from "../models/services/notification-dispatcher.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 interface Tournament {
@@ -265,6 +266,21 @@ export const useTournamentDetail = (
         .eq("id", tournament.id);
 
       if (updateError) throw updateError;
+
+      // ══════════════════════════════════════════════════════════
+      // 🔔 Phase 2: Notify users who favorited this tournament
+      // ══════════════════════════════════════════════════════════
+      notificationDispatcher
+        .sendToTournamentFavorites(
+          tournament.id,
+          profile.id_auto, // exclude the person who cancelled
+          "❌ Tournament Cancelled",
+          `${tournament.name} has been cancelled`,
+          { deep_link: `/tournament-detail?id=${tournament.id}` },
+        )
+        .catch((err) =>
+          console.error("⚠️ Error sending cancellation notifications:", err),
+        );
 
       Alert.alert("Deleted", "Tournament has been deleted.", [
         { text: "OK", onPress: () => router.back() },

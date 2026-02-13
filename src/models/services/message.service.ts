@@ -1,5 +1,6 @@
 import { supabase } from "../../lib/supabase";
 import { Message, Notification, SavedSearch } from "../types/message.types";
+import { notificationDispatcher } from "./notification-dispatcher.service";
 
 export const messageService = {
   async getMessages(userId: number): Promise<Message[]> {
@@ -51,6 +52,29 @@ export const messageService = {
       .from("message_recipients")
       .insert(recipients);
     if (recipientError) throw recipientError;
+
+    // ══════════════════════════════════════════════════════════
+    // 🔔 Phase 5: Send push notifications to message recipients
+    // ══════════════════════════════════════════════════════════
+    notificationDispatcher
+      .send({
+        category: "tournament_update",
+        recipientIdAutos: recipientIds,
+        title: `📣 ${message.subject || "New Message"}`,
+        body:
+          message.body && message.body.length > 120
+            ? message.body.slice(0, 120) + "..."
+            : message.body || "You have a new message",
+        data: {
+          message_id: data.id,
+          tournament_id: message.tournament_id || undefined,
+          deep_link: "/notifications",
+          type: "director_message",
+        },
+      })
+      .catch((err) =>
+        console.error("⚠️ Error sending message notifications:", err),
+      );
 
     return data;
   },
