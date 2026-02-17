@@ -34,7 +34,11 @@ export default function TabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="🏠" color={color} focused={focused} />
+            <TabBarIcon
+              emoji={"\uD83C\uDFE0"}
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -43,7 +47,11 @@ export default function TabLayout() {
         options={{
           title: "Billiards",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="🎱" color={color} focused={focused} />
+            <TabBarIcon
+              emoji={"\uD83C\uDFB1"}
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -52,7 +60,7 @@ export default function TabLayout() {
         options={{
           title: "Submit",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="➕" color={color} focused={focused} />
+            <TabBarIcon emoji={"\u2795"} color={color} focused={focused} />
           ),
           href: canSubmitTournaments ? undefined : null,
         }}
@@ -62,7 +70,11 @@ export default function TabLayout() {
         options={{
           title: "Admin",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="⚙️" color={color} focused={focused} />
+            <TabBarIcon
+              emoji={"\u2699\uFE0F"}
+              color={color}
+              focused={focused}
+            />
           ),
           href: hasAdminAccess ? undefined : null,
         }}
@@ -70,9 +82,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="shop"
         options={{
-          title: "Shop",
+          title: "Giveaways",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="🛒" color={color} focused={focused} />
+            <TabBarIcon
+              emoji={"\uD83C\uDF81"}
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -81,7 +97,11 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="👤" color={color} focused={focused} />
+            <TabBarIcon
+              emoji={"\uD83D\uDC64"}
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -90,7 +110,7 @@ export default function TabLayout() {
         options={{
           title: "FAQ",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon emoji="❓" color={color} focused={focused} />
+            <TabBarIcon emoji={"\u2753"} color={color} focused={focused} />
           ),
         }}
       />

@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
@@ -15,7 +14,6 @@ import { SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useGiveaways } from "../../src/viewmodels/useGiveaways";
-import { useShop } from "../../src/viewmodels/useShop";
 import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
 import {
@@ -27,7 +25,6 @@ import {
 
 export default function ShopScreen() {
   const router = useRouter();
-  const shopVm = useShop();
   const giveawaysVm = useGiveaways();
 
   // Scroll-to-top on tab switch
@@ -113,133 +110,82 @@ export default function ShopScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>SHOP</Text>
+        <Text style={styles.headerTitle}>GIVEAWAYS</Text>
         <Text style={styles.headerSubtitle}>
-          Discover unique finds & giveaways
+          Enter for a chance to win billiards gear
         </Text>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, shopVm.activeTab === "shop" && styles.tabActive]}
-          onPress={() => shopVm.setActiveTab("shop")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              shopVm.activeTab === "shop" && styles.tabTextActive,
-            ]}
-          >
-            Shop
-          </Text>
-        </TouchableOpacity>
+      {/* Giveaways Content */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={giveawaysVm.refreshing}
+            onRefresh={giveawaysVm.refresh}
+            tintColor={COLORS.primary}
+          />
+        }
+      >
+        {/* Stats Card */}
+        <GiveawayStatsCard stats={giveawaysVm.stats} />
 
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            shopVm.activeTab === "giveaways" && styles.tabActive,
-          ]}
-          onPress={() => shopVm.setActiveTab("giveaways")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              shopVm.activeTab === "giveaways" && styles.tabTextActive,
-            ]}
-          >
-            Giveaways
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      {shopVm.activeTab === "shop" ? (
-        // Shop Tab - Coming Soon
-        <View style={styles.comingSoonContainer}>
-          <Text style={styles.comingSoonIcon}>🛒</Text>
-          <Text style={styles.comingSoonTitle}>Coming Soon!</Text>
-          <Text style={styles.comingSoonSubtitle}>
-            Shop features are on the way.{"\n"}
-            Check back later for gear, apparel, and accessories.
-          </Text>
-        </View>
-      ) : (
-        // Giveaways Tab
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={giveawaysVm.refreshing}
-              onRefresh={giveawaysVm.refresh}
-              tintColor={COLORS.primary}
-            />
-          }
-        >
-          {/* Stats Card */}
-          <GiveawayStatsCard stats={giveawaysVm.stats} />
-
-          {/* Not logged in banner - NOW USES DIRECT AUTH CHECK */}
-          {!authLoading && !profile && (
-            <View style={styles.loginBanner}>
-              <Text style={styles.loginBannerText}>
-                Log in to enter giveaways!
-              </Text>
-              <View style={styles.loginBannerButtons}>
-                <Button
-                  title="Log In"
-                  onPress={() => router.push("/auth/login")}
-                  size="sm"
-                />
-                <Button
-                  title="Sign Up"
-                  onPress={() => router.push("/auth/register")}
-                  variant="outline"
-                  size="sm"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* Error state */}
-          {giveawaysVm.error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{giveawaysVm.error}</Text>
+        {/* Not logged in banner */}
+        {!authLoading && !profile && (
+          <View style={styles.loginBanner}>
+            <Text style={styles.loginBannerText}>
+              Log in to enter giveaways!
+            </Text>
+            <View style={styles.loginBannerButtons}>
               <Button
-                title="Try Again"
-                onPress={giveawaysVm.refresh}
+                title="Log In"
+                onPress={() => router.push("/auth/login")}
+                size="sm"
+              />
+              <Button
+                title="Sign Up"
+                onPress={() => router.push("/auth/register")}
+                variant="outline"
                 size="sm"
               />
             </View>
-          )}
+          </View>
+        )}
 
-          {/* Empty state */}
-          {!giveawaysVm.error && giveawaysVm.giveaways.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>🎁</Text>
-              <Text style={styles.emptyTitle}>No Active Giveaways</Text>
-              <Text style={styles.emptySubtitle}>
-                Check back soon for new giveaways!
-              </Text>
-            </View>
-          )}
+        {/* Error state */}
+        {giveawaysVm.error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{giveawaysVm.error}</Text>
+            <Button title="Try Again" onPress={giveawaysVm.refresh} size="sm" />
+          </View>
+        )}
 
-          {/* Giveaway Cards */}
-          {giveawaysVm.giveaways.map((giveaway) => (
-            <GiveawayCard
-              key={giveaway.id}
-              giveaway={giveaway}
-              isEntered={giveawaysVm.isEntered(giveaway.id)}
-              daysRemaining={giveawaysVm.getDaysRemaining(giveaway.end_date)}
-              onEnter={() => handleEnterGiveaway(giveaway)}
-              onView={() => handleViewGiveaway(giveaway)}
-            />
-          ))}
-        </ScrollView>
-      )}
+        {/* Empty state */}
+        {!giveawaysVm.error && giveawaysVm.giveaways.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>{"\uD83C\uDF81"}</Text>
+            <Text style={styles.emptyTitle}>No Active Giveaways</Text>
+            <Text style={styles.emptySubtitle}>
+              Check back soon for new giveaways!
+            </Text>
+          </View>
+        )}
+
+        {/* Giveaway Cards */}
+        {giveawaysVm.giveaways.map((giveaway) => (
+          <GiveawayCard
+            key={giveaway.id}
+            giveaway={giveaway}
+            isEntered={giveawaysVm.isEntered(giveaway.id)}
+            daysRemaining={giveawaysVm.getDaysRemaining(giveaway.end_date)}
+            onEnter={() => handleEnterGiveaway(giveaway)}
+            onView={() => handleViewGiveaway(giveaway)}
+          />
+        ))}
+      </ScrollView>
 
       {/* Detail Modal */}
       <GiveawayDetailModal
@@ -288,62 +234,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
-  tabsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
-    gap: SPACING.sm,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tabActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  tabText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  tabTextActive: {
-    color: COLORS.text,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: SPACING.md,
     paddingTop: 0,
-  },
-  // Coming Soon (Shop tab)
-  comingSoonContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: SPACING.xl,
-  },
-  comingSoonIcon: {
-    fontSize: 60,
-    marginBottom: SPACING.md,
-  },
-  comingSoonTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  comingSoonSubtitle: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-    textAlign: "center",
-    lineHeight: 24,
   },
   // Login Banner
   loginBanner: {

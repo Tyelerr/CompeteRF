@@ -1,5 +1,8 @@
+// app/(tabs)/admin/tournaments/bar-tournament-manager.tsx
+// UPDATED: Added Reassign Director button + modal with confirmation
+
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -12,10 +15,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { supabase } from "../../../../src/lib/supabase";
+import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { usePagination } from "../../../../src/viewmodels/hooks/use.pagination";
+import { DirectorSearchResult } from "../../../../src/viewmodels/useAdminTournaments";
 import {
   BarTournamentWithStats,
   SortOption,
@@ -23,6 +29,7 @@ import {
   useBarTournamentManager,
 } from "../../../../src/viewmodels/useBarTournamentManager";
 import { Pagination } from "../../../../src/views/components/common/pagination";
+import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
 
@@ -64,7 +71,7 @@ const DeleteModal = ({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Delete Tournament</Text>
-          <Text style={styles.modalSubtitle}>"{tournamentName}"</Text>
+          <Text style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
 
           <Text style={styles.modalLabel}>Deletion Reason *</Text>
           <TextInput
@@ -102,11 +109,21 @@ const DeleteModal = ({
 export default function BarTournamentManagerScreen() {
   const router = useRouter();
   const vm = useBarTournamentManager();
+  const { profile } = useAuthContext();
 
   // Cancel modal state
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [tournamentToCancel, setTournamentToCancel] =
     useState<BarTournamentWithStats | null>(null);
+
+  // Reassign modal state
+  const [reassignModalVisible, setReassignModalVisible] = useState(false);
+  const [tournamentToReassign, setTournamentToReassign] =
+    useState<BarTournamentWithStats | null>(null);
+  const [directorResults, setDirectorResults] = useState<
+    DirectorSearchResult[]
+  >([]);
+  const [searchingDirectors, setSearchingDirectors] = useState(false);
 
   // Pagination
   const pagination = usePagination(vm.tournaments, {
@@ -204,6 +221,105 @@ export default function BarTournamentManagerScreen() {
     );
   };
 
+  // ── Reassign Director ─────────────────────────────────────────────
+  const handleSearchDirectors = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setDirectorResults([]);
+      return;
+    }
+    setSearchingDirectors(true);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id_auto, name, email")
+        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(10);
+
+      if (error) {
+        setDirectorResults([]);
+        return;
+      }
+      setDirectorResults(
+        (data || []).map((u: any) => ({
+          id: u.id_auto,
+          name: u.name || u.email,
+          email: u.email,
+        })),
+      );
+    } catch {
+      setDirectorResults([]);
+    } finally {
+      setSearchingDirectors(false);
+    }
+  }, []);
+
+  const handleConfirmReassign = useCallback(
+    async (newDirectorId: number, newDirectorName: string, reason: string) => {
+      if (!tournamentToReassign || !profile?.id_auto) return;
+
+      try {
+        // 1. Update tournament director_id
+        const { error: updateError } = await supabase
+          .from("tournaments")
+          .update({ director_id: newDirectorId })
+          .eq("id", tournamentToReassign.id);
+
+        if (updateError) throw updateError;
+
+        // 2. Log the reassignment
+        await supabase.from("reassignment_logs").insert({
+          entity_type: "tournament_director",
+          entity_id: tournamentToReassign.id,
+          entity_name: tournamentToReassign.name,
+          previous_user_id: tournamentToReassign.director_id,
+          previous_user_name: tournamentToReassign.director_name,
+          new_user_id: newDirectorId,
+          new_user_name: newDirectorName,
+          reason,
+          reassigned_by: profile.id_auto,
+          reassigned_by_name: profile.name || null,
+        });
+
+        // 3. Ensure new director is in venue_directors
+        await supabase.from("venue_directors").upsert(
+          {
+            venue_id: tournamentToReassign.venue_id,
+            director_id: newDirectorId,
+            assigned_by: profile.id_auto,
+          },
+          { onConflict: "venue_id,director_id" },
+        );
+
+        // 4. Promote to tournament_director if currently basic_user
+        const { data: newDirProfile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id_auto", newDirectorId)
+          .single();
+
+        if (newDirProfile && newDirProfile.role === "basic_user") {
+          await supabase
+            .from("profiles")
+            .update({ role: "tournament_director" })
+            .eq("id_auto", newDirectorId);
+        }
+
+        setReassignModalVisible(false);
+        setTournamentToReassign(null);
+        setDirectorResults([]);
+        Alert.alert(
+          "Reassignment Complete",
+          `"${tournamentToReassign.name}" has been reassigned to ${newDirectorName}.`,
+        );
+        vm.onRefresh();
+      } catch (error) {
+        console.error("Error reassigning director:", error);
+        Alert.alert("Error", "Failed to reassign director.");
+      }
+    },
+    [tournamentToReassign, profile?.id_auto, profile?.name],
+  );
+
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
@@ -225,13 +341,29 @@ export default function BarTournamentManagerScreen() {
         onConfirm={handleConfirmDelete}
       />
 
+      {/* Reassign Director Modal */}
+      <ReassignDirectorModal
+        visible={reassignModalVisible}
+        tournamentName={tournamentToReassign?.name || ""}
+        currentDirector={tournamentToReassign?.director_name || ""}
+        directors={directorResults}
+        loadingDirectors={searchingDirectors}
+        onSearch={handleSearchDirectors}
+        onCancel={() => {
+          setReassignModalVisible(false);
+          setTournamentToReassign(null);
+          setDirectorResults([]);
+        }}
+        onConfirm={handleConfirmReassign}
+      />
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Tournament Manager</Text>
@@ -245,7 +377,7 @@ export default function BarTournamentManagerScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search name, game type, venue, or director..."
@@ -256,104 +388,55 @@ export default function BarTournamentManagerScreen() {
         </View>
       </View>
 
-      {/* Status Tabs - Fixed positioning */}
+      {/* Status Tabs */}
       <View style={styles.tabsContainer}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsContent}
         >
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              vm.statusFilter === "active" && styles.tabActive,
-            ]}
-            onPress={() => handleStatusFilter("active")}
-          >
-            <Text
+          {[
+            {
+              key: "active" as const,
+              label: "Active",
+              count: vm.statusCounts.active,
+            },
+            {
+              key: "completed" as const,
+              label: "Completed",
+              count: vm.statusCounts.completed,
+            },
+            {
+              key: "cancelled" as const,
+              label: "Cancelled",
+              count: vm.statusCounts.cancelled,
+            },
+            {
+              key: "archived" as const,
+              label: "Archived",
+              count: vm.statusCounts.archived,
+            },
+            { key: "all" as const, label: "All", count: vm.statusCounts.all },
+          ].map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
               style={[
-                styles.tabText,
-                vm.statusFilter === "active" && styles.tabTextActive,
+                styles.tab,
+                vm.statusFilter === tab.key && styles.tabActive,
               ]}
+              onPress={() => handleStatusFilter(tab.key)}
             >
-              Active
-              {vm.statusCounts.active > 0 ? ` (${vm.statusCounts.active})` : ""}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              vm.statusFilter === "completed" && styles.tabActive,
-            ]}
-            onPress={() => handleStatusFilter("completed")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                vm.statusFilter === "completed" && styles.tabTextActive,
-              ]}
-            >
-              Completed
-              {vm.statusCounts.completed > 0
-                ? ` (${vm.statusCounts.completed})`
-                : ""}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              vm.statusFilter === "cancelled" && styles.tabActive,
-            ]}
-            onPress={() => handleStatusFilter("cancelled")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                vm.statusFilter === "cancelled" && styles.tabTextActive,
-              ]}
-            >
-              Cancelled
-              {vm.statusCounts.cancelled > 0
-                ? ` (${vm.statusCounts.cancelled})`
-                : ""}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.tab,
-              vm.statusFilter === "archived" && styles.tabActive,
-            ]}
-            onPress={() => handleStatusFilter("archived")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                vm.statusFilter === "archived" && styles.tabTextActive,
-              ]}
-            >
-              Archived
-              {vm.statusCounts.archived > 0
-                ? ` (${vm.statusCounts.archived})`
-                : ""}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, vm.statusFilter === "all" && styles.tabActive]}
-            onPress={() => handleStatusFilter("all")}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                vm.statusFilter === "all" && styles.tabTextActive,
-              ]}
-            >
-              All{vm.statusCounts.all > 0 ? ` (${vm.statusCounts.all})` : ""}
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.tabText,
+                  vm.statusFilter === tab.key && styles.tabTextActive,
+                ]}
+              >
+                {tab.label}
+                {tab.count > 0 ? ` (${tab.count})` : ""}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
@@ -381,7 +464,7 @@ export default function BarTournamentManagerScreen() {
                 ]}
               >
                 {option.label}
-                {vm.sortOption === option.key && " ▼"}
+                {vm.sortOption === option.key && " \u25BC"}
               </Text>
             </TouchableOpacity>
           ))}
@@ -414,16 +497,30 @@ export default function BarTournamentManagerScreen() {
           />
         }
         renderItem={({ item }) => (
-          <TournamentCard
-            tournament={item}
-            onPress={() => handleTournamentPress(item.id)}
-            onEdit={() => handleEditTournament(item.id)}
-            onArchive={() => handleArchiveTournament(item)}
-            onCancel={() => handleDeleteTournament(item)}
-            onRestore={() => handleRestoreTournament(item)}
-            isProcessing={vm.processing === item.id}
-            showActions={true}
-          />
+          <View>
+            <TournamentCard
+              tournament={item}
+              onPress={() => handleTournamentPress(item.id)}
+              onEdit={() => handleEditTournament(item.id)}
+              onArchive={() => handleArchiveTournament(item)}
+              onCancel={() => handleDeleteTournament(item)}
+              onRestore={() => handleRestoreTournament(item)}
+              isProcessing={vm.processing === item.id}
+              showActions={true}
+            />
+            {/* Reassign Director button */}
+            <TouchableOpacity
+              style={styles.reassignBtn}
+              onPress={() => {
+                setTournamentToReassign(item);
+                setReassignModalVisible(true);
+              }}
+            >
+              <Text style={styles.reassignBtnText}>
+                {"\uD83D\uDD04"} Reassign Director
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
         ListEmptyComponent={
           <EmptyState
@@ -523,13 +620,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     height: 40,
   },
-
-  // FIXED: Tabs container - proper positioning above search
   tabsContainer: {
     backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    // Removed any absolute positioning or negative margins
   },
   tabsContent: {
     paddingHorizontal: SPACING.md,
@@ -556,7 +650,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-
   sortContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -599,7 +692,23 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     paddingBottom: SPACING.xl * 2,
   },
-
+  // Reassign button
+  reassignBtn: {
+    backgroundColor: "#FF980020",
+    borderWidth: 1,
+    borderColor: "#FF9800",
+    borderRadius: 8,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.md,
+    marginHorizontal: SPACING.xs,
+  },
+  reassignBtnText: {
+    color: "#FF9800",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+  },
   // Modal styles
   modalOverlay: {
     flex: 1,
