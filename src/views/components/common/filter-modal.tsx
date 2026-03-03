@@ -36,6 +36,7 @@ const TOURNAMENT_FORMATS = [
   { label: "Double Elimination", value: "double_elimination" },
   { label: "Round Robin", value: "round_robin" },
   { label: "Swiss", value: "swiss" },
+  { label: "Split Bracket", value: "split-bracket" },
 ];
 
 const TABLE_SIZES = [

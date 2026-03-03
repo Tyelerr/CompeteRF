@@ -682,12 +682,12 @@ export default function TournamentManagementScreen() {
               vm.statusFilter === "active"
                 ? "No active tournaments"
                 : vm.statusFilter === "completed"
-                ? "No completed tournaments"
-                : vm.statusFilter === "cancelled"
-                ? "No cancelled tournaments"
-                : vm.statusFilter === "archived"
-                ? "No archived tournaments"
-                : "No tournaments found"
+                  ? "No completed tournaments"
+                  : vm.statusFilter === "cancelled"
+                    ? "No cancelled tournaments"
+                    : vm.statusFilter === "archived"
+                      ? "No archived tournaments"
+                      : "No tournaments found"
             }
             submessage="Try adjusting your search or filters"
           />

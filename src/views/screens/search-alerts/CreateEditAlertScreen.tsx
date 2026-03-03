@@ -50,6 +50,7 @@ const FORMAT_OPTIONS = [
   { label: "Round Robin", value: "round-robin" },
   { label: "Swiss", value: "swiss" },
   { label: "Modified", value: "modified" },
+  { label: "Split Bracket", value: "split-bracket" },
 ];
 
 const TABLE_SIZE_OPTIONS = [

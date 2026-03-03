@@ -116,6 +116,7 @@ export const TOURNAMENT_FORMATS = [
   { label: "Round Robin", value: "round-robin" },
   { label: "Swiss", value: "swiss" },
   { label: "Modified Double Elimination", value: "modified-double" },
+  { label: "Split Bracket", value: "split-bracket" },
 ];
 
 export const START_TIMES = [

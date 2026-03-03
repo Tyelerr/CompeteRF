@@ -1,6 +1,6 @@
 // app/(tabs)/admin/index.tsx
 // ══════════════════════════════════════════════════════════
-// UPDATED: Added Reports card to Super Admin & Compete Admin
+// UPDATED: Added Bulk Import card to Super Admin dashboard
 // ══════════════════════════════════════════════════════════
 
 import { useRouter } from "expo-router";
@@ -505,6 +505,12 @@ const SuperAdminDashboard = () => {
           label="Messages"
           subtitle="Broadcasts & alerts"
           onPress={() => router.push("/(tabs)/admin/messages" as any)}
+        />
+        <ManagementCard
+          icon="📥"
+          label="Bulk Import"
+          subtitle="CSV tournament upload"
+          onPress={() => router.push("/(tabs)/admin/bulk-import" as any)}
         />
       </View>
 

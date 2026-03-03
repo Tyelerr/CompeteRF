@@ -1,3 +1,7 @@
+// src/models/types/index.ts
+// ─── UPDATED: Added bulk-import.types export ────────────────────────────────
+
+export * from "./bulk-import.types";
 export * from "./common.types";
 export * from "./giveaway.types";
 export * from "./message.types";
