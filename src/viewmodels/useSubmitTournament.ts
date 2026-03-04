@@ -21,7 +21,17 @@ import {
   initialFormData,
 } from "../utils/tournament-form-data";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ——— Helpers ——————————————————————————————————————————————————————————
+
+/** Turn a Date into "YYYY-MM-DD" using LOCAL year/month/day (not UTC) */
+const toLocalDateString = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// ——— Types ———————————————————————————————————————————————————————————
 
 interface Template {
   id: number;
@@ -40,7 +50,7 @@ interface DropdownOption {
   value: string;
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
+// ——— Hook ————————————————————————————————————————————————————————————
 
 export const useSubmitTournament = () => {
   const router = useRouter();
@@ -51,7 +61,7 @@ export const useSubmitTournament = () => {
     canSubmitTournaments,
   } = useAuthContext();
 
-  // ── Data state ─────────────────────────────────────────────────────────
+  // —— Data state —————————————————————————————————————————————————————
   const [dataLoading, setDataLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -60,20 +70,20 @@ export const useSubmitTournament = () => {
   const [formData, setFormData] = useState<TournamentFormData>(initialFormData);
   const [sidePots, setSidePots] = useState<SidePot[]>([]);
 
-  // ── Venue tables state ─────────────────────────────────────────────────
+  // —— Venue tables state —————————————————————————————————————————————
   const [venueTables, setVenueTables] = useState<VenueTableRecord[]>([]);
   const [venueTableSizeOptions, setVenueTableSizeOptions] = useState<
     DropdownOption[]
   >([]);
   const [loadingVenueTables, setLoadingVenueTables] = useState(false);
 
-  // ── Image/thumbnail state ──────────────────────────────────────────────
+  // —— Image/thumbnail state ——————————————————————————————————————————
   const [customImageUri, setCustomImageUri] = useState<string | null>(null);
   const [hasManualSelection, setHasManualSelection] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [scanningImage, setScanningImage] = useState(false);
 
-  // ── Refs for auto-advance ──────────────────────────────────────────────
+  // —— Refs for auto-advance ——————————————————————————————————————————
   const refs = {
     name: useRef<TextInput>(null),
     gameSpot: useRef<TextInput>(null),
@@ -85,7 +95,7 @@ export const useSubmitTournament = () => {
     phone: useRef<TextInput>(null),
   };
 
-  // ── Effects ────────────────────────────────────────────────────────────
+  // —— Effects ————————————————————————————————————————————————————————
 
   // Load venues and templates when profile is ready
   useEffect(() => {
@@ -132,7 +142,7 @@ export const useSubmitTournament = () => {
     }
   }, [formData.tournamentFormat]);
 
-  // ── Data loading ───────────────────────────────────────────────────────
+  // —— Data loading ———————————————————————————————————————————————————
 
   const loadFormData = async () => {
     try {
@@ -157,7 +167,7 @@ export const useSubmitTournament = () => {
     }
   };
 
-  // ── Venue tables loading ───────────────────────────────────────────────
+  // —— Venue tables loading ———————————————————————————————————————————
 
   const loadVenueTables = async (venueId: number) => {
     setLoadingVenueTables(true);
@@ -192,7 +202,7 @@ export const useSubmitTournament = () => {
     }
   };
 
-  // ── Form updates ───────────────────────────────────────────────────────
+  // —— Form updates ———————————————————————————————————————————————————
 
   const updateFormData = (field: keyof TournamentFormData, value: any) => {
     setFormData((prev) => {
@@ -220,7 +230,7 @@ export const useSubmitTournament = () => {
     });
   };
 
-  // ── Chip Range CRUD ────────────────────────────────────────────────────
+  // —— Chip Range CRUD ————————————————————————————————————————————————
 
   const addChipRange = () => {
     setFormData((prev) => {
@@ -270,12 +280,12 @@ export const useSubmitTournament = () => {
     }));
   };
 
-  // ── Computed ───────────────────────────────────────────────────────────
+  // —— Computed ———————————————————————————————————————————————————————
 
   const isChipTournament = formData.tournamentFormat === "chip-tournament";
   const venueHasTables = venueTables.length > 0;
 
-  // ── Venue selection ────────────────────────────────────────────────────
+  // —— Venue selection ————————————————————————————————————————————————
 
   const handleVenueSelect = (venueId: string) => {
     const venue = venues.find((v) => v.id.toString() === venueId);
@@ -296,7 +306,7 @@ export const useSubmitTournament = () => {
     }
   };
 
-  // ── Template selection ─────────────────────────────────────────────────
+  // —— Template selection —————————————————————————————————————————————
 
   const handleTemplateSelect = async (templateId: string) => {
     if (!templateId) {
@@ -366,7 +376,7 @@ export const useSubmitTournament = () => {
     }
   };
 
-  // ── Thumbnail / Image upload ───────────────────────────────────────────
+  // —— Thumbnail / Image upload ———————————————————————————————————————
 
   const handleThumbnailSelect = (thumbnailId: string) => {
     if (thumbnailId === "upload-custom") {
@@ -472,7 +482,7 @@ export const useSubmitTournament = () => {
     }
   };
 
-  // ── Side pots ──────────────────────────────────────────────────────────
+  // —— Side pots ——————————————————————————————————————————————————————
 
   const addSidePot = () => {
     setSidePots([...sidePots, { name: "", amount: "" }]);
@@ -492,7 +502,7 @@ export const useSubmitTournament = () => {
     setSidePots(sidePots.filter((_, i) => i !== index));
   };
 
-  // ── Recurrence helpers ─────────────────────────────────────────────────
+  // —— Recurrence helpers —————————————————————————————————————————————
 
   const getDayFromDate = (date: Date): string => {
     const days = [
@@ -542,7 +552,7 @@ export const useSubmitTournament = () => {
     return formData.chipRanges.filter((r) => r.maxRating > 0 && r.chips > 0);
   };
 
-  // ── Build equipment options from venue tables ──────────────────────────
+  // —— Build equipment options from venue tables ——————————————————————
 
   const getEquipmentOptionsFromVenue = (): DropdownOption[] => {
     if (venueTables.length === 0) return [];
@@ -559,7 +569,7 @@ export const useSubmitTournament = () => {
     ];
   };
 
-  // ── Submission ─────────────────────────────────────────────────────────
+  // —— Submission —————————————————————————————————————————————————————
 
   const buildTournamentPayload = (
     dateOverride?: Date,
@@ -588,7 +598,7 @@ export const useSubmitTournament = () => {
         ? parseInt(formData.numberOfTables)
         : null,
       tournament_date: date instanceof Date
-        ? date.toISOString().split("T")[0]
+        ? toLocalDateString(date)
         : date,
       start_time: formData.startTime,
       timezone: formData.timezone,
@@ -619,7 +629,7 @@ export const useSubmitTournament = () => {
 
     let startDateString: string;
     if (formData.tournamentDate instanceof Date) {
-      startDateString = formData.tournamentDate.toISOString().split("T")[0];
+      startDateString = toLocalDateString(formData.tournamentDate);
     } else if (typeof formData.tournamentDate === "string") {
       startDateString = formData.tournamentDate;
     } else {
@@ -629,7 +639,7 @@ export const useSubmitTournament = () => {
     let endDateString: string | null = null;
     if (formData.seriesEndDate) {
       if (formData.seriesEndDate instanceof Date) {
-        endDateString = formData.seriesEndDate.toISOString().split("T")[0];
+        endDateString = toLocalDateString(formData.seriesEndDate);
       } else if (typeof formData.seriesEndDate === "string") {
         endDateString = formData.seriesEndDate;
       }
@@ -769,7 +779,7 @@ export const useSubmitTournament = () => {
       return false;
     }
 
-    // ── Venue must have tables ──────────────────────────────────────────
+    // —— Venue must have tables ———————————————————————————————————————
     if (!venueHasTables) {
       Alert.alert(
         "No Tables Configured",
@@ -857,7 +867,7 @@ export const useSubmitTournament = () => {
   const navigateToLogin = () => router.push("/auth/login" as any);
   const navigateToFaq = () => router.push("/(tabs)/faq" as any);
 
-  // ── Dropdown options ───────────────────────────────────────────────────
+  // —— Dropdown options ———————————————————————————————————————————————
 
   const venueOptions = [
     { label: "Choose your venue", value: "" },
@@ -886,7 +896,7 @@ export const useSubmitTournament = () => {
     return null;
   };
 
-  // ── Public API ─────────────────────────────────────────────────────────
+  // —— Public API —————————————————————————————————————————————————————
 
   return {
     // Auth state

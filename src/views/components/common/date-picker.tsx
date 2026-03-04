@@ -11,6 +11,20 @@ interface DatePickerProps {
   placeholder?: string;
 }
 
+/** Turn a Date into "YYYY-MM-DD" using LOCAL year/month/day */
+const toLocalDateString = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+/** Parse "YYYY-MM-DD" as LOCAL midnight (not UTC) */
+const parseLocalDate = (dateString: string): Date => {
+  const [y, m, d] = dateString.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
 export const DatePicker = ({
   value,
   onChange,
@@ -23,14 +37,14 @@ export const DatePicker = ({
   // Reset to today or selected value when modal opens
   useEffect(() => {
     if (showModal) {
-      setTempDate(value ? new Date(value) : new Date());
+      setTempDate(value ? parseLocalDate(value) : new Date());
       setHasSelected(true);
     }
   }, [showModal]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return placeholder;
-    const date = new Date(dateString);
+    const date = parseLocalDate(dateString);
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -55,7 +69,7 @@ export const DatePicker = ({
   };
 
   const handleConfirm = () => {
-    const dateString = tempDate.toISOString().split("T")[0];
+    const dateString = toLocalDateString(tempDate);
     onChange(dateString);
     setShowModal(false);
   };

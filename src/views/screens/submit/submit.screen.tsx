@@ -26,19 +26,23 @@ import { Dropdown } from "../../components/common/dropdown";
 import { ToggleSwitch } from "../../components/common/toggle-switch";
 import { styles } from "./submit.styles";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ——— Helpers —————————————————————————————————————————————————————————
 
 const dateToString = (date: Date | null): string => {
   if (!date) return "";
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 };
 
 const stringToDate = (dateString: string): Date | null => {
   if (!dateString) return null;
-  return new Date(dateString);
+  const [y, m, d] = dateString.split("-").map(Number);
+  return new Date(y, m - 1, d);
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ——— Component ———————————————————————————————————————————————————————
 
 export const SubmitScreen = () => {
   const vm = useSubmitTournament();
@@ -55,7 +59,7 @@ export const SubmitScreen = () => {
     };
   }, []);
 
-  // ── Loading state ──────────────────────────────────────────────────────
+  // —— Loading state ——————————————————————————————————————————————————
 
   if (vm.isLoading) {
     return (
@@ -65,7 +69,7 @@ export const SubmitScreen = () => {
     );
   }
 
-  // ── Not logged in ─────────────────────────────────────────────────────
+  // —— Not logged in —————————————————————————————————————————————————
 
   if (!vm.user) {
     return (
@@ -80,7 +84,7 @@ export const SubmitScreen = () => {
     );
   }
 
-  // ── Not authorized ────────────────────────────────────────────────────
+  // —— Not authorized ————————————————————————————————————————————————
 
   if (!vm.canSubmitTournaments) {
     return (
@@ -96,7 +100,7 @@ export const SubmitScreen = () => {
     );
   }
 
-  // ── Thumbnail renderer ────────────────────────────────────────────────
+  // —— Thumbnail renderer ————————————————————————————————————————————
 
   const renderThumbnailOption = (thumb: any) => {
     const isSelected = vm.formData.thumbnail === thumb.id;
@@ -150,14 +154,14 @@ export const SubmitScreen = () => {
     );
   };
 
-  // ── Recurring hint style ──────────────────────────────────────────────
+  // —— Recurring hint style ——————————————————————————————————————————
 
   const recurringHintStyle = [
     styles.recurringHint,
     { color: vm.formData.isRecurring ? COLORS.primary : COLORS.textMuted },
   ];
 
-  // ── Section renderer ──────────────────────────────────────────────────
+  // —— Section renderer ——————————————————————————————————————————————
 
   const renderFormSection = ({ item }: { item: any }) => {
     switch (item.type) {
@@ -491,8 +495,8 @@ export const SubmitScreen = () => {
                 vm.isChipTournament
                   ? "N/A for Chip Tournament"
                   : vm.isMaxFargoDisabled
-                  ? "Disabled (Open Tournament is ON)"
-                  : "e.g., 550 (leave blank for open)"
+                    ? "Disabled (Open Tournament is ON)"
+                    : "e.g., 550 (leave blank for open)"
               }
               placeholderTextColor={COLORS.textMuted}
               keyboardType="numeric"
@@ -789,7 +793,7 @@ export const SubmitScreen = () => {
                   ))}
                 </View>
 
-                {/* Table Size – dynamic from venue_tables */}
+                {/* Table Size — dynamic from venue_tables */}
                 <View style={styles.dropdownContainer}>
                   <Dropdown
                     label="Table Size *"
@@ -800,7 +804,7 @@ export const SubmitScreen = () => {
                   />
                 </View>
 
-                {/* Equipment – from venue brands if available, else defaults */}
+                {/* Equipment — from venue brands if available, else defaults */}
                 <View style={styles.dropdownContainer}>
                   <Dropdown
                     label="Equipment"
@@ -850,8 +854,8 @@ export const SubmitScreen = () => {
                 vm.submitting
                   ? "Creating..."
                   : vm.formData.isRecurring
-                  ? "Create Tournament Series"
-                  : "Submit Tournament"
+                    ? "Create Tournament Series"
+                    : "Submit Tournament"
               }
               onPress={vm.handleSubmit}
               loading={vm.submitting}
@@ -872,7 +876,7 @@ export const SubmitScreen = () => {
     }
   };
 
-  // ── Form sections ─────────────────────────────────────────────────────
+  // —— Form sections —————————————————————————————————————————————————
 
   const formSections = [
     { type: "header", key: "header" },
