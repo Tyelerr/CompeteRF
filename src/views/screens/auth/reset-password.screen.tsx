@@ -16,6 +16,7 @@ import { Input } from "../../components/common/input";
 export const ResetPasswordScreen = () => {
   const router = useRouter();
   const {
+    url,
     password,
     setPassword,
     confirmPassword,
@@ -31,7 +32,7 @@ export const ResetPasswordScreen = () => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.icon}>✅</Text>
+          <Text style={styles.icon}>?</Text>
           <Text style={styles.title}>PASSWORD UPDATED</Text>
           <Text style={styles.message}>
             Your password has been changed successfully.
@@ -50,10 +51,13 @@ export const ResetPasswordScreen = () => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.icon}>🔐</Text>
+          <Text style={styles.icon}>??</Text>
           <Text style={styles.title}>VERIFYING...</Text>
           <Text style={styles.message}>
             Please wait while we verify your reset link.
+          </Text>
+          <Text style={styles.debugUrl}>
+            URL: {url ?? "no url detected"}
           </Text>
         </View>
       </View>
@@ -140,5 +144,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.sm,
+  },
+  debugUrl: {
+    color: "red",
+    fontSize: 10,
+    padding: 10,
+    textAlign: "center",
   },
 });
