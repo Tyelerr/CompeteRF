@@ -1,5 +1,6 @@
 import { supabase } from '@/src/lib/supabase';
 import { authService } from '@/src/models/services/auth.service';
+import * as ExpoLinking from 'expo-linking';
 import { useEffect, useState } from 'react';
 
 export function useResetPassword() {
@@ -10,14 +11,32 @@ export function useResetPassword() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const url = ExpoLinking.useURL();
+
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true);
+    if (!url) return;
+
+    const handleDeepLink = async (deepUrl: string) => {
+      const hashPart = deepUrl.split('#')[1];
+      if (!hashPart) return;
+
+      const params: Record<string, string> = {};
+      hashPart.split('&').forEach((part) => {
+        const [key, value] = part.split('=');
+        params[key] = decodeURIComponent(value ?? '');
+      });
+
+      if (params.access_token && params.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token,
+        });
+        if (!error) setSessionReady(true);
       }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    };
+
+    handleDeepLink(url);
+  }, [url]);
 
   const handleUpdatePassword = async () => {
     if (!password || password.length < 6) {
@@ -44,6 +63,7 @@ export function useResetPassword() {
   };
 
   return {
+    url,
     password,
     setPassword,
     confirmPassword,

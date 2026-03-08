@@ -16,6 +16,7 @@ import { Input } from "../../components/common/input";
 export const ResetPasswordScreen = () => {
   const router = useRouter();
   const {
+    url,
     password,
     setPassword,
     confirmPassword,
@@ -55,6 +56,7 @@ export const ResetPasswordScreen = () => {
           <Text style={styles.message}>
             Please wait while we verify your reset link.
           </Text>
+          <Text style={styles.debugUrl}>URL: {url ?? "no url detected"}</Text>
         </View>
       </View>
     );
@@ -140,5 +142,11 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.sm,
+  },
+  debugUrl: {
+    color: "red",
+    fontSize: 10,
+    padding: 10,
+    textAlign: "center",
   },
 });
