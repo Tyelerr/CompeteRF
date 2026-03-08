@@ -16,7 +16,7 @@ import { Input } from "../../components/common/input";
 export const ResetPasswordScreen = () => {
   const router = useRouter();
   const {
-    url,
+    params,
     password,
     setPassword,
     confirmPassword,
@@ -57,7 +57,7 @@ export const ResetPasswordScreen = () => {
             Please wait while we verify your reset link.
           </Text>
           <Text style={styles.debugUrl}>
-            URL: {url ?? "no url detected"}
+            PARAMS: {JSON.stringify(params)}
           </Text>
         </View>
       </View>
