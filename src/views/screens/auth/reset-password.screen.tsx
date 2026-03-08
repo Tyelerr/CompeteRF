@@ -16,7 +16,6 @@ import { Input } from "../../components/common/input";
 export const ResetPasswordScreen = () => {
   const router = useRouter();
   const {
-    params,
     password,
     setPassword,
     confirmPassword,
@@ -56,9 +55,6 @@ export const ResetPasswordScreen = () => {
           <Text style={styles.message}>
             Please wait while we verify your reset link.
           </Text>
-          <Text style={styles.debugUrl}>
-            PARAMS: {JSON.stringify(params)}
-          </Text>
         </View>
       </View>
     );
@@ -86,7 +82,7 @@ export const ResetPasswordScreen = () => {
         <Input
           label="Confirm Password"
           value={confirmPassword}
-          onChangeText={setConfirmPassword}
+          onChangeText={setConfirmPassword,}
           placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}
           secureTextEntry
         />
@@ -144,11 +140,5 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.sm,
-  },
-  debugUrl: {
-    color: "red",
-    fontSize: 10,
-    padding: 10,
-    textAlign: "center",
   },
 });
