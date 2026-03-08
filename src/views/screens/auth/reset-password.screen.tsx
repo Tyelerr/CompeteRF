@@ -82,7 +82,7 @@ export const ResetPasswordScreen = () => {
         <Input
           label="Confirm Password"
           value={confirmPassword}
-          onChangeText={setConfirmPassword,}
+          onChangeText={setConfirmPassword}
           placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}
           secureTextEntry
         />

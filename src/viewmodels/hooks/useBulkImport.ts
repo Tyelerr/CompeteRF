@@ -2,7 +2,6 @@
 // src/viewmodels/hooks/useBulkImport.ts
 
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
 import { useState } from "react";
 import { Alert } from "react-native";
 import { bulkImportService } from "../../models/services/bulk-import.service";
@@ -14,7 +13,7 @@ import {
 export const useBulkImport = () => {
   const [state, setState] = useState<BulkImportState>(INITIAL_BULK_IMPORT_STATE);
 
-  // ── Computed ─────────────────────────────────────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────────
 
   const isLoading = state.phase === "parsing" || state.phase === "importing";
   const canImport = state.phase === "validated" && state.validRows.length > 0;
@@ -23,7 +22,18 @@ export const useBulkImport = () => {
       ? state.currentRow / state.validRows.length
       : 0;
 
-  // ── Pick File ──────────────────────────────────────────────────────────
+  // ── Read File Content ─────────────────────────────────────────────────────
+  // Uses fetch() instead of expo-file-system to avoid EncodingType.UTF8 crash
+
+  const readFileAsText = async (uri: string): Promise<string> => {
+    const response = await fetch(uri);
+    if (!response.ok) {
+      throw new Error(`Failed to read file (HTTP ${response.status})`);
+    }
+    return await response.text();
+  };
+
+  // ── Pick File ─────────────────────────────────────────────────────────────
 
   const pickFile = async () => {
     try {
@@ -60,14 +70,12 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Parse & Validate ───────────────────────────────────────────────────
+  // ── Parse & Validate ──────────────────────────────────────────────────────
 
   const parseAndValidate = async (fileUri: string) => {
     try {
-      // Read file content
-      const content = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      // Read file content using fetch() — avoids expo-file-system entirely
+      const content = await readFileAsText(fileUri);
 
       if (!content.trim()) {
         Alert.alert("Empty File", "The selected CSV file is empty.");
@@ -107,7 +115,7 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Start Import ───────────────────────────────────────────────────────
+  // ── Start Import ──────────────────────────────────────────────────────────
 
   const startImport = async () => {
     if (!canImport) return;
@@ -141,13 +149,13 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Reset ──────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────
 
   const reset = () => {
     setState(INITIAL_BULK_IMPORT_STATE);
   };
 
-  // ── Public API ─────────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────
 
   return {
     state,
