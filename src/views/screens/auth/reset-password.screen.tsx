@@ -32,7 +32,7 @@ export const ResetPasswordScreen = () => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.icon}>✅</Text>
+          <Text style={styles.icon}>?</Text>
           <Text style={styles.title}>PASSWORD UPDATED</Text>
           <Text style={styles.message}>
             Your password has been changed successfully.
@@ -51,12 +51,14 @@ export const ResetPasswordScreen = () => {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.icon}>🔐</Text>
+          <Text style={styles.icon}>??</Text>
           <Text style={styles.title}>VERIFYING...</Text>
           <Text style={styles.message}>
             Please wait while we verify your reset link.
           </Text>
-          <Text style={styles.debugUrl}>URL: {url ?? "no url detected"}</Text>
+          <Text style={styles.debugUrl}>
+            URL: {url ?? "no url detected"}
+          </Text>
         </View>
       </View>
     );
