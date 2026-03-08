@@ -9,7 +9,12 @@ import {
   View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
-import { Filters, defaultFilters } from "../../../models/types/filter.types";
+import {
+  Filters,
+  defaultFilters,
+  getFargoMax,
+  isScotchDoubles,
+} from "../../../models/types/filter.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -71,11 +76,28 @@ export const FilterModal = ({
 }: FilterModalProps) => {
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
 
+  // Dynamic Fargo ceiling based on selected game type
+  const fargoMax = getFargoMax(localFilters.gameType);
+  const scotchSelected = isScotchDoubles(localFilters.gameType);
+  const fargoMaxLabel = scotchSelected ? "2000+" : "1000+";
+  const fargoMaxDisplay = scotchSelected ? 2000 : 1000;
+
   useEffect(() => {
     if (visible) {
       setLocalFilters(filters);
     }
   }, [visible]);
+
+  // When game type changes, reset Fargo range to new max if current max
+  // exceeds the new ceiling (e.g. switching from scotch to regular)
+  const handleGameTypeChange = (value: string) => {
+    const newFargoMax = getFargoMax(value);
+    setLocalFilters({
+      ...localFilters,
+      gameType: value,
+      maxFargo: Math.min(localFilters.maxFargo, newFargoMax),
+    });
+  };
 
   const handleApply = () => {
     onApply(localFilters);
@@ -99,7 +121,7 @@ export const FilterModal = ({
       activeFilters.maxEntryFee = localFilters.maxEntryFee;
     if (localFilters.minFargo > 0)
       activeFilters.minFargo = localFilters.minFargo;
-    if (localFilters.maxFargo < 900)
+    if (localFilters.maxFargo < fargoMax)
       activeFilters.maxFargo = localFilters.maxFargo;
     if (localFilters.requiresFargoGames)
       activeFilters.requiresFargoGames = true;
@@ -169,9 +191,7 @@ export const FilterModal = ({
               placeholder="All Game Types"
               options={GAME_TYPES}
               value={localFilters.gameType}
-              onSelect={(value) =>
-                setLocalFilters({ ...localFilters, gameType: value })
-              }
+              onSelect={handleGameTypeChange}
             />
 
             {/* Tournament Format */}
@@ -273,13 +293,18 @@ export const FilterModal = ({
               maxLabel="$1000+"
             />
 
-            {/* Fargo Rating Range */}
+            {/* Fargo Rating Range — dynamic based on game type */}
+            {scotchSelected && (
+              <Text style={styles.fargoNote}>
+                Combined team Fargo for Scotch Doubles
+              </Text>
+            )}
             <RangeSlider
               label="Fargo Rating Range"
               minValue={localFilters.minFargo}
-              maxValue={localFilters.maxFargo}
+              maxValue={Math.min(localFilters.maxFargo, fargoMaxDisplay)}
               min={0}
-              max={900}
+              max={fargoMaxDisplay}
               step={10}
               onValueChange={(minVal, maxVal) =>
                 setLocalFilters({
@@ -288,9 +313,11 @@ export const FilterModal = ({
                   maxFargo: maxVal,
                 })
               }
-              formatValue={(v) => (v >= 900 ? "900+" : v.toString())}
+              formatValue={(v) =>
+                v >= fargoMaxDisplay ? `${fargoMaxDisplay}+` : v.toString()
+              }
               minLabel="0"
-              maxLabel="900+"
+              maxLabel={fargoMaxLabel}
             />
 
             {/* Checkboxes */}
@@ -421,6 +448,13 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
+  },
+  fargoNote: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    marginTop: SPACING.sm,
+    marginBottom: -SPACING.xs,
+    fontStyle: "italic",
   },
   textInput: {
     backgroundColor: COLORS.surface,

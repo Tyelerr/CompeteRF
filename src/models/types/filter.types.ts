@@ -21,6 +21,22 @@ export interface Filters {
   openTournament: boolean;
 }
 
+const SCOTCH_DOUBLES_TYPES = [
+  "8-ball-scotch-doubles",
+  "9-ball-scotch-doubles",
+  "10-ball-scotch-doubles",
+];
+
+// Returns the max Fargo value based on selected game type
+// Scotch doubles uses combined team Fargo so the ceiling is much higher
+export const getFargoMax = (gameType: string): number => {
+  return SCOTCH_DOUBLES_TYPES.includes(gameType) ? 2000 : 1000;
+};
+
+export const isScotchDoubles = (gameType: string): boolean => {
+  return SCOTCH_DOUBLES_TYPES.includes(gameType);
+};
+
 export const defaultFilters: Filters = {
   gameType: "",
   tournamentFormat: "",
@@ -32,7 +48,7 @@ export const defaultFilters: Filters = {
   minEntryFee: 0,
   maxEntryFee: 1000,
   minFargo: 0,
-  maxFargo: 900,
+  maxFargo: 1000,
   requiresFargoGames: false,
   reportsToFargo: false,
   calcutta: false,

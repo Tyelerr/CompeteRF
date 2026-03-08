@@ -16,7 +16,7 @@ const DEFAULT_FILTERS: TournamentFilters = {
   entryFeeMin: 0,
   entryFeeMax: 1000,
   fargoMin: 0,
-  fargoMax: 900,
+  fargoMax: 1000,
   reportsToFargo: undefined,
   openTournament: undefined,
 };

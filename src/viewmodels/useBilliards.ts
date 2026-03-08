@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
 import { tournamentService } from "../models/services/tournament.service";
-import { defaultFilters, Filters } from "../models/types/filter.types";
+import { defaultFilters, Filters, getFargoMax } from "../models/types/filter.types";
 import { Tournament } from "../models/types/tournament.types";
 import {
   getDistanceMiles,
@@ -12,7 +12,7 @@ import {
 import { useAuth } from "./hooks/use.auth";
 import { useFavorites } from "./hooks/use.favorites";
 
-// ——— Types ———————————————————————————————————————————————————
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface CityOption {
   label: string;
@@ -59,7 +59,7 @@ export interface UseBilliardsReturn {
   getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
-// ——— Hook ————————————————————————————————————————————————————
+// ── Hook ───────────────────────────────────────────────────────────────────────
 
 export function useBilliards(): UseBilliardsReturn {
   const router = useRouter();
@@ -68,19 +68,19 @@ export function useBilliards(): UseBilliardsReturn {
     profile?.id_auto,
   );
 
-  // —— Tournament data ————————————————————————————————————————
+  // ── Tournament data ────────────────────────────────────────────────────────
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [hasSetHomeState, setHasSetHomeState] = useState(false);
 
-  // —— Location helpers ———————————————————————————————————————
+  // ── Location helpers ───────────────────────────────────────────────────────
   const [cities, setCities] = useState<CityOption[]>([]);
   const [zipCoords, setZipCoords] = useState<ZipCoords | null>(null);
   const [activeZip, setActiveZip] = useState("");
 
-  // —— Filter state (local — resets on navigation) ————————————
+  // ── Filter state (local — resets on navigation) ────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
@@ -89,7 +89,7 @@ export function useBilliards(): UseBilliardsReturn {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // —— Effects ————————————————————————————————————————————————
+  // ── Effects ────────────────────────────────────────────────────────────────
 
   // Initial load
   useEffect(() => {
@@ -145,7 +145,7 @@ export function useBilliards(): UseBilliardsReturn {
     }
   }, [selectedState]);
 
-  // —— Data fetching ——————————————————————————————————————————
+  // ── Data fetching ──────────────────────────────────────────────────────────
 
   const loadTournaments = async () => {
     try {
@@ -158,7 +158,7 @@ export function useBilliards(): UseBilliardsReturn {
     }
   };
 
-  // —— Client-side filtering ——————————————————————————————————
+  // ── Client-side filtering ──────────────────────────────────────────────────
 
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
@@ -213,7 +213,7 @@ export function useBilliards(): UseBilliardsReturn {
       }
     }
 
-    // —— Modal filters ————————————————————————————————————————
+    // ── Modal filters ──────────────────────────────────────────────────────
     if (filters.gameType) {
       filtered = filtered.filter((t) => t.game_type === filters.gameType);
     }
@@ -239,11 +239,24 @@ export function useBilliards(): UseBilliardsReturn {
         (t.entry_fee || 0) >= filters.minEntryFee &&
         (t.entry_fee || 0) <= filters.maxEntryFee,
     );
-    if (filters.maxFargo < 900) {
+
+    // ── Fargo range filter ─────────────────────────────────────────────────
+    // If the slider has been adjusted from defaults, apply strict filtering.
+    // Tournaments with no max_fargo (open/uncapped) are excluded when a
+    // specific Fargo range is set — user should use the Open Tournament
+    // checkbox instead if they want those.
+    const fargoMax = getFargoMax(filters.gameType);
+    const fargoAdjusted = filters.minFargo > 0 || filters.maxFargo < fargoMax;
+    if (fargoAdjusted) {
       filtered = filtered.filter(
-        (t) => !t.max_fargo || t.max_fargo <= filters.maxFargo,
+        (t) =>
+          t.max_fargo !== null &&
+          t.max_fargo !== undefined &&
+          t.max_fargo >= filters.minFargo &&
+          t.max_fargo <= filters.maxFargo,
       );
     }
+
     if (filters.reportsToFargo) {
       filtered = filtered.filter((t) => t.reports_to_fargo === true);
     }
@@ -266,7 +279,7 @@ export function useBilliards(): UseBilliardsReturn {
     filters,
   ]);
 
-  // —— Empty state helpers ————————————————————————————————————
+  // ── Empty state helpers ────────────────────────────────────────────────────
 
   // True when a state is selected but yields no results
   const isStateFilterEmpty = useMemo(() => {
@@ -281,7 +294,7 @@ export function useBilliards(): UseBilliardsReturn {
     return !tournaments.some((t) => t.venues?.state === profile.home_state);
   }, [profile?.home_state, selectedState, tournaments]);
 
-  // —— Actions ————————————————————————————————————————————————
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   const toggleFavorite = useCallback(
     async (tournamentId: number) => {
@@ -323,7 +336,7 @@ export function useBilliards(): UseBilliardsReturn {
     setRefreshing(false);
   }, []);
 
-  // —— Public API (flat object the screen destructures) ———————
+  // ── Public API (flat object the screen destructures) ───────────────────────
 
   return {
     // Data
