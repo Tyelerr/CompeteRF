@@ -6,6 +6,32 @@ import {
 } from "../types/tournament.types";
 import { searchAlertService } from "./search-alert.service";
 
+// ─── Game Type Normalizer ────────────────────────────────────────────────────
+// Normalizes any slug or display value to the canonical display format.
+// This is the single source of truth for game_type display across the entire app.
+const GAME_TYPE_MAP: Record<string, string> = {
+  "8-ball":                   "8 Ball",
+  "9-ball":                   "9 Ball",
+  "10-ball":                  "10 Ball",
+  "one-pocket":               "One Pocket",
+  "straight-pool":            "Straight Pool",
+  "banks":                    "Banks",
+  "8-ball-scotch-doubles":    "8 Ball Scotch Doubles",
+  "9-ball-scotch-doubles":    "9 Ball Scotch Doubles",
+  "10-ball-scotch-doubles":   "10 Ball Scotch Doubles",
+};
+
+function normalizeGameType(value: string | null | undefined): string {
+  if (!value) return "";
+  return GAME_TYPE_MAP[value.toLowerCase()] ?? value;
+}
+
+function normalizeTournament<T extends { game_type?: any }>(t: T): T {
+  return { ...t, game_type: normalizeGameType(t.game_type) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const tournamentService = {
   async getTournaments(
     filters: TournamentFilters,
@@ -16,7 +42,7 @@ export const tournamentService = {
       .from("tournaments")
       .select("*, venues(*), profiles!director_id(*)", { count: "exact" })
       .eq("status", "active")
-      .eq("is_hidden", false)                                        // ← NEW: exclude hidden
+      .eq("is_hidden", false)
       .gte("tournament_date", new Date().toISOString().split("T")[0])
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);
@@ -54,7 +80,10 @@ export const tournamentService = {
 
     const { data, error, count } = await query;
     if (error) throw error;
-    return { data: data || [], count: count || 0 };
+    return {
+      data: (data || []).map(normalizeTournament),
+      count: count || 0,
+    };
   },
 
   async getTournament(id: number): Promise<Tournament | null> {
@@ -64,7 +93,7 @@ export const tournamentService = {
       .eq("id", id)
       .single();
     if (error) throw error;
-    return data;
+    return data ? normalizeTournament(data) : null;
   },
 
   async getTournamentsByVenue(venueId: number): Promise<Tournament[]> {
@@ -73,11 +102,11 @@ export const tournamentService = {
       .select("*")
       .eq("venue_id", venueId)
       .eq("status", "active")
-      .eq("is_hidden", false)                                        // ← NEW
+      .eq("is_hidden", false)
       .gte("tournament_date", new Date().toISOString().split("T")[0])
       .order("tournament_date", { ascending: true });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(normalizeTournament);
   },
 
   async getTournamentsByDirector(directorId: number): Promise<Tournament[]> {
@@ -89,7 +118,7 @@ export const tournamentService = {
       .gte("tournament_date", new Date().toISOString().split("T")[0])
       .order("tournament_date", { ascending: true });
     if (error) throw error;
-    return data || [];
+    return (data || []).map(normalizeTournament);
   },
 
   async createTournament(tournament: Partial<Tournament>): Promise<Tournament> {
@@ -101,11 +130,8 @@ export const tournamentService = {
 
     if (error) throw error;
 
-    // Debug logging
     console.log("🏆 Created tournament:", data?.name, data?.game_type);
-    console.log("🏆 Tournament data:", data);
 
-    // Check new tournament against search alerts
     if (data) {
       console.log("🔍 Starting alert check for tournament:", data.name);
       try {
@@ -116,7 +142,7 @@ export const tournamentService = {
       }
     }
 
-    return data;
+    return normalizeTournament(data);
   },
 
   async updateTournament(
@@ -132,7 +158,6 @@ export const tournamentService = {
 
     if (error) throw error;
 
-    // Re-check alerts if significant fields changed
     const significantFields = [
       "game_type",
       "tournament_format",
@@ -155,7 +180,7 @@ export const tournamentService = {
       }
     }
 
-    return data;
+    return normalizeTournament(data);
   },
 
   async cancelTournament(
@@ -176,7 +201,7 @@ export const tournamentService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return normalizeTournament(data);
   },
 
   async archiveTournament(id: number, archivedBy: number): Promise<Tournament> {
@@ -192,7 +217,7 @@ export const tournamentService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return normalizeTournament(data);
   },
 
   async restoreTournament(id: number): Promise<Tournament> {
@@ -211,7 +236,7 @@ export const tournamentService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return normalizeTournament(data);
   },
 
   async completeTournament(id: number): Promise<Tournament> {
@@ -225,12 +250,8 @@ export const tournamentService = {
       .select()
       .single();
     if (error) throw error;
-    return data;
+    return normalizeTournament(data);
   },
-
-  // ═══════════════════════════════════════════════════════
-  // NEW: Hide / Unhide tournament (App Store compliance)
-  // ═══════════════════════════════════════════════════════
 
   async hideTournament(id: number): Promise<Tournament> {
     const { data, error } = await supabase
@@ -245,7 +266,7 @@ export const tournamentService = {
 
     if (error) throw error;
     if (!data) throw new Error("Hide failed — no rows modified (possible RLS block).");
-    return data;
+    return normalizeTournament(data);
   },
 
   async unhideTournament(id: number): Promise<Tournament> {
@@ -261,7 +282,7 @@ export const tournamentService = {
 
     if (error) throw error;
     if (!data) throw new Error("Unhide failed — no rows modified (possible RLS block).");
-    return data;
+    return normalizeTournament(data);
   },
 
   async getTemplates(directorId: number): Promise<TournamentTemplate[]> {
