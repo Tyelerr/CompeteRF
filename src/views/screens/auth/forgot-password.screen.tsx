@@ -1,42 +1,18 @@
-import { useNavigation } from "@react-navigation/native";
-import { useState } from "react";
+import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { isValidEmail } from "../../../utils/validation";
+import { useForgotPassword } from "../../../viewmodels/useForgotPassword";
 import { Button } from "../../components/common/button";
 import { Input } from "../../components/common/input";
 
 export const ForgotPasswordScreen = () => {
-  const navigation = useNavigation();
+  const router = useRouter();
+  const { email, setEmail, loading, sent, error, handleSendReset } =
+    useForgotPassword();
 
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleReset = async () => {
-    setError("");
-
-    if (!isValidEmail(email)) {
-      setError("Please enter a valid email");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await authService.resetPassword(email);
-      setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || "Failed to send reset email");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (success) {
+  if (sent) {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
@@ -47,13 +23,13 @@ export const ForgotPasswordScreen = () => {
           </Text>
           <Text style={styles.email}>{email}</Text>
           <Text style={styles.message}>
-            Click the link in the email to reset your password.
+            Tap the link in the email to reset your password. It will open the
+            app directly.
           </Text>
         </View>
-
         <Button
           title="Back to Log In"
-          onPress={() => navigation.goBack()}
+          onPress={() => router.back()}
           fullWidth
         />
       </View>
@@ -62,7 +38,7 @@ export const ForgotPasswordScreen = () => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.back}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 
@@ -88,7 +64,7 @@ export const ForgotPasswordScreen = () => {
 
         <Button
           title="Send Reset Link"
-          onPress={handleReset}
+          onPress={handleSendReset}
           loading={loading}
           fullWidth
         />

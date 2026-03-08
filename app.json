@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.thecompeteapp.competerf",
       "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:thecompeteapp.com"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

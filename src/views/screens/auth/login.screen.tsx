@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
@@ -42,7 +42,6 @@ export const LoginScreen = () => {
         return;
       }
 
-      // Check if user has a profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("id")
@@ -54,38 +53,10 @@ export const LoginScreen = () => {
       } else {
         router.replace("/auth/register");
       }
-    } catch (err: any) {
+    } catch {
       setError("Invalid email or password");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email.trim() || !email.includes("@")) {
-      Alert.alert(
-        "Enter Your Email",
-        "Please enter your email address above, then tap Forgot Password again.",
-      );
-      return;
-    }
-
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-      );
-
-      if (resetError) {
-        Alert.alert("Error", "Failed to send reset email. Please try again.");
-        return;
-      }
-
-      Alert.alert(
-        "Check Your Email",
-        "If an account exists with that email, you will receive a password reset link.",
-      );
-    } catch {
-      Alert.alert("Error", "Something went wrong. Please try again.");
     }
   };
 
@@ -97,7 +68,6 @@ export const LoginScreen = () => {
 
       <Text style={styles.title}>LOG IN</Text>
 
-      {/* Pushes the form down to roughly the upper-middle of the screen */}
       <View style={styles.spacer} />
 
       <View style={styles.form}>
@@ -119,7 +89,7 @@ export const LoginScreen = () => {
         />
 
         <TouchableOpacity
-          onPress={handleForgotPassword}
+          onPress={() => router.push("/auth/forgot-password" as any)}
           style={styles.forgotPassword}
         >
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -136,13 +106,14 @@ export const LoginScreen = () => {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>{"Don't have an account? "}</Text>
-          <TouchableOpacity onPress={() => router.push("/auth/register")}>
+          <TouchableOpacity
+            onPress={() => router.push("/auth/register" as any)}
+          >
             <Text style={styles.footerLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Bottom spacer balances the layout */}
       <View style={styles.bottomSpacer} />
     </View>
   );

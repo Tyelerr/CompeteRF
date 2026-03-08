@@ -22,14 +22,11 @@ export const authService = {
   },
 
   async signInWithApple() {
-    // Generate a random nonce for security
     const rawNonce = Math.random().toString(36).substring(2, 18);
     const hashedNonce = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       rawNonce,
     );
-
-    // Present the native Apple Sign In dialog
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -37,24 +34,18 @@ export const authService = {
       ],
       nonce: hashedNonce,
     });
-
     if (!credential.identityToken) {
       throw new Error("No identity token returned from Apple");
     }
-
-    // Send the token to Supabase
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
       token: credential.identityToken,
       nonce: rawNonce,
     });
-
     if (error) throw error;
-
     return {
       user: data.user,
       session: data.session,
-      // Apple only provides the name on FIRST sign-in, so capture it now
       fullName: credential.fullName,
     };
   },
@@ -64,10 +55,16 @@ export const authService = {
     if (error) throw error;
   },
 
-  async resetPassword(email: string) {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) throw error;
-    return data;
+  async sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: 'https://thecompeteapp.com/reset-password',
+    });
+    return { error: error?.message ?? null };
+  },
+
+  async updatePassword(newPassword: string): Promise<{ error: string | null }> {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
   },
 
   async getSession() {
