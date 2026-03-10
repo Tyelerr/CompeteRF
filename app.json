@@ -29,7 +29,8 @@
       "package": "com.thecompeteapp.competerf"
     },
     "web": {
-      "output": "static",
+      "bundler": "metro",
+      "output": "single-page",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
