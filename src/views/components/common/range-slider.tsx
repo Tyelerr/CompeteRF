@@ -1,10 +1,11 @@
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import { useEffect, useState } from "react";
-import { Dimensions, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Platform, StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 
+const isWeb = Platform.OS === "web";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const SLIDER_LENGTH = SCREEN_WIDTH - 80;
 
@@ -21,6 +22,51 @@ interface RangeSliderProps {
   maxLabel?: string;
 }
 
+// Inject thumb CSS once
+const STYLE_ID = "compete-range-style";
+if (
+  isWeb &&
+  typeof document !== "undefined" &&
+  !document.getElementById(STYLE_ID)
+) {
+  const s = document.createElement("style");
+  s.id = STYLE_ID;
+  s.textContent = `
+    .compete-range {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0; left: 0;
+      margin: 0; padding: 0;
+      background: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+      pointer-events: none;
+    }
+    .compete-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: ${COLORS.primary};
+      border: 3px solid #fff;
+      cursor: pointer;
+      pointer-events: all;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .compete-range::-moz-range-thumb {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: ${COLORS.primary};
+      border: 3px solid #fff;
+      cursor: pointer;
+      pointer-events: all;
+    }
+    .compete-range::-webkit-slider-runnable-track { background: transparent; }
+    .compete-range::-moz-range-track { background: transparent; }
+  `;
+  document.head.appendChild(s);
+}
+
 export const RangeSlider = ({
   label,
   minValue,
@@ -35,11 +81,98 @@ export const RangeSlider = ({
 }: RangeSliderProps) => {
   const [values, setValues] = useState<[number, number]>([minValue, maxValue]);
 
-  // Sync when parent values change
   useEffect(() => {
     setValues([minValue, maxValue]);
   }, [minValue, maxValue]);
 
+  // ── Web ─────────────────────────────────────────────────────────────────
+  if (isWeb) {
+    const range = max - min;
+    const leftPct = ((values[0] - min) / range) * 100;
+    const rightPct = ((values[1] - min) / range) * 100;
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.label}>{label}</Text>
+          <Text style={styles.value}>
+            {formatValue(values[0])} — {formatValue(values[1])}
+          </Text>
+        </View>
+
+        {/* Track container */}
+        <View
+          style={{
+            height: 36,
+            justifyContent: "center",
+            position: "relative" as any,
+          }}
+        >
+          {/* Base track */}
+          <View
+            style={{
+              position: "absolute" as any,
+              left: 0,
+              right: 0,
+              height: 6,
+              backgroundColor: COLORS.border,
+              borderRadius: 3,
+            }}
+          />
+          {/* Selected range highlight */}
+          <View
+            style={{
+              position: "absolute" as any,
+              left: `${leftPct}%` as any,
+              right: `${100 - rightPct}%` as any,
+              height: 6,
+              backgroundColor: COLORS.primary,
+              borderRadius: 3,
+            }}
+          />
+          {/* Min thumb input */}
+          <input
+            className="compete-range"
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={values[0]}
+            style={{ zIndex: values[0] >= values[1] - step ? 5 : 3 }}
+            onChange={(e) => {
+              const v = Math.min(Number(e.target.value), values[1] - step);
+              const next: [number, number] = [v, values[1]];
+              setValues(next);
+              onValueChange(next[0], next[1]);
+            }}
+          />
+          {/* Max thumb input */}
+          <input
+            className="compete-range"
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={values[1]}
+            style={{ zIndex: 4 }}
+            onChange={(e) => {
+              const v = Math.max(Number(e.target.value), values[0] + step);
+              const next: [number, number] = [values[0], v];
+              setValues(next);
+              onValueChange(next[0], next[1]);
+            }}
+          />
+        </View>
+
+        <View style={styles.labelsRow}>
+          <Text style={styles.sliderLabel}>{minLabel || formatValue(min)}</Text>
+          <Text style={styles.sliderLabel}>{maxLabel || formatValue(max)}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Mobile ───────────────────────────────────────────────────────────────
   const handleValuesChange = (newValues: number[]) => {
     setValues([newValues[0], newValues[1]]);
   };
@@ -56,7 +189,6 @@ export const RangeSlider = ({
           {formatValue(values[0])} — {formatValue(values[1])}
         </Text>
       </View>
-
       <View style={styles.sliderWrapper}>
         <MultiSlider
           values={values}
@@ -78,7 +210,6 @@ export const RangeSlider = ({
           markerOffsetY={2}
         />
       </View>
-
       <View style={styles.labelsRow}>
         <Text style={styles.sliderLabel}>{minLabel || formatValue(min)}</Text>
         <Text style={styles.sliderLabel}>{maxLabel || formatValue(max)}</Text>
@@ -88,44 +219,24 @@ export const RangeSlider = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginVertical: SPACING.md,
-  },
+  container: { marginVertical: SPACING.md },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: SPACING.sm,
   },
-  label: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  value: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
+  label: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text },
+  value: { fontSize: FONT_SIZES.md, color: COLORS.text },
   sliderWrapper: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: SPACING.sm,
   },
-  sliderContainer: {
-    height: 40,
-    justifyContent: "center",
-  },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.border,
-  },
-  selectedTrack: {
-    backgroundColor: COLORS.primary,
-  },
-  unselectedTrack: {
-    backgroundColor: COLORS.border,
-  },
+  sliderContainer: { height: 40, justifyContent: "center" },
+  track: { height: 6, borderRadius: 3, backgroundColor: COLORS.border },
+  selectedTrack: { backgroundColor: COLORS.primary },
+  unselectedTrack: { backgroundColor: COLORS.border },
   marker: {
     width: 24,
     height: 24,
@@ -152,8 +263,5 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: SPACING.xs,
   },
-  sliderLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
-  },
+  sliderLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
 });

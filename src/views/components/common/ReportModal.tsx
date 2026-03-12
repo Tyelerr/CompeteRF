@@ -1,6 +1,3 @@
-// src/views/components/common/ReportModal.tsx
-// Follows existing modal patterns: GiveawayEntryModal, RedrawConfirmModal, RemoveDirectorModal
-
 import {
   CONTENT_TYPE_LABELS,
   REPORT_REASON_LABELS,
@@ -21,6 +18,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+const isWeb = Platform.OS === "web";
 
 interface ReportModalProps {
   visible: boolean;
@@ -56,121 +55,129 @@ export default function ReportModal({
     ? `Report ${CONTENT_TYPE_LABELS[contentType]}`
     : "Report Content";
 
+  const inner = (
+    <View style={[styles.modalContainer, isWeb && wStyles.modalContainer]}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Ionicons name="flag" size={20} color="#E53935" />
+            <Text style={styles.title}>{title}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            disabled={isSubmitting}
+          >
+            <Ionicons name="close" size={24} color="#999" />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.subtitle}>Why are you reporting this content?</Text>
+
+        <View style={styles.reasonContainer}>
+          {REASON_OPTIONS.map((option) => {
+            const isSelected = reason === option;
+            return (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.reasonOption,
+                  isSelected && styles.reasonOptionSelected,
+                ]}
+                onPress={() => onReasonChange(option)}
+                disabled={isSubmitting}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[styles.radio, isSelected && styles.radioSelected]}
+                >
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+                <Text
+                  style={[
+                    styles.reasonText,
+                    isSelected && styles.reasonTextSelected,
+                  ]}
+                >
+                  {REPORT_REASON_LABELS[option]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.detailsLabel}>Additional details (optional)</Text>
+        <TextInput
+          style={styles.detailsInput}
+          placeholder="Provide any additional context..."
+          placeholderTextColor="#666"
+          value={details}
+          onChangeText={onDetailsChange}
+          multiline
+          numberOfLines={4}
+          maxLength={500}
+          textAlignVertical="top"
+          editable={!isSubmitting}
+          blurOnSubmit
+        />
+        <Text style={styles.charCount}>{details.length}/500</Text>
+      </ScrollView>
+
+      <View style={styles.buttonRow}>
+        <TouchableOpacity
+          style={[
+            styles.submitButton,
+            (!reason || isSubmitting) && styles.submitButtonDisabled,
+          ]}
+          onPress={onSubmit}
+          disabled={!reason || isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.submitButtonText}>Submit Report</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.cancelButton}
+          onPress={onClose}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType={isWeb ? "fade" : "slide"}
       transparent
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View style={styles.modalContainer}>
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.headerLeft}>
-                <Ionicons name="flag" size={20} color="#E53935" />
-                <Text style={styles.title}>{title}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={onClose}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={isSubmitting}
-              >
-                <Ionicons name="close" size={24} color="#999" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.subtitle}>
-              Why are you reporting this content?
-            </Text>
-
-            {/* Reason Selection */}
-            <View style={styles.reasonContainer}>
-              {REASON_OPTIONS.map((option) => {
-                const isSelected = reason === option;
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.reasonOption,
-                      isSelected && styles.reasonOptionSelected,
-                    ]}
-                    onPress={() => onReasonChange(option)}
-                    disabled={isSubmitting}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[styles.radio, isSelected && styles.radioSelected]}
-                    >
-                      {isSelected && <View style={styles.radioInner} />}
-                    </View>
-                    <Text
-                      style={[
-                        styles.reasonText,
-                        isSelected && styles.reasonTextSelected,
-                      ]}
-                    >
-                      {REPORT_REASON_LABELS[option]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Details Input */}
-            <Text style={styles.detailsLabel}>
-              Additional details (optional)
-            </Text>
-            <TextInput
-              style={styles.detailsInput}
-              placeholder="Provide any additional context..."
-              placeholderTextColor="#666"
-              value={details}
-              onChangeText={onDetailsChange}
-              multiline
-              numberOfLines={4}
-              maxLength={500}
-              textAlignVertical="top"
-              editable={!isSubmitting}
-              blurOnSubmit
-            />
-            <Text style={styles.charCount}>{details.length}/500</Text>
-          </ScrollView>
-
-          {/* Fixed Buttons — always visible at bottom */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (!reason || isSubmitting) && styles.submitButtonDisabled,
-              ]}
-              onPress={onSubmit}
-              disabled={!reason || isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Submit Report</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+      {isWeb ? (
+        // Web: centered dialog with dimmed backdrop
+        <>
+          <TouchableOpacity
+            style={wStyles.backdrop}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+          <View style={wStyles.overlay}>{inner}</View>
+        </>
+      ) : (
+        // Mobile: bottom sheet (unchanged)
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          {inner}
+        </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 }
@@ -178,7 +185,7 @@ export default function ReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
   modalContainer: {
@@ -196,25 +203,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#AAAAAA",
-    marginBottom: 16,
-  },
-  reasonContainer: {
-    gap: 8,
-    marginBottom: 20,
-  },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
+  title: { fontSize: 20, fontWeight: "700", color: "#FFFFFF" },
+  subtitle: { fontSize: 14, color: "#AAAAAA", marginBottom: 16 },
+  reasonContainer: { gap: 8, marginBottom: 20 },
   reasonOption: {
     flexDirection: "row",
     alignItems: "center",
@@ -227,7 +219,7 @@ const styles = StyleSheet.create({
   },
   reasonOptionSelected: {
     borderColor: "#E53935",
-    backgroundColor: "rgba(229, 57, 53, 0.1)",
+    backgroundColor: "rgba(229,57,53,0.1)",
   },
   radio: {
     width: 20,
@@ -239,28 +231,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  radioSelected: {
-    borderColor: "#E53935",
-  },
+  radioSelected: { borderColor: "#E53935" },
   radioInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: "#E53935",
   },
-  reasonText: {
-    fontSize: 15,
-    color: "#CCCCCC",
-  },
-  reasonTextSelected: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  detailsLabel: {
-    fontSize: 14,
-    color: "#AAAAAA",
-    marginBottom: 8,
-  },
+  reasonText: { fontSize: 15, color: "#CCCCCC" },
+  reasonTextSelected: { color: "#FFFFFF", fontWeight: "600" },
+  detailsLabel: { fontSize: 14, color: "#AAAAAA", marginBottom: 8 },
   detailsInput: {
     backgroundColor: "#2C2C2E",
     borderRadius: 10,
@@ -293,11 +273,7 @@ const styles = StyleSheet.create({
     borderColor: "#444",
     alignItems: "center",
   },
-  cancelButtonText: {
-    fontSize: 15,
-    color: "#CCCCCC",
-    fontWeight: "600",
-  },
+  cancelButtonText: { fontSize: 15, color: "#CCCCCC", fontWeight: "600" },
   submitButton: {
     flex: 1,
     paddingVertical: 14,
@@ -306,13 +282,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  submitButtonDisabled: {
-    backgroundColor: "#5C1A1A",
-    opacity: 0.6,
+  submitButtonDisabled: { backgroundColor: "#5C1A1A", opacity: 0.6 },
+  submitButtonText: { fontSize: 15, color: "#FFFFFF", fontWeight: "700" },
+});
+
+const wStyles = StyleSheet.create({
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 3000,
   },
-  submitButtonText: {
-    fontSize: 15,
-    color: "#FFFFFF",
-    fontWeight: "700",
+  overlay: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    pointerEvents: "box-none" as any,
+  },
+  modalContainer: {
+    width: 480,
+    maxWidth: "90%" as any,
+    maxHeight: "80vh" as any,
+    borderRadius: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
   },
 });

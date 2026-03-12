@@ -1,4 +1,11 @@
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Tournament } from "../../../models/types/tournament.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -17,6 +24,8 @@ interface BilliardsTournamentCardProps {
   getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
+const isWeb = Platform.OS === "web";
+
 export const BilliardsTournamentCard = ({
   tournament,
   isFavorited,
@@ -32,91 +41,198 @@ export const BilliardsTournamentCard = ({
       return (
         <Image
           source={{ uri: imageUrl }}
-          style={styles.gameTypeImage}
+          style={isWeb ? styles.gameTypeImageWeb : styles.gameTypeImage}
           resizeMode="cover"
-          onError={(e) => {
-            console.log("Tournament image failed to load:", imageUrl);
-            console.log("Error details:", e.nativeEvent.error);
-          }}
         />
       );
-    } else {
-      // Fallback to emoji if no image available
-      return (
-        <View style={styles.fallbackImageContainer}>
-          <Text style={styles.fallbackEmoji}>🎱</Text>
-        </View>
-      );
     }
+    return (
+      <View style={isWeb ? styles.fallbackWeb : styles.fallbackImageContainer}>
+        <Text style={styles.fallbackEmoji}>🎱</Text>
+      </View>
+    );
   };
 
-  return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={onPress}>
-      {/* Image Header Section */}
-      <View style={styles.imageSection}>
-        {/* Background Image from tournament-images bucket */}
-        {renderImage()}
-
-        {/* ID Badge */}
-        <View style={styles.idBadge}>
-          <Text style={styles.idText}>ID:{tournament.id}</Text>
+  // ── Mobile card (unchanged) ─────────────────────────────────────────────
+  if (!isWeb) {
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={onPress}
+      >
+        <View style={styles.imageSection}>
+          {renderImage()}
+          <View style={styles.idBadge}>
+            <Text style={styles.idText}>ID:{tournament.id}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+            style={styles.heartButton}
+          >
+            <Text style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
+              {isFavorited ? "♥" : "♡"}
+            </Text>
+          </TouchableOpacity>
         </View>
+        <View style={styles.contentSection}>
+          <Text style={styles.name} numberOfLines={2}>
+            {tournament.name}
+          </Text>
+          <View style={styles.gameTypeBadge}>
+            <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+          </View>
+          <Text style={styles.dateTime}>
+            {formatDate(tournament.tournament_date)}
+          </Text>
+          <Text style={styles.dateTime}>
+            {formatTime(tournament.start_time)}
+          </Text>
+          <Text style={styles.venueName} numberOfLines={2}>
+            {venue?.venue || "Venue TBD"}
+          </Text>
+          {venue?.city && venue?.state && (
+            <Text style={styles.cityState}>
+              {venue.city}, {venue.state}
+            </Text>
+          )}
+          {venue?.address && (
+            <Text style={styles.venueAddress} numberOfLines={2}>
+              {venue.address}
+            </Text>
+          )}
+          <View style={styles.feeSection}>
+            <Text style={styles.feeLabel}>Tournament Fee</Text>
+            <Text style={styles.feeAmount}>
+              {formatCurrency(tournament.entry_fee || 0)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
-        {/* Favorite Heart */}
+  // ── Web card ────────────────────────────────────────────────────────────
+  return (
+    <TouchableOpacity
+      style={styles.webCard}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      {/* Image */}
+      <View style={styles.webImageSection}>
+        {renderImage()}
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
             onToggleFavorite();
           }}
-          style={styles.heartButton}
+          style={styles.webHeartButton}
         >
-          <Text style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
+          <Text
+            style={[styles.webHeartIcon, isFavorited && styles.heartFilled]}
+          >
             {isFavorited ? "♥" : "♡"}
           </Text>
         </TouchableOpacity>
+        <View style={styles.webGameTypeBadge}>
+          <Text style={styles.webGameTypeText}>{tournament.game_type}</Text>
+        </View>
       </View>
 
-      {/* Content Section */}
-      <View style={styles.contentSection}>
-        {/* Tournament Name */}
-        <Text style={styles.name} numberOfLines={2}>
+      {/* Details */}
+      <View style={styles.webContent}>
+        <Text style={styles.webName} numberOfLines={2}>
           {tournament.name}
         </Text>
 
-        {/* Game Type Badge */}
-        <View style={styles.gameTypeBadge}>
-          <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+        <View style={styles.webRow}>
+          <Text style={styles.webIcon}>📅</Text>
+          <Text style={styles.webDetail}>
+            {formatDate(tournament.tournament_date)} •{" "}
+            {formatTime(tournament.start_time)}
+          </Text>
         </View>
 
-        {/* Date & Time */}
-        <Text style={styles.dateTime}>
-          {formatDate(tournament.tournament_date)}
-        </Text>
-        <Text style={styles.dateTime}>{formatTime(tournament.start_time)}</Text>
+        <View style={styles.webRow}>
+          <Text style={styles.webIcon}>📍</Text>
+          <Text style={styles.webDetail} numberOfLines={1}>
+            {venue?.venue || "Venue TBD"}
+          </Text>
+        </View>
 
-        {/* Venue Name */}
-        <Text style={styles.venueName} numberOfLines={2}>
-          {venue?.venue || "Venue TBD"}
-        </Text>
-
-        {/* City & State */}
         {venue?.city && venue?.state && (
-          <Text style={styles.cityState}>
-            {venue.city}, {venue.state}
-          </Text>
+          <View style={styles.webRow}>
+            <Text style={styles.webIcon}>🗺️</Text>
+            <Text style={styles.webDetail}>
+              {venue.city}, {venue.state}
+            </Text>
+          </View>
         )}
 
-        {/* Address */}
-        {venue?.address && (
-          <Text style={styles.venueAddress} numberOfLines={2}>
-            {venue.address}
-          </Text>
+        {tournament.tournament_format && (
+          <View style={styles.webRow}>
+            <Text style={styles.webIcon}>🏆</Text>
+            <Text style={styles.webDetail}>
+              {tournament.tournament_format.replace(/-/g, " ")}
+            </Text>
+          </View>
         )}
 
-        {/* Tournament Fee */}
-        <View style={styles.feeSection}>
-          <Text style={styles.feeLabel}>Tournament Fee</Text>
-          <Text style={styles.feeAmount}>
+        {(tournament.race || tournament.game_spot) && (
+          <View style={styles.webRow}>
+            <Text style={styles.webIcon}>🎯</Text>
+            <Text style={styles.webDetail}>
+              {[
+                tournament.race && `Race ${tournament.race}`,
+                tournament.game_spot && `Spot ${tournament.game_spot}`,
+              ]
+                .filter(Boolean)
+                .join(" • ")}
+            </Text>
+          </View>
+        )}
+
+        {tournament.max_fargo && (
+          <View style={styles.webRow}>
+            <Text style={styles.webIcon}>📊</Text>
+            <Text style={styles.webDetail}>
+              Max Fargo: {tournament.max_fargo}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.webTagsRow}>
+          {tournament.reports_to_fargo && (
+            <View style={styles.webTag}>
+              <Text style={styles.webTagText}>Fargo Rated</Text>
+            </View>
+          )}
+          {tournament.calcutta && (
+            <View style={styles.webTag}>
+              <Text style={styles.webTagText}>Calcutta</Text>
+            </View>
+          )}
+          {tournament.open_tournament && (
+            <View style={styles.webTag}>
+              <Text style={styles.webTagText}>Open</Text>
+            </View>
+          )}
+          {tournament.added_money && tournament.added_money > 0 && (
+            <View style={[styles.webTag, styles.webTagGreen]}>
+              <Text style={styles.webTagText}>
+                +{formatCurrency(tournament.added_money)} Added
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.webFeeRow}>
+          <Text style={styles.webFeeLabel}>Entry Fee</Text>
+          <Text style={styles.webFeeAmount}>
             {formatCurrency(tournament.entry_fee || 0)}
           </Text>
         </View>
@@ -126,6 +242,7 @@ export const BilliardsTournamentCard = ({
 };
 
 const styles = StyleSheet.create({
+  // ── Mobile (unchanged) ───────────────────────────────────────────────────
   card: {
     width: "48%",
     backgroundColor: COLORS.backgroundCard,
@@ -246,6 +363,137 @@ const styles = StyleSheet.create({
   },
   feeAmount: {
     fontSize: FONT_SIZES.xl,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+
+  // ── Web card ─────────────────────────────────────────────────────────────
+  webCard: {
+    width: "23.5%",
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: RADIUS.lg,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    margin: "0.75%",
+  },
+  webImageSection: {
+    height: 160,
+    backgroundColor: COLORS.surface,
+    position: "relative",
+    overflow: "hidden",
+  },
+  gameTypeImageWeb: {
+    width: "100%",
+    height: "100%",
+  },
+  fallbackWeb: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  webGameTypeBadge: {
+    position: "absolute",
+    bottom: SPACING.sm,
+    left: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  webGameTypeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  webHeartButton: {
+    position: "absolute",
+    top: SPACING.sm,
+    right: SPACING.sm,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 30,
+    width: 52,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1.6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 3.2,
+  },
+  webHeartIcon: {
+    fontSize: 36,
+    color: COLORS.white,
+  },
+  webContent: {
+    padding: 12,
+  },
+  webName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  webRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 4,
+    gap: 5,
+  },
+  webIcon: {
+    fontSize: 11,
+    lineHeight: 16,
+    width: 16,
+  },
+  webDetail: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
+  },
+  webTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  webTag: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  webTagGreen: {
+    borderColor: "#2ecc7160",
+    backgroundColor: "#2ecc7115",
+  },
+  webTagText: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  webFeeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  webFeeLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  webFeeAmount: {
+    fontSize: 15,
     fontWeight: "700",
     color: COLORS.text,
   },

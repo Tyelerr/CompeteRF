@@ -3,6 +3,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   Image,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -22,11 +23,12 @@ import { FullScreenImageViewer } from "../../src/views/components/common/FullScr
 import { Loading } from "../../src/views/components/common/loading";
 import ReportModal from "../../src/views/components/common/ReportModal";
 
+const isWeb = Platform.OS === "web";
+
 export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
   const vm = useTournamentDetail(id as string);
-  const { session, isAdmin } = useAuth(); // ← UPDATED: added isAdmin
-
+  const { session, isAdmin } = useAuth();
   const {
     isModalVisible,
     openReportModal,
@@ -40,10 +42,8 @@ export default function TournamentDetailScreen() {
     contentType,
   } = useReport({ userId: session?.user?.id });
 
-  // Image viewer state
   const [showImageViewer, setShowImageViewer] = useState(false);
 
-  // Get tournament image URL (same logic as useBilliards)
   const getTournamentImageUrl = (tournament: any) => {
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
@@ -53,42 +53,24 @@ export default function TournamentDetailScreen() {
       "straight-pool": "Straight-Pool.jpeg",
       banks: "Banks.jpeg",
     };
-
     if (tournament.thumbnail) {
       if (tournament.thumbnail.startsWith("custom:")) {
         return tournament.thumbnail.replace("custom:", "");
       } else {
         const imageFile = gameTypeImageMap[tournament.thumbnail];
-        if (imageFile) {
+        if (imageFile)
           return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
-        }
       }
     }
-
     const imageFile = gameTypeImageMap[tournament.game_type];
-    if (imageFile) {
+    if (imageFile)
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
-    }
-
-    // Partial match fallback (e.g., "9-ball-scotch-doubles" → "9-ball")
     const partialMatch = Object.keys(gameTypeImageMap).find((key) =>
       tournament.game_type?.toLowerCase().includes(key),
     );
-    if (partialMatch) {
+    if (partialMatch)
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${gameTypeImageMap[partialMatch]}`;
-    }
-
     return null;
-  };
-
-  const openImageViewer = () => {
-    if (tournament && getTournamentImageUrl(tournament)) {
-      setShowImageViewer(true);
-    }
-  };
-
-  const closeImageViewer = () => {
-    setShowImageViewer(false);
   };
 
   const handleShare = async () => {
@@ -99,25 +81,17 @@ export default function TournamentDetailScreen() {
           chipRanges
             .map(
               (r: any) =>
-                `${r.label || `${r.minRating}–${r.maxRating}`}: ${
-                  r.chips
-                } Chip${r.chips !== 1 ? "s" : ""}`,
+                `${r.label || `${r.minRating}–${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
             )
             .join("\n")
         : "";
-
       const message =
         `🎱 ${tournament.name}\n\n` +
         `📅 ${vm.formattedDate} at ${vm.formattedTime}\n` +
         `🏠 ${tournament.venues?.venue || "TBD"}\n` +
         `💰 Entry: ${vm.formattedEntryFee}` +
         chipInfo +
-        `\n\n📍 ${tournament.venues?.address || ""}, ${
-          tournament.venues?.city || ""
-        }, ${tournament.venues?.state || ""} ${
-          tournament.venues?.zip_code || ""
-        }`;
-
+        `\n\n📍 ${tournament.venues?.address || ""}, ${tournament.venues?.city || ""}, ${tournament.venues?.state || ""} ${tournament.venues?.zip_code || ""}`;
       await Share.share({ message });
       analyticsService.trackTournamentShared(tournament.id);
     } catch (error) {
@@ -125,9 +99,7 @@ export default function TournamentDetailScreen() {
     }
   };
 
-  if (vm.loading) {
-    return <Loading fullScreen message="Loading tournament..." />;
-  }
+  if (vm.loading) return <Loading fullScreen message="Loading tournament..." />;
 
   if (vm.error || !vm.tournament) {
     return (
@@ -146,273 +118,317 @@ export default function TournamentDetailScreen() {
     );
   }
 
-  // Cast to any so we can access chip_ranges, game_spot, race without TS errors
   const tournament: any = vm.tournament;
   const imageUrl = getTournamentImageUrl(tournament);
-
-  // 🎰 Determine if this is a chip tournament with valid chip data
   const isChipTournament = tournament.tournament_format === "chip-tournament";
   const chipRanges =
     isChipTournament &&
-    tournament.chip_ranges &&
     Array.isArray(tournament.chip_ranges) &&
     tournament.chip_ranges.length > 0
       ? tournament.chip_ranges
       : null;
 
-  return (
-    <View style={styles.container}>
-      <ScrollView style={styles.scrollContent}>
+  // ── Inner content (shared between web modal and mobile page) ─────────────
+  const content = (
+    <ScrollView
+      style={isWeb ? wStyles.scrollView : styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header / back button */}
+      {!isWeb && (
         <View style={styles.header}>
           <TouchableOpacity onPress={vm.goBack} style={styles.backButton}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
         </View>
+      )}
 
-        <View style={styles.content}>
-          {/* Deleted Banner */}
-          {vm.isDeleted && (
-            <View style={styles.deletedBanner}>
-              <Text style={styles.deletedText}>
-                🗑️ This tournament has been deleted
-              </Text>
-            </View>
-          )}
+      <View style={[styles.content, isWeb && wStyles.content]}>
+        {vm.isDeleted && (
+          <View style={styles.deletedBanner}>
+            <Text style={styles.deletedText}>
+              🗑️ This tournament has been deleted
+            </Text>
+          </View>
+        )}
+        {vm.isHidden && isAdmin && (
+          <View style={styles.hiddenBanner}>
+            <Ionicons name="eye-off" size={16} color="#fff" />
+            <Text style={styles.hiddenText}>
+              HIDDEN – This tournament has been hidden by an admin
+            </Text>
+          </View>
+        )}
 
-          {/* ═══ NEW: Hidden Banner (admin only) ═══ */}
-          {vm.isHidden && isAdmin && (
-            <View style={styles.hiddenBanner}>
-              <Ionicons name="eye-off" size={16} color="#fff" />
-              <Text style={styles.hiddenText}>
-                HIDDEN — This tournament has been hidden by an admin
-              </Text>
-            </View>
-          )}
-
-          {/* Top Section with Badges, Title and Image */}
-          <View style={styles.topSection}>
-            {/* Left Side - Badges and Title */}
-            <View style={styles.leftContent}>
-              {/* Badges */}
-              <View style={styles.badges}>
-                <View style={styles.idBadge}>
-                  <Text style={styles.idText}>ID: {tournament.id}</Text>
-                </View>
-                <View style={styles.gameTypeBadge}>
-                  <Text style={styles.gameTypeText}>
-                    {tournament.game_type}
-                  </Text>
-                </View>
-                <View style={styles.formatBadge}>
-                  <Text style={styles.formatText}>
-                    {tournament.tournament_format.replace("_", " ")}
-                  </Text>
-                </View>
-                {tournament.is_recurring && (
-                  <View style={styles.recurringBadge}>
-                    <Text style={styles.recurringText}>🔄 Weekly</Text>
-                  </View>
-                )}
-                {/* ═══ NEW: HIDDEN badge inline ═══ */}
-                {vm.isHidden && isAdmin && (
-                  <View style={styles.hiddenInlineBadge}>
-                    <Text style={styles.hiddenInlineText}>HIDDEN</Text>
-                  </View>
-                )}
+        {/* Top Section */}
+        <View style={[styles.topSection, isWeb && wStyles.topSection]}>
+          <View style={styles.leftContent}>
+            <View style={styles.badges}>
+              <View style={styles.idBadge}>
+                <Text style={styles.idText}>ID: {tournament.id}</Text>
               </View>
-
-              <Text style={styles.title}>{tournament.name}</Text>
-
-              {tournament.description && (
-                <Text style={styles.description}>{tournament.description}</Text>
+              <View style={styles.gameTypeBadge}>
+                <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+              </View>
+              <View style={styles.formatBadge}>
+                <Text style={styles.formatText}>
+                  {tournament.tournament_format.replace("_", " ")}
+                </Text>
+              </View>
+              {tournament.is_recurring && (
+                <View style={styles.recurringBadge}>
+                  <Text style={styles.recurringText}>🔄 Weekly</Text>
+                </View>
+              )}
+              {vm.isHidden && isAdmin && (
+                <View style={styles.hiddenInlineBadge}>
+                  <Text style={styles.hiddenInlineText}>HIDDEN</Text>
+                </View>
               )}
             </View>
+            <Text style={[styles.title, isWeb && wStyles.title]}>
+              {tournament.name}
+            </Text>
+            {tournament.description && (
+              <Text style={styles.description}>{tournament.description}</Text>
+            )}
+          </View>
 
-            {/* Right Side - Tournament Image */}
-            <View style={styles.imageSection}>
-              <View style={styles.imageContainer}>
-                {imageUrl ? (
-                  <Image
-                    source={{ uri: imageUrl }}
-                    style={styles.tournamentImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.placeholderImage}>
-                    <Text style={styles.placeholderText}>🎱</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* View Image Button */}
-              {imageUrl && (
-                <TouchableOpacity
-                  style={styles.viewImageButton}
-                  onPress={openImageViewer}
+          {/* Image */}
+          <View style={[styles.imageSection, isWeb && wStyles.imageSection]}>
+            <View style={styles.imageContainer}>
+              {imageUrl ? (
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={[
+                    styles.tournamentImage,
+                    isWeb && wStyles.tournamentImage,
+                  ]}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.placeholderImage,
+                    isWeb && wStyles.tournamentImage,
+                  ]}
                 >
-                  <Text style={styles.viewImageIcon}>🔍</Text>
-                  <Text style={styles.viewImageText}>View Image</Text>
-                </TouchableOpacity>
+                  <Text style={styles.placeholderText}>🎱</Text>
+                </View>
               )}
             </View>
+            {imageUrl && (
+              <TouchableOpacity
+                style={styles.viewImageButton}
+                onPress={() => setShowImageViewer(true)}
+              >
+                <Text style={styles.viewImageIcon}>🔍</Text>
+                <Text style={styles.viewImageText}>View Image</Text>
+              </TouchableOpacity>
+            )}
           </View>
+        </View>
 
-          {/* 🎰 Chip Breakdown — poster style with blue border */}
-          {chipRanges && (
-            <View style={styles.chipCard}>
-              <Text style={styles.chipTitle}>RATING / CHIP CHART</Text>
-              {chipRanges.map((range: any, index: number) => (
-                <Text key={index} style={styles.chipLine}>
-                  {range.label || `${range.minRating}–${range.maxRating}`}:{" "}
-                  <Text style={styles.chipLineCount}>
-                    {range.chips} Chip{range.chips !== 1 ? "s" : ""}
-                  </Text>
+        {/* Chip chart */}
+        {chipRanges && (
+          <View style={styles.chipCard}>
+            <Text style={styles.chipTitle}>RATING / CHIP CHART</Text>
+            {chipRanges.map((range: any, index: number) => (
+              <Text key={index} style={styles.chipLine}>
+                {range.label || `${range.minRating}–${range.maxRating}`}:{" "}
+                <Text style={styles.chipLineCount}>
+                  {range.chips} Chip{range.chips !== 1 ? "s" : ""}
                 </Text>
-              ))}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* Date & Time */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📅 Date & Time</Text>
+          <Text style={styles.sectionText}>{vm.formattedDate}</Text>
+          <Text style={styles.sectionText}>{vm.formattedTime}</Text>
+        </View>
+
+        {/* Entry & Prizes */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>💰 Entry & Prizes</Text>
+          <View style={styles.feeRow}>
+            <Text style={styles.feeLabel}>Entry Fee:</Text>
+            <Text style={styles.feeValue}>{vm.formattedEntryFee}</Text>
+          </View>
+          {tournament.added_money > 0 && (
+            <View style={styles.feeRow}>
+              <Text style={styles.feeLabel}>Added Money:</Text>
+              <Text style={styles.addedMoney}>${tournament.added_money}</Text>
             </View>
           )}
+        </View>
 
-          {/* Date & Time */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📅 Date & Time</Text>
-            <Text style={styles.sectionText}>{vm.formattedDate}</Text>
-            <Text style={styles.sectionText}>{vm.formattedTime}</Text>
-          </View>
-
-          {/* Entry & Prizes */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💰 Entry & Prizes</Text>
-            <View style={styles.feeRow}>
-              <Text style={styles.feeLabel}>Entry Fee:</Text>
-              <Text style={styles.feeValue}>{vm.formattedEntryFee}</Text>
-            </View>
-            {tournament.added_money > 0 && (
-              <View style={styles.feeRow}>
-                <Text style={styles.feeLabel}>Added Money:</Text>
-                <Text style={styles.addedMoney}>${tournament.added_money}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🎱 Details</Text>
-            {tournament.table_size && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Table Size:</Text>
-                <Text style={styles.detailValue}>{tournament.table_size}</Text>
-              </View>
-            )}
+        {/* Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎱 Details</Text>
+          {tournament.table_size && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Reports to Fargo:</Text>
+              <Text style={styles.detailLabel}>Table Size:</Text>
+              <Text style={styles.detailValue}>{tournament.table_size}</Text>
+            </View>
+          )}
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Reports to Fargo:</Text>
+            <Text style={styles.detailValue}>
+              {tournament.reports_to_fargo ? "Yes" : "No"}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Calcutta:</Text>
+            <Text style={styles.detailValue}>
+              {tournament.calcutta ? "Yes" : "No"}
+            </Text>
+          </View>
+          {!isChipTournament && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Open Tournament:</Text>
               <Text style={styles.detailValue}>
-                {tournament.reports_to_fargo ? "Yes" : "No"}
+                {tournament.open_tournament ? "Yes" : "No"}
               </Text>
             </View>
+          )}
+          {tournament.max_fargo && !isChipTournament && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Calcutta:</Text>
-              <Text style={styles.detailValue}>
-                {tournament.calcutta ? "Yes" : "No"}
-              </Text>
+              <Text style={styles.detailLabel}>Max Fargo:</Text>
+              <Text style={styles.detailValue}>{tournament.max_fargo}</Text>
             </View>
-            {!isChipTournament && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Open Tournament:</Text>
-                <Text style={styles.detailValue}>
-                  {tournament.open_tournament ? "Yes" : "No"}
-                </Text>
-              </View>
-            )}
-            {tournament.max_fargo && !isChipTournament && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Max Fargo:</Text>
-                <Text style={styles.detailValue}>{tournament.max_fargo}</Text>
-              </View>
-            )}
-            {tournament.game_spot && !isChipTournament && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Game Spot:</Text>
-                <Text style={styles.detailValue}>{tournament.game_spot}</Text>
-              </View>
-            )}
-            {tournament.race && !isChipTournament && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Race:</Text>
-                <Text style={styles.detailValue}>{tournament.race}</Text>
-              </View>
-            )}
-          </View>
+          )}
+          {tournament.game_spot && !isChipTournament && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Game Spot:</Text>
+              <Text style={styles.detailValue}>{tournament.game_spot}</Text>
+            </View>
+          )}
+          {tournament.race && !isChipTournament && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Race:</Text>
+              <Text style={styles.detailValue}>{tournament.race}</Text>
+            </View>
+          )}
+        </View>
 
-          {/* Location */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📍 Location</Text>
-            <Text style={styles.venueName}>{tournament.venues?.venue}</Text>
-            <Text style={styles.venueAddress}>
-              {tournament.venues?.address}
-            </Text>
-            <Text style={styles.venueAddress}>
-              {tournament.venues?.city}, {tournament.venues?.state}{" "}
-              {tournament.venues?.zip_code}
-            </Text>
-
-            <View style={styles.venueActions}>
+        {/* Location */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📍 Location</Text>
+          <Text style={styles.venueName}>{tournament.venues?.venue}</Text>
+          <Text style={styles.venueAddress}>{tournament.venues?.address}</Text>
+          <Text style={styles.venueAddress}>
+            {tournament.venues?.city}, {tournament.venues?.state}{" "}
+            {tournament.venues?.zip_code}
+          </Text>
+          <View style={styles.venueActions}>
+            <Button
+              title="📍 Open in Maps"
+              onPress={vm.openMaps}
+              variant="outline"
+              size="sm"
+            />
+            {tournament.venues?.phone && (
               <Button
-                title="📍 Open in Maps"
-                onPress={vm.openMaps}
+                title="📞 Call Venue"
+                onPress={vm.callVenue}
                 variant="outline"
                 size="sm"
               />
-              {tournament.venues?.phone && (
-                <Button
-                  title="📞 Call Venue"
-                  onPress={vm.callVenue}
-                  variant="outline"
-                  size="sm"
-                />
-              )}
-            </View>
+            )}
           </View>
-
-          {/* Share, Report & Close buttons */}
-          <View style={styles.bottomActions}>
-            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-              <Text style={styles.shareButtonText}>📤 Share</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.reportButton}
-              onPress={() =>
-                openReportModal("tournament", tournament.id.toString())
-              }
-            >
-              <Ionicons name="flag-outline" size={14} color="#E53935" />
-              <Text style={styles.reportButtonText}>Report</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.closeButton} onPress={vm.goBack}>
-              <Text style={styles.closeButtonText}>✕ Close</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Tournament Disclaimer */}
-          <Text style={styles.disclaimerText}>
-            This tournament is organized by{" "}
-            {tournament.venues?.venue || "an independent venue"}. Compete is not
-            the organizer and is not responsible for tournament operations.
-          </Text>
-
-          {/* Spacer for tab bar */}
-          <View style={styles.bottomSpacer} />
         </View>
-      </ScrollView>
 
-      {/* Full Screen Image Viewer */}
+        {/* Bottom actions */}
+        <View style={styles.bottomActions}>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <Text style={styles.shareButtonText}>📤 Share</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.reportButton}
+            onPress={() =>
+              openReportModal("tournament", tournament.id.toString())
+            }
+          >
+            <Ionicons name="flag-outline" size={14} color="#E53935" />
+            <Text style={styles.reportButtonText}>Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.closeButton} onPress={vm.goBack}>
+            <Text style={styles.closeButtonText}>✕ Close</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.disclaimerText}>
+          This tournament is organized by{" "}
+          {tournament.venues?.venue || "an independent venue"}. Compete is not
+          the organizer and is not responsible for tournament operations.
+        </Text>
+        <View style={styles.bottomSpacer} />
+      </View>
+    </ScrollView>
+  );
+
+  // ── Web: modal overlay ────────────────────────────────────────────────────
+  if (isWeb) {
+    return (
+      <>
+        {/* Dimmed backdrop — clicking it goes back */}
+        <TouchableOpacity
+          style={wStyles.backdrop}
+          activeOpacity={1}
+          onPress={vm.goBack}
+        />
+
+        {/* Centered dialog */}
+        <View style={wStyles.dialogWrap}>
+          <View style={wStyles.dialog}>
+            {/* Dialog header */}
+            <View style={wStyles.dialogHeader}>
+              <TouchableOpacity onPress={vm.goBack} style={wStyles.backBtn}>
+                <Text style={wStyles.backBtnText}>← Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={vm.goBack} style={wStyles.closeBtn}>
+                <Text style={wStyles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {content}
+          </View>
+        </View>
+
+        <FullScreenImageViewer
+          visible={showImageViewer}
+          imageUrl={imageUrl}
+          title={tournament.name}
+          onClose={() => setShowImageViewer(false)}
+        />
+        <ReportModal
+          visible={isModalVisible}
+          onClose={closeReportModal}
+          contentType={contentType}
+          reason={reason}
+          onReasonChange={setReason}
+          details={details}
+          onDetailsChange={setDetails}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+        />
+      </>
+    );
+  }
+
+  // ── Mobile: full page ─────────────────────────────────────────────────────
+  return (
+    <View style={styles.container}>
+      {content}
       <FullScreenImageViewer
         visible={showImageViewer}
         imageUrl={imageUrl}
         title={tournament.name}
-        onClose={closeImageViewer}
+        onClose={() => setShowImageViewer(false)}
       />
-
-      {/* Report Modal */}
       <ReportModal
         visible={isModalVisible}
         onClose={closeReportModal}
@@ -428,29 +444,14 @@ export default function TournamentDetailScreen() {
   );
 }
 
+// ── Mobile styles (unchanged) ─────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    flex: 1,
-  },
-  header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-  },
-  backButton: {
-    paddingVertical: SPACING.sm,
-  },
-  backText: {
-    color: COLORS.primary,
-    fontSize: FONT_SIZES.md,
-  },
-  content: {
-    padding: SPACING.md,
-    paddingTop: 0,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  scrollContent: { flex: 1 },
+  header: { padding: SPACING.md, paddingTop: SPACING.xl + SPACING.lg },
+  backButton: { paddingVertical: SPACING.sm },
+  backText: { color: COLORS.primary, fontSize: FONT_SIZES.md },
+  content: { padding: SPACING.md, paddingTop: 0 },
   deletedBanner: {
     backgroundColor: COLORS.error,
     padding: SPACING.md,
@@ -463,7 +464,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
-  // ═══ NEW: Hidden banner styles ═══
   hiddenBanner: {
     backgroundColor: "#E53935",
     padding: SPACING.md,
@@ -496,22 +496,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     alignItems: "flex-start",
   },
-  leftContent: {
-    flex: 1,
-    marginRight: SPACING.md,
-  },
-  imageSection: {
-    alignItems: "center",
-    minWidth: 100,
-  },
-  imageContainer: {
-    marginBottom: SPACING.sm,
-  },
-  tournamentImage: {
-    width: 100,
-    height: 100,
-    borderRadius: RADIUS.md,
-  },
+  leftContent: { flex: 1, marginRight: SPACING.md },
+  imageSection: { alignItems: "center", minWidth: 100 },
+  imageContainer: { marginBottom: SPACING.sm },
+  tournamentImage: { width: 100, height: 100, borderRadius: RADIUS.md },
   placeholderImage: {
     width: 100,
     height: 100,
@@ -522,9 +510,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  placeholderText: {
-    fontSize: FONT_SIZES.xl + 8,
-  },
+  placeholderText: { fontSize: FONT_SIZES.xl + 8 },
   viewImageButton: {
     backgroundColor: COLORS.primary + "20",
     borderColor: COLORS.primary,
@@ -537,10 +523,7 @@ const styles = StyleSheet.create({
     minWidth: 100,
     justifyContent: "center",
   },
-  viewImageIcon: {
-    fontSize: FONT_SIZES.xs,
-    marginRight: SPACING.xs / 2,
-  },
+  viewImageIcon: { fontSize: FONT_SIZES.xs, marginRight: SPACING.xs / 2 },
   viewImageText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
@@ -553,18 +536,14 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   idBadge: {
-    backgroundColor: "#000000",
+    backgroundColor: "#000",
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  idText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "700",
-  },
+  idText: { color: COLORS.white, fontSize: FONT_SIZES.xs, fontWeight: "700" },
   gameTypeBadge: {
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.xs,
@@ -594,10 +573,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
   },
-  recurringText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.xs,
-  },
+  recurringText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs },
   title: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: "700",
@@ -624,24 +600,14 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.sm,
   },
-  sectionText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
+  sectionText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
   feeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: SPACING.xs,
   },
-  feeLabel: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
-  feeValue: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
+  feeLabel: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  feeValue: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text },
   addedMoney: {
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
@@ -652,24 +618,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: SPACING.xs,
   },
-  detailLabel: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
-  detailValue: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
+  detailLabel: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  detailValue: { fontSize: FONT_SIZES.md, color: COLORS.text },
   venueName: {
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
-  venueAddress: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
+  venueAddress: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
   venueActions: {
     flexDirection: "row",
     gap: SPACING.sm,
@@ -686,9 +643,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     textAlign: "center",
   },
-  bottomSpacer: {
-    height: SPACING.xl * 2,
-  },
+  bottomSpacer: { height: SPACING.xl * 2 },
   disclaimerText: {
     fontSize: 11,
     color: COLORS.textSecondary,
@@ -698,8 +653,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     opacity: 0.6,
   },
-
-  // — 🎰 Chip chart — poster style with blue border
   chipCard: {
     borderWidth: 1.5,
     borderColor: COLORS.primary,
@@ -722,12 +675,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     textAlign: "center",
   },
-  chipLineCount: {
-    fontWeight: "800",
-    color: COLORS.primary,
-  },
-
-  // — Bottom actions
+  chipLineCount: { fontWeight: "800", color: COLORS.primary },
   bottomActions: {
     flexDirection: "row",
     gap: SPACING.sm,
@@ -775,5 +723,99 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.white,
+  },
+});
+
+// ── Web-only styles ───────────────────────────────────────────────────────
+const wStyles = StyleSheet.create({
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 1000,
+  },
+  dialogWrap: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    pointerEvents: "box-none" as any,
+  },
+  dialog: {
+    width: 720,
+    maxWidth: "92%" as any,
+    maxHeight: "88vh" as any,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+  },
+  dialogHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+    paddingTop: 16,
+    backgroundColor: COLORS.background,
+  },
+  backBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  backBtnText: {
+    color: COLORS.primary,
+    fontSize: FONT_SIZES.sm,
+  },
+  closeBtn: {
+    backgroundColor: COLORS.error,
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeBtnText: {
+    color: "#fff",
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+  },
+  scrollView: {
+    maxHeight: "calc(88vh - 50px)" as any,
+  },
+  contentPadding: {
+    paddingTop: SPACING.md,
+  },
+  content: {
+    padding: SPACING.lg,
+  },
+  topSection: {
+    flexDirection: "row",
+    gap: SPACING.lg,
+  },
+  title: {
+    fontSize: FONT_SIZES.xl,
+  },
+  imageSection: {
+    alignItems: "center",
+    minWidth: 140,
+  },
+  tournamentImage: {
+    width: 140,
+    height: 140,
+    borderRadius: RADIUS.md,
   },
 });

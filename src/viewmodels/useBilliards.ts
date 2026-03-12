@@ -12,40 +12,29 @@ import {
 import { useAuth } from "./hooks/use.auth";
 import { useFavorites } from "./hooks/use.favorites";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
 interface CityOption {
   label: string;
   value: string;
 }
 
 export interface UseBilliardsReturn {
-  // Data
   tournaments: Tournament[];
   filteredTournaments: Tournament[];
   favorites: number[];
   cities: CityOption[];
   user: any;
-
-  // State
   loading: boolean;
   refreshing: boolean;
   error: string;
   filterModalVisible: boolean;
-
-  // Filter values
   searchQuery: string;
   selectedState: string;
   selectedCity: string;
   zipCode: string;
   searchRadius: number;
   filters: Filters;
-
-  // Empty state helpers
   isStateFilterEmpty: boolean;
   isHomeStateEmpty: boolean;
-
-  // Actions
   setSearchQuery: (query: string) => void;
   setSelectedState: (state: string) => void;
   setSelectedCity: (city: string) => void;
@@ -59,28 +48,21 @@ export interface UseBilliardsReturn {
   getTournamentImageUrl: (tournament: Tournament) => string | null;
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────────
-
 export function useBilliards(): UseBilliardsReturn {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { favoritedIds, toggleFavorite: toggleFav } = useFavorites(
-    profile?.id_auto,
-  );
+  const { favoritedIds, toggleFavorite: toggleFav } = useFavorites(profile?.id_auto);
 
-  // ── Tournament data ────────────────────────────────────────────────────────
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [hasSetHomeState, setHasSetHomeState] = useState(false);
 
-  // ── Location helpers ───────────────────────────────────────────────────────
   const [cities, setCities] = useState<CityOption[]>([]);
   const [zipCoords, setZipCoords] = useState<ZipCoords | null>(null);
   const [activeZip, setActiveZip] = useState("");
 
-  // ── Filter state (local — resets on navigation) ────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
@@ -89,40 +71,23 @@ export function useBilliards(): UseBilliardsReturn {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // ── Effects ────────────────────────────────────────────────────────────────
+  useEffect(() => { loadTournaments(); }, []);
 
-  // Initial load
-  useEffect(() => {
-    loadTournaments();
-  }, []);
-
-  // Default to user's home state once tournaments are loaded
   useEffect(() => {
     if (!hasSetHomeState && !loading && tournaments.length > 0 && profile?.home_state) {
       const homeState = profile.home_state;
-
-      // Check if any tournaments exist in the user's home state
-      const hasHomeStateTournaments = tournaments.some(
-        (t) => t.venues?.state === homeState,
-      );
-
-      if (hasHomeStateTournaments) {
-        // Home state has tournaments — pre-select it
-        setSelectedState(homeState);
-      }
-      // If no tournaments in home state, leave as "" (show all)
-
+      const hasHomeStateTournaments = tournaments.some((t) => t.venues?.state === homeState);
+      if (hasHomeStateTournaments) setSelectedState(homeState);
       setHasSetHomeState(true);
     }
   }, [loading, tournaments, profile?.home_state, hasSetHomeState]);
 
-  // Auto-geocode when zip reaches 5 digits — clears state & city
   useEffect(() => {
     if (zipCode.length === 5) {
       setActiveZip(zipCode);
       setSelectedState("");
       setSelectedCity("");
-      setHasSetHomeState(true); // prevent home state from re-applying
+      setHasSetHomeState(true);
       geoService.lookupZipCoords(zipCode).then(setZipCoords);
     } else {
       setActiveZip("");
@@ -130,7 +95,6 @@ export function useBilliards(): UseBilliardsReturn {
     }
   }, [zipCode]);
 
-  // Load cities when state changes
   useEffect(() => {
     if (selectedState) {
       geoService.getCitiesForState(selectedState).then((cityNames) => {
@@ -145,8 +109,6 @@ export function useBilliards(): UseBilliardsReturn {
     }
   }, [selectedState]);
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-
   const loadTournaments = async () => {
     try {
       const { data } = await tournamentService.getTournaments({}, 1, 10000);
@@ -158,69 +120,55 @@ export function useBilliards(): UseBilliardsReturn {
     }
   };
 
-  // ── Client-side filtering ──────────────────────────────────────────────────
+  // ── Helper: normalize game_type slug → readable label ──────────────────
+  const gameTypeLabel = (gameType: string) =>
+    (gameType ?? "").replace(/-/g, " ").toLowerCase();
 
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
 
-    // Text search
+    // ── Text search: name, venue, AND game type ──────────────────────────
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(
         (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.venues?.venue?.toLowerCase().includes(q),
+          t.name?.toLowerCase().includes(q) ||
+          t.venues?.venue?.toLowerCase().includes(q) ||
+          gameTypeLabel(t.game_type).includes(q)
       );
     }
 
-    // State
     if (selectedState) {
       filtered = filtered.filter((t) => t.venues?.state === selectedState);
     }
 
-    // City
     if (selectedCity) {
       filtered = filtered.filter((t) => t.venues?.city === selectedCity);
     }
 
-    // Zip + radius
     if (activeZip && activeZip.length === 5) {
       if (zipCoords) {
         if (searchRadius === 0) {
-          filtered = filtered.filter(
-            (t) => (t.venues as any)?.zip_code === activeZip,
-          );
+          filtered = filtered.filter((t) => (t.venues as any)?.zip_code === activeZip);
         } else {
           filtered = filtered.filter((t) => {
             const venueLat = Number((t.venues as any)?.latitude);
             const venueLng = Number((t.venues as any)?.longitude);
             if (!venueLat || !venueLng) return false;
-            return (
-              getDistanceMiles(
-                zipCoords.lat,
-                zipCoords.lng,
-                venueLat,
-                venueLng,
-              ) <= searchRadius
-            );
+            return getDistanceMiles(zipCoords.lat, zipCoords.lng, venueLat, venueLng) <= searchRadius;
           });
         }
       } else {
-        const zipMatches = filtered.filter(
-          (t) => (t.venues as any)?.zip_code === activeZip,
-        );
+        const zipMatches = filtered.filter((t) => (t.venues as any)?.zip_code === activeZip);
         if (zipMatches.length > 0) filtered = zipMatches;
       }
     }
 
-    // ── Modal filters ──────────────────────────────────────────────────────
     if (filters.gameType) {
       filtered = filtered.filter((t) => t.game_type === filters.gameType);
     }
     if (filters.tournamentFormat) {
-      filtered = filtered.filter(
-        (t) => t.tournament_format === filters.tournamentFormat,
-      );
+      filtered = filtered.filter((t) => t.tournament_format === filters.tournamentFormat);
     }
     if (filters.daysOfWeek.length > 0) {
       filtered = filtered.filter((t) => {
@@ -237,14 +185,9 @@ export function useBilliards(): UseBilliardsReturn {
     filtered = filtered.filter(
       (t) =>
         (t.entry_fee || 0) >= filters.minEntryFee &&
-        (t.entry_fee || 0) <= filters.maxEntryFee,
+        (t.entry_fee || 0) <= filters.maxEntryFee
     );
 
-    // ── Fargo range filter ─────────────────────────────────────────────────
-    // If the slider has been adjusted from defaults, apply strict filtering.
-    // Tournaments with no max_fargo (open/uncapped) are excluded when a
-    // specific Fargo range is set — user should use the Open Tournament
-    // checkbox instead if they want those.
     const fargoMax = getFargoMax(filters.gameType);
     const fargoAdjusted = filters.minFargo > 0 || filters.maxFargo < fargoMax;
     if (fargoAdjusted) {
@@ -253,48 +196,27 @@ export function useBilliards(): UseBilliardsReturn {
           t.max_fargo !== null &&
           t.max_fargo !== undefined &&
           t.max_fargo >= filters.minFargo &&
-          t.max_fargo <= filters.maxFargo,
+          t.max_fargo <= filters.maxFargo
       );
     }
 
-    if (filters.reportsToFargo) {
-      filtered = filtered.filter((t) => t.reports_to_fargo === true);
-    }
-    if (filters.calcutta) {
-      filtered = filtered.filter((t) => t.calcutta === true);
-    }
-    if (filters.openTournament) {
-      filtered = filtered.filter((t) => t.open_tournament === true);
-    }
+    if (filters.reportsToFargo) filtered = filtered.filter((t) => t.reports_to_fargo === true);
+    if (filters.calcutta) filtered = filtered.filter((t) => t.calcutta === true);
+    if (filters.openTournament) filtered = filtered.filter((t) => t.open_tournament === true);
 
     return filtered;
-  }, [
-    tournaments,
-    searchQuery,
-    selectedState,
-    selectedCity,
-    activeZip,
-    searchRadius,
-    zipCoords,
-    filters,
-  ]);
+  }, [tournaments, searchQuery, selectedState, selectedCity, activeZip, searchRadius, zipCoords, filters]);
 
-  // ── Empty state helpers ────────────────────────────────────────────────────
-
-  // True when a state is selected but yields no results
   const isStateFilterEmpty = useMemo(() => {
     if (!selectedState) return false;
     return filteredTournaments.length === 0;
   }, [selectedState, filteredTournaments]);
 
-  // True when the user's home state was skipped because it had no tournaments
   const isHomeStateEmpty = useMemo(() => {
     if (!profile?.home_state) return false;
-    if (selectedState) return false; // they manually picked something
+    if (selectedState) return false;
     return !tournaments.some((t) => t.venues?.state === profile.home_state);
   }, [profile?.home_state, selectedState, tournaments]);
-
-  // ── Actions ────────────────────────────────────────────────────────────────
 
   const toggleFavorite = useCallback(
     async (tournamentId: number) => {
@@ -305,17 +227,14 @@ export function useBilliards(): UseBilliardsReturn {
           [
             { text: "Cancel", style: "cancel" },
             { text: "Log In", onPress: () => router.push("/auth/login") },
-            {
-              text: "Create Account",
-              onPress: () => router.push("/auth/register"),
-            },
-          ],
+            { text: "Create Account", onPress: () => router.push("/auth/register") },
+          ]
         );
         return;
       }
       await toggleFav(tournamentId);
     },
-    [user, toggleFav, router],
+    [user, toggleFav, router]
   );
 
   const resetAllFilters = useCallback(() => {
@@ -327,7 +246,7 @@ export function useBilliards(): UseBilliardsReturn {
     setSearchRadius(25);
     setZipCoords(null);
     setFilters(defaultFilters);
-    setHasSetHomeState(false); // re-trigger home state default
+    setHasSetHomeState(false);
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -336,35 +255,24 @@ export function useBilliards(): UseBilliardsReturn {
     setRefreshing(false);
   }, []);
 
-  // ── Public API (flat object the screen destructures) ───────────────────────
-
   return {
-    // Data
     tournaments,
     filteredTournaments,
     favorites: favoritedIds,
     cities,
     user,
-
-    // State
     loading,
     refreshing,
     error,
     filterModalVisible,
-
-    // Filter values
     searchQuery,
     selectedState,
     selectedCity,
     zipCode,
     searchRadius,
     filters,
-
-    // Empty state helpers
     isStateFilterEmpty,
     isHomeStateEmpty,
-
-    // Actions
     setSearchQuery,
     setSelectedState,
     setSelectedCity,

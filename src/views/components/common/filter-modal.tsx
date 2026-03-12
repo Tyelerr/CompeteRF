@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +22,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { DatePicker } from "./date-picker";
 import { Dropdown } from "./dropdown";
 import { RangeSlider } from "./range-slider";
+
+const isWeb = Platform.OS === "web";
 
 const GAME_TYPES = [
   { label: "All Game Types", value: "" },
@@ -76,20 +79,15 @@ export const FilterModal = ({
 }: FilterModalProps) => {
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
 
-  // Dynamic Fargo ceiling based on selected game type
   const fargoMax = getFargoMax(localFilters.gameType);
   const scotchSelected = isScotchDoubles(localFilters.gameType);
   const fargoMaxLabel = scotchSelected ? "2000+" : "1000+";
   const fargoMaxDisplay = scotchSelected ? 2000 : 1000;
 
   useEffect(() => {
-    if (visible) {
-      setLocalFilters(filters);
-    }
+    if (visible) setLocalFilters(filters);
   }, [visible]);
 
-  // When game type changes, reset Fargo range to new max if current max
-  // exceeds the new ceiling (e.g. switching from scotch to regular)
   const handleGameTypeChange = (value: string) => {
     const newFargoMax = getFargoMax(value);
     setLocalFilters({
@@ -101,8 +99,6 @@ export const FilterModal = ({
 
   const handleApply = () => {
     onApply(localFilters);
-
-    // Track which filters were actually set (non-default values only)
     const activeFilters: Record<string, any> = {};
     if (localFilters.gameType) activeFilters.gameType = localFilters.gameType;
     if (localFilters.tournamentFormat)
@@ -128,31 +124,27 @@ export const FilterModal = ({
     if (localFilters.reportsToFargo) activeFilters.reportsToFargo = true;
     if (localFilters.calcutta) activeFilters.calcutta = true;
     if (localFilters.openTournament) activeFilters.openTournament = true;
-
     analyticsService.trackFiltersChanged({
       filters: activeFilters,
       source_screen: "billiards",
     });
-
     onClose();
   };
 
   const handleReset = () => {
-    const resetFilters = { ...defaultFilters };
-    setLocalFilters(resetFilters);
-    onApply(resetFilters);
+    const r = { ...defaultFilters };
+    setLocalFilters(r);
+    onApply(r);
   };
 
   const toggleDay = (day: number) => {
     const days = localFilters.daysOfWeek;
-    if (days.includes(day)) {
-      setLocalFilters({
-        ...localFilters,
-        daysOfWeek: days.filter((d) => d !== day),
-      });
-    } else {
-      setLocalFilters({ ...localFilters, daysOfWeek: [...days, day] });
-    }
+    setLocalFilters({
+      ...localFilters,
+      daysOfWeek: days.includes(day)
+        ? days.filter((d) => d !== day)
+        : [...days, day],
+    });
   };
 
   const toggleCheckbox = (
@@ -165,236 +157,217 @@ export const FilterModal = ({
     setLocalFilters({ ...localFilters, [field]: !localFilters[field] });
   };
 
+  // ── Shared sub-components ───────────────────────────────────────────────
+  const renderDropdowns = () => (
+    <>
+      <Dropdown
+        label="Game Type"
+        placeholder="All Game Types"
+        options={GAME_TYPES}
+        value={localFilters.gameType}
+        onSelect={handleGameTypeChange}
+      />
+      <Dropdown
+        label="Tournament Format"
+        placeholder="Select The Format"
+        options={TOURNAMENT_FORMATS}
+        value={localFilters.tournamentFormat}
+        onSelect={(v) =>
+          setLocalFilters({ ...localFilters, tournamentFormat: v })
+        }
+      />
+      <Dropdown
+        label="Table Size"
+        placeholder="All Table Sizes"
+        options={TABLE_SIZES}
+        value={localFilters.tableSize}
+        onSelect={(v) => setLocalFilters({ ...localFilters, tableSize: v })}
+      />
+      <Text style={mStyles.label}>Equipment / Brand</Text>
+      <TextInput
+        style={mStyles.textInput}
+        placeholder="e.g. Diamond, Brunswick, Olhausen"
+        placeholderTextColor={COLORS.textMuted}
+        value={localFilters.equipment}
+        onChangeText={(t) => setLocalFilters({ ...localFilters, equipment: t })}
+      />
+      <Text style={mStyles.label}>Days of Week</Text>
+      <View style={mStyles.daysRow}>
+        {DAYS_OF_WEEK.map((day) => (
+          <TouchableOpacity
+            key={day.value}
+            style={[
+              mStyles.dayButton,
+              localFilters.daysOfWeek.includes(day.value) &&
+                mStyles.dayButtonActive,
+            ]}
+            onPress={() => toggleDay(day.value)}
+          >
+            <Text
+              style={[
+                mStyles.dayButtonText,
+                localFilters.daysOfWeek.includes(day.value) &&
+                  mStyles.dayButtonTextActive,
+              ]}
+            >
+              {day.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={mStyles.sectionTitle}>Tournament Date Range</Text>
+      <View style={mStyles.dateRow}>
+        <DatePicker
+          value={localFilters.fromDate}
+          onChange={(d) => setLocalFilters({ ...localFilters, fromDate: d })}
+          placeholder="From Date"
+        />
+        <DatePicker
+          value={localFilters.toDate}
+          onChange={(d) => setLocalFilters({ ...localFilters, toDate: d })}
+          placeholder="To Date"
+        />
+      </View>
+    </>
+  );
+
+  const renderSliders = () => (
+    <>
+      <RangeSlider
+        label="Entry Fee Range"
+        minValue={localFilters.minEntryFee}
+        maxValue={localFilters.maxEntryFee}
+        min={0}
+        max={1000}
+        step={10}
+        onValueChange={(mn, mx) =>
+          setLocalFilters({ ...localFilters, minEntryFee: mn, maxEntryFee: mx })
+        }
+        formatValue={(v) => (v >= 1000 ? "$1000+" : `$${v}`)}
+        minLabel="$0"
+        maxLabel="$1000+"
+      />
+      {scotchSelected && (
+        <Text style={mStyles.fargoNote}>
+          Combined team Fargo for Scotch Doubles
+        </Text>
+      )}
+      <RangeSlider
+        label="Fargo Rating Range"
+        minValue={localFilters.minFargo}
+        maxValue={Math.min(localFilters.maxFargo, fargoMaxDisplay)}
+        min={0}
+        max={fargoMaxDisplay}
+        step={10}
+        onValueChange={(mn, mx) =>
+          setLocalFilters({ ...localFilters, minFargo: mn, maxFargo: mx })
+        }
+        formatValue={(v) =>
+          v >= fargoMaxDisplay ? `${fargoMaxDisplay}+` : v.toString()
+        }
+        minLabel="0"
+        maxLabel={fargoMaxLabel}
+      />
+    </>
+  );
+
+  const renderCheckboxes = () => (
+    <>
+      {(["requiresFargoGames", "calcutta", "openTournament"] as const).map(
+        (field) => {
+          const labels: Record<string, string> = {
+            requiresFargoGames: "Minimum Required Fargo Games",
+            calcutta: "Calcutta",
+            openTournament: "Open Tournament",
+          };
+          return (
+            <TouchableOpacity
+              key={field}
+              style={mStyles.checkboxRow}
+              onPress={() => toggleCheckbox(field)}
+            >
+              <View
+                style={[
+                  mStyles.checkbox,
+                  localFilters[field] && mStyles.checkboxActive,
+                ]}
+              >
+                {localFilters[field] && (
+                  <Text style={mStyles.checkmark}>✓</Text>
+                )}
+              </View>
+              <Text style={mStyles.checkboxLabel}>{labels[field]}</Text>
+            </TouchableOpacity>
+          );
+        },
+      )}
+    </>
+  );
+
+  const renderFooter = () => (
+    <View style={mStyles.footer}>
+      <TouchableOpacity style={mStyles.applyButton} onPress={handleApply}>
+        <Text style={mStyles.applyButtonText}>Apply Filters</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={mStyles.resetButton} onPress={handleReset}>
+        <Text style={mStyles.resetButtonText}>Reset All</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      transparent={true}
+      animationType={isWeb ? "fade" : "slide"}
+      transparent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Tournament Filters</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
+      <View style={[mStyles.overlay, isWeb && wStyles.overlay]}>
+        <View style={[mStyles.container, isWeb && wStyles.container]}>
+          {/* Header */}
+          <View style={mStyles.header}>
+            <Text style={mStyles.title}>Tournament Filters</Text>
+            <TouchableOpacity onPress={onClose} style={mStyles.closeButton}>
+              <Text style={mStyles.closeButtonText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            style={styles.content}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Game Type */}
-            <Dropdown
-              label="Game Type"
-              placeholder="All Game Types"
-              options={GAME_TYPES}
-              value={localFilters.gameType}
-              onSelect={handleGameTypeChange}
-            />
-
-            {/* Tournament Format */}
-            <Dropdown
-              label="Tournament Format"
-              placeholder="Select The Format"
-              options={TOURNAMENT_FORMATS}
-              value={localFilters.tournamentFormat}
-              onSelect={(value) =>
-                setLocalFilters({ ...localFilters, tournamentFormat: value })
-              }
-            />
-
-            {/* Table Size */}
-            <Dropdown
-              label="Table Size"
-              placeholder="All Table Sizes"
-              options={TABLE_SIZES}
-              value={localFilters.tableSize}
-              onSelect={(value) =>
-                setLocalFilters({ ...localFilters, tableSize: value })
-              }
-            />
-
-            {/* Equipment */}
-            <Text style={styles.label}>Equipment / Brand</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g. Diamond, Brunswick, Olhausen"
-              placeholderTextColor={COLORS.textMuted}
-              value={localFilters.equipment}
-              onChangeText={(text) =>
-                setLocalFilters({ ...localFilters, equipment: text })
-              }
-            />
-
-            {/* Days of Week */}
-            <Text style={styles.label}>Days of Week</Text>
-            <View style={styles.daysRow}>
-              {DAYS_OF_WEEK.map((day) => (
-                <TouchableOpacity
-                  key={day.value}
-                  style={[
-                    styles.dayButton,
-                    localFilters.daysOfWeek.includes(day.value) &&
-                      styles.dayButtonActive,
-                  ]}
-                  onPress={() => toggleDay(day.value)}
-                >
-                  <Text
-                    style={[
-                      styles.dayButtonText,
-                      localFilters.daysOfWeek.includes(day.value) &&
-                        styles.dayButtonTextActive,
-                    ]}
-                  >
-                    {day.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          {/* Web: two-column layout in a plain View (no ScrollView so popovers aren't clipped) */}
+          {isWeb ? (
+            <View style={wStyles.body}>
+              <View style={wStyles.twoCol}>
+                <View style={wStyles.col}>{renderDropdowns()}</View>
+                <View style={wStyles.col}>
+                  {renderSliders()}
+                  {renderCheckboxes()}
+                </View>
+              </View>
             </View>
-
-            {/* Date Range */}
-            <Text style={styles.sectionTitle}>Tournament Date Range</Text>
-            <View style={styles.dateRow}>
-              <DatePicker
-                value={localFilters.fromDate}
-                onChange={(date) =>
-                  setLocalFilters({ ...localFilters, fromDate: date })
-                }
-                placeholder="From Date"
-              />
-              <DatePicker
-                value={localFilters.toDate}
-                onChange={(date) =>
-                  setLocalFilters({ ...localFilters, toDate: date })
-                }
-                placeholder="To Date"
-              />
-            </View>
-
-            {/* Entry Fee Range */}
-            <RangeSlider
-              label="Entry Fee Range"
-              minValue={localFilters.minEntryFee}
-              maxValue={localFilters.maxEntryFee}
-              min={0}
-              max={1000}
-              step={10}
-              onValueChange={(minVal, maxVal) =>
-                setLocalFilters({
-                  ...localFilters,
-                  minEntryFee: minVal,
-                  maxEntryFee: maxVal,
-                })
-              }
-              formatValue={(v) => (v >= 1000 ? "$1000+" : `$${v}`)}
-              minLabel="$0"
-              maxLabel="$1000+"
-            />
-
-            {/* Fargo Rating Range — dynamic based on game type */}
-            {scotchSelected && (
-              <Text style={styles.fargoNote}>
-                Combined team Fargo for Scotch Doubles
-              </Text>
-            )}
-            <RangeSlider
-              label="Fargo Rating Range"
-              minValue={localFilters.minFargo}
-              maxValue={Math.min(localFilters.maxFargo, fargoMaxDisplay)}
-              min={0}
-              max={fargoMaxDisplay}
-              step={10}
-              onValueChange={(minVal, maxVal) =>
-                setLocalFilters({
-                  ...localFilters,
-                  minFargo: minVal,
-                  maxFargo: maxVal,
-                })
-              }
-              formatValue={(v) =>
-                v >= fargoMaxDisplay ? `${fargoMaxDisplay}+` : v.toString()
-              }
-              minLabel="0"
-              maxLabel={fargoMaxLabel}
-            />
-
-            {/* Checkboxes */}
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => toggleCheckbox("requiresFargoGames")}
+          ) : (
+            // Mobile: original single-column ScrollView
+            <ScrollView
+              style={mStyles.content}
+              showsVerticalScrollIndicator={false}
             >
-              <View
-                style={[
-                  styles.checkbox,
-                  localFilters.requiresFargoGames && styles.checkboxActive,
-                ]}
-              >
-                {localFilters.requiresFargoGames && (
-                  <Text style={styles.checkmark}>✔</Text>
-                )}
-              </View>
-              <Text style={styles.checkboxLabel}>
-                Minimum Required Fargo Games
-              </Text>
-            </TouchableOpacity>
+              {renderDropdowns()}
+              {renderSliders()}
+              {renderCheckboxes()}
+              <View style={{ height: SPACING.xl }} />
+            </ScrollView>
+          )}
 
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => toggleCheckbox("calcutta")}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  localFilters.calcutta && styles.checkboxActive,
-                ]}
-              >
-                {localFilters.calcutta && (
-                  <Text style={styles.checkmark}>✔</Text>
-                )}
-              </View>
-              <Text style={styles.checkboxLabel}>Calcutta</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => toggleCheckbox("openTournament")}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  localFilters.openTournament && styles.checkboxActive,
-                ]}
-              >
-                {localFilters.openTournament && (
-                  <Text style={styles.checkmark}>✔</Text>
-                )}
-              </View>
-              <Text style={styles.checkboxLabel}>Open Tournament</Text>
-            </TouchableOpacity>
-
-            <View style={styles.bottomSpacer} />
-          </ScrollView>
-
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.applyButton} onPress={handleApply}>
-              <Text style={styles.applyButtonText}>Apply Filters</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-              <Text style={styles.resetButtonText}>Reset All</Text>
-            </TouchableOpacity>
-          </View>
+          {renderFooter()}
         </View>
       </View>
     </Modal>
   );
 };
 
-const styles = StyleSheet.create({
+// ── Mobile styles ─────────────────────────────────────────────────────────
+const mStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     alignItems: "center",
     padding: SPACING.lg,
@@ -526,9 +499,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
-  bottomSpacer: {
-    height: SPACING.xl,
-  },
   footer: {
     flexDirection: "row",
     padding: SPACING.md,
@@ -558,5 +528,33 @@ const styles = StyleSheet.create({
   resetButtonText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
+  },
+});
+
+// ── Web-only overrides ────────────────────────────────────────────────────
+const wStyles = StyleSheet.create({
+  overlay: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  container: {
+    width: 780,
+    maxWidth: "90%" as any,
+    borderRadius: RADIUS.lg,
+    overflow: "visible" as any,
+  },
+  body: {
+    padding: SPACING.md,
+    overflow: "visible" as any,
+  },
+  twoCol: {
+    flexDirection: "row",
+    gap: SPACING.xl,
+    overflow: "visible" as any,
+  },
+  col: {
+    flex: 1,
+    overflow: "visible" as any,
   },
 });

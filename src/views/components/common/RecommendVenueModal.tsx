@@ -1,9 +1,3 @@
-// src/views/components/common/RecommendVenueModal.tsx
-// ═══════════════════════════════════════════════════════════
-// "Know a spot that hosts pool tournaments?" modal
-// Bottom sheet that hugs content — dock stays visible
-// ═══════════════════════════════════════════════════════════
-
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -22,179 +16,174 @@ import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { UseRecommendVenueReturn } from "../../../viewmodels/hooks/use.recommend.venue";
 
+const isWeb = Platform.OS === "web";
+
 interface Props {
   vm: UseRecommendVenueReturn;
 }
 
 export const RecommendVenueModal = ({ vm }: Props) => {
+  const inner = (
+    <View style={[styles.sheet, isWeb && wStyles.sheet]}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Recommend a Venue</Text>
+        <TouchableOpacity onPress={vm.close} style={styles.closeButton}>
+          <Text style={styles.closeText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.description}>
+        Know a bar or pool hall that hosts tournaments? Let us know and we will
+        reach out to them!
+      </Text>
+
+      <View style={styles.content}>
+        <Text style={styles.label}>Search for a venue</Text>
+        <View style={styles.searchWrapper}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Type a bar or pool hall name..."
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.venueSelected ? vm.venue.venue_name : vm.searchQuery}
+            onChangeText={vm.venueSelected ? undefined : vm.searchPlaces}
+            editable={!vm.venueSelected}
+            onFocus={vm.venueSelected ? vm.clearSelection : undefined}
+            autoFocus
+          />
+          {vm.searching && (
+            <ActivityIndicator
+              color={COLORS.primary}
+              style={styles.searchSpinner}
+            />
+          )}
+          {!vm.venueSelected && vm.predictions.length > 0 && (
+            <View style={styles.predictionsDropdown}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                style={styles.predictionsScroll}
+                nestedScrollEnabled
+              >
+                {vm.predictions.map((prediction) => (
+                  <TouchableOpacity
+                    key={prediction.place_id}
+                    style={styles.predictionItem}
+                    onPress={() => vm.selectPlace(prediction.place_id)}
+                  >
+                    <Text style={styles.predictionMain}>
+                      {prediction.structured_formatting.main_text}
+                    </Text>
+                    <Text style={styles.predictionSecondary}>
+                      {prediction.structured_formatting.secondary_text}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          {!vm.venueSelected &&
+            vm.searchQuery.length >= 3 &&
+            !vm.searching &&
+            vm.predictions.length === 0 && (
+              <View style={styles.predictionsDropdown}>
+                <Text style={styles.noResults}>
+                  No results found. Try a different search.
+                </Text>
+              </View>
+            )}
+        </View>
+
+        {vm.venueSelected && (
+          <View style={styles.selectedCard}>
+            <View style={styles.selectedHeader}>
+              <Text style={styles.selectedName}>{vm.venue.venue_name}</Text>
+              <TouchableOpacity onPress={vm.clearSelection}>
+                <Text style={styles.changeText}>Change</Text>
+              </TouchableOpacity>
+            </View>
+            {vm.venue.address ? (
+              <Text style={styles.selectedDetail}>📍 {vm.venue.address}</Text>
+            ) : null}
+            {vm.venue.city && vm.venue.state ? (
+              <Text style={styles.selectedDetail}>
+                {vm.venue.city}, {vm.venue.state} {vm.venue.zip_code}
+              </Text>
+            ) : null}
+            {vm.venue.phone ? (
+              <Text style={styles.selectedDetail}>📞 {vm.venue.phone}</Text>
+            ) : null}
+          </View>
+        )}
+
+        <Text style={styles.label}>Anything we should know? (optional)</Text>
+        <TextInput
+          style={styles.notesInput}
+          placeholder="e.g. They have 9-ball tournaments on Thursdays, ask for Mike..."
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.notes}
+          onChangeText={vm.setNotes}
+          multiline
+          numberOfLines={3}
+          textAlignVertical="top"
+        />
+
+        <View style={styles.buttonsRow}>
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              (!vm.venueSelected || vm.submitting) &&
+                styles.submitButtonDisabled,
+            ]}
+            onPress={vm.handleSubmit}
+            disabled={!vm.venueSelected || vm.submitting}
+          >
+            {vm.submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitButtonText}>Submit</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelButton} onPress={vm.close}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={vm.visible}
-      animationType="slide"
+      animationType={isWeb ? "fade" : "slide"}
       transparent
       onRequestClose={vm.close}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        {/* Tap backdrop to dismiss */}
-        <TouchableWithoutFeedback onPress={vm.close}>
-          <View style={styles.backdrop} />
-        </TouchableWithoutFeedback>
-
-        {/* Sheet — wraps to content size */}
-        <View style={styles.sheet}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Recommend a Venue</Text>
-            <TouchableOpacity onPress={vm.close} style={styles.closeButton}>
-              <Text style={styles.closeText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.description}>
-            Know a bar or pool hall that hosts tournaments? Let us know and we
-            will reach out to them!
-          </Text>
-
-          {/* Content */}
-          <View style={styles.content}>
-            {/* Search Input */}
-            <Text style={styles.label}>Search for a venue</Text>
-            <View style={styles.searchWrapper}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Type a bar or pool hall name..."
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.venueSelected ? vm.venue.venue_name : vm.searchQuery}
-                onChangeText={vm.venueSelected ? undefined : vm.searchPlaces}
-                editable={!vm.venueSelected}
-                onFocus={vm.venueSelected ? vm.clearSelection : undefined}
-                autoFocus
-              />
-
-              {vm.searching && (
-                <ActivityIndicator
-                  color={COLORS.primary}
-                  style={styles.searchSpinner}
-                />
-              )}
-
-              {/* Predictions dropdown */}
-              {!vm.venueSelected && vm.predictions.length > 0 && (
-                <View style={styles.predictionsDropdown}>
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    style={styles.predictionsScroll}
-                    nestedScrollEnabled
-                  >
-                    {vm.predictions.map((prediction) => (
-                      <TouchableOpacity
-                        key={prediction.place_id}
-                        style={styles.predictionItem}
-                        onPress={() => vm.selectPlace(prediction.place_id)}
-                      >
-                        <Text style={styles.predictionMain}>
-                          {prediction.structured_formatting.main_text}
-                        </Text>
-                        <Text style={styles.predictionSecondary}>
-                          {prediction.structured_formatting.secondary_text}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {!vm.venueSelected &&
-                vm.searchQuery.length >= 3 &&
-                !vm.searching &&
-                vm.predictions.length === 0 && (
-                  <View style={styles.predictionsDropdown}>
-                    <Text style={styles.noResults}>
-                      No results found. Try a different search.
-                    </Text>
-                  </View>
-                )}
-            </View>
-
-            {/* Selected Venue Card */}
-            {vm.venueSelected && (
-              <View style={styles.selectedCard}>
-                <View style={styles.selectedHeader}>
-                  <Text style={styles.selectedName}>{vm.venue.venue_name}</Text>
-                  <TouchableOpacity onPress={vm.clearSelection}>
-                    <Text style={styles.changeText}>Change</Text>
-                  </TouchableOpacity>
-                </View>
-                {vm.venue.address ? (
-                  <Text style={styles.selectedDetail}>
-                    📍 {vm.venue.address}
-                  </Text>
-                ) : null}
-                {vm.venue.city && vm.venue.state ? (
-                  <Text style={styles.selectedDetail}>
-                    {vm.venue.city}, {vm.venue.state} {vm.venue.zip_code}
-                  </Text>
-                ) : null}
-                {vm.venue.phone ? (
-                  <Text style={styles.selectedDetail}>📞 {vm.venue.phone}</Text>
-                ) : null}
-              </View>
-            )}
-
-            {/* Notes */}
-            <Text style={styles.label}>
-              Anything we should know? (optional)
-            </Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder="e.g. They have 9-ball tournaments on Thursdays, ask for Mike..."
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.notes}
-              onChangeText={vm.setNotes}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-
-            {/* Buttons Row */}
-            <View style={styles.buttonsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  (!vm.venueSelected || vm.submitting) &&
-                    styles.submitButtonDisabled,
-                ]}
-                onPress={vm.handleSubmit}
-                disabled={!vm.venueSelected || vm.submitting}
-              >
-                {vm.submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Submit</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={vm.close}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+      {isWeb ? (
+        <>
+          <TouchableOpacity
+            style={wStyles.backdrop}
+            activeOpacity={1}
+            onPress={vm.close}
+          />
+          <View style={wStyles.overlay}>{inner}</View>
+        </>
+      ) : (
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <TouchableWithoutFeedback onPress={vm.close}>
+            <View style={styles.backdrop} />
+          </TouchableWithoutFeedback>
+          {inner}
+        </KeyboardAvoidingView>
+      )}
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
+  overlay: { flex: 1 },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
   sheet: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
@@ -212,18 +201,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  title: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  closeButton: {
-    padding: SPACING.xs,
-  },
-  closeText: {
-    fontSize: 20,
-    color: COLORS.textSecondary,
-  },
+  title: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: COLORS.text },
+  closeButton: { padding: SPACING.xs },
+  closeText: { fontSize: 20, color: COLORS.textSecondary },
   description: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
@@ -231,10 +211,7 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
   },
-  content: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xs,
-  },
+  content: { paddingHorizontal: SPACING.md, paddingTop: SPACING.xs },
   label: {
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
@@ -242,10 +219,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
     marginTop: SPACING.sm,
   },
-  searchWrapper: {
-    position: "relative",
-    zIndex: 10,
-  },
+  searchWrapper: { position: "relative", zIndex: 10 },
   searchInput: {
     backgroundColor: COLORS.surface,
     borderRadius: 10,
@@ -255,11 +229,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  searchSpinner: {
-    position: "absolute",
-    right: 12,
-    top: 12,
-  },
+  searchSpinner: { position: "absolute", right: 12, top: 12 },
   predictionsDropdown: {
     position: "absolute",
     top: "100%",
@@ -278,9 +248,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
-  predictionsScroll: {
-    maxHeight: 200,
-  },
+  predictionsScroll: { maxHeight: 200 },
   predictionItem: {
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.sm,
@@ -343,11 +311,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     minHeight: 70,
   },
-  buttonsRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-    marginTop: SPACING.md,
-  },
+  buttonsRow: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
   submitButton: {
     flex: 1,
     backgroundColor: COLORS.primary,
@@ -355,9 +319,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     alignItems: "center",
   },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
+  submitButtonDisabled: { opacity: 0.5 },
   submitButtonText: {
     color: "#fff",
     fontSize: FONT_SIZES.md,
@@ -376,5 +338,41 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
+  },
+});
+
+const wStyles = StyleSheet.create({
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 3000,
+  },
+  overlay: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    pointerEvents: "box-none" as any,
+  },
+  sheet: {
+    width: 520,
+    maxWidth: "90%" as any,
+    maxHeight: "85vh" as any,
+    borderRadius: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
   },
 });

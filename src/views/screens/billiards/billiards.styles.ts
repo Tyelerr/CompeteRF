@@ -1,7 +1,9 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+
+const isWeb = Platform.OS === "web";
 
 export const styles = StyleSheet.create({
   container: {
@@ -11,102 +13,102 @@ export const styles = StyleSheet.create({
 
   // ── Header ──────────────────────────────────────────────────────────────
   header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.sm,
+    padding: isWeb ? SPACING.sm : SPACING.md,
+    paddingTop: isWeb ? SPACING.md : SPACING.xl + SPACING.lg,
+    paddingBottom: isWeb ? 4 : SPACING.sm,
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: isWeb ? 18 : FONT_SIZES.xl,
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "center",
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: isWeb ? 11 : FONT_SIZES.sm,
     color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginTop: 2,
   },
 
-  // ── Search ──────────────────────────────────────────────────────────────
+  // ── Search ───────────────────────────────────────────────────────────────
   searchContainer: {
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
+    marginBottom: isWeb ? 6 : SPACING.md,
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.sm,
   },
   searchIcon: {
-    fontSize: FONT_SIZES.md,
-    marginRight: SPACING.sm,
+    fontSize: isWeb ? 12 : FONT_SIZES.md,
+    marginRight: SPACING.xs,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    fontSize: FONT_SIZES.md,
+    paddingVertical: isWeb ? 7 : SPACING.md,
+    fontSize: isWeb ? 12 : FONT_SIZES.md,
     color: COLORS.text,
   },
 
-  // ── Filter row ──────────────────────────────────────────────────────────
+  // ── Filter row ───────────────────────────────────────────────────────────
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: isWeb ? 6 : SPACING.sm,
+    marginBottom: isWeb ? 6 : SPACING.sm,
   },
   filterItem: {
     flex: 1,
   },
   filterLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: isWeb ? 10 : FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
 
-  // ── Zip input ───────────────────────────────────────────────────────────
+  // ── Zip input ────────────────────────────────────────────────────────────
   zipInput: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: SPACING.md,
+    paddingVertical: isWeb ? 6 : SPACING.md,
     paddingHorizontal: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+    fontSize: isWeb ? 12 : FONT_SIZES.md,
     color: COLORS.text,
-    marginTop: SPACING.xs,
+    marginTop: isWeb ? 2 : SPACING.xs,
   },
 
-  // ── Radius slider ──────────────────────────────────────────────────────
+  // ── Radius slider ────────────────────────────────────────────────────────
   radiusContainer: {
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
+    marginBottom: isWeb ? 6 : SPACING.sm,
   },
   radiusHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   radiusLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: isWeb ? 10 : FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.text,
   },
   radiusValue: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: isWeb ? 10 : FONT_SIZES.sm,
     fontWeight: "700",
     color: COLORS.primary,
   },
   radiusSlider: {
     width: "100%",
-    height: 36,
+    height: 28,
   },
   radiusLabels: {
     flexDirection: "row",
@@ -118,48 +120,48 @@ export const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Filter buttons ─────────────────────────────────────────────────────
+  // ── Filter buttons ───────────────────────────────────────────────────────
   filterButtonsRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
+    gap: isWeb ? 6 : SPACING.md,
+    marginBottom: isWeb ? 8 : SPACING.md,
   },
   filtersButton: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
+    borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: SPACING.md,
+    paddingVertical: isWeb ? 6 : SPACING.md,
     alignItems: "center",
   },
   filtersButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: isWeb ? 11 : FONT_SIZES.md,
     color: COLORS.text,
   },
   resetButton: {
     flex: 1,
     backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
+    paddingVertical: isWeb ? 6 : SPACING.md,
     alignItems: "center",
   },
   resetButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: isWeb ? 11 : FONT_SIZES.md,
     color: COLORS.white,
     fontWeight: "600",
   },
 
-  // ── List ────────────────────────────────────────────────────────────────
+  // ── List ─────────────────────────────────────────────────────────────────
   list: {
-    padding: SPACING.sm,
+    padding: isWeb ? SPACING.xs : SPACING.sm,
   },
   row: {
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
   },
 
-  // ── States ──────────────────────────────────────────────────────────────
+  // ── States ───────────────────────────────────────────────────────────────
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -189,4 +191,11 @@ export const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginTop: SPACING.xs,
   },
+});
+
+// kept for legacy imports
+export const webStyles = StyleSheet.create({
+  header: {},
+  headerTitle: {},
+  list: {},
 });

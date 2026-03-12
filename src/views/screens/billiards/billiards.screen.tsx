@@ -1,10 +1,11 @@
-import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   FlatList,
   Keyboard,
+  Platform,
   RefreshControl,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -12,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
-import { SPACING } from "../../../theme/spacing";
+import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
 import { useRecommendVenue } from "../../../viewmodels/hooks/use.recommend.venue";
@@ -25,12 +26,16 @@ import { FilterModal } from "../../components/common/filter-modal";
 import { Loading } from "../../components/common/loading";
 import { Pagination } from "../../components/common/pagination";
 import { RecommendVenueModal } from "../../components/common/RecommendVenueModal";
+import { WebContainer } from "../../components/common/WebContainer";
 import { styles } from "./billiards.styles";
+import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
 
-const ITEMS_PER_PAGE = 20;
-const NUM_COLUMNS = 2;
+const isWeb = Platform.OS === "web";
+const NUM_COLUMNS = isWeb ? 4 : 2;
+const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 
 export const BilliardsScreen = () => {
+  const [webDetailId, setWebDetailId] = useState<string | null>(null);
   const router = useRouter();
   const vm = useBilliards();
   const recommend = useRecommendVenue();
@@ -40,7 +45,6 @@ export const BilliardsScreen = () => {
     itemsPerPage: ITEMS_PER_PAGE,
   });
 
-  // Reset pagination when filters change
   useEffect(() => {
     pagination.resetPage();
   }, [
@@ -55,16 +59,129 @@ export const BilliardsScreen = () => {
   const stateOptions = [{ label: "All States", value: "" }, ...US_STATES];
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
-  const showRadiusBar = vm.zipCode.length > 0;
 
-  // Get display name for a state abbreviation
   const getStateName = (abbrev: string) => {
     const found = US_STATES.find((s) => s.value === abbrev);
     return found ? found.label : abbrev;
   };
 
-  // —— Render helpers ————————————————————————————————————————————————
+  // ── Web compact filter bar ──────────────────────────────────────────────
+  const renderWebFilters = () => (
+    <View style={webS.filterBar}>
+      {/* Search */}
+      <View style={webS.searchWrap}>
+        <Text style={webS.searchIcon}>🔍</Text>
+        <TextInput
+          style={webS.searchInput}
+          placeholder="Search tournaments..."
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.searchQuery}
+          onChangeText={vm.setSearchQuery}
+        />
+      </View>
 
+      {/* State */}
+      <View style={webS.dropWrap}>
+        <Dropdown
+          placeholder="State"
+          compact={isWeb}
+          options={stateOptions}
+          value={vm.selectedState}
+          onSelect={vm.setSelectedState}
+        />
+      </View>
+
+      {/* City */}
+      <View style={webS.dropWrap}>
+        <Dropdown
+          placeholder="City"
+          compact={isWeb}
+          options={cityOptions}
+          value={vm.selectedCity}
+          onSelect={vm.setSelectedCity}
+        />
+      </View>
+
+      {/* Zip */}
+      <TextInput
+        style={webS.zipInput}
+        placeholder="Zip"
+        placeholderTextColor={COLORS.textMuted}
+        value={vm.zipCode}
+        onChangeText={vm.setZipCode}
+        keyboardType="numeric"
+        maxLength={5}
+      />
+
+      {/* Filters button */}
+      <TouchableOpacity
+        style={webS.filterBtn}
+        onPress={() => vm.setFilterModalVisible(true)}
+      >
+        <Text style={webS.filterBtnText}>☰ Filters</Text>
+      </TouchableOpacity>
+
+      {/* Reset button */}
+      <TouchableOpacity style={webS.resetBtn} onPress={vm.resetAllFilters}>
+        <Text style={webS.resetBtnText}>Reset</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── Radius slider ───────────────────────────────────────────────────────
+  const renderRadiusSlider = () => {
+    if (!vm.zipCode.length) return null;
+    return (
+      <View style={styles.radiusContainer}>
+        <View style={styles.radiusHeader}>
+          <Text style={styles.radiusLabel}>Search Radius</Text>
+          <Text style={styles.radiusValue}>
+            {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
+          </Text>
+        </View>
+        {isWeb ? (
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={vm.searchRadius}
+            onChange={(e) => vm.setSearchRadius(Number(e.target.value))}
+            style={{
+              width: "100%",
+              height: 28,
+              accentColor: COLORS.primary,
+              cursor: "pointer",
+            }}
+          />
+        ) : (
+          (() => {
+            const Slider = require("@react-native-community/slider").default;
+            return (
+              <Slider
+                style={styles.radiusSlider}
+                minimumValue={0}
+                maximumValue={100}
+                step={5}
+                value={vm.searchRadius}
+                onValueChange={vm.setSearchRadius}
+                onSlidingStart={() => Keyboard.dismiss()}
+                minimumTrackTintColor={COLORS.primary}
+                maximumTrackTintColor={COLORS.border}
+                thumbTintColor={COLORS.primary}
+              />
+            );
+          })()
+        )}
+        <View style={styles.radiusLabels}>
+          <Text style={styles.radiusMinMax}>0 miles</Text>
+          <Text style={styles.radiusMinMax}>100 miles</Text>
+        </View>
+      </View>
+    );
+  };
+
+  // ── Pagination ──────────────────────────────────────────────────────────
   const renderPagination = () => (
     <Pagination
       totalCount={pagination.totalCount}
@@ -79,30 +196,34 @@ export const BilliardsScreen = () => {
     />
   );
 
+  // ── Tournament card ─────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
-    // Placeholder for padding — invisible spacer so empty cells still scroll
-    if (!item) return <View style={{ flex: 1, minHeight: 300 }} />;
-
+    if (!item)
+      return (
+        <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />
+      );
     return (
       <BilliardsTournamentCard
         tournament={item as any}
         isFavorited={vm.favorites.includes(item.id)}
-        onPress={() =>
-          router.push(
-            `/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`,
-          )
-        }
+        onPress={() => {
+          if (isWeb) {
+            setWebDetailId(String(item.id));
+          } else {
+            router.push(
+              `/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`,
+            );
+          }
+        }}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
         getTournamentImageUrl={vm.getTournamentImageUrl}
       />
     );
   };
 
-  // —— Recommend Venue Card (reused in empty state + footer) ——————————
-
+  // ── Recommend venue card ────────────────────────────────────────────────
   const renderRecommendCard = () => {
     if (!vm.user) return null;
-
     return (
       <View
         style={{
@@ -162,290 +283,310 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // —— Empty State ————————————————————————————————————————————————————
-
-  const renderEmptyState = () => {
-    // State is selected but has no tournaments — suggest search alert + recommend
-    if (vm.isStateFilterEmpty && vm.selectedState) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🎱</Text>
-          <Text style={styles.emptyText}>
-            No tournaments in {getStateName(vm.selectedState)} yet
+  // ── Empty state ─────────────────────────────────────────────────────────
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>🎱</Text>
+      <Text style={styles.emptyText}>
+        {vm.isStateFilterEmpty && vm.selectedState
+          ? `No tournaments in ${getStateName(vm.selectedState)} yet`
+          : "No tournaments found"}
+      </Text>
+      <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+      {vm.isStateFilterEmpty && vm.selectedState && vm.user && (
+        <TouchableOpacity
+          style={{
+            backgroundColor: COLORS.primary,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 8,
+            marginTop: 16,
+          }}
+          onPress={() =>
+            router.push(
+              `/search-alerts/create?state=${vm.selectedState}` as any,
+            )
+          }
+        >
+          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+            Create Search Alert
           </Text>
-          <Text style={styles.emptySubtext}>
-            Get notified when tournaments are added here
-          </Text>
-          {vm.user ? (
-            <TouchableOpacity
-              style={{
-                backgroundColor: COLORS.primary,
-                paddingHorizontal: 24,
-                paddingVertical: 12,
-                borderRadius: 8,
-                marginTop: 16,
-              }}
-              onPress={() =>
-                router.push(
-                  `/search-alerts/create?state=${vm.selectedState}` as any,
-                )
-              }
-            >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-                Create Search Alert
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={{
-                backgroundColor: COLORS.primary,
-                paddingHorizontal: 24,
-                paddingVertical: 12,
-                borderRadius: 8,
-                marginTop: 16,
-              }}
-              onPress={() => router.push("/auth/register")}
-            >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-                Sign Up for Alerts
-              </Text>
-            </TouchableOpacity>
-          )}
+        </TouchableOpacity>
+      )}
+      {renderRecommendCard()}
+    </View>
+  );
 
-          {/* Recommend Venue Card */}
-          {renderRecommendCard()}
-        </View>
-      );
-    }
-
-    // Home state had no tournaments — showing all, with a note
-    if (vm.isHomeStateEmpty) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🎱</Text>
-          <Text style={styles.emptyText}>No tournaments found</Text>
-          <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
-          {renderRecommendCard()}
-        </View>
-      );
-    }
-
-    // Generic empty
-    return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>🎱</Text>
-        <Text style={styles.emptyText}>No tournaments found</Text>
-        <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
-        {renderRecommendCard()}
-      </View>
-    );
-  };
-
-  // —— Loading state ——————————————————————————————————————————————————
-
-  if (vm.loading) {
+  if (vm.loading)
     return <Loading fullScreen message="Loading tournaments..." />;
-  }
-
-  // —— Pad data so the last row is always full (fixes scroll dead zone) ——
 
   const paddedData =
     pagination.paginatedItems.length % NUM_COLUMNS !== 0
-      ? [...pagination.paginatedItems, null]
+      ? [
+          ...pagination.paginatedItems,
+          ...Array(
+            NUM_COLUMNS - (pagination.paginatedItems.length % NUM_COLUMNS),
+          ).fill(null),
+        ]
       : pagination.paginatedItems;
 
-  // —— Main render ————————————————————————————————————————————————————
-
+  // ── Main render ─────────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
-      {/* Tap header/filters area to dismiss keyboard */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
-            <Text style={styles.headerSubtitle}>
-              Browse all billiards tournaments by game type and location
-            </Text>
-          </View>
-
-          {/* Home state banner */}
-          {vm.isHomeStateEmpty && (
-            <View
-              style={{
-                backgroundColor: COLORS.primary + "15",
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                marginHorizontal: 16,
-                marginBottom: 8,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: COLORS.primary + "30",
-              }}
-            >
-              <Text
-                style={{
-                  color: COLORS.text,
-                  fontSize: 13,
-                  textAlign: "center",
-                }}
-              >
-                No tournaments in your state yet — showing all tournaments
+    <WebContainer>
+      <View style={styles.container}>
+        <TouchableWithoutFeedback
+          onPress={isWeb ? undefined : Keyboard.dismiss}
+          accessible={false}
+        >
+          <View pointerEvents={isWeb ? "box-none" : "auto"}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
+              <Text style={styles.headerSubtitle}>
+                Browse all billiards tournaments by game type and location
               </Text>
             </View>
-          )}
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Text style={styles.searchIcon}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search tournaments..."
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.searchQuery}
-                onChangeText={vm.setSearchQuery}
-                returnKeyType="search"
-                onSubmitEditing={Keyboard.dismiss}
-              />
-            </View>
+            {/* Web: single compact filter bar | Mobile: stacked filters */}
+            {isWeb ? (
+              <>
+                {renderWebFilters()}
+                {renderRadiusSlider()}
+              </>
+            ) : (
+              <>
+                {vm.isHomeStateEmpty && (
+                  <View
+                    style={{
+                      backgroundColor: COLORS.primary + "15",
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      marginHorizontal: 16,
+                      marginBottom: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: COLORS.primary + "30",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: COLORS.text,
+                        fontSize: 13,
+                        textAlign: "center",
+                      }}
+                    >
+                      No tournaments in your state yet — showing all tournaments
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.searchContainer}>
+                  <View style={styles.searchBar}>
+                    <Text style={styles.searchIcon}>🔍</Text>
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search tournaments..."
+                      placeholderTextColor={COLORS.textMuted}
+                      value={vm.searchQuery}
+                      onChangeText={vm.setSearchQuery}
+                      returnKeyType="search"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+                </View>
+                <View style={styles.filterRow}>
+                  <View style={styles.filterItem}>
+                    <Text style={styles.filterLabel}>State</Text>
+                    <Dropdown
+                      placeholder="All States"
+                      options={stateOptions}
+                      value={vm.selectedState}
+                      onSelect={vm.setSelectedState}
+                    />
+                  </View>
+                  <View style={styles.filterItem}>
+                    <Text style={styles.filterLabel}>City</Text>
+                    <Dropdown
+                      placeholder="City"
+                      compact={isWeb}
+                      options={cityOptions}
+                      value={vm.selectedCity}
+                      onSelect={vm.setSelectedCity}
+                    />
+                  </View>
+                  <View style={styles.filterItem}>
+                    <Text style={styles.filterLabel}>Zip Code</Text>
+                    <TextInput
+                      style={styles.zipInput}
+                      placeholder="Zip"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={vm.zipCode}
+                      onChangeText={vm.setZipCode}
+                      keyboardType="numeric"
+                      maxLength={5}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+                </View>
+                {renderRadiusSlider()}
+                <View style={styles.filterButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.filtersButton}
+                    onPress={() => vm.setFilterModalVisible(true)}
+                  >
+                    <Text style={styles.filtersButtonText}>☰ Filters</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.resetButton}
+                    onPress={vm.resetAllFilters}
+                  >
+                    <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {renderPagination()}
           </View>
+        </TouchableWithoutFeedback>
 
-          {/* State, City, Zip Row */}
-          <View style={styles.filterRow}>
-            <View style={styles.filterItem}>
-              <Text style={styles.filterLabel}>State</Text>
-              <Dropdown
-                placeholder="All States"
-                options={stateOptions}
-                value={vm.selectedState}
-                onSelect={vm.setSelectedState}
-              />
-            </View>
-            <View style={styles.filterItem}>
-              <Text style={styles.filterLabel}>City</Text>
-              <Dropdown
-                placeholder="City"
-                options={cityOptions}
-                value={vm.selectedCity}
-                onSelect={vm.setSelectedCity}
-              />
-            </View>
-            <View style={styles.filterItem}>
-              <Text style={styles.filterLabel}>Zip Code</Text>
-              <TextInput
-                style={styles.zipInput}
-                placeholder="Zip"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.zipCode}
-                onChangeText={vm.setZipCode}
-                keyboardType="numeric"
-                maxLength={5}
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-              />
-            </View>
+        {/* Content */}
+        {vm.error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{vm.error}</Text>
           </View>
+        ) : pagination.paginatedItems.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <FlatList
+            ref={scrollRef}
+            style={{ flex: 1 }}
+            data={paddedData}
+            renderItem={renderTournament}
+            keyExtractor={(item: any, index: number) =>
+              item ? item.id.toString() : `placeholder-${index}`
+            }
+            numColumns={NUM_COLUMNS}
+            key={`cols-${NUM_COLUMNS}`}
+            contentContainerStyle={styles.list}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              !isWeb ? (
+                <RefreshControl
+                  refreshing={vm.refreshing}
+                  onRefresh={vm.onRefresh}
+                  tintColor={COLORS.primary}
+                />
+              ) : undefined
+            }
+            ListFooterComponent={
+              <>
+                {pagination.totalCount > 0 && renderPagination()}
+                {vm.filteredTournaments.length < 15 && renderRecommendCard()}
+              </>
+            }
+          />
+        )}
 
-          {/* Radius Slider */}
-          {showRadiusBar && (
-            <View style={styles.radiusContainer}>
-              <View style={styles.radiusHeader}>
-                <Text style={styles.radiusLabel}>Search Radius</Text>
-                <Text style={styles.radiusValue}>
-                  {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
-                </Text>
-              </View>
-              <Slider
-                style={styles.radiusSlider}
-                minimumValue={0}
-                maximumValue={100}
-                step={5}
-                value={vm.searchRadius}
-                onValueChange={vm.setSearchRadius}
-                onSlidingStart={() => Keyboard.dismiss()}
-                minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.border}
-                thumbTintColor={COLORS.primary}
-              />
-              <View style={styles.radiusLabels}>
-                <Text style={styles.radiusMinMax}>0 mile</Text>
-                <Text style={styles.radiusMinMax}>100 miles</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Filter Buttons */}
-          <View style={styles.filterButtonsRow}>
-            <TouchableOpacity
-              style={styles.filtersButton}
-              onPress={() => vm.setFilterModalVisible(true)}
-            >
-              <Text style={styles.filtersButtonText}>☰ Filters</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.resetButton}
-              onPress={vm.resetAllFilters}
-            >
-              <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Top Pagination */}
-          {renderPagination()}
-        </View>
-      </TouchableWithoutFeedback>
-
-      {/* Content */}
-      {vm.error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{vm.error}</Text>
-        </View>
-      ) : pagination.paginatedItems.length === 0 ? (
-        renderEmptyState()
-      ) : (
-        <FlatList
-          ref={scrollRef}
-          style={{ flex: 1 }}
-          data={paddedData}
-          renderItem={renderTournament}
-          keyExtractor={(item: any, index: number) =>
-            item ? item.id.toString() : `placeholder-${index}`
-          }
-          numColumns={NUM_COLUMNS}
-          contentContainerStyle={styles.list}
-          columnWrapperStyle={styles.row}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={vm.refreshing}
-              onRefresh={vm.onRefresh}
-              tintColor={COLORS.primary}
-            />
-          }
-          ListFooterComponent={
-            <>
-              {pagination.totalCount > 0 && renderPagination()}
-              {vm.filteredTournaments.length < 15 && renderRecommendCard()}
-            </>
-          }
+        <FilterModal
+          visible={vm.filterModalVisible}
+          onClose={() => vm.setFilterModalVisible(false)}
+          filters={vm.filters}
+          onApply={vm.setFilters}
         />
-      )}
+        <RecommendVenueModal vm={recommend} />
 
-      {/* Filter Modal */}
-      <FilterModal
-        visible={vm.filterModalVisible}
-        onClose={() => vm.setFilterModalVisible(false)}
-        filters={vm.filters}
-        onApply={vm.setFilters}
-      />
-
-      {/* Recommend Venue Modal */}
-      <RecommendVenueModal vm={recommend} />
-    </View>
+        {/* Web tournament detail overlay */}
+        {isWeb && webDetailId && (
+          <WebTournamentDetailOverlay
+            id={webDetailId}
+            onClose={() => setWebDetailId(null)}
+          />
+        )}
+      </View>
+    </WebContainer>
   );
 };
+
+// ── Web-only filter bar styles ──────────────────────────────────────────────
+const webS = StyleSheet.create({
+  filterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 8,
+  },
+  searchWrap: {
+    width: 220,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 8,
+    height: 32,
+  },
+  searchIcon: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.text,
+    height: 32,
+  },
+  dropWrap: {
+    width: 160,
+    height: 32,
+  },
+  zipInput: {
+    width: 70,
+    height: 32,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    color: COLORS.text,
+  },
+  filterBtn: {
+    height: 32,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterBtnText: {
+    fontSize: 11,
+    color: COLORS.text,
+  },
+  resetBtn: {
+    height: 32,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resetBtnText: {
+    fontSize: 11,
+    color: "#fff",
+    fontWeight: "600",
+  },
+});
 
 export default BilliardsScreen;

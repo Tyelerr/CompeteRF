@@ -1,16 +1,10 @@
-// src/viewmodels/hooks/use.recommend.venue.ts
-// ═══════════════════════════════════════════════════════════
-// Recommend a Venue Hook
-// Reuses same Google Places pattern as useCreateVenue
-// ViewModel layer: React hooks + service calls. No JSX.
-// ═══════════════════════════════════════════════════════════
-
-import { useCallback, useState } from "react";
-import { Alert } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Platform } from "react-native";
 import { barRequestService } from "../../models/services/bar-request.service";
 import { useAuthContext } from "../../providers/AuthProvider";
 
 const GOOGLE_PLACES_API_KEY = "AIzaSyC8ih2uZXpyubGDgVGJ1D32NLRS9LSs0gw";
+const isWeb = Platform.OS === "web";
 
 export interface PlacePrediction {
   place_id: string;
@@ -34,48 +28,111 @@ interface VenueInfo {
 }
 
 const EMPTY_VENUE: VenueInfo = {
-  venue_name: "",
-  address: "",
-  city: "",
-  state: "",
-  zip_code: "",
-  phone: "",
-  google_place_id: null,
-  latitude: null,
-  longitude: null,
+  venue_name: "", address: "", city: "", state: "",
+  zip_code: "", phone: "", google_place_id: null, latitude: null, longitude: null,
 };
 
 export interface UseRecommendVenueReturn {
-  // Modal
   visible: boolean;
   open: () => void;
   close: () => void;
-
-  // Google Places search
   searchQuery: string;
   searching: boolean;
   predictions: PlacePrediction[];
   searchPlaces: (query: string) => void;
   selectPlace: (placeId: string) => void;
-
-  // Selected venue
   venue: VenueInfo;
   venueSelected: boolean;
   clearSelection: () => void;
-
-  // Notes
   notes: string;
   setNotes: (notes: string) => void;
-
-  // Submit
   submitting: boolean;
   submitted: boolean;
   handleSubmit: () => Promise<void>;
-
-  // Reset everything
   reset: () => void;
 }
 
+// ── Load Google Maps JS SDK once on web ──────────────────────────────────
+let googleMapsLoaded = false;
+let googleMapsLoading = false;
+const googleMapsCallbacks: (() => void)[] = [];
+
+function loadGoogleMapsSDK(): Promise<void> {
+  return new Promise((resolve) => {
+    if (googleMapsLoaded) return resolve();
+    googleMapsCallbacks.push(resolve);
+    if (googleMapsLoading) return;
+    googleMapsLoading = true;
+
+    (window as any).__googleMapsCallback = () => {
+      googleMapsLoaded = true;
+      googleMapsCallbacks.forEach((cb) => cb());
+      googleMapsCallbacks.length = 0;
+    };
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_PLACES_API_KEY}&libraries=places&callback=__googleMapsCallback`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  });
+}
+
+// ── Web: search via JS SDK (no CORS) ────────────────────────────────────
+async function webSearchPlaces(query: string): Promise<PlacePrediction[]> {
+  await loadGoogleMapsSDK();
+  const svc = new (window as any).google.maps.places.AutocompleteService();
+  return new Promise((resolve) => {
+    svc.getPlacePredictions(
+      { input: query, types: ["establishment"] },
+      (predictions: any[], status: string) => {
+        if (status !== "OK" || !predictions) return resolve([]);
+        resolve(
+          predictions.map((p) => ({
+            place_id: p.place_id,
+            description: p.description,
+            structured_formatting: {
+              main_text: p.structured_formatting?.main_text ?? p.description,
+              secondary_text: p.structured_formatting?.secondary_text ?? "",
+            },
+          }))
+        );
+      }
+    );
+  });
+}
+
+async function webGetPlaceDetails(placeId: string): Promise<any> {
+  await loadGoogleMapsSDK();
+  const google = (window as any).google;
+  const svc = new google.maps.places.PlacesService(document.createElement("div"));
+  return new Promise((resolve, reject) => {
+    svc.getDetails(
+      { placeId, fields: ["name", "formatted_address", "address_components", "geometry", "formatted_phone_number"] },
+      (result: any, status: string) => {
+        if (status !== "OK" || !result) return reject(new Error(status));
+        resolve(result);
+      }
+    );
+  });
+}
+
+// ── Native: search via REST API ──────────────────────────────────────────
+async function nativeSearchPlaces(query: string): Promise<PlacePrediction[]> {
+  const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=establishment&key=${GOOGLE_PLACES_API_KEY}`;
+  const response = await fetch(url);
+  const data = await response.json();
+  return data.predictions ?? [];
+}
+
+async function nativeGetPlaceDetails(placeId: string): Promise<any> {
+  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,address_components,geometry,formatted_phone_number&key=${GOOGLE_PLACES_API_KEY}`;
+  const response = await fetch(url);
+  const data = await response.json();
+  return data.result;
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────
 export function useRecommendVenue(): UseRecommendVenueReturn {
   const { user } = useAuthContext();
 
@@ -89,25 +146,20 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // —— Google Places ——
+  // Preload SDK when modal opens on web
+  useEffect(() => {
+    if (isWeb && visible) loadGoogleMapsSDK();
+  }, [visible]);
 
   const searchPlaces = useCallback(async (query: string) => {
     setSearchQuery(query);
-
-    if (query.length < 3) {
-      setPredictions([]);
-      return;
-    }
-
+    if (query.length < 3) { setPredictions([]); return; }
     setSearching(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=establishment&key=${GOOGLE_PLACES_API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.predictions) {
-        setPredictions(data.predictions);
-      }
+      const results = isWeb
+        ? await webSearchPlaces(query)
+        : await nativeSearchPlaces(query);
+      setPredictions(results);
     } catch (error) {
       console.error("Error searching places:", error);
     } finally {
@@ -118,41 +170,29 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
   const selectPlace = useCallback(async (placeId: string) => {
     setSearching(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,address_components,geometry,formatted_phone_number&key=${GOOGLE_PLACES_API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
+      const result = isWeb
+        ? await webGetPlaceDetails(placeId)
+        : await nativeGetPlaceDetails(placeId);
 
-      if (data.result) {
-        const result = data.result;
+      if (result) {
         const components = result.address_components || [];
-
-        let streetNumber = "";
-        let route = "";
-        let city = "";
-        let state = "";
-        let zipCode = "";
-
-        components.forEach((component: any) => {
-          const types = component.types;
-          if (types.includes("street_number")) streetNumber = component.long_name;
-          else if (types.includes("route")) route = component.long_name;
-          else if (types.includes("locality")) city = component.long_name;
-          else if (types.includes("administrative_area_level_1")) state = component.short_name;
-          else if (types.includes("postal_code")) zipCode = component.long_name;
+        let streetNumber = "", route = "", city = "", state = "", zipCode = "";
+        components.forEach((c: any) => {
+          if (c.types.includes("street_number")) streetNumber = c.long_name;
+          else if (c.types.includes("route")) route = c.long_name;
+          else if (c.types.includes("locality")) city = c.long_name;
+          else if (c.types.includes("administrative_area_level_1")) state = c.short_name;
+          else if (c.types.includes("postal_code")) zipCode = c.long_name;
         });
-
-        const address = streetNumber ? `${streetNumber} ${route}` : route;
 
         setVenue({
           venue_name: result.name || "",
-          address,
-          city,
-          state,
-          zip_code: zipCode,
+          address: streetNumber ? `${streetNumber} ${route}` : route,
+          city, state, zip_code: zipCode,
           phone: result.formatted_phone_number || "",
           google_place_id: placeId,
-          latitude: result.geometry?.location?.lat || null,
-          longitude: result.geometry?.location?.lng || null,
+          latitude: result.geometry?.location?.lat?.() ?? result.geometry?.location?.lat ?? null,
+          longitude: result.geometry?.location?.lng?.() ?? result.geometry?.location?.lng ?? null,
         });
 
         setVenueSelected(true);
@@ -167,47 +207,18 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
     }
   }, []);
 
-  const clearSelection = useCallback(() => {
-    setVenueSelected(false);
-    setVenue(EMPTY_VENUE);
-  }, []);
-
-  // —— Modal ——
-
-  const open = useCallback(() => {
-    setSubmitted(false);
-    setVisible(true);
-  }, []);
-
-  const close = useCallback(() => {
-    setVisible(false);
-    // Don't reset if submitted — keep the success state
-  }, []);
-
+  const clearSelection = useCallback(() => { setVenueSelected(false); setVenue(EMPTY_VENUE); }, []);
+  const open = useCallback(() => { setSubmitted(false); setVisible(true); }, []);
+  const close = useCallback(() => setVisible(false), []);
   const reset = useCallback(() => {
-    setVisible(false);
-    setSearchQuery("");
-    setPredictions([]);
-    setVenue(EMPTY_VENUE);
-    setVenueSelected(false);
-    setNotes("");
-    setSubmitting(false);
-    setSubmitted(false);
+    setVisible(false); setSearchQuery(""); setPredictions([]);
+    setVenue(EMPTY_VENUE); setVenueSelected(false);
+    setNotes(""); setSubmitting(false); setSubmitted(false);
   }, []);
-
-  // —— Submit ——
 
   const handleSubmit = useCallback(async () => {
-    if (!user?.id) {
-      Alert.alert("Login Required", "Please log in to recommend a venue.");
-      return;
-    }
-
-    if (!venue.venue_name.trim()) {
-      Alert.alert("Error", "Please search for and select a venue.");
-      return;
-    }
-
+    if (!user?.id) { Alert.alert("Login Required", "Please log in to recommend a venue."); return; }
+    if (!venue.venue_name.trim()) { Alert.alert("Error", "Please search for and select a venue."); return; }
     setSubmitting(true);
     try {
       await barRequestService.create({
@@ -223,13 +234,8 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
         submitted_by: user.id,
         submitter_notes: notes.trim() || undefined,
       });
-
       setSubmitted(true);
-      Alert.alert(
-        "Thanks!",
-        "Your venue recommendation has been submitted. We'll check it out!",
-        [{ text: "OK", onPress: () => reset() }],
-      );
+      Alert.alert("Thanks!", "Your venue recommendation has been submitted. We'll check it out!", [{ text: "OK", onPress: () => reset() }]);
     } catch (error) {
       console.error("Error submitting bar request:", error);
       Alert.alert("Error", "Failed to submit recommendation. Please try again.");
@@ -239,22 +245,8 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
   }, [user, venue, notes, reset]);
 
   return {
-    visible,
-    open,
-    close,
-    searchQuery,
-    searching,
-    predictions,
-    searchPlaces,
-    selectPlace,
-    venue,
-    venueSelected,
-    clearSelection,
-    notes,
-    setNotes,
-    submitting,
-    submitted,
-    handleSubmit,
-    reset,
+    visible, open, close, searchQuery, searching, predictions,
+    searchPlaces, selectPlace, venue, venueSelected, clearSelection,
+    notes, setNotes, submitting, submitted, handleSubmit, reset,
   };
 }

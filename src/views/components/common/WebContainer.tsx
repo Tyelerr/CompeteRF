@@ -1,15 +1,12 @@
-import { Platform, View, StyleSheet } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { COLORS } from "../../../theme/colors";
 
 interface WebContainerProps {
   children: React.ReactNode;
   maxWidth?: number;
 }
 
-/**
- * On web: centers content and caps the max width so pages don't stretch
- * On mobile: renders children as-is with no changes
- */
-export function WebContainer({ children, maxWidth = 1200 }: WebContainerProps) {
+export function WebContainer({ children, maxWidth = 1400 }: WebContainerProps) {
   if (Platform.OS !== "web") return <>{children}</>;
 
   return (
@@ -24,6 +21,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     width: "100%",
+    backgroundColor: COLORS.background, // fixes white sides
   },
   inner: {
     flex: 1,

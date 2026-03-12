@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   Keyboard,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -24,9 +25,10 @@ import { Button } from "../../components/common/button";
 import { DatePicker } from "../../components/common/date-picker";
 import { Dropdown } from "../../components/common/dropdown";
 import { ToggleSwitch } from "../../components/common/toggle-switch";
+import { WebContainer } from "../../components/common/WebContainer";
 import { styles } from "./submit.styles";
 
-// ——— Helpers —————————————————————————————————————————————————————————
+const isWeb = Platform.OS === "web";
 
 const dateToString = (date: Date | null): string => {
   if (!date) return "";
@@ -42,13 +44,155 @@ const stringToDate = (dateString: string): Date | null => {
   return new Date(y, m - 1, d);
 };
 
-// ——— Component ———————————————————————————————————————————————————————
+// ── Two-column layout helpers ────────────────────────────────────────────────
+const Row = ({ children }: { children: React.ReactNode }) =>
+  isWeb ? (
+    <View style={{ flexDirection: "row", gap: 16 }}>{children}</View>
+  ) : (
+    <>{children}</>
+  );
 
+const Col = ({ children }: { children?: React.ReactNode }) =>
+  isWeb ? (
+    <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
+  ) : (
+    <>{children}</>
+  );
+
+// ── Web date input with calendar icon ────────────────────────────────────────
+const WebDateInput = ({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) => (
+  <div style={{ position: "relative", zIndex: 10, width: "100%" }}>
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: "100%",
+        height: 38,
+        backgroundColor: "#1C1C1E",
+        border: "1px solid #333",
+        borderRadius: 6,
+        paddingLeft: 10,
+        paddingRight: 10,
+        fontSize: 13,
+        color: value ? "#fff" : "#666",
+        outline: "none",
+        boxSizing: "border-box",
+        cursor: "pointer",
+        colorScheme: "dark",
+      }}
+    />
+  </div>
+);
+
+// ── Toggle row wrapper for web ────────────────────────────────────────────────
+const ToggleRow = ({
+  label,
+  value,
+  onValueChange,
+  disabled,
+  hint,
+}: {
+  label: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+  disabled?: boolean;
+  hint?: string;
+}) =>
+  isWeb ? (
+    <View style={{ marginTop: 12, marginBottom: 4 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          alignSelf: "flex-start",
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 13,
+            color: disabled ? COLORS.textMuted : COLORS.text,
+          }}
+        >
+          {label}
+        </Text>
+        <ToggleSwitch
+          label=""
+          value={value}
+          onValueChange={onValueChange}
+          disabled={disabled}
+        />
+      </View>
+      {hint && (
+        <Text
+          style={{
+            fontSize: 10,
+            color: COLORS.textMuted,
+            marginTop: 3,
+            fontStyle: "italic",
+          }}
+        >
+          {hint}
+        </Text>
+      )}
+    </View>
+  ) : (
+    <ToggleSwitch
+      label={label}
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+    />
+  );
+
+// ── Field wrapper ensures consistent top spacing ──────────────────────────────
+const Field = ({
+  label,
+  children,
+  disabled,
+  hint,
+  first,
+}: {
+  label: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+  hint?: string;
+  first?: boolean;
+}) => (
+  <View
+    style={[
+      disabled ? styles.disabledFieldWrapper : undefined,
+      isWeb && { marginTop: first ? 4 : 16 },
+    ]}
+  >
+    <Text
+      style={[
+        styles.label,
+        disabled && styles.labelDisabled,
+        isWeb && { marginTop: 0, marginBottom: 5 },
+      ]}
+    >
+      {label}
+    </Text>
+    {children}
+    {hint && <Text style={styles.chipDisabledHint}>{hint}</Text>}
+  </View>
+);
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export const SubmitScreen = () => {
   const vm = useSubmitTournament();
   const scrollRef = useScrollToTopOnFocus();
 
-  // Dismiss keyboard on mount
   useEffect(() => {
     Keyboard.dismiss();
     const show = Keyboard.addListener("keyboardDidShow", () => {});
@@ -59,8 +203,6 @@ export const SubmitScreen = () => {
     };
   }, []);
 
-  // —— Loading state ——————————————————————————————————————————————————
-
   if (vm.isLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -68,8 +210,6 @@ export const SubmitScreen = () => {
       </View>
     );
   }
-
-  // —— Not logged in —————————————————————————————————————————————————
 
   if (!vm.user) {
     return (
@@ -83,8 +223,6 @@ export const SubmitScreen = () => {
       </View>
     );
   }
-
-  // —— Not authorized ————————————————————————————————————————————————
 
   if (!vm.canSubmitTournaments) {
     return (
@@ -100,8 +238,6 @@ export const SubmitScreen = () => {
     );
   }
 
-  // —— Thumbnail renderer ————————————————————————————————————————————
-
   const renderThumbnailOption = (thumb: any) => {
     const isSelected = vm.formData.thumbnail === thumb.id;
     const isUploadOption = thumb.id === "upload-custom";
@@ -109,7 +245,6 @@ export const SubmitScreen = () => {
     const showUploadedImage =
       isUploadOption && isCustomImage && vm.customImageUri;
     const imageUrl = thumb.imageUrl ? vm.getThumbnailImageUrl(thumb.id) : null;
-
     return (
       <TouchableOpacity
         key={thumb.id}
@@ -139,7 +274,6 @@ export const SubmitScreen = () => {
               source={{ uri: imageUrl || undefined }}
               style={styles.thumbnailImage}
               resizeMode="cover"
-              onError={() => console.log("Image failed to load:", imageUrl)}
             />
           ) : (
             <Text style={styles.thumbnailEmoji}>🎱</Text>
@@ -153,15 +287,6 @@ export const SubmitScreen = () => {
       </TouchableOpacity>
     );
   };
-
-  // —— Recurring hint style ——————————————————————————————————————————
-
-  const recurringHintStyle = [
-    styles.recurringHint,
-    { color: vm.formData.isRecurring ? COLORS.primary : COLORS.textMuted },
-  ];
-
-  // —— Section renderer ——————————————————————————————————————————————
 
   const renderFormSection = ({ item }: { item: any }) => {
     switch (item.type) {
@@ -206,43 +331,50 @@ export const SubmitScreen = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Tournament Details</Text>
 
-            <Text style={styles.label}>Tournament Name *</Text>
-            <TextInput
-              ref={vm.refs.name}
-              style={styles.input}
-              value={vm.formData.name}
-              onChangeText={(v) => vm.updateFormData("name", v)}
-              placeholder={
-                vm.formData.isRecurring
-                  ? "Enter series name (e.g., 'Weekly 8-Ball League')"
-                  : "Enter tournament name..."
-              }
-              placeholderTextColor={COLORS.textMuted}
-              returnKeyType="next"
-              onSubmitEditing={() => vm.refs.gameSpot.current?.focus()}
-            />
-
-            <View style={styles.dropdownContainer}>
-              <Dropdown
-                label="Game Type *"
-                placeholder="Select The Game Type"
-                options={GAME_TYPES}
-                value={vm.formData.gameType}
-                onSelect={(v) => vm.updateFormData("gameType", v)}
+            <Field label="Tournament Name *" first>
+              <TextInput
+                ref={vm.refs.name}
+                style={styles.input}
+                value={vm.formData.name}
+                onChangeText={(v) => vm.updateFormData("name", v)}
+                placeholder={
+                  vm.formData.isRecurring
+                    ? "Enter series name..."
+                    : "Enter tournament name..."
+                }
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="next"
+                onSubmitEditing={() => vm.refs.gameSpot.current?.focus()}
               />
-            </View>
+            </Field>
 
-            <View style={styles.dropdownContainer}>
-              <Dropdown
-                label="Tournament Format *"
-                placeholder="Select The Format"
-                options={TOURNAMENT_FORMATS}
-                value={vm.formData.tournamentFormat}
-                onSelect={(v) => vm.updateFormData("tournamentFormat", v)}
-              />
-            </View>
+            <Row>
+              <Col>
+                <Field label="Game Type *">
+                  <View style={styles.dropdownContainer}>
+                    <Dropdown
+                      placeholder="Select The Game Type"
+                      options={GAME_TYPES}
+                      value={vm.formData.gameType}
+                      onSelect={(v) => vm.updateFormData("gameType", v)}
+                    />
+                  </View>
+                </Field>
+              </Col>
+              <Col>
+                <Field label="Tournament Format *">
+                  <View style={styles.dropdownContainer}>
+                    <Dropdown
+                      placeholder="Select The Format"
+                      options={TOURNAMENT_FORMATS}
+                      value={vm.formData.tournamentFormat}
+                      onSelect={(v) => vm.updateFormData("tournamentFormat", v)}
+                    />
+                  </View>
+                </Field>
+              </Col>
+            </Row>
 
-            {/* Chip Tournament Configuration */}
             {vm.isChipTournament && (
               <View style={styles.chipSection}>
                 <View style={styles.chipHeader}>
@@ -255,10 +387,8 @@ export const SubmitScreen = () => {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.chipDescription}>
-                  Set Fargo rating ranges and how many chips each range
-                  receives. Lower-rated players typically get more chips.
+                  Set Fargo rating ranges and chip allocation.
                 </Text>
-
                 <View style={styles.chipRowHeader}>
                   <Text style={[styles.chipColumnLabel, { flex: 1.4 }]}>
                     Label
@@ -274,7 +404,6 @@ export const SubmitScreen = () => {
                   </Text>
                   <View style={{ width: 36 }} />
                 </View>
-
                 {vm.formData.chipRanges.map((range, index) => (
                   <View key={index} style={styles.chipRow}>
                     <TextInput
@@ -328,21 +457,19 @@ export const SubmitScreen = () => {
                     </TouchableOpacity>
                   </View>
                 ))}
-
                 <TouchableOpacity
                   style={styles.chipAddButton}
                   onPress={vm.addChipRange}
                 >
                   <Text style={styles.chipAddButtonText}>+ Add Range</Text>
                 </TouchableOpacity>
-
                 {vm.formData.chipRanges.length > 0 && (
                   <View style={styles.chipPreview}>
                     <Text style={styles.chipPreviewTitle}>
                       📋 Chip Breakdown
                     </Text>
-                    {vm.formData.chipRanges.map((range, index) => (
-                      <Text key={index} style={styles.chipPreviewRow}>
+                    {vm.formData.chipRanges.map((range, i) => (
+                      <Text key={i} style={styles.chipPreviewRow}>
                         {range.label || `${range.minRating}–${range.maxRating}`}{" "}
                         → {range.chips} chip{range.chips !== 1 ? "s" : ""}
                       </Text>
@@ -352,100 +479,72 @@ export const SubmitScreen = () => {
               </View>
             )}
 
-            {/* Game Spot */}
-            <View
-              style={
-                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
-              }
-            >
-              <Text
-                style={[
-                  styles.label,
-                  vm.isChipTournament && styles.labelDisabled,
-                ]}
-              >
-                Game Spot
-              </Text>
+            <Row>
+              <Col>
+                <Field
+                  label="Game Spot"
+                  disabled={vm.isChipTournament}
+                  hint={
+                    vm.isChipTournament ? "Uses chip ranges instead" : undefined
+                  }
+                >
+                  <TextInput
+                    ref={vm.refs.gameSpot}
+                    style={[
+                      styles.input,
+                      vm.isChipTournament && styles.inputDisabled,
+                    ]}
+                    value={vm.formData.gameSpot}
+                    onChangeText={(v) => vm.updateFormData("gameSpot", v)}
+                    placeholder={vm.isChipTournament ? "N/A" : "e.g., The Ball"}
+                    placeholderTextColor={COLORS.textMuted}
+                    editable={!vm.isChipTournament}
+                  />
+                </Field>
+              </Col>
+              <Col>
+                <Field
+                  label="Race"
+                  disabled={vm.isChipTournament}
+                  hint={
+                    vm.isChipTournament ? "Uses chip ranges instead" : undefined
+                  }
+                >
+                  <TextInput
+                    ref={vm.refs.race}
+                    style={[
+                      styles.input,
+                      vm.isChipTournament && styles.inputDisabled,
+                    ]}
+                    value={vm.formData.race}
+                    onChangeText={(v) => vm.updateFormData("race", v)}
+                    placeholder={
+                      vm.isChipTournament ? "N/A" : "e.g., Race to 5"
+                    }
+                    placeholderTextColor={COLORS.textMuted}
+                    editable={!vm.isChipTournament}
+                  />
+                </Field>
+              </Col>
+            </Row>
+
+            <Field label="Description">
               <TextInput
-                ref={vm.refs.gameSpot}
-                style={[
-                  styles.input,
-                  vm.isChipTournament && styles.inputDisabled,
-                ]}
-                value={vm.formData.gameSpot}
-                onChangeText={(v) => vm.updateFormData("gameSpot", v)}
+                ref={vm.refs.description}
+                style={[styles.input, styles.textArea]}
+                value={vm.formData.description}
+                onChangeText={(v) => vm.updateFormData("description", v)}
                 placeholder={
-                  vm.isChipTournament
-                    ? "N/A for Chip Tournament"
-                    : "e.g., The Ball"
+                  vm.formData.isRecurring
+                    ? "Describe your series..."
+                    : "Enter description..."
                 }
                 placeholderTextColor={COLORS.textMuted}
-                returnKeyType="next"
-                onSubmitEditing={() => vm.refs.race.current?.focus()}
-                editable={!vm.isChipTournament}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
               />
-              {vm.isChipTournament && (
-                <Text style={styles.chipDisabledHint}>
-                  Chip tournaments use chip ranges instead
-                </Text>
-              )}
-            </View>
-
-            {/* Race */}
-            <View
-              style={
-                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
-              }
-            >
-              <Text
-                style={[
-                  styles.label,
-                  vm.isChipTournament && styles.labelDisabled,
-                ]}
-              >
-                Race
-              </Text>
-              <TextInput
-                ref={vm.refs.race}
-                style={[
-                  styles.input,
-                  vm.isChipTournament && styles.inputDisabled,
-                ]}
-                value={vm.formData.race}
-                onChangeText={(v) => vm.updateFormData("race", v)}
-                placeholder={
-                  vm.isChipTournament
-                    ? "N/A for Chip Tournament"
-                    : "e.g., Race to 5"
-                }
-                placeholderTextColor={COLORS.textMuted}
-                returnKeyType="next"
-                onSubmitEditing={() => vm.refs.description.current?.focus()}
-                editable={!vm.isChipTournament}
-              />
-              {vm.isChipTournament && (
-                <Text style={styles.chipDisabledHint}>
-                  Chip tournaments use chip ranges instead
-                </Text>
-              )}
-            </View>
-
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              ref={vm.refs.description}
-              style={[styles.input, styles.textArea]}
-              value={vm.formData.description}
-              onChangeText={(v) => vm.updateFormData("description", v)}
-              placeholder={
-                vm.formData.isRecurring
-                  ? "Describe your tournament series..."
-                  : "Enter description..."
-              }
-              placeholderTextColor={COLORS.textMuted}
-              multiline={true}
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
+            </Field>
           </View>
         );
 
@@ -465,50 +564,46 @@ export const SubmitScreen = () => {
             >
               Fargo Requirements
             </Text>
-
             {vm.isChipTournament && (
               <View style={styles.chipDisabledBanner}>
                 <Text style={styles.chipDisabledBannerText}>
-                  🎰 Fargo ranges are configured in the Chip Configuration above
+                  🎰 Fargo ranges configured in Chip Configuration above
                 </Text>
               </View>
             )}
-
-            <Text
-              style={[
-                styles.label,
-                vm.isChipTournament && styles.labelDisabled,
-              ]}
-            >
-              Maximum Fargo
-            </Text>
-            <TextInput
-              ref={vm.refs.maxFargo}
-              style={[
-                styles.input,
-                (vm.isMaxFargoDisabled || vm.isChipTournament) &&
-                  styles.inputDisabled,
-              ]}
-              value={vm.formData.maxFargo}
-              onChangeText={(v) => vm.updateFormData("maxFargo", v)}
-              placeholder={
-                vm.isChipTournament
-                  ? "N/A for Chip Tournament"
-                  : vm.isMaxFargoDisabled
-                    ? "Disabled (Open Tournament is ON)"
-                    : "e.g., 550 (leave blank for open)"
+            <Field
+              first
+              label="Maximum Fargo"
+              disabled={vm.isChipTournament}
+              hint={
+                !vm.isChipTournament && vm.isMaxFargoDisabled
+                  ? "Disabled when Open Tournament is ON"
+                  : undefined
               }
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
-              returnKeyType="next"
-              onSubmitEditing={() => vm.refs.requiredFargo.current?.focus()}
-              editable={!vm.isMaxFargoDisabled && !vm.isChipTournament}
-            />
-            {!vm.isChipTournament && vm.isMaxFargoDisabled && (
-              <Text style={styles.hintWarning}>
-                Disabled when Open Tournament is ON
-              </Text>
-            )}
+            >
+              <View style={isWeb ? { maxWidth: 200 } : undefined}>
+                <TextInput
+                  ref={vm.refs.maxFargo}
+                  style={[
+                    styles.input,
+                    (vm.isMaxFargoDisabled || vm.isChipTournament) &&
+                      styles.inputDisabled,
+                  ]}
+                  value={vm.formData.maxFargo}
+                  onChangeText={(v) => vm.updateFormData("maxFargo", v)}
+                  placeholder={
+                    vm.isChipTournament
+                      ? "N/A"
+                      : vm.isMaxFargoDisabled
+                        ? "Disabled"
+                        : "e.g., 550 (leave blank for open)"
+                  }
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="numeric"
+                  editable={!vm.isMaxFargoDisabled && !vm.isChipTournament}
+                />
+              </View>
+            </Field>
           </View>
         );
 
@@ -516,26 +611,86 @@ export const SubmitScreen = () => {
         return (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Entry & Fees</Text>
+            {isWeb ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 16,
+                  marginTop: 4,
+                }}
+              >
+                <View style={{ width: 160 }}>
+                  <Text
+                    style={[
+                      styles.label,
+                      isWeb && { marginTop: 0, marginBottom: 5 },
+                    ]}
+                  >
+                    Entry Fee
+                  </Text>
+                  <TextInput
+                    ref={vm.refs.entryFee}
+                    style={styles.input}
+                    value={vm.formData.entryFee}
+                    onChangeText={(v) => vm.updateFormData("entryFee", v)}
+                    placeholder="$0.00"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingTop: 16,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: COLORS.text }}>
+                    Calcutta
+                  </Text>
+                  <ToggleSwitch
+                    label=""
+                    value={vm.formData.calcutta}
+                    onValueChange={(v) => vm.updateFormData("calcutta", v)}
+                  />
+                </View>
+              </View>
+            ) : (
+              <>
+                <Field label="Entry Fee">
+                  <TextInput
+                    ref={vm.refs.entryFee}
+                    style={styles.input}
+                    value={vm.formData.entryFee}
+                    onChangeText={(v) => vm.updateFormData("entryFee", v)}
+                    placeholder="$0.00"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </Field>
+                <ToggleSwitch
+                  label="Calcutta"
+                  value={vm.formData.calcutta}
+                  onValueChange={(v) => vm.updateFormData("calcutta", v)}
+                />
+              </>
+            )}
 
-            <Text style={styles.label}>Entry Fee</Text>
-            <TextInput
-              ref={vm.refs.entryFee}
-              style={styles.input}
-              value={vm.formData.entryFee}
-              onChangeText={(v) => vm.updateFormData("entryFee", v)}
-              placeholder="$ 0.00"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="decimal-pad"
-            />
-
-            <ToggleSwitch
-              label="Calcutta"
-              value={vm.formData.calcutta}
-              onValueChange={(v) => vm.updateFormData("calcutta", v)}
-            />
-
-            <View style={styles.sidePotHeader}>
-              <Text style={styles.label}>Side Pots</Text>
+            <View
+              style={[
+                styles.sidePotHeader,
+                isWeb && {
+                  marginTop: 12,
+                  justifyContent: "flex-start",
+                  gap: 10,
+                },
+              ]}
+            >
+              <Text style={[styles.label, isWeb && { marginTop: 0 }]}>
+                Side Pots
+              </Text>
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={vm.addSidePot}
@@ -543,7 +698,6 @@ export const SubmitScreen = () => {
                 <Text style={styles.addButtonText}>+ Add</Text>
               </TouchableOpacity>
             </View>
-
             {vm.sidePots.map((pot, index) => (
               <View key={index} style={styles.sidePotRow}>
                 <TextInput
@@ -576,45 +730,101 @@ export const SubmitScreen = () => {
         return (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Settings</Text>
-
-            <ToggleSwitch
-              label="Reports to Fargo"
-              value={vm.formData.reportsToFargo}
-              onValueChange={(v) => vm.updateFormData("reportsToFargo", v)}
-            />
-
-            <View
-              style={
-                vm.isChipTournament ? styles.disabledFieldWrapper : undefined
-              }
-            >
-              <ToggleSwitch
-                label="Open Tournament"
-                value={vm.formData.openTournament}
-                onValueChange={(v) => vm.updateFormData("openTournament", v)}
-                disabled={vm.isOpenTournamentDisabled || vm.isChipTournament}
-              />
-              {vm.isChipTournament ? (
-                <Text style={styles.chipDisabledHint}>
-                  Chip tournaments use rating-based chip allocation instead
-                </Text>
-              ) : vm.isOpenTournamentDisabled ? (
-                <Text style={styles.hintWarning}>
-                  Disabled when Max Fargo is set
-                </Text>
-              ) : null}
-            </View>
-
-            <ToggleSwitch
-              label="Recurring Tournament"
-              value={vm.formData.isRecurring}
-              onValueChange={(v) => vm.updateFormData("isRecurring", v)}
-            />
-            <Text style={recurringHintStyle}>
-              {vm.formData.isRecurring
-                ? "🔄 This will create a tournament series using your selected date and time as the repeating pattern"
-                : "💡 Toggle this ON to create a recurring tournament series"}
-            </Text>
+            {isWeb ? (
+              <View style={{ marginTop: 0 }}>
+                {[
+                  {
+                    label: "Reports to Fargo",
+                    value: vm.formData.reportsToFargo,
+                    onChange: (v: boolean) =>
+                      vm.updateFormData("reportsToFargo", v),
+                  },
+                  {
+                    label: "Open Tournament",
+                    value: vm.formData.openTournament,
+                    onChange: (v: boolean) =>
+                      vm.updateFormData("openTournament", v),
+                    disabled:
+                      vm.isOpenTournamentDisabled || vm.isChipTournament,
+                    hint: vm.isChipTournament
+                      ? "Uses chip allocation instead"
+                      : vm.isOpenTournamentDisabled
+                        ? "Disabled when Max Fargo is set"
+                        : undefined,
+                  },
+                  {
+                    label: "Recurring Tournament",
+                    value: vm.formData.isRecurring,
+                    onChange: (v: boolean) =>
+                      vm.updateFormData("isRecurring", v),
+                    hint: vm.formData.isRecurring
+                      ? "🔄 Creates a series using your selected date/time as the repeating pattern"
+                      : "💡 Toggle ON to create a recurring tournament series",
+                  },
+                ].map((row, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      paddingVertical: 10,
+                      borderBottomWidth: 1,
+                      borderBottomColor: COLORS.border + "40",
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    <View>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: row.disabled ? COLORS.textMuted : COLORS.text,
+                        }}
+                      >
+                        {row.label}
+                      </Text>
+                      {row.hint && (
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            color: COLORS.textMuted,
+                            marginTop: 1,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          {row.hint}
+                        </Text>
+                      )}
+                    </View>
+                    <ToggleSwitch
+                      label=""
+                      value={row.value}
+                      onValueChange={row.onChange}
+                      disabled={row.disabled}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <>
+                <ToggleSwitch
+                  label="Reports to Fargo"
+                  value={vm.formData.reportsToFargo}
+                  onValueChange={(v) => vm.updateFormData("reportsToFargo", v)}
+                />
+                <ToggleSwitch
+                  label="Open Tournament"
+                  value={vm.formData.openTournament}
+                  onValueChange={(v) => vm.updateFormData("openTournament", v)}
+                  disabled={vm.isOpenTournamentDisabled || vm.isChipTournament}
+                />
+                <ToggleSwitch
+                  label="Recurring Tournament"
+                  value={vm.formData.isRecurring}
+                  onValueChange={(v) => vm.updateFormData("isRecurring", v)}
+                />
+              </>
+            )}
           </View>
         );
 
@@ -625,61 +835,100 @@ export const SubmitScreen = () => {
               {vm.formData.isRecurring ? "Schedule" : "Date & Time"}
             </Text>
 
-            <Text style={styles.label}>
-              {vm.formData.isRecurring
-                ? "First Tournament Date *"
-                : "Tournament Date *"}
-            </Text>
-
-            <View style={styles.staticWrapper}>
-              <DatePicker
-                value={dateToString(vm.formData.tournamentDate)}
-                onChange={(v) =>
-                  vm.updateFormData("tournamentDate", stringToDate(v))
-                }
-                placeholder={
-                  vm.formData.isRecurring
-                    ? "When does your series begin?"
-                    : "Select tournament date"
-                }
-              />
-            </View>
-
-            <View style={styles.dropdownContainer}>
-              <Dropdown
-                label="Start Time *"
-                placeholder="Select Start Time"
-                options={START_TIMES}
-                value={vm.formData.startTime}
-                onSelect={(v) => vm.updateFormData("startTime", v)}
-              />
-            </View>
+            <Row>
+              <Col>
+                <Field
+                  first
+                  label={
+                    vm.formData.isRecurring
+                      ? "First Tournament Date *"
+                      : "Tournament Date *"
+                  }
+                >
+                  {isWeb ? (
+                    <View style={{ maxWidth: 200 }}>
+                      <WebDateInput
+                        value={dateToString(vm.formData.tournamentDate)}
+                        onChange={(v) =>
+                          vm.updateFormData("tournamentDate", stringToDate(v))
+                        }
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.staticWrapper}>
+                      <DatePicker
+                        value={dateToString(vm.formData.tournamentDate)}
+                        onChange={(v) =>
+                          vm.updateFormData("tournamentDate", stringToDate(v))
+                        }
+                        placeholder="Select tournament date"
+                      />
+                    </View>
+                  )}
+                </Field>
+              </Col>
+              <Col>
+                <Field first label="Start Time *">
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      isWeb && { maxWidth: 200 },
+                    ]}
+                  >
+                    <Dropdown
+                      placeholder="Select Start Time"
+                      options={START_TIMES}
+                      value={vm.formData.startTime}
+                      onSelect={(v) => vm.updateFormData("startTime", v)}
+                    />
+                  </View>
+                </Field>
+              </Col>
+            </Row>
 
             {vm.formData.isRecurring && (
               <>
-                <View style={styles.dropdownContainer}>
-                  <Dropdown
-                    label="How Often *"
-                    placeholder="How often does this repeat?"
-                    options={RECURRENCE_TYPES}
-                    value={vm.formData.recurrenceType}
-                    onSelect={(v) => vm.updateFormData("recurrenceType", v)}
-                  />
-                </View>
-
-                <Text style={styles.label}>
-                  When Does The Series End? (Optional)
-                </Text>
-
-                <View style={styles.staticWrapper}>
-                  <DatePicker
-                    value={dateToString(vm.formData.seriesEndDate)}
-                    onChange={(v) =>
-                      vm.updateFormData("seriesEndDate", stringToDate(v))
-                    }
-                    placeholder="Leave blank for ongoing series"
-                  />
-                </View>
+                <Row>
+                  <Col>
+                    <Field label="How Often *">
+                      <View style={styles.dropdownContainer}>
+                        <Dropdown
+                          placeholder="How often does this repeat?"
+                          options={RECURRENCE_TYPES}
+                          value={vm.formData.recurrenceType}
+                          onSelect={(v) =>
+                            vm.updateFormData("recurrenceType", v)
+                          }
+                        />
+                      </View>
+                    </Field>
+                  </Col>
+                  <Col>
+                    <Field label="Series End Date (Optional)">
+                      {isWeb ? (
+                        <WebDateInput
+                          value={dateToString(vm.formData.seriesEndDate)}
+                          onChange={(v) =>
+                            vm.updateFormData("seriesEndDate", stringToDate(v))
+                          }
+                        />
+                      ) : (
+                        <View style={styles.staticWrapper}>
+                          <DatePicker
+                            value={dateToString(vm.formData.seriesEndDate)}
+                            onChange={(v) =>
+                              vm.updateFormData(
+                                "seriesEndDate",
+                                stringToDate(v),
+                              )
+                            }
+                            placeholder="Leave blank for ongoing"
+                          />
+                        </View>
+                      )}
+                    </Field>
+                  </Col>
+                </Row>
 
                 {vm.formData.tournamentDate &&
                   vm.formData.startTime &&
@@ -690,34 +939,25 @@ export const SubmitScreen = () => {
                         Starting:{" "}
                         {vm.formData.tournamentDate.toLocaleDateString(
                           "en-US",
-                          {
-                            weekday: "long",
-                            month: "long",
-                            day: "numeric",
-                          },
+                          { weekday: "long", month: "long", day: "numeric" },
                         )}{" "}
                         at{" "}
                         {(() => {
-                          const [hours, minutes] =
-                            vm.formData.startTime.split(":");
-                          const hour = parseInt(hours);
-                          const ampm = hour >= 12 ? "PM" : "AM";
-                          const displayHour = hour % 12 || 12;
-                          return `${displayHour}:${minutes} ${ampm}`;
+                          const [h, m] = vm.formData.startTime.split(":");
+                          const hr = parseInt(h);
+                          return `${hr % 12 || 12}:${m} ${hr >= 12 ? "PM" : "AM"}`;
                         })()}
                       </Text>
                       <Text style={styles.previewPattern}>
-                        🔄 This time will repeat {vm.formData.recurrenceType}
+                        🔄 Repeats {vm.formData.recurrenceType}
                       </Text>
                       <Text style={styles.previewNote}>
-                        Future tournaments will be created automatically (30
-                        days ahead)
+                        Future tournaments auto-created 30 days ahead
                       </Text>
                     </View>
                   )}
               </>
             )}
-
             <Text style={styles.hint}>Timezone: {vm.formData.timezone}</Text>
           </View>
         );
@@ -727,15 +967,18 @@ export const SubmitScreen = () => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Venue</Text>
 
-            <View style={styles.dropdownContainer}>
-              <Dropdown
-                label="Select Venue *"
-                placeholder="Choose your venue"
-                options={vm.venueOptions}
-                value={vm.formData.venueId?.toString() || ""}
-                onSelect={vm.handleVenueSelect}
-              />
-            </View>
+            <Field label="Select Venue *" first>
+              <View
+                style={[styles.dropdownContainer, isWeb && { maxWidth: 380 }]}
+              >
+                <Dropdown
+                  placeholder="Choose your venue"
+                  options={vm.venueOptions}
+                  value={vm.formData.venueId?.toString() || ""}
+                  onSelect={vm.handleVenueSelect}
+                />
+              </View>
+            </Field>
 
             {vm.selectedVenue && (
               <View style={styles.venueCard}>
@@ -750,7 +993,6 @@ export const SubmitScreen = () => {
               </View>
             )}
 
-            {/* No tables warning */}
             {vm.selectedVenue &&
               !vm.loadingVenueTables &&
               !vm.venueHasTables && (
@@ -759,14 +1001,11 @@ export const SubmitScreen = () => {
                     ⚠️ No tables configured for this venue
                   </Text>
                   <Text style={styles.noTablesSubtext}>
-                    This venue needs tables added before tournaments can be
-                    created. Contact the venue owner to set up their table
-                    information.
+                    Contact the venue owner to set up table information.
                   </Text>
                 </View>
               )}
 
-            {/* Loading venue tables */}
             {vm.loadingVenueTables && (
               <View style={styles.venueTablesInfo}>
                 <ActivityIndicator size="small" color={COLORS.primary} />
@@ -776,10 +1015,8 @@ export const SubmitScreen = () => {
               </View>
             )}
 
-            {/* Venue tables info + dynamic dropdowns */}
             {vm.selectedVenue && vm.venueHasTables && (
               <>
-                {/* Show what tables the venue has */}
                 <View style={styles.venueTablesInfo}>
                   <Text style={styles.venueTablesLabel}>
                     🎱 Tables at this venue:
@@ -792,52 +1029,62 @@ export const SubmitScreen = () => {
                     </Text>
                   ))}
                 </View>
-
-                {/* Table Size — dynamic from venue_tables */}
-                <View style={styles.dropdownContainer}>
-                  <Dropdown
-                    label="Table Size *"
-                    placeholder="Select Table Size"
-                    options={vm.venueTableSizeOptions}
-                    value={vm.formData.tableSize}
-                    onSelect={(v) => vm.updateFormData("tableSize", v)}
-                  />
-                </View>
-
-                {/* Equipment — from venue brands if available, else defaults */}
-                <View style={styles.dropdownContainer}>
-                  <Dropdown
-                    label="Equipment"
-                    placeholder="Select Equipment"
-                    options={
-                      vm.equipmentOptionsFromVenue.length > 0
-                        ? vm.equipmentOptionsFromVenue
-                        : EQUIPMENT_OPTIONS
-                    }
-                    value={vm.formData.equipment}
-                    onSelect={(v) => vm.updateFormData("equipment", v)}
-                  />
-                </View>
+                <Row>
+                  <Col>
+                    <Field label="Table Size *">
+                      <View style={styles.dropdownContainer}>
+                        <Dropdown
+                          placeholder="Select Table Size"
+                          options={vm.venueTableSizeOptions}
+                          value={vm.formData.tableSize}
+                          onSelect={(v) => vm.updateFormData("tableSize", v)}
+                        />
+                      </View>
+                    </Field>
+                  </Col>
+                  <Col>
+                    <Field label="Equipment">
+                      <View style={styles.dropdownContainer}>
+                        <Dropdown
+                          placeholder="Select Equipment"
+                          options={
+                            vm.equipmentOptionsFromVenue.length > 0
+                              ? vm.equipmentOptionsFromVenue
+                              : EQUIPMENT_OPTIONS
+                          }
+                          value={vm.formData.equipment}
+                          onSelect={(v) => vm.updateFormData("equipment", v)}
+                        />
+                      </View>
+                    </Field>
+                  </Col>
+                </Row>
               </>
             )}
 
-            <Text style={styles.label}>Contact Phone</Text>
-            <TextInput
-              ref={vm.refs.phone}
-              style={styles.input}
-              value={vm.formData.phoneNumber}
-              onChangeText={(v) => vm.updateFormData("phoneNumber", v)}
-              placeholder="Enter contact phone..."
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="phone-pad"
-            />
+            <Row>
+              <Col>
+                <Field label="Contact Phone">
+                  <TextInput
+                    ref={vm.refs.phone}
+                    style={styles.input}
+                    value={vm.formData.phoneNumber}
+                    onChangeText={(v) => vm.updateFormData("phoneNumber", v)}
+                    placeholder="Enter contact phone..."
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="phone-pad"
+                  />
+                </Field>
+              </Col>
+              <Col />
+            </Row>
           </View>
         );
 
       case "thumbnail":
         return (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
+            <Text style={[styles.sectionTitle, isWeb && { marginBottom: 4 }]}>
               {vm.formData.isRecurring ? "Series Image" : "Tournament Image"}
             </Text>
             <View style={styles.thumbnailGrid}>
@@ -876,8 +1123,6 @@ export const SubmitScreen = () => {
     }
   };
 
-  // —— Form sections —————————————————————————————————————————————————
-
   const formSections = [
     { type: "header", key: "header" },
     { type: "template", key: "template" },
@@ -893,20 +1138,31 @@ export const SubmitScreen = () => {
   ];
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        ref={scrollRef}
-        data={formSections}
-        renderItem={renderFormSection}
-        keyExtractor={(item) => item.key}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        removeClippedSubviews={false}
-        scrollEnabled={true}
-        onScrollBeginDrag={() => Keyboard.dismiss()}
-      />
-    </View>
+    <WebContainer>
+      <View
+        style={[
+          styles.container,
+          isWeb && {
+            maxWidth: 800,
+            alignSelf: "center" as const,
+            width: "100%" as any,
+          },
+        ]}
+      >
+        <FlatList
+          ref={scrollRef}
+          data={formSections}
+          renderItem={renderFormSection}
+          keyExtractor={(item) => item.key}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          removeClippedSubviews={false}
+          scrollEnabled={true}
+          onScrollBeginDrag={() => Keyboard.dismiss()}
+        />
+      </View>
+    </WebContainer>
   );
 };
 

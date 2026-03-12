@@ -1,9 +1,17 @@
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useEffect, useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+
+const isWeb = Platform.OS === "web";
 
 interface DatePickerProps {
   value: string;
@@ -11,7 +19,6 @@ interface DatePickerProps {
   placeholder?: string;
 }
 
-/** Turn a Date into "YYYY-MM-DD" using LOCAL year/month/day */
 const toLocalDateString = (date: Date): string => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -19,10 +26,18 @@ const toLocalDateString = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
-/** Parse "YYYY-MM-DD" as LOCAL midnight (not UTC) */
 const parseLocalDate = (dateString: string): Date => {
   const [y, m, d] = dateString.split("-").map(Number);
   return new Date(y, m - 1, d);
+};
+
+const formatDisplay = (dateString: string, placeholder: string) => {
+  if (!dateString) return placeholder;
+  return parseLocalDate(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 export const DatePicker = ({
@@ -34,49 +49,57 @@ export const DatePicker = ({
   const [tempDate, setTempDate] = useState(new Date());
   const [hasSelected, setHasSelected] = useState(false);
 
-  // Reset to today or selected value when modal opens
   useEffect(() => {
     if (showModal) {
       setTempDate(value ? parseLocalDate(value) : new Date());
-      setHasSelected(true);
+      setHasSelected(!!value);
     }
   }, [showModal]);
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return placeholder;
-    const date = parseLocalDate(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+  const handleConfirm = () => {
+    onChange(toLocalDateString(tempDate));
+    setShowModal(false);
   };
 
-  const formatSelectedDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
+  // ── Web: simple inline HTML date input ───────────────────────────────────
+  if (isWeb) {
+    return (
+      <View style={wStyles.wrap}>
+        <input
+          type="date"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          style={
+            {
+              flex: 1,
+              width: "100%",
+              backgroundColor: COLORS.surface,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: 6,
+              padding: "8px 10px",
+              fontSize: 13,
+              color: value ? COLORS.text : COLORS.textMuted,
+              outline: "none",
+              cursor: "pointer",
+              colorScheme: "dark",
+            } as React.CSSProperties
+          }
+        />
+      </View>
+    );
+  }
+
+  // ── Mobile: original modal with DateTimePicker ────────────────────────────
+  const DateTimePicker =
+    require("@react-native-community/datetimepicker").default;
+
+  const formatSelectedDate = (date: Date) =>
+    date.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-  };
-
-  const handleChange = (event: any, selectedDate?: Date) => {
-    if (selectedDate) {
-      setTempDate(selectedDate);
-      setHasSelected(true);
-    }
-  };
-
-  const handleConfirm = () => {
-    const dateString = toLocalDateString(tempDate);
-    onChange(dateString);
-    setShowModal(false);
-  };
-
-  const handleCancel = () => {
-    setShowModal(false);
-  };
 
   return (
     <>
@@ -85,20 +108,20 @@ export const DatePicker = ({
         onPress={() => setShowModal(true)}
       >
         <Text style={[styles.buttonText, !value && styles.placeholder]}>
-          {formatDate(value)}
+          {formatDisplay(value, placeholder)}
         </Text>
       </TouchableOpacity>
 
       <Modal
         visible={showModal}
         animationType="fade"
-        transparent={true}
-        onRequestClose={handleCancel}
+        transparent
+        onRequestClose={() => setShowModal(false)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={handleCancel}
+          onPress={() => setShowModal(false)}
         >
           <TouchableOpacity
             style={styles.modalContainer}
@@ -106,8 +129,6 @@ export const DatePicker = ({
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.modalTitle}>Select Date</Text>
-
-            {/* Show selected date */}
             <View style={styles.selectedDateContainer}>
               <Text style={styles.selectedDateText}>
                 {hasSelected
@@ -115,22 +136,25 @@ export const DatePicker = ({
                   : "Tap a date below"}
               </Text>
             </View>
-
             <View style={styles.pickerContainer}>
               <DateTimePicker
                 value={tempDate}
                 mode="date"
                 display="inline"
-                onChange={handleChange}
+                onChange={(_: any, d?: Date) => {
+                  if (d) {
+                    setTempDate(d);
+                    setHasSelected(true);
+                  }
+                }}
                 themeVariant="dark"
                 style={styles.picker}
               />
             </View>
-
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={handleCancel}
+                onPress={() => setShowModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -159,6 +183,13 @@ export const DatePicker = ({
   );
 };
 
+const wStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    height: 36,
+  },
+});
+
 const styles = StyleSheet.create({
   button: {
     flex: 1,
@@ -169,16 +200,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  buttonText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
-  placeholder: {
-    color: COLORS.textMuted,
-  },
+  buttonText: { fontSize: FONT_SIZES.md, color: COLORS.text },
+  placeholder: { color: COLORS.textMuted },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0,0,0,0.8)",
     justifyContent: "center",
     alignItems: "center",
     padding: SPACING.lg,
@@ -209,13 +235,8 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "500",
   },
-  pickerContainer: {
-    alignItems: "center",
-  },
-  picker: {
-    height: 320,
-    width: "100%",
-  },
+  pickerContainer: { alignItems: "center" },
+  picker: { height: 320, width: "100%" },
   modalButtons: {
     flexDirection: "row",
     gap: SPACING.md,
@@ -228,10 +249,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     alignItems: "center",
   },
-  cancelButtonText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-  },
+  cancelButtonText: { fontSize: FONT_SIZES.md, color: COLORS.text },
   confirmButton: {
     flex: 1,
     backgroundColor: COLORS.primary,
@@ -239,15 +257,11 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     alignItems: "center",
   },
-  confirmButtonDisabled: {
-    backgroundColor: COLORS.border,
-  },
+  confirmButtonDisabled: { backgroundColor: COLORS.border },
   confirmButtonText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.white,
     fontWeight: "600",
   },
-  confirmButtonTextDisabled: {
-    color: COLORS.textMuted,
-  },
+  confirmButtonTextDisabled: { color: COLORS.textMuted },
 });
