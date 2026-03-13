@@ -191,12 +191,22 @@ export const Dropdown = ({
 }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const selectorRef = useRef<View>(null);
+  const [selectorLayout, setSelectorLayout] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    pageY: 0,
+  });
   const anchorRef = useRef<any>(null);
   const selectedOption = options.find((o) => o.value === value);
 
   const handlePress = () => {
     if (!disabled) setIsOpen(!isOpen);
   };
+
+  // Mobile selector measurement (must be top-level, not conditional)
 
   // ── Web ───────────────────────────────────────────────────────────────────
   if (isWeb) {
@@ -249,6 +259,9 @@ export const Dropdown = ({
   // ── Mobile ────────────────────────────────────────────────────────────────
   const handleMobilePress = () => {
     if (!disabled) {
+      selectorRef.current?.measure((x, y, width, height, pageX, pageY) => {
+        setSelectorLayout({ x: pageX, y: pageY, width, height, pageY });
+      });
       setSearchText("");
       setIsOpen(true);
     }
@@ -265,6 +278,7 @@ export const Dropdown = ({
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TouchableOpacity
+        ref={selectorRef as any}
         style={[
           styles.selector,
           error && styles.selectorError,
@@ -287,58 +301,71 @@ export const Dropdown = ({
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Modal visible={isOpen} transparent animationType="fade">
+        {/* Dim overlay — tap anywhere to close */}
         <TouchableOpacity
           style={styles.overlay}
           onPress={() => setIsOpen(false)}
           activeOpacity={1}
         >
-          <View style={styles.dropdown}>
-            {searchable && (
-              <View style={styles.searchContainer}>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder={searchPlaceholder}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
-            )}
-            <FlatList
-              data={filteredOptions}
-              keyExtractor={(item) => item.value}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No results found</Text>
+          {/* Stop touches from closing when tapping list */}
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              position: "absolute",
+              top: selectorLayout.pageY + selectorLayout.height + 4,
+              left: selectorLayout.x,
+              width: selectorLayout.width,
+            }}
+            onPress={() => {}}
+          >
+            <View style={styles.dropdown}>
+              {searchable && (
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder={searchPlaceholder}
+                    placeholderTextColor={COLORS.textMuted}
+                    value={searchText}
+                    onChangeText={setSearchText}
+                    autoFocus
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
                 </View>
-              }
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.option,
-                    item.value === value && styles.optionSelected,
-                  ]}
-                  onPress={() => {
-                    onSelect(item.value);
-                    setIsOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      item.value === value && styles.optionTextSelected,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
               )}
-            />
-          </View>
+              <FlatList
+                data={filteredOptions}
+                keyExtractor={(item) => item.value}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No results found</Text>
+                  </View>
+                }
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.option,
+                      item.value === value && styles.optionSelected,
+                    ]}
+                    onPress={() => {
+                      onSelect(item.value);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        item.value === value && styles.optionTextSelected,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>
@@ -376,16 +403,14 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     marginTop: SPACING.xs,
   },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    padding: SPACING.lg,
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
+  dropdownWrapper: {},
   dropdown: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
-    maxHeight: 400,
+    maxHeight: 280,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   searchContainer: {
     padding: SPACING.sm,
@@ -405,7 +430,7 @@ const styles = StyleSheet.create({
   emptyContainer: { paddingVertical: SPACING.lg, alignItems: "center" },
   emptyText: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
   option: {
-    paddingVertical: SPACING.md,
+    paddingVertical: 10,
     paddingHorizontal: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,

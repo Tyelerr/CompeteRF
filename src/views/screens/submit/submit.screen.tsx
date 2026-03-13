@@ -345,7 +345,7 @@ export const SubmitScreen = () => {
 
       case "template":
         return (
-          <View style={[styles.section, { paddingVertical: isWeb ? 10 : 12 }]}>
+          <View style={[styles.section, { paddingVertical: isWeb ? 10 : 14 }]}>
             {/* Header row */}
             <View
               style={{
