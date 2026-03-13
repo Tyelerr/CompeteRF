@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, TextInput } from "react-native";
+import { Alert, Platform, TextInput } from "react-native";
 import { ImageContentScanner } from "../../image-scanner";
 import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
@@ -20,6 +20,16 @@ import {
   getRecurrencePreviewText,
   initialFormData,
 } from "../utils/tournament-form-data";
+
+// ── Web-safe alert helper ─────────────────────────────────────────────────────
+const showAlert = (title: string, message: string, onOk?: () => void) => {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+    onOk?.();
+  } else {
+    Alert.alert(title, message, onOk ? [{ text: "OK", onPress: onOk }] : undefined);
+  }
+};
 
 // ——— Helpers ——————————————————————————————————————————————————————————
 
@@ -72,9 +82,7 @@ export const useSubmitTournament = () => {
 
   // —— Venue tables state —————————————————————————————————————————————
   const [venueTables, setVenueTables] = useState<VenueTableRecord[]>([]);
-  const [venueTableSizeOptions, setVenueTableSizeOptions] = useState<
-    DropdownOption[]
-  >([]);
+  const [venueTableSizeOptions, setVenueTableSizeOptions] = useState<DropdownOption[]>([]);
   const [loadingVenueTables, setLoadingVenueTables] = useState(false);
 
   // —— Image/thumbnail state ——————————————————————————————————————————
@@ -97,7 +105,6 @@ export const useSubmitTournament = () => {
 
   // —— Effects ————————————————————————————————————————————————————————
 
-  // Load venues and templates when profile is ready
   useEffect(() => {
     if (!authLoading && profile && canSubmitTournaments) {
       loadFormData();
@@ -106,14 +113,16 @@ export const useSubmitTournament = () => {
     }
   }, [authLoading, profile, canSubmitTournaments]);
 
-  // Auto-select thumbnail when game type changes
   useEffect(() => {
     if (formData.gameType && !hasManualSelection) {
+      // Normalize scotch doubles → base game type for thumbnail matching
+      const normalizedGameType = formData.gameType?.replace("-scotch-doubles", "") ?? formData.gameType;
       const matchingThumb = THUMBNAIL_OPTIONS.find(
         (thumb) =>
           thumb.gameType === formData.gameType ||
+          thumb.gameType === normalizedGameType ||
           (thumb.gameType &&
-            formData.gameType?.toLowerCase().includes(thumb.gameType)),
+            normalizedGameType?.toLowerCase().includes(thumb.gameType)),
       );
       if (matchingThumb) {
         setFormData((prev) => ({ ...prev, thumbnail: matchingThumb.id }));
@@ -121,7 +130,6 @@ export const useSubmitTournament = () => {
     }
   }, [formData.gameType, hasManualSelection]);
 
-  // Auto-populate chip ranges when chip tournament selected
   useEffect(() => {
     if (formData.tournamentFormat === "chip-tournament") {
       setFormData((prev) => ({
@@ -146,11 +154,9 @@ export const useSubmitTournament = () => {
 
   const loadFormData = async () => {
     try {
-      // Load venues via service
       const venuesData = await venueService.getVenues();
       setVenues(venuesData);
 
-      // Load user's templates (tournament_templates_user isn't in a service yet)
       const { data: templatesData } = await supabase
         .from("tournament_templates_user")
         .select("id, name, game_type, tournament_format")
@@ -183,14 +189,9 @@ export const useSubmitTournament = () => {
         ...sizeOptions,
       ]);
 
-      // Auto-select if venue only has one size
       if (sizeOptions.length === 1) {
-        setFormData((prev) => ({
-          ...prev,
-          tableSize: sizeOptions[0].value,
-        }));
+        setFormData((prev) => ({ ...prev, tableSize: sizeOptions[0].value }));
       } else {
-        // Clear previous selection when changing venues
         setFormData((prev) => ({ ...prev, tableSize: "" }));
       }
     } catch (error) {
@@ -205,20 +206,20 @@ export const useSubmitTournament = () => {
   // —— Form updates ———————————————————————————————————————————————————
 
   const updateFormData = (field: keyof TournamentFormData, value: any) => {
+    // Changing game type should re-trigger auto thumbnail selection
+    if (field === "gameType") {
+      setHasManualSelection(false);
+    }
+
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
 
-      // If Open Tournament is turned ON, clear Max Fargo
       if (field === "openTournament" && value === true) {
         updated.maxFargo = "";
       }
-
-      // If Max Fargo is entered, turn OFF Open Tournament
       if (field === "maxFargo" && value.trim() !== "") {
         updated.openTournament = false;
       }
-
-      // If switching to non-recurring, clear recurring fields only
       if (field === "isRecurring" && value === false) {
         updated.recurrenceType = "";
         updated.recurrenceDay = "";
@@ -235,8 +236,7 @@ export const useSubmitTournament = () => {
   const addChipRange = () => {
     setFormData((prev) => {
       const ranges = [...prev.chipRanges];
-      const lastMax =
-        ranges.length > 0 ? ranges[ranges.length - 1].maxRating : -1;
+      const lastMax = ranges.length > 0 ? ranges[ranges.length - 1].maxRating : -1;
       const newMin = lastMax + 1;
       const newMax = lastMax + 50;
       const newRange: ChipRange = {
@@ -249,11 +249,7 @@ export const useSubmitTournament = () => {
     });
   };
 
-  const updateChipRange = (
-    index: number,
-    field: keyof ChipRange,
-    value: string,
-  ) => {
+  const updateChipRange = (index: number, field: keyof ChipRange, value: string) => {
     setFormData((prev) => {
       const ranges = [...prev.chipRanges];
       if (field === "label") {
@@ -274,10 +270,7 @@ export const useSubmitTournament = () => {
   };
 
   const resetChipRangesToDefault = () => {
-    setFormData((prev) => ({
-      ...prev,
-      chipRanges: [...DEFAULT_CHIP_RANGES],
-    }));
+    setFormData((prev) => ({ ...prev, chipRanges: [...DEFAULT_CHIP_RANGES] }));
   };
 
   // —— Computed ———————————————————————————————————————————————————————
@@ -296,7 +289,6 @@ export const useSubmitTournament = () => {
       updateFormData("phoneNumber", venue.phone);
     }
 
-    // Fetch venue tables for dynamic table size dropdown
     if (venue) {
       loadVenueTables(venue.id);
     } else {
@@ -325,7 +317,6 @@ export const useSubmitTournament = () => {
         const venue = venues.find((v) => v.id === template.venue_id);
         setSelectedVenue(venue || null);
 
-        // Load venue tables for the template's venue
         if (venue) {
           await loadVenueTables(venue.id);
         }
@@ -355,15 +346,12 @@ export const useSubmitTournament = () => {
           numberOfTables: template.number_of_tables?.toString() || "",
           thumbnail: template.thumbnail || "",
           chipRanges:
-            template.tournament_format === "chip-tournament" &&
-            template.chip_ranges
+            template.tournament_format === "chip-tournament" && template.chip_ranges
               ? template.chip_ranges
               : [],
         });
 
-        if (template.thumbnail) {
-          setHasManualSelection(true);
-        }
+        if (template.thumbnail) setHasManualSelection(true);
 
         if (template.side_pots && Array.isArray(template.side_pots)) {
           setSidePots(template.side_pots);
@@ -390,14 +378,10 @@ export const useSubmitTournament = () => {
 
   const handleImageUpload = async () => {
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert(
-          "Permission needed",
-          "Please grant photo library access to upload images.",
-        );
+        Alert.alert("Permission needed", "Please grant photo library access to upload images.");
         return;
       }
 
@@ -415,7 +399,6 @@ export const useSubmitTournament = () => {
       setScanningImage(true);
       const asset = result.assets[0];
 
-      // Scan image for inappropriate content
       const scanResult = await ImageContentScanner.scanImage(
         asset.uri,
         profile?.id_auto?.toString(),
@@ -428,10 +411,7 @@ export const useSubmitTournament = () => {
           "🚫 Image Not Allowed",
           `This image contains inappropriate content and cannot be used for tournaments:\n\n${scanResult.violations.join("\n")}`,
           [
-            {
-              text: "Try Different Image",
-              onPress: () => handleImageUpload(),
-            },
+            { text: "Try Different Image", onPress: () => handleImageUpload() },
             { text: "Cancel", style: "cancel" },
           ],
         );
@@ -439,7 +419,6 @@ export const useSubmitTournament = () => {
         return;
       }
 
-      // Upload to Supabase storage
       const timestamp = new Date().getTime();
       const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
       const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
@@ -460,9 +439,9 @@ export const useSubmitTournament = () => {
 
       if (error) throw error;
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("tournament-images").getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage
+        .from("tournament-images")
+        .getPublicUrl(fileName);
 
       setCustomImageUri(asset.uri);
       setHasManualSelection(true);
@@ -473,8 +452,7 @@ export const useSubmitTournament = () => {
       console.error("Image upload error:", error);
       Alert.alert(
         "Upload Error",
-        error.message ||
-          "Failed to upload image. Please check your internet connection.",
+        error.message || "Failed to upload image. Please check your internet connection.",
       );
     } finally {
       setUploadingImage(false);
@@ -484,15 +462,9 @@ export const useSubmitTournament = () => {
 
   // —— Side pots ——————————————————————————————————————————————————————
 
-  const addSidePot = () => {
-    setSidePots([...sidePots, { name: "", amount: "" }]);
-  };
+  const addSidePot = () => setSidePots([...sidePots, { name: "", amount: "" }]);
 
-  const updateSidePot = (
-    index: number,
-    field: "name" | "amount",
-    value: string,
-  ) => {
+  const updateSidePot = (index: number, field: "name" | "amount", value: string) => {
     const updated = [...sidePots];
     updated[index] = { ...updated[index], [field]: value };
     setSidePots(updated);
@@ -505,22 +477,11 @@ export const useSubmitTournament = () => {
   // —— Recurrence helpers —————————————————————————————————————————————
 
   const getDayFromDate = (date: Date): string => {
-    const days = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
+    const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     return days[date.getDay()];
   };
 
-  const calculateNextTournamentDates = (
-    startDate: Date,
-    recurrenceType: string,
-  ): Date[] => {
+  const calculateNextTournamentDates = (startDate: Date, recurrenceType: string): Date[] => {
     const dates: Date[] = [];
     const horizonDays = 30;
     const maxDate = new Date(startDate);
@@ -552,17 +513,12 @@ export const useSubmitTournament = () => {
     return formData.chipRanges.filter((r) => r.maxRating > 0 && r.chips > 0);
   };
 
-  // —— Build equipment options from venue tables ——————————————————————
+  // —— Equipment options from venue ——————————————————————————————————
 
   const getEquipmentOptionsFromVenue = (): DropdownOption[] => {
     if (venueTables.length === 0) return [];
-
-    const brands = [
-      ...new Set(venueTables.map((t) => t.brand).filter(Boolean)),
-    ] as string[];
-
+    const brands = [...new Set(venueTables.map((t) => t.brand).filter(Boolean))] as string[];
     if (brands.length === 0) return [];
-
     return [
       { label: "Select Equipment", value: "" },
       ...brands.map((b) => ({ label: b, value: b.toLowerCase() })),
@@ -571,14 +527,8 @@ export const useSubmitTournament = () => {
 
   // —— Submission —————————————————————————————————————————————————————
 
-  const buildTournamentPayload = (
-    dateOverride?: Date,
-    templateId?: number,
-  ) => {
-    const validSidePots = sidePots.filter(
-      (pot) => pot.name.trim() && pot.amount.trim(),
-    );
-
+  const buildTournamentPayload = (dateOverride?: Date, templateId?: number) => {
+    const validSidePots = sidePots.filter((pot) => pot.name.trim() && pot.amount.trim());
     const date = dateOverride || formData.tournamentDate!;
 
     return {
@@ -594,21 +544,15 @@ export const useSubmitTournament = () => {
       race: formData.race.trim() || null,
       table_size: formData.tableSize || null,
       equipment: formData.equipment || null,
-      number_of_tables: formData.numberOfTables
-        ? parseInt(formData.numberOfTables)
-        : null,
-      tournament_date: date instanceof Date
-        ? toLocalDateString(date)
-        : date,
+      number_of_tables: formData.numberOfTables ? parseInt(formData.numberOfTables) : null,
+      tournament_date: date instanceof Date ? toLocalDateString(date) : date,
       start_time: formData.startTime,
       timezone: formData.timezone,
       entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : 0,
       added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : 0,
       side_pots: validSidePots.length > 0 ? validSidePots : null,
       max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
-      required_fargo_games: formData.requiredFargoGames
-        ? parseInt(formData.requiredFargoGames)
-        : null,
+      required_fargo_games: formData.requiredFargoGames ? parseInt(formData.requiredFargoGames) : null,
       reports_to_fargo: formData.reportsToFargo,
       calcutta: formData.calcutta,
       open_tournament: formData.openTournament,
@@ -621,12 +565,9 @@ export const useSubmitTournament = () => {
   };
 
   const createTournamentTemplate = async (): Promise<number> => {
-    if (!formData.tournamentDate) {
-      throw new Error("Tournament date is required");
-    }
+    if (!formData.tournamentDate) throw new Error("Tournament date is required");
 
     const recurrenceDay = getDayFromDate(formData.tournamentDate);
-
     let startDateString: string;
     if (formData.tournamentDate instanceof Date) {
       startDateString = toLocalDateString(formData.tournamentDate);
@@ -645,9 +586,7 @@ export const useSubmitTournament = () => {
       }
     }
 
-    const validSidePots = sidePots.filter(
-      (pot) => pot.name.trim() && pot.amount.trim(),
-    );
+    const validSidePots = sidePots.filter((pot) => pot.name.trim() && pot.amount.trim());
 
     const templateData = {
       director_id: profile!.id_auto,
@@ -660,16 +599,12 @@ export const useSubmitTournament = () => {
       race: formData.race.trim() || null,
       table_size: formData.tableSize || null,
       equipment: formData.equipment || null,
-      number_of_tables: formData.numberOfTables
-        ? parseInt(formData.numberOfTables)
-        : null,
+      number_of_tables: formData.numberOfTables ? parseInt(formData.numberOfTables) : null,
       entry_fee: formData.entryFee ? parseFloat(formData.entryFee) : null,
       added_money: formData.addedMoney ? parseFloat(formData.addedMoney) : null,
       side_pots: validSidePots.length > 0 ? validSidePots : null,
       max_fargo: formData.maxFargo ? parseInt(formData.maxFargo) : null,
-      required_fargo_games: formData.requiredFargoGames
-        ? parseInt(formData.requiredFargoGames)
-        : null,
+      required_fargo_games: formData.requiredFargoGames ? parseInt(formData.requiredFargoGames) : null,
       reports_to_fargo: formData.reportsToFargo || false,
       calcutta: formData.calcutta || false,
       open_tournament: formData.openTournament || false,
@@ -696,16 +631,12 @@ export const useSubmitTournament = () => {
     return data.id;
   };
 
-  const createSingleTournament = async (
-    templateId?: number,
-  ): Promise<void> => {
+  const createSingleTournament = async (templateId?: number): Promise<void> => {
     const payload = buildTournamentPayload(undefined, templateId);
     await tournamentService.createTournament(payload as any);
   };
 
-  const createAdditionalTournaments = async (
-    templateId: number,
-  ): Promise<void> => {
+  const createAdditionalTournaments = async (templateId: number): Promise<void> => {
     if (!formData.tournamentDate || !formData.recurrenceType) return;
 
     const nextDates = calculateNextTournamentDates(
@@ -714,88 +645,68 @@ export const useSubmitTournament = () => {
     );
 
     if (nextDates.length === 0) return;
-
     for (const date of nextDates) {
       const payload = buildTournamentPayload(date, templateId);
       await tournamentService.createTournament(payload as any);
     }
   };
 
+  // —— Validation (web-safe) ——————————————————————————————————————————
+
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
-      Alert.alert("Error", "Please enter a tournament name.");
+      showAlert("Error", "Please enter a tournament name.");
       return false;
     }
     if (!formData.gameType) {
-      Alert.alert("Error", "Please select a game type.");
+      showAlert("Error", "Please select a game type.");
       return false;
     }
     if (!formData.tournamentFormat) {
-      Alert.alert("Error", "Please select a tournament format.");
+      showAlert("Error", "Please select a tournament format.");
       return false;
     }
 
-    // Chip tournament validation
     if (isChipTournament) {
       if (formData.chipRanges.length === 0) {
-        Alert.alert(
-          "Error",
-          "Please add at least one chip range for your Chip Tournament.",
-        );
+        showAlert("Error", "Please add at least one chip range for your Chip Tournament.");
         return false;
       }
       for (let i = 0; i < formData.chipRanges.length; i++) {
         const range = formData.chipRanges[i];
         if (!range.label.trim()) {
-          Alert.alert(
-            "Error",
-            `Chip range row ${i + 1}: Please enter a label.`,
-          );
+          showAlert("Error", `Chip range row ${i + 1}: Please enter a label.`);
           return false;
         }
         if (range.minRating > range.maxRating) {
-          Alert.alert(
-            "Error",
-            `Chip range row ${i + 1}: Min rating cannot be greater than max rating.`,
-          );
+          showAlert("Error", `Chip range row ${i + 1}: Min rating cannot be greater than max rating.`);
           return false;
         }
         if (range.chips < 1) {
-          Alert.alert(
-            "Error",
-            `Chip range row ${i + 1}: Chips must be at least 1.`,
-          );
+          showAlert("Error", `Chip range row ${i + 1}: Chips must be at least 1.`);
           return false;
         }
       }
     }
 
     if (!formData.startTime) {
-      Alert.alert("Error", "Please select a start time.");
+      showAlert("Error", "Please select a start time.");
       return false;
     }
     if (!formData.venueId) {
-      Alert.alert("Error", "Please select a venue.");
+      showAlert("Error", "Please select a venue.");
       return false;
     }
-
-    // —— Venue must have tables ———————————————————————————————————————
     if (!venueHasTables) {
-      Alert.alert(
-        "No Tables Configured",
-        "This venue doesn't have any tables set up yet. Please contact the venue owner to add their table information before creating a tournament.",
-        [{ text: "OK" }],
-      );
+      showAlert("No Tables Configured", "This venue doesn't have any tables set up yet. Please contact the venue owner to add their table information before creating a tournament.");
       return false;
     }
-
     if (!formData.tableSize) {
-      Alert.alert("Error", "Please select a table size.");
+      showAlert("Error", "Please select a table size.");
       return false;
     }
-
     if (!formData.tournamentDate) {
-      Alert.alert(
+      showAlert(
         "Error",
         formData.isRecurring
           ? "Please select when your series begins."
@@ -803,9 +714,8 @@ export const useSubmitTournament = () => {
       );
       return false;
     }
-
     if (formData.isRecurring && !formData.recurrenceType) {
-      Alert.alert("Error", "Please select how often this repeats.");
+      showAlert("Error", "Please select how often this repeats.");
       return false;
     }
 
@@ -838,31 +748,24 @@ export const useSubmitTournament = () => {
           formData.recurrenceType,
         ).length;
 
-        Alert.alert(
+        showAlert(
           "Success!",
-          `Your recurring tournament series "${formData.name}" has been created! ` +
-            `${additionalCount + 1} tournaments have been scheduled within the next 30 days.`,
-          [{ text: "OK", onPress: resetForm }],
+          `Your recurring tournament series "${formData.name}" has been created! ${additionalCount + 1} tournaments have been scheduled within the next 30 days.`,
+          resetForm,
         );
       } else {
         await createSingleTournament();
-        Alert.alert(
-          "Success!",
-          "Your tournament has been submitted successfully!",
-          [{ text: "OK", onPress: resetForm }],
-        );
+        showAlert("Success!", "Your tournament has been submitted successfully!", resetForm);
       }
     } catch (error: any) {
       console.error("Submit error:", error);
-      Alert.alert("Error", error.message || "Failed to submit tournament.");
+      showAlert("Error", error.message || "Failed to submit tournament.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getRecurrencePreview = (): string => {
-    return getRecurrencePreviewText(formData);
-  };
+  const getRecurrencePreview = (): string => getRecurrencePreviewText(formData);
 
   const navigateToLogin = () => router.push("/auth/login" as any);
   const navigateToFaq = () => router.push("/(tabs)/faq" as any);
@@ -882,13 +785,10 @@ export const useSubmitTournament = () => {
     ...templates.map((t) => ({ label: t.name, value: t.id.toString() })),
   ];
 
-  // Equipment: use venue brands if available, else default options
   const equipmentOptionsFromVenue = getEquipmentOptionsFromVenue();
 
   const getThumbnailImageUrl = (thumbnailId: string) => {
-    if (thumbnailId.startsWith("custom:")) {
-      return thumbnailId.replace("custom:", "");
-    }
+    if (thumbnailId.startsWith("custom:")) return thumbnailId.replace("custom:", "");
     const option = THUMBNAIL_OPTIONS.find((opt) => opt.id === thumbnailId);
     if (option?.imageUrl) {
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${option.imageUrl}`;
@@ -899,45 +799,30 @@ export const useSubmitTournament = () => {
   // —— Public API —————————————————————————————————————————————————————
 
   return {
-    // Auth state
     user,
     profile,
     isLoading: authLoading || dataLoading,
     canSubmitTournaments,
-
-    // Form state
     formData,
     sidePots,
     selectedVenue,
     submitting,
-
-    // Venue tables
     venueTables,
     venueTableSizeOptions,
     loadingVenueTables,
     venueHasTables,
     equipmentOptionsFromVenue,
-
-    // Image/thumbnail state
     customImageUri,
     hasManualSelection,
     uploadingImage,
     scanningImage,
-
-    // Computed
     isMaxFargoDisabled: formData.openTournament === true,
     isOpenTournamentDisabled: formData.maxFargo.trim() !== "",
     isChipTournament,
-
-    // Dropdown options
     venueOptions,
     templateOptions,
     hasTemplates: templates.length > 0,
-
-    // Refs
     refs,
-
-    // Actions
     updateFormData,
     handleVenueSelect,
     handleTemplateSelect,
@@ -951,8 +836,6 @@ export const useSubmitTournament = () => {
     getRecurrencePreview,
     navigateToLogin,
     navigateToFaq,
-
-    // Chip Tournament actions
     addChipRange,
     updateChipRange,
     removeChipRange,

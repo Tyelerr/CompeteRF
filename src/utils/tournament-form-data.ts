@@ -7,7 +7,6 @@ export interface ChipRange {
 }
 
 // ── Default chip ranges for Chip Tournament ──────────────────────────────
-// Tournament directors can customize these, but this provides a sensible starting point
 export const DEFAULT_CHIP_RANGES: ChipRange[] = [
   { label: "299 & Under", minRating: 0, maxRating: 299, chips: 8 },
   { label: "300-349", minRating: 300, maxRating: 349, chips: 7 },
@@ -34,8 +33,8 @@ export interface TournamentFormData {
   openTournament: boolean;
   entryFee: string;
   addedMoney: string;
-  tournamentDate: Date | null; // This becomes series start date if recurring
-  startTime: string; // This is used for all recurring instances
+  tournamentDate: Date | null;
+  startTime: string;
   timezone: string;
   isRecurring: boolean;
   venueId: number | null;
@@ -44,12 +43,10 @@ export interface TournamentFormData {
   equipment: string;
   numberOfTables: string;
   thumbnail: string;
-  // Simplified recurring fields - no duplicate date/time
   recurrenceType: string;
   recurrenceDay: string;
   recurrenceWeek: string | undefined;
-  seriesEndDate: Date | null; // Optional end date only
-  // Chip Tournament fields
+  seriesEndDate: Date | null;
   chipRanges: ChipRange[];
 }
 
@@ -86,12 +83,10 @@ export const initialFormData: TournamentFormData = {
   equipment: "",
   numberOfTables: "",
   thumbnail: "",
-  // Simplified recurring fields
   recurrenceType: "",
   recurrenceDay: "",
   recurrenceWeek: undefined,
   seriesEndDate: null,
-  // Chip Tournament defaults (empty until format is selected)
   chipRanges: [],
 };
 
@@ -185,24 +180,6 @@ export const THUMBNAIL_OPTIONS = [
     id: "10-ball",
     name: "10 Ball",
     gameType: "10-ball",
-    imageUrl: "10-ball.jpeg",
-  },
-  {
-    id: "8-ball-scotch-doubles",
-    name: "8 Ball Scotch Doubles",
-    gameType: "8-ball-scotch-doubles",
-    imageUrl: "8-ball.jpeg",
-  },
-  {
-    id: "9-ball-scotch-doubles",
-    name: "9 Ball Scotch Doubles",
-    gameType: "9-ball-scotch-doubles",
-    imageUrl: "9-ball.jpeg",
-  },
-  {
-    id: "10-ball-scotch-doubles",
-    name: "10 Ball Scotch Doubles",
-    gameType: "10-ball-scotch-doubles",
     imageUrl: "10-ball.jpeg",
   },
   {

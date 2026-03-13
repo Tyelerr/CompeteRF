@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import {
   TOURNAMENT_FORMATS,
 } from "../../../utils/tournament-form-data";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
+import { useTournamentTemplates } from "../../../viewmodels/hooks/use.tournament.templates";
 import { useSubmitTournament } from "../../../viewmodels/useSubmitTournament";
 import { Button } from "../../components/common/button";
 import { DatePicker } from "../../components/common/date-picker";
@@ -193,6 +194,46 @@ export const SubmitScreen = () => {
   const vm = useSubmitTournament();
   const scrollRef = useScrollToTopOnFocus();
 
+  // ── Template hook ─────────────────────────────────────────────────────────
+  const templateMgr = useTournamentTemplates({
+    userId: vm.profile?.id_auto ?? null,
+    onApplyTemplate: (
+      template: import("../../../models/services/tournament-template.service").UserTemplate,
+    ) => {
+      // Fill form from template — never touch date, venue, or isRecurring
+      vm.updateFormData("name", template.name);
+      if (template.game_type) vm.updateFormData("gameType", template.game_type);
+      if (template.tournament_format)
+        vm.updateFormData("tournamentFormat", template.tournament_format);
+      vm.updateFormData("gameSpot", template.game_spot ?? "");
+      vm.updateFormData("race", template.race ?? "");
+      vm.updateFormData("description", template.description ?? "");
+      vm.updateFormData("maxFargo", template.max_fargo?.toString() ?? "");
+      vm.updateFormData("entryFee", template.entry_fee?.toString() ?? "");
+      vm.updateFormData("reportsToFargo", template.reports_to_fargo ?? false);
+      vm.updateFormData("openTournament", template.open_tournament ?? false);
+      vm.updateFormData("calcutta", template.calcutta ?? false);
+      if (template.table_size)
+        vm.updateFormData("tableSize", template.table_size);
+      if (template.equipment)
+        vm.updateFormData("equipment", template.equipment);
+      if (template.thumbnail)
+        vm.updateFormData("thumbnail", template.thumbnail);
+      if (template.chip_ranges)
+        vm.updateFormData("chipRanges", template.chip_ranges);
+      // side_pots requires direct setter — handled separately if vm exposes it
+      // Clear isRecurring
+      vm.updateFormData("isRecurring", false);
+    },
+  });
+
+  const canSaveTemplate = !!(vm.formData.name?.trim() && vm.formData.gameType);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [manageMode, setManageMode] = useState(false);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
   useEffect(() => {
     Keyboard.dismiss();
     const show = Keyboard.addListener("keyboardDidShow", () => {});
@@ -303,17 +344,273 @@ export const SubmitScreen = () => {
         );
 
       case "template":
-        return vm.hasTemplates ? (
-          <View style={styles.section}>
-            <Dropdown
-              label="Use a Template"
-              placeholder="Start Fresh (No Template)"
-              options={vm.templateOptions}
-              value={vm.formData.templateId?.toString() || ""}
-              onSelect={vm.handleTemplateSelect}
-            />
+        return (
+          <View style={[styles.section, { paddingVertical: isWeb ? 10 : 12 }]}>
+            {/* Header row */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: isWeb ? 8 : 10,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
+                  My Templates
+                </Text>
+                {templateMgr.templateCount > 0 && (
+                  <View
+                    style={{
+                      backgroundColor: COLORS.primary + "20",
+                      borderRadius: 10,
+                      paddingHorizontal: 7,
+                      paddingVertical: 2,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: "700",
+                        color: COLORS.primary,
+                      }}
+                    >
+                      {templateMgr.templateCount} / 5
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {templateMgr.hasTemplates && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setManageMode(!manageMode);
+                    setRenamingId(null);
+                  }}
+                  style={{
+                    backgroundColor: manageMode ? "#16a34a" : COLORS.primary,
+                    borderRadius: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 5,
+                  }}
+                >
+                  <Text
+                    style={{ fontSize: 11, color: "#fff", fontWeight: "700" }}
+                  >
+                    {manageMode ? "Done" : "Manage"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Loading */}
+            {templateMgr.loading && (
+              <Text style={styles.hint}>Loading templates...</Text>
+            )}
+
+            {/* Select mode */}
+            {!templateMgr.loading &&
+              !manageMode &&
+              (templateMgr.hasTemplates ? (
+                <View
+                  style={[styles.dropdownContainer, isWeb && { maxWidth: 380 }]}
+                >
+                  <Dropdown
+                    placeholder="Select a template to load..."
+                    options={templateMgr.templates.map((t) => ({
+                      label: t.name,
+                      value: String(t.id),
+                    }))}
+                    value=""
+                    onSelect={(val) => {
+                      const found = templateMgr.templates.find(
+                        (t) => String(t.id) === val,
+                      );
+                      if (found) templateMgr.applyTemplate(found);
+                    }}
+                  />
+                </View>
+              ) : (
+                <Text style={styles.hint}>
+                  {"No templates yet. Save one using the button at the bottom."}
+                </Text>
+              ))}
+
+            {/* Manage mode */}
+            {!templateMgr.loading && manageMode && (
+              <View style={{ gap: 6 }}>
+                {templateMgr.templates.map((t) => (
+                  <View
+                    key={t.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: COLORS.surface,
+                      borderRadius: isWeb ? 6 : 8,
+                      borderWidth: 1,
+                      borderColor: COLORS.border,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      gap: 8,
+                    }}
+                  >
+                    {/* Name or rename input */}
+                    {renamingId === t.id ? (
+                      <TextInput
+                        style={[
+                          styles.input,
+                          {
+                            flex: 1,
+                            height: 32,
+                            marginBottom: 0,
+                            paddingVertical: 0,
+                          },
+                        ]}
+                        value={renameValue}
+                        onChangeText={setRenameValue}
+                        autoFocus
+                        selectTextOnFocus
+                        onSubmitEditing={async () => {
+                          if (renameValue.trim()) {
+                            await templateMgr.renameTemplate(
+                              t.id,
+                              renameValue.trim(),
+                            );
+                          }
+                          setRenamingId(null);
+                        }}
+                      />
+                    ) : (
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: COLORS.text,
+                            fontWeight: "600",
+                          }}
+                          numberOfLines={1}
+                        >
+                          {t.name}
+                        </Text>
+                        {t.game_type && (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: COLORS.textSecondary,
+                              marginTop: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {t.game_type}
+                            {t.tournament_format
+                              ? ` · ${t.tournament_format}`
+                              : ""}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Actions */}
+                    {renamingId === t.id ? (
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            if (renameValue.trim())
+                              await templateMgr.renameTemplate(
+                                t.id,
+                                renameValue.trim(),
+                              );
+                            setRenamingId(null);
+                          }}
+                          style={{
+                            backgroundColor: COLORS.primary,
+                            borderRadius: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: "#fff",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Save
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setRenamingId(null)}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: COLORS.border,
+                            borderRadius: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: COLORS.textSecondary,
+                            }}
+                          >
+                            Cancel
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setRenamingId(t.id);
+                            setRenameValue(t.name);
+                          }}
+                          style={{
+                            backgroundColor: COLORS.primary,
+                            borderRadius: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: "#fff",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Rename
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => templateMgr.deleteTemplate(t.id)}
+                          style={{
+                            backgroundColor: COLORS.error,
+                            borderRadius: 4,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: "#fff",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Delete
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
-        ) : null;
+        );
 
       case "director":
         return (
@@ -1096,19 +1393,52 @@ export const SubmitScreen = () => {
       case "submit":
         return (
           <View style={styles.submitSection}>
-            <Button
-              title={
-                vm.submitting
-                  ? "Creating..."
-                  : vm.formData.isRecurring
-                    ? "Create Tournament Series"
-                    : "Submit Tournament"
-              }
-              onPress={vm.handleSubmit}
-              loading={vm.submitting}
-              disabled={vm.submitting}
-              fullWidth
-            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title={
+                    vm.submitting
+                      ? "Creating..."
+                      : vm.formData.isRecurring
+                        ? "Create Series"
+                        : "Submit Tournament"
+                  }
+                  onPress={vm.handleSubmit}
+                  loading={vm.submitting}
+                  disabled={vm.submitting}
+                  fullWidth
+                />
+              </View>
+              {!templateMgr.atLimit && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setTemplateName(vm.formData.name || "");
+                    setShowTemplateModal(true);
+                  }}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: COLORS.primary,
+                    borderRadius: isWeb ? 6 : 8,
+                    paddingHorizontal: isWeb ? 14 : 16,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    opacity: canSaveTemplate ? 1 : 0.4,
+                  }}
+                  disabled={!canSaveTemplate}
+                >
+                  <Text
+                    style={{
+                      fontSize: isWeb ? 12 : 13,
+                      color: COLORS.primary,
+                      fontWeight: "600",
+                    }}
+                  >
+                    💾 Save Template
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {/* at limit — no save button, just submit */}
+            </View>
             {vm.formData.isRecurring && (
               <Text style={styles.submitHint}>
                 This will create your tournament template and schedule the first
@@ -1139,16 +1469,7 @@ export const SubmitScreen = () => {
 
   return (
     <WebContainer>
-      <View
-        style={[
-          styles.container,
-          isWeb && {
-            maxWidth: 800,
-            alignSelf: "center" as const,
-            width: "100%" as any,
-          },
-        ]}
-      >
+      <View style={[styles.container, isWeb && { width: "100%" as any }]}>
         <FlatList
           ref={scrollRef}
           data={formSections}
@@ -1156,12 +1477,151 @@ export const SubmitScreen = () => {
           keyExtractor={(item) => item.key}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isWeb && {
+              maxWidth: 800,
+              alignSelf: "center" as const,
+              width: "100%" as any,
+            },
+          ]}
           removeClippedSubviews={false}
           scrollEnabled={true}
           onScrollBeginDrag={() => Keyboard.dismiss()}
         />
       </View>
+
+      {/* ── Save Template Modal — rendered at root so it's never clipped ── */}
+      {showTemplateModal && isWeb && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#1C1C1E",
+              borderRadius: 10,
+              padding: 28,
+              width: 380,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+              border: "1px solid #333",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontSize: 16,
+                fontWeight: 700,
+                color: "#fff",
+              }}
+            >
+              Save as Template
+            </p>
+            <p style={{ margin: "0 0 20px", fontSize: 12, color: "#888" }}>
+              Give this template a name so you can reuse it later.
+            </p>
+            <label
+              style={{
+                fontSize: 11,
+                color: "#888",
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                display: "block",
+                marginBottom: 5,
+              }}
+            >
+              Template Name
+            </label>
+            <input
+              autoFocus
+              type="text"
+              value={templateName}
+              onChange={(e: any) => setTemplateName(e.target.value)}
+              placeholder="e.g. Friday Night 9-Ball"
+              style={{
+                width: "100%",
+                boxSizing: "border-box" as any,
+                height: 38,
+                backgroundColor: "#111",
+                border: "1px solid #444",
+                borderRadius: 6,
+                padding: "0 10px",
+                fontSize: 13,
+                color: "#fff",
+                outline: "none",
+                marginBottom: 20,
+                colorScheme: "dark",
+              }}
+            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setShowTemplateModal(false)}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  backgroundColor: "transparent",
+                  border: "1px solid #444",
+                  borderRadius: 6,
+                  color: "#aaa",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await templateMgr.saveTemplate({
+                    name: templateName.trim() || vm.formData.name,
+                    gameType: vm.formData.gameType,
+                    tournamentFormat: vm.formData.tournamentFormat,
+                    gameSpot: vm.formData.gameSpot,
+                    race: vm.formData.race,
+                    description: vm.formData.description,
+                    maxFargo: vm.formData.maxFargo,
+                    entryFee: vm.formData.entryFee,
+                    sidePots: vm.sidePots ?? [],
+                    reportsToFargo: vm.formData.reportsToFargo,
+                    openTournament: vm.formData.openTournament,
+                    calcutta: vm.formData.calcutta,
+                    tableSize: vm.formData.tableSize,
+                    equipment: vm.formData.equipment,
+                    thumbnail: vm.formData.thumbnail,
+                    chipRanges: vm.formData.chipRanges ?? [],
+                    phoneNumber: vm.formData.phoneNumber,
+                  });
+                  setShowTemplateModal(false);
+                }}
+                disabled={templateMgr.saving || !templateName.trim()}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  backgroundColor: templateName.trim() ? "#2563eb" : "#333",
+                  border: "none",
+                  borderRadius: 6,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: templateName.trim() ? "pointer" : "not-allowed",
+                }}
+              >
+                {templateMgr.saving ? "Saving..." : "Save Template"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </WebContainer>
   );
 };
