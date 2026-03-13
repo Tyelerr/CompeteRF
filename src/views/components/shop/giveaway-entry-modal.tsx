@@ -9,10 +9,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Giveaway } from "../../../models/types/giveaway.types";
+import { RADIUS } from "../../../theme/spacing";
 import { useGiveawayEntry } from "../../../viewmodels/useGiveawayEntry";
+
+const isWeb = Platform.OS === "web";
 
 const COLORS = {
   background: "#000000",
@@ -27,21 +31,8 @@ const COLORS = {
   green: "#30D158",
 };
 
-const SPACING = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-};
-
-const FONT_SIZES = {
-  xs: 11,
-  sm: 13,
-  md: 15,
-  lg: 17,
-  xl: 20,
-};
+const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
+const FONT_SIZES = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
 // ============================================
 // OFFICIAL GIVEAWAY RULES
@@ -98,7 +89,7 @@ const OFFICIAL_RULES_SECTIONS = [
 ];
 
 // ============================================
-// PRIVACY POLICY SUMMARY (for giveaway context)
+// PRIVACY POLICY SUMMARY
 // ============================================
 const PRIVACY_SECTIONS = [
   {
@@ -145,59 +136,105 @@ function LegalViewerModal({
   sections: { heading: string; body: string }[];
   onClose: () => void;
 }) {
+  if (!visible) return null;
+
+  const content = (
+    <>
+      <View style={legalStyles.header}>
+        <Pressable onPress={onClose} style={legalStyles.closeButton}>
+          <Ionicons name="close" size={24} color={COLORS.white} />
+        </Pressable>
+        <Text style={legalStyles.headerTitle}>{title}</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <View style={legalStyles.divider} />
+      <ScrollView
+        style={legalStyles.scrollView}
+        contentContainerStyle={legalStyles.scrollContent}
+        showsVerticalScrollIndicator
+      >
+        {sections.map((section, index) => (
+          <View key={index} style={legalStyles.section}>
+            <Text style={legalStyles.heading}>{section.heading}</Text>
+            <Text style={legalStyles.body}>{section.body}</Text>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={legalStyles.bottomBar}>
+        <Pressable style={legalStyles.acceptButton} onPress={onClose}>
+          <Text style={legalStyles.acceptButtonText}>Accept & Close</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  if (isWeb) {
+    return (
+      <>
+        <TouchableOpacity
+          style={legalStyles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={legalStyles.dialogWrap} pointerEvents="box-none">
+          <View style={legalStyles.dialog}>{content}</View>
+        </View>
+      </>
+    );
+  }
+
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={legalStyles.overlay}>
         <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <View style={legalStyles.container}>
-          {/* Header */}
-          <View style={legalStyles.header}>
-            <Pressable onPress={onClose} style={legalStyles.closeButton}>
-              <Ionicons name="close" size={24} color={COLORS.white} />
-            </Pressable>
-            <Text style={legalStyles.headerTitle}>{title}</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <View style={legalStyles.divider} />
-
-          {/* Content */}
-          <ScrollView
-            style={legalStyles.scrollView}
-            contentContainerStyle={legalStyles.scrollContent}
-            showsVerticalScrollIndicator
-          >
-            {sections.map((section, index) => (
-              <View key={index} style={legalStyles.section}>
-                <Text style={legalStyles.heading}>{section.heading}</Text>
-                <Text style={legalStyles.body}>{section.body}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Accept Button */}
-          <View style={legalStyles.bottomBar}>
-            <Pressable style={legalStyles.acceptButton} onPress={onClose}>
-              <Text style={legalStyles.acceptButtonText}>Accept & Close</Text>
-            </Pressable>
-          </View>
-        </View>
+        <View style={legalStyles.container}>{content}</View>
       </View>
     </Modal>
   );
 }
 
 const legalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 3000,
   },
+  dialogWrap: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  dialog: {
+    width: 640,
+    maxWidth: "92%" as any,
+    maxHeight: "88vh" as any,
+    backgroundColor: "#0F1117",
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: "hidden" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)" },
   container: {
     backgroundColor: "#0F1117",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "90%",
-    minHeight: "60%",
+    maxHeight: "90%" as any,
+    minHeight: "60%" as any,
   },
   header: {
     flexDirection: "row",
@@ -228,11 +265,7 @@ const legalStyles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
   },
-  body: {
-    color: "#D1D5DB",
-    fontSize: 14,
-    lineHeight: 22,
-  },
+  body: { color: "#D1D5DB", fontSize: 14, lineHeight: 22 },
   bottomBar: {
     padding: SPACING.lg,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
@@ -246,11 +279,7 @@ const legalStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  acceptButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  acceptButtonText: { color: COLORS.white, fontSize: 16, fontWeight: "600" },
 });
 
 // ============================================
@@ -290,174 +319,198 @@ export function GiveawayEntryModal({
     vm.resetForm();
   };
 
+  if (!visible) return null;
+
+  const formContent = (
+    <>
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable onPress={handleClose} style={styles.closeButton}>
+          <Ionicons name="close" size={24} color={COLORS.white} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Enter Giveaway</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <View style={styles.divider} />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.giveawayName}>{giveaway?.name}</Text>
+
+        <Text style={styles.label}>Full Name (as on ID) *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your full legal name"
+          placeholderTextColor={COLORS.gray}
+          value={vm.form.name_as_on_id}
+          onChangeText={(text) => vm.updateField("name_as_on_id", text)}
+          autoCapitalize="words"
+        />
+        {vm.errors.name_as_on_id && (
+          <Text style={styles.errorField}>{vm.errors.name_as_on_id}</Text>
+        )}
+
+        <Text style={styles.label}>Date of Birth *</Text>
+        <View style={styles.birthdayRow}>
+          <Dropdown
+            options={vm.monthOptions}
+            value={vm.form.birthday.month}
+            onSelect={(val) => vm.updateBirthday("month", val)}
+            placeholder="Month"
+            flex={2}
+          />
+          <Dropdown
+            options={vm.dayOptions}
+            value={vm.form.birthday.day}
+            onSelect={(val) => vm.updateBirthday("day", val)}
+            placeholder="Day"
+            flex={1}
+          />
+          <Dropdown
+            options={vm.yearOptions}
+            value={vm.form.birthday.year}
+            onSelect={(val) => vm.updateBirthday("year", val)}
+            placeholder="Year"
+            flex={1}
+          />
+        </View>
+        {vm.errors.birthday && (
+          <Text style={styles.errorField}>{vm.errors.birthday}</Text>
+        )}
+
+        <Text style={styles.label}>Email Address *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your email"
+          placeholderTextColor={COLORS.gray}
+          value={vm.form.email}
+          onChangeText={(text) => vm.updateField("email", text)}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        {vm.errors.email && (
+          <Text style={styles.errorField}>{vm.errors.email}</Text>
+        )}
+
+        <Text style={styles.label}>Phone Number *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your phone number"
+          placeholderTextColor={COLORS.gray}
+          value={vm.form.phone}
+          onChangeText={(text) => vm.updateField("phone", text)}
+          keyboardType="phone-pad"
+        />
+        {vm.errors.phone && (
+          <Text style={styles.errorField}>{vm.errors.phone}</Text>
+        )}
+
+        <View style={styles.checkboxSection}>
+          <CheckboxRow
+            label="I confirm I am 18+ years old"
+            checked={vm.form.confirmed_age}
+            onToggle={() => vm.toggleCheckbox("confirmed_age")}
+          />
+          <CheckboxRowWithLink
+            prefix="I agree to the "
+            linkText="official rules"
+            checked={vm.form.agreed_to_rules}
+            onToggle={() => vm.toggleCheckbox("agreed_to_rules")}
+            onLinkPress={() => setShowRulesModal(true)}
+          />
+          <CheckboxRowWithLink
+            prefix="I agree to the "
+            linkText="privacy policy"
+            checked={vm.form.agreed_to_privacy}
+            onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
+            onLinkPress={() => setShowPrivacyModal(true)}
+          />
+          <CheckboxRow
+            label="I understand this is one entry per person"
+            checked={vm.form.understood_one_entry}
+            onToggle={() => vm.toggleCheckbox("understood_one_entry")}
+          />
+        </View>
+        {vm.errors.checkboxes && (
+          <Text style={styles.errorField}>{vm.errors.checkboxes}</Text>
+        )}
+        {vm.submitError && (
+          <Text style={styles.errorText}>{vm.submitError}</Text>
+        )}
+      </ScrollView>
+
+      {/* Bottom buttons — Enter Giveaway LEFT, Cancel RIGHT */}
+      <View style={styles.bottomBar}>
+        <Pressable
+          style={[
+            styles.submitButton,
+            (!vm.isFormComplete || vm.isSubmitting) &&
+              styles.submitButtonDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={!vm.isFormComplete || vm.isSubmitting}
+        >
+          <Text style={styles.submitButtonText}>
+            {vm.isSubmitting ? "Submitting..." : "Enter Giveaway"}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.cancelButton} onPress={handleClose}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  // ── Web: fixed centered dialog ────────────────────────────────────────────
+  if (isWeb) {
+    return (
+      <>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleClose}
+        />
+        <View style={styles.dialogWrap} pointerEvents="box-none">
+          <View style={styles.dialog}>{formContent}</View>
+        </View>
+        <LegalViewerModal
+          visible={showRulesModal}
+          title="Official Giveaway Rules"
+          sections={OFFICIAL_RULES_SECTIONS}
+          onClose={() => setShowRulesModal(false)}
+        />
+        <LegalViewerModal
+          visible={showPrivacyModal}
+          title="Giveaway Privacy Policy"
+          sections={PRIVACY_SECTIONS}
+          onClose={() => setShowPrivacyModal(false)}
+        />
+      </>
+    );
+  }
+
+  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+      <View style={styles.mobileOverlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardView}
         >
           <Pressable style={styles.dismissArea} onPress={handleClose} />
-          <View style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Pressable onPress={handleClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={COLORS.white} />
-              </Pressable>
-              <Text style={styles.headerTitle}>Enter Giveaway</Text>
-              <View style={{ width: 40 }} />
-            </View>
-
-            <View style={styles.divider} />
-
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.giveawayName}>{giveaway?.name}</Text>
-
-              {/* Full Name */}
-              <Text style={styles.label}>Full Name (as on ID) *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your full legal name"
-                placeholderTextColor={COLORS.gray}
-                value={vm.form.name_as_on_id}
-                onChangeText={(text) => vm.updateField("name_as_on_id", text)}
-                autoCapitalize="words"
-              />
-              {vm.errors.name_as_on_id && (
-                <Text style={styles.errorField}>{vm.errors.name_as_on_id}</Text>
-              )}
-
-              {/* Date of Birth */}
-              <Text style={styles.label}>Date of Birth *</Text>
-              <View style={styles.birthdayRow}>
-                <Dropdown
-                  options={vm.monthOptions}
-                  value={vm.form.birthday.month}
-                  onSelect={(val) => vm.updateBirthday("month", val)}
-                  placeholder="Month"
-                  flex={2}
-                />
-                <Dropdown
-                  options={vm.dayOptions}
-                  value={vm.form.birthday.day}
-                  onSelect={(val) => vm.updateBirthday("day", val)}
-                  placeholder="Day"
-                  flex={1}
-                />
-                <Dropdown
-                  options={vm.yearOptions}
-                  value={vm.form.birthday.year}
-                  onSelect={(val) => vm.updateBirthday("year", val)}
-                  placeholder="Year"
-                  flex={1}
-                />
-              </View>
-              {vm.errors.birthday && (
-                <Text style={styles.errorField}>{vm.errors.birthday}</Text>
-              )}
-
-              {/* Email */}
-              <Text style={styles.label}>Email Address *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                placeholderTextColor={COLORS.gray}
-                value={vm.form.email}
-                onChangeText={(text) => vm.updateField("email", text)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              {vm.errors.email && (
-                <Text style={styles.errorField}>{vm.errors.email}</Text>
-              )}
-
-              {/* Phone */}
-              <Text style={styles.label}>Phone Number *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your phone number"
-                placeholderTextColor={COLORS.gray}
-                value={vm.form.phone}
-                onChangeText={(text) => vm.updateField("phone", text)}
-                keyboardType="phone-pad"
-              />
-              {vm.errors.phone && (
-                <Text style={styles.errorField}>{vm.errors.phone}</Text>
-              )}
-
-              {/* Checkboxes */}
-              <View style={styles.checkboxSection}>
-                <CheckboxRow
-                  label="I confirm I am 18+ years old"
-                  checked={vm.form.confirmed_age}
-                  onToggle={() => vm.toggleCheckbox("confirmed_age")}
-                />
-                <CheckboxRowWithLink
-                  prefix="I agree to the "
-                  linkText="official rules"
-                  checked={vm.form.agreed_to_rules}
-                  onToggle={() => vm.toggleCheckbox("agreed_to_rules")}
-                  onLinkPress={() => setShowRulesModal(true)}
-                />
-                <CheckboxRowWithLink
-                  prefix="I agree to the "
-                  linkText="privacy policy"
-                  checked={vm.form.agreed_to_privacy}
-                  onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
-                  onLinkPress={() => setShowPrivacyModal(true)}
-                />
-                <CheckboxRow
-                  label="I understand this is one entry per person"
-                  checked={vm.form.understood_one_entry}
-                  onToggle={() => vm.toggleCheckbox("understood_one_entry")}
-                />
-              </View>
-              {vm.errors.checkboxes && (
-                <Text style={styles.errorField}>{vm.errors.checkboxes}</Text>
-              )}
-
-              {vm.submitError && (
-                <Text style={styles.errorText}>{vm.submitError}</Text>
-              )}
-            </ScrollView>
-
-            {/* Bottom buttons */}
-            <View style={styles.bottomBar}>
-              <Pressable style={styles.cancelButton} onPress={handleClose}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.submitButton,
-                  (!vm.isFormComplete || vm.isSubmitting) &&
-                    styles.submitButtonDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={!vm.isFormComplete || vm.isSubmitting}
-              >
-                <Text style={styles.submitButtonText}>
-                  {vm.isSubmitting ? "Submitting..." : "Enter Giveaway"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          <View style={styles.modalContainer}>{formContent}</View>
         </KeyboardAvoidingView>
       </View>
-
-      {/* Official Rules Sub-Modal */}
       <LegalViewerModal
         visible={showRulesModal}
         title="Official Giveaway Rules"
         sections={OFFICIAL_RULES_SECTIONS}
         onClose={() => setShowRulesModal(false)}
       />
-
-      {/* Privacy Policy Sub-Modal */}
       <LegalViewerModal
         visible={showPrivacyModal}
         title="Giveaway Privacy Policy"
@@ -484,9 +537,53 @@ function Dropdown({
   placeholder: string;
   flex?: number;
 }) {
+  // Must be before any early returns (Rules of Hooks)
   const [open, setOpen] = React.useState(false);
   const selectedLabel =
     options.find((o) => o.value === value)?.label || placeholder;
+
+  // ── Web: native <select> — no full-screen modal ───────────────────────────
+  if (isWeb) {
+    return (
+      <View style={{ flex }}>
+        <select
+          value={value}
+          onChange={(e) => onSelect(e.target.value)}
+          style={
+            {
+              flex: 1,
+              backgroundColor: COLORS.card,
+              color: value ? COLORS.white : COLORS.gray,
+              fontSize: 15,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: COLORS.cardBorder,
+              padding: "12px 14px",
+              width: "100%",
+              appearance: "auto",
+              cursor: "pointer",
+              outline: "none",
+            } as any
+          }
+        >
+          <option value="" disabled style={{ color: COLORS.gray }}>
+            {placeholder}
+          </option>
+          {options
+            .filter((o) => o.value !== "")
+            .map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                style={{ color: COLORS.white, backgroundColor: COLORS.card }}
+              >
+                {option.label}
+              </option>
+            ))}
+        </select>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex }}>
@@ -503,7 +600,6 @@ function Dropdown({
           color={COLORS.gray}
         />
       </Pressable>
-
       {open && (
         <Modal transparent animationType="fade">
           <Pressable
@@ -609,24 +705,55 @@ function CheckboxRowWithLink({
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+  // ── Web ───────────────────────────────────────────────────────────────────
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 2000,
   },
-  keyboardView: {
-    flex: 1,
-    justifyContent: "flex-end",
+  dialogWrap: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
   },
-  dismissArea: {
-    flex: 1,
+  dialog: {
+    width: 640,
+    maxWidth: "92%" as any,
+    maxHeight: "90vh" as any,
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: "hidden" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
   },
+
+  // ── Mobile ────────────────────────────────────────────────────────────────
+  mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
+  keyboardView: { flex: 1, justifyContent: "flex-end" },
+  dismissArea: { flex: 1 },
   modalContainer: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "92%",
-    minHeight: "75%",
+    maxHeight: "92%" as any,
+    minHeight: "75%" as any,
   },
+
+  // ── Shared chrome ─────────────────────────────────────────────────────────
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -647,9 +774,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   divider: { height: 1, backgroundColor: COLORS.cardBorder },
-  scrollView: {
-    flex: 1,
-  },
+  scrollView: { flex: 1 },
   scrollContent: {
     padding: SPACING.xl,
     paddingBottom: SPACING.lg,
@@ -716,11 +841,7 @@ const styles = StyleSheet.create({
   dropdownOptionText: { color: COLORS.white, fontSize: FONT_SIZES.md },
   dropdownOptionTextActive: { fontWeight: "700" },
   checkboxSection: { marginTop: SPACING.xl, gap: SPACING.md },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.md,
-  },
+  checkboxRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
   checkbox: {
     width: 24,
     height: 24,
@@ -748,6 +869,8 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
     textAlign: "center",
   },
+
+  // Buttons — Enter Giveaway (blue) LEFT, Cancel RIGHT
   bottomBar: {
     flexDirection: "row",
     padding: SPACING.lg,
@@ -755,6 +878,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.cardBorder,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
+  },
+  submitButton: {
+    flex: 1,
+    backgroundColor: COLORS.blue,
+    borderRadius: 12,
+    paddingVertical: SPACING.lg,
+    alignItems: "center",
+  },
+  submitButtonDisabled: { opacity: 0.5 },
+  submitButtonText: {
+    color: COLORS.white,
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
   },
   cancelButton: {
     flex: 1,
@@ -769,18 +905,5 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
-  },
-  submitButton: {
-    flex: 1,
-    backgroundColor: COLORS.blue,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: "center",
-  },
-  submitButtonDisabled: { opacity: 0.5 },
-  submitButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
   },
 });

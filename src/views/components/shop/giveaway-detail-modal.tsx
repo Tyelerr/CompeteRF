@@ -2,16 +2,31 @@ import React from "react";
 import {
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../../theme/colors";
-import { SPACING } from "../../../theme/spacing";
-import { FONT_SIZES } from "../../../theme/typography";
 import { Giveaway } from "../../../models/types/giveaway.types";
+import { RADIUS } from "../../../theme/spacing";
+
+const isWeb = Platform.OS === "web";
+
+// Match entry modal local tokens exactly
+const MODAL_COLORS = {
+  background: "#000000",
+  card: "#1C1C1E",
+  cardBorder: "#2C2C2E",
+  blue: "#007AFF",
+  white: "#FFFFFF",
+  gray: "#8E8E93",
+  lightGray: "#AEAEB2",
+  red: "#FF453A",
+};
+const MODAL_SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
+const MODAL_FONT = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
 interface GiveawayDetailModalProps {
   visible: boolean;
@@ -30,7 +45,7 @@ export function GiveawayDetailModal({
   onClose,
   onEnter,
 }: GiveawayDetailModalProps) {
-  if (!giveaway) return null;
+  if (!giveaway || !visible) return null;
 
   const entryCount = giveaway.entry_count || 0;
   const maxEntries = giveaway.max_entries || 0;
@@ -44,8 +59,7 @@ export function GiveawayDetailModal({
 
   const formatDate = (dateString: string | null): string => {
     if (!dateString) return "No end date";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+    return new Date(dateString).toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
       month: "long",
@@ -55,311 +69,354 @@ export function GiveawayDetailModal({
     });
   };
 
+  const innerContent = (
+    <>
+      {/* Header — matches entry modal: X left, centered title, spacer right */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={onClose} style={s.closeButton}>
+          <Text style={s.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Giveaway Details</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <View style={s.divider} />
+
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Giveaway name in blue — matches entry modal giveawayName */}
+        <Text style={s.giveawayName}>{giveaway.name}</Text>
+
+        {/* Image */}
+        <View style={s.imageContainer}>
+          {giveaway.image_url ? (
+            <Image
+              source={{ uri: giveaway.image_url }}
+              style={s.image}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={s.imagePlaceholder}>
+              <Text style={s.imagePlaceholderText}>🎁</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Prize value */}
+        {giveaway.prize_value && (
+          <Text style={s.value}>{formatValue(giveaway.prize_value)} Value</Text>
+        )}
+
+        {/* Description */}
+        {giveaway.description && (
+          <Text style={s.description}>{giveaway.description}</Text>
+        )}
+
+        {/* Stats card */}
+        <View style={s.statsCard}>
+          <View style={s.row}>
+            <Text style={s.label}>Entries:</Text>
+            <Text style={s.val}>
+              {entryCount} / {maxEntries || "Unlimited"}
+            </Text>
+          </View>
+
+          {maxEntries > 0 && (
+            <View style={s.progressContainer}>
+              <View style={s.progressBackground}>
+                <View
+                  style={[
+                    s.progressFill,
+                    { width: `${progressPercent}%` as any },
+                  ]}
+                />
+              </View>
+            </View>
+          )}
+
+          <View style={s.row}>
+            <Text style={s.label}>Ends:</Text>
+            <Text style={s.val}>{formatDate(giveaway.end_date)}</Text>
+          </View>
+          <View style={s.row}>
+            <Text style={s.label}>Status:</Text>
+            <Text style={[s.val, s.statusText]}>{daysRemaining}</Text>
+          </View>
+          <View style={[s.row, { marginBottom: 0 }]}>
+            <Text style={s.label}>Min Age:</Text>
+            <Text style={s.val}>{giveaway.min_age}+</Text>
+          </View>
+        </View>
+
+        {/* Rules preview */}
+        {giveaway.rules_text && (
+          <View style={s.statsCard}>
+            <Text style={s.sectionTitle}>Official Rules</Text>
+            <Text style={s.rulesText} numberOfLines={6}>
+              {giveaway.rules_text}
+            </Text>
+            <Text style={s.rulesMore}>Full rules shown when entering...</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom buttons — Enter Giveaway left, Close right */}
+      <View style={s.bottomBar}>
+        <TouchableOpacity
+          style={[s.enterButton, isEntered && s.enteredButton]}
+          onPress={onEnter}
+          disabled={isEntered}
+        >
+          <Text style={[s.enterButtonText, isEntered && s.enteredButtonText]}>
+            {isEntered ? "Already Entered ✓" : "Enter Giveaway"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.cancelButton} onPress={onClose}>
+          <Text style={s.cancelButtonText}>Close</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  // ── Web: fixed centered dialog ────────────────────────────────────────────
+  if (isWeb) {
+    return (
+      <>
+        <TouchableOpacity
+          style={s.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={s.dialogWrap} pointerEvents="box-none">
+          <View style={s.dialog}>{innerContent}</View>
+        </View>
+      </>
+    );
+  }
+
+  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      transparent={true}
+      transparent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Giveaway Details</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-            {/* Image */}
-            <View style={styles.imageContainer}>
-              {giveaway.image_url ? (
-                <Image
-                  source={{ uri: giveaway.image_url }}
-                  style={styles.image}
-                  resizeMode="contain"
-                />
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <Text style={styles.imagePlaceholderText}>🎁</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Title & Value */}
-            <View style={styles.titleRow}>
-              <Text style={styles.name}>{giveaway.name}</Text>
-              {giveaway.prize_value && (
-                <Text style={styles.value}>
-                  {formatValue(giveaway.prize_value)} Value
-                </Text>
-              )}
-            </View>
-
-            {/* Description */}
-            {giveaway.description && (
-              <Text style={styles.description}>{giveaway.description}</Text>
-            )}
-
-            {/* Stats */}
-            <View style={styles.statsContainer}>
-              <View style={styles.statRow}>
-                <Text style={styles.statLabel}>Entries:</Text>
-                <Text style={styles.statValue}>
-                  {entryCount} / {maxEntries || "Unlimited"}
-                </Text>
-              </View>
-
-              {maxEntries > 0 && (
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBackground}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${progressPercent}%` },
-                      ]}
-                    />
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.statRow}>
-                <Text style={styles.statLabel}>Ends:</Text>
-                <Text style={styles.statValue}>{formatDate(giveaway.end_date)}</Text>
-              </View>
-
-              <View style={styles.statRow}>
-                <Text style={styles.statLabel}>Status:</Text>
-                <Text style={[styles.statValue, styles.statusText]}>
-                  {daysRemaining}
-                </Text>
-              </View>
-
-              <View style={styles.statRow}>
-                <Text style={styles.statLabel}>Min Age:</Text>
-                <Text style={styles.statValue}>{giveaway.min_age}+</Text>
-              </View>
-            </View>
-
-            {/* Rules Preview */}
-            {giveaway.rules_text && (
-              <View style={styles.rulesPreview}>
-                <Text style={styles.rulesTitle}>Official Rules</Text>
-                <Text style={styles.rulesText} numberOfLines={6}>
-                  {giveaway.rules_text}
-                </Text>
-                <Text style={styles.rulesMore}>
-                  Full rules shown when entering...
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Bottom Buttons */}
-          <View style={styles.bottomButtons}>
-            <TouchableOpacity
-              style={[styles.enterButton, isEntered && styles.enteredButton]}
-              onPress={onEnter}
-              disabled={isEntered}
-            >
-              <Text
-                style={[
-                  styles.enterButtonText,
-                  isEntered && styles.enteredButtonText,
-                ]}
-              >
-                {isEntered ? "Already Entered ✓" : "Enter Giveaway"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      <View style={s.mobileOverlay}>
+        <View style={s.mobileContainer}>{innerContent}</View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
+const s = StyleSheet.create({
+  // ── Web ───────────────────────────────────────────────────────────────────
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 2000,
+  },
+  dialogWrap: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  dialog: {
+    width: 640,
+    maxWidth: "92%" as any,
+    maxHeight: "90vh" as any,
+    backgroundColor: MODAL_COLORS.background,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: MODAL_COLORS.cardBorder,
+    overflow: "hidden" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+  },
+
+  // ── Mobile ────────────────────────────────────────────────────────────────
+  mobileOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "flex-end",
   },
-  container: {
-    backgroundColor: COLORS.background,
+  mobileContainer: {
+    backgroundColor: MODAL_COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "90%",
+    maxHeight: "90%" as any,
   },
+
+  // ── Shared chrome (matches entry modal exactly) ───────────────────────────
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
+    justifyContent: "space-between",
+    paddingHorizontal: MODAL_SPACING.lg,
+    paddingTop: MODAL_SPACING.lg,
+    paddingBottom: MODAL_SPACING.md,
   },
   closeButton: {
-    padding: SPACING.xs,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
   closeButtonText: {
-    fontSize: FONT_SIZES.xl,
-    color: COLORS.textSecondary,
+    color: MODAL_COLORS.white,
+    fontSize: 20,
+    fontWeight: "700",
   },
-  scrollView: {
-    padding: SPACING.md,
+  headerTitle: {
+    color: MODAL_COLORS.white,
+    fontSize: MODAL_FONT.lg,
+    fontWeight: "700",
   },
+  divider: { height: 1, backgroundColor: MODAL_COLORS.cardBorder },
+
+  scroll: { flex: 1 },
+  scrollContent: {
+    padding: MODAL_SPACING.xl,
+    paddingBottom: MODAL_SPACING.lg,
+  },
+
+  // Giveaway name in blue — same as entry modal
+  giveawayName: {
+    color: MODAL_COLORS.blue,
+    fontSize: MODAL_FONT.lg,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: MODAL_SPACING.xl,
+  },
+
   imageContainer: {
     width: "100%",
     height: 200,
     borderRadius: 12,
     overflow: "hidden",
-    backgroundColor: COLORS.surface,
-    marginBottom: SPACING.md,
+    backgroundColor: MODAL_COLORS.card,
+    marginBottom: MODAL_SPACING.md,
   },
-  image: {
-    width: "100%",
-    height: "100%",
-  },
+  image: { width: "100%", height: "100%" },
   imagePlaceholder: {
     width: "100%",
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },
-  imagePlaceholderText: {
-    fontSize: 60,
-  },
-  titleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: SPACING.sm,
-  },
-  name: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "700",
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
+  imagePlaceholderText: { fontSize: 60 },
+
   value: {
-    fontSize: FONT_SIZES.md,
+    fontSize: MODAL_FONT.md,
     fontWeight: "600",
-    color: COLORS.primary,
+    color: MODAL_COLORS.blue,
+    textAlign: "center",
+    marginBottom: MODAL_SPACING.sm,
   },
   description: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
+    fontSize: MODAL_FONT.md,
+    color: MODAL_COLORS.lightGray,
+    marginBottom: MODAL_SPACING.lg,
     lineHeight: 22,
   },
-  statsContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+
+  statsCard: {
+    backgroundColor: MODAL_COLORS.card,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: MODAL_COLORS.cardBorder,
   },
-  statRow: {
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: MODAL_COLORS.white,
+    marginBottom: MODAL_SPACING.sm,
+  },
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: SPACING.sm,
+    marginBottom: MODAL_SPACING.sm,
   },
-  statLabel: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-  },
-  statValue: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  statusText: {
-    color: COLORS.primary,
-  },
-  progressContainer: {
-    marginBottom: SPACING.sm,
-  },
+  label: { fontSize: 14, color: MODAL_COLORS.gray },
+  val: { fontSize: 14, color: MODAL_COLORS.white, fontWeight: "500" },
+  statusText: { color: MODAL_COLORS.blue },
+
+  progressContainer: { marginBottom: MODAL_SPACING.sm },
   progressBackground: {
     height: 8,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: "#3A3A3C",
     borderRadius: 4,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: COLORS.primary,
+    backgroundColor: MODAL_COLORS.blue,
     borderRadius: 4,
   },
-  rulesPreview: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-  },
-  rulesTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
+
   rulesText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+    fontSize: MODAL_FONT.sm,
+    color: MODAL_COLORS.lightGray,
     lineHeight: 20,
   },
   rulesMore: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
-    marginTop: SPACING.sm,
+    fontSize: MODAL_FONT.xs,
+    color: MODAL_COLORS.gray,
+    marginTop: MODAL_SPACING.sm,
     fontStyle: "italic",
   },
-  bottomButtons: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xl,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+
+  // Bottom buttons — matches entry modal bottomBar
+  bottomBar: {
     flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  enterButton: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  enteredButton: {
-    backgroundColor: COLORS.surfaceLight,
-  },
-  enterButtonText: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-  },
-  enteredButtonText: {
-    color: COLORS.textMuted,
+    padding: MODAL_SPACING.lg,
+    gap: MODAL_SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: MODAL_COLORS.cardBorder,
+    paddingBottom: Platform.OS === "ios" ? 34 : MODAL_SPACING.lg,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: COLORS.surfaceLight,
-    paddingVertical: SPACING.md,
-    borderRadius: 8,
+    backgroundColor: MODAL_COLORS.card,
+    borderRadius: 12,
+    paddingVertical: MODAL_SPACING.lg,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: MODAL_COLORS.cardBorder,
   },
   cancelButtonText: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.md,
+    color: MODAL_COLORS.white,
+    fontSize: MODAL_FONT.md,
     fontWeight: "600",
   },
+  enterButton: {
+    flex: 1,
+    backgroundColor: MODAL_COLORS.blue,
+    borderRadius: 12,
+    paddingVertical: MODAL_SPACING.lg,
+    alignItems: "center",
+  },
+  enteredButton: { opacity: 0.5 },
+  enterButtonText: {
+    color: MODAL_COLORS.white,
+    fontSize: MODAL_FONT.md,
+    fontWeight: "700",
+  },
+  enteredButtonText: { color: MODAL_COLORS.white },
 });

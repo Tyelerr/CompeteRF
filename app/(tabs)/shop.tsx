@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,7 @@ import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.
 import { useGiveaways } from "../../src/viewmodels/useGiveaways";
 import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
+import { WebContainer } from "../../src/views/components/common/WebContainer";
 import {
   GiveawayCard,
   GiveawayDetailModal,
@@ -23,26 +25,24 @@ import {
   GiveawayStatsCard,
 } from "../../src/views/components/shop";
 
+const isWeb = Platform.OS === "web";
+
 export default function ShopScreen() {
   const router = useRouter();
   const giveawaysVm = useGiveaways();
 
-  // Scroll-to-top on tab switch
   const scrollRef = useScrollToTopOnFocus();
 
-  // Direct auth state like FAQ page
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Modal state
   const [selectedGiveaway, setSelectedGiveaway] = useState<Giveaway | null>(
     null,
   );
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showEntryModal, setShowEntryModal] = useState(false);
 
-  // Check user and profile directly like FAQ page
   useEffect(() => {
     checkUser();
   }, []);
@@ -53,14 +53,12 @@ export default function ShopScreen() {
         data: { session },
       } = await supabase.auth.getSession();
       setUser(session?.user || null);
-
       if (session?.user) {
         const { data: profileData } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", session.user.id)
           .single();
-
         setProfile(profileData);
       }
     } catch (error) {
@@ -78,7 +76,6 @@ export default function ShopScreen() {
 
   const handleEnterGiveaway = (giveaway: Giveaway) => {
     if (!profile) {
-      // Redirect to login
       router.push("/auth/login");
       return;
     }
@@ -95,87 +92,87 @@ export default function ShopScreen() {
   const handleEnterFromDetail = () => {
     setShowDetailModal(false);
     if (selectedGiveaway && !giveawaysVm.isEntered(selectedGiveaway.id)) {
-      setTimeout(() => {
-        setShowEntryModal(true);
-      }, 300);
+      setTimeout(() => setShowEntryModal(true), 300);
     }
   };
 
-  // Loading state
   if (giveawaysVm.loading) {
     return <Loading fullScreen message="Loading..." />;
   }
 
-  return (
-    <View style={styles.container}>
+  const pageContent = (
+    <>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>GIVEAWAYS</Text>
         <Text style={styles.headerSubtitle}>
           Enter for a chance to win billiards gear
         </Text>
       </View>
 
-      {/* Giveaways Content */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={giveawaysVm.refreshing}
-            onRefresh={giveawaysVm.refresh}
-            tintColor={COLORS.primary}
-          />
-        }
-      >
-        {/* Stats Card */}
-        <GiveawayStatsCard stats={giveawaysVm.stats} />
+      {/* Stats Card */}
+      <GiveawayStatsCard stats={giveawaysVm.stats} />
 
-        {/* Not logged in banner */}
-        {!authLoading && !profile && (
-          <View style={styles.loginBanner}>
-            <Text style={styles.loginBannerText}>
-              Log in to enter giveaways!
-            </Text>
-            <View style={styles.loginBannerButtons}>
-              <Button
-                title="Log In"
-                onPress={() => router.push("/auth/login")}
-                size="sm"
-              />
-              <Button
-                title="Sign Up"
-                onPress={() => router.push("/auth/register")}
-                variant="outline"
-                size="sm"
+      {/* Not logged in banner */}
+      {!authLoading && !profile && (
+        <View style={styles.loginBanner}>
+          <Text style={styles.loginBannerText}>Log in to enter giveaways!</Text>
+          <View style={styles.loginBannerButtons}>
+            <Button
+              title="Log In"
+              onPress={() => router.push("/auth/login")}
+              size="sm"
+            />
+            <Button
+              title="Sign Up"
+              onPress={() => router.push("/auth/register")}
+              variant="outline"
+              size="sm"
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Error state */}
+      {giveawaysVm.error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{giveawaysVm.error}</Text>
+          <Button title="Try Again" onPress={giveawaysVm.refresh} size="sm" />
+        </View>
+      )}
+
+      {/* Empty state */}
+      {!giveawaysVm.error && giveawaysVm.giveaways.length === 0 && (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>{"\uD83C\uDF81"}</Text>
+          <Text style={styles.emptyTitle}>No Active Giveaways</Text>
+          <Text style={styles.emptySubtitle}>
+            Check back soon for new giveaways!
+          </Text>
+        </View>
+      )}
+
+      {/* Giveaway Cards */}
+      {isWeb ? (
+        <View style={styles.webGrid}>
+          {giveawaysVm.giveaways.map((giveaway) => (
+            <View key={giveaway.id} style={styles.webGridItem}>
+              <GiveawayCard
+                giveaway={giveaway}
+                isEntered={giveawaysVm.isEntered(giveaway.id)}
+                daysRemaining={giveawaysVm.getDaysRemaining(giveaway.end_date)}
+                onEnter={() => handleEnterGiveaway(giveaway)}
+                onView={() => handleViewGiveaway(giveaway)}
               />
             </View>
-          </View>
-        )}
-
-        {/* Error state */}
-        {giveawaysVm.error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{giveawaysVm.error}</Text>
-            <Button title="Try Again" onPress={giveawaysVm.refresh} size="sm" />
-          </View>
-        )}
-
-        {/* Empty state */}
-        {!giveawaysVm.error && giveawaysVm.giveaways.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>{"\uD83C\uDF81"}</Text>
-            <Text style={styles.emptyTitle}>No Active Giveaways</Text>
-            <Text style={styles.emptySubtitle}>
-              Check back soon for new giveaways!
-            </Text>
-          </View>
-        )}
-
-        {/* Giveaway Cards */}
-        {giveawaysVm.giveaways.map((giveaway) => (
+          ))}
+          {/* Phantom keeps odd last card from stretching full width */}
+          {giveawaysVm.giveaways.length % 2 !== 0 && (
+            <View style={styles.webGridItem} />
+          )}
+        </View>
+      ) : (
+        giveawaysVm.giveaways.map((giveaway) => (
           <GiveawayCard
             key={giveaway.id}
             giveaway={giveaway}
@@ -184,34 +181,66 @@ export default function ShopScreen() {
             onEnter={() => handleEnterGiveaway(giveaway)}
             onView={() => handleViewGiveaway(giveaway)}
           />
-        ))}
-      </ScrollView>
+        ))
+      )}
+    </>
+  );
 
-      {/* Detail Modal */}
-      <GiveawayDetailModal
-        visible={showDetailModal}
-        giveaway={selectedGiveaway}
-        isEntered={
-          selectedGiveaway ? giveawaysVm.isEntered(selectedGiveaway.id) : false
-        }
-        daysRemaining={
-          selectedGiveaway
-            ? giveawaysVm.getDaysRemaining(selectedGiveaway.end_date)
-            : ""
-        }
-        onClose={() => setShowDetailModal(false)}
-        onEnter={handleEnterFromDetail}
-      />
+  return (
+    <WebContainer>
+      <View style={styles.container}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isWeb && styles.scrollContentWeb,
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            !isWeb ? (
+              <RefreshControl
+                refreshing={giveawaysVm.refreshing}
+                onRefresh={giveawaysVm.refresh}
+                tintColor={COLORS.primary}
+              />
+            ) : undefined
+          }
+        >
+          {/* Web: wrap in a centered max-width column */}
+          {isWeb ? (
+            <View style={styles.webInner}>{pageContent}</View>
+          ) : (
+            pageContent
+          )}
+        </ScrollView>
 
-      {/* Entry Modal */}
-      <GiveawayEntryModal
-        visible={showEntryModal}
-        giveaway={selectedGiveaway}
-        userId={profile?.id_auto}
-        onClose={() => setShowEntryModal(false)}
-        onSuccess={handleEntrySuccess}
-      />
-    </View>
+        <GiveawayDetailModal
+          visible={showDetailModal}
+          giveaway={selectedGiveaway}
+          isEntered={
+            selectedGiveaway
+              ? giveawaysVm.isEntered(selectedGiveaway.id)
+              : false
+          }
+          daysRemaining={
+            selectedGiveaway
+              ? giveawaysVm.getDaysRemaining(selectedGiveaway.end_date)
+              : ""
+          }
+          onClose={() => setShowDetailModal(false)}
+          onEnter={handleEnterFromDetail}
+        />
+
+        <GiveawayEntryModal
+          visible={showEntryModal}
+          giveaway={selectedGiveaway}
+          userId={profile?.id_auto}
+          onClose={() => setShowEntryModal(false)}
+          onSuccess={handleEntrySuccess}
+        />
+      </View>
+    </WebContainer>
   );
 }
 
@@ -220,9 +249,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
+  // ----- Scroll -----
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: SPACING.md,
+    paddingTop: 0,
+  },
+  // Web outer: full width, center children
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xl,
+  },
+  // Web inner: constrained column all content sits in
+  webInner: {
+    width: "100%",
+    maxWidth: 900,
+  },
+
+  // ----- Header -----
   header: {
     padding: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
+  },
+  headerWeb: {
+    alignItems: "center",
+    paddingTop: SPACING.lg,
+    paddingHorizontal: 0,
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
@@ -234,14 +290,19 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
-  scrollView: {
+
+  // ----- Web 2-col grid -----
+  webGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.md,
+  },
+  webGridItem: {
     flex: 1,
+    minWidth: 300,
   },
-  scrollContent: {
-    padding: SPACING.md,
-    paddingTop: 0,
-  },
-  // Login Banner
+
+  // ----- Login Banner -----
   loginBanner: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
@@ -262,7 +323,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: SPACING.sm,
   },
-  // Error state
+
+  // ----- Error state -----
   errorContainer: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
@@ -276,7 +338,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: SPACING.md,
   },
-  // Empty state
+
+  // ----- Empty state -----
   emptyContainer: {
     alignItems: "center",
     padding: SPACING.xl,

@@ -1,9 +1,18 @@
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Giveaway } from "../../../models/types/giveaway.types";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { Giveaway } from "../../../models/types/giveaway.types";
+
+const isWeb = Platform.OS === "web";
 
 interface GiveawayCardProps {
   giveaway: Giveaway;
@@ -31,10 +40,12 @@ export function GiveawayCard({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
+    <View style={[styles.container, isWeb && styles.containerWeb]}>
+      <View style={[styles.content, isWeb && styles.contentWeb]}>
         {/* Image */}
-        <View style={styles.imageContainer}>
+        <View
+          style={[styles.imageContainer, isWeb && styles.imageContainerWeb]}
+        >
           {giveaway.image_url ? (
             <Image
               source={{ uri: giveaway.image_url }}
@@ -51,16 +62,18 @@ export function GiveawayCard({
         {/* Info */}
         <View style={styles.info}>
           <View style={styles.headerRow}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={styles.name} numberOfLines={2}>
               {giveaway.name}
             </Text>
             {giveaway.prize_value && (
-              <Text style={styles.value}>{formatValue(giveaway.prize_value)}</Text>
+              <Text style={styles.value}>
+                {formatValue(giveaway.prize_value)}
+              </Text>
             )}
           </View>
 
           {giveaway.description && (
-            <Text style={styles.description} numberOfLines={1}>
+            <Text style={styles.description} numberOfLines={isWeb ? 3 : 1}>
               {giveaway.description}
             </Text>
           )}
@@ -74,7 +87,10 @@ export function GiveawayCard({
             <View style={styles.progressContainer}>
               <View style={styles.progressBackground}>
                 <View
-                  style={[styles.progressFill, { width: `${progressPercent}%` }]}
+                  style={[
+                    styles.progressFill,
+                    { width: `${progressPercent}%` },
+                  ]}
                 />
               </View>
             </View>
@@ -85,11 +101,12 @@ export function GiveawayCard({
       </View>
 
       {/* Buttons */}
-      <View style={styles.buttons}>
+      <View style={[styles.buttons, isWeb && styles.buttonsWeb]}>
         <TouchableOpacity
           style={[
             styles.enterButton,
             isEntered && styles.enteredButton,
+            isWeb && styles.enterButtonWeb,
           ]}
           onPress={onEnter}
           disabled={isEntered}
@@ -104,7 +121,10 @@ export function GiveawayCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.viewButton} onPress={onView}>
+        <TouchableOpacity
+          style={[styles.viewButton, isWeb && styles.viewButtonWeb]}
+          onPress={onView}
+        >
           <Text style={styles.viewButtonText}>View</Text>
         </TouchableOpacity>
       </View>
@@ -113,6 +133,7 @@ export function GiveawayCard({
 }
 
 const styles = StyleSheet.create({
+  // ----- Container -----
   container: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
@@ -121,10 +142,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  containerWeb: {
+    padding: SPACING.lg,
+    marginBottom: 0, // gap handled by parent grid
+  },
+
+  // ----- Content row -----
   content: {
     flexDirection: "row",
     marginBottom: SPACING.md,
   },
+  contentWeb: {
+    marginBottom: SPACING.lg,
+  },
+
+  // ----- Image -----
   imageContainer: {
     width: 100,
     height: 100,
@@ -132,6 +164,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: COLORS.surfaceLight,
     marginRight: SPACING.md,
+    flexShrink: 0,
+  },
+  imageContainerWeb: {
+    width: 140,
+    height: 140,
   },
   image: {
     width: "100%",
@@ -147,6 +184,8 @@ const styles = StyleSheet.create({
   imagePlaceholderText: {
     fontSize: 40,
   },
+
+  // ----- Info -----
   info: {
     flex: 1,
   },
@@ -154,7 +193,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   name: {
     fontSize: FONT_SIZES.md,
@@ -167,11 +206,13 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.primary,
+    flexShrink: 0,
   },
   description: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
+    lineHeight: 18,
   },
   entries: {
     fontSize: FONT_SIZES.sm,
@@ -196,9 +237,14 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
   },
+
+  // ----- Buttons -----
   buttons: {
     flexDirection: "row",
     gap: SPACING.sm,
+  },
+  buttonsWeb: {
+    gap: SPACING.md,
   },
   enterButton: {
     flex: 1,
@@ -206,6 +252,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm + 2,
     borderRadius: 8,
     alignItems: "center",
+  },
+  enterButtonWeb: {
+    paddingVertical: SPACING.md,
   },
   enteredButton: {
     backgroundColor: COLORS.surfaceLight,
@@ -224,6 +273,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm + 2,
     borderRadius: 8,
     alignItems: "center",
+  },
+  viewButtonWeb: {
+    paddingVertical: SPACING.md,
   },
   viewButtonText: {
     color: COLORS.text,
