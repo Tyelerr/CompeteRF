@@ -1,9 +1,10 @@
-// app/(tabs)/notifications.tsx
+// src/views/components/notifications/NotificationsModal.tsx
 
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   Alert,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -12,15 +13,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { supabase } from "../../src/lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import {
   ConversationPreview,
   conversationService,
-} from "../../src/models/services/conversation.service";
-import { useAuthContext } from "../../src/providers/AuthProvider";
-import { COLORS } from "../../src/theme/colors";
-import { RADIUS, SPACING } from "../../src/theme/spacing";
-import { FONT_SIZES } from "../../src/theme/typography";
+} from "../../../models/services/conversation.service";
+import { COLORS } from "../../../theme/colors";
+import { RADIUS, SPACING } from "../../../theme/spacing";
+import { FONT_SIZES } from "../../../theme/typography";
 
 const isWeb = Platform.OS === "web";
 
@@ -165,7 +165,7 @@ const NotificationCard = ({
   const isUnread = !item.read_at;
   return (
     <TouchableOpacity
-      style={[styles.card, isUnread && styles.cardUnread]}
+      style={[s.card, isUnread && s.cardUnread]}
       onPress={onPress}
       onLongPress={() =>
         Alert.alert("Delete", "Remove this notification?", [
@@ -176,64 +176,50 @@ const NotificationCard = ({
       activeOpacity={0.7}
     >
       {isUnread && (
-        <View
-          style={[styles.accentBar, { backgroundColor: item.badge.color }]}
-        />
+        <View style={[s.accentBar, { backgroundColor: item.badge.color }]} />
       )}
-      <View style={styles.cardContent}>
-        <View style={styles.cardTopRow}>
-          <View style={styles.senderRow}>
-            <View
-              style={[
-                styles.typeBadge,
-                { backgroundColor: item.badge.color + "20" },
-              ]}
-            >
-              <Text style={styles.typeBadgeIcon}>{item.badge.icon}</Text>
-              <Text style={[styles.typeBadgeText, { color: item.badge.color }]}>
-                {item.badge.label}
-              </Text>
-            </View>
+      <View style={s.cardContent}>
+        <View style={s.cardTopRow}>
+          <View
+            style={[s.typeBadge, { backgroundColor: item.badge.color + "20" }]}
+          >
+            <Text style={s.typeBadgeIcon}>{item.badge.icon}</Text>
+            <Text style={[s.typeBadgeText, { color: item.badge.color }]}>
+              {item.badge.label}
+            </Text>
           </View>
-          <Text style={styles.timeText}>{getTimeAgo(item.created_at)}</Text>
+          <Text style={s.timeText}>{getTimeAgo(item.created_at)}</Text>
         </View>
-        <Text
-          style={[styles.subjectText, isUnread && styles.subjectTextUnread]}
-        >
+        <Text style={[s.subjectText, isUnread && s.subjectTextUnread]}>
           {item.title}
         </Text>
         {isExpanded ? (
-          <View style={styles.expandedBody}>
-            <Text style={styles.bodyText}>{item.body}</Text>
+          <View style={s.expandedBody}>
+            <Text style={s.bodyText}>{item.body}</Text>
             {item.tournament_id && (
               <TouchableOpacity
-                style={styles.tournamentLink}
+                style={s.linkButton}
                 onPress={() => onTournamentPress(item.tournament_id!)}
               >
-                <Text style={styles.tournamentLinkText}>
-                  🏆 View Tournament
-                </Text>
+                <Text style={s.linkButtonText}>🏆 View Tournament</Text>
               </TouchableOpacity>
             )}
             {item.deep_link && !item.tournament_id && (
               <TouchableOpacity
-                style={styles.tournamentLink}
+                style={s.linkButton}
                 onPress={() => onDeepLink(item.deep_link!)}
               >
-                <Text style={styles.tournamentLinkText}>View Details →</Text>
+                <Text style={s.linkButtonText}>View Details →</Text>
               </TouchableOpacity>
             )}
-            <View style={styles.cardActions}>
-              <TouchableOpacity
-                style={styles.deleteTextButton}
-                onPress={onDelete}
-              >
-                <Text style={styles.deleteTextButtonLabel}>🗑️ Delete</Text>
+            <View style={s.cardActions}>
+              <TouchableOpacity onPress={onDelete}>
+                <Text style={s.deleteLabel}>🗑️ Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          <Text style={styles.previewText} numberOfLines={1}>
+          <Text style={s.previewText} numberOfLines={1}>
             {item.body}
           </Text>
         )}
@@ -259,7 +245,7 @@ const ConversationCard = ({
 
   return (
     <TouchableOpacity
-      style={[styles.card, hasUnread && styles.cardUnread]}
+      style={[s.card, hasUnread && s.cardUnread]}
       onPress={onPress}
       onLongPress={() =>
         Alert.alert("Delete", "Remove this conversation?", [
@@ -270,45 +256,41 @@ const ConversationCard = ({
       activeOpacity={0.7}
     >
       {hasUnread && (
-        <View style={[styles.accentBar, { backgroundColor: roleInfo.color }]} />
+        <View style={[s.accentBar, { backgroundColor: roleInfo.color }]} />
       )}
-      <View style={styles.cardContent}>
-        <View style={styles.cardTopRow}>
-          <View style={styles.senderRow}>
-            <View
-              style={[styles.senderDot, { backgroundColor: roleInfo.color }]}
-            />
-            <Text style={styles.senderText}>
+      <View style={s.cardContent}>
+        <View style={s.cardTopRow}>
+          <View style={s.senderRow}>
+            <View style={[s.senderDot, { backgroundColor: roleInfo.color }]} />
+            <Text style={s.senderText}>
               {convo.is_support
                 ? "📢 Compete Support"
                 : `${roleInfo.icon} ${convo.other_participant_name || "Unknown"}`}
             </Text>
           </View>
-          <View style={styles.timeRow}>
+          <View style={s.timeRow}>
             {hasUnread && (
-              <View style={styles.unreadCountBadge}>
-                <Text style={styles.unreadCountText}>{convo.unread_count}</Text>
+              <View style={s.unreadBadge}>
+                <Text style={s.unreadBadgeText}>{convo.unread_count}</Text>
               </View>
             )}
-            <Text style={styles.timeText}>
+            <Text style={s.timeText}>
               {getTimeAgo(convo.last_message_at || convo.updated_at)}
             </Text>
           </View>
         </View>
-        <Text
-          style={[styles.subjectText, hasUnread && styles.subjectTextUnread]}
-        >
+        <Text style={[s.subjectText, hasUnread && s.subjectTextUnread]}>
           {convo.subject || getCategoryLabel(convo.category) || "Message"}
         </Text>
         {convo.last_message && (
-          <Text style={styles.previewText} numberOfLines={1}>
+          <Text style={s.previewText} numberOfLines={1}>
             {convo.last_message}
           </Text>
         )}
         {convo.category && (
-          <View style={styles.categoryBadgeRow}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>
+          <View style={s.categoryBadgeRow}>
+            <View style={s.categoryBadge}>
+              <Text style={s.categoryBadgeText}>
                 {getCategoryLabel(convo.category)}
               </Text>
             </View>
@@ -319,26 +301,37 @@ const ConversationCard = ({
   );
 };
 
-// ── Main Screen ────────────────────────────────────────────────────────────
-export default function NotificationsScreen() {
-  const router = useRouter();
-  const { user, profile } = useAuthContext();
+// ── Main Modal ─────────────────────────────────────────────────────────────
+interface NotificationsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  userId: string | undefined;
+  userIdAuto: number | undefined;
+}
 
+export function NotificationsModal({
+  visible,
+  onClose,
+  userId,
+  userIdAuto,
+}: NotificationsModalProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(
     "conversations",
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unifiedNotifications, setUnifiedNotifications] = useState<
     UnifiedNotification[]
   >([]);
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const loadBroadcasts = useCallback(async (): Promise<
     UnifiedNotification[]
   > => {
-    if (!user?.id) return [];
+    if (!userId) return [];
     try {
       const { data, error } = await supabase
         .from("notification_message_recipients")
@@ -346,7 +339,7 @@ export default function NotificationsScreen() {
           `id, message_id, read_at, created_at,
           notification_messages (id, subject, body, message_type, sender_role, tournament_id, venue_id, created_at)`,
         )
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -365,21 +358,20 @@ export default function NotificationsScreen() {
           broadcastRecipientId: msg.id,
         };
       });
-    } catch (err) {
-      console.error("Error loading broadcasts:", err);
+    } catch {
       return [];
     }
-  }, [user?.id]);
+  }, [userId]);
 
   const loadPushNotifications = useCallback(async (): Promise<
     UnifiedNotification[]
   > => {
-    if (!profile?.id_auto) return [];
+    if (!userIdAuto) return [];
     try {
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
-        .eq("user_id", profile.id_auto)
+        .eq("user_id", userIdAuto)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -395,21 +387,18 @@ export default function NotificationsScreen() {
         deep_link: (notif.data?.deep_link as string) || null,
         pushNotificationId: notif.id,
       }));
-    } catch (err) {
-      console.error("Error loading push notifications:", err);
+    } catch {
       return [];
     }
-  }, [profile?.id_auto]);
+  }, [userIdAuto]);
 
   const loadConversations = useCallback(async () => {
-    if (!user?.id) return;
+    if (!userId) return;
     try {
-      const convos = await conversationService.getConversations(user.id);
+      const convos = await conversationService.getConversations(userId);
       setConversations(convos);
-    } catch (err) {
-      console.error("Error loading conversations:", err);
-    }
-  }, [user?.id]);
+    } catch {}
+  }, [userId]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -424,13 +413,13 @@ export default function NotificationsScreen() {
     );
     setUnifiedNotifications(merged);
     setLoading(false);
+    setLoaded(true);
   }, [loadBroadcasts, loadPushNotifications, loadConversations]);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (user?.id) loadAll();
-    }, [user?.id, loadAll]),
-  );
+  // Load when modal opens
+  const handleOpen = useCallback(() => {
+    if (!loaded) loadAll();
+  }, [loaded, loadAll]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -474,18 +463,18 @@ export default function NotificationsScreen() {
   };
 
   const markAllRead = async () => {
-    if (user?.id) {
+    if (userId) {
       await supabase
         .from("notification_message_recipients")
         .update({ read_at: new Date().toISOString() })
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .is("read_at", null);
     }
-    if (profile?.id_auto) {
+    if (userIdAuto) {
       await supabase
         .from("notifications")
         .update({ read_at: new Date().toISOString() })
-        .eq("user_id", profile.id_auto)
+        .eq("user_id", userIdAuto)
         .is("read_at", null);
     }
     setUnifiedNotifications((prev) =>
@@ -497,8 +486,8 @@ export default function NotificationsScreen() {
   };
 
   const deleteConversation = async (convoId: string) => {
-    if (!user?.id) return;
-    await conversationService.leaveConversation(convoId, user.id);
+    if (!userId) return;
+    await conversationService.leaveConversation(convoId, userId);
     setConversations((prev) => prev.filter((c) => c.id !== convoId));
   };
 
@@ -507,6 +496,7 @@ export default function NotificationsScreen() {
       convo.subject ||
       convo.other_participant_name ||
       (convo.is_support ? "Support" : "Conversation");
+    onClose();
     router.push(
       `/conversation-detail?id=${convo.id}&title=${encodeURIComponent(title)}` as any,
     );
@@ -520,39 +510,24 @@ export default function NotificationsScreen() {
     0,
   );
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+  if (!visible) return null;
 
-  return (
-    <View style={styles.container}>
+  const innerContent = (
+    <>
       {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity
-          style={styles.headerSide}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
+      <View style={s.header}>
+        <TouchableOpacity style={s.closeButton} onPress={onClose}>
+          <Text style={s.closeButtonText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>INBOX</Text>
-        <View style={styles.headerSide} />
+        <Text style={s.headerTitle}>INBOX</Text>
+        <View style={{ width: 40 }} />
       </View>
+      <View style={s.divider} />
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={
-          isWeb
-            ? styles.scrollContentWeb
-            : (activeTab === "notifications"
-                  ? unifiedNotifications.length
-                  : conversations.length) === 0
-              ? styles.emptyContainer
-              : undefined
-        }
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           isWeb ? undefined : (
             <RefreshControl
@@ -563,217 +538,321 @@ export default function NotificationsScreen() {
           )
         }
       >
-        {/* Web: constrained centered column */}
-        <View style={isWeb ? styles.webInner : styles.mobileInner}>
-          {/* Tabs */}
-          <View style={styles.tabRow}>
-            <TouchableOpacity
+        {/* Tabs */}
+        <View style={s.tabRow}>
+          <TouchableOpacity
+            style={[s.tab, activeTab === "conversations" && s.tabActive]}
+            onPress={() => setActiveTab("conversations")}
+          >
+            <Text
               style={[
-                styles.tab,
-                activeTab === "conversations" && styles.tabActive,
+                s.tabText,
+                activeTab === "conversations" && s.tabTextActive,
               ]}
-              onPress={() => setActiveTab("conversations")}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "conversations" && styles.tabTextActive,
-                ]}
-              >
-                💬 Conversations
-              </Text>
-              {unreadConvoCount > 0 && (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>{unreadConvoCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === "notifications" && styles.tabActive,
-              ]}
-              onPress={() => setActiveTab("notifications")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "notifications" && styles.tabTextActive,
-                ]}
-              >
-                🔔 Notifications
-              </Text>
-              {unreadNotifCount > 0 && (
-                <View style={styles.tabBadge}>
-                  <Text style={styles.tabBadgeText}>{unreadNotifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* New Message Button */}
-          {activeTab === "conversations" && (
-            <TouchableOpacity
-              style={styles.newMessageButton}
-              onPress={() => router.push("/compose-message" as any)}
-            >
-              <Text style={styles.newMessageButtonText}>✉️ New Message</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* ── Notifications Tab ── */}
-          {activeTab === "notifications" && (
-            <>
-              <View style={styles.notifActionRow}>
-                <TouchableOpacity
-                  style={styles.settingsLink}
-                  onPress={() =>
-                    router.push("/(tabs)/notification-preferences" as any)
-                  }
-                >
-                  <Text style={styles.settingsLinkIcon}>⚙️</Text>
-                  <Text style={styles.settingsLinkText}>
-                    Notification Settings
-                  </Text>
-                </TouchableOpacity>
-                {unreadNotifCount > 0 && (
-                  <TouchableOpacity onPress={markAllRead}>
-                    <Text style={styles.actionBarText}>Mark all as read</Text>
-                  </TouchableOpacity>
-                )}
+              💬 Conversations
+            </Text>
+            {unreadConvoCount > 0 && (
+              <View style={s.tabBadge}>
+                <Text style={s.tabBadgeText}>{unreadConvoCount}</Text>
               </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.tab, activeTab === "notifications" && s.tabActive]}
+            onPress={() => setActiveTab("notifications")}
+          >
+            <Text
+              style={[
+                s.tabText,
+                activeTab === "notifications" && s.tabTextActive,
+              ]}
+            >
+              🔔 Notifications
+            </Text>
+            {unreadNotifCount > 0 && (
+              <View style={s.tabBadge}>
+                <Text style={s.tabBadgeText}>{unreadNotifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
 
-              {unifiedNotifications.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyIcon}>🔔</Text>
-                  <Text style={styles.emptyTitle}>No notifications</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Search alert matches, tournament updates, giveaway news, and
-                    broadcasts will appear here.
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  {unifiedNotifications.map((item) => (
-                    <NotificationCard
-                      key={item.id}
-                      item={item}
-                      isExpanded={expandedNotifId === item.id}
-                      onPress={() => {
-                        if (!item.read_at) markNotifAsRead(item);
-                        setExpandedNotifId((prev) =>
-                          prev === item.id ? null : item.id,
-                        );
-                      }}
-                      onDelete={() => deleteNotification(item)}
-                      onTournamentPress={(id) =>
-                        router.push(
-                          `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
-                        )
-                      }
-                      onDeepLink={(link) => router.push(link as any)}
-                    />
-                  ))}
-                  <Text style={styles.hintText}>Long press to delete</Text>
-                </>
-              )}
-            </>
-          )}
+        {/* New Message button */}
+        {activeTab === "conversations" && (
+          <TouchableOpacity
+            style={s.newMessageButton}
+            onPress={() => {
+              onClose();
+              router.push("/compose-message" as any);
+            }}
+          >
+            <Text style={s.newMessageButtonText}>✉️ New Message</Text>
+          </TouchableOpacity>
+        )}
 
-          {/* ── Conversations Tab ── */}
-          {activeTab === "conversations" && (
-            <>
-              {conversations.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyIcon}>💬</Text>
-                  <Text style={styles.emptyTitle}>No conversations yet</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Send a message to a tournament director, venue owner, or
-                    Compete support.
-                  </Text>
+        {loading ? (
+          <View style={s.loadingState}>
+            <Text style={s.loadingText}>Loading...</Text>
+          </View>
+        ) : (
+          <>
+            {/* ── Notifications Tab ── */}
+            {activeTab === "notifications" && (
+              <>
+                <View style={s.actionRow}>
                   <TouchableOpacity
-                    style={styles.emptyComposeButton}
-                    onPress={() => router.push("/compose-message" as any)}
+                    style={s.settingsLink}
+                    onPress={() => {
+                      onClose();
+                      router.push("/(tabs)/notification-preferences" as any);
+                    }}
                   >
-                    <Text style={styles.emptyComposeText}>
-                      ✏️ Start a Conversation
+                    <Text style={s.settingsLinkIcon}>⚙️</Text>
+                    <Text style={s.settingsLinkText}>
+                      Notification Settings
                     </Text>
                   </TouchableOpacity>
+                  {unreadNotifCount > 0 && (
+                    <TouchableOpacity onPress={markAllRead}>
+                      <Text style={s.markAllText}>Mark all as read</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ) : (
-                <>
-                  {conversations.map((convo) => (
-                    <ConversationCard
-                      key={convo.id}
-                      convo={convo}
-                      onPress={() => openConversation(convo)}
-                      onDelete={() => deleteConversation(convo.id)}
-                    />
-                  ))}
-                  <Text style={styles.hintText}>Long press to delete</Text>
-                </>
-              )}
-            </>
-          )}
 
-          <View style={styles.bottomSpacer} />
-        </View>
+                {unifiedNotifications.length === 0 ? (
+                  <View style={s.emptyState}>
+                    <Text style={s.emptyIcon}>🔔</Text>
+                    <Text style={s.emptyTitle}>No notifications</Text>
+                    <Text style={s.emptySubtitle}>
+                      Search alerts, tournament updates, and broadcasts will
+                      appear here.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {unifiedNotifications.map((item) => (
+                      <NotificationCard
+                        key={item.id}
+                        item={item}
+                        isExpanded={expandedNotifId === item.id}
+                        onPress={() => {
+                          if (!item.read_at) markNotifAsRead(item);
+                          setExpandedNotifId((prev) =>
+                            prev === item.id ? null : item.id,
+                          );
+                        }}
+                        onDelete={() => deleteNotification(item)}
+                        onTournamentPress={(id) => {
+                          onClose();
+                          router.push(
+                            `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
+                          );
+                        }}
+                        onDeepLink={(link) => {
+                          onClose();
+                          router.push(link as any);
+                        }}
+                      />
+                    ))}
+                    <Text style={s.hintText}>Long press to delete</Text>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── Conversations Tab ── */}
+            {activeTab === "conversations" && (
+              <>
+                {conversations.length === 0 ? (
+                  <View style={s.emptyState}>
+                    <Text style={s.emptyIcon}>💬</Text>
+                    <Text style={s.emptyTitle}>No conversations yet</Text>
+                    <Text style={s.emptySubtitle}>
+                      Send a message to a tournament director, venue owner, or
+                      Compete support.
+                    </Text>
+                    <TouchableOpacity
+                      style={s.emptyComposeButton}
+                      onPress={() => {
+                        onClose();
+                        router.push("/compose-message" as any);
+                      }}
+                    >
+                      <Text style={s.emptyComposeText}>
+                        ✏️ Start a Conversation
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    {conversations.map((convo) => (
+                      <ConversationCard
+                        key={convo.id}
+                        convo={convo}
+                        onPress={() => openConversation(convo)}
+                        onDelete={() => deleteConversation(convo.id)}
+                      />
+                    ))}
+                    <Text style={s.hintText}>Long press to delete</Text>
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        <View style={{ height: SPACING.xl * 2 }} />
       </ScrollView>
-    </View>
+    </>
+  );
+
+  // ── Web: fixed overlay ────────────────────────────────────────────────────
+  if (isWeb) {
+    return (
+      <>
+        <TouchableOpacity
+          style={s.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={s.dialogWrap} pointerEvents="box-none">
+          <View style={s.dialog} onLayout={handleOpen}>
+            {innerContent}
+          </View>
+        </View>
+      </>
+    );
+  }
+
+  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+      onShow={handleOpen}
+    >
+      <View style={s.mobileOverlay}>
+        <View style={s.mobileContainer}>
+          {innerContent}
+          <TouchableOpacity style={s.externalCloseButton} onPress={onClose}>
+            <Text style={s.externalCloseText}>✕ Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  centerContainer: {
+// ── Styles ─────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  // Web overlay
+  backdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    zIndex: 2000,
+  },
+  dialogWrap: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2001,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  dialog: {
+    width: 700,
+    maxWidth: "92%" as any,
+    height: "82vh" as any,
+    backgroundColor: "#000000",
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: "#2C2C2E",
+    overflow: "hidden" as any,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    display: "flex" as any,
+    flexDirection: "column",
+  },
+
+  // Mobile overlay
+  mobileOverlay: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 110,
   },
-  loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  externalCloseButton: {
+    margin: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#E74C3C",
+    borderRadius: 12,
+  },
+  externalCloseText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  mobileContainer: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    width: "100%" as any,
+    maxWidth: 500,
+    flex: 1,
+    overflow: "hidden",
+  },
 
-  // ── Header ────────────────────────────────────────────────────────────────
+  // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
   },
-  headerWeb: { paddingTop: SPACING.lg },
-  headerSide: { width: 70 },
-  backButtonText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    fontWeight: "600",
+  closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
+  closeButtonText: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
   headerTitle: {
+    color: COLORS.text,
     fontSize: FONT_SIZES.lg,
     fontWeight: "700",
-    color: COLORS.text,
     letterSpacing: 1,
   },
+  divider: { height: 1, backgroundColor: "#2C2C2E" },
 
-  // ── Web centering ─────────────────────────────────────────────────────────
-  scrollView: { flex: 1 },
-  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
-  webInner: { width: "100%" as any, maxWidth: 860, padding: SPACING.md },
-  mobileInner: { flex: 1, marginTop: SPACING.sm },
-  emptyContainer: { flex: 1 },
+  scroll: { flex: 1, minHeight: 0 },
+  scrollContent: { padding: SPACING.md },
 
-  // ── Tabs ──────────────────────────────────────────────────────────────────
+  // Tabs
   tabRow: {
     flexDirection: "row",
-    marginTop: SPACING.xs,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     padding: 3,
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
   },
   tab: {
     flex: 1,
@@ -790,7 +869,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
-  tabTextActive: { color: "#FFFFFF" },
+  tabTextActive: { color: "#fff" },
   tabBadge: {
     backgroundColor: "#E74C3C",
     borderRadius: 10,
@@ -800,24 +879,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 4,
   },
-  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
 
-  // ── New Message Button ────────────────────────────────────────────────────
   newMessageButton: {
-    marginTop: SPACING.sm,
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
     paddingVertical: SPACING.sm,
     alignItems: "center",
+    marginBottom: SPACING.sm,
   },
   newMessageButtonText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#fff",
   },
 
-  // ── Notif action row ──────────────────────────────────────────────────────
-  notifActionRow: {
+  actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -830,15 +907,15 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-  actionBarText: {
+  markAllText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
     fontWeight: "600",
   },
 
-  // ── Cards ─────────────────────────────────────────────────────────────────
+  // Cards
   card: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
@@ -873,7 +950,7 @@ const styles = StyleSheet.create({
   typeBadgeText: { fontSize: 11, fontWeight: "700" },
   timeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   timeText: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
-  unreadCountBadge: {
+  unreadBadge: {
     backgroundColor: COLORS.primary,
     borderRadius: 10,
     minWidth: 18,
@@ -882,7 +959,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 4,
   },
-  unreadCountText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  unreadBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
   subjectText: {
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
@@ -909,7 +986,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 22,
   },
-  tournamentLink: {
+  linkButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
     paddingVertical: SPACING.sm,
@@ -917,11 +994,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: SPACING.md,
   },
-  tournamentLinkText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
+  linkButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
   cardActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -930,12 +1003,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-  deleteTextButton: { paddingVertical: 4, paddingHorizontal: SPACING.sm },
-  deleteTextButtonLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: "#E74C3C",
-    fontWeight: "600",
-  },
+  deleteLabel: { fontSize: FONT_SIZES.xs, color: "#E74C3C", fontWeight: "600" },
+
   hintText: {
     textAlign: "center",
     fontSize: FONT_SIZES.xs,
@@ -944,14 +1013,15 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // ── Empty ─────────────────────────────────────────────────────────────────
+  loadingState: { alignItems: "center", paddingTop: SPACING.xl * 2 },
+  loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+
   emptyState: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xl * 2,
+    paddingHorizontal: SPACING.xl,
   },
-  emptyIcon: { fontSize: 56, marginBottom: SPACING.md },
+  emptyIcon: { fontSize: 48, marginBottom: SPACING.md },
   emptyTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
@@ -974,8 +1044,6 @@ const styles = StyleSheet.create({
   emptyComposeText: {
     fontSize: FONT_SIZES.sm,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#fff",
   },
-
-  bottomSpacer: { height: SPACING.xl * 2 },
 });

@@ -26,7 +26,12 @@ import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
 import { Pagination } from "../../src/views/components/common/pagination";
+import { NotificationsModal } from "../../src/views/components/notifications/NotificationsModal";
+import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
+import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
+
+const isWeb = Platform.OS === "web";
 
 interface Favorite {
   id: number;
@@ -37,19 +42,14 @@ interface Favorite {
     game_type: string;
     tournament_date: string;
     thumbnail?: string;
-    venues: {
-      venue: string;
-      city: string;
-      state: string;
-    };
+    venues: { venue: string; city: string; state: string };
   };
 }
 
-// —— Animated logged-out view ————————————————————————————
+// Animated logged-out view
 const LoggedOutView = ({ router }: { router: any }) => {
   const [appleLoading, setAppleLoading] = useState(false);
   const [error, setError] = useState("");
-
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
   const messageFade = useRef(new Animated.Value(0)).current;
@@ -95,40 +95,30 @@ const LoggedOutView = ({ router }: { router: any }) => {
   const handleAppleSignIn = async () => {
     setError("");
     setAppleLoading(true);
-
     try {
       const result = await authService.signInWithApple();
-
       if (!result.user) {
         setError("Sign in failed. Please try again.");
         return;
       }
-
-      // Check if user already has a profile
       const { data: profile } = await supabase
         .from("profiles")
         .select("id")
         .eq("id", result.user.id)
         .maybeSingle();
-
       if (profile) {
-        // Existing user — go straight to the app
         router.replace("/(tabs)");
       } else {
-        // New Apple user — needs to complete their profile
-        const firstName = result.fullName?.givenName || "";
-        const lastName = result.fullName?.familyName || "";
-
         router.replace({
           pathname: "/auth/complete-profile",
-          params: { firstName, lastName },
+          params: {
+            firstName: result.fullName?.givenName || "",
+            lastName: result.fullName?.familyName || "",
+          },
         } as any);
       }
     } catch (err: any) {
-      if (err.code === "ERR_REQUEST_CANCELED") {
-        return;
-      }
-      console.error("Apple Sign In error:", err);
+      if (err.code === "ERR_REQUEST_CANCELED") return;
       setError("Apple Sign In failed. Please try again.");
     } finally {
       setAppleLoading(false);
@@ -137,40 +127,30 @@ const LoggedOutView = ({ router }: { router: any }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>PROFILE</Text>
         <Text style={styles.headerSubtitle}>
           View and manage your tournament history
         </Text>
       </View>
-
       <View style={styles.notLoggedIn}>
         <Animated.Text
           style={[
             styles.welcomeText,
-            {
-              opacity: welcomeFade,
-              transform: [{ translateY: welcomeSlide }],
-            },
+            { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] },
           ]}
         >
           Welcome!
         </Animated.Text>
-
         <Animated.Text style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
-
         <Animated.View
           style={[
             styles.buttonGroup,
-            {
-              opacity: buttonsFade,
-              transform: [{ translateY: buttonsSlide }],
-            },
+            { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] },
           ]}
         >
-          {/* Apple Sign In — iOS only */}
           {Platform.OS === "ios" && (
             <>
               <View style={styles.appleButtonWrapper}>
@@ -189,7 +169,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
                   <Text style={styles.loadingHint}>Signing in...</Text>
                 )}
               </View>
-
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>or</Text>
@@ -197,7 +176,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
               </View>
             </>
           )}
-
           <Button
             title="Log In"
             onPress={() => router.push("/auth/login" as any)}
@@ -210,7 +188,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
             variant="outline"
             fullWidth
           />
-
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
       </View>
@@ -226,14 +203,15 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [inboxVisible, setInboxVisible] = useState(false);
+  const [editProfileVisible, setEditProfileVisible] = useState(false);
+  const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
 
   const scrollRef = useScrollToTopOnFocus();
-
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
 
-  // Pagination - 5 favorites per page
   const {
     paginatedItems: paginatedFavorites,
     currentPage,
@@ -244,12 +222,10 @@ export default function ProfileScreen() {
     prevPage,
     canGoNext,
     canGoPrev,
-    resetPage,
   } = usePagination(favorites, { itemsPerPage: 5 });
 
   useEffect(() => {
     checkUser();
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -264,7 +240,6 @@ export default function ProfileScreen() {
         setLoading(false);
       }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -288,10 +263,7 @@ export default function ProfileScreen() {
       .eq("id", userId)
       .single();
     setProfile(data);
-
-    if (data) {
-      await loadFavorites(data.id_auto);
-    }
+    if (data) await loadFavorites(data.id_auto);
     setLoading(false);
   };
 
@@ -299,29 +271,11 @@ export default function ProfileScreen() {
     const { data } = await supabase
       .from("favorites")
       .select(
-        `
-        id,
-        tournament_id,
-        tournaments (
-          id,
-          name,
-          game_type,
-          tournament_date,
-          thumbnail,
-          venues (
-            venue,
-            city,
-            state
-          )
-        )
-      `,
+        "id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))",
       )
       .eq("user_id", userIdAuto)
       .not("tournament_id", "is", null);
-
-    if (data) {
-      setFavorites(data as unknown as Favorite[]);
-    }
+    if (data) setFavorites(data as unknown as Favorite[]);
   };
 
   const loadUnreadCount = async (userId: string) => {
@@ -355,12 +309,8 @@ export default function ProfileScreen() {
     router.replace("/(tabs)" as any);
   };
 
-  const handleShare = async (tournament: any) => {
-    console.log("Sharing tournament:", tournament.name);
-  };
-
   const getTournamentImageUrl = (tournament: any) => {
-    const gameTypeImageMap: Record<string, string> = {
+    const map: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
       "9-ball": "9-ball.jpeg",
       "10-ball": "10-ball.jpeg",
@@ -368,301 +318,298 @@ export default function ProfileScreen() {
       "straight-pool": "Straight-Pool.jpeg",
       banks: "Banks.jpeg",
     };
-
     if (tournament.thumbnail) {
-      if (tournament.thumbnail.startsWith("custom:")) {
+      if (tournament.thumbnail.startsWith("custom:"))
         return tournament.thumbnail.replace("custom:", "");
-      } else {
-        const imageFile = gameTypeImageMap[tournament.thumbnail];
-        if (imageFile) {
-          return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
-        }
-      }
+      const f = map[tournament.thumbnail];
+      if (f)
+        return (
+          "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
+          f
+        );
     }
-
-    const imageFile = gameTypeImageMap[tournament.game_type];
-    if (imageFile) {
-      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
-    }
-
-    return null;
+    const f = map[tournament.game_type];
+    return f
+      ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
+          f
+      : null;
   };
 
   const handleViewImage = (tournament: any) => {
-    const imageUrl = getTournamentImageUrl(tournament);
-    if (imageUrl) {
-      setCurrentImageUrl(imageUrl);
+    const url = getTournamentImageUrl(tournament);
+    if (url) {
+      setCurrentImageUrl(url);
       setCurrentImageTitle(tournament.name);
       setShowImageViewer(true);
     }
   };
 
-  const closeImageViewer = () => {
-    setShowImageViewer(false);
-    setCurrentImageUrl(null);
-    setCurrentImageTitle("");
-  };
-
-  const formatMemberSince = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
+  const formatMemberSince = (d: string) =>
+    new Date(d).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "2-digit",
     });
-  };
 
-  const generatePlayerID = (idAuto: number) => {
-    return `PL-${String(idAuto).padStart(6, "0")}`;
-  };
+  const generatePlayerID = (idAuto: number) =>
+    "PL-" + String(idAuto).padStart(6, "0");
 
   const handleRemoveFavorite = (favId: number) => {
-    const removeFavorite = async () => {
+    const run = async () => {
       await supabase.from("favorites").delete().eq("id", favId);
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
-      const newTotalPages = Math.ceil(updated.length / 5);
-      if (currentPage > newTotalPages && newTotalPages > 0) {
+      if (
+        currentPage > Math.ceil(updated.length / 5) &&
+        Math.ceil(updated.length / 5) > 0
+      )
         prevPage();
-      }
     };
-    removeFavorite();
+    run();
   };
 
-  if (loading) {
-    return <Loading fullScreen message="Loading..." />;
-  }
-
-  if (!user) {
-    return <LoggedOutView router={router} />;
-  }
+  if (loading) return <Loading fullScreen message="Loading..." />;
+  if (!user) return <LoggedOutView router={router} />;
 
   return (
     <View style={styles.container}>
       <ScrollView
         ref={scrollRef}
-        style={styles.scrollContent}
+        style={styles.scrollView}
+        contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={COLORS.primary}
-          />
+          isWeb ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={COLORS.primary}
+            />
+          )
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>PROFILE</Text>
-          <Text style={styles.headerSubtitle}>
-            View and manage your tournament history
-          </Text>
-        </View>
+        <View style={isWeb ? styles.webInner : styles.mobileInner}>
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
+            <Text style={styles.headerTitle}>PROFILE</Text>
+            <Text style={styles.headerSubtitle}>
+              View and manage your tournament history
+            </Text>
+          </View>
 
-        <View style={styles.profileCard}>
-          {/* ✉️ Messages button - top right */}
-          <TouchableOpacity
-            style={styles.messagesFloatingButton}
-            onPress={() => router.push("/notifications" as any)}
-          >
-            <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
-            <Text style={styles.messagesFloatingText}>Messages</Text>
-            {unreadCount > 0 && (
-              <View style={styles.messagesUnreadBadge}>
-                <Text style={styles.messagesUnreadText}>{unreadCount}</Text>
+          <View style={styles.profileCard}>
+            {/* Messages floating button - opens inbox modal */}
+            <TouchableOpacity
+              style={styles.messagesFloatingButton}
+              onPress={() => setInboxVisible(true)}
+            >
+              <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
+              <Text style={styles.messagesFloatingText}>Messages</Text>
+              {unreadCount > 0 && (
+                <View style={styles.messagesUnreadBadge}>
+                  <Text style={styles.messagesUnreadText}>{unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.profileHeader}>
+              <View style={styles.avatarContainer}>
+                {profile?.avatar_url ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={styles.profileImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.avatar}>
+                    <View style={styles.ballRow}>
+                      <View style={[styles.ball, styles.ball8]} />
+                      <View style={[styles.ball, styles.ball9]} />
+                      <View style={[styles.ball, styles.ball1]} />
+                    </View>
+                    <View style={styles.ballRow}>
+                      <View style={[styles.ball, styles.ball15]} />
+                      <View style={[styles.ball, styles.ball2]} />
+                      <View style={[styles.ball, styles.ball10]} />
+                    </View>
+                    <View style={styles.ballRow}>
+                      <View style={[styles.ball, styles.ball7]} />
+                      <View style={[styles.ball, styles.ball3]} />
+                      <View style={[styles.ball, styles.ball12]} />
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.name}>
+                  {profile?.user_name
+                    ? "@" + profile.user_name
+                    : user.email?.split("@")[0] || "Player"}
+                </Text>
+                <Text style={styles.playerID}>
+                  {profile ? generatePlayerID(profile.id_auto) : "No ID"}
+                </Text>
+                <Text style={styles.memberSince}>
+                  Member since{" "}
+                  {formatMemberSince(profile?.created_at || user.created_at)}
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.editButton,
+                  isWeb && styles.actionButtonWeb,
+                ]}
+                onPress={() => setEditProfileVisible(true)}
+              >
+                <Text style={styles.editButtonText}>
+                  {"\u2699\uFE0F"} Edit Profile
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.notificationButton,
+                  isWeb && styles.actionButtonWeb,
+                ]}
+                onPress={() => setInboxVisible(true)}
+              >
+                <Text style={styles.notificationButtonText}>
+                  {"\uD83D\uDD14"} Notifications
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.signOutButton,
+                  isWeb && styles.actionButtonWeb,
+                ]}
+                onPress={handleLogout}
+              >
+                <Text style={styles.signOutButtonText}>
+                  {"\uD83D\uDEAA"} Sign Out
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {profile && (
+              <View style={styles.userDetails}>
+                {profile.home_state && (
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Home State</Text>
+                    <Text style={styles.detailValue}>{profile.home_state}</Text>
+                  </View>
+                )}
+                {profile.favorite_player && (
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Favorite Player</Text>
+                    <Text style={styles.detailValue}>
+                      {profile.favorite_player}
+                    </Text>
+                  </View>
+                )}
+                {profile.preferred_game && (
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Favorite Game</Text>
+                    <Text style={styles.detailValue}>
+                      {profile.preferred_game}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
-          </TouchableOpacity>
+          </View>
 
-          <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
-              {profile?.avatar_url ? (
-                <Image
-                  source={{ uri: profile.avatar_url }}
-                  style={styles.profileImage}
-                  resizeMode="cover"
+          <View style={styles.bottomNavigation}>
+            <TouchableOpacity
+              style={[styles.navButton, styles.favoritesButton]}
+              onPress={() => {}}
+            >
+              <Text style={styles.navButtonText}>
+                {"\u2764\uFE0F"} Favorite Tournaments
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navButton, styles.alertsButton]}
+              onPress={() => setSearchAlertsVisible(true)}
+            >
+              <Text style={styles.alertsButtonText}>
+                {"\uD83D\uDD0D"} Search Alerts
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.favoritesSection}>
+            {favorites.length === 0 ? (
+              <View style={styles.emptyFavorites}>
+                <Text style={styles.emptyText}>No favorites yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap the heart on tournaments to save them here!
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Pagination
+                  totalCount={totalCount}
+                  displayStart={displayRange.start}
+                  displayEnd={displayRange.end}
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPrevPage={prevPage}
+                  onNextPage={nextPage}
+                  canGoPrev={canGoPrev}
+                  canGoNext={canGoNext}
                 />
-              ) : (
-                <View style={styles.avatar}>
-                  <View style={styles.ballRow}>
-                    <View style={[styles.ball, styles.ball8]} />
-                    <View style={[styles.ball, styles.ball9]} />
-                    <View style={[styles.ball, styles.ball1]} />
-                  </View>
-                  <View style={styles.ballRow}>
-                    <View style={[styles.ball, styles.ball15]} />
-                    <View style={[styles.ball, styles.ball2]} />
-                    <View style={[styles.ball, styles.ball10]} />
-                  </View>
-                  <View style={styles.ballRow}>
-                    <View style={[styles.ball, styles.ball7]} />
-                    <View style={[styles.ball, styles.ball3]} />
-                    <View style={[styles.ball, styles.ball12]} />
-                  </View>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.profileInfo}>
-              <Text style={styles.name}>
-                {profile?.user_name
-                  ? `@${profile.user_name}`
-                  : user.email?.split("@")[0] || "Player"}
-              </Text>
-              <Text style={styles.playerID}>
-                {profile ? generatePlayerID(profile.id_auto) : "No ID"}
-              </Text>
-              <Text style={styles.memberSince}>
-                Member since{" "}
-                {formatMemberSince(profile?.created_at || user.created_at)}
-              </Text>
-            </View>
+                {paginatedFavorites.map((fav) => {
+                  const t = {
+                    id: fav.tournament_id,
+                    name: fav.tournaments?.name || "Unknown Tournament",
+                    game_type: fav.tournaments?.game_type || "Unknown",
+                    tournament_date: fav.tournaments?.tournament_date || "",
+                    thumbnail: fav.tournaments?.thumbnail,
+                    venues: {
+                      venue: fav.tournaments?.venues?.venue || "Unknown Venue",
+                      city: fav.tournaments?.venues?.city || "Unknown City",
+                      state: fav.tournaments?.venues?.state || "Unknown State",
+                    },
+                  };
+                  return (
+                    <FavoriteTournamentCard
+                      key={fav.id}
+                      tournament={t}
+                      onPress={() =>
+                        router.push(
+                          ("/(tabs)/tournament-detail?id=" +
+                            fav.tournament_id +
+                            "&from=/(tabs)/profile") as any,
+                        )
+                      }
+                      onToggleFavorite={() => handleRemoveFavorite(fav.id)}
+                      onShare={() =>
+                        console.log("share", fav.tournaments?.name)
+                      }
+                      onViewImage={() => handleViewImage(t)}
+                      getTournamentImageUrl={getTournamentImageUrl}
+                    />
+                  );
+                })}
+                <Pagination
+                  totalCount={totalCount}
+                  displayStart={displayRange.start}
+                  displayEnd={displayRange.end}
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPrevPage={prevPage}
+                  onNextPage={nextPage}
+                  canGoPrev={canGoPrev}
+                  canGoNext={canGoNext}
+                />
+              </>
+            )}
           </View>
-
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.editButton]}
-              onPress={() => router.push("../edit-profile" as any)}
-            >
-              <Text style={styles.editButtonText}>
-                {"\u2699\uFE0F"} Edit Profile
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.notificationButton]}
-              onPress={() => router.push("/notifications" as any)}
-            >
-              <Text style={styles.notificationButtonText}>
-                {"\uD83D\uDD14"} Notifications
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.signOutButton]}
-              onPress={handleLogout}
-            >
-              <Text style={styles.signOutButtonText}>
-                {"\uD83D\uDEAA"} Sign Out
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {profile && (
-            <View style={styles.userDetails}>
-              {profile.home_state && (
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Home State</Text>
-                  <Text style={styles.detailValue}>{profile.home_state}</Text>
-                </View>
-              )}
-
-              {profile.favorite_player && (
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Favorite Player</Text>
-                  <Text style={styles.detailValue}>
-                    {profile.favorite_player}
-                  </Text>
-                </View>
-              )}
-
-              {profile.preferred_game && (
-                <View style={styles.detailItem}>
-                  <Text style={styles.detailLabel}>Favorite Game</Text>
-                  <Text style={styles.detailValue}>
-                    {profile.preferred_game}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.bottomNavigation}>
-          <TouchableOpacity
-            style={[styles.navButton, styles.favoritesButton]}
-            onPress={() => {
-              /* Current favorites functionality */
-            }}
-          >
-            <Text style={styles.navButtonText}>
-              {"\u2764\uFE0F"} Favorite Tournaments
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.navButton, styles.alertsButton]}
-            onPress={() => router.push("/search-alerts" as any)}
-          >
-            <Text style={styles.navButtonText}>
-              {"\uD83D\uDD0D"} Search Alerts
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.favoritesSection}>
-          {favorites.length === 0 ? (
-            <View style={styles.emptyFavorites}>
-              <Text style={styles.emptyText}>No favorites yet</Text>
-              <Text style={styles.emptySubtext}>
-                Tap the heart on tournaments to save them here!
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Pagination
-                totalCount={totalCount}
-                displayStart={displayRange.start}
-                displayEnd={displayRange.end}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPrevPage={prevPage}
-                onNextPage={nextPage}
-                canGoPrev={canGoPrev}
-                canGoNext={canGoNext}
-              />
-              {paginatedFavorites.map((fav) => {
-                const tournamentData = {
-                  id: fav.tournament_id,
-                  name: fav.tournaments?.name || "Unknown Tournament",
-                  game_type: fav.tournaments?.game_type || "Unknown",
-                  tournament_date: fav.tournaments?.tournament_date || "",
-                  thumbnail: fav.tournaments?.thumbnail,
-                  venues: {
-                    venue: fav.tournaments?.venues?.venue || "Unknown Venue",
-                    city: fav.tournaments?.venues?.city || "Unknown City",
-                    state: fav.tournaments?.venues?.state || "Unknown State",
-                  },
-                };
-
-                return (
-                  <FavoriteTournamentCard
-                    key={fav.id}
-                    tournament={tournamentData}
-                    onPress={() =>
-                      router.push(
-                        `/(tabs)/tournament-detail?id=${fav.tournament_id}&from=/(tabs)/profile` as any,
-                      )
-                    }
-                    onToggleFavorite={() => handleRemoveFavorite(fav.id)}
-                    onShare={() => handleShare(fav.tournaments)}
-                    onViewImage={() => handleViewImage(tournamentData)}
-                    getTournamentImageUrl={getTournamentImageUrl}
-                  />
-                );
-              })}
-
-              <Pagination
-                totalCount={totalCount}
-                displayStart={displayRange.start}
-                displayEnd={displayRange.end}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPrevPage={prevPage}
-                onNextPage={nextPage}
-                canGoPrev={canGoPrev}
-                canGoNext={canGoNext}
-              />
-            </>
-          )}
         </View>
       </ScrollView>
 
@@ -670,26 +617,46 @@ export default function ProfileScreen() {
         visible={showImageViewer}
         imageUrl={currentImageUrl}
         title={currentImageTitle}
-        onClose={closeImageViewer}
+        onClose={() => {
+          setShowImageViewer(false);
+          setCurrentImageUrl(null);
+          setCurrentImageTitle("");
+        }}
+      />
+
+      <EditProfileModal
+        visible={editProfileVisible}
+        onClose={() => setEditProfileVisible(false)}
+      />
+
+      <NotificationsModal
+        visible={inboxVisible}
+        onClose={() => setInboxVisible(false)}
+        userId={user?.id}
+        userIdAuto={profile?.id_auto}
+      />
+
+      <SearchAlertsModal
+        visible={searchAlertsVisible}
+        onClose={() => setSearchAlertsVisible(false)}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  scrollView: { flex: 1 },
+  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  webInner: { width: "100%" as any, maxWidth: 860 },
+  mobileInner: { flex: 1 },
   header: {
     padding: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
     alignItems: "center",
   },
+  headerWeb: { paddingTop: SPACING.lg },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
@@ -721,17 +688,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
     textAlign: "center",
   },
-  buttonGroup: {
-    width: "100%",
-  },
-  appleButtonWrapper: {
-    alignItems: "center",
-    marginBottom: SPACING.sm,
-  },
-  appleButton: {
-    width: "100%",
-    height: 50,
-  },
+  buttonGroup: { width: "100%" },
+  appleButtonWrapper: { alignItems: "center", marginBottom: SPACING.sm },
+  appleButton: { width: "100%", height: 50 },
   loadingHint: {
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
@@ -742,11 +701,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: SPACING.md,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: COLORS.border,
-  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
   dividerText: {
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
@@ -779,9 +734,7 @@ const styles = StyleSheet.create({
     gap: 4,
     zIndex: 1,
   },
-  messagesFloatingIcon: {
-    fontSize: 14,
-  },
+  messagesFloatingIcon: { fontSize: 14 },
   messagesFloatingText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "700",
@@ -797,21 +750,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginLeft: 2,
   },
-  messagesUnreadText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
+  messagesUnreadText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: SPACING.lg,
   },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    marginRight: SPACING.md,
-  },
+  avatarContainer: { width: 80, height: 80, marginRight: SPACING.md },
   profileImage: {
     width: 80,
     height: 80,
@@ -819,21 +764,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.border,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-  },
+  avatar: { width: 80, height: 80 },
   ballRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 2,
   },
-  ball: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginHorizontal: 1,
-  },
+  ball: { width: 24, height: 24, borderRadius: 12, marginHorizontal: 1 },
   ball1: { backgroundColor: "#FFD700" },
   ball2: { backgroundColor: "#0066FF" },
   ball3: { backgroundColor: "#FF0000" },
@@ -843,9 +780,7 @@ const styles = StyleSheet.create({
   ball10: { backgroundColor: "#0066FF", borderWidth: 2, borderColor: "#FFF" },
   ball12: { backgroundColor: "#800080" },
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
-  profileInfo: {
-    flex: 1,
-  },
+  profileInfo: { flex: 1 },
   name: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "600",
@@ -857,48 +792,39 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
   },
-  memberSince: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textMuted,
-  },
+  memberSince: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
   actionButtons: {
     flexDirection: "row",
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
   },
+  actionButtonsWeb: { flexDirection: "row" },
   actionButton: {
     flex: 1,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
     alignItems: "center",
   },
-  editButton: {
-    backgroundColor: COLORS.secondary,
-  },
+  actionButtonWeb: { paddingVertical: SPACING.md + 2 },
+  editButton: { backgroundColor: COLORS.secondary },
   editButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
   },
-  notificationButton: {
-    backgroundColor: COLORS.primary,
-  },
+  notificationButton: { backgroundColor: COLORS.primary },
   notificationButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
   },
-  signOutButton: {
-    backgroundColor: COLORS.error,
-  },
+  signOutButton: { backgroundColor: COLORS.error },
   signOutButtonText: {
     color: COLORS.white,
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
   },
-  userDetails: {
-    gap: SPACING.md,
-  },
+  userDetails: { gap: SPACING.md },
   detailItem: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -925,9 +851,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     alignItems: "center",
   },
-  favoritesButton: {
-    backgroundColor: COLORS.primary,
-  },
+  favoritesButton: { backgroundColor: COLORS.primary },
   alertsButton: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
@@ -938,13 +862,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.white,
   },
-  favoritesSection: {
-    padding: SPACING.md,
+  alertsButtonText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.text,
   },
-  emptyFavorites: {
-    alignItems: "center",
-    padding: SPACING.lg,
-  },
+  favoritesSection: { padding: SPACING.md },
+  emptyFavorites: { alignItems: "center", padding: SPACING.lg },
   emptyText: {
     fontSize: FONT_SIZES.md,
     color: COLORS.textMuted,
@@ -955,10 +879,5 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: "center",
   },
-  spacer: {
-    height: SPACING.lg,
-  },
-  spacerSm: {
-    height: SPACING.sm,
-  },
+  spacerSm: { height: SPACING.sm },
 });

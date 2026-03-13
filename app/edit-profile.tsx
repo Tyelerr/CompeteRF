@@ -3,6 +3,7 @@
 import {
   ActivityIndicator,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,8 @@ import { useEditProfile } from "../src/viewmodels/useEditProfile";
 import { Dropdown } from "../src/views/components/common/dropdown";
 import { Loading } from "../src/views/components/common/loading";
 import { DeleteAccountModal } from "../src/views/components/profile/DeleteAccountModal";
+
+const isWeb = Platform.OS === "web";
 
 export default function EditProfileScreen() {
   const vm = useEditProfile();
@@ -40,261 +43,295 @@ export default function EditProfileScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
-        style={styles.scrollContent}
+        style={styles.scrollView}
+        contentContainerStyle={
+          isWeb ? styles.scrollContentWeb : styles.scrollContentMobile
+        }
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContentContainer}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={vm.goBack} style={styles.backButton}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>EDIT PROFILE</Text>
-          <Text style={styles.headerSubtitle}>
-            Update your profile information
-          </Text>
-        </View>
-
-        <View style={styles.content}>
-          {/* Error Message */}
-          {vm.error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{vm.error}</Text>
-            </View>
-          ) : null}
-
-          {/* Avatar Section */}
-          <View style={styles.avatarSection}>
-            <TouchableOpacity
-              onPress={vm.handlePickAvatar}
-              disabled={vm.uploadingAvatar || vm.saving}
-              style={styles.avatarTouchable}
-              activeOpacity={0.7}
-            >
-              {vm.uploadingAvatar ? (
-                <View style={styles.avatarContainer}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                </View>
-              ) : vm.avatarUrl ? (
-                <Image
-                  source={{ uri: vm.avatarUrl }}
-                  style={styles.avatarImage}
-                />
-              ) : (
-                <View style={styles.avatarContainer}>
-                  <Text style={styles.avatarPlaceholderIcon}>📷</Text>
-                  <Text style={styles.avatarPlaceholderText}>Add Photo</Text>
-                </View>
-              )}
+        {/* Web: constrained centered column */}
+        <View style={isWeb ? styles.webInner : styles.mobileInner}>
+          {/* Header */}
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
+            <TouchableOpacity onPress={vm.goBack} style={styles.backButton}>
+              <Text style={styles.backText}>← Back</Text>
             </TouchableOpacity>
-
-            <View style={styles.avatarActions}>
-              <TouchableOpacity
-                onPress={vm.handlePickAvatar}
-                disabled={vm.uploadingAvatar || vm.saving}
-                style={styles.avatarActionButton}
-              >
-                <Text style={styles.avatarActionText}>
-                  {vm.avatarUrl ? "Change Photo" : "Upload Photo"}
-                </Text>
-              </TouchableOpacity>
-
-              {vm.avatarUrl && (
-                <TouchableOpacity
-                  onPress={vm.handleRemoveAvatar}
-                  disabled={vm.uploadingAvatar || vm.saving}
-                  style={styles.avatarActionButton}
-                >
-                  <Text style={styles.avatarRemoveText}>Remove</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={styles.headerTitle}>EDIT PROFILE</Text>
+            <Text style={styles.headerSubtitle}>
+              Update your profile information
+            </Text>
           </View>
 
-          {/* Form */}
-          <View style={styles.form}>
-            {/* Username - Read Only */}
-            {vm.username ? (
-              <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Username</Text>
-                <TextInput
-                  style={[styles.textInput, styles.disabledInput]}
-                  value={`@${vm.username}`}
-                  editable={false}
-                />
-                <Text style={styles.disabledHint}>
-                  Username cannot be changed
-                </Text>
+          <View style={styles.content}>
+            {/* Error Message */}
+            {vm.error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{vm.error}</Text>
               </View>
             ) : null}
 
-            {/* First Name + Last Name side by side */}
-            <View style={styles.nameRow}>
-              <View style={styles.nameField}>
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>
-                    First Name <Text style={styles.required}>*</Text>
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      !vm.profileData.first_name.trim() &&
-                        vm.profileData.first_name.length > 0 &&
-                        styles.inputError,
-                    ]}
-                    placeholder="First Name"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={vm.profileData.first_name}
-                    onChangeText={(value) =>
-                      vm.updateField("first_name", value)
-                    }
-                    editable={!vm.saving}
-                    autoCapitalize="words"
-                    autoCorrect={false}
+            {/* Avatar Section */}
+            <View style={styles.avatarSection}>
+              <TouchableOpacity
+                onPress={vm.handlePickAvatar}
+                disabled={vm.uploadingAvatar || vm.saving}
+                style={styles.avatarTouchable}
+                activeOpacity={0.7}
+              >
+                {vm.uploadingAvatar ? (
+                  <View style={styles.avatarContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                  </View>
+                ) : vm.avatarUrl ? (
+                  <Image
+                    source={{ uri: vm.avatarUrl }}
+                    style={styles.avatarImage}
                   />
-                </View>
-              </View>
-              <View style={styles.nameField}>
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.fieldLabel}>
-                    Last Name <Text style={styles.required}>*</Text>
+                ) : (
+                  <View style={styles.avatarContainer}>
+                    <Text style={styles.avatarPlaceholderIcon}>📷</Text>
+                    <Text style={styles.avatarPlaceholderText}>Add Photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.avatarActions}>
+                <TouchableOpacity
+                  onPress={vm.handlePickAvatar}
+                  disabled={vm.uploadingAvatar || vm.saving}
+                  style={styles.avatarActionButton}
+                >
+                  <Text style={styles.avatarActionText}>
+                    {vm.avatarUrl ? "Change Photo" : "Upload Photo"}
                   </Text>
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      !vm.profileData.last_name.trim() &&
-                        vm.profileData.last_name.length > 0 &&
-                        styles.inputError,
-                    ]}
-                    placeholder="Last Name"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={vm.profileData.last_name}
-                    onChangeText={(value) => vm.updateField("last_name", value)}
-                    editable={!vm.saving}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
+                </TouchableOpacity>
+                {vm.avatarUrl && (
+                  <TouchableOpacity
+                    onPress={vm.handleRemoveAvatar}
+                    disabled={vm.uploadingAvatar || vm.saving}
+                    style={styles.avatarActionButton}
+                  >
+                    <Text style={styles.avatarRemoveText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
-            {!vm.isValid &&
-              (vm.profileData.first_name.length > 0 ||
-                vm.profileData.last_name.length > 0) && (
-                <Text style={styles.fieldError}>
-                  Both first and last name are required
+
+            {/* Form */}
+            <View style={styles.form}>
+              {/* Username - Read Only */}
+              {vm.username ? (
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.fieldLabel}>Username</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.disabledInput]}
+                    value={`@${vm.username}`}
+                    editable={false}
+                  />
+                  <Text style={styles.disabledHint}>
+                    Username cannot be changed
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* First + Last Name */}
+              <View style={styles.nameRow}>
+                <View style={styles.nameField}>
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.fieldLabel}>
+                      First Name <Text style={styles.required}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        !vm.profileData.first_name.trim() &&
+                          vm.profileData.first_name.length > 0 &&
+                          styles.inputError,
+                      ]}
+                      placeholder="First Name"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={vm.profileData.first_name}
+                      onChangeText={(value) =>
+                        vm.updateField("first_name", value)
+                      }
+                      editable={!vm.saving}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
+                <View style={styles.nameField}>
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.fieldLabel}>
+                      Last Name <Text style={styles.required}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        !vm.profileData.last_name.trim() &&
+                          vm.profileData.last_name.length > 0 &&
+                          styles.inputError,
+                      ]}
+                      placeholder="Last Name"
+                      placeholderTextColor={COLORS.textMuted}
+                      value={vm.profileData.last_name}
+                      onChangeText={(value) =>
+                        vm.updateField("last_name", value)
+                      }
+                      editable={!vm.saving}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
+              </View>
+              {!vm.isValid &&
+                (vm.profileData.first_name.length > 0 ||
+                  vm.profileData.last_name.length > 0) && (
+                  <Text style={styles.fieldError}>
+                    Both first and last name are required
+                  </Text>
+                )}
+
+              {/* Home State */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Home State</Text>
+                <Dropdown
+                  placeholder="Select your home state"
+                  options={vm.stateOptions}
+                  value={vm.profileData.home_state}
+                  onSelect={(value: string) =>
+                    vm.updateField("home_state", value)
+                  }
+                  disabled={vm.saving}
+                />
+              </View>
+
+              {/* Favorite Player */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Favorite Player</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Who's your favorite billiards player?"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={vm.profileData.favorite_player}
+                  onChangeText={(value) =>
+                    vm.updateField("favorite_player", value)
+                  }
+                  editable={!vm.saving}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+
+              {/* Preferred Game */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Favorite Game</Text>
+                <Dropdown
+                  placeholder="Select your favorite billiards game"
+                  options={vm.gameOptions}
+                  value={vm.profileData.preferred_game}
+                  onSelect={(value: string) =>
+                    vm.updateField("preferred_game", value)
+                  }
+                  disabled={vm.saving}
+                />
+              </View>
+
+              {/* Info Note */}
+              <View style={styles.infoContainer}>
+                <Text style={styles.infoIcon}>ℹ️</Text>
+                <Text style={styles.infoText}>
+                  First and last name are required. Other fields help
+                  personalize your experience.
                 </Text>
-              )}
-
-            {/* Home State Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Home State</Text>
-              <Dropdown
-                placeholder="Select your home state"
-                options={vm.stateOptions}
-                value={vm.profileData.home_state}
-                onSelect={(value: string) =>
-                  vm.updateField("home_state", value)
-                }
-                disabled={vm.saving}
-              />
+              </View>
             </View>
 
-            {/* Favorite Player Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Favorite Player</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Who's your favorite billiards player?"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.profileData.favorite_player}
-                onChangeText={(value) =>
-                  vm.updateField("favorite_player", value)
-                }
-                editable={!vm.saving}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            </View>
+            {/* Unsaved changes indicator */}
+            {vm.hasChanges && (
+              <View style={styles.changesIndicator}>
+                <Text style={styles.changesText}>
+                  ✏️ You have unsaved changes
+                </Text>
+              </View>
+            )}
 
-            {/* Preferred Game Field */}
-            <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Favorite Game</Text>
-              <Dropdown
-                placeholder="Select your favorite billiards game"
-                options={vm.gameOptions}
-                value={vm.profileData.preferred_game}
-                onSelect={(value: string) =>
-                  vm.updateField("preferred_game", value)
-                }
-                disabled={vm.saving}
-              />
-            </View>
-
-            {/* Info Note */}
-            <View style={styles.infoContainer}>
-              <Text style={styles.infoIcon}>ℹ️</Text>
-              <Text style={styles.infoText}>
-                First and last name are required. Other fields help personalize
-                your experience.
+            {/* Delete Account Section */}
+            <View style={styles.deleteSection}>
+              <View style={styles.deleteDivider} />
+              <Text style={styles.deleteSectionTitle}>Danger Zone</Text>
+              <Text style={styles.deleteSectionDescription}>
+                Permanently delete your account and all associated data. This
+                action cannot be undone.
               </Text>
+              <TouchableOpacity
+                style={styles.deleteAccountButton}
+                onPress={openModal}
+              >
+                <Text style={styles.deleteAccountText}>Delete Account</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Changes Indicator */}
-          {vm.hasChanges && (
-            <View style={styles.changesIndicator}>
-              <Text style={styles.changesText}>
-                ✏️ You have unsaved changes
-              </Text>
+          {/* Bottom Buttons — inline on web (inside scroll), fixed on mobile */}
+          {isWeb && (
+            <View style={styles.bottomBarWeb}>
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  (!vm.isValid || !vm.hasChanges || vm.saving) &&
+                    styles.buttonDisabled,
+                ]}
+                onPress={vm.handleSave}
+                disabled={!vm.isValid || !vm.hasChanges || vm.saving}
+              >
+                {vm.saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={vm.goBack}
+                disabled={vm.saving}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           )}
-
-          {/* Delete Account Section */}
-          <View style={styles.deleteSection}>
-            <View style={styles.deleteDivider} />
-            <Text style={styles.deleteSectionTitle}>Danger Zone</Text>
-            <Text style={styles.deleteSectionDescription}>
-              Permanently delete your account and all associated data. This
-              action cannot be undone.
-            </Text>
-            <TouchableOpacity
-              style={styles.deleteAccountButton}
-              onPress={openModal}
-            >
-              <Text style={styles.deleteAccountText}>Delete Account</Text>
-            </TouchableOpacity>
-          </View>
         </View>
       </ScrollView>
 
-      {/* Fixed Bottom Buttons */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={vm.goBack}
-          disabled={vm.saving}
-        >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
+      {/* Fixed Bottom Bar — mobile only */}
+      {!isWeb && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              (!vm.isValid || !vm.hasChanges || vm.saving) &&
+                styles.buttonDisabled,
+            ]}
+            onPress={vm.handleSave}
+            disabled={!vm.isValid || !vm.hasChanges || vm.saving}
+          >
+            {vm.saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={vm.goBack}
+            disabled={vm.saving}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-        <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (!vm.isValid || !vm.hasChanges || vm.saving) &&
-              styles.buttonDisabled,
-          ]}
-          onPress={vm.handleSave}
-          disabled={!vm.isValid || !vm.hasChanges || vm.saving}
-        >
-          {vm.saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>Save Changes</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Delete Account Modal */}
       <DeleteAccountModal
         visible={modalVisible}
         confirmText={confirmText}
@@ -309,30 +346,32 @@ export default function EditProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    flex: 1,
-  },
-  scrollContentContainer: {
-    paddingBottom: SPACING.xl,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+
+  // ── Scroll ────────────────────────────────────────────────────────────────
+  scrollView: { flex: 1 },
+  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  scrollContentMobile: { paddingBottom: SPACING.xl },
+
+  // ── Constrained column ────────────────────────────────────────────────────
+  webInner: { width: "100%" as any, maxWidth: 860 },
+  mobileInner: { flex: 1 },
+
+  // ── Header ────────────────────────────────────────────────────────────────
   header: {
     padding: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     alignItems: "center",
+  },
+  headerWeb: {
+    paddingTop: SPACING.xl + SPACING.lg, // no nav bar on this standalone page
   },
   backButton: {
     alignSelf: "flex-start",
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  backText: {
-    color: COLORS.primary,
-    fontSize: FONT_SIZES.md,
-  },
+  backText: { color: COLORS.primary, fontSize: FONT_SIZES.md },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
@@ -346,10 +385,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
-  content: {
-    padding: SPACING.md,
-    paddingTop: 0,
-  },
+
+  content: { padding: SPACING.md, paddingTop: 0 },
+
+  // ── Error ─────────────────────────────────────────────────────────────────
   errorContainer: {
     backgroundColor: COLORS.error + "20",
     borderColor: COLORS.error,
@@ -363,15 +402,14 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     textAlign: "center",
   },
-  // Avatar styles
+
+  // ── Avatar ────────────────────────────────────────────────────────────────
   avatarSection: {
     alignItems: "center",
     marginBottom: SPACING.lg,
     paddingVertical: SPACING.md,
   },
-  avatarTouchable: {
-    marginBottom: SPACING.sm,
-  },
+  avatarTouchable: { marginBottom: SPACING.sm },
   avatarImage: {
     width: 120,
     height: 120,
@@ -390,10 +428,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarPlaceholderIcon: {
-    fontSize: 32,
-    marginBottom: SPACING.xs,
-  },
+  avatarPlaceholderIcon: { fontSize: 32, marginBottom: SPACING.xs },
   avatarPlaceholderText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
@@ -418,28 +453,18 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
   },
-  // Form styles
-  form: {
-    gap: SPACING.lg,
-  },
-  nameRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  nameField: {
-    flex: 1,
-  },
-  fieldContainer: {
-    gap: SPACING.sm,
-  },
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+  form: { gap: SPACING.lg },
+  nameRow: { flexDirection: "row", gap: SPACING.sm },
+  nameField: { flex: 1 },
+  fieldContainer: { gap: SPACING.sm },
   fieldLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     fontWeight: "500",
   },
-  required: {
-    color: COLORS.error,
-  },
+  required: { color: COLORS.error },
   textInput: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
@@ -450,10 +475,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
-  disabledInput: {
-    opacity: 0.5,
-    color: COLORS.textMuted,
-  },
+  disabledInput: { opacity: 0.5, color: COLORS.textMuted },
   disabledHint: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
@@ -477,17 +499,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: "flex-start",
   },
-  infoIcon: {
-    fontSize: FONT_SIZES.md,
-    marginRight: SPACING.sm,
-    marginTop: 2,
-  },
+  infoIcon: { fontSize: FONT_SIZES.md, marginRight: SPACING.sm, marginTop: 2 },
   infoText: {
     flex: 1,
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     lineHeight: 18,
   },
+
+  // ── Changes indicator ─────────────────────────────────────────────────────
   changesIndicator: {
     marginTop: SPACING.lg,
     backgroundColor: COLORS.primary + "20",
@@ -502,11 +522,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "500",
   },
-  // Delete account section
-  deleteSection: {
-    marginTop: SPACING.xl,
-    paddingTop: SPACING.md,
-  },
+
+  // ── Delete section ────────────────────────────────────────────────────────
+  deleteSection: { marginTop: SPACING.xl, paddingTop: SPACING.md },
   deleteDivider: {
     height: 1,
     backgroundColor: COLORS.error + "30",
@@ -537,7 +555,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
   },
-  // Fixed bottom bar
+
+  // ── Bottom buttons ────────────────────────────────────────────────────────
+  // Web: inline inside scroll (no fixed bar)
+  bottomBarWeb: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.xl,
+    marginBottom: SPACING.xl,
+  },
+  // Mobile: fixed to bottom
   bottomBar: {
     flexDirection: "row",
     gap: SPACING.sm,
@@ -571,12 +599,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: COLORS.primary,
   },
-  saveButtonText: {
-    fontSize: FONT_SIZES.md,
-    color: "#fff",
-    fontWeight: "600",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
+  saveButtonText: { fontSize: FONT_SIZES.md, color: "#fff", fontWeight: "600" },
+  buttonDisabled: { opacity: 0.5 },
 });
