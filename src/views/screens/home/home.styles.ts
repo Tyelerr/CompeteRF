@@ -21,13 +21,52 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
   },
+
+  // ----- Web Hero -----
+  heroWeb: {
+    alignItems: "center",
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: SPACING.sm,
+    maxWidth: 860,
+    alignSelf: "center",
+    width: "100%",
+  },
+  heroTitle: {
+    fontSize: 36,
+    fontWeight: "800",
+    color: COLORS.text,
+    letterSpacing: 1,
+  },
+  heroTagline: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    textAlign: "center",
+  },
+
+  // ----- Content -----
   content: {
     flex: 1,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: Platform.OS === "web" ? SPACING.md : SPACING.lg,
+  },
+  contentContainerWeb: {
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xl,
+    maxWidth: 860,
+    alignSelf: "center",
+    width: "100%",
   },
   loadingContainer: {
     padding: SPACING.xl,
     alignItems: "center",
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    textAlign: "center",
   },
 
   // ----- Language Toggle -----
@@ -110,19 +149,24 @@ export const styles = StyleSheet.create({
   // ----- Tab Bar -----
   tabContainer: {
     flexDirection: "row",
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: Platform.OS === "web" ? SPACING.md : SPACING.lg,
     marginBottom: SPACING.sm,
+    ...(Platform.OS === "web"
+      ? { maxWidth: 860, alignSelf: "center", width: "100%", paddingTop: SPACING.lg }
+      : {}),
   },
   tab: {
     flex: 1,
     alignItems: "center",
-    paddingVertical: SPACING.md,
+    paddingVertical: Platform.OS === "web" ? SPACING.sm : SPACING.md,
     paddingHorizontal: SPACING.sm,
     backgroundColor: COLORS.backgroundCard,
     marginHorizontal: SPACING.xs,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
+    minHeight: 44,
+    justifyContent: "center",
   },
   activeTab: {
     backgroundColor: COLORS.primary,
@@ -142,45 +186,75 @@ export const styles = StyleSheet.create({
     color: COLORS.white,
   },
 
+  // ----- News Grid (web only) -----
+  newsGrid: {
+    width: "100%",
+  },
+  newsGridRow: {
+    flexDirection: "row",
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  newsGridItem: {
+    flex: 1,
+  },
+
   // ----- News Card -----
   newsCard: {
     backgroundColor: "#000000",
     borderRadius: 12,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginBottom: Platform.OS === "web" ? 0 : SPACING.md,
     borderWidth: 1,
     borderColor: "#333333",
-  },
-  newsHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: SPACING.sm,
-  },
-  starIcon: {
-    fontSize: 18,
-    marginRight: SPACING.sm,
-    color: COLORS.warning,
-    marginTop: 2,
-  },
-  newsTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    lineHeight: 24,
+    overflow: "hidden",
     flex: 1,
   },
-  newsDescription: {
+  newsAccentBar: {
+    height: 3,
+    backgroundColor: COLORS.primary,
+    width: "100%",
+  },
+  newsCardInner: {
+    padding: SPACING.md,
+    flex: 1,
+  },
+  newsPill: {
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.primary + "20",
+    borderRadius: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginBottom: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+  },
+  newsPillText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+  },
+  newsTitle: {
     fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.text,
+    lineHeight: 22,
+    marginBottom: SPACING.sm,
+  },
+  newsDescription: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     lineHeight: 20,
     marginBottom: SPACING.md,
-    marginLeft: 30,
+    flex: 1,
   },
   newsFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginLeft: 30,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: "#333333",
   },
   newsInfo: {
     flexDirection: "row",
@@ -193,12 +267,34 @@ export const styles = StyleSheet.create({
     fontWeight: "500",
   },
   newsDate: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+  },
+  newsReadMore: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: 6,
+  },
+  newsReadMoreText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   externalIcon: {
     fontSize: 16,
     color: COLORS.success,
+  },
+  starIcon: {
+    fontSize: 18,
+    marginRight: SPACING.sm,
+    color: COLORS.warning,
+    marginTop: 2,
+  },
+  newsHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: SPACING.sm,
   },
 
   // ----- Featured Content (Shared) -----

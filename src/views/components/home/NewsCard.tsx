@@ -1,6 +1,8 @@
-import { Text, TouchableOpacity, View } from "react-native";
+import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { RSSItem } from "../../../models/types/home.types";
 import { styles } from "../../screens/home/home.styles";
+
+const isWeb = Platform.OS === "web";
 
 interface NewsCardProps {
   item: RSSItem;
@@ -12,20 +14,25 @@ export function NewsCard({ item, onPress }: NewsCardProps) {
     <TouchableOpacity
       style={styles.newsCard}
       onPress={() => onPress(item.link)}
+      activeOpacity={0.75}
     >
-      <View style={styles.newsHeader}>
-        <Text style={styles.starIcon}>⭐</Text>
-        <Text style={styles.newsTitle}>{item.title}</Text>
-      </View>
-
-      <Text style={styles.newsDescription}>{item.description}</Text>
-
-      <View style={styles.newsFooter}>
-        <View style={styles.newsInfo}>
-          <Text style={styles.newsAuthor}>{item.author}</Text>
-          <Text style={styles.newsDate}>📅 {item.pubDate}</Text>
+      <View style={styles.newsAccentBar} />
+      <View style={styles.newsCardInner}>
+        <View style={styles.newsPill}>
+          <Text style={styles.newsPillText}>AZ BILLIARDS</Text>
         </View>
-        <Text style={styles.externalIcon}>🔗</Text>
+        <Text style={styles.newsTitle} numberOfLines={isWeb ? 3 : 4}>
+          {item.title}
+        </Text>
+        <Text style={styles.newsDescription} numberOfLines={isWeb ? 3 : 4}>
+          {item.description}
+        </Text>
+        <View style={styles.newsFooter}>
+          <Text style={styles.newsDate}>{item.pubDate}</Text>
+          <View style={styles.newsReadMore}>
+            <Text style={styles.newsReadMoreText}>Read more →</Text>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );

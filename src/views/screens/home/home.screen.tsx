@@ -1,7 +1,8 @@
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Platform, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useHome } from "../../../viewmodels/useHome";
 import { Loading } from "../../components/common/loading";
+import { WebContainer } from "../../components/common/WebContainer";
 import {
   FeaturedBarTab,
   FeaturedPlayerTab,
@@ -9,6 +10,8 @@ import {
   NewsCard,
 } from "../../components/home";
 import { styles } from "./home.styles";
+
+const isWeb = Platform.OS === "web";
 
 export default function HomeScreen() {
   const scrollRef = useScrollToTopOnFocus();
@@ -27,48 +30,84 @@ export default function HomeScreen() {
     openWebsite,
   } = useHome();
 
+  const renderNews = () => {
+    if (newsLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Loading message="Loading news..." />
+        </View>
+      );
+    }
+    if (newsItems.length === 0) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.emptyText}>No news available.</Text>
+        </View>
+      );
+    }
+    if (isWeb) {
+      const rows: (typeof newsItems)[] = [];
+      for (let i = 0; i < newsItems.length; i += 2) {
+        rows.push(newsItems.slice(i, i + 2));
+      }
+      return (
+        <View style={styles.newsGrid}>
+          {rows.map((row, rowIndex) => (
+            <View key={rowIndex} style={styles.newsGridRow}>
+              {row.map((item, colIndex) => (
+                <View key={colIndex} style={styles.newsGridItem}>
+                  <NewsCard item={item} onPress={openArticle} />
+                </View>
+              ))}
+              {row.length === 1 && <View style={styles.newsGridItem} />}
+            </View>
+          ))}
+        </View>
+      );
+    }
+    return newsItems.map((item, index) => (
+      <NewsCard key={index} item={item} onPress={openArticle} />
+    ));
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>HOME</Text>
+    <WebContainer>
+      <View style={styles.container}>
+        {!isWeb && (
+          <View style={styles.header}>
+            <Text style={styles.title}>HOME</Text>
+          </View>
+        )}
+
+        <HomeTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+
+        <ScrollView
+          ref={scrollRef}
+          style={styles.content}
+          contentContainerStyle={isWeb ? styles.contentContainerWeb : undefined}
+          refreshControl={
+            !isWeb ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+              />
+            ) : undefined
+          }
+        >
+          {activeTab === "latest" && renderNews()}
+          {activeTab === "featured" && (
+            <FeaturedPlayerTab player={featuredPlayer} />
+          )}
+          {activeTab === "bars" && (
+            <FeaturedBarTab
+              bar={featuredBar}
+              onOpenAddress={openAddress}
+              onCallPhone={callPhone}
+              onOpenWebsite={openWebsite}
+            />
+          )}
+        </ScrollView>
       </View>
-
-      <HomeTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-
-      <ScrollView
-        ref={scrollRef}
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {activeTab === "latest" && (
-          <>
-            {newsLoading ? (
-              <View style={styles.loadingContainer}>
-                <Loading message="Loading news..." />
-              </View>
-            ) : (
-              newsItems.map((item, index) => (
-                <NewsCard key={index} item={item} onPress={openArticle} />
-              ))
-            )}
-          </>
-        )}
-
-        {activeTab === "featured" && (
-          <FeaturedPlayerTab player={featuredPlayer} />
-        )}
-
-        {activeTab === "bars" && (
-          <FeaturedBarTab
-            bar={featuredBar}
-            onOpenAddress={openAddress}
-            onCallPhone={callPhone}
-            onOpenWebsite={openWebsite}
-          />
-        )}
-      </ScrollView>
-    </View>
+    </WebContainer>
   );
 }
