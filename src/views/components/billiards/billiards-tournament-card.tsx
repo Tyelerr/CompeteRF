@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Image,
   Platform,
@@ -35,6 +36,7 @@ export const BilliardsTournamentCard = ({
 }: BilliardsTournamentCardProps) => {
   const venue = tournament.venues;
   const imageUrl = getTournamentImageUrl(tournament);
+  const [hovered, setHovered] = useState(false);
 
   const renderImage = () => {
     if (imageUrl) {
@@ -118,13 +120,19 @@ export const BilliardsTournamentCard = ({
   // ── Web card ──────────────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
-      style={styles.webCard}
+      style={[styles.webCard, hovered && styles.webCardHovered]}
       activeOpacity={0.85}
       onPress={onPress}
+      // @ts-ignore — web-only events
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Image */}
       <View style={styles.webImageSection}>
         {renderImage()}
+
+        {/* Hover overlay shimmer */}
+        {hovered && <View style={styles.webImageOverlay} />}
 
         {/* ID badge — top left */}
         <View style={styles.webIdBadge}>
@@ -151,7 +159,10 @@ export const BilliardsTournamentCard = ({
 
       {/* Details */}
       <View style={styles.webContent}>
-        <Text style={styles.webName} numberOfLines={2}>
+        <Text
+          style={[styles.webName, hovered && styles.webNameHovered]}
+          numberOfLines={2}
+        >
           {tournament.name}
         </Text>
 
@@ -236,9 +247,11 @@ export const BilliardsTournamentCard = ({
           )}
         </View>
 
-        <View style={styles.webFeeRow}>
+        <View style={[styles.webFeeRow, hovered && styles.webFeeRowHovered]}>
           <Text style={styles.webFeeLabel}>Entry Fee</Text>
-          <Text style={styles.webFeeAmount}>
+          <Text
+            style={[styles.webFeeAmount, hovered && styles.webFeeAmountHovered]}
+          >
             {formatCurrency(tournament.entry_fee || 0)}
           </Text>
         </View>
@@ -382,6 +395,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     margin: "0.75%",
+    // @ts-ignore — web only
+    transition:
+      "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+    cursor: "pointer",
+  },
+  webCardHovered: {
+    borderColor: COLORS.primary,
+    // @ts-ignore — web only
+    transform: [{ scale: 1.03 }],
+    boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
   },
   webImageSection: {
     height: 160,
@@ -399,6 +422,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     justifyContent: "center",
     alignItems: "center",
+  },
+  // Blue tint shimmer that appears on hover over the image
+  webImageOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: `${COLORS.primary}22`,
   },
   webIdBadge: {
     position: "absolute",
@@ -457,6 +489,11 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 8,
     lineHeight: 18,
+    // @ts-ignore
+    transition: "color 0.18s ease",
+  },
+  webNameHovered: {
+    color: COLORS.primary,
   },
   webRow: {
     flexDirection: "row",
@@ -507,6 +544,11 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    // @ts-ignore
+    transition: "border-color 0.18s ease",
+  },
+  webFeeRowHovered: {
+    borderTopColor: COLORS.primary + "60",
   },
   webFeeLabel: {
     fontSize: 10,
@@ -516,5 +558,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: COLORS.text,
+    // @ts-ignore
+    transition: "color 0.18s ease",
+  },
+  webFeeAmountHovered: {
+    color: COLORS.primary,
   },
 });

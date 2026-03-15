@@ -65,7 +65,7 @@ export const BilliardsScreen = () => {
     return found ? found.label : abbrev;
   };
 
-  // ── Web compact filter bar ──────────────────────────────────────────────
+  // ── Web compact filter bar ────────────────────────────────────────────────────
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       {/* Search */}
@@ -128,7 +128,7 @@ export const BilliardsScreen = () => {
     </View>
   );
 
-  // ── Radius slider ───────────────────────────────────────────────────────
+  // ── Radius slider ─────────────────────────────────────────────────────────────
   const renderRadiusSlider = () => {
     if (!vm.zipCode.length) return null;
     return (
@@ -181,7 +181,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Pagination ──────────────────────────────────────────────────────────
+  // ── Pagination ────────────────────────────────────────────────────────────────
   const renderPagination = () => (
     <Pagination
       totalCount={pagination.totalCount}
@@ -196,7 +196,7 @@ export const BilliardsScreen = () => {
     />
   );
 
-  // ── Tournament card ─────────────────────────────────────────────────────
+  // ── Tournament card ───────────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
       return (
@@ -221,7 +221,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Recommend venue card ────────────────────────────────────────────────
+  // ── Recommend venue card ──────────────────────────────────────────────────────
   const renderRecommendCard = () => {
     if (!vm.user) return null;
     return (
@@ -258,7 +258,7 @@ export const BilliardsScreen = () => {
             marginBottom: 12,
           }}
         >
-          Help us grow the community — recommend a venue!
+          Help us grow the community – recommend a venue!
         </Text>
         <TouchableOpacity
           style={{
@@ -283,7 +283,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Empty state ─────────────────────────────────────────────────────────
+  // ── Empty state ───────────────────────────────────────────────────────────────
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎱</Text>
@@ -330,7 +330,7 @@ export const BilliardsScreen = () => {
         ]
       : pagination.paginatedItems;
 
-  // ── Main render ─────────────────────────────────────────────────────────
+  // ── Main render ───────────────────────────────────────────────────────────────
   return (
     <WebContainer>
       <View style={styles.container}>
@@ -375,7 +375,7 @@ export const BilliardsScreen = () => {
                         textAlign: "center",
                       }}
                     >
-                      No tournaments in your state yet — showing all tournaments
+                      No tournaments in your state yet – showing all tournaments
                     </Text>
                   </View>
                 )}
@@ -511,7 +511,7 @@ export const BilliardsScreen = () => {
   );
 };
 
-// ── Web-only filter bar styles ──────────────────────────────────────────────
+// ── Web-only filter bar styles ────────────────────────────────────────────────
 const webS = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
@@ -520,8 +520,6 @@ const webS = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 8,
     gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
     marginBottom: 8,
   },
   searchWrap: {
