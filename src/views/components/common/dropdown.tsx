@@ -87,12 +87,12 @@ const WebPopover = ({
     left: rect.left,
     width: Math.max(rect.width, compact ? 180 : 220),
     backgroundColor: COLORS.surface,
-    border: `1px solid ${COLORS.border}`,
+    border: `1px solid ${COLORS.primary}`,
     borderRadius: 6,
     zIndex: 999999,
     maxHeight: 280,
     overflowY: "auto",
-    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+    boxShadow: `0 4px 16px rgba(0,0,0,0.4), 0 0 0 3px ${COLORS.primary}33`,
   };
 
   const overlayStyle: React.CSSProperties = {
@@ -111,6 +111,7 @@ const WebPopover = ({
     backgroundColor: isSelected ? COLORS.primary : "transparent",
     cursor: "pointer",
     borderBottom: `1px solid ${COLORS.border}`,
+    transition: "background-color 0.12s ease",
   });
 
   if (typeof document === "undefined") return null;
@@ -190,6 +191,7 @@ export const Dropdown = ({
   compact = false,
 }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [searchText, setSearchText] = useState("");
   const selectorRef = useRef<View>(null);
   const [selectorLayout, setSelectorLayout] = useState({
@@ -206,13 +208,20 @@ export const Dropdown = ({
     if (!disabled) setIsOpen(!isOpen);
   };
 
-  // Mobile selector measurement (must be top-level, not conditional)
-
-  // ── Web ───────────────────────────────────────────────────────────────────
+  // ── Web ───────────────────────────────────────────────────────────────────────
   if (isWeb) {
     return (
       <View style={wStyles.container}>
-        {label && <Text style={styles.label}>{label}</Text>}
+        {label && (
+          <Text
+            style={[
+              styles.label,
+              (isOpen || hovered) && !disabled && wStyles.labelActive,
+            ]}
+          >
+            {label}
+          </Text>
+        )}
         {/* @ts-ignore */}
         <TouchableOpacity
           ref={anchorRef}
@@ -220,11 +229,20 @@ export const Dropdown = ({
             wStyles.selector,
             compact && wStyles.selectorCompact,
             isOpen && wStyles.selectorOpen,
+            !isOpen && hovered && !disabled && wStyles.selectorHovered,
             error && wStyles.selectorError,
             disabled && wStyles.selectorDisabled,
+            {
+              // @ts-ignore — web only
+              transition: "border-color 0.18s ease, box-shadow 0.18s ease",
+              cursor: disabled ? "not-allowed" : "pointer",
+            },
           ]}
           onPress={handlePress}
           activeOpacity={disabled ? 1 : 0.7}
+          // @ts-ignore — web only
+          onMouseEnter={() => !disabled && setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
           <Text
             style={[
@@ -232,12 +250,15 @@ export const Dropdown = ({
               compact && wStyles.selectorTextCompact,
               !selectedOption && wStyles.placeholder,
               disabled && wStyles.textDisabled,
+              isOpen && wStyles.selectorTextOpen,
             ]}
             numberOfLines={1}
           >
             {selectedOption?.label || placeholder}
           </Text>
-          <Text style={wStyles.arrow}>{isOpen ? "▲" : "▼"}</Text>
+          <Text style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>
+            {isOpen ? "▲" : "▼"}
+          </Text>
         </TouchableOpacity>
         {error && <Text style={styles.error}>{error}</Text>}
         {isOpen && (
@@ -256,7 +277,7 @@ export const Dropdown = ({
     );
   }
 
-  // ── Mobile ────────────────────────────────────────────────────────────────
+  // ── Mobile ────────────────────────────────────────────────────────────────────
   const handleMobilePress = () => {
     if (!disabled) {
       selectorRef.current?.measure((x, y, width, height, pageX, pageY) => {
@@ -301,13 +322,11 @@ export const Dropdown = ({
       {error && <Text style={styles.error}>{error}</Text>}
 
       <Modal visible={isOpen} transparent animationType="fade">
-        {/* Dim overlay — tap anywhere to close */}
         <TouchableOpacity
           style={styles.overlay}
           onPress={() => setIsOpen(false)}
           activeOpacity={1}
         >
-          {/* Stop touches from closing when tapping list */}
           <TouchableOpacity
             activeOpacity={1}
             style={{
@@ -379,6 +398,8 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
+    // @ts-ignore — web only
+    transition: "color 0.18s ease",
   },
   selector: {
     backgroundColor: COLORS.surface,
@@ -440,15 +461,18 @@ const styles = StyleSheet.create({
   optionTextSelected: { color: COLORS.white, fontWeight: "600" },
 });
 
-// ── Web styles — fixed 38px height to match all other inputs ─────────────────
+// ── Web styles ────────────────────────────────────────────────────────────────
 const wStyles = StyleSheet.create({
   container: { marginTop: 0 },
+  labelActive: {
+    color: COLORS.primary,
+  },
   selector: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 6,
-    height: 38, // ← fixed height, matches TextInput
+    height: 38,
     paddingHorizontal: 10,
     paddingVertical: 0,
     flexDirection: "row",
@@ -460,12 +484,39 @@ const wStyles = StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 4,
   },
-  selectorOpen: { borderColor: COLORS.primary },
+  selectorHovered: {
+    borderColor: COLORS.primary + "80",
+    // @ts-ignore — web only
+    boxShadow: `0 0 0 2px ${COLORS.primary}22`,
+  },
+  selectorOpen: {
+    borderColor: COLORS.primary,
+    // @ts-ignore — web only
+    boxShadow: `0 0 0 3px ${COLORS.primary}33`,
+  },
   selectorError: { borderColor: COLORS.error },
   selectorDisabled: { backgroundColor: COLORS.background, opacity: 0.6 },
-  selectorText: { fontSize: 13, color: COLORS.text, flex: 1 },
+  selectorText: {
+    fontSize: 13,
+    color: COLORS.text,
+    flex: 1,
+    // @ts-ignore — web only
+    transition: "color 0.18s ease",
+  },
+  selectorTextOpen: {
+    color: COLORS.primary,
+  },
   selectorTextCompact: { fontSize: 12 },
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
-  arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4 },
+  arrow: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginLeft: 4,
+    // @ts-ignore — web only
+    transition: "color 0.18s ease, transform 0.18s ease",
+  },
+  arrowOpen: {
+    color: COLORS.primary,
+  },
 });

@@ -6,7 +6,6 @@ import {
   Keyboard,
   Platform,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -25,6 +24,7 @@ import { useSubmitTournament } from "../../../viewmodels/useSubmitTournament";
 import { Button } from "../../components/common/button";
 import { DatePicker } from "../../components/common/date-picker";
 import { Dropdown } from "../../components/common/dropdown";
+import { FocusTextInput } from "../../components/common/FocusTextInput";
 import { ToggleSwitch } from "../../components/common/toggle-switch";
 import { WebContainer } from "../../components/common/WebContainer";
 import { styles } from "./submit.styles";
@@ -45,7 +45,7 @@ const stringToDate = (dateString: string): Date | null => {
   return new Date(y, m - 1, d);
 };
 
-// ── Two-column layout helpers ────────────────────────────────────────────────
+// ── Two-column layout helpers ─────────────────────────────────────────────────
 const Row = ({ children }: { children: React.ReactNode }) =>
   isWeb ? (
     <View style={{ flexDirection: "row", gap: 16 }}>{children}</View>
@@ -89,6 +89,15 @@ const WebDateInput = ({
         boxSizing: "border-box",
         cursor: "pointer",
         colorScheme: "dark",
+        transition: "border-color 0.18s ease, box-shadow 0.18s ease",
+      }}
+      onFocus={(e) => {
+        e.target.style.borderColor = COLORS.primary;
+        e.target.style.boxShadow = `0 0 0 3px ${COLORS.primary}33`;
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = "#333";
+        e.target.style.boxShadow = "none";
       }}
     />
   </div>
@@ -194,13 +203,12 @@ export const SubmitScreen = () => {
   const vm = useSubmitTournament();
   const scrollRef = useScrollToTopOnFocus();
 
-  // ── Template hook ─────────────────────────────────────────────────────────
+  // ── Template hook ─────────────────────────────────────────────────────────────
   const templateMgr = useTournamentTemplates({
     userId: vm.profile?.id_auto ?? null,
     onApplyTemplate: (
       template: import("../../../models/services/tournament-template.service").UserTemplate,
     ) => {
-      // Fill form from template — never touch date, venue, or isRecurring
       vm.updateFormData("name", template.name);
       if (template.game_type) vm.updateFormData("gameType", template.game_type);
       if (template.tournament_format)
@@ -221,8 +229,6 @@ export const SubmitScreen = () => {
         vm.updateFormData("thumbnail", template.thumbnail);
       if (template.chip_ranges)
         vm.updateFormData("chipRanges", template.chip_ranges);
-      // side_pots requires direct setter — handled separately if vm exposes it
-      // Clear isRecurring
       vm.updateFormData("isRecurring", false);
     },
   });
@@ -346,7 +352,6 @@ export const SubmitScreen = () => {
       case "template":
         return (
           <View style={[styles.section, { paddingVertical: isWeb ? 10 : 14 }]}>
-            {/* Header row */}
             <View
               style={{
                 flexDirection: "row",
@@ -404,12 +409,10 @@ export const SubmitScreen = () => {
               )}
             </View>
 
-            {/* Loading */}
             {templateMgr.loading && (
               <Text style={styles.hint}>Loading templates...</Text>
             )}
 
-            {/* Select mode */}
             {!templateMgr.loading &&
               !manageMode &&
               (templateMgr.hasTemplates ? (
@@ -437,7 +440,6 @@ export const SubmitScreen = () => {
                 </Text>
               ))}
 
-            {/* Manage mode */}
             {!templateMgr.loading && manageMode && (
               <View style={{ gap: 6 }}>
                 {templateMgr.templates.map((t) => (
@@ -455,9 +457,8 @@ export const SubmitScreen = () => {
                       gap: 8,
                     }}
                   >
-                    {/* Name or rename input */}
                     {renamingId === t.id ? (
-                      <TextInput
+                      <FocusTextInput
                         style={[
                           styles.input,
                           {
@@ -511,7 +512,6 @@ export const SubmitScreen = () => {
                       </View>
                     )}
 
-                    {/* Actions */}
                     {renamingId === t.id ? (
                       <View style={{ flexDirection: "row", gap: 6 }}>
                         <TouchableOpacity
@@ -629,7 +629,7 @@ export const SubmitScreen = () => {
             <Text style={styles.sectionTitle}>Tournament Details</Text>
 
             <Field label="Tournament Name *" first>
-              <TextInput
+              <FocusTextInput
                 ref={vm.refs.name}
                 style={styles.input}
                 value={vm.formData.name}
@@ -703,7 +703,7 @@ export const SubmitScreen = () => {
                 </View>
                 {vm.formData.chipRanges.map((range, index) => (
                   <View key={index} style={styles.chipRow}>
-                    <TextInput
+                    <FocusTextInput
                       style={[
                         styles.chipInput,
                         styles.chipLabelInput,
@@ -716,7 +716,7 @@ export const SubmitScreen = () => {
                       placeholder="e.g., SL7"
                       placeholderTextColor={COLORS.textMuted}
                     />
-                    <TextInput
+                    <FocusTextInput
                       style={[styles.chipInput, { flex: 0.8 }]}
                       value={range.minRating.toString()}
                       onChangeText={(v) =>
@@ -726,7 +726,7 @@ export const SubmitScreen = () => {
                       placeholderTextColor={COLORS.textMuted}
                       keyboardType="numeric"
                     />
-                    <TextInput
+                    <FocusTextInput
                       style={[styles.chipInput, { flex: 0.8 }]}
                       value={range.maxRating.toString()}
                       onChangeText={(v) =>
@@ -736,7 +736,7 @@ export const SubmitScreen = () => {
                       placeholderTextColor={COLORS.textMuted}
                       keyboardType="numeric"
                     />
-                    <TextInput
+                    <FocusTextInput
                       style={[styles.chipInput, { flex: 0.6 }]}
                       value={range.chips.toString()}
                       onChangeText={(v) =>
@@ -785,7 +785,7 @@ export const SubmitScreen = () => {
                     vm.isChipTournament ? "Uses chip ranges instead" : undefined
                   }
                 >
-                  <TextInput
+                  <FocusTextInput
                     ref={vm.refs.gameSpot}
                     style={[
                       styles.input,
@@ -807,7 +807,7 @@ export const SubmitScreen = () => {
                     vm.isChipTournament ? "Uses chip ranges instead" : undefined
                   }
                 >
-                  <TextInput
+                  <FocusTextInput
                     ref={vm.refs.race}
                     style={[
                       styles.input,
@@ -826,7 +826,7 @@ export const SubmitScreen = () => {
             </Row>
 
             <Field label="Description">
-              <TextInput
+              <FocusTextInput
                 ref={vm.refs.description}
                 style={[styles.input, styles.textArea]}
                 value={vm.formData.description}
@@ -879,7 +879,7 @@ export const SubmitScreen = () => {
               }
             >
               <View style={isWeb ? { maxWidth: 200 } : undefined}>
-                <TextInput
+                <FocusTextInput
                   ref={vm.refs.maxFargo}
                   style={[
                     styles.input,
@@ -926,7 +926,7 @@ export const SubmitScreen = () => {
                   >
                     Entry Fee
                   </Text>
-                  <TextInput
+                  <FocusTextInput
                     ref={vm.refs.entryFee}
                     style={styles.input}
                     value={vm.formData.entryFee}
@@ -957,7 +957,7 @@ export const SubmitScreen = () => {
             ) : (
               <>
                 <Field label="Entry Fee">
-                  <TextInput
+                  <FocusTextInput
                     ref={vm.refs.entryFee}
                     style={styles.input}
                     value={vm.formData.entryFee}
@@ -997,14 +997,14 @@ export const SubmitScreen = () => {
             </View>
             {vm.sidePots.map((pot, index) => (
               <View key={index} style={styles.sidePotRow}>
-                <TextInput
+                <FocusTextInput
                   style={[styles.input, styles.sidePotName]}
                   value={pot.name}
                   onChangeText={(v) => vm.updateSidePot(index, "name", v)}
                   placeholder="Name"
                   placeholderTextColor={COLORS.textMuted}
                 />
-                <TextInput
+                <FocusTextInput
                   style={[styles.input, styles.sidePotAmount]}
                   value={pot.amount}
                   onChangeText={(v) => vm.updateSidePot(index, "amount", v)}
@@ -1362,7 +1362,7 @@ export const SubmitScreen = () => {
             <Row>
               <Col>
                 <Field label="Contact Phone">
-                  <TextInput
+                  <FocusTextInput
                     ref={vm.refs.phone}
                     style={styles.input}
                     value={vm.formData.phoneNumber}
@@ -1437,7 +1437,6 @@ export const SubmitScreen = () => {
                   </Text>
                 </TouchableOpacity>
               )}
-              {/* at limit — no save button, just submit */}
             </View>
             {vm.formData.isRecurring && (
               <Text style={styles.submitHint}>
@@ -1491,7 +1490,7 @@ export const SubmitScreen = () => {
         />
       </View>
 
-      {/* ── Save Template Modal — rendered at root so it's never clipped ── */}
+      {/* ── Save Template Modal ── */}
       {showTemplateModal && isWeb && (
         <div
           style={{
@@ -1561,6 +1560,15 @@ export const SubmitScreen = () => {
                 outline: "none",
                 marginBottom: 20,
                 colorScheme: "dark",
+                transition: "border-color 0.18s ease, box-shadow 0.18s ease",
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = COLORS.primary;
+                e.target.style.boxShadow = `0 0 0 3px ${COLORS.primary}33`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "#444";
+                e.target.style.boxShadow = "none";
               }}
             />
             <div style={{ display: "flex", gap: 10 }}>

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import {
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -8,6 +10,8 @@ import {
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+
+const isWeb = Platform.OS === "web";
 
 interface InputProps {
   label?: string;
@@ -48,9 +52,15 @@ export const Input = ({
   passwordRules,
   autoFillActive = false,
 }: InputProps) => {
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && (
+        <Text style={[styles.label, isWeb && focused && styles.labelFocused]}>
+          {label}
+        </Text>
+      )}
       <View style={styles.inputWrapper}>
         <TextInput
           style={[
@@ -58,9 +68,14 @@ export const Input = ({
             error && styles.inputError,
             disabled && styles.inputDisabled,
             multiline && styles.multiline,
-            // When iOS strong password is active, use a blue background
-            // with dark text so it's readable and fits the dark theme
             autoFillActive && styles.autoFillInput,
+            // Web focus glow
+            isWeb && focused && !error && styles.inputFocused,
+            isWeb && {
+              // @ts-ignore — web only
+              transition: "border-color 0.18s ease, box-shadow 0.18s ease",
+              outline: "none",
+            },
           ]}
           value={value}
           onChangeText={onChangeText}
@@ -75,6 +90,8 @@ export const Input = ({
           textContentType={textContentType}
           autoComplete={autoComplete}
           passwordRules={passwordRules}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
@@ -92,6 +109,11 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.xs,
     fontWeight: "500",
+    // @ts-ignore — web only
+    transition: "color 0.18s ease",
+  },
+  labelFocused: {
+    color: COLORS.primary,
   },
   inputWrapper: {
     position: "relative",
@@ -106,6 +128,11 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
+  inputFocused: {
+    borderColor: COLORS.primary,
+    // @ts-ignore — web only
+    boxShadow: `0 0 0 3px ${COLORS.primary}33`,
+  },
   inputError: {
     borderColor: COLORS.error,
   },
@@ -116,10 +143,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
   },
-  // Styling for when iOS strong password autofill is active.
-  // Uses a blue-tinted background with dark text. iOS overlays its own
-  // "Automatic Strong Password" view on top, but the background color
-  // bleeds through at the edges and sets the overall tone.
   autoFillInput: {
     backgroundColor: "#1a3a5c",
     borderColor: "#2d6cb4",

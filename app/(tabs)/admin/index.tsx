@@ -1,6 +1,7 @@
 // app/(tabs)/admin/index.tsx
 
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   Platform,
   RefreshControl,
@@ -102,22 +103,48 @@ const ManagementCard = ({
   value,
   subtitle,
   onPress,
-}: ManagementCardProps) => (
-  <TouchableOpacity
-    style={[
-      styles.managementCard,
-      isWeb ? styles.managementCardWeb : styles.managementCardMobile,
-    ]}
-    onPress={onPress}
-  >
-    <Text style={styles.managementIcon}>{icon}</Text>
-    {value !== undefined && (
-      <Text style={styles.managementValue}>{value.toLocaleString()}</Text>
-    )}
-    <Text style={styles.managementLabel}>{label}</Text>
-    {subtitle && <Text style={styles.managementSubtitle}>{subtitle}</Text>}
-  </TouchableOpacity>
-);
+}: ManagementCardProps) => {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <TouchableOpacity
+      style={[
+        styles.managementCard,
+        isWeb ? styles.managementCardWeb : styles.managementCardMobile,
+        // @ts-ignore — web only
+        isWeb && {
+          // @ts-ignore — web only
+          transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+          // @ts-ignore — web only
+          cursor: "pointer",
+        },
+        isWeb && hovered && {
+          borderColor: COLORS.primary,
+          transform: [{ scale: 1.02 }],
+          // @ts-ignore — web only
+          boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
+        },
+      ]}
+      onPress={onPress}
+      // @ts-ignore — web only
+      onMouseEnter={() => isWeb && setHovered(true)}
+      // @ts-ignore — web only
+      onMouseLeave={() => isWeb && setHovered(false)}
+    >
+      <Text style={styles.managementIcon}>{icon}</Text>
+      {value !== undefined && (
+        <Text style={[
+          styles.managementValue,
+          isWeb && hovered && { color: COLORS.primary },
+        ]}>{value.toLocaleString()}</Text>
+      )}
+      <Text style={[
+        styles.managementLabel,
+        isWeb && hovered && { color: COLORS.primary },
+      ]}>{label}</Text>
+      {subtitle && <Text style={styles.managementSubtitle}>{subtitle}</Text>}
+    </TouchableOpacity>
+  );
+};
 
 // ─── Shared inner wrapper ─────────────────────────────────────────────────────
 
@@ -644,8 +671,6 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.md,
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   headerWeb: {
     paddingTop: SPACING.lg,
