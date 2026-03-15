@@ -53,7 +53,7 @@ export const BilliardsTournamentCard = ({
     );
   };
 
-  // ── Mobile card (unchanged) ─────────────────────────────────────────────
+  // ── Mobile card ───────────────────────────────────────────────────────────────
   if (!isWeb) {
     return (
       <TouchableOpacity
@@ -115,7 +115,7 @@ export const BilliardsTournamentCard = ({
     );
   }
 
-  // ── Web card ────────────────────────────────────────────────────────────
+  // ── Web card ──────────────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
       style={styles.webCard}
@@ -125,6 +125,12 @@ export const BilliardsTournamentCard = ({
       {/* Image */}
       <View style={styles.webImageSection}>
         {renderImage()}
+
+        {/* ID badge — top left */}
+        <View style={styles.webIdBadge}>
+          <Text style={styles.webIdText}>ID:{tournament.id}</Text>
+        </View>
+
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
@@ -196,7 +202,7 @@ export const BilliardsTournamentCard = ({
           </View>
         )}
 
-        {tournament.max_fargo && (
+        {!!tournament.max_fargo && (
           <View style={styles.webRow}>
             <Text style={styles.webIcon}>📊</Text>
             <Text style={styles.webDetail}>
@@ -221,7 +227,7 @@ export const BilliardsTournamentCard = ({
               <Text style={styles.webTagText}>Open</Text>
             </View>
           )}
-          {tournament.added_money && tournament.added_money > 0 && (
+          {!!tournament.added_money && tournament.added_money > 0 && (
             <View style={[styles.webTag, styles.webTagGreen]}>
               <Text style={styles.webTagText}>
                 +{formatCurrency(tournament.added_money)} Added
@@ -242,7 +248,7 @@ export const BilliardsTournamentCard = ({
 };
 
 const styles = StyleSheet.create({
-  // ── Mobile (unchanged) ───────────────────────────────────────────────────
+  // ── Mobile ────────────────────────────────────────────────────────────────────
   card: {
     width: "48%",
     backgroundColor: COLORS.backgroundCard,
@@ -367,7 +373,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  // ── Web card ─────────────────────────────────────────────────────────────
+  // ── Web card ──────────────────────────────────────────────────────────────────
   webCard: {
     width: "23.5%",
     backgroundColor: COLORS.backgroundCard,
@@ -393,6 +399,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     justifyContent: "center",
     alignItems: "center",
+  },
+  webIdBadge: {
+    position: "absolute",
+    top: SPACING.sm,
+    left: SPACING.sm,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  webIdText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "600",
   },
   webGameTypeBadge: {
     position: "absolute",

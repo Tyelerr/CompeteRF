@@ -3,13 +3,13 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
-  Platform,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -189,7 +189,7 @@ export default function MyTournamentsScreen() {
           <Text style={styles.headerTitle}>MY TOURNAMENTS</Text>
           <Text style={styles.headerSubtitle}>
             {vm.tournaments.length} tournament
-            {vm.tournaments.length !== 1 ? "s" : ""} you&apos;re directing
+            {vm.tournaments.length !== 1 ? "s" : ""} you're directing
           </Text>
         </View>
         <View style={styles.placeholder} />
@@ -234,17 +234,12 @@ export default function MyTournamentsScreen() {
       <FlatList
         data={filteredTournaments}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={[
-          styles.listContent,
-          isWeb && styles.scrollContentWeb,
-        ]}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl
-              refreshing={vm.refreshing}
-              onRefresh={vm.onRefresh}
-              tintColor={COLORS.primary}
-            />
+            <RefreshControl refreshing={vm.refreshing}
+            onRefresh={vm.onRefresh}
+            tintColor={COLORS.primary}/>
           )
         }
         renderItem={({ item }) => (
@@ -276,9 +271,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   container: {
-    ...Platform.select({
-      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
-    }),
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },

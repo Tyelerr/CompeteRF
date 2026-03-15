@@ -2,13 +2,13 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   FlatList,
-  Platform,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
@@ -113,7 +113,7 @@ export default function TDVenuesScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>My Venues</Text>
           <Text style={styles.headerSubtitle}>
-            Venues where you&apos;re assigned as TD
+            Venues where you're assigned as TD
           </Text>
         </View>
         <View style={styles.placeholder} />
@@ -135,17 +135,12 @@ export default function TDVenuesScreen() {
         data={vm.venues}
         renderItem={renderVenue}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={[
-          styles.listContent,
-          isWeb && styles.scrollContentWeb,
-        ]}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl
-              refreshing={vm.refreshing}
-              onRefresh={vm.onRefresh}
-              tintColor={COLORS.primary}
-            />
+            <RefreshControl refreshing={vm.refreshing}
+            onRefresh={vm.onRefresh}
+            tintColor={COLORS.primary}/>
           )
         }
         ListEmptyComponent={
@@ -171,9 +166,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   container: {
-    ...Platform.select({
-      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
-    }),
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },

@@ -674,40 +674,40 @@ const styles = StyleSheet.create({
   managementGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    padding: SPACING.md,
-    gap: SPACING.sm,
+    padding: SPACING.sm,
+    gap: SPACING.xs,
   },
 
   // Management card base
   managementCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    padding: SPACING.sm,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 90,
+    minHeight: 54,
   },
-  // Mobile: 2 columns
+  // Mobile: 2 columns (~40% smaller)
   managementCardMobile: {
     width: "48%" as any,
   },
-  // Web: 3 columns within 860px container
+  // Web: 3 columns within 860px container (~20% smaller)
   managementCardWeb: {
     width: "31.5%" as any,
   },
   managementIcon: {
-    fontSize: 24,
-    marginBottom: SPACING.xs,
+    fontSize: 18,
+    marginBottom: 2,
   },
   managementValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: "700",
     color: COLORS.text,
   },
   managementLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     fontWeight: "600",
     color: COLORS.text,
     marginTop: 2,
