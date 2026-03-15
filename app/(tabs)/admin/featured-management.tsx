@@ -8,6 +8,9 @@ import { CreatePlayerModal } from "@/src/views/components/featured/CreatePlayerM
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
+import { SPACING } from "../../../src/theme/spacing";
+
+const isWeb = Platform.OS === "web";
 import {
   RefreshControl,
   SafeAreaView,
@@ -18,6 +21,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 
 export default function FeaturedManagement() {
@@ -294,7 +298,7 @@ export default function FeaturedManagement() {
               setShowCreateBarModal(true);
             }
           }}
-        >
+      >
           <Ionicons name="add" size={20} color="#FFFFFF" />
           <Text style={styles.createButtonText}>
             Create {activeTab === "players" ? "Player" : "Bar"}
@@ -306,7 +310,9 @@ export default function FeaturedManagement() {
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          isWeb ? undefined : (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh}/>
+          )
         }
       >
         <View style={styles.content}>
@@ -373,7 +379,13 @@ export default function FeaturedManagement() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: "#000000",
   },

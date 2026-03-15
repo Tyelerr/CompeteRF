@@ -12,8 +12,11 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
 } from "react-native";
 import { useGiveawayParticipants } from "../../../src/viewmodels/useGiveawayParticipants";
+
+const isWeb = Platform.OS === "web";
 
 const COLORS = {
   background: "#000000",
@@ -250,14 +253,14 @@ export default function GiveawayParticipantsScreen() {
           keyExtractor={(item) => String(item.id)}
           renderItem={renderParticipantCard}
           ListEmptyComponent={renderEmpty}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
           refreshControl={
-            <RefreshControl
-              refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
               onRefresh={vm.refresh}
-              tintColor={COLORS.blue}
-            />
-          }
+              tintColor={COLORS.blue}/>
+          )
+        }
         />
       )}
 
@@ -283,7 +286,7 @@ export default function GiveawayParticipantsScreen() {
                 vm.selectGiveaway(null);
                 setFilterModalVisible(false);
               }}
-            >
+      >
               <Text
                 style={[
                   styles.filterOptionText,
@@ -312,7 +315,7 @@ export default function GiveawayParticipantsScreen() {
                     vm.selectGiveaway(g.id);
                     setFilterModalVisible(false);
                   }}
-                >
+      >
                   <Text
                     style={[
                       styles.filterOptionText,
@@ -338,7 +341,13 @@ export default function GiveawayParticipantsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },

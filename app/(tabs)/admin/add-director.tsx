@@ -8,12 +8,15 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { supabase } from "../../../src/lib/supabase";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+
+const isWeb = Platform.OS === "web";
 
 interface SearchUser {
   id_auto: number;
@@ -373,7 +376,7 @@ export default function AddDirectorScreen() {
           <Text style={styles.userName}>{item.name}</Text>
           <Text style={styles.userEmail}>{item.email}</Text>
           <Text style={styles.userUsername}>
-            @{item.user_name} · ID: {item.id_auto}
+            @{item.user_name} Â· ID: {item.id_auto}
           </Text>
           <Text style={[styles.roleLabel, { color: roleInfo.color }]}>
             {roleInfo.text}
@@ -386,7 +389,7 @@ export default function AddDirectorScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
           <Text style={styles.backText}>← Cancel</Text>
         </TouchableOpacity>
@@ -400,8 +403,7 @@ export default function AddDirectorScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+        keyboardShouldPersistTaps="handled">
         {/* ===== STEP 1: Select Director ===== */}
         <View style={styles.section}>
           <Text style={styles.stepLabel}>STEP 1</Text>
@@ -420,7 +422,7 @@ export default function AddDirectorScreen() {
                   <Text style={styles.selectedName}>{selectedUser.name}</Text>
                   <Text style={styles.selectedEmail}>{selectedUser.email}</Text>
                   <Text style={styles.selectedUsername}>
-                    @{selectedUser.user_name} · ID: {selectedUser.id_auto}
+                    @{selectedUser.user_name} Â· ID: {selectedUser.id_auto}
                   </Text>
                 </View>
               </View>
@@ -461,8 +463,7 @@ export default function AddDirectorScreen() {
                     style={styles.resultsList}
                     showsVerticalScrollIndicator={true}
                     nestedScrollEnabled={true}
-                    keyboardShouldPersistTaps="handled"
-                  >
+                    keyboardShouldPersistTaps="handled">
                     {searchResults.map((item) => (
                       <View key={item.id_auto}>
                         {renderSearchResult({ item })}
@@ -607,7 +608,13 @@ export default function AddDirectorScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -620,6 +627,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

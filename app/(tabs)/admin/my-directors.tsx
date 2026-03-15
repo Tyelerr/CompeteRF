@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -16,6 +17,8 @@ import {
   useMyDirectors,
 } from "../../../src/viewmodels/useMyDirectors";
 import { EmptyState } from "../../../src/views/components/dashboard";
+
+const isWeb = Platform.OS === "web";
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
@@ -109,7 +112,7 @@ export default function MyDirectorsScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -154,13 +157,13 @@ export default function MyDirectorsScreen() {
       <FlatList
         data={vm.directors}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         renderItem={({ item }) => (
           <DirectorCard
@@ -180,7 +183,13 @@ export default function MyDirectorsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -203,6 +212,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

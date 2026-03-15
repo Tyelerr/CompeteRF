@@ -10,6 +10,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
@@ -17,6 +18,8 @@ import { FONT_SIZES } from "../../../../src/theme/typography";
 import { useTournamentDirectorManager } from "../../../../src/viewmodels/useTournamentDirectorManager";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+
+const isWeb = Platform.OS === "web";
 
 const PAGE_SIZE = 10; // 10 tournaments per page
 
@@ -298,7 +301,7 @@ ${tournament.description || "No additional details available."}`,
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -456,13 +459,13 @@ ${tournament.description || "No additional details available."}`,
         data={paginatedTournaments}
         renderItem={renderTournament}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         ListEmptyComponent={
           <EmptyState
@@ -478,7 +481,13 @@ ${tournament.description || "No additional details available."}`,
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -503,6 +512,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

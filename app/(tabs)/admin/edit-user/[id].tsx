@@ -314,7 +314,8 @@ const InfoRow = ({
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
   centerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,

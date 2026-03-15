@@ -15,6 +15,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -27,6 +28,8 @@ import {
   STATUS_LABELS,
 } from "../../../src/models/types/bar-request.types";
 import { useState } from "react";
+
+const isWeb = Platform.OS === "web";
 
 const STATUS_FILTERS: { label: string; value: BarRequestStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -52,15 +55,15 @@ export default function BarRequestsScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl
-          refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
           onRefresh={vm.onRefresh}
-          tintColor={COLORS.primary}
-        />
-      }
+          tintColor={COLORS.primary}/>
+          )
+        }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
@@ -320,7 +323,13 @@ const RequestCard = ({
 // ——————————————————————————————————————————
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -340,6 +349,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backText: {
     color: COLORS.primary,

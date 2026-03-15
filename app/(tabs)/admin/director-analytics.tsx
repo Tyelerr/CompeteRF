@@ -13,12 +13,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useDirectorAnalytics } from "../../../src/viewmodels/useDirectorAnalytics";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
+
+const isWeb = Platform.OS === "web";
 
 export default function DirectorAnalyticsScreen() {
   const router = useRouter();
@@ -36,15 +39,15 @@ export default function DirectorAnalyticsScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl
-          refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
           onRefresh={vm.onRefresh}
-          tintColor={COLORS.primary}
-        />
-      }
+          tintColor={COLORS.primary}/>
+          )
+        }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
@@ -88,7 +91,7 @@ export default function DirectorAnalyticsScreen() {
           label="Venue Calls"
         />
         <MiniStatCard
-          icon="❤️"
+          icon="❤ï¸"
           value={vm.summaryStats.totalFavorites}
           label="Favorites"
         />
@@ -184,7 +187,7 @@ export default function DirectorAnalyticsScreen() {
               <Text style={styles.rankName} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={styles.rankCount}>{item.count} ❤️</Text>
+              <Text style={styles.rankCount}>{item.count} ❤ï¸</Text>
             </View>
           ))}
         </View>
@@ -255,7 +258,13 @@ const PeriodRow = ({ label, value, isLast }: PeriodRowProps) => (
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -279,6 +288,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backBtn: {
     position: "absolute",

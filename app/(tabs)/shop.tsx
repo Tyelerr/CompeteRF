@@ -103,12 +103,44 @@ export default function ShopScreen() {
   const pageContent = (
     <>
       {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <Text style={styles.headerTitle}>GIVEAWAYS</Text>
-        <Text style={styles.headerSubtitle}>
-          Enter for a chance to win billiards gear
-        </Text>
-      </View>
+      {isWeb ? (
+        <View style={styles.headerWeb}>
+          <Text style={styles.headerTitle}>GIVEAWAYS</Text>
+          <Text style={styles.headerSubtitle}>
+            Enter for a chance to win billiards gear
+          </Text>
+        </View>
+      ) : (
+        <View
+          style={{
+            alignItems: "center",
+            paddingTop: 56,
+            paddingBottom: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: "#222222",
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "700",
+              color: "#FFFFFF",
+              letterSpacing: 1,
+            }}
+          >
+            GIVEAWAYS
+          </Text>
+          <Text
+            style={{
+              fontSize: FONT_SIZES.sm,
+              color: COLORS.textSecondary,
+              marginTop: 4,
+            }}
+          >
+            Enter for a chance to win billiards gear
+          </Text>
+        </View>
+      )}
 
       {/* Stats Card */}
       <GiveawayStatsCard stats={giveawaysVm.stats} />
@@ -255,7 +287,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: SPACING.md,
     paddingTop: 0,
   },
   // Web outer: full width, center children
@@ -270,15 +301,12 @@ const styles = StyleSheet.create({
     maxWidth: 900,
   },
 
-  // ----- Header -----
-  header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-  },
+  // ----- Header (web only) -----
   headerWeb: {
     alignItems: "center",
     paddingTop: SPACING.lg,
     paddingHorizontal: 0,
+    paddingBottom: SPACING.sm,
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
@@ -308,6 +336,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: SPACING.md,
     marginBottom: SPACING.md,
+    marginHorizontal: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
@@ -331,6 +360,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     alignItems: "center",
     marginBottom: SPACING.md,
+    marginHorizontal: SPACING.md,
   },
   errorText: {
     fontSize: FONT_SIZES.md,

@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
@@ -17,6 +18,8 @@ import { useVenueTables } from "../../../../src/viewmodels/useVenueTables";
 import { DetailsTab } from "../../../../src/views/components/venues/DetailsTab";
 import { DirectorsTab } from "../../../../src/views/components/venues/DirectorsTab";
 import { TablesTab } from "../../../../src/views/components/venues/TablesTab";
+
+const isWeb = Platform.OS === "web";
 
 type TabType = "details" | "tables" | "directors";
 
@@ -61,7 +64,7 @@ export default function EditVenueScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -121,11 +124,11 @@ export default function EditVenueScreen() {
       <ScrollView
         style={styles.content}
         refreshControl={
-          <RefreshControl
-            refreshing={venueVM.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={venueVM.refreshing}
             onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
       >
         {activeTab === "details" && (
@@ -171,7 +174,13 @@ export default function EditVenueScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -206,6 +215,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

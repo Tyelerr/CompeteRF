@@ -10,12 +10,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBulkImport } from "../../../src/viewmodels/hooks/useBulkImport";
+
+const isWeb = Platform.OS === "web";
 
 export default function BulkImportScreen() {
   const router = useRouter();
@@ -36,9 +39,11 @@ export default function BulkImportScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container}
+      contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
+    >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>BULK IMPORT</Text>
         <Text style={styles.headerSubtitle}>Import tournaments from CSV</Text>
       </View>
@@ -238,7 +243,13 @@ export default function BulkImportScreen() {
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -256,6 +267,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,

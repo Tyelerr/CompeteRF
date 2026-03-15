@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   FlatList,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,6 +14,8 @@ import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { useTournamentDirectorVenues } from "../../../../src/viewmodels/useTournamentDirectorVenues";
+
+const isWeb = Platform.OS === "web";
 
 // TD Venue Card Component (bar owner style but read-only)
 const TDVenueCard = ({
@@ -100,7 +103,7 @@ export default function TDVenuesScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -110,7 +113,7 @@ export default function TDVenuesScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>My Venues</Text>
           <Text style={styles.headerSubtitle}>
-            Venues where you're assigned as TD
+            Venues where you&apos;re assigned as TD
           </Text>
         </View>
         <View style={styles.placeholder} />
@@ -132,13 +135,18 @@ export default function TDVenuesScreen() {
         data={vm.venues}
         renderItem={renderVenue}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          isWeb && styles.scrollContentWeb,
+        ]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+          isWeb ? undefined : (
+            <RefreshControl
+              refreshing={vm.refreshing}
+              onRefresh={vm.onRefresh}
+              tintColor={COLORS.primary}
+            />
+          )
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -157,7 +165,15 @@ export default function TDVenuesScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({
+      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+    }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -180,6 +196,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

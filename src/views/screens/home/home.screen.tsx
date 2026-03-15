@@ -74,8 +74,25 @@ export default function HomeScreen() {
     <WebContainer>
       <View style={styles.container}>
         {!isWeb && (
-          <View style={styles.header}>
-            <Text style={styles.title}>HOME</Text>
+          <View
+            style={{
+              alignItems: "center",
+              paddingTop: 56,
+              paddingBottom: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: "#222222",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "700",
+                color: "#FFFFFF",
+                letterSpacing: 1,
+              }}
+            >
+              HOME
+            </Text>
           </View>
         )}
 

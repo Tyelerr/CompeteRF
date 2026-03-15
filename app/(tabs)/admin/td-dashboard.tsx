@@ -7,11 +7,14 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useTournamentDirectorDashboard } from "../../../src/viewmodels/useTournamentDirectorDashboard";
+
+const isWeb = Platform.OS === "web";
 
 // Stats Card Component
 const StatsCard = ({
@@ -100,16 +103,16 @@ export default function TDDashboardScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl
-          refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
           onRefresh={vm.onRefresh}
-          tintColor={COLORS.primary}
-        />
-      }
+          tintColor={COLORS.primary}/>
+          )
+        }
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -146,7 +149,7 @@ export default function TDDashboardScreen() {
           onPress={() => router.push(vm.navigateToVenues() as any)}
         />
         <StatsCard
-          icon="❤️"
+          icon="❤ï¸"
           title="Favorites"
           value={vm.performanceMetrics.totalFavorites}
         />
@@ -252,7 +255,13 @@ export default function TDDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -275,6 +284,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

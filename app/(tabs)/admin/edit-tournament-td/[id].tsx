@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { supabase } from "../../../../src/lib/supabase";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
@@ -15,6 +16,8 @@ import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
+
+const isWeb = Platform.OS === "web";
 
 export default function EditTournamentTDScreen() {
   const router = useRouter();
@@ -205,7 +208,7 @@ export default function EditTournamentTDScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -229,8 +232,7 @@ export default function EditTournamentTDScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         <View style={styles.form}>
           {/* Tournament Name */}
           <View style={styles.field}>
@@ -388,7 +390,13 @@ export default function EditTournamentTDScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -415,6 +423,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

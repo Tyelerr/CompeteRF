@@ -18,6 +18,8 @@ import { FONT_SIZES } from "../../../src/theme/typography";
 import { useCreateGiveaway } from "../../../src/viewmodels/useCreateGiveaway";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 
+const isWeb = Platform.OS === "web";
+
 export default function CreateGiveawayScreen() {
   const router = useRouter();
   const vm = useCreateGiveaway();
@@ -28,7 +30,7 @@ export default function CreateGiveawayScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={vm.cancel}>
           <Text style={styles.backText}>← Cancel</Text>
         </TouchableOpacity>
@@ -330,7 +332,13 @@ export default function CreateGiveawayScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -343,6 +351,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

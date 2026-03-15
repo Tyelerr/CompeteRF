@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
@@ -16,6 +17,8 @@ import { useBarOwnerDirectors } from "../../../../src/viewmodels/useBarOwnerDire
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { DirectorCard } from "../../../../src/views/components/directors/DirectorCard";
 import { RemoveDirectorModal } from "../../../../src/views/components/directors/RemoveDirectorModal";
+
+const isWeb = Platform.OS === "web";
 
 const StatusTab = ({
   label,
@@ -76,7 +79,7 @@ export default function BarOwnerDirectorsScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -143,13 +146,13 @@ export default function BarOwnerDirectorsScreen() {
         data={vm.directors}
         renderItem={renderDirector}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         ListEmptyComponent={
           <EmptyState
@@ -187,7 +190,13 @@ export default function BarOwnerDirectorsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -210,6 +219,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

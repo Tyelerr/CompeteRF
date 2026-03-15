@@ -13,8 +13,9 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: SPACING.md,
-    paddingTop: SPACING.xl,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+    paddingTop: SPACING.xl + SPACING.lg,
   },
   title: {
     fontSize: FONT_SIZES.xl,

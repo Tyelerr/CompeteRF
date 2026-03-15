@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
@@ -15,6 +16,8 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useTDDashboard } from "../../../src/viewmodels/useTDDashboard";
 import { EmptyState } from "../../../src/views/components/dashboard";
+
+const isWeb = Platform.OS === "web";
 
 const formatDate = (dateString: string): string => {
   const date = new Date(dateString);
@@ -175,7 +178,7 @@ export default function MyTournamentsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -186,7 +189,7 @@ export default function MyTournamentsScreen() {
           <Text style={styles.headerTitle}>MY TOURNAMENTS</Text>
           <Text style={styles.headerSubtitle}>
             {vm.tournaments.length} tournament
-            {vm.tournaments.length !== 1 ? "s" : ""} you're directing
+            {vm.tournaments.length !== 1 ? "s" : ""} you&apos;re directing
           </Text>
         </View>
         <View style={styles.placeholder} />
@@ -231,13 +234,18 @@ export default function MyTournamentsScreen() {
       <FlatList
         data={filteredTournaments}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          isWeb && styles.scrollContentWeb,
+        ]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+          isWeb ? undefined : (
+            <RefreshControl
+              refreshing={vm.refreshing}
+              onRefresh={vm.onRefresh}
+              tintColor={COLORS.primary}
+            />
+          )
         }
         renderItem={({ item }) => (
           <TDTournamentCard
@@ -262,7 +270,15 @@ export default function MyTournamentsScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({
+      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+    }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -285,6 +301,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

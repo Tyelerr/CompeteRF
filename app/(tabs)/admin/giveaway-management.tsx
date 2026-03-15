@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
+
+const isWeb = Platform.OS === "web";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
 } from "react-native";
 import {
   AdminGiveaway,
@@ -268,14 +271,14 @@ export default function GiveawayManagementScreen() {
           data={vm.giveaways}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderGiveawayCard}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
           refreshControl={
-            <RefreshControl
-              refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
               onRefresh={vm.onRefresh}
-              tintColor={COLORS.blue}
-            />
-          }
+              tintColor={COLORS.blue}/>
+          )
+        }
         />
       )}
     </>
@@ -285,12 +288,12 @@ export default function GiveawayManagementScreen() {
     <ScrollView
       contentContainerStyle={styles.manageContent}
       refreshControl={
-        <RefreshControl
-          refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
           onRefresh={vm.onRefresh}
-          tintColor={COLORS.blue}
-        />
-      }
+          tintColor={COLORS.blue}/>
+          )
+        }
     >
       <Text style={styles.sectionTitle}>Quick Actions</Text>
 
@@ -416,7 +419,13 @@ export default function GiveawayManagementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
+  container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: "row",
     alignItems: "center",

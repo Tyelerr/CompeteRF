@@ -20,6 +20,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import {
   getReports,
@@ -36,6 +37,8 @@ import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+
+const isWeb = Platform.OS === "web";
 
 type FilterStatus = "all" | ReportStatus;
 
@@ -209,7 +212,7 @@ export default function ReportManagementScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -218,7 +221,7 @@ export default function ReportManagementScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>CONTENT REPORTS</Text>
         <Text style={styles.headerSubtitle}>
-          {totalCount} total · {pendingCount} pending review
+          {totalCount} total Â· {pendingCount} pending review
         </Text>
       </View>
 
@@ -255,12 +258,12 @@ export default function ReportManagementScreen() {
         <ScrollView
           style={styles.scrollContent}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={COLORS.primary}
-            />
-          }
+              tintColor={COLORS.primary}/>
+          )
+        }
         >
           {reports.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -450,7 +453,13 @@ export default function ReportManagementScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -460,6 +469,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     paddingVertical: SPACING.sm,

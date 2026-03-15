@@ -16,6 +16,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import {
   ConversationPreview,
@@ -26,6 +27,8 @@ import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useMessageCenter } from "../../../src/viewmodels/hooks/use.message.center";
+
+const isWeb = Platform.OS === "web";
 
 // ── Helpers ──
 const getTimeAgo = (dateString: string): string => {
@@ -273,7 +276,7 @@ export default function AdminMessagesScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>MESSAGE CENTER</Text>
         <Text style={styles.headerSubtitle}>
           Manage conversations and broadcasts
@@ -333,12 +336,12 @@ export default function AdminMessagesScreen() {
         <ScrollView
           style={styles.content}
           refreshControl={
-            <RefreshControl
-              refreshing={inboxRefreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={inboxRefreshing}
               onRefresh={onInboxRefresh}
-              tintColor={COLORS.primary}
-            />
-          }
+              tintColor={COLORS.primary}/>
+          )
+        }
         >
           {inboxLoading ? (
             <View style={styles.emptyState}>
@@ -387,7 +390,9 @@ export default function AdminMessagesScreen() {
 
       {/* ═══ BROADCAST TAB ═══ */}
       {activeTab === "send" && (
-        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled"
+          contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
+        >
           {mc.rateLimit && (
             <View style={styles.rateLimitBar}>
               <Text style={styles.rateLimitText}>
@@ -497,12 +502,12 @@ export default function AdminMessagesScreen() {
         <ScrollView
           style={styles.content}
           refreshControl={
-            <RefreshControl
-              refreshing={mc.isRefreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={mc.isRefreshing}
               onRefresh={mc.refresh}
-              tintColor={COLORS.primary}
-            />
-          }
+              tintColor={COLORS.primary}/>
+          )
+        }
         >
           {mc.sentMessages.length === 0 ? (
             <View style={styles.emptyState}>
@@ -525,12 +530,21 @@ export default function AdminMessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
+  container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
   header: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
     alignItems: "center",
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   headerTitle: {
     fontSize: FONT_SIZES.xl,

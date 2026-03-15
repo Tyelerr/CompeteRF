@@ -28,6 +28,8 @@ import { Pagination } from "../../../src/views/components/common/pagination";
 import { EmptyState } from "../../../src/views/components/dashboard";
 import { BarOwnerVenueCard } from "../../../src/views/components/venues";
 
+const isWeb = Platform.OS === "web";
+
 // ── Reassign Owner Modal ──────────────────────────────────────────────
 interface UserSearchResult {
   id: number;
@@ -208,7 +210,7 @@ const ReassignOwnerModal = ({
                   reset();
                   onCancel();
                 }}
-              >
+      >
                 <Text style={ms.btnCancelText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity style={ms.btnConfirm} onPress={handleConfirm}>
@@ -408,7 +410,7 @@ export default function VenueManagementScreen() {
         onConfirm={handleReassignOwner}
       />
 
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -466,13 +468,13 @@ export default function VenueManagementScreen() {
       <FlatList
         data={vm.venues}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         renderItem={({ item }) => (
           <View>
@@ -513,7 +515,13 @@ export default function VenueManagementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
+  container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
   centerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -530,6 +538,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: { padding: SPACING.xs },
   backText: {

@@ -14,6 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { supabase } from "../../../../src/lib/supabase";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
@@ -32,6 +33,8 @@ import { Pagination } from "../../../../src/views/components/common/pagination";
 import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+
+const isWeb = Platform.OS === "web";
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "date", label: "Date" },
@@ -358,7 +361,7 @@ export default function BarTournamentManagerScreen() {
       />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -488,13 +491,13 @@ export default function BarTournamentManagerScreen() {
       <FlatList
         data={pagination.paginatedItems}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         renderItem={({ item }) => (
           <View>
@@ -515,7 +518,7 @@ export default function BarTournamentManagerScreen() {
                 setTournamentToReassign(item);
                 setReassignModalVisible(true);
               }}
-            >
+      >
               <Text style={styles.reassignBtnText}>
                 {"\uD83D\uDD04"} Reassign Director
               </Text>
@@ -544,7 +547,13 @@ export default function BarTournamentManagerScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -567,6 +576,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
@@ -26,6 +27,8 @@ import {
 import { Pagination } from "../../../../src/views/components/common/pagination";
 import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
+
+const isWeb = Platform.OS === "web";
 
 type SASortOption = "newest" | "oldest" | "a-z" | "z-a";
 const SORT_OPTIONS: { key: SASortOption; label: string }[] = [
@@ -106,7 +109,7 @@ const CancelModal = ({
                 setReason("");
                 onCancel();
               }}
-            >
+      >
               <Text style={styles.modalBtnCancelText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -119,7 +122,7 @@ const CancelModal = ({
                 onConfirm(reason.trim());
                 setReason("");
               }}
-            >
+      >
               <Text style={styles.modalBtnConfirmText}>Cancel Tournament</Text>
             </TouchableOpacity>
           </View>
@@ -425,7 +428,7 @@ export default function SuperAdminTournamentManager() {
         onConfirm={confirmReassign}
       />
 
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
@@ -525,7 +528,7 @@ export default function SuperAdminTournamentManager() {
                 setSortOption(o.key);
                 pg.resetPage();
               }}
-            >
+      >
               <Text
                 style={[
                   styles.sortPillText,
@@ -556,11 +559,11 @@ export default function SuperAdminTournamentManager() {
         keyExtractor={(i) => i.id.toString()}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         renderItem={({ item }) => (
           <TournamentCard
@@ -620,7 +623,13 @@ export default function SuperAdminTournamentManager() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
+  container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
   center: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -638,6 +647,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backBtn: { padding: SPACING.xs },
   backText: {

@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -19,6 +20,8 @@ import {
   useAdminUsers,
 } from "../../../src/viewmodels/useAdminUsers";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
+
+const isWeb = Platform.OS === "web";
 
 export default function UserManagementScreen() {
   const router = useRouter();
@@ -36,7 +39,7 @@ export default function UserManagementScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>USER MANAGEMENT</Text>
         <Text style={styles.headerSubtitle}>{vm.totalCount} total users</Text>
       </View>
@@ -108,14 +111,14 @@ export default function UserManagementScreen() {
       <FlatList
         data={vm.users}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         style={styles.listContainer}
         refreshControl={
-          <RefreshControl
-            refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
             onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
         renderItem={({ item }) =>
           vm.viewMode === "compact" ? (
@@ -313,7 +316,13 @@ const FullUserCard = ({
 // STYLES
 // ============================================
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -335,6 +344,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   headerTitle: {
     fontSize: FONT_SIZES.lg,

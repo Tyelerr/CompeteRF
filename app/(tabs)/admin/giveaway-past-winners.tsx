@@ -10,8 +10,11 @@ import {
   StyleSheet,
   Text,
   View,
+  Platform,
 } from "react-native";
 import { useGiveawayPastWinners } from "../../../src/viewmodels/useGiveawayPastWinners";
+
+const isWeb = Platform.OS === "web";
 
 const COLORS = {
   background: "#000000",
@@ -165,14 +168,14 @@ export default function GiveawayPastWinnersScreen() {
           keyExtractor={(item) => `${item.giveaway_id}-${item.drawn_at}`}
           renderItem={renderWinnerCard}
           ListEmptyComponent={renderEmpty}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
           refreshControl={
-            <RefreshControl
-              refreshing={vm.refreshing}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={vm.refreshing}
               onRefresh={vm.refresh}
-              tintColor={COLORS.blue}
-            />
-          }
+              tintColor={COLORS.blue}/>
+          )
+        }
         />
       )}
     </View>
@@ -180,7 +183,13 @@ export default function GiveawayPastWinnersScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },

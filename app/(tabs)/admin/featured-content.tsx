@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   StatusBar,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +17,9 @@ import { PlayerCard } from "@/src/views/components/featured/PlayerCard";
 import { BarCard } from "@/src/views/components/featured/BarCard";
 import { CreatePlayerModal } from "@/src/views/components/featured/CreatePlayerModal";
 import { CreateBarModal } from "@/src/views/components/featured/CreateBarModal";
+import { SPACING } from "../../../src/theme/spacing";
+
+const isWeb = Platform.OS === "web";
 
 export default function FeaturedContent() {
   const {
@@ -110,7 +114,7 @@ export default function FeaturedContent() {
               setShowCreateBarModal(true);
             }
           }}
-        >
+      >
           <Ionicons name="add" size={20} color="#FFFFFF" />
           <Text style={styles.createButtonText}>
             Create {activeTab === "players" ? "Player" : "Bar"}
@@ -122,7 +126,9 @@ export default function FeaturedContent() {
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          isWeb ? undefined : (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh}/>
+          )
         }
       >
         <View style={styles.content}>
@@ -181,7 +187,13 @@ export default function FeaturedContent() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: "#000000",
   },

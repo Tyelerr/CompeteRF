@@ -9,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
@@ -26,6 +27,8 @@ import { Button } from "../../../../src/views/components/common/button";
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
+
+const isWeb = Platform.OS === "web";
 
 export default function EditTournamentScreen() {
   const router = useRouter();
@@ -151,7 +154,7 @@ export default function EditTournamentScreen() {
     switch (item.type) {
       case "header":
         return (
-          <View style={styles.header}>
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
@@ -516,7 +519,7 @@ export default function EditTournamentScreen() {
         keyExtractor={(item) => item.key}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         removeClippedSubviews={false}
         scrollEnabled={true}
         onScrollBeginDrag={() => Keyboard.dismiss()}
@@ -526,7 +529,13 @@ export default function EditTournamentScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -567,6 +576,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     padding: SPACING.xs,

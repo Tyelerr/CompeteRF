@@ -15,12 +15,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useNotificationPreferences } from "../../../src/viewmodels/hooks/use.notification.preferences";
+
+const isWeb = Platform.OS === "web";
 
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
@@ -53,7 +56,7 @@ export default function NotificationPreferencesScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -67,11 +70,11 @@ export default function NotificationPreferencesScreen() {
       <ScrollView
         style={styles.scrollContent}
         refreshControl={
-          <RefreshControl
-            refreshing={false}
+          isWeb ? undefined : (
+            <RefreshControl refreshing={false}
             onRefresh={onRefresh}
-            tintColor={COLORS.primary}
-          />
+            tintColor={COLORS.primary}/>
+          )
         }
       >
         {/* Device Permission Banner */}
@@ -213,7 +216,13 @@ export default function NotificationPreferencesScreen() {
 // STYLES
 // ═══════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
+  // Web centering
+  scrollContentWeb: {
+    alignItems: "center",
+    paddingBottom: SPACING.xl,
+  },
   container: {
+    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -237,6 +246,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
+  },
+  headerWeb: {
+    paddingTop: SPACING.lg,
   },
   backButton: {
     width: 70,
