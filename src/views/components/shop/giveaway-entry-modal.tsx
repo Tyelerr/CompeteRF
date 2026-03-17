@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -152,6 +152,7 @@ function LegalViewerModal({
         style={legalStyles.scrollView}
         contentContainerStyle={legalStyles.scrollContent}
         showsVerticalScrollIndicator
+        onScrollBeginDrag={Keyboard.dismiss}
       >
         {sections.map((section, index) => (
           <View key={index} style={legalStyles.section}>
@@ -185,15 +186,16 @@ function LegalViewerModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={legalStyles.overlay}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <View style={legalStyles.container}>{content}</View>
+      <Pressable style={legalStyles.mobileBackdrop} onPress={onClose} />
+      <View style={legalStyles.mobileCardWrapper} pointerEvents="box-none">
+        <View style={legalStyles.mobileCard}>{content}</View>
       </View>
     </Modal>
   );
 }
 
 const legalStyles = StyleSheet.create({
+  // Web
   backdrop: {
     position: "fixed" as any,
     top: 0,
@@ -228,13 +230,30 @@ const legalStyles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 24,
   },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)" },
-  container: {
+  // Mobile
+  mobileBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  mobileCardWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  mobileCard: {
     backgroundColor: "#0F1117",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%" as any,
-    minHeight: "60%" as any,
+    borderRadius: 20,
+    width: "100%",
+    maxWidth: 480,
+    height: "80%" as any,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: "hidden",
   },
   header: {
     flexDirection: "row",
@@ -333,11 +352,18 @@ export function GiveawayEntryModal({
       </View>
       <View style={styles.divider} />
 
+      {/*
+        onScrollBeginDrag — fires the instant the user starts a swipe in
+        any direction, dismissing the keyboard before the scroll moves.
+        Works for both up and down swipes.
+      */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScrollBeginDrag={Keyboard.dismiss}
       >
         <Text style={styles.giveawayName}>{giveaway?.name}</Text>
 
@@ -443,7 +469,7 @@ export function GiveawayEntryModal({
         )}
       </ScrollView>
 
-      {/* Bottom buttons — Enter Giveaway LEFT, Cancel RIGHT */}
+      {/* Bottom buttons */}
       <View style={styles.bottomBar}>
         <Pressable
           style={[
@@ -493,17 +519,12 @@ export function GiveawayEntryModal({
     );
   }
 
-  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
+  // ── Mobile: centered floating card ───────────────────────────────────────
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.mobileOverlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.keyboardView}
-        >
-          <Pressable style={styles.dismissArea} onPress={handleClose} />
-          <View style={styles.modalContainer}>{formContent}</View>
-        </KeyboardAvoidingView>
+    <Modal visible={visible} animationType="fade" transparent>
+      <Pressable style={styles.mobileBackdrop} onPress={handleClose} />
+      <View style={styles.mobileCardWrapper} pointerEvents="box-none">
+        <View style={styles.mobileCard}>{formContent}</View>
       </View>
       <LegalViewerModal
         visible={showRulesModal}
@@ -537,12 +558,11 @@ function Dropdown({
   placeholder: string;
   flex?: number;
 }) {
-  // Must be before any early returns (Rules of Hooks)
   const [open, setOpen] = React.useState(false);
   const selectedLabel =
     options.find((o) => o.value === value)?.label || placeholder;
 
-  // ── Web: native <select> — no full-screen modal ───────────────────────────
+  // Web: native <select>
   if (isWeb) {
     return (
       <View style={{ flex }}>
@@ -587,7 +607,13 @@ function Dropdown({
 
   return (
     <View style={{ flex }}>
-      <Pressable style={styles.dropdownButton} onPress={() => setOpen(!open)}>
+      <Pressable
+        style={styles.dropdownButton}
+        onPress={() => {
+          Keyboard.dismiss();
+          setOpen(!open);
+        }}
+      >
         <Text
           style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}
           numberOfLines={1}
@@ -658,7 +684,13 @@ function CheckboxRow({
   onToggle: () => void;
 }) {
   return (
-    <Pressable style={styles.checkboxRow} onPress={onToggle}>
+    <Pressable
+      style={styles.checkboxRow}
+      onPress={() => {
+        Keyboard.dismiss();
+        onToggle();
+      }}
+    >
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
         {checked && (
           <Ionicons name="checkmark" size={14} color={COLORS.white} />
@@ -684,7 +716,12 @@ function CheckboxRowWithLink({
 }) {
   return (
     <View style={styles.checkboxRow}>
-      <Pressable onPress={onToggle}>
+      <Pressable
+        onPress={() => {
+          Keyboard.dismiss();
+          onToggle();
+        }}
+      >
         <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
           {checked && (
             <Ionicons name="checkmark" size={14} color={COLORS.white} />
@@ -693,7 +730,13 @@ function CheckboxRowWithLink({
       </Pressable>
       <Text style={styles.checkboxLabel}>
         {prefix}
-        <Text style={styles.linkText} onPress={onLinkPress}>
+        <Text
+          style={styles.linkText}
+          onPress={() => {
+            Keyboard.dismiss();
+            onLinkPress();
+          }}
+        >
           {linkText}
         </Text>
       </Text>
@@ -742,15 +785,33 @@ const styles = StyleSheet.create({
   },
 
   // ── Mobile ────────────────────────────────────────────────────────────────
-  mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
-  keyboardView: { flex: 1, justifyContent: "flex-end" },
-  dismissArea: { flex: 1 },
-  modalContainer: {
+  mobileBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  mobileCardWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  mobileCard: {
+    width: "100%",
+    maxWidth: 480,
+    height: "78%" as any,
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "92%" as any,
-    minHeight: "75%" as any,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
   },
 
   // ── Shared chrome ─────────────────────────────────────────────────────────
@@ -870,7 +931,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // Buttons — Enter Giveaway (blue) LEFT, Cancel RIGHT
+  // Bottom buttons
   bottomBar: {
     flexDirection: "row",
     padding: SPACING.lg,

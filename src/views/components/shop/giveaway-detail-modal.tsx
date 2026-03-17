@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Image,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -14,7 +15,6 @@ import { RADIUS } from "../../../theme/spacing";
 
 const isWeb = Platform.OS === "web";
 
-// Match entry modal local tokens exactly
 const MODAL_COLORS = {
   background: "#000000",
   card: "#1C1C1E",
@@ -71,7 +71,7 @@ export function GiveawayDetailModal({
 
   const innerContent = (
     <>
-      {/* Header — matches entry modal: X left, centered title, spacer right */}
+      {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={onClose} style={s.closeButton}>
           <Text style={s.closeButtonText}>✕</Text>
@@ -85,8 +85,8 @@ export function GiveawayDetailModal({
         style={s.scroll}
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={Keyboard.dismiss}
       >
-        {/* Giveaway name in blue — matches entry modal giveawayName */}
         <Text style={s.giveawayName}>{giveaway.name}</Text>
 
         {/* Image */}
@@ -162,7 +162,7 @@ export function GiveawayDetailModal({
         )}
       </ScrollView>
 
-      {/* Bottom buttons — Enter Giveaway left, Close right */}
+      {/* Bottom buttons */}
       <View style={s.bottomBar}>
         <TouchableOpacity
           style={[s.enterButton, isEntered && s.enteredButton]}
@@ -196,23 +196,28 @@ export function GiveawayDetailModal({
     );
   }
 
-  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
+  // ── Mobile: centered floating card ───────────────────────────────────────
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent
       onRequestClose={onClose}
     >
-      <View style={s.mobileOverlay}>
-        <View style={s.mobileContainer}>{innerContent}</View>
+      <TouchableOpacity
+        style={s.mobileBackdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+      <View style={s.mobileCardWrapper} pointerEvents="box-none">
+        <View style={s.mobileCard}>{innerContent}</View>
       </View>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
-  // ── Web ───────────────────────────────────────────────────────────────────
+  // ── Web ────────────────────────────────────────────────────────────────────
   backdrop: {
     position: "fixed" as any,
     top: 0,
@@ -248,20 +253,37 @@ const s = StyleSheet.create({
     shadowRadius: 24,
   },
 
-  // ── Mobile ────────────────────────────────────────────────────────────────
-  mobileOverlay: {
-    flex: 1,
+  // ── Mobile: centered floating card ─────────────────────────────────────────
+  mobileBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
   },
-  mobileContainer: {
+  mobileCardWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  mobileCard: {
+    width: "100%",
+    maxWidth: 480,
+    height: "82%" as any,
     backgroundColor: MODAL_COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%" as any,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: MODAL_COLORS.cardBorder,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
   },
 
-  // ── Shared chrome (matches entry modal exactly) ───────────────────────────
+  // ── Shared chrome ──────────────────────────────────────────────────────────
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -294,7 +316,6 @@ const s = StyleSheet.create({
     paddingBottom: MODAL_SPACING.lg,
   },
 
-  // Giveaway name in blue — same as entry modal
   giveawayName: {
     color: MODAL_COLORS.blue,
     fontSize: MODAL_FONT.lg,
@@ -382,7 +403,7 @@ const s = StyleSheet.create({
     fontStyle: "italic",
   },
 
-  // Bottom buttons — matches entry modal bottomBar
+  // Bottom buttons
   bottomBar: {
     flexDirection: "row",
     padding: MODAL_SPACING.lg,

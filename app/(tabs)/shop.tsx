@@ -76,7 +76,7 @@ export default function ShopScreen() {
 
   const handleEnterGiveaway = (giveaway: Giveaway) => {
     if (!profile) {
-      router.push("/auth/login");
+      router.push("/(tabs)/profile");
       return;
     }
     setSelectedGiveaway(giveaway);
@@ -152,7 +152,7 @@ export default function ShopScreen() {
           <View style={styles.loginBannerButtons}>
             <Button
               title="Log In"
-              onPress={() => router.push("/auth/login")}
+              onPress={() => router.push("/(tabs)/profile")}
               size="sm"
             />
             <Button
