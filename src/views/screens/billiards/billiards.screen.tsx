@@ -27,6 +27,7 @@ import { Loading } from "../../components/common/loading";
 import { Pagination } from "../../components/common/pagination";
 import { RecommendVenueModal } from "../../components/common/RecommendVenueModal";
 import { WebContainer } from "../../components/common/WebContainer";
+import { TournamentDetailModal } from "../../components/tournament/TournamentDetailModal";
 import { styles } from "./billiards.styles";
 import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
 
@@ -36,6 +37,7 @@ const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 
 export const BilliardsScreen = () => {
   const [webDetailId, setWebDetailId] = useState<string | null>(null);
+  const [mobileDetailId, setMobileDetailId] = useState<string | null>(null);
   const router = useRouter();
   const vm = useBilliards();
   const recommend = useRecommendVenue();
@@ -65,7 +67,7 @@ export const BilliardsScreen = () => {
     return found ? found.label : abbrev;
   };
 
-  // ── Web compact filter bar ────────────────────────────────────────────────────
+  // ── Web compact filter bar ─────────────────────────────────────────────────
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       {/* Search */}
@@ -128,7 +130,7 @@ export const BilliardsScreen = () => {
     </View>
   );
 
-  // ── Radius slider ─────────────────────────────────────────────────────────────
+  // ── Radius slider ──────────────────────────────────────────────────────────
   const renderRadiusSlider = () => {
     if (!vm.zipCode.length) return null;
     return (
@@ -181,7 +183,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Pagination ────────────────────────────────────────────────────────────────
+  // ── Pagination ─────────────────────────────────────────────────────────────
   const renderPagination = () => (
     <Pagination
       totalCount={pagination.totalCount}
@@ -196,7 +198,7 @@ export const BilliardsScreen = () => {
     />
   );
 
-  // ── Tournament card ───────────────────────────────────────────────────────────
+  // ── Tournament card ────────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
       return (
@@ -210,9 +212,7 @@ export const BilliardsScreen = () => {
           if (isWeb) {
             setWebDetailId(String(item.id));
           } else {
-            router.push(
-              `/(tabs)/tournament-detail?id=${item.id}&from=/(tabs)/billiards`,
-            );
+            setMobileDetailId(String(item.id));
           }
         }}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
@@ -221,7 +221,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Recommend venue card ──────────────────────────────────────────────────────
+  // ── Recommend venue card ───────────────────────────────────────────────────
   const renderRecommendCard = () => {
     if (!vm.user) return null;
     return (
@@ -283,7 +283,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Empty state ───────────────────────────────────────────────────────────────
+  // ── Empty state ────────────────────────────────────────────────────────────
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎱</Text>
@@ -330,7 +330,7 @@ export const BilliardsScreen = () => {
         ]
       : pagination.paginatedItems;
 
-  // ── Main render ───────────────────────────────────────────────────────────────
+  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <WebContainer>
       <View style={styles.container}>
@@ -499,19 +499,26 @@ export const BilliardsScreen = () => {
         />
         <RecommendVenueModal vm={recommend} />
 
-        {/* Web tournament detail overlay */}
+        {/* Web tournament detail overlay (unchanged) */}
         {isWeb && webDetailId && (
           <WebTournamentDetailOverlay
             id={webDetailId}
             onClose={() => setWebDetailId(null)}
           />
         )}
+
+        {/* Mobile tournament detail modal */}
+        <TournamentDetailModal
+          id={mobileDetailId}
+          visible={mobileDetailId !== null}
+          onClose={() => setMobileDetailId(null)}
+        />
       </View>
     </WebContainer>
   );
 };
 
-// ── Web-only filter bar styles ────────────────────────────────────────────────
+// ── Web-only filter bar styles ─────────────────────────────────────────────────
 const webS = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
