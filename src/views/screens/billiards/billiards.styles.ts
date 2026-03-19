@@ -66,6 +66,15 @@ export const styles = StyleSheet.create({
   filterItem: {
     flex: 1,
   },
+  filterItemState: {
+    flex: 2,
+  },
+  filterItemCity: {
+    flex: 2,
+  },
+  filterItemZip: {
+    width: 80,
+  },
   filterLabel: {
     fontSize: isWeb ? 10 : FONT_SIZES.sm,
     color: COLORS.textSecondary,

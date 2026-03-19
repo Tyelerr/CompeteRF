@@ -394,7 +394,7 @@ export const BilliardsScreen = () => {
                   </View>
                 </View>
                 <View style={styles.filterRow}>
-                  <View style={styles.filterItem}>
+                  <View style={[styles.filterItem, styles.filterItemState]}>
                     <Text style={styles.filterLabel}>State</Text>
                     <Dropdown
                       placeholder="All States"
@@ -403,7 +403,7 @@ export const BilliardsScreen = () => {
                       onSelect={vm.setSelectedState}
                     />
                   </View>
-                  <View style={styles.filterItem}>
+                  <View style={[styles.filterItem, styles.filterItemCity]}>
                     <Text style={styles.filterLabel}>City</Text>
                     <Dropdown
                       placeholder="City"
@@ -413,7 +413,7 @@ export const BilliardsScreen = () => {
                       onSelect={vm.setSelectedCity}
                     />
                   </View>
-                  <View style={styles.filterItem}>
+                  <View style={[styles.filterItem, styles.filterItemZip]}>
                     <Text style={styles.filterLabel}>Zip Code</Text>
                     <TextInput
                       style={styles.zipInput}
