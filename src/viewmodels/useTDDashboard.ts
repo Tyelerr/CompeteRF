@@ -131,12 +131,36 @@ export const useTDDashboard = () => {
       favoritesCount = fc || 0;
     }
 
+    // Today counts
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayIso = todayStart.toISOString();
+    let todayViews = 0;
+    let todayFavorites = 0;
+    if (tournamentIds.length > 0) {
+      const { count: tv } = await supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_viewed")
+        .in("entity_id", tournamentIds)
+        .gte("created_at", todayIso);
+      todayViews = tv || 0;
+      const { count: tf } = await supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_favorited")
+        .in("entity_id", tournamentIds)
+        .gte("created_at", todayIso);
+      todayFavorites = tf || 0;
+    }
     setStats({
       myTournaments: tournamentCount || 0,
       activeEvents: activeCount || 0,
       venues: venueCount || 0,
       totalFavorites: favoritesCount,
       totalViews: viewsCount,
+      todayViews,
+      todayFavorites,
     });
   };
 

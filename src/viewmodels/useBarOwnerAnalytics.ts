@@ -254,17 +254,17 @@ export function useBarOwnerAnalytics() {
 
       const { data: tournaments } = await supabase
         .from("tournaments")
-        .select("id, title")
+        .select("id, name")
         .in("id", ids);
 
       const nameMap: Record<number, string> = {};
       tournaments?.forEach((t: any) => {
-        nameMap[t.id] = t.title;
+        nameMap[t.id] = t.name;
       });
 
       return entities.map((e) => ({
         ...e,
-        name: nameMap[e.entity_id] || `Tournament #${e.entity_id}`,
+        name: nameMap[e.entity_id] ? `${nameMap[e.entity_id]} (ID:${e.entity_id})` : `Tournament #${e.entity_id}`,
       }));
     },
     [],

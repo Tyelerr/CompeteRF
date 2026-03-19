@@ -20,6 +20,7 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBarOwnerAnalytics } from "../../../src/viewmodels/useBarOwnerAnalytics";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
+import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
 
 const isWeb = Platform.OS === "web";
 
@@ -91,7 +92,7 @@ export default function BarOwnerAnalyticsScreen() {
           label="Venue Calls"
         />
         <MiniStatCard
-          icon="❤ï¸"
+          icon="❤️"
           value={vm.summaryStats.totalFavorites}
           label="Favorites"
         />
@@ -114,23 +115,13 @@ export default function BarOwnerAnalyticsScreen() {
             <Text style={styles.sectionTitle}>Event Breakdown</Text>
           </View>
           <View style={styles.card}>
-            {vm.eventBreakdown.map((item) => {
+            {vm.eventBreakdown.map((item, index) => {
               const maxVal = Math.max(...vm.eventBreakdown.map((e) => e.value));
               const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
               return (
                 <View key={item.label} style={styles.barRow}>
                   <Text style={styles.barLabel}>{item.label}</Text>
-                  <View style={styles.barTrack}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        {
-                          width: `${barWidth}%`,
-                          backgroundColor: item.color,
-                        },
-                      ]}
-                    />
-                  </View>
+                  <AnimatedBar widthPercent={barWidth} color={item.color} delay={index * 80} />
                   <Text style={styles.barValue}>{item.value}</Text>
                 </View>
               );
@@ -187,7 +178,7 @@ export default function BarOwnerAnalyticsScreen() {
               <Text style={styles.rankName} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={styles.rankCount}>{item.count} ❤ï¸</Text>
+              <Text style={styles.rankCount}>{item.count} ❤️</Text>
             </View>
           ))}
         </View>

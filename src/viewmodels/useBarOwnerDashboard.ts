@@ -13,6 +13,8 @@ export interface BarOwnerStats {
   activeTournaments: number;
   totalViews: number;
   totalFavorites: number;
+  todayViews: number;
+  todayFavorites: number;
 }
 
 export interface BarOwnerVenueSummary {
@@ -102,6 +104,8 @@ export const useBarOwnerDashboard = () => {
         activeTournaments: 0,
         totalViews: 0,
         totalFavorites: 0,
+        todayViews: 0,
+        todayFavorites: 0,
       });
       return;
     }
@@ -162,12 +166,36 @@ export const useBarOwnerDashboard = () => {
       favoritesCount = fc || 0;
     }
 
+    // Today's counts
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayIso = todayStart.toISOString();
+    let todayViews = 0;
+    let todayFavorites = 0;
+    if (tournamentIds.length > 0) {
+      const { count: tv } = await supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_viewed")
+        .in("entity_id", tournamentIds)
+        .gte("created_at", todayIso);
+      todayViews = tv || 0;
+      const { count: tf } = await supabase
+        .from("app_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "tournament_favorited")
+        .in("entity_id", tournamentIds)
+        .gte("created_at", todayIso);
+      todayFavorites = tf || 0;
+    }
     setStats({
       totalVenues,
       totalDirectors: directorCount || 0,
       activeTournaments: tournamentCount || 0,
       totalViews: viewsCount,
       totalFavorites: favoritesCount,
+      todayViews,
+      todayFavorites,
     });
   };
 

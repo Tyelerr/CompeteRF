@@ -13,6 +13,7 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useAnalyticsDashboard } from "../../../src/viewmodels/useAnalyticsDashboard";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
+import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
 
 const isWeb = Platform.OS === "web";
 
@@ -82,7 +83,7 @@ export default function AnalyticsScreen() {
           label="Venue Calls"
         />
         <MiniStatCard
-          icon="❤ï¸"
+          icon="❤️"
           value={vm.summaryStats.totalFavorites}
           label="Favorites"
         />
@@ -191,7 +192,7 @@ export default function AnalyticsScreen() {
               <Text style={styles.rankName} numberOfLines={1}>
                 {item.name}
               </Text>
-              <Text style={styles.rankCount}>{item.count} ❤ï¸</Text>
+              <Text style={styles.rankCount}>{item.count} ❤️</Text>
             </View>
           ))}
         </View>

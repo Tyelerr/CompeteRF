@@ -113,16 +113,18 @@ const ManagementCard = ({
         // @ts-ignore — web only
         isWeb && {
           // @ts-ignore — web only
-          transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+          transition:
+            "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
           // @ts-ignore — web only
           cursor: "pointer",
         },
-        isWeb && hovered && {
-          borderColor: COLORS.primary,
-          transform: [{ scale: 1.02 }],
-          // @ts-ignore — web only
-          boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
-        },
+        isWeb &&
+          hovered && {
+            borderColor: COLORS.primary,
+            transform: [{ scale: 1.02 }],
+            // @ts-ignore — web only
+            boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
+          },
       ]}
       onPress={onPress}
       // @ts-ignore — web only
@@ -132,15 +134,23 @@ const ManagementCard = ({
     >
       <Text style={styles.managementIcon}>{icon}</Text>
       {value !== undefined && (
-        <Text style={[
-          styles.managementValue,
-          isWeb && hovered && { color: COLORS.primary },
-        ]}>{value.toLocaleString()}</Text>
+        <Text
+          style={[
+            styles.managementValue,
+            isWeb && hovered && { color: COLORS.primary },
+          ]}
+        >
+          {value.toLocaleString()}
+        </Text>
       )}
-      <Text style={[
-        styles.managementLabel,
-        isWeb && hovered && { color: COLORS.primary },
-      ]}>{label}</Text>
+      <Text
+        style={[
+          styles.managementLabel,
+          isWeb && hovered && { color: COLORS.primary },
+        ]}
+      >
+        {label}
+      </Text>
       {subtitle && <Text style={styles.managementSubtitle}>{subtitle}</Text>}
     </TouchableOpacity>
   );
@@ -228,27 +238,53 @@ const TDDashboard = () => {
           />
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Analytics Period</Text>
-            <View style={styles.filterDropdown}>
-              <Dropdown
-                options={vm.timePeriodOptions}
-                value={vm.timePeriod.value}
-                onSelect={vm.handleTimePeriodChange}
-                placeholder="Select Period"
-              />
+        <View style={styles.quickStatsSection}>
+          <Text style={styles.quickStatsTitle}>Quick Stats</Text>
+          <Text style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
+          <View style={styles.quickStatsCard}>
+            <View style={styles.quickStatRow}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#1E3A5F" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>👁</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Views</Text>
+              <Text style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
+                {vm.stats.todayViews}
+              </Text>
+            </View>
+            <View style={styles.quickStatRow}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#5F1E1E" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>❤️</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Favorites</Text>
+              <Text style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
+                {vm.stats.todayFavorites}
+              </Text>
+            </View>
+            <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#1E4D2B" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>🎯</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Active Events</Text>
+              <Text style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
+                {vm.stats.activeEvents}
+              </Text>
             </View>
           </View>
-        </View>
-
-        <View style={styles.analyticsRow}>
-          <EventTypeChart data={vm.eventTypeStats} />
-          <PerformanceCard
-            totalViews={vm.stats.totalViews}
-            totalFavorites={vm.stats.totalFavorites}
-            activeEvents={vm.stats.activeEvents}
-          />
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -330,27 +366,53 @@ const BarOwnerDashboard = () => {
           />
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Analytics Period</Text>
-            <View style={styles.filterDropdown}>
-              <Dropdown
-                options={vm.timePeriodOptions}
-                value={vm.timePeriod.value}
-                onSelect={vm.handleTimePeriodChange}
-                placeholder="Select Period"
-              />
+        <View style={styles.quickStatsSection}>
+          <Text style={styles.quickStatsTitle}>Quick Stats</Text>
+          <Text style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
+          <View style={styles.quickStatsCard}>
+            <View style={styles.quickStatRow}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#1E3A5F" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>👁</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Views</Text>
+              <Text style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
+                {vm.stats.todayViews}
+              </Text>
+            </View>
+            <View style={styles.quickStatRow}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#5F1E1E" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>❤️</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Favorites</Text>
+              <Text style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
+                {vm.stats.todayFavorites}
+              </Text>
+            </View>
+            <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
+              <View
+                style={[
+                  styles.quickStatIconWrap,
+                  { backgroundColor: "#1E4D2B" },
+                ]}
+              >
+                <Text style={styles.quickStatIcon}>🎯</Text>
+              </View>
+              <Text style={styles.quickStatLabel}>Active Events</Text>
+              <Text style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
+                {vm.stats.activeTournaments}
+              </Text>
             </View>
           </View>
-        </View>
-
-        <View style={styles.analyticsRow}>
-          <EventTypeChart data={vm.eventTypeStats} />
-          <PerformanceCard
-            totalViews={vm.stats.totalViews}
-            totalFavorites={vm.stats.totalFavorites}
-            activeEvents={vm.stats.activeTournaments}
-          />
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -771,6 +833,59 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
 
+  quickStatsSection: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  quickStatsTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  quickStatsSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  quickStatsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+  },
+  quickStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  quickStatIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickStatIcon: {
+    fontSize: 18,
+  },
+  quickStatNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    marginLeft: "auto",
+    minWidth: 44,
+    textAlign: "right",
+  },
+  quickStatLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+    flex: 1,
+  },
   bottomSpacer: {
     height: SPACING.xl * 2,
   },

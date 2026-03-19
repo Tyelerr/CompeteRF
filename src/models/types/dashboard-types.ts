@@ -4,6 +4,8 @@ export interface DashboardStats {
   venues: number;
   totalFavorites: number;
   totalViews: number;
+  todayViews: number;
+  todayFavorites: number;
 }
 
 export interface VenueWithStats {
