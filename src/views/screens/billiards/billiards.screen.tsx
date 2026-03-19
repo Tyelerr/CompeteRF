@@ -394,7 +394,7 @@ export const BilliardsScreen = () => {
                   </View>
                 </View>
                 <View style={styles.filterRow}>
-                  <View style={[styles.filterItem, styles.filterItemState]}>
+                  <View style={styles.filterItemState}>
                     <Text style={styles.filterLabel}>State</Text>
                     <Dropdown
                       placeholder="All States"
@@ -403,7 +403,7 @@ export const BilliardsScreen = () => {
                       onSelect={vm.setSelectedState}
                     />
                   </View>
-                  <View style={[styles.filterItem, styles.filterItemCity]}>
+                  <View style={styles.filterItemCity}>
                     <Text style={styles.filterLabel}>City</Text>
                     <Dropdown
                       placeholder="City"
@@ -413,7 +413,7 @@ export const BilliardsScreen = () => {
                       onSelect={vm.setSelectedCity}
                     />
                   </View>
-                  <View style={[styles.filterItem, styles.filterItemZip]}>
+                  <View style={styles.filterItemZip}>
                     <Text style={styles.filterLabel}>Zip Code</Text>
                     <TextInput
                       style={styles.zipInput}
@@ -551,11 +551,11 @@ const webS = StyleSheet.create({
     height: 32,
   },
   dropWrap: {
-    width: 160,
+    width: 150,
     height: 32,
   },
   zipInput: {
-    width: 70,
+    width: 100,
     height: 32,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.sm,

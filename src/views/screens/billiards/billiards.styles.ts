@@ -67,13 +67,13 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   filterItemState: {
-    flex: 2,
+    flex: 3,
   },
   filterItemCity: {
-    flex: 2,
+    flex: 3,
   },
   filterItemZip: {
-    width: 80,
+    flex: 2,
   },
   filterLabel: {
     fontSize: isWeb ? 10 : FONT_SIZES.sm,
@@ -84,14 +84,17 @@ export const styles = StyleSheet.create({
   // ── Zip input ────────────────────────────────────────────────────────────
   zipInput: {
     backgroundColor: COLORS.surface,
-    borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingVertical: isWeb ? 6 : SPACING.md,
-    paddingHorizontal: SPACING.sm,
-    fontSize: isWeb ? 12 : FONT_SIZES.md,
+    paddingVertical: 0,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZES.md,
     color: COLORS.text,
-    marginTop: isWeb ? 2 : SPACING.xs,
+    height: 52,
+    marginTop: SPACING.xs,
+    textAlignVertical: "center",
+    includeFontPadding: false,
   },
 
   // ── Radius slider ────────────────────────────────────────────────────────

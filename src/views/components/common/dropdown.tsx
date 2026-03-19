@@ -314,6 +314,8 @@ export const Dropdown = ({
             !selectedOption && styles.placeholder,
             disabled && styles.textDisabled,
           ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
         >
           {selectedOption?.label || placeholder}
         </Text>
@@ -406,16 +408,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
+    height: 52,
     paddingHorizontal: SPACING.md,
+    paddingVertical: 0,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginHorizontal: SPACING.sm,
+    overflow: "hidden",
   },
   selectorError: { borderColor: COLORS.error },
   selectorDisabled: { backgroundColor: COLORS.background, opacity: 0.6 },
-  selectorText: { fontSize: FONT_SIZES.md, color: COLORS.text, flex: 1 },
+  selectorText: {
+    fontSize: FONT_SIZES.md,
+    lineHeight: FONT_SIZES.md + 2,
+    color: COLORS.text,
+    flex: 1,
+    minWidth: 0,
+    // @ts-ignore
+    width: "100%",
+  },
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginLeft: 4 },
