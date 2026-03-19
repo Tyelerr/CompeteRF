@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
   Image,
@@ -22,8 +22,6 @@ import { Button } from "../common/button";
 import { FullScreenImageViewer } from "../common/FullScreenImageViewer";
 import { Loading } from "../common/loading";
 import ReportModal from "../common/ReportModal";
-
-// ── Web uses WebTournamentDetailOverlay — this returns null on web ─────────────
 
 interface TournamentDetailModalProps {
   id: string | null;
@@ -53,7 +51,7 @@ export function TournamentDetailModal({
 
   const [showImageViewer, setShowImageViewer] = useState(false);
 
-  // ── Image URL (identical to tournament-detail.tsx) ────────────────────────
+  // ── Image URL ──────────────────────────────────────────────────────────────
   const getTournamentImageUrl = (tournament: any) => {
     const gameTypeImageMap: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
@@ -83,26 +81,42 @@ export function TournamentDetailModal({
     return null;
   };
 
-  // ── Share ─────────────────────────────────────────────────────────────────
+  // ── Director helpers ───────────────────────────────────────────────────────
+  const getDirectorName = (profiles: any): string => {
+    if (!profiles) return "Unknown";
+    const first = profiles.first_name || "";
+    const last = profiles.last_name || "";
+    const full = [first, last].filter(Boolean).join(" ");
+    if (full.trim()) return full;
+    if (profiles.user_name) return `@${profiles.user_name}`;
+    return "Unknown";
+  };
+
+  const getDirectorId = (profiles: any): string | null => {
+    if (!profiles?.id_auto) return null;
+    return `TD-${String(profiles.id_auto).padStart(6, "0")}`;
+  };
+
+  // ── Share ──────────────────────────────────────────────────────────────────
   const handleShare = async () => {
     if (!vm.tournament) return;
     try {
       const chipInfo = chipRanges
-        ? "\n\n🎰 Chip Chart:\n" +
+        ? "\n\nChip Chart:\n" +
           chipRanges
             .map(
               (r: any) =>
-                `${r.label || `${r.minRating}–${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
+                `${r.label || `${r.minRating}-${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
             )
             .join("\n")
         : "";
       const message =
-        `🎱 ${vm.tournament.name}\n\n` +
-        `📅 ${vm.formattedDate} at ${vm.formattedTime}\n` +
-        `🏠 ${vm.tournament.venues?.venue || "TBD"}\n` +
-        `💰 Entry: ${vm.formattedEntryFee}` +
+        `${vm.tournament.name}\n\n` +
+        `${vm.formattedDate} at ${vm.formattedTime}\n` +
+        `${vm.tournament.venues?.venue || "TBD"}\n` +
+        `Entry: ${vm.formattedEntryFee}` +
         chipInfo +
-        `\n\n📍 ${vm.tournament.venues?.address || ""}, ${vm.tournament.venues?.city || ""}, ${vm.tournament.venues?.state || ""} ${vm.tournament.venues?.zip_code || ""}`;
+        `\n\n${vm.tournament.venues?.address || ""}, ${vm.tournament.venues?.city || ""}, ${vm.tournament.venues?.state || ""} ${vm.tournament.venues?.zip_code || ""}`;
       await Share.share({ message });
       analyticsService.trackTournamentShared(vm.tournament.id);
     } catch (error) {
@@ -110,7 +124,7 @@ export function TournamentDetailModal({
     }
   };
 
-  // ── Derived values ────────────────────────────────────────────────────────
+  // ── Derived values ─────────────────────────────────────────────────────────
   const tournament: any = vm.tournament;
   const imageUrl = tournament ? getTournamentImageUrl(tournament) : null;
   const isChipTournament = tournament?.tournament_format === "chip-tournament";
@@ -121,27 +135,32 @@ export function TournamentDetailModal({
       ? tournament.chip_ranges
       : null;
 
-  // ── Inner content (same structure as giveaway modal's innerContent) ────────
+  // director comes from profiles!director_id(*) join
+  const director = tournament?.profiles ?? null;
+  const directorName = getDirectorName(director);
+  const directorId = getDirectorId(director);
+
+  // ── Inner content ──────────────────────────────────────────────────────────
   const innerContent = (
     <>
-      {/* Header — matches giveaway modal header exactly */}
+      {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={onClose} style={s.closeButton}>
-          <Text style={s.closeButtonText}>✕</Text>
+          <Text style={s.closeButtonText}>{"\u2715"}</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>Tournament Details</Text>
         <View style={{ width: 40 }} />
       </View>
       <View style={s.divider} />
 
-      {/* Loading state */}
+      {/* Loading */}
       {vm.loading && (
         <View style={s.loadingWrap}>
           <Loading message="Loading tournament..." />
         </View>
       )}
 
-      {/* Error state */}
+      {/* Error */}
       {!vm.loading && (vm.error || !tournament) && (
         <View style={s.loadingWrap}>
           <Text style={s.errorText}>{vm.error || "Tournament not found"}</Text>
@@ -159,14 +178,14 @@ export function TournamentDetailModal({
             {vm.isDeleted && (
               <View style={s.deletedBanner}>
                 <Text style={s.deletedText}>
-                  🗑️ This tournament has been deleted
+                  This tournament has been deleted
                 </Text>
               </View>
             )}
             {vm.isHidden && isAdmin && (
               <View style={s.hiddenBanner}>
                 <Ionicons name="eye-off" size={16} color="#fff" />
-                <Text style={s.hiddenText}>HIDDEN – hidden by an admin</Text>
+                <Text style={s.hiddenText}>HIDDEN — hidden by an admin</Text>
               </View>
             )}
 
@@ -187,7 +206,7 @@ export function TournamentDetailModal({
                   </View>
                   {tournament.is_recurring && (
                     <View style={s.recurringBadge}>
-                      <Text style={s.recurringText}>🔄 Weekly</Text>
+                      <Text style={s.recurringText}>Weekly</Text>
                     </View>
                   )}
                 </View>
@@ -207,7 +226,7 @@ export function TournamentDetailModal({
                     />
                   ) : (
                     <View style={s.placeholderImage}>
-                      <Text style={s.placeholderText}>🎱</Text>
+                      <Text style={s.placeholderText}>{"\uD83C\uDFB1"}</Text>
                     </View>
                   )}
                 </View>
@@ -216,7 +235,7 @@ export function TournamentDetailModal({
                     style={s.viewImageButton}
                     onPress={() => setShowImageViewer(true)}
                   >
-                    <Text style={s.viewImageText}>🔍 View</Text>
+                    <Text style={s.viewImageText}>View</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -228,7 +247,7 @@ export function TournamentDetailModal({
                 <Text style={s.chipTitle}>RATING / CHIP CHART</Text>
                 {chipRanges.map((range: any, index: number) => (
                   <Text key={index} style={s.chipLine}>
-                    {range.label || `${range.minRating}–${range.maxRating}`}:{" "}
+                    {range.label || `${range.minRating}-${range.maxRating}`}:{" "}
                     <Text style={s.chipLineCount}>
                       {range.chips} Chip{range.chips !== 1 ? "s" : ""}
                     </Text>
@@ -239,14 +258,14 @@ export function TournamentDetailModal({
 
             {/* Date & Time */}
             <View style={s.section}>
-              <Text style={s.sectionTitle}>📅 Date & Time</Text>
+              <Text style={s.sectionTitle}>Date & Time</Text>
               <Text style={s.sectionText}>{vm.formattedDate}</Text>
               <Text style={s.sectionText}>{vm.formattedTime}</Text>
             </View>
 
             {/* Entry & Prizes */}
             <View style={s.section}>
-              <Text style={s.sectionTitle}>💰 Entry & Prizes</Text>
+              <Text style={s.sectionTitle}>Entry & Prizes</Text>
               <View style={s.row}>
                 <Text style={s.label}>Entry Fee:</Text>
                 <Text style={s.val}>{vm.formattedEntryFee}</Text>
@@ -263,7 +282,7 @@ export function TournamentDetailModal({
 
             {/* Details */}
             <View style={s.section}>
-              <Text style={s.sectionTitle}>🎱 Details</Text>
+              <Text style={s.sectionTitle}>Details</Text>
               {tournament.table_size && (
                 <View style={s.row}>
                   <Text style={s.label}>Table Size:</Text>
@@ -308,9 +327,26 @@ export function TournamentDetailModal({
               )}
             </View>
 
+            {/* Director */}
+            <View style={s.section}>
+              <Text style={s.sectionTitle}>Tournament Director</Text>
+              <View style={s.row}>
+                <Text style={s.label}>Name:</Text>
+                <Text style={s.val}>{directorName}</Text>
+              </View>
+              {directorId && (
+                <View style={s.row}>
+                  <Text style={s.label}>Director ID:</Text>
+                  <View style={s.directorIdBadge}>
+                    <Text style={s.directorIdText}>{directorId}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Location */}
             <View style={s.section}>
-              <Text style={s.sectionTitle}>📍 Location</Text>
+              <Text style={s.sectionTitle}>Location</Text>
               <Text style={s.venueName}>{tournament.venues?.venue}</Text>
               <Text style={s.venueAddress}>{tournament.venues?.address}</Text>
               <Text style={s.venueAddress}>
@@ -319,14 +355,14 @@ export function TournamentDetailModal({
               </Text>
               <View style={s.venueActions}>
                 <Button
-                  title="🗺 Open in Maps"
+                  title="Open in Maps"
                   onPress={vm.openMaps}
                   variant="outline"
                   size="sm"
                 />
                 {tournament.venues?.phone && (
                   <Button
-                    title="📞 Call Venue"
+                    title="Call Venue"
                     onPress={vm.callVenue}
                     variant="outline"
                     size="sm"
@@ -343,10 +379,10 @@ export function TournamentDetailModal({
             </Text>
           </ScrollView>
 
-          {/* Bottom buttons — matches giveaway modal bottomBar */}
+          {/* Bottom buttons */}
           <View style={s.bottomBar}>
             <TouchableOpacity style={s.shareButton} onPress={handleShare}>
-              <Text style={s.shareButtonText}>📤 Share</Text>
+              <Text style={s.shareButtonText}>Share</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.reportButton}
@@ -368,7 +404,6 @@ export function TournamentDetailModal({
 
   if (Platform.OS === "web") return null;
 
-  // ── Mobile: centered floating card — matches giveaway modal exactly ────────
   return (
     <>
       <Modal
@@ -385,12 +420,12 @@ export function TournamentDetailModal({
         <View style={s.mobileCardWrapper} pointerEvents="box-none">
           <View style={s.mobileCard}>{innerContent}</View>
         </View>
-      <FullScreenImageViewer
-        visible={showImageViewer}
-        imageUrl={imageUrl}
-        title={tournament?.name}
-        onClose={() => setShowImageViewer(false)}
-      />
+        <FullScreenImageViewer
+          visible={showImageViewer}
+          imageUrl={imageUrl}
+          title={tournament?.name}
+          onClose={() => setShowImageViewer(false)}
+        />
       </Modal>
 
       <ReportModal
@@ -408,10 +443,8 @@ export function TournamentDetailModal({
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  // Mobile card — copied from giveaway-detail-modal
   mobileBackdrop: {
     position: "absolute",
     top: 0,
@@ -440,8 +473,6 @@ const s = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 24,
   },
-
-  // Header — copied from giveaway-detail-modal
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -467,13 +498,11 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
   divider: { height: 1, backgroundColor: COLORS.border },
-
   scroll: { flex: 1 },
   scrollContent: {
     padding: SPACING.md,
     paddingBottom: SPACING.lg,
   },
-
   loadingWrap: {
     flex: 1,
     justifyContent: "center",
@@ -484,8 +513,6 @@ const s = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     textAlign: "center",
   },
-
-  // Banners
   deletedBanner: {
     backgroundColor: COLORS.error,
     padding: SPACING.md,
@@ -513,8 +540,6 @@ const s = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: "700",
   },
-
-  // Top section
   topSection: {
     flexDirection: "row",
     marginBottom: SPACING.md,
@@ -577,8 +602,6 @@ const s = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 20,
   },
-
-  // Image
   imageSection: { alignItems: "center" },
   imageContainer: { marginBottom: SPACING.xs },
   tournamentImage: { width: 80, height: 80, borderRadius: RADIUS.md },
@@ -607,8 +630,6 @@ const s = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-
-  // Sections — matches giveaway statsCard style
   section: {
     backgroundColor: COLORS.surface,
     borderRadius: 10,
@@ -627,12 +648,24 @@ const s = StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SPACING.xs,
   },
   label: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
   val: { fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: "500" },
-
-  // Location
+  directorIdBadge: {
+    backgroundColor: COLORS.primary + "20",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.sm,
+    paddingVertical: 2,
+    paddingHorizontal: SPACING.sm,
+  },
+  directorIdText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
   venueName: {
     fontSize: FONT_SIZES.sm,
     fontWeight: "600",
@@ -645,8 +678,6 @@ const s = StyleSheet.create({
     gap: SPACING.sm,
     marginTop: SPACING.sm,
   },
-
-  // Chip chart
   chipCard: {
     borderWidth: 1.5,
     borderColor: COLORS.primary,
@@ -671,8 +702,6 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
   chipLineCount: { fontWeight: "800", color: COLORS.primary },
-
-  // Disclaimer
   disclaimerText: {
     fontSize: 11,
     color: COLORS.textSecondary,
@@ -681,8 +710,6 @@ const s = StyleSheet.create({
     lineHeight: 16,
     opacity: 0.6,
   },
-
-  // Bottom bar — matches giveaway modal bottomBar
   bottomBar: {
     flexDirection: "row",
     padding: SPACING.md,

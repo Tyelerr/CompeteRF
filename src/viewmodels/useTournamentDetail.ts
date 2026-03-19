@@ -1,10 +1,17 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+﻿import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { analyticsService, ENTITY_TYPES } from "../models/services/analytics.service";
 import { notificationDispatcher } from "../models/services/notification-dispatcher.service";
 import { useAuthContext } from "../providers/AuthProvider";
+
+interface DirectorProfile {
+  id_auto: number;
+  first_name?: string;
+  last_name?: string;
+  user_name?: string;
+}
 
 interface Tournament {
   id: number;
@@ -26,6 +33,12 @@ interface Tournament {
   status: string;
   director_id: number;
   venue_id: number;
+  chip_ranges?: any[];
+  game_spot?: string;
+  race?: string;
+  table_size?: string;
+  thumbnail?: string;
+  profiles: DirectorProfile | null;
   venues: {
     id: number;
     venue: string;
@@ -38,26 +51,19 @@ interface Tournament {
 }
 
 interface UseTournamentDetailReturn {
-  // State
   loading: boolean;
   tournament: Tournament | null;
   error: string;
   deleting: boolean;
-
-  // Computed
   isDirector: boolean;
   isVenueOwner: boolean;
   canEdit: boolean;
   isDeleted: boolean;
   isHidden: boolean;
   showActionBar: boolean;
-
-  // Formatted values
   formattedDate: string;
   formattedTime: string;
   formattedEntryFee: string;
-
-  // Actions
   openMaps: () => void;
   callVenue: () => void;
   handleEdit: () => void;
@@ -79,7 +85,6 @@ export const useTournamentDetail = (
   const [isVenueOwner, setIsVenueOwner] = useState(false);
   const viewRecorded = useRef<string | null>(null);
 
-  // Check if opened from bar owner dashboard
   const fromBarOwner = params.fromBarOwner === "true";
 
   useEffect(() => {
@@ -88,7 +93,6 @@ export const useTournamentDetail = (
     }
   }, [tournamentId]);
 
-  // Record a view once per unique tournament ID (non-blocking, fire-and-forget)
   useEffect(() => {
     if (tournamentId && viewRecorded.current !== tournamentId) {
       viewRecorded.current = tournamentId;
@@ -113,6 +117,12 @@ export const useTournamentDetail = (
             state,
             zip_code,
             phone
+          ),
+          profiles!director_id (
+            id_auto,
+            first_name,
+            last_name,
+            user_name
           )
         `,
         )
@@ -124,7 +134,6 @@ export const useTournamentDetail = (
       } else {
         setTournament(data);
 
-        // Check if current user is a venue owner for this tournament's venue
         if (profile?.id_auto && data?.venue_id) {
           checkVenueOwnership(data.venue_id);
         }
@@ -138,7 +147,6 @@ export const useTournamentDetail = (
 
   const checkVenueOwnership = async (venueId: number) => {
     if (!profile?.id_auto) return;
-
     try {
       const { data, error } = await supabase
         .from("venue_owners")
@@ -147,27 +155,18 @@ export const useTournamentDetail = (
         .eq("owner_id", profile.id_auto)
         .is("archived_at", null)
         .maybeSingle();
-
       setIsVenueOwner(!!data && !error);
     } catch {
       setIsVenueOwner(false);
     }
   };
 
-  // Computed values
   const isDirector = profile?.id_auto === tournament?.director_id;
   const isDeleted = tournament?.status === "cancelled";
   const isHidden = tournament?.is_hidden === true;
-
-  // Can edit if:
-  // 1. User is the director who created it AND it's not deleted
-  // 2. User is a venue owner (accessing from bar owner dashboard) AND it's not deleted
   const canEdit = !isDeleted && (isDirector || (fromBarOwner && isVenueOwner));
-
-  // Show action bar if user is director OR venue owner (from bar owner dashboard)
   const showActionBar = isDirector || (fromBarOwner && isVenueOwner);
 
-  // Formatters
   const formatDate = (dateString: string): string => {
     if (!dateString) return "";
     const date = new Date(dateString);
@@ -192,35 +191,27 @@ export const useTournamentDetail = (
     return amount === 0 ? "Free" : `$${amount}`;
   };
 
-  // Actions
   const openMaps = () => {
     if (!tournament?.venues) return;
     const address = `${tournament.venues.address}, ${tournament.venues.city}, ${tournament.venues.state} ${tournament.venues.zip_code}`;
     const encodedAddress = encodeURIComponent(address);
-
-    const url = Platform.select({
-      ios: `https://maps.apple.com/?q=${encodedAddress}`,
-      android: `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`,
-    }) || `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
-
-    analyticsService.trackDirectionsClicked(
-      ENTITY_TYPES.TOURNAMENT,
-      tournament.id,
-      { venue_name: tournament.venues.venue },
-    );
-
+    const url =
+      Platform.select({
+        ios: `https://maps.apple.com/?q=${encodedAddress}`,
+        android: `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`,
+      }) || `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`;
+    analyticsService.trackDirectionsClicked(ENTITY_TYPES.TOURNAMENT, tournament.id, {
+      venue_name: tournament.venues.venue,
+    });
     Linking.openURL(url);
   };
 
   const callVenue = () => {
     if (!tournament?.venues?.phone) return;
-
-    analyticsService.trackVenueContactClicked(
-      ENTITY_TYPES.TOURNAMENT,
-      tournament.id,
-      { contact_type: "phone", venue_name: tournament.venues.venue },
-    );
-
+    analyticsService.trackVenueContactClicked(ENTITY_TYPES.TOURNAMENT, tournament.id, {
+      contact_type: "phone",
+      venue_name: tournament.venues.venue,
+    });
     const phone = tournament.venues.phone.replace(/[^0-9+]/g, "");
     Linking.openURL(`tel:${phone}`);
   };
@@ -235,24 +226,18 @@ export const useTournamentDetail = (
 
   const handleDelete = () => {
     if (!tournament) return;
-
     Alert.alert(
       "Delete Tournament",
       `Are you sure you want to delete "${tournament.name}"? This action cannot be undone.`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: deleteTournament,
-        },
+        { text: "Delete", style: "destructive", onPress: deleteTournament },
       ],
     );
   };
 
   const deleteTournament = async () => {
     if (!tournament || !profile) return;
-
     setDeleting(true);
     try {
       const { error: updateError } = await supabase
@@ -267,20 +252,15 @@ export const useTournamentDetail = (
 
       if (updateError) throw updateError;
 
-      // ══════════════════════════════════════════════════════════
-      // 🔔 Phase 2: Notify users who favorited this tournament
-      // ══════════════════════════════════════════════════════════
       notificationDispatcher
         .sendToTournamentFavorites(
           tournament.id,
-          profile.id_auto, // exclude the person who cancelled
-          "❌ Tournament Cancelled",
+          profile.id_auto,
+          "Tournament Cancelled",
           `${tournament.name} has been cancelled`,
           { deep_link: `/tournament-detail?id=${tournament.id}` },
         )
-        .catch((err) =>
-          console.error("⚠️ Error sending cancellation notifications:", err),
-        );
+        .catch((err) => console.error("Error sending cancellation notifications:", err));
 
       Alert.alert("Deleted", "Tournament has been deleted.", [
         { text: "OK", onPress: () => router.back() },
@@ -304,26 +284,19 @@ export const useTournamentDetail = (
   };
 
   return {
-    // State
     loading,
     tournament,
     error,
     deleting,
-
-    // Computed
     isDirector,
     isVenueOwner,
     canEdit,
     isDeleted,
     isHidden,
     showActionBar,
-
-    // Formatted values
     formattedDate: tournament ? formatDate(tournament.tournament_date) : "",
     formattedTime: tournament ? formatTime(tournament.start_time) : "",
     formattedEntryFee: tournament ? formatCurrency(tournament.entry_fee) : "",
-
-    // Actions
     openMaps,
     callVenue,
     handleEdit,

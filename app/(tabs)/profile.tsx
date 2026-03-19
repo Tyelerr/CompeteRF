@@ -1,4 +1,4 @@
-// app/(tabs)/profile.tsx
+﻿// app/(tabs)/profile.tsx
 
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
@@ -47,10 +47,6 @@ interface Favorite {
   };
 }
 
-/**
- * Converts a hyphen-separated game slug into Title Case with spaces.
- * e.g. "one-pocket" ? "One Pocket", "9-ball" ? "9 Ball"
- */
 const formatGameName = (game: string): string => {
   return game
     .split(/[-\s]+/)
@@ -58,7 +54,7 @@ const formatGameName = (game: string): string => {
     .join(" ");
 };
 
-// Animated logged-out view
+// ── Animated logged-out view ─────────────────────────────────────────────────
 const LoggedOutView = ({ router }: { router: any }) => {
   const [appleLoading, setAppleLoading] = useState(false);
   const [error, setError] = useState("");
@@ -71,35 +67,13 @@ const LoggedOutView = ({ router }: { router: any }) => {
   useEffect(() => {
     Animated.sequence([
       Animated.parallel([
-        Animated.timing(welcomeFade, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(welcomeSlide, {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.out(Easing.back(1.2)),
-          useNativeDriver: true,
-        }),
+        Animated.timing(welcomeFade, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(welcomeSlide, { toValue: 0, duration: 600, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(messageFade, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonsFade, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonsSlide, {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
+        Animated.timing(messageFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(buttonsFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(buttonsSlide, { toValue: 0, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       ]),
     ]).start();
   }, []);
@@ -109,24 +83,15 @@ const LoggedOutView = ({ router }: { router: any }) => {
     setAppleLoading(true);
     try {
       const result = await authService.signInWithApple();
-      if (!result.user) {
-        setError("Sign in failed. Please try again.");
-        return;
-      }
+      if (!result.user) { setError("Sign in failed. Please try again."); return; }
       const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", result.user.id)
-        .maybeSingle();
+        .from("profiles").select("id").eq("id", result.user.id).maybeSingle();
       if (profile) {
         router.replace("/(tabs)");
       } else {
         router.replace({
           pathname: "/auth/complete-profile",
-          params: {
-            firstName: result.fullName?.givenName || "",
-            lastName: result.fullName?.familyName || "",
-          },
+          params: { firstName: result.fullName?.givenName || "", lastName: result.fullName?.familyName || "" },
         } as any);
       }
     } catch (err: any) {
@@ -141,45 +106,27 @@ const LoggedOutView = ({ router }: { router: any }) => {
     <View style={styles.container}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>PROFILE</Text>
-        <Text style={styles.headerSubtitle}>
-          View and manage your tournament history
-        </Text>
+        <Text style={styles.headerSubtitle}>View and manage your tournament history</Text>
       </View>
       <View style={styles.notLoggedIn}>
-        <Animated.Text
-          style={[
-            styles.welcomeText,
-            { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] },
-          ]}
-        >
+        <Animated.Text style={[styles.welcomeText, { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] }]}>
           Welcome!
         </Animated.Text>
         <Animated.Text style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
-        <Animated.View
-          style={[
-            styles.buttonGroup,
-            { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] },
-          ]}
-        >
+        <Animated.View style={[styles.buttonGroup, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
           {Platform.OS === "ios" && (
             <>
               <View style={styles.appleButtonWrapper}>
                 <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={
-                    AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                  }
-                  buttonStyle={
-                    AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                  }
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
                   cornerRadius={8}
                   style={styles.appleButton}
                   onPress={handleAppleSignIn}
                 />
-                {appleLoading && (
-                  <Text style={styles.loadingHint}>Signing in...</Text>
-                )}
+                {appleLoading && <Text style={styles.loadingHint}>Signing in...</Text>}
               </View>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
@@ -188,18 +135,9 @@ const LoggedOutView = ({ router }: { router: any }) => {
               </View>
             </>
           )}
-          <Button
-            title="Log In"
-            onPress={() => router.push("/auth/login" as any)}
-            fullWidth
-          />
+          <Button title="Log In" onPress={() => router.push("/auth/login" as any)} fullWidth />
           <View style={styles.spacerSm} />
-          <Button
-            title="Create Account"
-            onPress={() => router.push("/auth/register" as any)}
-            variant="outline"
-            fullWidth
-          />
+          <Button title="Create Account" onPress={() => router.push("/auth/register" as any)} variant="outline" fullWidth />
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
       </View>
@@ -207,6 +145,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
   );
 };
 
+// ── Main screen ───────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -215,13 +154,15 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Modals
   const [inboxVisible, setInboxVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
 
-  // Tournament detail modal triggered from inbox notification
-  const [inboxTournamentId, setInboxTournamentId] = useState<string | null>(null);
-  const [showInboxTournament, setShowInboxTournament] = useState(false);
+  // Tournament detail modal — used by both inbox and favorites
+  const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const scrollRef = useScrollToTopOnFocus();
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -242,9 +183,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     checkUser();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
       if (session?.user) {
         loadProfile(session.user.id);
@@ -260,9 +199,7 @@ export default function ProfileScreen() {
   }, []);
 
   const checkUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user || null);
     if (session?.user) {
       await loadProfile(session.user.id);
@@ -273,11 +210,7 @@ export default function ProfileScreen() {
   };
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     setProfile(data);
     if (data) await loadFavorites(data.id_auto);
     setLoading(false);
@@ -286,9 +219,7 @@ export default function ProfileScreen() {
   const loadFavorites = async (userIdAuto: number) => {
     const { data } = await supabase
       .from("favorites")
-      .select(
-        "id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))",
-      )
+      .select("id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))")
       .eq("user_id", userIdAuto)
       .not("tournament_id", "is", null);
     if (data) setFavorites(data as unknown as Favorite[]);
@@ -325,6 +256,16 @@ export default function ProfileScreen() {
     router.replace("/(tabs)" as any);
   };
 
+  const openDetailModal = (tournamentId: number | string) => {
+    setDetailTournamentId(String(tournamentId));
+    setShowDetailModal(true);
+  };
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false);
+    setDetailTournamentId(null);
+  };
+
   const getTournamentImageUrl = (tournament: any) => {
     const map: Record<string, string> = {
       "8-ball": "8-ball.jpeg",
@@ -338,17 +279,10 @@ export default function ProfileScreen() {
       if (tournament.thumbnail.startsWith("custom:"))
         return tournament.thumbnail.replace("custom:", "");
       const f = map[tournament.thumbnail];
-      if (f)
-        return (
-          "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
-          f
-        );
+      if (f) return "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f;
     }
     const f = map[tournament.game_type];
-    return f
-      ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
-          f
-      : null;
+    return f ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f : null;
   };
 
   const handleViewImage = (tournament: any) => {
@@ -361,24 +295,16 @@ export default function ProfileScreen() {
   };
 
   const formatMemberSince = (d: string) =>
-    new Date(d).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "2-digit",
-    });
+    new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
-  const generatePlayerID = (idAuto: number) =>
-    "PL-" + String(idAuto).padStart(6, "0");
+  const generatePlayerID = (idAuto: number) => "PL-" + String(idAuto).padStart(6, "0");
 
   const handleRemoveFavorite = (favId: number) => {
     const run = async () => {
       await supabase.from("favorites").delete().eq("id", favId);
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
-      if (
-        currentPage > Math.ceil(updated.length / 5) &&
-        Math.ceil(updated.length / 5) > 0
-      )
+      if (currentPage > Math.ceil(updated.length / 5) && Math.ceil(updated.length / 5) > 0)
         prevPage();
     };
     run();
@@ -395,28 +321,19 @@ export default function ProfileScreen() {
         contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={COLORS.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
           )
         }
       >
         <View style={isWeb ? styles.webInner : styles.mobileInner}>
           <View style={[styles.header, isWeb && styles.headerWeb]}>
             <Text style={styles.headerTitle}>PROFILE</Text>
-            <Text style={styles.headerSubtitle}>
-              View and manage your tournament history
-            </Text>
+            <Text style={styles.headerSubtitle}>View and manage your tournament history</Text>
           </View>
 
           <View style={styles.profileCard}>
             {/* Messages floating button */}
-            <TouchableOpacity
-              style={styles.messagesFloatingButton}
-              onPress={() => setInboxVisible(true)}
-            >
+            <TouchableOpacity style={styles.messagesFloatingButton} onPress={() => setInboxVisible(true)}>
               <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
               <Text style={styles.messagesFloatingText}>Messages</Text>
               {unreadCount > 0 && (
@@ -429,11 +346,7 @@ export default function ProfileScreen() {
             <View style={styles.profileHeader}>
               <View style={styles.avatarContainer}>
                 {profile?.avatar_url ? (
-                  <Image
-                    source={{ uri: profile.avatar_url }}
-                    style={styles.profileImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={{ uri: profile.avatar_url }} style={styles.profileImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.avatar}>
                     <View style={styles.ballRow}>
@@ -456,58 +369,33 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.name}>
-                  {profile?.user_name
-                    ? "@" + profile.user_name
-                    : user.email?.split("@")[0] || "Player"}
+                  {profile?.user_name ? "@" + profile.user_name : user.email?.split("@")[0] || "Player"}
                 </Text>
-                <Text style={styles.playerID}>
-                  {profile ? generatePlayerID(profile.id_auto) : "No ID"}
-                </Text>
+                <Text style={styles.playerID}>{profile ? generatePlayerID(profile.id_auto) : "No ID"}</Text>
                 <Text style={styles.memberSince}>
-                  Member since{" "}
-                  {formatMemberSince(profile?.created_at || user.created_at)}
+                  Member since {formatMemberSince(profile?.created_at || user.created_at)}
                 </Text>
               </View>
             </View>
 
-            <View
-              style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}
-            >
+            <View style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.editButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setEditProfileVisible(true)}
               >
-                <Text style={styles.editButtonText}>
-                  {"\u2699\uFE0F"} Edit Profile
-                </Text>
+                <Text style={styles.editButtonText}>{"\u2699\uFE0F"} Edit Profile</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.notificationButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setInboxVisible(true)}
               >
-                <Text style={styles.notificationButtonText}>
-                  {"\uD83D\uDD14"} Notifications
-                </Text>
+                <Text style={styles.notificationButtonText}>{"\uD83D\uDD14"} Notifications</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.signOutButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]}
                 onPress={handleLogout}
               >
-                <Text style={styles.signOutButtonText}>
-                  {"\uD83D\uDEAA"} Sign Out
-                </Text>
+                <Text style={styles.signOutButtonText}>{"\uD83D\uDEAA"} Sign Out</Text>
               </TouchableOpacity>
             </View>
 
@@ -522,17 +410,13 @@ export default function ProfileScreen() {
                 {profile.favorite_player && (
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Favorite Player</Text>
-                    <Text style={styles.detailValue}>
-                      {profile.favorite_player}
-                    </Text>
+                    <Text style={styles.detailValue}>{profile.favorite_player}</Text>
                   </View>
                 )}
                 {profile.preferred_game && (
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Favorite Game</Text>
-                    <Text style={styles.detailValue}>
-                      {formatGameName(profile.preferred_game)}
-                    </Text>
+                    <Text style={styles.detailValue}>{formatGameName(profile.preferred_game)}</Text>
                   </View>
                 )}
               </View>
@@ -540,21 +424,14 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.bottomNavigation}>
-            <TouchableOpacity
-              style={[styles.navButton, styles.favoritesButton]}
-              onPress={() => {}}
-            >
-              <Text style={styles.navButtonText}>
-                {"\u2764\uFE0F"} Favorite Tournaments
-              </Text>
+            <TouchableOpacity style={[styles.navButton, styles.favoritesButton]} onPress={() => {}}>
+              <Text style={styles.navButtonText}>{"\u2764\uFE0F"} Favorite Tournaments</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navButton, styles.alertsButton]}
               onPress={() => setSearchAlertsVisible(true)}
             >
-              <Text style={styles.alertsButtonText}>
-                {"\uD83D\uDD0D"} Search Alerts
-              </Text>
+              <Text style={styles.alertsButtonText}>{"\uD83D\uDD0D"} Search Alerts</Text>
             </TouchableOpacity>
           </View>
 
@@ -562,9 +439,7 @@ export default function ProfileScreen() {
             {favorites.length === 0 ? (
               <View style={styles.emptyFavorites}>
                 <Text style={styles.emptyText}>No favorites yet</Text>
-                <Text style={styles.emptySubtext}>
-                  Tap the heart on tournaments to save them here!
-                </Text>
+                <Text style={styles.emptySubtext}>Tap the heart on tournaments to save them here!</Text>
               </View>
             ) : (
               <>
@@ -596,17 +471,9 @@ export default function ProfileScreen() {
                     <FavoriteTournamentCard
                       key={fav.id}
                       tournament={t}
-                      onPress={() =>
-                        router.push(
-                          ("/(tabs)/tournament-detail?id=" +
-                            fav.tournament_id +
-                            "&from=/(tabs)/profile") as any,
-                        )
-                      }
+                      onPress={() => openDetailModal(fav.tournament_id)}
                       onToggleFavorite={() => handleRemoveFavorite(fav.id)}
-                      onShare={() =>
-                        console.log("share", fav.tournaments?.name)
-                      }
+                      onShare={() => console.log("share", fav.tournaments?.name)}
                       onViewImage={() => handleViewImage(t)}
                       getTournamentImageUrl={getTournamentImageUrl}
                     />
@@ -633,17 +500,10 @@ export default function ProfileScreen() {
         visible={showImageViewer}
         imageUrl={currentImageUrl}
         title={currentImageTitle}
-        onClose={() => {
-          setShowImageViewer(false);
-          setCurrentImageUrl(null);
-          setCurrentImageTitle("");
-        }}
+        onClose={() => { setShowImageViewer(false); setCurrentImageUrl(null); setCurrentImageTitle(""); }}
       />
 
-      <EditProfileModal
-        visible={editProfileVisible}
-        onClose={() => setEditProfileVisible(false)}
-      />
+      <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
 
       <NotificationsModal
         visible={inboxVisible}
@@ -651,25 +511,19 @@ export default function ProfileScreen() {
         userId={user?.id}
         userIdAuto={profile?.id_auto}
         onViewTournament={(id) => {
-          setInboxTournamentId(id);
-          setShowInboxTournament(true);
+          setInboxVisible(false);
+          setTimeout(() => openDetailModal(id), 150);
         }}
       />
 
-      {/* Tournament detail modal triggered from inbox */}
+      {/* Single TournamentDetailModal used by both inbox and favorites */}
       <TournamentDetailModal
-        id={inboxTournamentId}
-        visible={showInboxTournament}
-        onClose={() => {
-          setShowInboxTournament(false);
-          setInboxTournamentId(null);
-        }}
+        id={detailTournamentId}
+        visible={showDetailModal}
+        onClose={closeDetailModal}
       />
 
-      <SearchAlertsModal
-        visible={searchAlertsVisible}
-        onClose={() => setSearchAlertsVisible(false)}
-      />
+      <SearchAlertsModal visible={searchAlertsVisible} onClose={() => setSearchAlertsVisible(false)} />
     </View>
   );
 }
@@ -687,62 +541,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerWeb: { paddingTop: SPACING.lg },
-  headerTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "700",
-    color: COLORS.text,
-    textAlign: "center",
-  },
-  headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    marginTop: SPACING.xs,
-  },
-  notLoggedIn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: SPACING.lg,
-  },
-  welcomeText: {
-    fontSize: 36,
-    fontWeight: "700",
-    color: "#4A90D9",
-    marginBottom: SPACING.xl,
-    letterSpacing: 1,
-  },
-  message: {
-    fontSize: FONT_SIZES.lg,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.xl,
-    textAlign: "center",
-  },
+  headerTitle: { fontSize: FONT_SIZES.xl, fontWeight: "700", color: COLORS.text, textAlign: "center" },
+  headerSubtitle: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", marginTop: SPACING.xs },
+  notLoggedIn: { flex: 1, alignItems: "center", justifyContent: "center", padding: SPACING.lg },
+  welcomeText: { fontSize: 36, fontWeight: "700", color: "#4A90D9", marginBottom: SPACING.xl, letterSpacing: 1 },
+  message: { fontSize: FONT_SIZES.lg, color: COLORS.textMuted, marginBottom: SPACING.xl, textAlign: "center" },
   buttonGroup: { width: "100%" },
   appleButtonWrapper: { alignItems: "center", marginBottom: SPACING.sm },
   appleButton: { width: "100%", height: 50 },
-  loadingHint: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    marginTop: SPACING.xs,
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: SPACING.md,
-  },
+  loadingHint: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, marginTop: SPACING.xs },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: SPACING.md },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  dividerText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    marginHorizontal: SPACING.md,
-  },
-  errorText: {
-    color: COLORS.error,
-    fontSize: FONT_SIZES.sm,
-    textAlign: "center",
-    marginTop: SPACING.md,
-  },
+  dividerText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, marginHorizontal: SPACING.md },
+  errorText: { color: COLORS.error, fontSize: FONT_SIZES.sm, textAlign: "center", marginTop: SPACING.md },
   profileCard: {
     margin: SPACING.md,
     backgroundColor: COLORS.backgroundCard,
@@ -765,11 +576,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   messagesFloatingIcon: { fontSize: 14 },
-  messagesFloatingText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
+  messagesFloatingText: { fontSize: FONT_SIZES.xs, fontWeight: "700", color: "#FFFFFF" },
   messagesUnreadBadge: {
     backgroundColor: "#E74C3C",
     borderRadius: 10,
@@ -781,25 +588,11 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   messagesUnreadText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
-  profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.lg,
-  },
+  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.lg },
   avatarContainer: { width: 80, height: 80, marginRight: SPACING.md },
-  profileImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-  },
+  profileImage: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: COLORS.border },
   avatar: { width: 80, height: 80 },
-  ballRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 2,
-  },
+  ballRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
   ball: { width: 24, height: 24, borderRadius: 12, marginHorizontal: 1 },
   ball1: { backgroundColor: "#FFD700" },
   ball2: { backgroundColor: "#0066FF" },
@@ -811,103 +604,32 @@ const styles = StyleSheet.create({
   ball12: { backgroundColor: "#800080" },
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
   profileInfo: { flex: 1 },
-  name: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  playerID: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
+  name: { fontSize: FONT_SIZES.xl, fontWeight: "600", color: COLORS.text, marginBottom: SPACING.xs },
+  playerID: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary, marginBottom: SPACING.xs },
   memberSince: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
-  actionButtons: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
+  actionButtons: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.sm },
   actionButtonsWeb: { flexDirection: "row" },
-  actionButton: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    alignItems: "center",
-  },
+  actionButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.md, alignItems: "center" },
   actionButtonWeb: { paddingVertical: SPACING.md + 2 },
   editButton: { backgroundColor: COLORS.secondary },
-  editButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-  },
+  editButtonText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: "600" },
   notificationButton: { backgroundColor: COLORS.primary },
-  notificationButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-  },
+  notificationButtonText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: "600" },
   signOutButton: { backgroundColor: COLORS.error },
-  signOutButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-  },
+  signOutButtonText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: "600" },
   userDetails: { gap: SPACING.md },
-  detailItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingBottom: SPACING.sm,
-  },
-  detailLabel: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  detailValue: {
-    fontSize: FONT_SIZES.lg,
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  bottomNavigation: {
-    flexDirection: "row",
-    margin: SPACING.md,
-    gap: SPACING.sm,
-  },
-  navButton: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    alignItems: "center",
-  },
+  detailItem: { borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: SPACING.sm },
+  detailLabel: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, marginBottom: SPACING.xs },
+  detailValue: { fontSize: FONT_SIZES.lg, color: COLORS.text, fontWeight: "500" },
+  bottomNavigation: { flexDirection: "row", margin: SPACING.md, gap: SPACING.sm },
+  navButton: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.md, alignItems: "center" },
   favoritesButton: { backgroundColor: COLORS.primary },
-  alertsButton: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  navButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.white,
-  },
-  alertsButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
+  alertsButton: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  navButtonText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.white },
+  alertsButtonText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text },
   favoritesSection: { padding: SPACING.md },
   emptyFavorites: { alignItems: "center", padding: SPACING.lg },
-  emptyText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-    marginBottom: SPACING.xs,
-  },
-  emptySubtext: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textMuted,
-    textAlign: "center",
-  },
+  emptyText: { fontSize: FONT_SIZES.md, color: COLORS.textMuted, marginBottom: SPACING.xs },
+  emptySubtext: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted, textAlign: "center" },
   spacerSm: { height: SPACING.sm },
 });
