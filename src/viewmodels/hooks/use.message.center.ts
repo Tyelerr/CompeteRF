@@ -1,12 +1,4 @@
 // src/viewmodels/hooks/use.message.center.ts
-// ═══════════════════════════════════════════════════════════
-// Message Center ViewModel
-// Powers the messages screen for TD, Bar Owner, and Admin roles.
-// Uses notification_messages / notification_message_recipients tables
-// (separate from existing support ticket messages table)
-// ViewModel layer: React hooks + service calls. No JSX. No Supabase.
-// ═══════════════════════════════════════════════════════════
-
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -22,13 +14,27 @@ import {
 } from "../../models/types/notification.types";
 import { useAuthContext } from "../../providers/AuthProvider";
 
-// —— Types ——
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface MessageTarget {
   id: number | string;
   name: string;
-  type: "tournament" | "venue";
+  type: "tournament" | "venue" | "all_users";
   favoriteCount?: number;
+  date?: string;
+}
+
+export interface BarOwnerVenue {
+  id: number;
+  name: string;
+  totalFollowers: number;
+}
+
+export interface VenueTournament {
+  id: number;
+  name: string;
+  date?: string;
+  followerCount: number;
 }
 
 interface UseMessageCenterReturn {
@@ -41,13 +47,17 @@ interface UseMessageCenterReturn {
   updateSubject: (subject: string) => void;
   updateBody: (body: string) => void;
   isFormValid: boolean;
+  // TD + admin flat list
   targets: MessageTarget[];
   selectedTargetId: number | string | null;
-  selectTarget: (
-    type: TargetType,
-    id: number | string | null,
-    name: string,
-  ) => void;
+  selectTarget: (type: TargetType, id: number | string | null, name: string) => void;
+  // Bar owner two-level selection
+  venues: BarOwnerVenue[];
+  selectedVenueId: number | null;
+  selectVenue: (venueId: number | null) => void;
+  venueTournaments: VenueTournament[];
+  venueTournamentsLoading: boolean;
+  //
   recipientCount: number;
   rateLimit: RateLimitStatus | null;
   handleSend: () => Promise<void>;
@@ -58,29 +68,37 @@ interface UseMessageCenterReturn {
 export function useMessageCenter(): UseMessageCenterReturn {
   const { user, profile } = useAuthContext();
   const userId = user?.id;
+  const userIdAuto = profile?.id_auto as number | undefined;
   const role = (profile?.role || "basic_user") as SenderRole;
 
-  // —— State ——
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<"send" | "sent">("send");
   const [form, setForm] = useState<ComposeMessageForm>(INITIAL_COMPOSE_FORM);
+
+  // TD + admin
   const [targets, setTargets] = useState<MessageTarget[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<number | string | null>(null);
+
+  // Bar owner
+  const [venues, setVenues] = useState<BarOwnerVenue[]>([]);
+  const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
+  const [venueTournaments, setVenueTournaments] = useState<VenueTournament[]>([]);
+  const [venueTournamentsLoading, setVenueTournamentsLoading] = useState(false);
+
   const [recipientCount, setRecipientCount] = useState(0);
   const [rateLimit, setRateLimit] = useState<RateLimitStatus | null>(null);
   const [sentMessages, setSentMessages] = useState<MessageStats[]>([]);
 
-  // —— Load Targets (tournaments/venues the user can message) ——
+  // ── Load Targets (TD + admin) ──────────────────────────────────────────────
   const loadTargets = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !userIdAuto) return;
 
     try {
       const loadedTargets: MessageTarget[] = [];
 
-      if (role === "super_admin") {
-        // Super admin can message all users
+      if (role === "super_admin" || role === "compete_admin") {
         const { count } = await supabase
           .from("profiles")
           .select("id", { count: "exact", head: true });
@@ -88,14 +106,14 @@ export function useMessageCenter(): UseMessageCenterReturn {
         loadedTargets.push({
           id: "all_users",
           name: "All Users",
-          type: "venue",
+          type: "all_users",
           favoriteCount: count || 0,
         });
       } else if (role === "tournament_director") {
         const { data: tournaments } = await supabase
           .from("tournaments")
-          .select("id, name")
-          .eq("director_id", userId)
+          .select("id, name, tournament_date")
+          .eq("director_id", userIdAuto)
           .in("status", ["active"]);
 
         if (tournaments) {
@@ -105,44 +123,19 @@ export function useMessageCenter(): UseMessageCenterReturn {
               .select("id", { count: "exact", head: true })
               .eq("tournament_id", t.id);
 
+            const formattedDate = t.tournament_date
+              ? new Date(t.tournament_date + "T00:00:00").toLocaleDateString(
+                  "en-US",
+                  { weekday: "short", month: "short", day: "numeric" },
+                )
+              : undefined;
+
             loadedTargets.push({
               id: t.id,
               name: t.name,
               type: "tournament",
               favoriteCount: count || 0,
-            });
-          }
-        }
-      } else if (role === "bar_owner") {
-        const { data: venueLinks } = await supabase
-          .from("venue_owners")
-          .select("venue_id, venues(id, venue)")
-          .eq("owner_id", userId);
-
-        if (venueLinks) {
-          for (const vl of venueLinks) {
-            const venue = vl.venues as unknown as {
-              id: number;
-              venue: string;
-            } | null;
-            if (!venue) continue;
-
-            const { data: favData } = await supabase
-              .from("favorites")
-              .select("user_id, tournaments!inner(venue_id)")
-              .eq("tournaments.venue_id", venue.id);
-
-            const uniqueUsers = new Set(
-              favData?.map(
-                (f: { user_id: string; tournaments: unknown }) => f.user_id,
-              ) || [],
-            );
-
-            loadedTargets.push({
-              id: venue.id,
-              name: venue.venue,
-              type: "venue",
-              favoriteCount: uniqueUsers.size,
+              date: formattedDate,
             });
           }
         }
@@ -150,16 +143,112 @@ export function useMessageCenter(): UseMessageCenterReturn {
 
       setTargets(loadedTargets);
 
-      // Auto-select for super admin since there's only one option
-      if (role === "super_admin" && loadedTargets.length === 1) {
+      if (
+        (role === "super_admin" || role === "compete_admin") &&
+        loadedTargets.length === 1
+      ) {
         selectTarget("all_users", "all_users", "All Users");
       }
     } catch (err) {
       console.error("Error loading targets:", err);
     }
+  }, [userId, userIdAuto, role]);
+
+  // ── Load Venues (bar owner) ────────────────────────────────────────────────
+  const loadVenues = useCallback(async () => {
+    if (!userId || role !== "bar_owner") return;
+
+    try {
+      const { data: venueLinks } = await supabase
+        .from("venue_owners")
+        .select("venue_id, venues(id, venue)")
+        .eq("owner_id", userIdAuto);
+
+      if (!venueLinks) return;
+
+      const loadedVenues: BarOwnerVenue[] = [];
+
+      for (const vl of venueLinks) {
+        const venue = vl.venues as unknown as { id: number; venue: string } | null;
+        if (!venue) continue;
+
+        const { data: favData } = await supabase
+          .from("favorites")
+          .select("user_id, tournaments!inner(venue_id)")
+          .eq("tournaments.venue_id", venue.id);
+
+        const uniqueUsers = new Set(
+          favData?.map((f: { user_id: number }) => f.user_id) || [],
+        );
+
+        loadedVenues.push({
+          id: venue.id,
+          name: venue.venue,
+          totalFollowers: uniqueUsers.size,
+        });
+      }
+
+      setVenues(loadedVenues);
+    } catch (err) {
+      console.error("Error loading venues:", err);
+    }
   }, [userId, role]);
 
-  // —— Load Rate Limit ——
+  // ── Select Venue → loads tournaments for that venue ────────────────────────
+  const selectVenue = useCallback(async (venueId: number | null) => {
+    if (venueId === null) {
+      setSelectedVenueId(null);
+      setVenueTournaments([]);
+      setSelectedTargetId(null);
+      setRecipientCount(0);
+      setForm(INITIAL_COMPOSE_FORM);
+      return;
+    }
+
+    setSelectedVenueId(venueId);
+    setSelectedTargetId(null);
+    setRecipientCount(0);
+    setVenueTournamentsLoading(true);
+
+    try {
+      const { data: tournaments } = await supabase
+        .from("tournaments")
+        .select("id, name, tournament_date")
+        .eq("venue_id", venueId)
+        .in("status", ["active"]);
+
+      const loaded: VenueTournament[] = [];
+
+      for (const t of tournaments || []) {
+        const { count } = await supabase
+          .from("favorites")
+          .select("id", { count: "exact", head: true })
+          .eq("tournament_id", t.id);
+
+        const formattedDate = t.tournament_date
+          ? new Date(t.tournament_date + "T00:00:00").toLocaleDateString(
+              "en-US",
+              { weekday: "short", month: "short", day: "numeric" },
+            )
+          : undefined;
+
+        loaded.push({
+          id: t.id,
+          name: t.name,
+          date: formattedDate,
+          followerCount: count || 0,
+        });
+      }
+
+      setVenueTournaments(loaded);
+    } catch (err) {
+      console.error("Error loading venue tournaments:", err);
+    } finally {
+      setVenueTournamentsLoading(false);
+    }
+  }, []);
+
+  // ── Load Rate Limit ────────────────────────────────────────────────────────
   const loadRateLimit = useCallback(async () => {
     if (!userId) return;
     try {
@@ -170,7 +259,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, role]);
 
-  // —— Load Sent Messages ——
+  // ── Load Sent Messages ─────────────────────────────────────────────────────
   const loadSentMessages = useCallback(async () => {
     if (!userId) return;
     try {
@@ -214,15 +303,20 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId]);
 
-  // —— Load All ——
+  // ── Load All ───────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      await Promise.all([loadTargets(), loadRateLimit(), loadSentMessages()]);
+      await Promise.all([
+        loadTargets(),
+        loadVenues(),
+        loadRateLimit(),
+        loadSentMessages(),
+      ]);
     } finally {
       setIsLoading(false);
     }
-  }, [loadTargets, loadRateLimit, loadSentMessages]);
+  }, [loadTargets, loadVenues, loadRateLimit, loadSentMessages]);
 
   useEffect(() => {
     if (userId) {
@@ -230,7 +324,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, loadAll]);
 
-  // —— Select Target ——
+  // ── Recipient Count ────────────────────────────────────────────────────────
   const updateRecipientCount = useCallback(
     async (type: TargetType, id: number | string | null) => {
       try {
@@ -246,9 +340,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
             .select("user_id, tournaments!inner(venue_id)")
             .eq("tournaments.venue_id", id);
           const unique = new Set(
-            data?.map(
-              (f: { user_id: string; tournaments: unknown }) => f.user_id,
-            ) || [],
+            data?.map((f: { user_id: number }) => f.user_id) || [],
           );
           setRecipientCount(unique.size);
         } else if (type === "all_users") {
@@ -256,7 +348,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
             .from("profiles")
             .select("id", { count: "exact", head: true });
           setRecipientCount(count || 0);
-        } else if (type === "state") {
+        } else {
           setRecipientCount(0);
         }
       } catch (err) {
@@ -283,7 +375,6 @@ export function useMessageCenter(): UseMessageCenterReturn {
     updateRecipientCount(type, id);
   }
 
-  // —— Form Updates ——
   function updateSubject(subject: string) {
     setForm((prev) => ({ ...prev, subject }));
   }
@@ -300,60 +391,76 @@ export function useMessageCenter(): UseMessageCenterReturn {
       form.target_type === "state") &&
     recipientCount > 0;
 
-  // —— Resolve Recipients ——
+  // ── Resolve Recipients → always returns UUIDs ──────────────────────────────
   async function resolveRecipients(
     targetType: TargetType,
     tournamentId: number | null,
     venueId: number | null,
   ): Promise<string[]> {
     try {
-      let userIds: string[] = [];
+      let idAutos: number[] = [];
 
       if (targetType === "tournament" && tournamentId) {
         const { data } = await supabase
           .from("favorites")
           .select("user_id")
           .eq("tournament_id", tournamentId);
-        userIds = data?.map((f: { user_id: string }) => f.user_id) || [];
+        idAutos = data?.map((f: { user_id: number }) => f.user_id) || [];
       } else if (targetType === "venue" && venueId) {
         const { data } = await supabase
           .from("favorites")
           .select("user_id, tournaments!inner(venue_id)")
           .eq("tournaments.venue_id", venueId);
         const unique = new Set(
-          data?.map(
-            (f: { user_id: string; tournaments: unknown }) => f.user_id,
-          ) || [],
+          data?.map((f: { user_id: number }) => f.user_id) || [],
         );
-        userIds = Array.from(unique);
+        idAutos = Array.from(unique);
       } else if (targetType === "all_users") {
-        const { data } = await supabase.from("profiles").select("id");
-        userIds = data?.map((p: { id: string }) => p.id) || [];
+        const { data } = await supabase.from("profiles").select("id, id_auto");
+        if (!data) return [];
+
+        const allUuids = data.map((p: { id: string }) => p.id);
+        const { data: optedOut } = await supabase
+          .from("notification_preferences")
+          .select("user_id")
+          .in("user_id", allUuids)
+          .eq("app_announcements", false);
+
+        const optedOutSet = new Set(
+          optedOut?.map((p: { user_id: string }) => p.user_id) || [],
+        );
+
+        return allUuids.filter(
+          (uuid: string) => uuid !== userId && !optedOutSet.has(uuid),
+        );
       }
 
-      if (userIds.length === 0) return [];
+      if (idAutos.length === 0) return [];
 
-      // Filter out users who opted out
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, id_auto")
+        .in("id_auto", idAutos);
+
+      if (!profileRows) return [];
+
+      const allUuids = profileRows.map((p: { id: string }) => p.id);
+
       const preferenceKey =
-        targetType === "tournament"
-          ? "tournament_updates"
-          : targetType === "venue"
-            ? "venue_promotions"
-            : "app_announcements";
+        targetType === "tournament" ? "tournament_updates" : "venue_promotions";
 
       const { data: optedOut } = await supabase
         .from("notification_preferences")
         .select("user_id")
-        .in("user_id", userIds)
+        .in("user_id", allUuids)
         .eq(preferenceKey, false);
 
       const optedOutSet = new Set(
         optedOut?.map((p: { user_id: string }) => p.user_id) || [],
       );
 
-      // Exclude sender and opted-out users
-      return userIds.filter(
-        (uid) => uid !== userId && !optedOutSet.has(uid),
+      return allUuids.filter(
+        (uuid: string) => uuid !== userId && !optedOutSet.has(uuid),
       );
     } catch (err) {
       console.error("Error resolving recipients:", err);
@@ -361,7 +468,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }
 
-  // —— Send Message ——
+  // ── Send Message ───────────────────────────────────────────────────────────
   async function handleSend(): Promise<void> {
     if (!userId || !isFormValid || !rateLimit?.allowed) return;
 
@@ -376,7 +483,6 @@ export function useMessageCenter(): UseMessageCenterReturn {
           onPress: async () => {
             setIsSending(true);
             try {
-              // 1. Create notification message
               const { data: message, error: msgError } = await supabase
                 .from("notification_messages")
                 .insert({
@@ -395,16 +501,14 @@ export function useMessageCenter(): UseMessageCenterReturn {
 
               if (msgError) throw msgError;
 
-              // 2. Resolve recipients
-              const recipientIds = await resolveRecipients(
+              const recipientUuids = await resolveRecipients(
                 form.target_type,
                 form.tournament_id,
                 form.venue_id,
               );
 
-              // 3. Create notification_message_recipients rows
-              if (recipientIds.length > 0) {
-                const recipients = recipientIds.map((uid: string) => ({
+              if (recipientUuids.length > 0) {
+                const recipients = recipientUuids.map((uid: string) => ({
                   message_id: message.id,
                   user_id: uid,
                 }));
@@ -415,9 +519,8 @@ export function useMessageCenter(): UseMessageCenterReturn {
 
                 if (recError) throw recError;
 
-                // 4. Send push notifications
                 const tokens =
-                  await notificationService.getTokensForUsers(recipientIds);
+                  await notificationService.getTokensForUsers(recipientUuids);
                 const tokenStrings = tokens.map((t) => t.token);
 
                 if (tokenStrings.length > 0) {
@@ -435,10 +538,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
                     },
                   );
 
-                  // Mark push_sent on recipients with tokens
-                  const usersWithTokens = new Set(
-                    tokens.map((t) => t.user_id),
-                  );
+                  const usersWithTokens = new Set(tokens.map((t) => t.user_id));
                   for (const uid of usersWithTokens) {
                     await supabase
                       .from("notification_message_recipients")
@@ -449,29 +549,24 @@ export function useMessageCenter(): UseMessageCenterReturn {
                 }
               }
 
-              // 5. Increment rate limit
               await rateLimitService.incrementCount(userId);
 
-              // 6. Success
               Alert.alert(
                 "Message Sent!",
-                `Your message was sent to ${recipientIds.length} ${recipientIds.length === 1 ? "person" : "people"}.`,
+                `Your message was sent to ${recipientUuids.length} ${recipientUuids.length === 1 ? "person" : "people"}.`,
               );
 
-              // Reset form
               setForm(INITIAL_COMPOSE_FORM);
               setSelectedTargetId(null);
+              setSelectedVenueId(null);
+              setVenueTournaments([]);
               setRecipientCount(0);
 
-              // Refresh data
               await loadRateLimit();
               await loadSentMessages();
             } catch (err) {
               console.error("Send message error:", err);
-              Alert.alert(
-                "Error",
-                "Failed to send message. Please try again.",
-              );
+              Alert.alert("Error", "Failed to send message. Please try again.");
             } finally {
               setIsSending(false);
             }
@@ -481,7 +576,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     );
   }
 
-  // —— Refresh ——
+  // ── Refresh ────────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadAll();
@@ -501,6 +596,11 @@ export function useMessageCenter(): UseMessageCenterReturn {
     targets,
     selectedTargetId,
     selectTarget,
+    venues,
+    selectedVenueId,
+    selectVenue,
+    venueTournaments,
+    venueTournamentsLoading,
     recipientCount,
     rateLimit,
     handleSend,

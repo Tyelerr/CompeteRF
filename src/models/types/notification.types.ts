@@ -8,12 +8,14 @@ import { MessageType } from "./common.types";
 
 // ── Enums ──
 
+// FIX Bug 5: unified with notification-dispatcher.service.ts values
 export type NotificationCategory =
   | "tournament_update"
-  | "venue_promo"
-  | "app_announcement"
   | "search_alert_match"
-  | "giveaway_update";
+  | "giveaway_update"
+  | "venue_promotion"    // was "venue_promo" — now matches dispatcher
+  | "app_announcement"
+  | "admin_alert";       // was missing — needed by dispatcher
 
 export type TargetType = "tournament" | "venue" | "state" | "all_users";
 
@@ -66,7 +68,7 @@ export interface MessageRateLimit {
 /** What the inbox displays (message_recipients joined with messages) */
 export interface InboxItem {
   recipient_id: number; // message_recipients.id
-  message_id: number; // messages.id
+  message_id: number;   // messages.id
   subject: string;
   body: string;
   message_type: MessageType;
@@ -87,7 +89,7 @@ export interface ComposeMessageForm {
   target_type: TargetType;
   tournament_id: number | null;
   venue_id: number | null;
-  target_name: string; // Display name for UI
+  target_name: string;
 }
 
 export const INITIAL_COMPOSE_FORM: ComposeMessageForm = {
@@ -177,8 +179,7 @@ export const PREFERENCE_CATEGORIES: PreferenceCategory[] = [
   {
     key: "search_alert_matches",
     label: "Search Alert Matches",
-    description:
-      "When a new tournament matches your saved search alerts",
+    description: "When a new tournament matches your saved search alerts",
     icon: "🔔",
   },
   {
@@ -195,7 +196,7 @@ export const RATE_LIMITS: Record<
   { daily: number; weekly: number; cooldown_minutes: number }
 > = {
   tournament_director: { daily: 3, weekly: 10, cooldown_minutes: 30 },
-  bar_owner: { daily: 2, weekly: 5, cooldown_minutes: 120 },
+  bar_owner: { daily: 3, weekly: 10, cooldown_minutes: 60 },
   super_admin: { daily: 999, weekly: 999, cooldown_minutes: 0 },
   compete_admin: { daily: 5, weekly: 15, cooldown_minutes: 60 },
 };

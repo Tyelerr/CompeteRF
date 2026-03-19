@@ -9,6 +9,9 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -16,7 +19,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import {
   ConversationPreview,
@@ -30,7 +32,7 @@ import { useMessageCenter } from "../../../src/viewmodels/hooks/use.message.cent
 
 const isWeb = Platform.OS === "web";
 
-// ── Helpers ──
+// ── Helpers ──────────────────────────────────────────────────────────────────
 const getTimeAgo = (dateString: string): string => {
   const now = new Date();
   const date = new Date(dateString);
@@ -76,7 +78,7 @@ const getCategoryColor = (cat: string | null): string => {
   return cat ? map[cat] || "#95A5A6" : "#95A5A6";
 };
 
-// ── Inbox Card ──
+// ── Inbox Card ────────────────────────────────────────────────────────────────
 const InboxCard = ({
   convo,
   onPress,
@@ -154,8 +156,6 @@ const InboxCard = ({
             </View>
           )}
         </View>
-
-        {/* Extra user info for admins */}
         {(convo.other_participant_email || convo.other_participant_id_auto) && (
           <View style={styles.userDetailRow}>
             {convo.other_participant_id_auto && (
@@ -181,7 +181,7 @@ const InboxCard = ({
   );
 };
 
-// ── Sent Card ──
+// ── Sent Card ─────────────────────────────────────────────────────────────────
 const SentCard = ({
   msg,
 }: {
@@ -214,26 +214,25 @@ const SentCard = ({
   </View>
 );
 
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // MAIN SCREEN
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 export default function AdminMessagesScreen() {
   const router = useRouter();
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
+  const role = profile?.role || "basic_user";
 
   const [activeTab, setActiveTab] = useState<"inbox" | "send" | "sent">(
     "inbox",
   );
-
-  // Inbox state
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxRefreshing, setInboxRefreshing] = useState(false);
+  const [targetSearch, setTargetSearch] = useState("");
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
 
-  // Broadcast state
   const mc = useMessageCenter();
 
-  // Load inbox
   const loadInbox = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -252,7 +251,7 @@ export default function AdminMessagesScreen() {
         loadInbox();
         mc.refresh();
       }
-    }, [user?.id]),
+    }, [user?.id, loadInbox, mc.refresh]),
   );
 
   const onInboxRefresh = useCallback(async () => {
@@ -272,9 +271,475 @@ export default function AdminMessagesScreen() {
   };
 
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+  const isBarOwner = role === "bar_owner";
+
+  // ── Bar Owner: render venue + tournament selection ─────────────────────────
+  const renderBarOwnerTargetSelection = () => {
+    if (mc.isLoading) {
+      return (
+        <View style={styles.noTargetsBox}>
+          <Text style={styles.noTargetsText}>Loading venues...</Text>
+        </View>
+      );
+    }
+
+    if (mc.venues.length === 0) {
+      return (
+        <View style={styles.noTargetsBox}>
+          <Text style={styles.noTargetsText}>
+            No venues found. You need to be assigned as an owner to a venue.
+          </Text>
+        </View>
+      );
+    }
+
+    // Auto-select on first render if only one venue
+    if (mc.venues.length === 1 && mc.selectedVenueId === null) {
+      mc.selectVenue(mc.venues[0].id);
+    }
+
+    return (
+      <>
+        {/* Only show venue selector if 2+ venues */}
+        {mc.venues.length > 1 && (
+          <>
+            <Text style={styles.stepLabel}>STEP 1 — SELECT VENUE</Text>
+            <View style={styles.venueDropdownOuter}>
+              <TouchableOpacity
+                style={styles.venueDropdownTrigger}
+                onPress={() => setVenueDropdownOpen((v) => !v)}
+              >
+                <Text style={styles.venueDropdownTriggerText}>
+                  {mc.selectedVenueId
+                    ? `🏢 ${mc.venues.find((v) => v.id === mc.selectedVenueId)?.name}`
+                    : "Select a venue..."}
+                </Text>
+                <Text style={styles.venueDropdownArrow}>
+                  {venueDropdownOpen ? "▲" : "▼"}
+                </Text>
+              </TouchableOpacity>
+
+              {venueDropdownOpen && (
+                <View style={styles.venueDropdownList}>
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    {[...mc.venues]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((v) => (
+                        <TouchableOpacity
+                          key={v.id}
+                          style={[
+                            styles.venueDropdownRow,
+                            mc.selectedVenueId === v.id &&
+                              styles.venueDropdownRowActive,
+                          ]}
+                          onPress={() => {
+                            mc.selectVenue(v.id);
+                            setVenueDropdownOpen(false);
+                            setTargetSearch("");
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.venueDropdownRowText,
+                              mc.selectedVenueId === v.id &&
+                                styles.venueDropdownRowTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            🏢 {v.name}
+                          </Text>
+                          <Text style={styles.targetCount}>
+                            {v.totalFollowers} followers
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Step 2: audience — only shown after venue selected */}
+        {mc.selectedVenueId !== null && (
+          <>
+            <Text style={styles.stepLabel}>
+              {mc.venues.length === 1
+                ? "SELECT AUDIENCE"
+                : "STEP 2 — SELECT AUDIENCE"}
+            </Text>
+
+            {/* Option A: All venue followers */}
+            {(() => {
+              const venue = mc.venues.find((v) => v.id === mc.selectedVenueId);
+              if (!venue) return null;
+              const isSelected =
+                mc.form.target_type === "venue" &&
+                mc.form.venue_id === venue.id;
+              return (
+                <TouchableOpacity
+                  style={[
+                    styles.allVenueChip,
+                    isSelected && styles.allVenueChipActive,
+                  ]}
+                  onPress={() =>
+                    mc.selectTarget(
+                      "venue",
+                      venue.id,
+                      `All ${venue.name} followers`,
+                    )
+                  }
+                >
+                  <View style={styles.allVenueChipLeft}>
+                    <Text
+                      style={[
+                        styles.allVenueChipText,
+                        isSelected && styles.allVenueChipTextActive,
+                      ]}
+                    >
+                      👥 All {venue.name} followers
+                    </Text>
+                    <Text style={styles.allVenueChipSub}>
+                      Everyone who favorited any tournament at this venue
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.targetCount,
+                      isSelected && styles.targetCountActive,
+                    ]}
+                  >
+                    {venue.totalFollowers} people
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* Option B: Specific tournament */}
+            <Text style={styles.orDivider}>— or specific tournament —</Text>
+
+            {mc.venueTournamentsLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Loading tournaments...</Text>
+              </View>
+            ) : mc.venueTournaments.length === 0 ? (
+              <View style={styles.noTargetsBox}>
+                <Text style={styles.noTargetsText}>
+                  No active tournaments at this venue
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.targetSearchOuter}>
+                <View style={styles.targetSearchWrap}>
+                  <Text style={styles.targetSearchIcon}>🔍</Text>
+                  <TextInput
+                    style={styles.targetSearchInput}
+                    value={targetSearch}
+                    onChangeText={setTargetSearch}
+                    placeholder="Search by tournament name or ID..."
+                    placeholderTextColor={COLORS.textMuted}
+                    returnKeyType="search"
+                  />
+                  {targetSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setTargetSearch("")}>
+                      <Text style={styles.targetSearchClear}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {targetSearch.trim().length > 0 &&
+                  (() => {
+                    const q = targetSearch.toLowerCase();
+                    const filtered = mc.venueTournaments.filter(
+                      (t) =>
+                        t.name.toLowerCase().includes(q) ||
+                        String(t.id).includes(q),
+                    );
+                    return (
+                      <View style={styles.targetDropdown}>
+                        {filtered.length === 0 ? (
+                          <View style={styles.targetDropdownEmpty}>
+                            <Text style={styles.targetNoResults}>
+                              No tournaments match your search
+                            </Text>
+                          </View>
+                        ) : (
+                          <ScrollView
+                            style={styles.targetDropdownScroll}
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled
+                            showsVerticalScrollIndicator
+                          >
+                            {filtered.map((t) => {
+                              const isSelected =
+                                mc.form.target_type === "tournament" &&
+                                mc.form.tournament_id === t.id;
+                              return (
+                                <TouchableOpacity
+                                  key={t.id}
+                                  style={[
+                                    styles.targetDropdownRow,
+                                    isSelected &&
+                                      styles.targetDropdownRowActive,
+                                  ]}
+                                  onPress={() => {
+                                    mc.selectTarget("tournament", t.id, t.name);
+                                    setTargetSearch("");
+                                  }}
+                                >
+                                  <View style={styles.targetChipLeft}>
+                                    <Text
+                                      style={[
+                                        styles.targetChipText,
+                                        isSelected &&
+                                          styles.targetChipTextActive,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      🏆 {t.name}
+                                    </Text>
+                                    <View style={styles.targetChipMeta}>
+                                      <Text style={styles.targetChipId}>
+                                        ID: {t.id}
+                                      </Text>
+                                      {t.date && (
+                                        <Text style={styles.targetChipDate}>
+                                          📅 {t.date}
+                                        </Text>
+                                      )}
+                                    </View>
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.targetCount,
+                                      isSelected && styles.targetCountActive,
+                                    ]}
+                                  >
+                                    {t.followerCount} followers
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        )}
+                      </View>
+                    );
+                  })()}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Selected target summary */}
+        {mc.selectedTargetId !== null && (
+          <View style={styles.selectedTargetCard}>
+            <View style={styles.selectedTargetLeft}>
+              <Text style={styles.selectedTargetLabel}>Selected</Text>
+              <Text style={styles.selectedTargetName} numberOfLines={1}>
+                {mc.form.target_type === "venue" ? "👥" : "🏆"}{" "}
+                {mc.form.target_name}
+              </Text>
+            </View>
+            <View style={styles.selectedTargetRight}>
+              <Text style={styles.selectedFollowerCount}>
+                {mc.recipientCount} recipients
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  mc.selectTarget("tournament", null, "");
+                  setTargetSearch("");
+                }}
+              >
+                <Text style={styles.clearSelection}>✕ Clear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </>
+    );
+  };
+
+  // ── TD + Admin: render flat search list ───────────────────────────────────
+  const renderTDTargetSelection = () => {
+    if (mc.isLoading) {
+      return (
+        <View style={styles.noTargetsBox}>
+          <Text style={styles.noTargetsText}>Loading tournaments...</Text>
+        </View>
+      );
+    }
+
+    if (mc.targets.length === 0) {
+      return (
+        <View style={styles.noTargetsBox}>
+          <Text style={styles.noTargetsText}>
+            No active tournaments found. Tournaments must have status = active
+            to appear here.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        {/* Selected target card */}
+        {mc.selectedTargetId !== null &&
+          (() => {
+            const selected = mc.targets.find(
+              (t) => t.id === mc.selectedTargetId,
+            );
+            if (!selected) return null;
+            return (
+              <View style={styles.selectedTargetCard}>
+                <View style={styles.selectedTargetLeft}>
+                  <Text style={styles.selectedTargetLabel}>Selected</Text>
+                  <Text style={styles.selectedTargetName} numberOfLines={1}>
+                    {selected.type === "tournament"
+                      ? "🏆"
+                      : selected.type === "all_users"
+                        ? "👥"
+                        : "🏢"}{" "}
+                    {selected.name}
+                  </Text>
+                </View>
+                <View style={styles.selectedTargetRight}>
+                  {selected.favoriteCount !== undefined && (
+                    <Text style={styles.selectedFollowerCount}>
+                      {selected.favoriteCount} followers
+                    </Text>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => {
+                      mc.selectTarget("tournament", null, "");
+                      setTargetSearch("");
+                    }}
+                  >
+                    <Text style={styles.clearSelection}>✕ Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })()}
+
+        {/* Search with dropdown */}
+        <View style={styles.targetSearchOuter}>
+          <View style={styles.targetSearchWrap}>
+            <Text style={styles.targetSearchIcon}>🔍</Text>
+            <TextInput
+              style={styles.targetSearchInput}
+              value={targetSearch}
+              onChangeText={setTargetSearch}
+              placeholder="Search by name or ID..."
+              placeholderTextColor={COLORS.textMuted}
+              returnKeyType="search"
+            />
+            {targetSearch.length > 0 && (
+              <TouchableOpacity onPress={() => setTargetSearch("")}>
+                <Text style={styles.targetSearchClear}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {targetSearch.trim().length > 0 &&
+            (() => {
+              const q = targetSearch.toLowerCase();
+              const filtered = mc.targets.filter(
+                (t) =>
+                  t.name.toLowerCase().includes(q) || String(t.id).includes(q),
+              );
+              return (
+                <View style={styles.targetDropdown}>
+                  {filtered.length === 0 ? (
+                    <View style={styles.targetDropdownEmpty}>
+                      <Text style={styles.targetNoResults}>
+                        No tournaments match your search
+                      </Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      style={styles.targetDropdownScroll}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                    >
+                      {filtered.map((target) => {
+                        const isSelected = mc.selectedTargetId === target.id;
+                        return (
+                          <TouchableOpacity
+                            key={`${target.type}-${target.id}`}
+                            style={[
+                              styles.targetDropdownRow,
+                              isSelected && styles.targetDropdownRowActive,
+                            ]}
+                            onPress={() => {
+                              mc.selectTarget(
+                                target.type as
+                                  | "tournament"
+                                  | "venue"
+                                  | "all_users",
+                                target.id,
+                                target.name,
+                              );
+                              setTargetSearch("");
+                            }}
+                          >
+                            <View style={styles.targetChipLeft}>
+                              <Text
+                                style={[
+                                  styles.targetChipText,
+                                  isSelected && styles.targetChipTextActive,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {target.type === "tournament"
+                                  ? "🏆"
+                                  : target.type === "all_users"
+                                    ? "👥"
+                                    : "🏢"}{" "}
+                                {target.name}
+                              </Text>
+                              <View style={styles.targetChipMeta}>
+                                <Text style={styles.targetChipId}>
+                                  ID: {target.id}
+                                </Text>
+                                {target.date && (
+                                  <Text style={styles.targetChipDate}>
+                                    📅 {target.date}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                            <Text
+                              style={[
+                                styles.targetCount,
+                                isSelected && styles.targetCountActive,
+                              ]}
+                            >
+                              {target.favoriteCount ?? 0} followers
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                </View>
+              );
+            })()}
+        </View>
+      </>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text style={styles.headerTitle}>MESSAGE CENTER</Text>
@@ -336,12 +801,14 @@ export default function AdminMessagesScreen() {
         <ScrollView
           style={styles.content}
           refreshControl={
-          isWeb ? undefined : (
-            <RefreshControl refreshing={inboxRefreshing}
-              onRefresh={onInboxRefresh}
-              tintColor={COLORS.primary}/>
-          )
-        }
+            isWeb ? undefined : (
+              <RefreshControl
+                refreshing={inboxRefreshing}
+                onRefresh={onInboxRefresh}
+                tintColor={COLORS.primary}
+              />
+            )
+          }
         >
           {inboxLoading ? (
             <View style={styles.emptyState}>
@@ -390,63 +857,42 @@ export default function AdminMessagesScreen() {
 
       {/* ═══ BROADCAST TAB ═══ */}
       {activeTab === "send" && (
-        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled"
-          contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.broadcastScrollContent,
+            isWeb && styles.scrollContentWeb,
+          ]}
         >
           {mc.rateLimit && (
-            <View style={styles.rateLimitBar}>
-              <Text style={styles.rateLimitText}>
-                {mc.rateLimit.daily_remaining} broadcasts remaining today
+            <View
+              style={[
+                styles.rateLimitBar,
+                !mc.rateLimit.allowed && styles.rateLimitBarBlocked,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.rateLimitText,
+                  !mc.rateLimit.allowed && styles.rateLimitTextBlocked,
+                ]}
+              >
+                {mc.rateLimit.allowed
+                  ? `${mc.rateLimit.daily_remaining} broadcast${mc.rateLimit.daily_remaining !== 1 ? "s" : ""} remaining today`
+                  : mc.rateLimit.daily_remaining === 0
+                    ? "Daily broadcast limit reached. Resets at midnight."
+                    : `Next broadcast available in ${mc.rateLimit.reason?.match(/\d+/)?.[0] ?? "a few"} minutes.`}
               </Text>
             </View>
           )}
 
           <Text style={styles.fieldLabel}>SEND TO</Text>
-          {mc.targets.length === 0 ? (
-            <View style={styles.noTargetsBox}>
-              <Text style={styles.noTargetsText}>
-                No tournaments or venues to message. You need active tournaments
-                with followers.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.targetList}>
-              {mc.targets.map((target) => (
-                <TouchableOpacity
-                  key={`${target.type}-${target.id}`}
-                  style={[
-                    styles.targetChip,
-                    mc.selectedTargetId === target.id &&
-                      styles.targetChipActive,
-                  ]}
-                  onPress={() =>
-                    mc.selectTarget(
-                      target.type as "tournament" | "venue",
-                      target.id,
-                      target.name,
-                    )
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.targetChipText,
-                      mc.selectedTargetId === target.id &&
-                        styles.targetChipTextActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {target.type === "tournament" ? "🏆" : "🏢"} {target.name}
-                  </Text>
-                  {target.favoriteCount !== undefined &&
-                    target.favoriteCount > 0 && (
-                      <Text style={styles.targetCount}>
-                        {target.favoriteCount} followers
-                      </Text>
-                    )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+
+          {/* Bar owner gets two-level venue → tournament flow */}
+          {isBarOwner
+            ? renderBarOwnerTargetSelection()
+            : renderTDTargetSelection()}
 
           {mc.recipientCount > 0 && (
             <Text style={styles.recipientCountText}>
@@ -463,6 +909,7 @@ export default function AdminMessagesScreen() {
             placeholder="Message subject..."
             placeholderTextColor={COLORS.textMuted}
             maxLength={100}
+            returnKeyType="next"
           />
 
           <Text style={styles.fieldLabel}>MESSAGE</Text>
@@ -481,15 +928,18 @@ export default function AdminMessagesScreen() {
           <TouchableOpacity
             style={[
               styles.broadcastButton,
-              (!mc.isFormValid || mc.isSending) && styles.buttonDisabled,
+              (!mc.isFormValid || mc.isSending || !mc.rateLimit?.allowed) &&
+                styles.buttonDisabled,
             ]}
             onPress={mc.handleSend}
-            disabled={!mc.isFormValid || mc.isSending}
+            disabled={!mc.isFormValid || mc.isSending || !mc.rateLimit?.allowed}
           >
             <Text style={styles.broadcastButtonText}>
               {mc.isSending
                 ? "Sending..."
-                : `📢 Send Broadcast to ${mc.recipientCount} people`}
+                : !mc.rateLimit?.allowed && mc.rateLimit?.reason
+                  ? `Next broadcast available in ${mc.rateLimit.reason.match(/\d+/)?.[0] ?? "a few"} minutes.`
+                  : `📢 Send Broadcast to ${mc.recipientCount} people`}
             </Text>
           </TouchableOpacity>
 
@@ -502,12 +952,14 @@ export default function AdminMessagesScreen() {
         <ScrollView
           style={styles.content}
           refreshControl={
-          isWeb ? undefined : (
-            <RefreshControl refreshing={mc.isRefreshing}
-              onRefresh={mc.refresh}
-              tintColor={COLORS.primary}/>
-          )
-        }
+            isWeb ? undefined : (
+              <RefreshControl
+                refreshing={mc.isRefreshing}
+                onRefresh={mc.refresh}
+                tintColor={COLORS.primary}
+              />
+            )
+          }
         >
           {mc.sentMessages.length === 0 ? (
             <View style={styles.emptyState}>
@@ -525,27 +977,36 @@ export default function AdminMessagesScreen() {
           <View style={styles.bottomSpacer} />
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
   },
+  broadcastScrollContent: {
+    flexGrow: 1,
+  },
   container: {
-    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }), flex: 1, backgroundColor: COLORS.background },
+    ...Platform.select({
+      web: {
+        maxWidth: 860,
+        width: "100%" as any,
+        alignSelf: "center" as any,
+      },
+    }),
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   header: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.sm,
     alignItems: "center",
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
+  headerWeb: { paddingTop: SPACING.lg },
   headerTitle: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
@@ -594,6 +1055,8 @@ const styles = StyleSheet.create({
   },
   tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
   content: { flex: 1, marginTop: SPACING.sm },
+
+  // Stats bar
   statsBar: {
     flexDirection: "row",
     marginHorizontal: SPACING.md,
@@ -611,6 +1074,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: 2 },
+
+  // Inbox card
   inboxCard: {
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
@@ -708,9 +1173,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  userDetailChipEmail: {
-    flex: 1,
-  },
+  userDetailChipEmail: { flex: 1 },
   userDetailLabel: {
     fontSize: 9,
     fontWeight: "700",
@@ -724,6 +1187,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
+
+  // Sent card
   sentCard: {
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
@@ -767,6 +1232,8 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
+
+  // Broadcast
   rateLimitBar: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.md,
@@ -776,11 +1243,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  rateLimitBarBlocked: {
+    backgroundColor: "rgba(229, 57, 53, 0.1)",
+    borderColor: "#E53935",
+  },
   rateLimitText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
+  rateLimitTextBlocked: { color: "#E53935" },
   fieldLabel: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "700",
@@ -790,29 +1262,132 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     marginHorizontal: SPACING.md,
   },
-  targetList: { marginHorizontal: SPACING.md, gap: SPACING.xs },
-  targetChip: {
+  stepLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
+    letterSpacing: 1,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+    marginHorizontal: SPACING.md,
+  },
+
+  // Venue dropdown (bar owner, 2+ venues)
+  venueDropdownOuter: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    zIndex: 100,
+  },
+  venueDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    height: 48,
   },
-  targetChipActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + "15",
-  },
-  targetChipText: {
+  venueDropdownTriggerText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.text,
     fontWeight: "500",
     flex: 1,
   },
-  targetChipTextActive: { color: COLORS.primary, fontWeight: "600" },
-  targetCount: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
+  venueDropdownArrow: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginLeft: SPACING.sm,
+  },
+  venueDropdownList: {
+    position: "absolute",
+    top: 52,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    overflow: "hidden",
+    maxHeight: 5 * 56, // 5 rows × 56px each
+    zIndex: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  venueDropdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: SPACING.md,
+    height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  venueDropdownRowActive: {
+    backgroundColor: COLORS.primary + "20",
+  },
+  venueDropdownRowText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: "500",
+    flex: 1,
+  },
+  venueDropdownRowTextActive: {
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+
+  // All venue followers option
+  allVenueChip: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  allVenueChipActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary + "15",
+  },
+  allVenueChipLeft: { flex: 1, marginRight: SPACING.sm },
+  allVenueChipText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  allVenueChipTextActive: { color: COLORS.primary },
+  allVenueChipSub: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  orDivider: {
+    textAlign: "center",
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    marginVertical: SPACING.sm,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    padding: SPACING.md,
+  },
+  loadingText: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
+
+  // Shared target styles
   noTargetsBox: {
     marginHorizontal: SPACING.md,
     backgroundColor: COLORS.surface,
@@ -826,6 +1401,124 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: "center",
   },
+  targetCount: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
+  targetCountActive: { color: COLORS.primary },
+  targetNoResults: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  targetChipLeft: { flex: 1, marginRight: SPACING.sm },
+  targetChipMeta: { flexDirection: "row", gap: SPACING.sm, marginTop: 3 },
+  targetChipId: { fontSize: 11, color: COLORS.textMuted, fontWeight: "600" },
+  targetChipDate: { fontSize: 11, color: COLORS.textMuted },
+  targetChipText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    fontWeight: "500",
+    flex: 1,
+  },
+  targetChipTextActive: { color: COLORS.primary, fontWeight: "600" },
+
+  // Selected target summary card
+  selectedTargetCard: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    padding: SPACING.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  selectedTargetLeft: { flex: 1, marginRight: SPACING.sm },
+  selectedTargetLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: COLORS.primary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  selectedTargetName: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "600",
+    color: COLORS.text,
+  },
+  selectedTargetRight: { alignItems: "flex-end", gap: 4 },
+  selectedFollowerCount: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  clearSelection: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textMuted,
+    fontWeight: "600",
+  },
+
+  // Search + dropdown
+  targetSearchOuter: {
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+    zIndex: 100,
+  },
+  targetSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.sm,
+    height: 44,
+  },
+  targetSearchIcon: { fontSize: 14, marginRight: SPACING.xs },
+  targetSearchInput: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    height: 44,
+  },
+  targetSearchClear: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textMuted,
+    paddingLeft: SPACING.xs,
+  },
+  targetDropdown: {
+    position: "absolute",
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    overflow: "hidden",
+    zIndex: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  targetDropdownScroll: { maxHeight: 280 },
+  targetDropdownEmpty: { padding: SPACING.md, alignItems: "center" },
+  targetDropdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  targetDropdownRowActive: { backgroundColor: COLORS.primary + "20" },
+
+  // Inputs
   recipientCountText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
@@ -858,6 +1551,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   buttonDisabled: { opacity: 0.4 },
+
   emptyState: {
     alignItems: "center",
     paddingVertical: SPACING.xl * 2,
