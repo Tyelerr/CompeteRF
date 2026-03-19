@@ -385,14 +385,14 @@ export function TournamentDetailModal({
         <View style={s.mobileCardWrapper} pointerEvents="box-none">
           <View style={s.mobileCard}>{innerContent}</View>
         </View>
-      </Modal>
-
       <FullScreenImageViewer
         visible={showImageViewer}
         imageUrl={imageUrl}
         title={tournament?.name}
         onClose={() => setShowImageViewer(false)}
       />
+      </Modal>
+
       <ReportModal
         visible={isModalVisible}
         onClose={closeReportModal}
