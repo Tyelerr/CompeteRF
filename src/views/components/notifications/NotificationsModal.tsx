@@ -24,7 +24,7 @@ import { FONT_SIZES } from "../../../theme/typography";
 
 const isWeb = Platform.OS === "web";
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// -- Types ----------------------------------------------------------------------
 interface BroadcastNotification {
   id: string;
   message_id: string;
@@ -68,7 +68,7 @@ interface UnifiedNotification {
   pushNotificationId?: number;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// -- Helpers --------------------------------------------------------------------
 const getTimeAgo = (dateString: string): string => {
   const now = new Date();
   const date = new Date(dateString);
@@ -146,7 +146,7 @@ const getConvoRoleInfo = (role: string | null) => {
   }
 };
 
-// ── Notification Card ──────────────────────────────────────────────────────
+// -- Notification Card ----------------------------------------------------------
 const NotificationCard = ({
   item,
   isExpanded,
@@ -209,12 +209,12 @@ const NotificationCard = ({
                 style={s.linkButton}
                 onPress={() => onDeepLink(item.deep_link!)}
               >
-                <Text style={s.linkButtonText}>View Details →</Text>
+                <Text style={s.linkButtonText}>View Details ?</Text>
               </TouchableOpacity>
             )}
             <View style={s.cardActions}>
               <TouchableOpacity onPress={onDelete}>
-                <Text style={s.deleteLabel}>🗑️ Delete</Text>
+                <Text style={s.deleteLabel}>🗑uFE0F Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -228,7 +228,7 @@ const NotificationCard = ({
   );
 };
 
-// ── Conversation Card ──────────────────────────────────────────────────────
+// -- Conversation Card ----------------------------------------------------------
 const ConversationCard = ({
   convo,
   onPress,
@@ -301,12 +301,14 @@ const ConversationCard = ({
   );
 };
 
-// ── Main Modal ─────────────────────────────────────────────────────────────
+// -- Main Modal -----------------------------------------------------------------
 interface NotificationsModalProps {
   visible: boolean;
   onClose: () => void;
   userId: string | undefined;
   userIdAuto: number | undefined;
+  /** If provided, "View Tournament" opens a modal instead of navigating */
+  onViewTournament?: (id: string) => void;
 }
 
 export function NotificationsModal({
@@ -314,6 +316,7 @@ export function NotificationsModal({
   onClose,
   userId,
   userIdAuto,
+  onViewTournament,
 }: NotificationsModalProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(
@@ -321,16 +324,12 @@ export function NotificationsModal({
   );
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [unifiedNotifications, setUnifiedNotifications] = useState<
-    UnifiedNotification[]
-  >([]);
+  const [unifiedNotifications, setUnifiedNotifications] = useState<UnifiedNotification[]>([]);
   const [expandedNotifId, setExpandedNotifId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const loadBroadcasts = useCallback(async (): Promise<
-    UnifiedNotification[]
-  > => {
+  const loadBroadcasts = useCallback(async (): Promise<UnifiedNotification[]> => {
     if (!userId) return [];
     try {
       const { data, error } = await supabase
@@ -363,9 +362,7 @@ export function NotificationsModal({
     }
   }, [userId]);
 
-  const loadPushNotifications = useCallback(async (): Promise<
-    UnifiedNotification[]
-  > => {
+  const loadPushNotifications = useCallback(async (): Promise<UnifiedNotification[]> => {
     if (!userIdAuto) return [];
     try {
       const { data, error } = await supabase
@@ -416,7 +413,6 @@ export function NotificationsModal({
     setLoaded(true);
   }, [loadBroadcasts, loadPushNotifications, loadConversations]);
 
-  // Load when modal opens
   const handleOpen = useCallback(() => {
     if (!loaded) loadAll();
   }, [loaded, loadAll]);
@@ -502,6 +498,18 @@ export function NotificationsModal({
     );
   };
 
+  const handleTournamentPress = (id: number) => {
+    onClose();
+    if (onViewTournament) {
+      // Small delay so inbox closes before modal opens (avoids nested modal flash)
+      setTimeout(() => onViewTournament(id.toString()), 150);
+    } else {
+      router.push(
+        `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
+      );
+    }
+  };
+
   const unreadNotifCount = unifiedNotifications.filter(
     (n) => !n.read_at,
   ).length;
@@ -578,7 +586,6 @@ export function NotificationsModal({
           </TouchableOpacity>
         </View>
 
-        {/* New Message button */}
         {activeTab === "conversations" && (
           <TouchableOpacity
             style={s.newMessageButton}
@@ -597,7 +604,7 @@ export function NotificationsModal({
           </View>
         ) : (
           <>
-            {/* ── Notifications Tab ── */}
+            {/* -- Notifications Tab -- */}
             {activeTab === "notifications" && (
               <>
                 <View style={s.actionRow}>
@@ -609,9 +616,7 @@ export function NotificationsModal({
                     }}
                   >
                     <Text style={s.settingsLinkIcon}>⚙️</Text>
-                    <Text style={s.settingsLinkText}>
-                      Notification Settings
-                    </Text>
+                    <Text style={s.settingsLinkText}>Notification Settings</Text>
                   </TouchableOpacity>
                   {unreadNotifCount > 0 && (
                     <TouchableOpacity onPress={markAllRead}>
@@ -643,12 +648,7 @@ export function NotificationsModal({
                           );
                         }}
                         onDelete={() => deleteNotification(item)}
-                        onTournamentPress={(id) => {
-                          onClose();
-                          router.push(
-                            `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
-                          );
-                        }}
+                        onTournamentPress={handleTournamentPress}
                         onDeepLink={(link) => {
                           onClose();
                           router.push(link as any);
@@ -661,7 +661,7 @@ export function NotificationsModal({
               </>
             )}
 
-            {/* ── Conversations Tab ── */}
+            {/* -- Conversations Tab -- */}
             {activeTab === "conversations" && (
               <>
                 {conversations.length === 0 ? (
@@ -707,7 +707,6 @@ export function NotificationsModal({
     </>
   );
 
-  // ── Web: fixed overlay ────────────────────────────────────────────────────
   if (isWeb) {
     return (
       <>
@@ -725,7 +724,6 @@ export function NotificationsModal({
     );
   }
 
-  // ── Mobile: slide-up Modal ────────────────────────────────────────────────
   return (
     <Modal
       visible={visible}
@@ -746,9 +744,8 @@ export function NotificationsModal({
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────
+// -- Styles ---------------------------------------------------------------------
 const s = StyleSheet.create({
-  // Web overlay
   backdrop: {
     position: "fixed" as any,
     top: 0,
@@ -785,8 +782,6 @@ const s = StyleSheet.create({
     display: "flex" as any,
     flexDirection: "column",
   },
-
-  // Mobile overlay
   mobileOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.75)",
@@ -803,11 +798,7 @@ const s = StyleSheet.create({
     backgroundColor: "#E74C3C",
     borderRadius: 12,
   },
-  externalCloseText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  externalCloseText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   mobileContainer: {
     backgroundColor: COLORS.background,
     borderRadius: 20,
@@ -816,8 +807,6 @@ const s = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
   },
-
-  // Header
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -840,11 +829,8 @@ const s = StyleSheet.create({
     letterSpacing: 1,
   },
   divider: { height: 1, backgroundColor: "#2C2C2E" },
-
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: { padding: SPACING.md },
-
-  // Tabs
   tabRow: {
     flexDirection: "row",
     backgroundColor: COLORS.surface,
@@ -880,7 +866,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
-
   newMessageButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -893,7 +878,6 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
   },
-
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -912,8 +896,6 @@ const s = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-
-  // Cards
   card: {
     marginTop: SPACING.sm,
     backgroundColor: COLORS.surface,
@@ -979,7 +961,11 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  categoryBadgeText: { fontSize: 10, color: COLORS.primary, fontWeight: "600" },
+  categoryBadgeText: {
+    fontSize: 10,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
   expandedBody: { marginTop: SPACING.xs },
   bodyText: {
     fontSize: FONT_SIZES.sm,
@@ -994,7 +980,11 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginTop: SPACING.md,
   },
-  linkButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
+  linkButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "700",
+    color: "#fff",
+  },
   cardActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -1003,8 +993,11 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-  deleteLabel: { fontSize: FONT_SIZES.xs, color: "#E74C3C", fontWeight: "600" },
-
+  deleteLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: "#E74C3C",
+    fontWeight: "600",
+  },
   hintText: {
     textAlign: "center",
     fontSize: FONT_SIZES.xs,
@@ -1012,10 +1005,8 @@ const s = StyleSheet.create({
     marginTop: SPACING.md,
     fontStyle: "italic",
   },
-
   loadingState: { alignItems: "center", paddingTop: SPACING.xl * 2 },
   loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
-
   emptyState: {
     alignItems: "center",
     paddingTop: SPACING.xl * 2,
@@ -1041,9 +1032,5 @@ const s = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
   },
-  emptyComposeText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: "#fff",
-  },
+  emptyComposeText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
 });

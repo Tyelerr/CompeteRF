@@ -30,6 +30,7 @@ import { NotificationsModal } from "../../src/views/components/notifications/Not
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
+import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 
@@ -45,6 +46,17 @@ interface Favorite {
     venues: { venue: string; city: string; state: string };
   };
 }
+
+/**
+ * Converts a hyphen-separated game slug into Title Case with spaces.
+ * e.g. "one-pocket" ? "One Pocket", "9-ball" ? "9 Ball"
+ */
+const formatGameName = (game: string): string => {
+  return game
+    .split(/[-\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+};
 
 // Animated logged-out view
 const LoggedOutView = ({ router }: { router: any }) => {
@@ -206,6 +218,10 @@ export default function ProfileScreen() {
   const [inboxVisible, setInboxVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
+
+  // Tournament detail modal triggered from inbox notification
+  const [inboxTournamentId, setInboxTournamentId] = useState<string | null>(null);
+  const [showInboxTournament, setShowInboxTournament] = useState(false);
 
   const scrollRef = useScrollToTopOnFocus();
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -396,7 +412,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileCard}>
-            {/* Messages floating button - opens inbox modal */}
+            {/* Messages floating button */}
             <TouchableOpacity
               style={styles.messagesFloatingButton}
               onPress={() => setInboxVisible(true)}
@@ -515,7 +531,7 @@ export default function ProfileScreen() {
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Favorite Game</Text>
                     <Text style={styles.detailValue}>
-                      {profile.preferred_game}
+                      {formatGameName(profile.preferred_game)}
                     </Text>
                   </View>
                 )}
@@ -634,6 +650,20 @@ export default function ProfileScreen() {
         onClose={() => setInboxVisible(false)}
         userId={user?.id}
         userIdAuto={profile?.id_auto}
+        onViewTournament={(id) => {
+          setInboxTournamentId(id);
+          setShowInboxTournament(true);
+        }}
+      />
+
+      {/* Tournament detail modal triggered from inbox */}
+      <TournamentDetailModal
+        id={inboxTournamentId}
+        visible={showInboxTournament}
+        onClose={() => {
+          setShowInboxTournament(false);
+          setInboxTournamentId(null);
+        }}
       />
 
       <SearchAlertsModal

@@ -13,11 +13,6 @@ export const giveawayService = {
   // PUBLIC METHODS (for shop page)
   // ============================================
 
-  /**
-   * Get all active giveaways with entry counts.
-   * Excludes giveaways whose end_date has already passed even if
-   * status hasn't been flipped yet (client-side guard).
-   */
   async getActiveGiveaways(): Promise<Giveaway[]> {
     const now = new Date().toISOString();
 
@@ -33,7 +28,6 @@ export const giveawayService = {
       throw error;
     }
 
-    // Direct count — works because "Anyone can view entries" RLS policy exists
     const giveawaysWithCounts = await Promise.all(
       (data || []).map(async (g) => {
         const { count } = await supabase
@@ -50,9 +44,6 @@ export const giveawayService = {
     return giveawaysWithCounts;
   },
 
-  /**
-   * Get single giveaway by ID with entry count
-   */
   async getGiveawayById(id: number): Promise<Giveaway | null> {
     const { data, error } = await supabase
       .from("giveaways")
@@ -76,29 +67,35 @@ export const giveawayService = {
     };
   },
 
-  /**
-   * Get stats for completed giveaways (for stats card)
-   */
   async getGiveawayStats(): Promise<GiveawayStats> {
-    const { data, error } = await supabase
-      .from("giveaways")
-      .select("id, prize_value, ended_at")
-      .in("status", ["ended", "awarded"])
-      .not("ended_at", "is", null)
-      .order("ended_at", { ascending: true });
+    const [completedResult, activeResult] = await Promise.all([
+      supabase
+        .from("giveaways")
+        .select("id, prize_value, ended_at")
+        .in("status", ["ended", "awarded"])
+        .not("ended_at", "is", null)
+        .order("ended_at", { ascending: true }),
+      supabase
+        .from("giveaways")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active"),
+    ]);
 
-    if (error) {
-      console.error("Error fetching giveaway stats:", error);
+    if (completedResult.error) {
+      console.error("Error fetching giveaway stats:", completedResult.error);
       return {
         completedCount: 0,
         totalValueGiven: 0,
         frequency: "Ongoing",
+        activeCount: 0,
       };
     }
 
+    const data = completedResult.data;
     const completedCount = data?.length || 0;
     const totalValueGiven =
       data?.reduce((sum, g) => sum + (g.prize_value || 0), 0) || 0;
+    const activeCount = activeResult.count || 0;
 
     let frequency: GiveawayStats["frequency"] = "Ongoing";
 
@@ -132,12 +129,10 @@ export const giveawayService = {
       completedCount,
       totalValueGiven,
       frequency,
+      activeCount,
     };
   },
 
-  /**
-   * Get all entries for current user (to check which giveaways they've entered)
-   */
   async getUserEntries(userId: number): Promise<GiveawayEntry[]> {
     const { data, error } = await supabase
       .from("giveaway_entries")
@@ -152,9 +147,6 @@ export const giveawayService = {
     return data || [];
   },
 
-  /**
-   * Check if user has already entered a specific giveaway
-   */
   async hasUserEntered(giveawayId: number, userId: number): Promise<boolean> {
     const { data, error } = await supabase
       .from("giveaway_entries")
@@ -171,9 +163,6 @@ export const giveawayService = {
     return !!data;
   },
 
-  /**
-   * Submit a giveaway entry
-   */
   async createEntry(
     giveawayId: number,
     userId: number,
@@ -196,21 +185,18 @@ export const giveawayService = {
 
     if (error) {
       console.error("Error creating entry:", error);
-
       if (error.code === "23505") {
         return {
           success: false,
           error: "You have already entered this giveaway.",
         };
       }
-
       return {
         success: false,
         error: error.message || "Failed to submit entry. Please try again.",
       };
     }
 
-    // Check if giveaway should auto-end (max entries reached)
     const { data: giveaway } = await supabase
       .from("giveaways")
       .select("max_entries")
@@ -237,9 +223,6 @@ export const giveawayService = {
     return { success: true };
   },
 
-  /**
-   * Get entry count for a specific giveaway
-   */
   async getEntryCount(giveawayId: number): Promise<number> {
     const { count, error } = await supabase
       .from("giveaway_entries")
@@ -255,12 +238,9 @@ export const giveawayService = {
   },
 
   // ============================================
-  // ADMIN METHODS (super_admin RLS covers these)
+  // ADMIN METHODS
   // ============================================
 
-  /**
-   * Get all giveaways for admin (includes all statuses)
-   */
   async getAllGiveaways(): Promise<Giveaway[]> {
     const { data, error } = await supabase
       .from("giveaways")
@@ -286,9 +266,6 @@ export const giveawayService = {
     }));
   },
 
-  /**
-   * Get admin overview stats
-   */
   async getAdminStats(): Promise<{
     activeCount: number;
     totalEntries: number;
@@ -318,9 +295,6 @@ export const giveawayService = {
     };
   },
 
-  /**
-   * Create a new giveaway
-   */
   async createGiveaway(
     giveaway: {
       name: string;
@@ -357,13 +331,11 @@ export const giveawayService = {
     }
 
     const prizeStr =
-      giveaway.prize_value > 0
-        ? ` — $${giveaway.prize_value} value!`
-        : "";
+      giveaway.prize_value > 0 ? ` – $${giveaway.prize_value} value!` : "";
     notificationDispatcher
       .sendToAllUsers(
         "giveaway_update",
-        "🎁 New Giveaway!",
+        "?? New Giveaway!",
         `${giveaway.name.trim()}${prizeStr} Enter now for a chance to win!`,
         {
           giveaway_id: data.id,
@@ -372,15 +344,12 @@ export const giveawayService = {
         },
       )
       .catch((err) =>
-        console.error("⚠️ Error sending new giveaway notifications:", err),
+        console.error("?? Error sending new giveaway notifications:", err),
       );
 
     return { success: true, data };
   },
 
-  /**
-   * Update a giveaway
-   */
   async updateGiveaway(
     id: number,
     updates: Partial<{
@@ -410,9 +379,6 @@ export const giveawayService = {
     return { success: true };
   },
 
-  /**
-   * End a giveaway (sets status to 'ended')
-   */
   async endGiveaway(id: number): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase
       .from("giveaways")
@@ -431,9 +397,6 @@ export const giveawayService = {
     return { success: true };
   },
 
-  /**
-   * Draw a random winner for a giveaway
-   */
   async drawWinner(
     giveawayId: number,
     drawnBy: number,
@@ -517,9 +480,7 @@ export const giveawayService = {
 
         await supabase
           .from("profiles")
-          .update({
-            total_winnings: currentWinnings + prizeValue,
-          })
+          .update({ total_winnings: currentWinnings + prizeValue })
           .eq("id_auto", winnerEntry.user_id);
       }
     }
@@ -528,7 +489,7 @@ export const giveawayService = {
       .send({
         category: "giveaway_update",
         recipientIdAutos: [winnerEntry.user_id],
-        title: "🏆 You Won!",
+        title: "?? You Won!",
         body: `Congratulations! You won ${giveawayName}!`,
         data: {
           giveaway_id: giveawayId,
@@ -537,7 +498,7 @@ export const giveawayService = {
         },
       })
       .catch((err) =>
-        console.error("⚠️ Error sending winner notification:", err),
+        console.error("?? Error sending winner notification:", err),
       );
 
     const otherEntrantIds = entries
@@ -546,12 +507,11 @@ export const giveawayService = {
 
     if (otherEntrantIds.length > 0) {
       const uniqueOtherIds = [...new Set(otherEntrantIds)];
-
       notificationDispatcher
         .send({
           category: "giveaway_update",
           recipientIdAutos: uniqueOtherIds,
-          title: "🎁 Giveaway Results",
+          title: "?? Giveaway Results",
           body: `The winner of ${giveawayName} has been drawn. Stay tuned for the next one!`,
           data: {
             giveaway_id: giveawayId,
@@ -560,7 +520,7 @@ export const giveawayService = {
           },
         })
         .catch((err) =>
-          console.error("⚠️ Error sending entrant notifications:", err),
+          console.error("?? Error sending entrant notifications:", err),
         );
     }
 
@@ -576,9 +536,6 @@ export const giveawayService = {
     };
   },
 
-  /**
-   * Archive a giveaway
-   */
   async archiveGiveaway(
     id: number,
   ): Promise<{ success: boolean; error?: string }> {
@@ -599,9 +556,6 @@ export const giveawayService = {
     return { success: true };
   },
 
-  /**
-   * Restore an archived giveaway
-   */
   async restoreGiveaway(
     id: number,
   ): Promise<{ success: boolean; error?: string }> {
@@ -630,14 +584,9 @@ export const giveawayService = {
     return { success: true };
   },
 
-  /**
-   * Get all entries (for admin participants view)
-   */
   async getAllEntries(
     giveawayId?: number,
-  ): Promise<
-    (GiveawayEntry & { giveaway_name?: string; giveaway_prize?: number })[]
-  > {
+  ): Promise<(GiveawayEntry & { giveaway_name?: string; giveaway_prize?: number })[]> {
     let query = supabase
       .from("giveaway_entries")
       .select(
@@ -666,20 +615,7 @@ export const giveawayService = {
     }));
   },
 
-  /**
-   * Get past winners
-   */
-  async getPastWinners(): Promise<
-    {
-      giveaway_id: number;
-      giveaway_name: string;
-      prize_value: number;
-      winner_name: string;
-      winner_email: string;
-      drawn_at: string;
-      entry_count: number;
-    }[]
-  > {
+  async getPastWinners(): Promise<{ giveaway_id: number; giveaway_name: string; prize_value: number; winner_name: string; winner_email: string; drawn_at: string; entry_count: number; }[]> {
     const { data, error } = await supabase
       .from("giveaways")
       .select(
@@ -722,12 +658,9 @@ export const giveawayService = {
   },
 
   // ============================================
-  // REDRAW WINNER METHODS (admin only)
+  // REDRAW WINNER METHODS
   // ============================================
 
-  /**
-   * Get winner history for a giveaway
-   */
   async getWinnerHistory(giveawayId: number): Promise<WinnerHistoryRecord[]> {
     const { data, error } = await supabase
       .from("giveaway_winner_history")
@@ -753,9 +686,6 @@ export const giveawayService = {
     }));
   },
 
-  /**
-   * Get count of eligible entries (excludes disqualified users)
-   */
   async getEligibleEntryCount(giveawayId: number): Promise<number> {
     const { data: disqualified } = await supabase
       .from("giveaway_winner_history")
@@ -784,9 +714,6 @@ export const giveawayService = {
     return count || 0;
   },
 
-  /**
-   * Get current winner details for a giveaway
-   */
   async getCurrentWinner(giveawayId: number): Promise<{
     id: number;
     user_id: number;
@@ -822,9 +749,6 @@ export const giveawayService = {
     };
   },
 
-  /**
-   * Redraw a new winner (disqualifies current winner)
-   */
   async redrawWinner(
     giveawayId: number,
     redrawBy: number,
@@ -913,9 +837,7 @@ export const giveawayService = {
 
       await supabase
         .from("profiles")
-        .update({
-          total_winnings: Math.max(0, oldWinnings - prizeValue),
-        })
+        .update({ total_winnings: Math.max(0, oldWinnings - prizeValue) })
         .eq("id_auto", oldWinnerId);
     }
 
@@ -964,9 +886,7 @@ export const giveawayService = {
 
       await supabase
         .from("profiles")
-        .update({
-          total_winnings: newWinnings + prizeValue,
-        })
+        .update({ total_winnings: newWinnings + prizeValue })
         .eq("id_auto", newWinnerEntry.user_id);
     }
 
@@ -974,7 +894,7 @@ export const giveawayService = {
       .send({
         category: "giveaway_update",
         recipientIdAutos: [newWinnerEntry.user_id],
-        title: "🏆 You Won!",
+        title: "?? You Won!",
         body: `Congratulations! You won ${giveawayName}!`,
         data: {
           giveaway_id: giveawayId,
@@ -983,7 +903,7 @@ export const giveawayService = {
         },
       })
       .catch((err) =>
-        console.error("⚠️ Error sending redraw winner notification:", err),
+        console.error("?? Error sending redraw winner notification:", err),
       );
 
     return {
@@ -998,3 +918,5 @@ export const giveawayService = {
     };
   },
 };
+
+

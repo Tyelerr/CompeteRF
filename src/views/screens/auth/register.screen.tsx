@@ -14,6 +14,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { useCheckUsername } from "../../../../hooks/use-profile";
 import { supabase } from "../../../lib/supabase";
 import { profileService } from "../../../models/services/profile.service";
+import { useAuthContext } from "../../../providers/AuthProvider";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -31,6 +32,7 @@ const PASSWORD_RULES =
 
 export const RegisterScreen = () => {
   const router = useRouter();
+  const { refreshSession } = useAuthContext();
 
   // Auth fields
   const [email, setEmail] = useState("");
@@ -51,11 +53,10 @@ export const RegisterScreen = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // iOS-only: toggle between strong password and manual entry.
+  // iOS-only: toggle between strong password and manual entry
   const [useAutoPassword, setUseAutoPassword] = useState(IS_IOS);
   const [formKey, setFormKey] = useState(() => Date.now());
 
-  // Check availability using lowercase version
   const { isAvailable, isChecking } = useCheckUsername(username.toLowerCase());
 
   const togglePasswordMode = useCallback(() => {
@@ -82,7 +83,6 @@ export const RegisterScreen = () => {
     setFormKey(Date.now());
   }, []);
 
-  // Password mismatch check (only show after user starts typing confirm)
   const passwordsMatch = password === confirmPassword;
   const showPasswordMismatch = confirmPassword.length > 0 && !passwordsMatch;
 
@@ -93,47 +93,38 @@ export const RegisterScreen = () => {
       setError("Please enter a valid email");
       return false;
     }
-
     if (password.length < 8) {
       setError("Password must be at least 8 characters");
       return false;
     }
-
     if (!passwordsMatch) {
       setError("Passwords do not match");
       return false;
     }
-
     if (!firstName.trim()) {
       setError("Please enter your first name");
       return false;
     }
-
     if (!lastName.trim()) {
       setError("Please enter your last name");
       return false;
     }
-
     if (!isValidUsername(username)) {
       setError("Username must be 3-20 letters or numbers");
       return false;
     }
-
     if (containsBadWord(username)) {
       setError("This username is not allowed");
       return false;
     }
-
     if (!isAvailable) {
       setError("This username is already taken");
       return false;
     }
-
     if (!homeState) {
       setError("Please select your home state");
       return false;
     }
-
     if (!agreeTerms || !agreeAge) {
       setError("Please agree to the terms and confirm your age");
       return false;
@@ -148,10 +139,7 @@ export const RegisterScreen = () => {
     setLoading(true);
     try {
       const { data: authData, error: signUpError } = await supabase.auth.signUp(
-        {
-          email,
-          password,
-        },
+        { email, password },
       );
 
       if (signUpError) {
@@ -173,7 +161,7 @@ export const RegisterScreen = () => {
         name: `${trimmedFirst} ${trimmedLast}`,
         first_name: trimmedFirst,
         last_name: trimmedLast,
-        user_name: username.toLowerCase(), // always store lowercase
+        user_name: username.toLowerCase(),
         home_state: homeState,
         preferred_game: preferredGame || undefined,
         favorite_player: favoritePlayer || undefined,
@@ -181,6 +169,7 @@ export const RegisterScreen = () => {
 
       await profileService.createProfile(profileData);
 
+      // Poll until profile is confirmed in DB (max 10s)
       let attempts = 0;
       const maxAttempts = 10;
       let profileFound = false;
@@ -209,6 +198,14 @@ export const RegisterScreen = () => {
         attempts++;
       }
 
+      // Force AuthProvider to re-hydrate so profile screen has fresh data
+      // immediately on arrival, avoiding the brief "no ID / user not found" flash.
+      try {
+        await refreshSession();
+      } catch (refreshErr) {
+        console.warn("refreshSession after register failed:", refreshErr);
+      }
+
       router.replace("/(tabs)");
     } catch (err: any) {
       setError(err.message || "Registration failed");
@@ -217,7 +214,6 @@ export const RegisterScreen = () => {
     }
   };
 
-  // Green/red username helper
   const getUsernameHelper = () => {
     if (username.length < 3)
       return {
@@ -318,7 +314,6 @@ export const RegisterScreen = () => {
           autoFillActive={useAutoPassword && password.length > 0}
         />
 
-        {/* Confirm password with red border on mismatch */}
         <View>
           <Input
             key={`confirm-${formKey}`}
@@ -341,7 +336,6 @@ export const RegisterScreen = () => {
           )}
         </View>
 
-        {/* Only show the toggle on iOS */}
         {IS_IOS && (
           <TouchableOpacity
             onPress={togglePasswordMode}
@@ -357,7 +351,6 @@ export const RegisterScreen = () => {
 
         <Text style={styles.sectionTitle}>Profile Information</Text>
 
-        {/* First Name + Last Name side by side */}
         <View style={styles.nameRow}>
           <View style={styles.nameField}>
             <Input
@@ -383,7 +376,6 @@ export const RegisterScreen = () => {
           </View>
         </View>
 
-        {/* Username — user can type mixed case, stored as lowercase */}
         <View>
           <Input
             label="Username *"
@@ -439,7 +431,9 @@ export const RegisterScreen = () => {
               agreeTerms && styles.checkboxBoxChecked,
             ]}
           >
-            {agreeTerms && <Text style={styles.checkboxCheck}>{"\u2713"}</Text>}
+            {agreeTerms && (
+              <Text style={styles.checkboxCheck}>{"\u2713"}</Text>
+            )}
           </View>
           <Text style={styles.checkboxText}>
             I agree to the{" "}
@@ -473,7 +467,9 @@ export const RegisterScreen = () => {
           <View
             style={[styles.checkboxBox, agreeAge && styles.checkboxBoxChecked]}
           >
-            {agreeAge && <Text style={styles.checkboxCheck}>{"\u2713"}</Text>}
+            {agreeAge && (
+              <Text style={styles.checkboxCheck}>{"\u2713"}</Text>
+            )}
           </View>
           <Text style={styles.checkboxText}>I am 18 years or older</Text>
         </Pressable>
@@ -500,14 +496,8 @@ export const RegisterScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xl * 2,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  scrollContent: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
   loadingContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -528,22 +518,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
     textAlign: "center",
   },
-  loadingSpinner: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
-    fontSize: 40,
-    marginBottom: SPACING.md,
-  },
-  back: {
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.lg,
-  },
-  backText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.md,
-  },
+  loadingSpinner: { alignItems: "center", justifyContent: "center" },
+  loadingText: { fontSize: 40, marginBottom: SPACING.md },
+  back: { marginTop: SPACING.xl, marginBottom: SPACING.lg },
+  backText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.md },
   title: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: "700",
@@ -562,26 +540,16 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     marginBottom: SPACING.md,
   },
-  form: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  nameField: {
-    flex: 1,
-  },
+  form: { flex: 1 },
+  nameRow: { flexDirection: "row", gap: SPACING.sm },
+  nameField: { flex: 1 },
   usernameHelper: {
     fontSize: FONT_SIZES.xs,
     marginTop: 4,
     marginLeft: 4,
     fontWeight: "500",
   },
-  inputError: {
-    borderColor: "#EF4444",
-    borderWidth: 1,
-  },
+  inputError: { borderColor: "#EF4444", borderWidth: 1 },
   mismatchText: {
     color: "#EF4444",
     fontSize: FONT_SIZES.xs,
@@ -589,10 +557,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: "500",
   },
-  toggleButton: {
-    paddingVertical: SPACING.xs,
-    marginBottom: SPACING.sm,
-  },
+  toggleButton: { paddingVertical: SPACING.xs, marginBottom: SPACING.sm },
   toggleText: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.sm,
@@ -618,11 +583,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
-  checkboxCheck: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
+  checkboxCheck: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   checkboxText: {
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
@@ -645,10 +606,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: SPACING.xl,
   },
-  footerText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.md,
-  },
+  footerText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.md },
   footerLink: {
     color: COLORS.primary,
     fontSize: FONT_SIZES.md,

@@ -1,9 +1,9 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { GiveawayStats } from "../../../models/types/giveaway.types";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { GiveawayStats } from "../../../models/types/giveaway.types";
 
 interface GiveawayStatsCardProps {
   stats: GiveawayStats;
@@ -20,7 +20,7 @@ export function GiveawayStatsCard({ stats }: GiveawayStatsCardProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.icon}>🎁</Text>
+        <Text style={styles.icon}>{"🎁"}</Text>
         <Text style={styles.title}>GIVEAWAY STATS</Text>
       </View>
 
@@ -42,8 +42,8 @@ export function GiveawayStatsCard({ stats }: GiveawayStatsCardProps) {
         <View style={styles.divider} />
 
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>~{stats.frequency}</Text>
-          <Text style={styles.statLabel}>Frequency</Text>
+          <Text style={styles.statValue}>{stats.activeCount}</Text>
+          <Text style={styles.statLabel}>Active</Text>
         </View>
       </View>
     </View>

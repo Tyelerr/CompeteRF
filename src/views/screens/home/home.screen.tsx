@@ -79,8 +79,6 @@ export default function HomeScreen() {
               alignItems: "center",
               paddingTop: 56,
               paddingBottom: 16,
-              borderBottomWidth: 1,
-              borderBottomColor: "#222222",
             }}
           >
             <Text

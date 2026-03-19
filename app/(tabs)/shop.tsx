@@ -116,8 +116,6 @@ export default function ShopScreen() {
             alignItems: "center",
             paddingTop: 56,
             paddingBottom: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: "#222222",
           }}
         >
           <Text
@@ -198,7 +196,6 @@ export default function ShopScreen() {
               />
             </View>
           ))}
-          {/* Phantom keeps odd last card from stretching full width */}
           {giveawaysVm.giveaways.length % 2 !== 0 && (
             <View style={styles.webGridItem} />
           )}
@@ -239,7 +236,6 @@ export default function ShopScreen() {
             ) : undefined
           }
         >
-          {/* Web: wrap in a centered max-width column */}
           {isWeb ? (
             <View style={styles.webInner}>{pageContent}</View>
           ) : (
@@ -281,27 +277,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
-  // ----- Scroll -----
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 0,
-  },
-  // Web outer: full width, center children
+  scrollView: { flex: 1 },
+  scrollContent: { paddingTop: 0 },
   scrollContentWeb: {
     alignItems: "center",
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.xl,
   },
-  // Web inner: constrained column all content sits in
-  webInner: {
-    width: "100%",
-    maxWidth: 900,
-  },
-
-  // ----- Header (web only) -----
+  webInner: { width: "100%", maxWidth: 900 },
   headerWeb: {
     alignItems: "center",
     paddingTop: SPACING.lg,
@@ -318,19 +301,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 4,
   },
-
-  // ----- Web 2-col grid -----
   webGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: SPACING.md,
   },
-  webGridItem: {
-    flex: 1,
-    minWidth: 300,
-  },
-
-  // ----- Login Banner -----
+  webGridItem: { flex: 1, minWidth: 300 },
   loginBanner: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
@@ -352,8 +328,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: SPACING.sm,
   },
-
-  // ----- Error state -----
   errorContainer: {
     backgroundColor: COLORS.surface,
     borderRadius: 12,
@@ -364,21 +338,16 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: FONT_SIZES.md,
-    color: COLORS.error || "#ef4444",
+    color: COLORS.error,
     textAlign: "center",
     marginBottom: SPACING.md,
   },
-
-  // ----- Empty state -----
   emptyContainer: {
     alignItems: "center",
     padding: SPACING.xl,
     marginTop: SPACING.xl,
   },
-  emptyIcon: {
-    fontSize: 60,
-    marginBottom: SPACING.md,
-  },
+  emptyIcon: { fontSize: 60, marginBottom: SPACING.md },
   emptyTitle: {
     fontSize: FONT_SIZES.lg,
     fontWeight: "600",

@@ -41,6 +41,7 @@ export interface GiveawayStats {
   completedCount: number;
   totalValueGiven: number;
   frequency: "Weekly" | "Bi-weekly" | "2-3x Monthly" | "Monthly" | "Ongoing";
+  activeCount: number;
 }
 
 export interface WinnerHistoryRecord {
