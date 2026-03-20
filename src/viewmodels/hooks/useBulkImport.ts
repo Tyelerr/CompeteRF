@@ -1,4 +1,4 @@
-// ─── Bulk Import ViewModel ───────────────────────────────────────────────────
+// ─── Bulk Import ViewModel ────────────────────────────────────────────────────
 // src/viewmodels/hooks/useBulkImport.ts
 
 import * as DocumentPicker from "expo-document-picker";
@@ -13,7 +13,10 @@ import {
 export const useBulkImport = () => {
   const [state, setState] = useState<BulkImportState>(INITIAL_BULK_IMPORT_STATE);
 
-  // ── Computed ──────────────────────────────────────────────────────────────
+  // imageFiles: map of filename (e.g. "rusty-9ball-friday.jpg") → local URI
+  const [imageFiles, setImageFiles] = useState<Map<string, string>>(new Map());
+
+  // ── Computed ──────────────────────────────────────────────────────────────────
 
   const isLoading = state.phase === "parsing" || state.phase === "importing";
   const canImport = state.phase === "validated" && state.validRows.length > 0;
@@ -21,8 +24,9 @@ export const useBulkImport = () => {
     state.phase === "importing" && state.validRows.length > 0
       ? state.currentRow / state.validRows.length
       : 0;
+  const imageCount = imageFiles.size;
 
-  // ── Read File Content ─────────────────────────────────────────────────────
+  // ── Read File Content ─────────────────────────────────────────────────────────
   // Uses fetch() instead of expo-file-system to avoid EncodingType.UTF8 crash
 
   const readFileAsText = async (uri: string): Promise<string> => {
@@ -33,7 +37,7 @@ export const useBulkImport = () => {
     return await response.text();
   };
 
-  // ── Pick File ─────────────────────────────────────────────────────────────
+  // ── Pick CSV File ─────────────────────────────────────────────────────────────
 
   const pickFile = async () => {
     try {
@@ -70,7 +74,54 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Parse & Validate ──────────────────────────────────────────────────────
+  // ── Pick Flyer Images ─────────────────────────────────────────────────────────
+
+  const pickImages = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["image/jpeg", "image/png", "image/webp", "image/gif", "*/*"],
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      // Filter to image files only and build the filename → URI map
+      const newMap = new Map(imageFiles); // preserve any previously picked images
+      let addedCount = 0;
+      let skippedCount = 0;
+
+      for (const asset of result.assets) {
+        const name = asset.name || "";
+        if (/\.(jpg|jpeg|png|webp|gif)$/i.test(name)) {
+          newMap.set(name, asset.uri);
+          addedCount++;
+        } else {
+          skippedCount++;
+        }
+      }
+
+      setImageFiles(newMap);
+
+      if (skippedCount > 0) {
+        Alert.alert(
+          "Some files skipped",
+          `${addedCount} image(s) loaded. ${skippedCount} file(s) were skipped — only JPG, PNG, WebP, and GIF are supported.`,
+        );
+      }
+    } catch (error: any) {
+      console.error("Image picker error:", error);
+      Alert.alert("Error", "Failed to open image picker. Please try again.");
+    }
+  };
+
+  // ── Clear Images ──────────────────────────────────────────────────────────────
+
+  const clearImages = () => {
+    setImageFiles(new Map());
+  };
+
+  // ── Parse & Validate ──────────────────────────────────────────────────────────
 
   const parseAndValidate = async (fileUri: string) => {
     try {
@@ -115,7 +166,7 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Start Import ──────────────────────────────────────────────────────────
+  // ── Start Import ──────────────────────────────────────────────────────────────
 
   const startImport = async () => {
     if (!canImport) return;
@@ -134,6 +185,7 @@ export const useBulkImport = () => {
         (current, _total) => {
           setState((prev) => ({ ...prev, currentRow: current }));
         },
+        imageFiles.size > 0 ? imageFiles : undefined,
       );
 
       setState((prev) => ({
@@ -149,20 +201,24 @@ export const useBulkImport = () => {
     }
   };
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
+  // ── Reset ─────────────────────────────────────────────────────────────────────
 
   const reset = () => {
     setState(INITIAL_BULK_IMPORT_STATE);
+    setImageFiles(new Map());
   };
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  // ── Public API ────────────────────────────────────────────────────────────────
 
   return {
     state,
     isLoading,
     canImport,
     progress,
+    imageCount,
     pickFile,
+    pickImages,
+    clearImages,
     startImport,
     reset,
   };

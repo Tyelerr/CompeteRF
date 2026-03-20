@@ -1,10 +1,9 @@
-// ─── Bulk Import Screen ──────────────────────────────────────────────────────
+// ─── Bulk Import Screen ───────────────────────────────────────────────────────
 // app/(tabs)/admin/bulk-import.tsx
 
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
-  FlatList,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,7 +38,8 @@ export default function BulkImportScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}
+    <ScrollView
+      style={styles.container}
       contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
     >
       {/* Header */}
@@ -49,6 +49,7 @@ export default function BulkImportScreen() {
       </View>
 
       <View style={styles.content}>
+
         {/* ── Phase: Idle ── */}
         {vm.state.phase === "idle" && (
           <View>
@@ -57,9 +58,10 @@ export default function BulkImportScreen() {
               <Text style={styles.infoText}>
                 1. Fill out the tournament CSV template{"\n"}
                 2. Export as .csv file{"\n"}
-                3. Upload it here{"\n"}
-                4. Review validation results{"\n"}
-                5. Import valid tournaments
+                3. (Optional) Select flyer images{"\n"}
+                4. Upload the CSV here{"\n"}
+                5. Review validation results{"\n"}
+                6. Import valid tournaments
               </Text>
               <Text style={styles.infoNote}>
                 Only the 7 required fields need to be filled in (venue_id,
@@ -67,6 +69,42 @@ export default function BulkImportScreen() {
                 Everything else can be left blank — bar owners can fill in
                 details later.
               </Text>
+            </View>
+
+            {/* Image picker — shown before CSV so images are ready when import runs */}
+            <View style={styles.imagePickerCard}>
+              <View style={styles.imagePickerHeader}>
+                <Text style={styles.imagePickerTitle}>🖼️ Flyer Images</Text>
+                <Text style={styles.imagePickerSubtitle}>Optional</Text>
+              </View>
+              <Text style={styles.imagePickerHint}>
+                If your CSV has image filenames in the thumbnail column (e.g.{" "}
+                <Text style={styles.code}>rusty-9ball.jpg</Text>), select those
+                files here. They will be uploaded to Supabase automatically
+                during import.
+              </Text>
+
+              <View style={styles.imagePickerRow}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={vm.pickImages}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    📂 Select Images
+                  </Text>
+                </TouchableOpacity>
+
+                {vm.imageCount > 0 && (
+                  <View style={styles.imageCountBadge}>
+                    <Text style={styles.imageCountText}>
+                      ✅ {vm.imageCount} image{vm.imageCount !== 1 ? "s" : ""} loaded
+                    </Text>
+                    <TouchableOpacity onPress={vm.clearImages}>
+                      <Text style={styles.clearText}>Clear</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={vm.pickFile}>
@@ -107,6 +145,13 @@ export default function BulkImportScreen() {
                   <Text style={styles.summaryLabelRed}>Errors</Text>
                 </View>
               </View>
+
+              {/* Image count reminder if images are loaded */}
+              {vm.imageCount > 0 && (
+                <Text style={styles.imageSummaryNote}>
+                  🖼️ {vm.imageCount} flyer image{vm.imageCount !== 1 ? "s" : ""} ready to upload
+                </Text>
+              )}
             </View>
 
             {/* Error List */}
@@ -130,10 +175,7 @@ export default function BulkImportScreen() {
 
             {/* Action Buttons */}
             <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={vm.reset}
-              >
+              <TouchableOpacity style={styles.cancelButton} onPress={vm.reset}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
 
@@ -162,13 +204,22 @@ export default function BulkImportScreen() {
             {/* Progress Bar */}
             <View style={styles.progressBarContainer}>
               <View
-                style={[styles.progressBarFill, { width: `${vm.progress * 100}%` }]}
+                style={[
+                  styles.progressBarFill,
+                  { width: `${vm.progress * 100}%` as any },
+                ]}
               />
             </View>
 
             <Text style={styles.statusText}>
               Tournament {vm.state.currentRow} of {vm.state.validRows.length}
             </Text>
+
+            {vm.imageCount > 0 && (
+              <Text style={styles.uploadingNote}>
+                Uploading flyer images as needed...
+              </Text>
+            )}
 
             <ActivityIndicator
               size="small"
@@ -240,16 +291,17 @@ export default function BulkImportScreen() {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
   },
   container: {
-    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
+    ...Platform.select({
+      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+    }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -313,7 +365,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   infoTitle: {
     fontSize: FONT_SIZES.md,
@@ -333,6 +385,81 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  // ── Image Picker Card ──
+  imagePickerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.md,
+  },
+  imagePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: SPACING.xs,
+  },
+  imagePickerTitle: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  imagePickerSubtitle: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    fontStyle: "italic",
+  },
+  imagePickerHint: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    marginBottom: SPACING.sm,
+  },
+  code: {
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    color: COLORS.primary,
+  },
+  imagePickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    flexWrap: "wrap",
+  },
+  imageCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#4CAF5015",
+    borderRadius: 8,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: "#4CAF5033",
+  },
+  imageCountText: {
+    fontSize: FONT_SIZES.xs,
+    color: "#4CAF50",
+    fontWeight: "600",
+  },
+  clearText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    textDecorationLine: "underline",
+  },
+  imageSummaryNote: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.primary,
+    marginTop: SPACING.sm,
+    textAlign: "center",
+  },
+  uploadingNote: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    fontStyle: "italic",
+  },
+
   // ── Buttons ──
   primaryButton: {
     backgroundColor: COLORS.primary,
@@ -344,6 +471,19 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: SPACING.sm,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  secondaryButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.primary,
   },
   importButton: {
     flex: 1,

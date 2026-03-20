@@ -11,7 +11,65 @@ import {
 } from "../types/bulk-import.types";
 import { THUMBNAIL_OPTIONS } from "../../utils/tournament-form-data";
 
-// ─── CSV Parsing ─────────────────────────────────────────────────────────────
+// ─── Image Upload ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if the thumbnail value looks like a local image filename
+ * (e.g. "rusty-friday-9ball.jpg") rather than a game type slug (e.g. "9-ball").
+ */
+function isImageFilename(thumbnail: string | null): boolean {
+  if (!thumbnail) return false;
+  return /\.(jpg|jpeg|png|webp|gif)$/i.test(thumbnail);
+}
+
+/**
+ * Upload a flyer image to the tournament-images bucket.
+ * Accepts a local URI (from DocumentPicker) and returns the public URL.
+ */
+async function uploadTournamentImage(
+  localUri: string,
+  filename: string,
+): Promise<string> {
+  // Read the file as a blob via fetch — works on both mobile and web
+  const response = await fetch(localUri);
+  if (!response.ok) {
+    throw new Error(`Failed to read image file: ${filename}`);
+  }
+  const blob = await response.blob();
+
+  // Detect MIME type from extension
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "jpg";
+  const mimeMap: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    gif: "image/gif",
+  };
+  const contentType = mimeMap[ext] ?? "image/jpeg";
+
+  // Upload to Supabase storage under flyers/ subfolder
+  const storagePath = `flyers/${filename}`;
+  const { error } = await supabase.storage
+    .from("tournament-images")
+    .upload(storagePath, blob, {
+      contentType,
+      upsert: true, // overwrite if re-importing same flyer
+    });
+
+  if (error) {
+    throw new Error(`Image upload failed for "${filename}": ${error.message}`);
+  }
+
+  // Return the public URL
+  const { data } = supabase.storage
+    .from("tournament-images")
+    .getPublicUrl(storagePath);
+
+  return data.publicUrl;
+}
+
+// ─── CSV Parsing ──────────────────────────────────────────────────────────────
 
 /**
  * Parse a CSV string into an array of BulkTournamentRow objects.
@@ -141,7 +199,7 @@ function mapRowToObject(
   };
 }
 
-// ─── Validation ──────────────────────────────────────────────────────────────
+// ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
  * Validate all parsed rows against required fields and DB constraints.
@@ -238,15 +296,17 @@ async function validateRows(
   return { valid, errors };
 }
 
-// ─── Import ──────────────────────────────────────────────────────────────────
+// ─── Import ───────────────────────────────────────────────────────────────────
 
 /**
  * Import validated rows one at a time via tournamentService.createTournament().
+ * If imageFiles is provided, uploads any flyer images before inserting.
  * Reports progress via callback. Skips and logs failures.
  */
 async function importTournaments(
   validRows: RowValidationResult[],
   onProgress: (current: number, total: number) => void,
+  imageFiles?: Map<string, string>, // filename → local URI
 ): Promise<{ imported: number; failed: { rowNumber: number; error: string }[] }> {
   let imported = 0;
   const failed: { rowNumber: number; error: string }[] = [];
@@ -257,7 +317,21 @@ async function importTournaments(
     onProgress(i + 1, total);
 
     try {
-      const payload = buildPayload(row);
+      // Upload flyer image if thumbnail is a local filename and we have the file
+      let resolvedThumbnail = row.thumbnail;
+      if (
+        isImageFilename(row.thumbnail) &&
+        imageFiles &&
+        row.thumbnail &&
+        imageFiles.has(row.thumbnail)
+      ) {
+        const localUri = imageFiles.get(row.thumbnail)!;
+        console.log(`📸 Uploading flyer image: ${row.thumbnail}`);
+        resolvedThumbnail = await uploadTournamentImage(localUri, row.thumbnail);
+        console.log(`✅ Image uploaded: ${resolvedThumbnail}`);
+      }
+
+      const payload = buildPayload({ ...row, thumbnail: resolvedThumbnail });
       await tournamentService.createTournament(payload);
       imported++;
     } catch (err: any) {
@@ -272,24 +346,26 @@ async function importTournaments(
   return { imported, failed };
 }
 
-// ─── Payload Builder ─────────────────────────────────────────────────────────
+// ─── Payload Builder ──────────────────────────────────────────────────────────
 
 /**
  * Convert a BulkTournamentRow into the shape tournamentService.createTournament() expects.
- * Matches the Partial<Tournament> type from your tournament.types.ts.
+ * If thumbnail is still a slug (not a URL), auto-assign from game type.
  */
 function buildPayload(row: BulkTournamentRow): Record<string, any> {
-  // Auto-assign thumbnail by game type if not provided
+  // If thumbnail is a full URL (uploaded image) use it directly.
+  // If it's a slug or empty, fall back to auto-assign from game type.
   let thumbnail = row.thumbnail || null;
-  if (!thumbnail && row.game_type) {
-    const match = THUMBNAIL_OPTIONS?.find(
-      (opt: any) =>
-        opt.gameType === row.game_type ||
-        (opt.gameType &&
-          row.game_type?.toLowerCase().includes(opt.gameType)),
-    );
-    if (match) {
-      thumbnail = match.id;
+  if (!thumbnail || !thumbnail.startsWith("http")) {
+    if (row.game_type) {
+      const match = THUMBNAIL_OPTIONS?.find(
+        (opt: any) =>
+          opt.gameType === row.game_type ||
+          (opt.gameType && row.game_type?.toLowerCase().includes(opt.gameType)),
+      );
+      if (match) {
+        thumbnail = match.id;
+      }
     }
   }
 
@@ -324,12 +400,10 @@ function buildPayload(row: BulkTournamentRow): Record<string, any> {
   };
 }
 
-// ─── Database Lookups (cached) ───────────────────────────────────────────────
+// ─── Database Lookups (cached) ────────────────────────────────────────────────
 
 async function fetchAllVenueIds(): Promise<Set<number>> {
-  const { data, error } = await supabase
-    .from("venues")
-    .select("id");
+  const { data, error } = await supabase.from("venues").select("id");
 
   if (error) {
     console.error("Error fetching venues for validation:", error);
@@ -340,9 +414,7 @@ async function fetchAllVenueIds(): Promise<Set<number>> {
 }
 
 async function fetchAllDirectorIds(): Promise<Set<number>> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id_auto");
+  const { data, error } = await supabase.from("profiles").select("id_auto");
 
   if (error) {
     console.error("Error fetching profiles for validation:", error);
@@ -352,7 +424,7 @@ async function fetchAllDirectorIds(): Promise<Set<number>> {
   return new Set((data || []).map((p: any) => p.id_auto));
 }
 
-// ─── Export ──────────────────────────────────────────────────────────────────
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export const bulkImportService = {
   parseCSV,
