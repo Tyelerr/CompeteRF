@@ -1,21 +1,24 @@
-// src/views/components/notifications/NotificationsModal.tsx
+﻿// src/views/components/notifications/NotificationsModal.tsx
 
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { supabase } from "../../../lib/supabase";
 import {
   ConversationPreview,
+  RecipientOption,
   conversationService,
 } from "../../../models/services/conversation.service";
 import { COLORS } from "../../../theme/colors";
@@ -146,6 +149,370 @@ const getConvoRoleInfo = (role: string | null) => {
   }
 };
 
+// -- Compose View (inline, no navigation) ---------------------------------------
+const RECIPIENT_TYPES = [
+  { value: "tournament_director", label: "Tournament Director", icon: "🏆" },
+  { value: "bar_owner", label: "Bar Owner", icon: "🏢" },
+  { value: "support", label: "Compete Support", icon: "📢" },
+];
+
+const COMPOSE_CATEGORIES = [
+  { value: "tournament_issues", label: "Tournament Issues" },
+  { value: "report_problem", label: "Report a Problem" },
+  { value: "feedback_suggestions", label: "Feedback / Suggestions" },
+  { value: "account_issues", label: "Account Issues" },
+  { value: "fargo_rating", label: "Fargo Rating Questions" },
+  { value: "become_td", label: "Become a Tournament Director" },
+  { value: "tournament_submission", label: "Tournament Submission" },
+  { value: "general", label: "General" },
+  { value: "other", label: "Other" },
+];
+
+const ComposeView = ({
+  userId,
+  onBack,
+  onSent,
+}: {
+  userId: string;
+  onBack: () => void;
+  onSent: () => void;
+}) => {
+  const [recipientType, setRecipientType] = useState<string | null>(null);
+  const [showRecipientDropdown, setShowRecipientDropdown] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<RecipientOption | null>(null);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipientResults, setRecipientResults] = useState<RecipientOption[]>([]);
+  const [isSearchingRecipient, setIsSearchingRecipient] = useState(false);
+  const [showRecipientResults, setShowRecipientResults] = useState(false);
+  const [category, setCategory] = useState<string | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [tournamentSearch, setTournamentSearch] = useState("");
+  const [tournamentResults, setTournamentResults] = useState<{ id: number; name: string; venue_name: string }[]>([]);
+  const [selectedTournament, setSelectedTournament] = useState<{ id: number; name: string } | null>(null);
+  const [showTournamentResults, setShowTournamentResults] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+
+  const closeAllDropdowns = () => {
+    setShowRecipientDropdown(false);
+    setShowCategoryPicker(false);
+    setShowRecipientResults(false);
+    setShowTournamentResults(false);
+  };
+
+  const handleRecipientSearch = useCallback(async (query: string) => {
+    setRecipientSearch(query);
+    if (query.length < 1) {
+      setRecipientResults([]);
+      setShowRecipientResults(false);
+      return;
+    }
+    setIsSearchingRecipient(true);
+    setShowRecipientResults(true);
+    try {
+      const roleFilter =
+        recipientType === "tournament_director" ? ["tournament_director"] : ["bar_owner"];
+      const results = await conversationService.searchRecipients(query, roleFilter);
+      setRecipientResults(results.filter((r: RecipientOption) => r.id !== userId));
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      setIsSearchingRecipient(false);
+    }
+  }, [userId, recipientType]);
+
+  const handleTournamentSearch = useCallback(async (query: string) => {
+    setTournamentSearch(query);
+    if (query.length < 1) {
+      setTournamentResults([]);
+      setShowTournamentResults(false);
+      return;
+    }
+    setShowTournamentResults(true);
+    try {
+      const results = await conversationService.searchTournaments(query);
+      setTournamentResults(results);
+    } catch (err) {
+      console.error("Tournament search error:", err);
+    }
+  }, []);
+
+  const isFormValid =
+    message.trim().length > 0 &&
+    recipientType !== null &&
+    (recipientType === "support" || selectedRecipient !== null);
+
+  const handleSend = async () => {
+    if (!isFormValid) return;
+    setIsSending(true);
+    try {
+      await conversationService.createConversation({
+        createdBy: userId,
+        recipientId: recipientType === "support" ? null : selectedRecipient!.id,
+        subject: subject.trim() || undefined,
+        category: category || "general",
+        tournamentId: selectedTournament?.id,
+        isSupport: recipientType === "support",
+        firstMessage: message.trim(),
+      });
+      Alert.alert("Message Sent!", "Your message has been delivered.", [
+        { text: "OK", onPress: onSent },
+      ]);
+    } catch (err) {
+      console.error("Send error:", err);
+      Alert.alert("Error", "Failed to send message. Please try again.");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const needsPersonSearch =
+    recipientType === "tournament_director" || recipientType === "bar_owner";
+
+  const selectedRecipientTypeLabel = RECIPIENT_TYPES.find(
+    (r) => r.value === recipientType,
+  );
+
+  const getRoleLabel = (role: string) => {
+    if (role === "tournament_director") return "TD";
+    if (role === "bar_owner") return "Venue Owner";
+    return "";
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {/* Header */}
+      <View style={cs.header}>
+        <TouchableOpacity style={cs.backButton} onPress={onBack}>
+          <Text style={cs.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={cs.headerTitle}>New Message</Text>
+        <View style={{ width: 64 }} />
+      </View>
+      <View style={s.divider} />
+
+      <ScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={cs.formContent}
+      >
+        {/* TO */}
+        <Text style={cs.sectionLabel}>TO</Text>
+        <TouchableOpacity
+          style={cs.dropdownButton}
+          onPress={() => { closeAllDropdowns(); setShowRecipientDropdown(!showRecipientDropdown); }}
+        >
+          <Text style={[cs.dropdownButtonText, !recipientType && cs.placeholder]}>
+            {selectedRecipientTypeLabel
+              ? `${selectedRecipientTypeLabel.icon} ${selectedRecipientTypeLabel.label}`
+              : "Select recipient type"}
+          </Text>
+          <Text style={cs.dropdownArrow}>{showRecipientDropdown ? "▲" : "▼"}</Text>
+        </TouchableOpacity>
+
+        {showRecipientDropdown && (
+          <View style={cs.dropdown}>
+            {RECIPIENT_TYPES.map((rt) => (
+              <TouchableOpacity
+                key={rt.value}
+                style={[cs.dropdownOption, recipientType === rt.value && cs.dropdownOptionActive]}
+                onPress={() => {
+                  setRecipientType(rt.value);
+                  setShowRecipientDropdown(false);
+                  setSelectedRecipient(null);
+                  setRecipientSearch("");
+                  setRecipientResults([]);
+                }}
+              >
+                <Text style={[cs.dropdownOptionText, recipientType === rt.value && cs.dropdownOptionTextActive]}>
+                  {rt.icon} {rt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {needsPersonSearch && !selectedRecipient && (
+          <View style={cs.searchWrapper}>
+            <TextInput
+              style={cs.searchInput}
+              value={recipientSearch}
+              onChangeText={handleRecipientSearch}
+              placeholder={`Search ${recipientType === "tournament_director" ? "tournament directors" : "bar owners"}...`}
+              placeholderTextColor={COLORS.textMuted}
+              onFocus={() => { closeAllDropdowns(); if (recipientSearch.length >= 1) setShowRecipientResults(true); }}
+            />
+            {showRecipientResults && recipientResults.length > 0 && (
+              <View style={cs.autocompleteDropdown}>
+                <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
+                  {recipientResults.map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={cs.autocompleteItem}
+                      onPress={() => {
+                        setSelectedRecipient(r);
+                        setRecipientResults([]);
+                        setShowRecipientResults(false);
+                        setRecipientSearch("");
+                      }}
+                    >
+                      <Text style={cs.autocompleteItemName}>{r.name}</Text>
+                      <Text style={cs.autocompleteItemRole}>{getRoleLabel(r.role)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {recipientSearch.length >= 1 && recipientResults.length === 0 && !isSearchingRecipient && (
+              <Text style={cs.noResults}>No results found</Text>
+            )}
+          </View>
+        )}
+
+        {needsPersonSearch && selectedRecipient && (
+          <View style={cs.selectedBadge}>
+            <Text style={cs.selectedBadgeText}>{selectedRecipient.name}</Text>
+            <TouchableOpacity onPress={() => { setSelectedRecipient(null); setRecipientSearch(""); }}>
+              <Text style={cs.removeBadge}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {recipientType === "support" && (
+          <View style={cs.supportNote}>
+            <Text style={cs.supportNoteText}>Your message will be sent to the Compete support team</Text>
+          </View>
+        )}
+
+        {/* CATEGORY */}
+        <Text style={cs.sectionLabel}>CATEGORY</Text>
+        <TouchableOpacity
+          style={cs.dropdownButton}
+          onPress={() => { closeAllDropdowns(); setShowCategoryPicker(!showCategoryPicker); }}
+        >
+          <Text style={[cs.dropdownButtonText, !category && cs.placeholder]}>
+            {category ? COMPOSE_CATEGORIES.find((c) => c.value === category)?.label : "Select a category"}
+          </Text>
+          <Text style={cs.dropdownArrow}>{showCategoryPicker ? "▲" : "▼"}</Text>
+        </TouchableOpacity>
+
+        {showCategoryPicker && (
+          <View style={cs.dropdown}>
+            <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 240 }}>
+              {COMPOSE_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat.value}
+                  style={[cs.dropdownOption, category === cat.value && cs.dropdownOptionActive]}
+                  onPress={() => { setCategory(cat.value); setShowCategoryPicker(false); }}
+                >
+                  <Text style={[cs.dropdownOptionText, category === cat.value && cs.dropdownOptionTextActive]}>
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* TOURNAMENT (optional) */}
+        <Text style={cs.sectionLabel}>
+          TOURNAMENT <Text style={cs.optionalText}>(optional)</Text>
+        </Text>
+        {!selectedTournament ? (
+          <View style={cs.searchWrapper}>
+            <TextInput
+              style={cs.searchInput}
+              value={tournamentSearch}
+              onChangeText={handleTournamentSearch}
+              placeholder="Search tournaments..."
+              placeholderTextColor={COLORS.textMuted}
+              onFocus={() => { closeAllDropdowns(); if (tournamentSearch.length >= 1) setShowTournamentResults(true); }}
+            />
+            {showTournamentResults && tournamentResults.length > 0 && (
+              <View style={cs.autocompleteDropdown}>
+                <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 180 }}>
+                  {tournamentResults.map((t) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={cs.autocompleteItem}
+                      onPress={() => {
+                        setSelectedTournament({ id: t.id, name: t.name });
+                        setTournamentResults([]);
+                        setShowTournamentResults(false);
+                        setTournamentSearch("");
+                      }}
+                    >
+                      <Text style={cs.autocompleteItemName}>🏆 {t.name}</Text>
+                      <Text style={cs.autocompleteItemRole}>{t.venue_name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={cs.selectedBadge}>
+            <Text style={cs.selectedBadgeText}>🏆 {selectedTournament.name}</Text>
+            <TouchableOpacity onPress={() => setSelectedTournament(null)}>
+              <Text style={cs.removeBadge}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* SUBJECT */}
+        <Text style={cs.sectionLabel}>
+          SUBJECT <Text style={cs.optionalText}>(optional)</Text>
+        </Text>
+        <TextInput
+          style={cs.input}
+          value={subject}
+          onChangeText={setSubject}
+          placeholder="Brief subject line..."
+          placeholderTextColor={COLORS.textMuted}
+          maxLength={100}
+          onFocus={closeAllDropdowns}
+        />
+
+        {/* MESSAGE */}
+        <Text style={cs.sectionLabel}>MESSAGE</Text>
+        <TextInput
+          style={[cs.input, cs.messageInput]}
+          value={message}
+          onChangeText={setMessage}
+          placeholder="Type your message..."
+          placeholderTextColor={COLORS.textMuted}
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+          maxLength={2000}
+          onFocus={closeAllDropdowns}
+        />
+        <Text style={cs.charCount}>{message.length}/2000</Text>
+
+        <View style={{ height: 120 }} />
+      </ScrollView>
+
+      {/* Bottom buttons */}
+      <View style={cs.bottomBar}>
+        <TouchableOpacity
+          style={[cs.bottomButton, cs.sendButton, (!isFormValid || isSending) && cs.buttonDisabled]}
+          onPress={handleSend}
+          disabled={!isFormValid || isSending}
+        >
+          <Text style={cs.sendButtonText}>{isSending ? "Sending..." : "Send Message"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[cs.bottomButton, cs.cancelButton]} onPress={onBack}>
+          <Text style={cs.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+};
+
 // -- Notification Card ----------------------------------------------------------
 const NotificationCard = ({
   item,
@@ -180,9 +547,7 @@ const NotificationCard = ({
       )}
       <View style={s.cardContent}>
         <View style={s.cardTopRow}>
-          <View
-            style={[s.typeBadge, { backgroundColor: item.badge.color + "20" }]}
-          >
+          <View style={[s.typeBadge, { backgroundColor: item.badge.color + "20" }]}>
             <Text style={s.typeBadgeIcon}>{item.badge.icon}</Text>
             <Text style={[s.typeBadgeText, { color: item.badge.color }]}>
               {item.badge.label}
@@ -190,38 +555,28 @@ const NotificationCard = ({
           </View>
           <Text style={s.timeText}>{getTimeAgo(item.created_at)}</Text>
         </View>
-        <Text style={[s.subjectText, isUnread && s.subjectTextUnread]}>
-          {item.title}
-        </Text>
+        <Text style={[s.subjectText, isUnread && s.subjectTextUnread]}>{item.title}</Text>
         {isExpanded ? (
           <View style={s.expandedBody}>
             <Text style={s.bodyText}>{item.body}</Text>
             {item.tournament_id && (
-              <TouchableOpacity
-                style={s.linkButton}
-                onPress={() => onTournamentPress(item.tournament_id!)}
-              >
+              <TouchableOpacity style={s.linkButton} onPress={() => onTournamentPress(item.tournament_id!)}>
                 <Text style={s.linkButtonText}>🏆 View Tournament</Text>
               </TouchableOpacity>
             )}
             {item.deep_link && !item.tournament_id && (
-              <TouchableOpacity
-                style={s.linkButton}
-                onPress={() => onDeepLink(item.deep_link!)}
-              >
-                <Text style={s.linkButtonText}>View Details ?</Text>
+              <TouchableOpacity style={s.linkButton} onPress={() => onDeepLink(item.deep_link!)}>
+                <Text style={s.linkButtonText}>View Details →</Text>
               </TouchableOpacity>
             )}
             <View style={s.cardActions}>
               <TouchableOpacity onPress={onDelete}>
-                <Text style={s.deleteLabel}>🗑uFE0F Delete</Text>
+                <Text style={s.deleteLabel}>🗑️ Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
         ) : (
-          <Text style={s.previewText} numberOfLines={1}>
-            {item.body}
-          </Text>
+          <Text style={s.previewText} numberOfLines={1}>{item.body}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -283,16 +638,12 @@ const ConversationCard = ({
           {convo.subject || getCategoryLabel(convo.category) || "Message"}
         </Text>
         {convo.last_message && (
-          <Text style={s.previewText} numberOfLines={1}>
-            {convo.last_message}
-          </Text>
+          <Text style={s.previewText} numberOfLines={1}>{convo.last_message}</Text>
         )}
         {convo.category && (
           <View style={s.categoryBadgeRow}>
             <View style={s.categoryBadge}>
-              <Text style={s.categoryBadgeText}>
-                {getCategoryLabel(convo.category)}
-              </Text>
+              <Text style={s.categoryBadgeText}>{getCategoryLabel(convo.category)}</Text>
             </View>
           </View>
         )}
@@ -307,7 +658,6 @@ interface NotificationsModalProps {
   onClose: () => void;
   userId: string | undefined;
   userIdAuto: number | undefined;
-  /** If provided, "View Tournament" opens a modal instead of navigating */
   onViewTournament?: (id: string) => void;
 }
 
@@ -319,9 +669,9 @@ export function NotificationsModal({
   onViewTournament,
 }: NotificationsModalProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(
-    "conversations",
-  );
+
+  const [showCompose, setShowCompose] = useState(false);
+  const [activeTab, setActiveTab] = useState<"conversations" | "notifications">("conversations");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unifiedNotifications, setUnifiedNotifications] = useState<UnifiedNotification[]>([]);
@@ -405,8 +755,7 @@ export function NotificationsModal({
     ]);
     await loadConversations();
     const merged = [...broadcasts, ...pushNotifs].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
     setUnifiedNotifications(merged);
     setLoading(false);
@@ -436,9 +785,7 @@ export function NotificationsModal({
         .eq("id", item.pushNotificationId);
     }
     setUnifiedNotifications((prev) =>
-      prev.map((n) =>
-        n.id === item.id ? { ...n, read_at: new Date().toISOString() } : n,
-      ),
+      prev.map((n) => n.id === item.id ? { ...n, read_at: new Date().toISOString() } : n),
     );
   };
 
@@ -449,10 +796,7 @@ export function NotificationsModal({
         .delete()
         .eq("id", item.broadcastRecipientId);
     } else if (item.source === "push" && item.pushNotificationId) {
-      await supabase
-        .from("notifications")
-        .delete()
-        .eq("id", item.pushNotificationId);
+      await supabase.from("notifications").delete().eq("id", item.pushNotificationId);
     }
     setUnifiedNotifications((prev) => prev.filter((n) => n.id !== item.id));
     if (expandedNotifId === item.id) setExpandedNotifId(null);
@@ -474,10 +818,7 @@ export function NotificationsModal({
         .is("read_at", null);
     }
     setUnifiedNotifications((prev) =>
-      prev.map((n) => ({
-        ...n,
-        read_at: n.read_at || new Date().toISOString(),
-      })),
+      prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })),
     );
   };
 
@@ -501,26 +842,31 @@ export function NotificationsModal({
   const handleTournamentPress = (id: number) => {
     onClose();
     if (onViewTournament) {
-      // Small delay so inbox closes before modal opens (avoids nested modal flash)
       setTimeout(() => onViewTournament(id.toString()), 150);
     } else {
-      router.push(
-        `/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any,
-      );
+      router.push(`/(tabs)/tournament-detail?id=${id}&from=/(tabs)/notifications` as any);
     }
   };
 
-  const unreadNotifCount = unifiedNotifications.filter(
-    (n) => !n.read_at,
-  ).length;
-  const unreadConvoCount = conversations.reduce(
-    (sum, c) => sum + c.unread_count,
-    0,
-  );
+  // After a message is sent, reload conversations and return to inbox
+  const handleComposeSent = useCallback(async () => {
+    setShowCompose(false);
+    await loadConversations();
+  }, [loadConversations]);
+
+  const unreadNotifCount = unifiedNotifications.filter((n) => !n.read_at).length;
+  const unreadConvoCount = conversations.reduce((sum, c) => sum + c.unread_count, 0);
 
   if (!visible) return null;
 
-  const innerContent = (
+  // -- Compose view swaps in place of inbox content ----------------------------
+  const inboxContent = showCompose && userId ? (
+    <ComposeView
+      userId={userId}
+      onBack={() => setShowCompose(false)}
+      onSent={handleComposeSent}
+    />
+  ) : (
     <>
       {/* Header */}
       <View style={s.header}>
@@ -552,12 +898,7 @@ export function NotificationsModal({
             style={[s.tab, activeTab === "conversations" && s.tabActive]}
             onPress={() => setActiveTab("conversations")}
           >
-            <Text
-              style={[
-                s.tabText,
-                activeTab === "conversations" && s.tabTextActive,
-              ]}
-            >
+            <Text style={[s.tabText, activeTab === "conversations" && s.tabTextActive]}>
               💬 Conversations
             </Text>
             {unreadConvoCount > 0 && (
@@ -570,12 +911,7 @@ export function NotificationsModal({
             style={[s.tab, activeTab === "notifications" && s.tabActive]}
             onPress={() => setActiveTab("notifications")}
           >
-            <Text
-              style={[
-                s.tabText,
-                activeTab === "notifications" && s.tabTextActive,
-              ]}
-            >
+            <Text style={[s.tabText, activeTab === "notifications" && s.tabTextActive]}>
               🔔 Notifications
             </Text>
             {unreadNotifCount > 0 && (
@@ -589,10 +925,7 @@ export function NotificationsModal({
         {activeTab === "conversations" && (
           <TouchableOpacity
             style={s.newMessageButton}
-            onPress={() => {
-              onClose();
-              router.push("/compose-message" as any);
-            }}
+            onPress={() => setShowCompose(true)}
           >
             <Text style={s.newMessageButtonText}>✉️ New Message</Text>
           </TouchableOpacity>
@@ -604,7 +937,6 @@ export function NotificationsModal({
           </View>
         ) : (
           <>
-            {/* -- Notifications Tab -- */}
             {activeTab === "notifications" && (
               <>
                 <View style={s.actionRow}>
@@ -630,8 +962,7 @@ export function NotificationsModal({
                     <Text style={s.emptyIcon}>🔔</Text>
                     <Text style={s.emptyTitle}>No notifications</Text>
                     <Text style={s.emptySubtitle}>
-                      Search alerts, tournament updates, and broadcasts will
-                      appear here.
+                      Search alerts, tournament updates, and broadcasts will appear here.
                     </Text>
                   </View>
                 ) : (
@@ -643,16 +974,11 @@ export function NotificationsModal({
                         isExpanded={expandedNotifId === item.id}
                         onPress={() => {
                           if (!item.read_at) markNotifAsRead(item);
-                          setExpandedNotifId((prev) =>
-                            prev === item.id ? null : item.id,
-                          );
+                          setExpandedNotifId((prev) => prev === item.id ? null : item.id);
                         }}
                         onDelete={() => deleteNotification(item)}
                         onTournamentPress={handleTournamentPress}
-                        onDeepLink={(link) => {
-                          onClose();
-                          router.push(link as any);
-                        }}
+                        onDeepLink={(link) => { onClose(); router.push(link as any); }}
                       />
                     ))}
                     <Text style={s.hintText}>Long press to delete</Text>
@@ -661,7 +987,6 @@ export function NotificationsModal({
               </>
             )}
 
-            {/* -- Conversations Tab -- */}
             {activeTab === "conversations" && (
               <>
                 {conversations.length === 0 ? (
@@ -669,19 +994,13 @@ export function NotificationsModal({
                     <Text style={s.emptyIcon}>💬</Text>
                     <Text style={s.emptyTitle}>No conversations yet</Text>
                     <Text style={s.emptySubtitle}>
-                      Send a message to a tournament director, venue owner, or
-                      Compete support.
+                      Send a message to a tournament director, venue owner, or Compete support.
                     </Text>
                     <TouchableOpacity
                       style={s.emptyComposeButton}
-                      onPress={() => {
-                        onClose();
-                        router.push("/compose-message" as any);
-                      }}
+                      onPress={() => setShowCompose(true)}
                     >
-                      <Text style={s.emptyComposeText}>
-                        ✏️ Start a Conversation
-                      </Text>
+                      <Text style={s.emptyComposeText}>✏️ Start a Conversation</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -710,14 +1029,10 @@ export function NotificationsModal({
   if (isWeb) {
     return (
       <>
-        <TouchableOpacity
-          style={s.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={s.dialogWrap} pointerEvents="box-none">
           <View style={s.dialog} onLayout={handleOpen}>
-            {innerContent}
+            {inboxContent}
           </View>
         </View>
       </>
@@ -734,33 +1049,29 @@ export function NotificationsModal({
     >
       <View style={s.mobileOverlay}>
         <View style={s.mobileContainer}>
-          {innerContent}
-          <TouchableOpacity style={s.externalCloseButton} onPress={onClose}>
-            <Text style={s.externalCloseText}>✕ Close</Text>
-          </TouchableOpacity>
+          {inboxContent}
+          {!showCompose && (
+            <TouchableOpacity style={s.externalCloseButton} onPress={onClose}>
+              <Text style={s.externalCloseText}>✕ Close</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </Modal>
   );
 }
 
-// -- Styles ---------------------------------------------------------------------
+// -- Inbox styles ---------------------------------------------------------------
 const s = StyleSheet.create({
   backdrop: {
     position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: "rgba(0,0,0,0.75)",
     zIndex: 2000,
   },
   dialogWrap: {
     position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 2001,
     alignItems: "center",
     justifyContent: "center",
@@ -815,19 +1126,9 @@ const s = StyleSheet.create({
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.md,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
   closeButtonText: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
-  headerTitle: {
-    color: COLORS.text,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
+  headerTitle: { color: COLORS.text, fontSize: FONT_SIZES.lg, fontWeight: "700", letterSpacing: 1 },
   divider: { height: 1, backgroundColor: "#2C2C2E" },
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: { padding: SPACING.md },
@@ -850,11 +1151,7 @@ const s = StyleSheet.create({
     gap: 4,
   },
   tabActive: { backgroundColor: COLORS.primary },
-  tabText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
+  tabText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.textSecondary },
   tabTextActive: { color: "#fff" },
   tabBadge: {
     backgroundColor: "#E74C3C",
@@ -873,11 +1170,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginBottom: SPACING.sm,
   },
-  newMessageButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: "#fff",
-  },
+  newMessageButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
   actionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -886,16 +1179,8 @@ const s = StyleSheet.create({
   },
   settingsLink: { flexDirection: "row", alignItems: "center", gap: 6 },
   settingsLinkIcon: { fontSize: 16 },
-  settingsLinkText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  markAllText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
+  settingsLinkText: { fontSize: FONT_SIZES.sm, color: COLORS.primary, fontWeight: "600" },
+  markAllText: { fontSize: FONT_SIZES.xs, color: COLORS.primary, fontWeight: "600" },
   card: {
     marginTop: SPACING.sm,
     backgroundColor: COLORS.surface,
@@ -915,11 +1200,7 @@ const s = StyleSheet.create({
   },
   senderRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   senderDot: { width: 8, height: 8, borderRadius: 4 },
-  senderText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
+  senderText: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, fontWeight: "600" },
   typeBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -942,18 +1223,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   unreadBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
-  subjectText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 4,
-  },
+  subjectText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text, marginBottom: 4 },
   subjectTextUnread: { fontWeight: "700" },
-  previewText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textMuted,
-    lineHeight: 18,
-  },
+  previewText: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted, lineHeight: 18 },
   categoryBadgeRow: { flexDirection: "row", marginTop: 6 },
   categoryBadge: {
     backgroundColor: COLORS.primary + "15",
@@ -961,17 +1233,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  categoryBadgeText: {
-    fontSize: 10,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
+  categoryBadgeText: { fontSize: 10, color: COLORS.primary, fontWeight: "600" },
   expandedBody: { marginTop: SPACING.xs },
-  bodyText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-  },
+  bodyText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, lineHeight: 22 },
   linkButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -980,11 +1244,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     marginTop: SPACING.md,
   },
-  linkButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: "#fff",
-  },
+  linkButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
   cardActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -993,11 +1253,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-  deleteLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: "#E74C3C",
-    fontWeight: "600",
-  },
+  deleteLabel: { fontSize: FONT_SIZES.xs, color: "#E74C3C", fontWeight: "600" },
   hintText: {
     textAlign: "center",
     fontSize: FONT_SIZES.xs,
@@ -1013,18 +1269,8 @@ const s = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
   },
   emptyIcon: { fontSize: 48, marginBottom: SPACING.md },
-  emptyTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  emptySubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
-  },
+  emptyTitle: { fontSize: FONT_SIZES.xl, fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs },
+  emptySubtitle: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", lineHeight: 20 },
   emptyComposeButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -1033,4 +1279,144 @@ const s = StyleSheet.create({
     marginTop: SPACING.lg,
   },
   emptyComposeText: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: "#fff" },
+});
+
+// -- Compose styles -------------------------------------------------------------
+const cs = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+  },
+  backButton: { paddingVertical: 6, paddingHorizontal: 4 },
+  backButtonText: { color: COLORS.primary, fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  headerTitle: { color: COLORS.text, fontSize: FONT_SIZES.lg, fontWeight: "700" },
+  formContent: { padding: SPACING.md },
+  sectionLabel: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+    letterSpacing: 1,
+    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  optionalText: { fontWeight: "400", color: COLORS.textMuted, letterSpacing: 0, fontSize: FONT_SIZES.xs },
+  dropdownButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dropdownButtonText: { fontSize: FONT_SIZES.md, color: COLORS.text },
+  placeholder: { color: COLORS.textMuted },
+  dropdownArrow: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
+  dropdown: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 4,
+    zIndex: 100,
+    overflow: "hidden",
+  },
+  dropdownOption: { padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  dropdownOptionActive: { backgroundColor: COLORS.primary + "20" },
+  dropdownOptionText: { fontSize: FONT_SIZES.md, color: COLORS.text },
+  dropdownOptionTextActive: { color: COLORS.primary, fontWeight: "600" },
+  searchWrapper: { position: "relative", zIndex: 50 },
+  searchInput: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.sm,
+  },
+  autocompleteDropdown: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    marginTop: 2,
+    zIndex: 999,
+    overflow: "hidden",
+  },
+  autocompleteItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  autocompleteItemName: { fontSize: FONT_SIZES.md, color: COLORS.text, fontWeight: "500", flex: 1 },
+  autocompleteItemRole: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginLeft: SPACING.sm },
+  noResults: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted, textAlign: "center", marginTop: SPACING.md },
+  selectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary + "20",
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+  },
+  selectedBadgeText: { fontSize: FONT_SIZES.md, color: COLORS.text, fontWeight: "600", flex: 1 },
+  removeBadge: { fontSize: FONT_SIZES.lg, color: COLORS.textMuted, paddingLeft: SPACING.sm },
+  supportNote: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  supportNoteText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center" },
+  input: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  messageInput: { minHeight: 140 },
+  charCount: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, textAlign: "right", marginTop: 4 },
+  bottomBar: {
+    flexDirection: "row",
+    padding: SPACING.md,
+    paddingBottom: SPACING.lg,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  bottomButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButton: { backgroundColor: COLORS.primary },
+  sendButtonText: { fontSize: FONT_SIZES.md, fontWeight: "700", color: "#FFFFFF" },
+  cancelButton: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  cancelButtonText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.textSecondary },
+  buttonDisabled: { opacity: 0.4 },
 });

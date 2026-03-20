@@ -119,7 +119,7 @@ export function DeleteAccountModal({
                   disabled={!isConfirmed || deleting}
                 >
                   {deleting ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color={COLORS.white} size="small" />
                   ) : (
                     <Text style={styles.deleteButtonText}>
                       Delete My Account
@@ -148,22 +148,22 @@ const styles = StyleSheet.create({
   },
   modal: {
     width: "100%",
-    backgroundColor: COLORS.backgroundCard || "#1A1D24",
+    backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
     padding: SPACING.lg,
     borderWidth: 1,
-    borderColor: "#EF4444",
+    borderColor: COLORS.error,
   },
   title: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
-    color: "#EF4444",
+    color: COLORS.error,
     marginBottom: SPACING.sm,
   },
   warning: {
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
-    color: "#EF4444",
+    color: COLORS.error,
     marginBottom: SPACING.md,
   },
   body: {
@@ -194,30 +194,32 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   deleteWord: {
-    color: "#EF4444",
+    color: COLORS.error,
     fontWeight: "700",
   },
   input: {
-    backgroundColor: COLORS.surface || "#0F1117",
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border || "#374151",
+    borderColor: COLORS.border,
     borderRadius: RADIUS.md,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
     marginBottom: SPACING.lg,
+    textAlign: "center",
   },
   buttons: {
     flexDirection: "row",
     gap: SPACING.sm,
+    alignItems: "stretch",
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: COLORS.border || "#374151",
+    borderColor: COLORS.border,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -225,12 +227,13 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
+    textAlign: "center",
   },
   deleteButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: RADIUS.md,
-    backgroundColor: "#EF4444",
+    backgroundColor: COLORS.error,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -238,8 +241,9 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   deleteButtonText: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: FONT_SIZES.md,
     fontWeight: "600",
+    textAlign: "center",
   },
 });

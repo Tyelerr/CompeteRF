@@ -131,8 +131,8 @@ export function EditProfileModal({ visible, onClose }: EditProfileModalProps) {
             <View style={s.fieldContainer}>
               <Text style={s.fieldLabel}>Username</Text>
               <TextInput
-                style={[s.textInput, s.disabledInput]}
-                value={"@" + vm.username}
+                style={[s.textInput, s.disabledInput, s.uppercaseInput]}
+                value={"@" + vm.username.toUpperCase()}
                 editable={false}
               />
               <Text style={s.disabledHint}>Username cannot be changed</Text>
@@ -274,7 +274,7 @@ export function EditProfileModal({ visible, onClose }: EditProfileModalProps) {
           disabled={!vm.isValid || !vm.hasChanges || vm.saving}
         >
           {vm.saving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={COLORS.white} />
           ) : (
             <Text style={s.saveButtonText}>Save Changes</Text>
           )}
@@ -370,12 +370,12 @@ const s = StyleSheet.create({
     width: 700,
     maxWidth: "92%" as any,
     height: "82vh" as any,
-    backgroundColor: "#000000",
+    backgroundColor: COLORS.black,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: "#2C2C2E",
+    borderColor: COLORS.border,
     overflow: "hidden" as any,
-    shadowColor: "#000",
+    shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 24,
@@ -424,7 +424,7 @@ const s = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 1,
   },
-  divider: { height: 1, backgroundColor: "#2C2C2E" },
+  divider: { height: 1, backgroundColor: COLORS.border },
 
   scroll: { flex: 1, minHeight: 0 },
   scrollContent: { padding: SPACING.md },
@@ -451,7 +451,11 @@ const s = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: COLORS.primary,
   },
-  saveButtonText: { fontSize: FONT_SIZES.md, color: "#fff", fontWeight: "600" },
+  saveButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.white,
+    fontWeight: "600",
+  },
   cancelButton: {
     flex: 1,
     paddingVertical: SPACING.md,
@@ -557,6 +561,7 @@ const s = StyleSheet.create({
     color: COLORS.text,
   },
   disabledInput: { opacity: 0.5, color: COLORS.textMuted },
+  uppercaseInput: { textTransform: "uppercase" },
   disabledHint: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textMuted,
