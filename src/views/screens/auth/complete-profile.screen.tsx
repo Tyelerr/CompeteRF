@@ -4,6 +4,7 @@
 // Collects required profile fields (no email/password needed).
 // ═══════════════════════════════════════════════════════════
 
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -20,6 +21,24 @@ import { containsBadWord, isValidUsername } from "../../../utils/validation";
 import { Button } from "../../components/common/button";
 import { Dropdown } from "../../components/common/dropdown";
 import { Input } from "../../components/common/input";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SECTION_GAP = 28;
+const FIELD_GAP = 18;
+
+const GAME_OPTIONS = [
+  "8-Ball",
+  "9-Ball",
+  "10-Ball",
+  "One Pocket",
+  "Straight Pool",
+  "Banks",
+  "Carom",
+  "Snooker",
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export const CompleteProfileScreen = () => {
   const router = useRouter();
@@ -44,8 +63,10 @@ export const CompleteProfileScreen = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Check username availability
-  const { isAvailable, isChecking } = useCheckUsername(username.toLowerCase());
+  // Username has its first letter capitalized on input — pass directly
+  const { isAvailable, isChecking } = useCheckUsername(username);
+
+  // ─── Validation ───────────────────────────────────────────────────────────
 
   const validateForm = () => {
     setError("");
@@ -54,32 +75,26 @@ export const CompleteProfileScreen = () => {
       setError("Please enter your first name");
       return false;
     }
-
     if (!lastName.trim()) {
       setError("Please enter your last name");
       return false;
     }
-
     if (!isValidUsername(username)) {
-      setError("Username must be 3-20 letters or numbers");
+      setError("Username must be 3–20 letters or numbers");
       return false;
     }
-
     if (containsBadWord(username)) {
       setError("This username is not allowed");
       return false;
     }
-
     if (!isAvailable) {
       setError("This username is already taken");
       return false;
     }
-
     if (!homeState) {
       setError("Please select your home state");
       return false;
     }
-
     if (!agreeTerms || !agreeAge) {
       setError("Please agree to the terms and confirm your age");
       return false;
@@ -88,12 +103,13 @@ export const CompleteProfileScreen = () => {
     return true;
   };
 
+  // ─── Submit ───────────────────────────────────────────────────────────────
+
   const handleComplete = async () => {
     if (!validateForm()) return;
 
     setLoading(true);
     try {
-      // Get the current authenticated user (from Apple Sign In)
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -107,28 +123,23 @@ export const CompleteProfileScreen = () => {
       const trimmedFirst = toTitleCase(firstName.trim());
       const trimmedLast = toTitleCase(lastName.trim());
 
-      const profileData = {
+      await profileService.createProfile({
         id: user.id,
         email: user.email!,
         name: `${trimmedFirst} ${trimmedLast}`,
         first_name: trimmedFirst,
         last_name: trimmedLast,
-        user_name: username.toLowerCase(),
+        user_name: username, // first letter already capitalised
         home_state: homeState,
         preferred_game: preferredGame || undefined,
         favorite_player: favoritePlayer || undefined,
-      };
-
-      await profileService.createProfile(profileData);
+      });
 
       // Wait for profile to be available (same pattern as register screen)
       let attempts = 0;
-      const maxAttempts = 10;
       let profileFound = false;
-
-      while (attempts < maxAttempts && !profileFound) {
+      while (attempts < 10 && !profileFound) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-
         try {
           const session = await supabase.auth.getSession();
           if (session.data.session?.user) {
@@ -143,7 +154,6 @@ export const CompleteProfileScreen = () => {
         } catch {
           // Profile not ready yet, keep waiting
         }
-
         attempts++;
       }
 
@@ -155,7 +165,8 @@ export const CompleteProfileScreen = () => {
     }
   };
 
-  // Username helper
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
   const getUsernameHelper = () => {
     if (username.length < 3)
       return {
@@ -169,37 +180,42 @@ export const CompleteProfileScreen = () => {
     return { text: "\u2717 Username taken", color: "#EF4444" };
   };
 
-  const isFormValid =
+  const isFormValid = !!(
     firstName.trim() &&
     lastName.trim() &&
     username &&
+    username.length >= 3 &&
     homeState &&
     agreeTerms &&
     agreeAge &&
-    username.length >= 3 &&
     isAvailable &&
-    !isChecking;
+    !isChecking
+  );
 
   const usernameHelper = getUsernameHelper();
+
+  // ─── Loading ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingTitle}>Setting Up Your Profile</Text>
-        <Text style={styles.loadingSubtitle}>Almost there...</Text>
-        <View style={styles.loadingSpinner}>
-          <Text style={styles.loadingText}>{"\u23F3"}</Text>
-        </View>
+        <Text style={styles.loadingSubtitle}>Almost there…</Text>
+        <Text style={styles.loadingIcon}>{"\u23F3"}</Text>
       </View>
     );
   }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
-      enableOnAndroid={true}
+      enableOnAndroid
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      enableResetScrollToCoords={false}
       extraScrollHeight={20}
     >
       <Text style={styles.title}>COMPLETE YOUR PROFILE</Text>
@@ -208,76 +224,111 @@ export const CompleteProfileScreen = () => {
       </Text>
 
       <View style={styles.form}>
-        <Text style={styles.sectionTitle}>Profile Information</Text>
+        {/* ══ PROFILE ══════════════════════════════════════════════════════ */}
 
-        {/* First Name + Last Name side by side */}
-        <View style={styles.nameRow}>
+        <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>
+          Profile Information
+        </Text>
+
+        {/* First Name + Last Name — side by side */}
+        <View style={[styles.fieldGroup, styles.nameRow]}>
           <View style={styles.nameField}>
             <Input
-              label="First Name *"
+              label="First Name"
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="First Name"
+              placeholder="First"
               autoCapitalize="words"
             />
           </View>
           <View style={styles.nameField}>
             <Input
-              label="Last Name *"
+              label="Last Name"
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Last Name"
+              placeholder="Last"
               autoCapitalize="words"
             />
           </View>
         </View>
 
         {/* Username */}
-        <View>
+        <View style={styles.fieldGroup}>
           <Input
-            label="Username *"
+            label="Username"
             value={username}
-            onChangeText={setUsername}
-            placeholder="username"
-            autoCapitalize="none"
+            onChangeText={(text) => {
+              // Strip non-alphanumeric chars; capitalize first letter
+              const clean = text.replace(/[^a-zA-Z0-9]/g, "");
+              setUsername(clean.charAt(0).toUpperCase() + clean.slice(1));
+            }}
+            placeholder="Username"
+            autoCapitalize="sentences"
           />
           {username.length > 0 && (
-            <Text
-              style={[styles.usernameHelper, { color: usernameHelper.color }]}
-            >
+            <Text style={[styles.fieldHint, { color: usernameHelper.color }]}>
               {usernameHelper.text}
             </Text>
           )}
         </View>
 
-        <Dropdown
-          label="Home State *"
-          placeholder="Select State"
-          options={US_STATES}
-          value={homeState}
-          onSelect={setHomeState}
-        />
+        {/* Home State */}
+        <View style={styles.fieldGroup}>
+          <Dropdown
+            label="Home State"
+            placeholder="Select your state"
+            options={US_STATES}
+            value={homeState}
+            onSelect={setHomeState}
+          />
+        </View>
 
-        <Input
-          label="Preferred Game"
-          value={preferredGame}
-          onChangeText={setPreferredGame}
-          placeholder="e.g., 8-Ball, 9-Ball (optional)"
-          autoCapitalize="words"
-        />
+        {/* Preferred Game — chip selector */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.chipLabel}>Preferred Game</Text>
+          <View style={styles.chipsRow}>
+            {GAME_OPTIONS.map((game) => {
+              const selected = preferredGame === game;
+              return (
+                <Pressable
+                  key={game}
+                  style={[styles.chip, selected && styles.chipSelected]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setPreferredGame(selected ? "" : game);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      selected && styles.chipTextSelected,
+                    ]}
+                  >
+                    {game}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
-        <Input
-          label="Favorite Player"
-          value={favoritePlayer}
-          onChangeText={setFavoritePlayer}
-          placeholder="Your favorite pro player (optional)"
-          autoCapitalize="words"
-        />
+        {/* Favorite Player */}
+        <View style={styles.fieldGroup}>
+          <Input
+            label="Favorite Player"
+            value={favoritePlayer}
+            onChangeText={setFavoritePlayer}
+            placeholder="Your Favorite Player (optional)"
+            autoCapitalize="words"
+          />
+        </View>
+
+        {/* ══ TERMS ════════════════════════════════════════════════════════ */}
 
         <Text style={styles.sectionTitle}>Terms & Conditions</Text>
 
         <Pressable
-          style={styles.checkbox}
+          style={styles.checkboxRow}
           onPress={() => setAgreeTerms(!agreeTerms)}
         >
           <View
@@ -314,7 +365,7 @@ export const CompleteProfileScreen = () => {
         </Pressable>
 
         <Pressable
-          style={styles.checkbox}
+          style={[styles.checkboxRow, styles.checkboxRowLast]}
           onPress={() => setAgreeAge(!agreeAge)}
         >
           <View
@@ -325,19 +376,23 @@ export const CompleteProfileScreen = () => {
           <Text style={styles.checkboxText}>I am 18 years or older</Text>
         </Pressable>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Button
-          title="Complete Setup"
-          onPress={handleComplete}
-          loading={loading}
-          disabled={!isFormValid}
-          fullWidth
-        />
+        <View style={styles.ctaWrapper}>
+          <Button
+            title="Complete Setup"
+            onPress={handleComplete}
+            loading={loading}
+            disabled={!isFormValid}
+            fullWidth
+          />
+        </View>
       </View>
     </KeyboardAwareScrollView>
   );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -345,10 +400,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl * 2,
     paddingBottom: SPACING.xl * 2,
   },
+
+  // ── Loading ───────────────────────────────────────────────────────────────
+
   loadingContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -369,63 +427,126 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
     textAlign: "center",
   },
-  loadingSpinner: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: {
+  loadingIcon: {
     fontSize: 40,
-    marginBottom: SPACING.md,
+    textAlign: "center",
   },
+
+  // ── Header ────────────────────────────────────────────────────────────────
+
   title: {
     fontSize: FONT_SIZES.xxl,
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginBottom: SPACING.xl,
   },
-  sectionTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
-  },
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+
   form: {
     flex: 1,
   },
+  fieldGroup: {
+    marginBottom: FIELD_GAP,
+  },
+  sectionTitle: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+    opacity: 0.55,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    marginTop: SECTION_GAP,
+    marginBottom: 16,
+  },
+  sectionTitleFirst: {
+    marginTop: 0,
+  },
+
+  // ── Field hints ───────────────────────────────────────────────────────────
+
+  fieldHint: {
+    fontSize: FONT_SIZES.xs,
+    marginTop: 5,
+    marginLeft: 2,
+    fontWeight: "500",
+    color: COLORS.textSecondary,
+  },
+
+  // ── Name row ──────────────────────────────────────────────────────────────
+
   nameRow: {
     flexDirection: "row",
-    gap: SPACING.sm,
+    gap: 12,
   },
   nameField: {
     flex: 1,
   },
-  usernameHelper: {
-    fontSize: FONT_SIZES.xs,
-    marginTop: 4,
-    marginLeft: 4,
+
+  // ── Preferred game chips ──────────────────────────────────────────────────
+
+  chipLabel: {
+    fontSize: FONT_SIZES.sm,
     fontWeight: "500",
+    color: COLORS.textSecondary,
+    marginBottom: 10,
   },
-  checkbox: {
+  chipsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.md,
-    minHeight: 40,
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 9,
+    alignItems: "flex-start",
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#242424",
+    borderWidth: 1.5,
+    borderColor: "#383838",
+  },
+  chipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: "500",
+    color: "#888888",
+  },
+  chipTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
+
+  // ── Terms & Conditions ────────────────────────────────────────────────────
+
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  checkboxRowLast: {
+    marginBottom: 0,
   },
   checkboxBox: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     borderRadius: 4,
     borderWidth: 2,
     borderColor: COLORS.textSecondary,
-    marginRight: SPACING.md,
+    marginRight: 12,
+    marginTop: 3,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   checkboxBoxChecked: {
     backgroundColor: COLORS.primary,
@@ -433,24 +554,34 @@ const styles = StyleSheet.create({
   },
   checkboxCheck: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
   checkboxText: {
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
     flex: 1,
-    textAlignVertical: "center",
-    lineHeight: 28,
+    lineHeight: 22,
   },
   policyLink: {
     color: COLORS.primary,
     textDecorationLine: "underline",
     fontWeight: "600",
   },
-  error: {
+
+  // ── Error ─────────────────────────────────────────────────────────────────
+
+  errorText: {
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
-    marginBottom: SPACING.md,
+    fontWeight: "500",
+    marginTop: 16,
+    marginBottom: 4,
+  },
+
+  // ── CTA ───────────────────────────────────────────────────────────────────
+
+  ctaWrapper: {
+    marginTop: 20,
   },
 });

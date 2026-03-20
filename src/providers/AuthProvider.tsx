@@ -12,6 +12,22 @@
 // WHAT CHANGED (App Store compliance):
 // - After profile fetch, checks is_disabled flag
 // - If disabled → shows Alert + signs out immediately
+//
+// WHAT CHANGED (race condition fix — generation counter):
+// - hydrateAuthSession() now uses a generation counter (hydrationGenRef).
+// - On signup, onAuthStateChange fires and starts Call A before the profile
+//   exists in the DB. The register screen then creates the profile and calls
+//   refreshSession(), which starts Call B. Call B finds the profile and sets
+//   the store correctly — but Call A is still in flight. When Call A finishes
+//   it would overwrite the store with null, wiping out Call B's result.
+// - The counter increments on every new hydrateAuthSession call. Each call
+//   captures its own generation number. Before writing to the store, it checks
+//   whether it is still the most recent call. If not, it discards the result.
+//   This means Call A can never overwrite a more recent Call B result.
+//
+// WHAT CHANGED (refreshSession forceUserId):
+// - refreshSession() accepts optional forceUserId so the register screen can
+//   pass authData.user.id directly, bypassing stale React state.
 // ═══════════════════════════════════════════════════════════
 
 import { Session, User } from "@supabase/supabase-js";
@@ -20,16 +36,17 @@ import {
   ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
-import { Alert } from "react-native"; // ← NEW import
+import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { profileService } from "../models/services/profile.service";
 import { Profile, ProfileInsert } from "../models/types/profile.types";
 import { useNotifications } from "../viewmodels/hooks/use.notifications";
 import { useAuthStore } from "../viewmodels/stores/auth.store";
 
-// ── Context type (kept for backward compat) ────────────────
+// ── Context type ───────────────────────────────────────────
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -39,7 +56,7 @@ interface AuthContextType {
   canSubmitTournaments: boolean;
   isAdmin: boolean;
   pushToken: string | null;
-  refreshSession: () => Promise<void>;
+  refreshSession: (forceUserId?: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
@@ -81,20 +98,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Zustand store — single source of truth
   const { profile, hydrateSession, reset: resetStore } = useAuthStore();
 
+  // ── Generation counter ─────────────────────────────────────────────
+  // Incremented on every hydrateAuthSession() call. Each call captures
+  // its own generation number and checks it before writing to the store.
+  // This ensures a slow, stale hydration (e.g. onAuthStateChange during
+  // signup before the profile exists) can never overwrite a more recent
+  // successful hydration (e.g. refreshSession after profile is created).
+  const hydrationGenRef = useRef(0);
+
   // 🔔 Push notification registration
-  // Only fires after profile exists (prevents foreign key error on push_tokens)
   const { pushToken } = useNotifications(profile ? user?.id : undefined);
 
-  // ═══════════════════════════════════════════════════════
-  // NEW: Check if user is disabled and eject them
-  // ═══════════════════════════════════════════════════════
+  // ── Disabled user check ───────────────────────────────────────────
   const checkDisabledAndEject = async (profileData: any): Promise<boolean> => {
     if (profileData?.is_disabled === true) {
-      // Clear state immediately so the UI doesn't flash authenticated content
       hydrateSession(null, [], []);
       setLoading(false);
-
-      // Show alert then sign out
       Alert.alert(
         "Account Disabled",
         "Your account has been disabled. Contact support at support@competerf.com.",
@@ -111,19 +130,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         ],
         { cancelable: false },
       );
-      return true; // was disabled
+      return true;
     }
-    return false; // not disabled
+    return false;
   };
 
-  // ── Session hydration via RPC ──────────────────────────
+  // ── Session hydration via RPC ──────────────────────────────────────
   const hydrateAuthSession = async (userId: string) => {
+    // Capture this call's generation. If a newer call starts before
+    // this one finishes, myGen will no longer equal hydrationGenRef.current
+    // and we discard our result rather than overwriting the newer one.
+    const myGen = ++hydrationGenRef.current;
+
     try {
       const { data, error } = await supabase.rpc("get_auth_session");
 
+      // A newer hydration has started — this result is stale, discard it
+      if (myGen !== hydrationGenRef.current) return;
+
       if (error) {
         console.error("Auth session RPC error:", error);
-        await fallbackFetchProfile(userId);
+        await fallbackFetchProfile(userId, myGen);
         return;
       }
 
@@ -132,9 +159,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return;
       }
 
-      // ── NEW: Block disabled users ──
       const wasDisabled = await checkDisabledAndEject(data.profile);
       if (wasDisabled) return;
+
+      // Check generation again after the async disabled check
+      if (myGen !== hydrationGenRef.current) return;
 
       hydrateSession(
         data.profile as Profile,
@@ -143,14 +172,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       );
     } catch (error) {
       console.error("Auth session hydration error:", error);
-      await fallbackFetchProfile(userId);
+      if (myGen !== hydrationGenRef.current) return;
+      await fallbackFetchProfile(userId, myGen);
     } finally {
-      setLoading(false);
+      // Only update loading state if this is still the current hydration
+      if (myGen === hydrationGenRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   // Fallback in case the RPC isn't deployed yet
-  const fallbackFetchProfile = async (userId: string) => {
+  const fallbackFetchProfile = async (userId: string, gen: number) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -158,22 +191,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         .eq("id", userId)
         .maybeSingle();
 
+      if (gen !== hydrationGenRef.current) return;
       if (error) throw error;
 
-      // ── NEW: Block disabled users (fallback path) ──
       const wasDisabled = await checkDisabledAndEject(data);
       if (wasDisabled) return;
+
+      if (gen !== hydrationGenRef.current) return;
 
       hydrateSession(data as Profile | null, [], []);
     } catch (error) {
       console.error("Fallback profile fetch error:", error);
+      if (gen !== hydrationGenRef.current) return;
       hydrateSession(null, [], []);
     } finally {
-      setLoading(false);
+      if (gen === hydrationGenRef.current) {
+        setLoading(false);
+      }
     }
   };
 
-  // ── Auth state listener ────────────────────────────────
+  // ── Auth state listener ────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -202,14 +240,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Refresh the full session (re-calls RPC) ───────────
-  const refreshSession = async () => {
-    if (user?.id) {
-      await hydrateAuthSession(user.id);
+  // ── Refresh ────────────────────────────────────────────────────────
+  const refreshSession = async (forceUserId?: string) => {
+    const id = forceUserId ?? user?.id;
+    if (id) {
+      await hydrateAuthSession(id);
     }
   };
 
-  // ── Create profile (new user signup) ───────────────────
+  // ── Create profile ─────────────────────────────────────────────────
   const createProfile = async (profileData: ProfileInsert) => {
     try {
       await profileService.createProfile(profileData);
@@ -222,26 +261,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  // ── Sign out ───────────────────────────────────────────
+  // ── Sign out ───────────────────────────────────────────────────────
   const signOut = async () => {
     if (user?.id) {
       try {
-        const { notificationService } = await import(
-          "../models/services/notification.service"
-        );
+        const { notificationService } =
+          await import("../models/services/notification.service");
         await notificationService.removeUserTokens(user.id);
       } catch (err) {
         console.error("Error removing push tokens on sign out:", err);
       }
     }
-
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
     resetStore();
   };
 
-  // ── Context value ──────────────────────────────────────
+  // ── Context value ──────────────────────────────────────────────────
   const value: AuthContextType = {
     session,
     user,
@@ -263,6 +300,4 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 };
 
 export const useAuthContext = () => useContext(AuthContext);
-
-// Keep backward compatibility
 export const useAuth = useAuthContext;
