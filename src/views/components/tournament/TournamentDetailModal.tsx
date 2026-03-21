@@ -1,5 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Image,
   Modal,
@@ -51,6 +51,12 @@ export function TournamentDetailModal({
 
   const [showImageViewer, setShowImageViewer] = useState(false);
 
+  // Always reset report state before closing so the overlay never persists
+  const handleClose = useCallback(() => {
+    closeReportModal();
+    onClose();
+  }, [closeReportModal, onClose]);
+
   // ── Image URL ──────────────────────────────────────────────────────────────
   const getTournamentImageUrl = (tournament: any) => {
     const gameTypeImageMap: Record<string, string> = {
@@ -74,7 +80,7 @@ export function TournamentDetailModal({
     if (imageFile)
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
     const partialMatch = Object.keys(gameTypeImageMap).find((key) =>
-      tournament.game_type?.toLowerCase().includes(key),
+      tournament.game_type?.toLowerCase().includes(key)
     );
     if (partialMatch)
       return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${gameTypeImageMap[partialMatch]}`;
@@ -106,7 +112,7 @@ export function TournamentDetailModal({
           chipRanges
             .map(
               (r: any) =>
-                `${r.label || `${r.minRating}-${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
+                `${r.label || `${r.minRating}-${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`
             )
             .join("\n")
         : "";
@@ -135,7 +141,6 @@ export function TournamentDetailModal({
       ? tournament.chip_ranges
       : null;
 
-  // director comes from profiles!director_id(*) join
   const director = tournament?.profiles ?? null;
   const directorName = getDirectorName(director);
   const directorId = getDirectorId(director);
@@ -143,9 +148,8 @@ export function TournamentDetailModal({
   // ── Inner content ──────────────────────────────────────────────────────────
   const innerContent = (
     <>
-      {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={onClose} style={s.closeButton}>
+        <TouchableOpacity onPress={handleClose} style={s.closeButton}>
           <Text style={s.closeButtonText}>{"\u2715"}</Text>
         </TouchableOpacity>
         <Text style={s.headerTitle}>Tournament Details</Text>
@@ -153,21 +157,18 @@ export function TournamentDetailModal({
       </View>
       <View style={s.divider} />
 
-      {/* Loading */}
       {vm.loading && (
         <View style={s.loadingWrap}>
           <Loading message="Loading tournament..." />
         </View>
       )}
 
-      {/* Error */}
       {!vm.loading && (vm.error || !tournament) && (
         <View style={s.loadingWrap}>
           <Text style={s.errorText}>{vm.error || "Tournament not found"}</Text>
         </View>
       )}
 
-      {/* Content */}
       {!vm.loading && tournament && (
         <>
           <ScrollView
@@ -177,9 +178,7 @@ export function TournamentDetailModal({
           >
             {vm.isDeleted && (
               <View style={s.deletedBanner}>
-                <Text style={s.deletedText}>
-                  This tournament has been deleted
-                </Text>
+                <Text style={s.deletedText}>This tournament has been deleted</Text>
               </View>
             )}
             {vm.isHidden && isAdmin && (
@@ -189,7 +188,6 @@ export function TournamentDetailModal({
               </View>
             )}
 
-            {/* Top: badges + title + image */}
             <View style={s.topSection}>
               <View style={s.leftContent}>
                 <View style={s.badges}>
@@ -241,7 +239,6 @@ export function TournamentDetailModal({
               </View>
             </View>
 
-            {/* Chip chart */}
             {chipRanges && (
               <View style={s.chipCard}>
                 <Text style={s.chipTitle}>RATING / CHIP CHART</Text>
@@ -256,14 +253,12 @@ export function TournamentDetailModal({
               </View>
             )}
 
-            {/* Date & Time */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Date & Time</Text>
               <Text style={s.sectionText}>{vm.formattedDate}</Text>
               <Text style={s.sectionText}>{vm.formattedTime}</Text>
             </View>
 
-            {/* Entry & Prizes */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Entry & Prizes</Text>
               <View style={s.row}>
@@ -280,7 +275,6 @@ export function TournamentDetailModal({
               )}
             </View>
 
-            {/* Details */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Details</Text>
               {tournament.table_size && (
@@ -291,9 +285,7 @@ export function TournamentDetailModal({
               )}
               <View style={s.row}>
                 <Text style={s.label}>Reports to Fargo:</Text>
-                <Text style={s.val}>
-                  {tournament.reports_to_fargo ? "Yes" : "No"}
-                </Text>
+                <Text style={s.val}>{tournament.reports_to_fargo ? "Yes" : "No"}</Text>
               </View>
               <View style={s.row}>
                 <Text style={s.label}>Calcutta:</Text>
@@ -302,9 +294,7 @@ export function TournamentDetailModal({
               {!isChipTournament && (
                 <View style={s.row}>
                   <Text style={s.label}>Open Tournament:</Text>
-                  <Text style={s.val}>
-                    {tournament.open_tournament ? "Yes" : "No"}
-                  </Text>
+                  <Text style={s.val}>{tournament.open_tournament ? "Yes" : "No"}</Text>
                 </View>
               )}
               {tournament.max_fargo && !isChipTournament && (
@@ -327,7 +317,6 @@ export function TournamentDetailModal({
               )}
             </View>
 
-            {/* Director */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Tournament Director</Text>
               <View style={s.row}>
@@ -344,7 +333,6 @@ export function TournamentDetailModal({
               )}
             </View>
 
-            {/* Location */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Location</Text>
               <Text style={s.venueName}>{tournament.venues?.venue}</Text>
@@ -374,12 +362,10 @@ export function TournamentDetailModal({
             <Text style={s.disclaimerText}>
               This tournament is organized by{" "}
               {tournament.venues?.venue || "an independent venue"}. Compete is
-              not the organizer and is not responsible for tournament
-              operations.
+              not the organizer and is not responsible for tournament operations.
             </Text>
           </ScrollView>
 
-          {/* Bottom buttons */}
           <View style={s.bottomBar}>
             <TouchableOpacity style={s.shareButton} onPress={handleShare}>
               <Text style={s.shareButtonText}>Share</Text>
@@ -393,7 +379,7 @@ export function TournamentDetailModal({
               <Ionicons name="flag-outline" size={14} color="#E53935" />
               <Text style={s.reportButtonText}>Report</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.closeBtn} onPress={onClose}>
+            <TouchableOpacity style={s.closeBtn} onPress={handleClose}>
               <Text style={s.closeBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -405,30 +391,35 @@ export function TournamentDetailModal({
   if (Platform.OS === "web") return null;
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        animationType="fade"
-        transparent
-        onRequestClose={onClose}
-      >
-        <TouchableOpacity
-          style={s.mobileBackdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-        <View style={s.mobileCardWrapper} pointerEvents="box-none">
-          <View style={s.mobileCard}>{innerContent}</View>
-        </View>
-        <FullScreenImageViewer
-          visible={showImageViewer}
-          imageUrl={imageUrl}
-          title={tournament?.name}
-          onClose={() => setShowImageViewer(false)}
-        />
-      </Modal>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={handleClose}
+    >
+      {/* Backdrop */}
+      <TouchableOpacity
+        style={s.mobileBackdrop}
+        activeOpacity={1}
+        onPress={handleClose}
+      />
 
-      <ReportModal
+      {/* Card */}
+      <View style={s.mobileCardWrapper} pointerEvents="box-none">
+        <View style={s.mobileCard}>{innerContent}</View>
+      </View>
+
+      {/* Full-screen image viewer — inside Modal so it layers correctly */}
+      <FullScreenImageViewer
+        visible={showImageViewer}
+        imageUrl={imageUrl}
+        title={tournament?.name}
+        onClose={() => setShowImageViewer(false)}
+      />
+
+      {/* ReportModal — MUST be inside the parent Modal so it renders
+          above the native modal layer, not behind it */}
+      <ReportModal asOverlay
         visible={isModalVisible}
         onClose={closeReportModal}
         contentType={contentType}
@@ -439,7 +430,7 @@ export function TournamentDetailModal({
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
       />
-    </>
+    </Modal>
   );
 }
 

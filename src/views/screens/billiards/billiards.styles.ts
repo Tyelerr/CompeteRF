@@ -11,7 +11,7 @@ export const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // ── Header ──────────────────────────────────────────────────────────────
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
     padding: isWeb ? SPACING.sm : SPACING.md,
     paddingTop: isWeb ? SPACING.md : SPACING.xl + SPACING.lg,
@@ -31,7 +31,7 @@ export const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Search ───────────────────────────────────────────────────────────────
+  // ── Search ───────────────────────────────────────────────────────────────────
   searchContainer: {
     paddingHorizontal: SPACING.md,
     marginBottom: isWeb ? 6 : SPACING.md,
@@ -43,7 +43,8 @@ export const styles = StyleSheet.create({
     borderRadius: isWeb ? RADIUS.sm : RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: SPACING.sm,
+    paddingLeft: SPACING.sm,
+    paddingRight: 0,
   },
   searchIcon: {
     fontSize: isWeb ? 12 : FONT_SIZES.md,
@@ -55,8 +56,23 @@ export const styles = StyleSheet.create({
     fontSize: isWeb ? 12 : FONT_SIZES.md,
     color: COLORS.text,
   },
+  // ── Clear button (mobile) ───────────────────────────────────────────────────
+  // paddingRight pushes X away from the right edge = moves it left toward text
+  clearBtn: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingLeft: SPACING.xs,
+    paddingRight: SPACING.md,  // increased → X sits left, closer to typed text
+    alignSelf: "stretch",
+  },
+  clearBtnText: {
+    fontSize: Math.round(FONT_SIZES.sm * 2 * 0.8),  // doubled then -20%
+    color: COLORS.textMuted,
+    fontWeight: "600",
+    lineHeight: Math.round(FONT_SIZES.sm * 2 * 0.8) + 4,
+  },
 
-  // ── Filter row ───────────────────────────────────────────────────────────
+  // ── Filter row ───────────────────────────────────────────────────────────────
   filterRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
@@ -81,7 +97,7 @@ export const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
-  // ── Zip input ────────────────────────────────────────────────────────────
+  // ── Zip input ────────────────────────────────────────────────────────────────
   zipInput: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
@@ -97,7 +113,7 @@ export const styles = StyleSheet.create({
     includeFontPadding: false,
   },
 
-  // ── Radius slider ────────────────────────────────────────────────────────
+  // ── Radius slider ─────────────────────────────────────────────────────────────
   radiusContainer: {
     paddingHorizontal: SPACING.md,
     marginBottom: isWeb ? 6 : SPACING.sm,
@@ -132,7 +148,7 @@ export const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Filter buttons ───────────────────────────────────────────────────────
+  // ── Filter buttons ────────────────────────────────────────────────────────────
   filterButtonsRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
@@ -165,7 +181,7 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ── List ─────────────────────────────────────────────────────────────────
+  // ── List ──────────────────────────────────────────────────────────────────────
   list: {
     padding: isWeb ? SPACING.xs : SPACING.sm,
   },
@@ -173,7 +189,7 @@ export const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
 
-  // ── States ───────────────────────────────────────────────────────────────
+  // ── States ────────────────────────────────────────────────────────────────────
   errorContainer: {
     flex: 1,
     alignItems: "center",

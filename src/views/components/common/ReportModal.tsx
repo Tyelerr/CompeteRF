@@ -1,4 +1,4 @@
-import {
+﻿import {
   CONTENT_TYPE_LABELS,
   REPORT_REASON_LABELS,
   ReportContentType,
@@ -55,8 +55,8 @@ export default function ReportModal({
     ? `Report ${CONTENT_TYPE_LABELS[contentType]}`
     : "Report Content";
 
-  const inner = (
-    <View style={[styles.modalContainer, isWeb && wStyles.modalContainer]}>
+  const dialog = (
+    <View style={styles.dialog}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -91,17 +91,10 @@ export default function ReportModal({
                 disabled={isSubmitting}
                 activeOpacity={0.7}
               >
-                <View
-                  style={[styles.radio, isSelected && styles.radioSelected]}
-                >
+                <View style={[styles.radio, isSelected && styles.radioSelected]}>
                   {isSelected && <View style={styles.radioInner} />}
                 </View>
-                <Text
-                  style={[
-                    styles.reasonText,
-                    isSelected && styles.reasonTextSelected,
-                  ]}
-                >
+                <Text style={[styles.reasonText, isSelected && styles.reasonTextSelected]}>
                   {REPORT_REASON_LABELS[option]}
                 </Text>
               </TouchableOpacity>
@@ -152,50 +145,64 @@ export default function ReportModal({
     </View>
   );
 
+  if (isWeb) {
+    return (
+      <Modal
+        visible={visible}
+        animationType="fade"
+        transparent
+        onRequestClose={onClose}
+      >
+        <TouchableOpacity
+          style={wStyles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={wStyles.overlay}>{dialog}</View>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       visible={visible}
-      animationType={isWeb ? "fade" : "slide"}
+      animationType="fade"
       transparent
       onRequestClose={onClose}
     >
-      {isWeb ? (
-        // Web: centered dialog with dimmed backdrop
-        <>
-          <TouchableOpacity
-            style={wStyles.backdrop}
-            activeOpacity={1}
-            onPress={onClose}
-          />
-          <View style={wStyles.overlay}>{inner}</View>
-        </>
-      ) : (
-        // Mobile: bottom sheet (unchanged)
-        <KeyboardAvoidingView
-          style={styles.overlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          {inner}
-        </KeyboardAvoidingView>
-      )}
+      <KeyboardAvoidingView
+        style={styles.backdrop}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        {dialog}
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  // Full-screen dimmed backdrop, centers the dialog
+  backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
   },
-  modalContainer: {
+  // The actual popup card
+  dialog: {
+    width: "100%",
+    maxHeight: "80%",
     backgroundColor: "#1C1C1E",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
-    maxHeight: "80%",
+    paddingBottom: Platform.OS === "ios" ? 32 : 24,
   },
   header: {
     flexDirection: "row",
@@ -307,17 +314,5 @@ const wStyles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     pointerEvents: "box-none" as any,
-  },
-  modalContainer: {
-    width: 480,
-    maxWidth: "90%" as any,
-    maxHeight: "80vh" as any,
-    borderRadius: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
   },
 });

@@ -17,6 +17,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
 import { useRecommendVenue } from "../../../viewmodels/hooks/use.recommend.venue";
+import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useBilliards } from "../../../viewmodels/useBilliards";
 import { usePagination } from "../../../viewmodels/usePagination";
@@ -26,10 +27,12 @@ import { FilterModal } from "../../components/common/filter-modal";
 import { Loading } from "../../components/common/loading";
 import { Pagination } from "../../components/common/pagination";
 import { RecommendVenueModal } from "../../components/common/RecommendVenueModal";
+import ReportModal from "../../components/common/ReportModal";
 import { WebContainer } from "../../components/common/WebContainer";
 import { TournamentDetailModal } from "../../components/tournament/TournamentDetailModal";
 import { styles } from "./billiards.styles";
 import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
+import { useAuth } from "../../../viewmodels/hooks/use.auth";
 
 const isWeb = Platform.OS === "web";
 const NUM_COLUMNS = isWeb ? 4 : 2;
@@ -42,6 +45,20 @@ export const BilliardsScreen = () => {
   const vm = useBilliards();
   const recommend = useRecommendVenue();
   const scrollRef = useScrollToTopOnFocus();
+  const { session } = useAuth();
+
+  const {
+    isModalVisible: isReportVisible,
+    openReportModal,
+    closeReportModal,
+    reason: reportReason,
+    setReason: setReportReason,
+    details: reportDetails,
+    setDetails: setReportDetails,
+    handleSubmit: handleReportSubmit,
+    isSubmitting: isReportSubmitting,
+    contentType: reportContentType,
+  } = useReport({ userId: session?.user?.id });
 
   const pagination = usePagination(vm.filteredTournaments as any, {
     itemsPerPage: ITEMS_PER_PAGE,
@@ -70,7 +87,6 @@ export const BilliardsScreen = () => {
   // ── Web compact filter bar ─────────────────────────────────────────────────
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
-      {/* Search */}
       <View style={webS.searchWrap}>
         <Text style={webS.searchIcon}>🔍</Text>
         <TextInput
@@ -80,9 +96,16 @@ export const BilliardsScreen = () => {
           value={vm.searchQuery}
           onChangeText={vm.setSearchQuery}
         />
+        {vm.searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => vm.setSearchQuery("")}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={webS.clearBtn}
+          >
+            <Text style={webS.clearBtnText}>✕</Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      {/* State */}
       <View style={webS.dropWrap}>
         <Dropdown
           placeholder="State"
@@ -92,8 +115,6 @@ export const BilliardsScreen = () => {
           onSelect={vm.setSelectedState}
         />
       </View>
-
-      {/* City */}
       <View style={webS.dropWrap}>
         <Dropdown
           placeholder="City"
@@ -103,8 +124,6 @@ export const BilliardsScreen = () => {
           onSelect={vm.setSelectedCity}
         />
       </View>
-
-      {/* Zip */}
       <TextInput
         style={webS.zipInput}
         placeholder="Zip"
@@ -114,16 +133,12 @@ export const BilliardsScreen = () => {
         keyboardType="numeric"
         maxLength={5}
       />
-
-      {/* Filters button */}
       <TouchableOpacity
         style={webS.filterBtn}
         onPress={() => vm.setFilterModalVisible(true)}
       >
         <Text style={webS.filterBtnText}>☰ Filters</Text>
       </TouchableOpacity>
-
-      {/* Reset button */}
       <TouchableOpacity style={webS.resetBtn} onPress={vm.resetAllFilters}>
         <Text style={webS.resetBtnText}>Reset</Text>
       </TouchableOpacity>
@@ -149,12 +164,7 @@ export const BilliardsScreen = () => {
             step={5}
             value={vm.searchRadius}
             onChange={(e) => vm.setSearchRadius(Number(e.target.value))}
-            style={{
-              width: "100%",
-              height: 28,
-              accentColor: COLORS.primary,
-              cursor: "pointer",
-            }}
+            style={{ width: "100%", height: 28, accentColor: COLORS.primary, cursor: "pointer" }}
           />
         ) : (
           (() => {
@@ -201,9 +211,7 @@ export const BilliardsScreen = () => {
   // ── Tournament card ────────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
-      return (
-        <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />
-      );
+      return <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />;
     return (
       <BilliardsTournamentCard
         tournament={item as any}
@@ -239,43 +247,17 @@ export const BilliardsScreen = () => {
         }}
       >
         <Text style={{ fontSize: 24, marginBottom: 8 }}>🎱</Text>
-        <Text
-          style={{
-            fontSize: FONT_SIZES.md,
-            fontWeight: "600",
-            color: COLORS.text,
-            textAlign: "center",
-          }}
-        >
+        <Text style={{ fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
           Know a spot that hosts pool tournaments?
         </Text>
-        <Text
-          style={{
-            fontSize: FONT_SIZES.sm,
-            color: COLORS.textSecondary,
-            textAlign: "center",
-            marginTop: 4,
-            marginBottom: 12,
-          }}
-        >
-          Help us grow the community – recommend a venue!
+        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 12 }}>
+          Help us grow the community — recommend a venue!
         </Text>
         <TouchableOpacity
-          style={{
-            backgroundColor: COLORS.primary,
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            borderRadius: 8,
-          }}
+          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
           onPress={recommend.open}
         >
-          <Text
-            style={{
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: FONT_SIZES.sm,
-            }}
-          >
+          <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: FONT_SIZES.sm }}>
             Recommend a Venue
           </Text>
         </TouchableOpacity>
@@ -295,42 +277,26 @@ export const BilliardsScreen = () => {
       <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
       {vm.isStateFilterEmpty && vm.selectedState && vm.user && (
         <TouchableOpacity
-          style={{
-            backgroundColor: COLORS.primary,
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            borderRadius: 8,
-            marginTop: 16,
-          }}
-          onPress={() =>
-            router.push(
-              `/search-alerts/create?state=${vm.selectedState}` as any,
-            )
-          }
+          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginTop: 16 }}
+          onPress={() => router.push(`/search-alerts/create?state=${vm.selectedState}` as any)}
         >
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-            Create Search Alert
-          </Text>
+          <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: 15 }}>Create Search Alert</Text>
         </TouchableOpacity>
       )}
       {renderRecommendCard()}
     </View>
   );
 
-  if (vm.loading)
-    return <Loading fullScreen message="Loading tournaments..." />;
+  if (vm.loading) return <Loading fullScreen message="Loading tournaments..." />;
 
   const paddedData =
     pagination.paginatedItems.length % NUM_COLUMNS !== 0
       ? [
           ...pagination.paginatedItems,
-          ...Array(
-            NUM_COLUMNS - (pagination.paginatedItems.length % NUM_COLUMNS),
-          ).fill(null),
+          ...Array(NUM_COLUMNS - (pagination.paginatedItems.length % NUM_COLUMNS)).fill(null),
         ]
       : pagination.paginatedItems;
 
-  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <WebContainer>
       <View style={styles.container}>
@@ -339,7 +305,6 @@ export const BilliardsScreen = () => {
           accessible={false}
         >
           <View pointerEvents={isWeb ? "box-none" : "auto"}>
-            {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
               <Text style={styles.headerSubtitle}>
@@ -347,7 +312,6 @@ export const BilliardsScreen = () => {
               </Text>
             </View>
 
-            {/* Web: single compact filter bar | Mobile: stacked filters */}
             {isWeb ? (
               <>
                 {renderWebFilters()}
@@ -356,26 +320,9 @@ export const BilliardsScreen = () => {
             ) : (
               <>
                 {vm.isHomeStateEmpty && (
-                  <View
-                    style={{
-                      backgroundColor: COLORS.primary + "15",
-                      paddingHorizontal: 16,
-                      paddingVertical: 10,
-                      marginHorizontal: 16,
-                      marginBottom: 8,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: COLORS.primary + "30",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: COLORS.text,
-                        fontSize: 13,
-                        textAlign: "center",
-                      }}
-                    >
-                      No tournaments in your state yet – showing all tournaments
+                  <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 8, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
+                    <Text style={{ color: COLORS.text, fontSize: 13, textAlign: "center" }}>
+                      No tournaments in your state yet — showing all tournaments
                     </Text>
                   </View>
                 )}
@@ -391,6 +338,15 @@ export const BilliardsScreen = () => {
                       returnKeyType="search"
                       onSubmitEditing={Keyboard.dismiss}
                     />
+                    {vm.searchQuery.length > 0 && (
+                      <TouchableOpacity
+                        onPress={() => vm.setSearchQuery("")}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        style={styles.clearBtn}
+                      >
+                        <Text style={styles.clearBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
                 <View style={styles.filterRow}>
@@ -436,10 +392,7 @@ export const BilliardsScreen = () => {
                   >
                     <Text style={styles.filtersButtonText}>☰ Filters</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetButton}
-                    onPress={vm.resetAllFilters}
-                  >
+                  <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
                     <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
                   </TouchableOpacity>
                 </View>
@@ -450,7 +403,6 @@ export const BilliardsScreen = () => {
           </View>
         </TouchableWithoutFeedback>
 
-        {/* Content */}
         {vm.error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{vm.error}</Text>
@@ -499,7 +451,6 @@ export const BilliardsScreen = () => {
         />
         <RecommendVenueModal vm={recommend} />
 
-        {/* Web tournament detail overlay (unchanged) */}
         {isWeb && webDetailId && (
           <WebTournamentDetailOverlay
             id={webDetailId}
@@ -507,18 +458,29 @@ export const BilliardsScreen = () => {
           />
         )}
 
-        {/* Mobile tournament detail modal */}
         <TournamentDetailModal
           id={mobileDetailId}
           visible={mobileDetailId !== null}
           onClose={() => setMobileDetailId(null)}
+          onReport={openReportModal}
+        />
+
+        <ReportModal
+          visible={isReportVisible}
+          onClose={closeReportModal}
+          contentType={reportContentType}
+          reason={reportReason}
+          onReasonChange={setReportReason}
+          details={reportDetails}
+          onDetailsChange={setReportDetails}
+          onSubmit={handleReportSubmit}
+          isSubmitting={isReportSubmitting}
         />
       </View>
     </WebContainer>
   );
 };
 
-// ── Web-only filter bar styles ─────────────────────────────────────────────────
 const webS = StyleSheet.create({
   filterBar: {
     flexDirection: "row",
@@ -537,23 +499,29 @@ const webS = StyleSheet.create({
     borderRadius: RADIUS.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 8,
+    paddingLeft: 8,
+    paddingRight: 0,
     height: 32,
   },
-  searchIcon: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 12,
-    color: COLORS.text,
+  searchIcon: { fontSize: 12, marginRight: 4 },
+  searchInput: { flex: 1, fontSize: 12, color: COLORS.text, height: 32 },
+  // ── Clear button (web) ────────────────────────────────────────────────────
+  // paddingRight increased → X moves left toward typed text
+  // fontSize 22 * 0.8 = ~18 (doubled original 11, then -20%)
+  clearBtn: {
     height: 32,
+    paddingLeft: 4,
+    paddingRight: 12,  // increased from 4 → shifts X left
+    justifyContent: "center",
+    alignItems: "center",
   },
-  dropWrap: {
-    width: 150,
-    height: 32,
+  clearBtnText: {
+    fontSize: 18,       // was 22, -20% ≈ 18
+    color: COLORS.textMuted,
+    fontWeight: "600",
+    lineHeight: 22,
   },
+  dropWrap: { width: 150, height: 32 },
   zipInput: {
     width: 100,
     height: 32,
@@ -575,10 +543,7 @@ const webS = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterBtnText: {
-    fontSize: 11,
-    color: COLORS.text,
-  },
+  filterBtnText: { fontSize: 11, color: COLORS.text },
   resetBtn: {
     height: 32,
     paddingHorizontal: 12,
@@ -587,11 +552,7 @@ const webS = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  resetBtnText: {
-    fontSize: 11,
-    color: "#fff",
-    fontWeight: "600",
-  },
+  resetBtnText: { fontSize: 11, color: COLORS.white, fontWeight: "600" },
 });
 
 export default BilliardsScreen;
