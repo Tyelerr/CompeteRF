@@ -7,6 +7,7 @@ import {
   WinnerHistoryRecord,
 } from "../types/giveaway.types";
 import { notificationDispatcher } from "./notification-dispatcher.service";
+import { FraudReport, fraudDetectionService } from "./fraud-detection.service";
 
 export const giveawayService = {
   // ============================================
@@ -216,18 +217,22 @@ export const giveawayService = {
   ): Promise<{ success: boolean; error?: string }> {
     const birthday = `${form.birthday.year}-${form.birthday.month.padStart(2, "0")}-${form.birthday.day.padStart(2, "0")}`;
 
-    const { error } = await supabase.from("giveaway_entries").insert({
-      giveaway_id: giveawayId,
-      user_id: userId,
-      name_as_on_id: form.name_as_on_id.trim(),
-      birthday,
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim(),
-      agreed_to_rules: form.agreed_to_rules,
-      agreed_to_privacy: form.agreed_to_privacy,
-      confirmed_age: form.confirmed_age,
-      opted_in_promotions: form.opted_in_promotions,
-    });
+    const { data: insertedEntry, error } = await supabase
+      .from("giveaway_entries")
+      .insert({
+        giveaway_id: giveawayId,
+        user_id: userId,
+        name_as_on_id: form.name_as_on_id.trim(),
+        birthday,
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone.trim(),
+        agreed_to_rules: form.agreed_to_rules,
+        agreed_to_privacy: form.agreed_to_privacy,
+        confirmed_age: form.confirmed_age,
+        opted_in_promotions: form.opted_in_promotions,
+      })
+      .select("id")
+      .single();
 
     if (error) {
       console.error("Error creating entry:", error);
@@ -264,6 +269,13 @@ export const giveawayService = {
           })
           .eq("id", giveawayId);
       }
+    }
+
+    // Silent background fraud check — never blocks the entry, logs signals only
+    if (insertedEntry?.id) {
+      fraudDetectionService
+        .silentEntryCheck(insertedEntry.id, giveawayId, userId)
+        .catch(() => {/* swallow — never interrupt successful entry */});
     }
 
     return { success: true };
@@ -455,6 +467,7 @@ export const giveawayService = {
       email: string;
       phone: string;
     };
+    fraudReport?: FraudReport;
     error?: string;
   }> {
     const { data: entries, error: entriesError } = await supabase
@@ -570,6 +583,24 @@ export const giveawayService = {
         );
     }
 
+    // Run fraud check on the selected winner before returning result.
+    // This gives the admin full visibility before confirming the prize award.
+    const fraudReport = await fraudDetectionService
+      .checkEntry(winnerEntry.id, giveawayId, winnerEntry.user_id)
+      .catch((err) => {
+        console.error("Fraud check error in drawWinner:", err);
+        return fraudDetectionService._emptyReport(
+          winnerEntry.id, giveawayId, winnerEntry.user_id,
+        );
+      });
+
+    if (fraudReport.riskLevel !== "clean") {
+      console.warn(
+        `🚩 Winner fraud report (${fraudReport.riskLevel}):`,
+        fraudDetectionService.summarizeReport(fraudReport),
+      );
+    }
+
     return {
       success: true,
       winner: {
@@ -579,6 +610,7 @@ export const giveawayService = {
         email: winnerEntry.email,
         phone: winnerEntry.phone,
       },
+      fraudReport,
     };
   },
 

@@ -219,14 +219,18 @@ export default function GiveawayManagementScreen() {
             >
               <Text style={cS.secondaryBtnText}>Edit</Text>
             </Pressable>
-            {/* End Early is destructive but slightly muted until tapped */}
+            {/* End Early / End Giveaway — destructive, muted styling */}
             <Pressable
               style={[cS.secondaryBtn, cS.endEarlyBtn]}
               onPress={() => openEndEarlyModal(item)}
               disabled={isProcessing}
             >
               <Text style={[cS.secondaryBtnText, { color: C.red }]}>
-                {isProcessing ? "Ending…" : "End Early"}
+                {isProcessing
+                  ? "Ending…"
+                  : item.max_entries && entryCount >= item.max_entries
+                  ? "End Giveaway"
+                  : "End Early"}
               </Text>
             </Pressable>
           </View>
@@ -625,11 +629,61 @@ export default function GiveawayManagementScreen() {
             <Text style={m.bodyNote}>
               The winner has been notified via push notification.
             </Text>
+
+            {/* ── Fraud report banner ──────────────────────────────────── */}
+            {vm.winnerFraudReport && vm.winnerFraudReport.riskLevel !== "clean" && (() => {
+              const r = vm.winnerFraudReport!;
+              const isHigh = r.riskLevel === "high";
+              const isMed  = r.riskLevel === "medium";
+              const bannerBg     = isHigh ? C.redDim    : isMed ? C.amberDim    : C.blueDim;
+              const bannerBorder = isHigh ? C.redBorder : isMed ? C.amberBorder : C.blueBorder;
+              const bannerColor  = isHigh ? C.red       : isMed ? C.amber       : C.blue;
+              const icon = isHigh ? "🚨" : isMed ? "⚠️" : "ℹ️";
+              return (
+                <View style={[m.warnBox, { backgroundColor: bannerBg, borderColor: bannerBorder, marginBottom: SP.md }]}>
+                  <Text style={[m.warnText, { color: bannerColor, marginBottom: SP.xs }]}>
+                    {icon}  Fraud Review — {r.riskLevel.toUpperCase()} RISK
+                  </Text>
+                  {r.signals.map((sig, i) => (
+                    <Text key={i} style={{ color: bannerColor, fontSize: FS.xs, marginTop: 2, opacity: 0.85 }}>
+                      • {sig.description}
+                    </Text>
+                  ))}
+                  {r.requiresManualReview && (
+                    <Text style={{ color: bannerColor, fontSize: FS.xs, marginTop: SP.sm, fontWeight: "700" }}>
+                      Manual review recommended before awarding prize.
+                    </Text>
+                  )}
+                  {r.requiresVerification && (
+                    <Text style={{ color: bannerColor, fontSize: FS.xs, marginTop: SP.xs, fontWeight: "600" }}>
+                      Require winner to verify identity with government-issued ID.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
+            {vm.winnerFraudReport?.riskLevel === "clean" && (
+              <View style={[m.warnBox, { backgroundColor: C.greenDim, borderColor: C.greenBorder, marginBottom: SP.md }]}>
+                <Text style={{ color: C.green, fontSize: FS.sm, fontWeight: "600", textAlign: "center" }}>
+                  ✅  No fraud signals detected
+                </Text>
+              </View>
+            )}
             <Pressable
-              style={[m.confirmBtn, { backgroundColor: C.green, width: "100%" }]}
+              style={{
+                width: "100%",
+                backgroundColor: C.green,
+                borderRadius: 12,
+                paddingVertical: 16,
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: SP.sm,
+              }}
               onPress={vm.closeWinnerModal}
             >
-              <Text style={[m.confirmBtnText, { color: "#000000" }]}>Done ✓</Text>
+              <Text style={{ color: "#000000", fontSize: FS.lg, fontWeight: "800", letterSpacing: 0.5 }}>
+                Done ✓
+              </Text>
             </Pressable>
           </View>
         </View>
