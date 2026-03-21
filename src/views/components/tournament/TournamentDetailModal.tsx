@@ -149,11 +149,11 @@ export function TournamentDetailModal({
   const innerContent = (
     <>
       <View style={s.header}>
+        <View style={{ width: 40 }} />
+        <Text style={s.headerTitle}>Tournament Details</Text>
         <TouchableOpacity onPress={handleClose} style={s.closeButton}>
           <Text style={s.closeButtonText}>{"\u2715"}</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Tournament Details</Text>
-        <View style={{ width: 40 }} />
       </View>
       <View style={s.divider} />
 
@@ -753,3 +753,5 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+
