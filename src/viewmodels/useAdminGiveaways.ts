@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
 import { Giveaway, WinnerHistoryRecord } from "../models/types/giveaway.types";
-import { useAuthContext } from "../providers/AuthProvider";
+import { useAuthStore } from "./stores/auth.store";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHY useAuthStore() instead of useAuthContext():
+// useAuthContext() is a React context value that only updates when AuthProvider
+// re-renders. There is a timing window where profile can be stale/null even
+// though the Zustand store already holds a valid profile — causing drawWinner
+// to bail out silently with "no profile" before even calling the service.
+// useAuthStore() subscribes directly to Zustand and is always current.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type GiveawayStatusFilter =
   | "active"
@@ -36,7 +45,8 @@ export interface CurrentWinner {
 }
 
 export const useAdminGiveaways = () => {
-  const { profile } = useAuthContext();
+  // ── Auth: read from Zustand — never stale ─────────────────────────────────
+  const profile = useAuthStore((state) => state.profile);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<AdminTab>("giveaways");
@@ -65,6 +75,7 @@ export const useAdminGiveaways = () => {
 
   // Draw Modal state
   const [drawModalVisible, setDrawModalVisible] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const [winnerModalVisible, setWinnerModalVisible] = useState(false);
   const [selectedGiveaway, setSelectedGiveaway] =
     useState<AdminGiveaway | null>(null);
@@ -76,7 +87,7 @@ export const useAdminGiveaways = () => {
     phone: string;
   } | null>(null);
 
-  // Winner Details Modal state (for viewing winner + redraw)
+  // Winner Details Modal state
   const [winnerDetailsModalVisible, setWinnerDetailsModalVisible] =
     useState(false);
   const [currentWinner, setCurrentWinner] = useState<CurrentWinner | null>(
@@ -90,8 +101,9 @@ export const useAdminGiveaways = () => {
   const [redrawModalVisible, setRedrawModalVisible] = useState(false);
   const [redrawReason, setRedrawReason] = useState("");
   const [redrawing, setRedrawing] = useState(false);
+  const [redrawError, setRedrawError] = useState<string | null>(null);
 
-  // Load data
+  // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
       const [giveawaysData, statsData] = await Promise.all([
@@ -101,7 +113,6 @@ export const useAdminGiveaways = () => {
 
       setGiveaways(giveawaysData as AdminGiveaway[]);
 
-      // Calculate additional stats
       const totalGiveaways = giveawaysData.length;
       const awardedGiveaways = giveawaysData.filter(
         (g) => g.status === "awarded",
@@ -111,7 +122,6 @@ export const useAdminGiveaways = () => {
         0,
       );
 
-      // Calculate frequency
       let frequency = "Ongoing";
       if (awardedGiveaways.length >= 2) {
         const dates = awardedGiveaways
@@ -123,19 +133,13 @@ export const useAdminGiveaways = () => {
           const daySpan =
             (dates[dates.length - 1] - dates[0]) / (1000 * 60 * 60 * 24);
           const avgDays = daySpan / (dates.length - 1);
-
           if (avgDays <= 7) frequency = "Weekly";
           else if (avgDays <= 14) frequency = "Bi-weekly";
           else if (avgDays <= 35) frequency = "Monthly";
         }
       }
 
-      setStats({
-        ...statsData,
-        totalGiveaways,
-        totalAwarded,
-        frequency,
-      });
+      setStats({ ...statsData, totalGiveaways, totalAwarded, frequency });
     } catch (error) {
       console.error("Error loading giveaways:", error);
     } finally {
@@ -153,16 +157,14 @@ export const useAdminGiveaways = () => {
     loadData();
   }, [loadData]);
 
-  // Filter and sort giveaways
+  // ── Filter and sort ───────────────────────────────────────────────────────
   const filteredGiveaways = useMemo(() => {
     let result = [...giveaways];
 
-    // Status filter
     if (statusFilter !== "all") {
       result = result.filter((g) => g.status === statusFilter);
     }
 
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -172,7 +174,6 @@ export const useAdminGiveaways = () => {
       );
     }
 
-    // Sort
     switch (sortOption) {
       case "date":
         result.sort(
@@ -191,18 +192,16 @@ export const useAdminGiveaways = () => {
     return result;
   }, [giveaways, statusFilter, sortOption, searchQuery]);
 
-  // Status counts
-  const statusCounts = useMemo(() => {
-    return {
-      active: giveaways.filter((g) => g.status === "active").length,
-      ended: giveaways.filter((g) => g.status === "ended").length,
-      awarded: giveaways.filter((g) => g.status === "awarded").length,
-      archived: giveaways.filter((g) => g.status === "archived").length,
-      all: giveaways.length,
-    };
-  }, [giveaways]);
+  // ── Status counts ─────────────────────────────────────────────────────────
+  const statusCounts = useMemo(() => ({
+    active:   giveaways.filter((g) => g.status === "active").length,
+    ended:    giveaways.filter((g) => g.status === "ended").length,
+    awarded:  giveaways.filter((g) => g.status === "awarded").length,
+    archived: giveaways.filter((g) => g.status === "archived").length,
+    all:      giveaways.length,
+  }), [giveaways]);
 
-  // End giveaway
+  // ── End giveaway ──────────────────────────────────────────────────────────
   const handleEndGiveaway = useCallback(
     async (giveawayId: number): Promise<boolean> => {
       setProcessing(giveawayId);
@@ -212,15 +211,10 @@ export const useAdminGiveaways = () => {
           setGiveaways((prev) =>
             prev.map((g) =>
               g.id === giveawayId
-                ? {
-                    ...g,
-                    status: "ended" as const,
-                    ended_at: new Date().toISOString(),
-                  }
+                ? { ...g, status: "ended" as const, ended_at: new Date().toISOString() }
                 : g,
             ),
           );
-          // Update stats
           setStats((prev) => ({
             ...prev,
             activeCount: Math.max(0, prev.activeCount - 1),
@@ -238,24 +232,33 @@ export const useAdminGiveaways = () => {
     [],
   );
 
-  // Draw winner
+  // ── Draw winner ───────────────────────────────────────────────────────────
   const handleDrawWinner = useCallback(
     async (giveawayId: number): Promise<boolean> => {
-      if (!profile?.id_auto) return false;
+      // Read the live profile directly from Zustand at call time.
+      // This bypasses any stale React context snapshot.
+      const currentProfile = useAuthStore.getState().profile;
 
+      if (!currentProfile?.id_auto) {
+        setDrawError("You must be logged in to draw a winner.");
+        return false;
+      }
+
+      setDrawError(null);
       setProcessing(giveawayId);
+
       try {
         const result = await giveawayService.drawWinner(
           giveawayId,
-          profile.id_auto,
+          currentProfile.id_auto,
         );
 
         if (result.success && result.winner) {
           setDrawnWinner(result.winner);
           setDrawModalVisible(false);
+          setDrawError(null);
           setWinnerModalVisible(true);
 
-          // Update local state
           setGiveaways((prev) =>
             prev.map((g) =>
               g.id === giveawayId
@@ -273,20 +276,24 @@ export const useAdminGiveaways = () => {
 
           return true;
         } else {
-          console.error("Draw winner failed:", result.error);
+          const msg = result.error || "Failed to draw a winner. Please try again.";
+          console.error("Draw winner failed:", msg);
+          setDrawError(msg);
           return false;
         }
-      } catch (error) {
+      } catch (error: any) {
+        const msg = error?.message || "An unexpected error occurred.";
         console.error("Error drawing winner:", error);
+        setDrawError(msg);
         return false;
       } finally {
         setProcessing(null);
       }
     },
-    [profile?.id_auto],
+    [],
   );
 
-  // Archive giveaway
+  // ── Archive giveaway ──────────────────────────────────────────────────────
   const handleArchiveGiveaway = useCallback(
     async (giveawayId: number): Promise<boolean> => {
       setProcessing(giveawayId);
@@ -296,11 +303,7 @@ export const useAdminGiveaways = () => {
           setGiveaways((prev) =>
             prev.map((g) =>
               g.id === giveawayId
-                ? {
-                    ...g,
-                    status: "archived" as const,
-                    archived_at: new Date().toISOString(),
-                  }
+                ? { ...g, status: "archived" as const, archived_at: new Date().toISOString() }
                 : g,
             ),
           );
@@ -317,14 +320,13 @@ export const useAdminGiveaways = () => {
     [],
   );
 
-  // Restore giveaway
+  // ── Restore giveaway ──────────────────────────────────────────────────────
   const handleRestoreGiveaway = useCallback(
     async (giveawayId: number): Promise<boolean> => {
       setProcessing(giveawayId);
       try {
         const result = await giveawayService.restoreGiveaway(giveawayId);
         if (result.success) {
-          // Reload to get correct status
           await loadData();
           return true;
         }
@@ -339,15 +341,16 @@ export const useAdminGiveaways = () => {
     [loadData],
   );
 
-  // Open draw modal
+  // ── Draw modal ────────────────────────────────────────────────────────────
   const openDrawModal = useCallback((giveaway: AdminGiveaway) => {
     setSelectedGiveaway(giveaway);
+    setDrawError(null);
     setDrawModalVisible(true);
   }, []);
 
-  // Close modals
   const closeDrawModal = useCallback(() => {
     setDrawModalVisible(false);
+    setDrawError(null);
     setSelectedGiveaway(null);
   }, []);
 
@@ -357,11 +360,7 @@ export const useAdminGiveaways = () => {
     setSelectedGiveaway(null);
   }, []);
 
-  // ============================================
-  // WINNER DETAILS & REDRAW HANDLERS
-  // ============================================
-
-  // Open Winner Details Modal
+  // ── Winner Details & Redraw ───────────────────────────────────────────────
   const openWinnerDetailsModal = useCallback(
     async (giveaway: AdminGiveaway) => {
       setSelectedGiveaway(giveaway);
@@ -369,7 +368,6 @@ export const useAdminGiveaways = () => {
       setWinnerDetailsModalVisible(true);
 
       try {
-        // Fetch winner details, history, and eligible count in parallel
         const [winner, history, eligible] = await Promise.all([
           giveawayService.getCurrentWinner(giveaway.id),
           giveawayService.getWinnerHistory(giveaway.id),
@@ -388,7 +386,6 @@ export const useAdminGiveaways = () => {
     [],
   );
 
-  // Close Winner Details Modal
   const closeWinnerDetailsModal = useCallback(() => {
     setWinnerDetailsModalVisible(false);
     setSelectedGiveaway(null);
@@ -397,35 +394,37 @@ export const useAdminGiveaways = () => {
     setEligibleCount(0);
   }, []);
 
-  // Open Redraw Confirm Modal
   const openRedrawModal = useCallback(() => {
     setWinnerDetailsModalVisible(false);
     setRedrawReason("");
+    setRedrawError(null);
     setRedrawModalVisible(true);
   }, []);
 
-  // Close Redraw Confirm Modal
   const closeRedrawModal = useCallback(() => {
     setRedrawModalVisible(false);
     setRedrawReason("");
+    setRedrawError(null);
   }, []);
 
-  // Handle Redraw Winner
   const handleRedrawWinner = useCallback(async (): Promise<boolean> => {
-    if (!profile?.id_auto || !selectedGiveaway || !redrawReason.trim()) {
+    const currentProfile = useAuthStore.getState().profile;
+
+    if (!currentProfile?.id_auto || !selectedGiveaway || !redrawReason.trim()) {
       return false;
     }
 
     setRedrawing(true);
+    setRedrawError(null);
+
     try {
       const result = await giveawayService.redrawWinner(
         selectedGiveaway.id,
-        profile.id_auto,
+        currentProfile.id_auto,
         redrawReason.trim(),
       );
 
       if (result.success && result.winner) {
-        // Update local giveaway state
         setGiveaways((prev) =>
           prev.map((g) =>
             g.id === selectedGiveaway.id
@@ -440,7 +439,6 @@ export const useAdminGiveaways = () => {
           ),
         );
 
-        // Update selected giveaway
         setSelectedGiveaway((prev) =>
           prev
             ? {
@@ -453,7 +451,6 @@ export const useAdminGiveaways = () => {
             : null,
         );
 
-        // Update current winner
         setCurrentWinner({
           id: result.winner.id,
           user_id: result.winner.user_id,
@@ -463,7 +460,6 @@ export const useAdminGiveaways = () => {
           drawn_at: new Date().toISOString(),
         });
 
-        // Refresh history and eligible count
         const [history, eligible] = await Promise.all([
           giveawayService.getWinnerHistory(selectedGiveaway.id),
           giveawayService.getEligibleEntryCount(selectedGiveaway.id),
@@ -471,31 +467,31 @@ export const useAdminGiveaways = () => {
         setWinnerHistory(history);
         setEligibleCount(eligible);
 
-        // Close redraw modal
         closeRedrawModal();
-
         return true;
       } else {
-        console.error("Redraw failed:", result.error);
+        const msg = result.error || "Redraw failed. Please try again.";
+        console.error("Redraw failed:", msg);
+        setRedrawError(msg);
         return false;
       }
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || "An unexpected error occurred.";
       console.error("Error redrawing winner:", error);
+      setRedrawError(msg);
       return false;
     } finally {
       setRedrawing(false);
     }
-  }, [profile?.id_auto, selectedGiveaway, redrawReason, closeRedrawModal]);
+  }, [selectedGiveaway, redrawReason, closeRedrawModal]);
 
-  // Helper: get days remaining
+  // ── Helper ────────────────────────────────────────────────────────────────
   const getDaysRemaining = useCallback((endDate: string | null): string => {
     if (!endDate) return "No end date";
-
     const now = new Date();
     const end = new Date(endDate);
     const diffTime = end.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
     if (diffDays < 0) return "Ended";
     if (diffDays === 0) return "Ends today";
     if (diffDays === 1) return "Ends tomorrow";
@@ -527,6 +523,7 @@ export const useAdminGiveaways = () => {
 
     // Draw Modal state
     drawModalVisible,
+    drawError,
     winnerModalVisible,
     selectedGiveaway,
     drawnWinner,
@@ -546,6 +543,7 @@ export const useAdminGiveaways = () => {
     // Redraw Modal state
     redrawModalVisible,
     redrawReason,
+    redrawError,
     setRedrawReason,
     redrawing,
     openRedrawModal,

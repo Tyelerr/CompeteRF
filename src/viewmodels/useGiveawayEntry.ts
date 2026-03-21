@@ -5,7 +5,7 @@ import {
   GiveawayEntryForm,
   INITIAL_ENTRY_FORM,
 } from "../models/types/giveaway.types";
-import { useAuthContext } from "../providers/AuthProvider";
+import { useAuthStore } from "./stores/auth.store";
 
 interface ValidationErrors {
   name_as_on_id?: string;
@@ -16,7 +16,7 @@ interface ValidationErrors {
 }
 
 export function useGiveawayEntry(giveaway: Giveaway | null) {
-  const { profile } = useAuthContext();
+  const profile = useAuthStore((s) => s.profile);
 
   const [form, setForm] = useState<GiveawayEntryForm>(INITIAL_ENTRY_FORM);
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -24,32 +24,21 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  // Pre-fill email from profile if available
   useEffect(() => {
     if (profile?.email) {
-      setForm((prev) => ({
-        ...prev,
-        email: profile.email || "",
-      }));
+      setForm((prev) => ({ ...prev, email: profile.email || "" }));
     }
   }, [profile?.email]);
 
-  // Reset form when giveaway changes
   useEffect(() => {
-    setForm({
-      ...INITIAL_ENTRY_FORM,
-      email: profile?.email || "",
-    });
+    setForm({ ...INITIAL_ENTRY_FORM, email: profile?.email || "" });
     setErrors({});
     setSubmitError(null);
     setSubmitSuccess(false);
   }, [giveaway?.id, profile?.email]);
 
   const updateField = useCallback(
-    <K extends keyof GiveawayEntryForm>(
-      field: K,
-      value: GiveawayEntryForm[K],
-    ) => {
+    <K extends keyof GiveawayEntryForm>(field: K, value: GiveawayEntryForm[K]) => {
       setForm((prev) => ({ ...prev, [field]: value }));
       setErrors((prev) => ({ ...prev, [field]: undefined }));
       setSubmitError(null);
@@ -57,62 +46,42 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     [],
   );
 
-  // THE KEY FUNCTION FOR BIRTHDAY DROPDOWNS
   const updateBirthday = useCallback(
     (field: "month" | "day" | "year", value: string) => {
-      setForm((prev) => {
-        const newForm = {
-          ...prev,
-          birthday: { ...prev.birthday, [field]: value },
-        };
-        return newForm;
-      });
+      setForm((prev) => ({ ...prev, birthday: { ...prev.birthday, [field]: value } }));
       setErrors((prev) => ({ ...prev, birthday: undefined }));
     },
     [],
   );
 
   const toggleCheckbox = useCallback((field: keyof GiveawayEntryForm) => {
-    setForm((prev) => ({
-      ...prev,
-      [field]: !prev[field],
-    }));
+    setForm((prev) => ({ ...prev, [field]: !prev[field] }));
     setErrors((prev) => ({ ...prev, checkboxes: undefined }));
   }, []);
 
   const validate = useCallback((): boolean => {
     const newErrors: ValidationErrors = {};
 
-    // Name validation
     if (!form.name_as_on_id.trim()) {
       newErrors.name_as_on_id = "Full name is required";
     }
 
-    // Birthday validation
     const { month, day, year } = form.birthday;
     if (!month || !day || !year) {
       newErrors.birthday = "Complete birthday is required";
     } else {
-      const birthDate = new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-      );
+      const birthDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
       const dayDiff = today.getDate() - birthDate.getDate();
-
-      const actualAge =
-        monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
-
+      const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
       const minAge = giveaway?.min_age || 18;
       if (actualAge < minAge) {
         newErrors.birthday = `You must be at least ${minAge} years old to enter`;
       }
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!form.email.trim()) {
       newErrors.email = "Email is required";
@@ -120,7 +89,6 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
       newErrors.email = "Please enter a valid email address";
     }
 
-    // Phone validation
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (!form.phone.trim()) {
       newErrors.phone = "Phone number is required";
@@ -128,13 +96,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
       newErrors.phone = "Please enter a valid phone number";
     }
 
-    // Required checkboxes
-    if (
-      !form.confirmed_age ||
-      !form.agreed_to_rules ||
-      !form.agreed_to_privacy ||
-      !form.understood_one_entry
-    ) {
+    if (!form.confirmed_age || !form.agreed_to_rules || !form.agreed_to_privacy || !form.understood_one_entry) {
       newErrors.checkboxes = "You must agree to all required terms";
     }
 
@@ -146,9 +108,7 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     const { month, day, year } = form.birthday;
     return (
       form.name_as_on_id.trim() !== "" &&
-      month !== "" &&
-      day !== "" &&
-      year !== "" &&
+      month !== "" && day !== "" && year !== "" &&
       form.email.trim() !== "" &&
       form.phone.trim() !== "" &&
       form.confirmed_age &&
@@ -159,25 +119,22 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
   }, [form]);
 
   const submitEntry = useCallback(async (): Promise<boolean> => {
-    if (!giveaway || !profile?.id_auto) {
+    // getState() reads the Zustand store synchronously at call time —
+    // immune to any useCallback memoisation or context re-render lag.
+    const currentProfile = useAuthStore.getState().profile;
+
+    if (!giveaway || !currentProfile?.id_auto) {
       setSubmitError("Please log in to enter the giveaway");
       return false;
     }
 
-    if (!validate()) {
-      return false;
-    }
+    if (!validate()) return false;
 
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const result = await giveawayService.createEntry(
-        giveaway.id,
-        profile.id_auto,
-        form,
-      );
-
+      const result = await giveawayService.createEntry(giveaway.id, currentProfile.id_auto, form);
       if (result.success) {
         setSubmitSuccess(true);
         return true;
@@ -192,43 +149,28 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [giveaway, profile?.id_auto, form, validate]);
+  }, [giveaway, form, validate]);
 
   const resetForm = useCallback(() => {
-    setForm({
-      ...INITIAL_ENTRY_FORM,
-      email: profile?.email || "",
-    });
+    setForm({ ...INITIAL_ENTRY_FORM, email: profile?.email || "" });
     setErrors({});
     setSubmitError(null);
     setSubmitSuccess(false);
   }, [profile?.email]);
 
-  // Dropdown options
-  const monthOptions = useMemo(
-    () => [
-      { label: "Month", value: "" },
-      { label: "January", value: "1" },
-      { label: "February", value: "2" },
-      { label: "March", value: "3" },
-      { label: "April", value: "4" },
-      { label: "May", value: "5" },
-      { label: "June", value: "6" },
-      { label: "July", value: "7" },
-      { label: "August", value: "8" },
-      { label: "September", value: "9" },
-      { label: "October", value: "10" },
-      { label: "November", value: "11" },
-      { label: "December", value: "12" },
-    ],
-    [],
-  );
+  const monthOptions = useMemo(() => [
+    { label: "Month", value: "" },
+    { label: "January", value: "1" }, { label: "February", value: "2" },
+    { label: "March", value: "3" }, { label: "April", value: "4" },
+    { label: "May", value: "5" }, { label: "June", value: "6" },
+    { label: "July", value: "7" }, { label: "August", value: "8" },
+    { label: "September", value: "9" }, { label: "October", value: "10" },
+    { label: "November", value: "11" }, { label: "December", value: "12" },
+  ], []);
 
   const dayOptions = useMemo(() => {
     const days = [{ label: "Day", value: "" }];
-    for (let i = 1; i <= 31; i++) {
-      days.push({ label: String(i), value: String(i) });
-    }
+    for (let i = 1; i <= 31; i++) days.push({ label: String(i), value: String(i) });
     return days;
   }, []);
 
@@ -242,29 +184,11 @@ export function useGiveawayEntry(giveaway: Giveaway | null) {
   }, []);
 
   return {
-    // Form state
-    form,
-    errors,
-
-    // Actions
-    updateField,
-    updateBirthday, // This fixes the birthday dropdown
-    toggleCheckbox,
-    submitEntry,
-    resetForm,
-
-    // Status
-    isSubmitting,
-    isFormComplete,
-    submitError,
-    submitSuccess,
-
-    // Dropdown options
-    monthOptions,
-    dayOptions,
-    yearOptions,
-
-    // Giveaway data
+    form, errors,
+    updateField, updateBirthday, toggleCheckbox,
+    submitEntry, resetForm,
+    isSubmitting, isFormComplete, submitError, submitSuccess,
+    monthOptions, dayOptions, yearOptions,
     rulesText: giveaway?.rules_text || null,
     minAge: giveaway?.min_age || 18,
   };

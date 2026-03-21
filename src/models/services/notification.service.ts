@@ -28,7 +28,7 @@ Notifications.setNotificationHandler({
 });
 
 export const notificationService = {
-  // ── Push Token Management ──
+  // ── Push Token Management ──────────────────────────────────────────────────
 
   async getExpoPushToken(): Promise<string | null> {
     try {
@@ -73,6 +73,33 @@ export const notificationService = {
   },
 
   async registerPushToken(userId: string, token: string): Promise<void> {
+    // ─────────────────────────────────────────────────────────────────────
+    // CRITICAL: Remove this token from ALL other user accounts before
+    // registering it for the current user.
+    //
+    // WHY: The upsert conflict key is (user_id, token). Without this step,
+    // the same device token accumulates rows for every account that has
+    // ever logged in on this device. When a targeted push is sent to user A
+    // (e.g. "You Won!"), we fetch user A's token and push to it. But that
+    // same token string is also registered under user B, C, etc. — the
+    // physical device receives the push regardless of which account is
+    // currently "active", so everyone on the same device sees notifications
+    // meant only for a specific winner.
+    //
+    // Removing the token from other accounts first ensures one token = one
+    // owner at any given time, which is the correct invariant.
+    // ─────────────────────────────────────────────────────────────────────
+    const { error: removeError } = await supabase
+      .from("push_tokens")
+      .delete()
+      .eq("token", token)
+      .neq("user_id", userId);   // Delete rows for OTHER users only
+
+    if (removeError) {
+      // Non-fatal — log but proceed so registration still succeeds
+      console.warn("⚠️ Could not remove stale token from other accounts:", removeError);
+    }
+
     const deviceType: DeviceType = Platform.OS as DeviceType;
 
     const { error } = await supabase.from("push_tokens").upsert(
@@ -123,7 +150,7 @@ export const notificationService = {
     return data || [];
   },
 
-  // ── Expo Push API ──
+  // ── Expo Push API ──────────────────────────────────────────────────────────
 
   async sendPushBatch(
     tokens: string[],
@@ -193,7 +220,7 @@ export const notificationService = {
     return { sent: totalSent, failed: failedTokens };
   },
 
-  // ── Notification Preferences ──
+  // ── Notification Preferences ───────────────────────────────────────────────
 
   async getPreferences(userId: string): Promise<NotificationPreferences> {
     const { data, error } = await supabase
@@ -251,7 +278,7 @@ export const notificationService = {
     return prefs[category];
   },
 
-  // ── Permission Status ──
+  // ── Permission Status ──────────────────────────────────────────────────────
 
   async getPermissionStatus(): Promise<"granted" | "denied" | "undetermined"> {
     const { status } = await Notifications.getPermissionsAsync();

@@ -29,15 +29,16 @@ const COLORS = {
   darkGray: "#3A3A3C",
   red: "#FF453A",
   green: "#30D158",
+  amber: "#FF9F0A",
 };
 
 const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
 const FONT_SIZES = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
-// ============================================
-// OFFICIAL GIVEAWAY RULES
-// ============================================
-const OFFICIAL_RULES_SECTIONS = [
+// ─────────────────────────────────────────────────────────────────────────────
+// Default Official Rules — always shown first
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_RULES_SECTIONS = [
   {
     heading: "",
     body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law.",
@@ -48,7 +49,7 @@ const OFFICIAL_RULES_SECTIONS = [
   },
   {
     heading: "2. How to Enter",
-    body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name (as it appears on your government-issued ID), date of birth, email address, and phone number. All information must be accurate and truthful. Limit one (1) entry per person per giveaway. Multiple entries, duplicate accounts, or fraudulent information will result in disqualification. Entry is free and open to all eligible participants.",
+    body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name (as it appears on your government-issued ID), date of birth, email address, and phone number. All information must be accurate and truthful. Limit one (1) entry per person per giveaway. Multiple entries, duplicate accounts, or fraudulent information will result in disqualification.",
   },
   {
     heading: "3. Entry Period",
@@ -72,7 +73,7 @@ const OFFICIAL_RULES_SECTIONS = [
   },
   {
     heading: "8. General Conditions",
-    body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason. Compete is not responsible for any technical failures, errors, or other issues that may affect entry submissions. Entrants agree to release Compete, its officers, directors, employees, and agents from any liability arising from participation in the giveaway or acceptance of the prize.",
+    body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason.",
   },
   {
     heading: "9. Privacy",
@@ -84,56 +85,52 @@ const OFFICIAL_RULES_SECTIONS = [
   },
   {
     heading: "11. Apple Disclaimer",
-    body: "This giveaway is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or any of its subsidiaries or affiliates. By entering, you acknowledge and agree that Apple has no responsibility or liability whatsoever in connection with this giveaway, including but not limited to the administration of the giveaway, the selection of winners, or the provision of prizes. Any questions, comments, or complaints regarding the giveaway should be directed to Compete, not Apple.",
+    body: "This giveaway is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or any of its subsidiaries or affiliates. Any questions, comments, or complaints regarding the giveaway should be directed to Compete, not Apple.",
   },
 ];
 
-// ============================================
-// PRIVACY POLICY SUMMARY
-// ============================================
 const PRIVACY_SECTIONS = [
   {
     heading: "What We Collect",
-    body: "When you enter a giveaway on Compete, we collect the personal information you provide in the entry form: your full legal name, date of birth, email address, and phone number. This information is required for giveaway administration and winner verification.",
+    body: "When you enter a giveaway on Compete, we collect the personal information you provide in the entry form: your full legal name, date of birth, email address, and phone number.",
   },
   {
     heading: "How We Use Your Information",
-    body: "Your giveaway entry information is used solely for: verifying your eligibility, administering the giveaway drawing, contacting the winner, and fulfilling the prize. We may also use your email to send you giveaway-related updates if you have opted in to notifications.",
+    body: "Your giveaway entry information is used solely for: verifying your eligibility, administering the giveaway drawing, contacting the winner, and fulfilling the prize.",
   },
   {
     heading: "Information Sharing",
-    body: "We do not sell, rent, or trade your personal information to third parties. Your giveaway entry data may be shared with prize sponsors solely for the purpose of prize fulfillment. We may disclose information if required by law.",
+    body: "We do not sell, rent, or trade your personal information to third parties. Your giveaway entry data may be shared with prize sponsors solely for the purpose of prize fulfillment.",
   },
   {
     heading: "Data Retention",
-    body: "Giveaway entry data is retained for a reasonable period after the giveaway concludes for record-keeping and compliance purposes. You may request deletion of your data by contacting support@thecompeteapp.com.",
+    body: "Giveaway entry data is retained for a reasonable period after the giveaway concludes. You may request deletion of your data by contacting support@thecompeteapp.com.",
   },
   {
     heading: "Your Rights",
-    body: "You have the right to access, correct, or delete your personal information at any time. To exercise these rights, contact us at support@thecompeteapp.com. For the full Compete Privacy Policy, visit the Privacy Policy page in the app settings.",
+    body: "You have the right to access, correct, or delete your personal information at any time. Contact us at support@thecompeteapp.com.",
   },
   {
     heading: "Security",
-    body: "We implement reasonable technical and organizational measures to protect your personal information from unauthorized access, alteration, or destruction. However, no method of transmission or storage is 100% secure.",
-  },
-  {
-    heading: "Contact",
-    body: "If you have questions about how your data is handled in connection with giveaways, please contact us at support@thecompeteapp.com.",
+    body: "We implement reasonable technical and organizational measures to protect your personal information from unauthorized access, alteration, or destruction.",
   },
 ];
 
-// ============================================
-// LEGAL VIEWER SUB-MODAL
-// ============================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Legal viewer sub-modal
+// Builds final sections = default rules + optional custom rules appended
+// ─────────────────────────────────────────────────────────────────────────────
 function LegalViewerModal({
   visible,
   title,
   sections,
+  customRulesText,
   onClose,
 }: {
   visible: boolean;
   title: string;
   sections: { heading: string; body: string }[];
+  customRulesText?: string | null;
   onClose: () => void;
 }) {
   if (!visible) return null;
@@ -154,12 +151,23 @@ function LegalViewerModal({
         showsVerticalScrollIndicator
         onScrollBeginDrag={Keyboard.dismiss}
       >
+        {/* Default sections */}
         {sections.map((section, index) => (
           <View key={index} style={legalStyles.section}>
-            <Text style={legalStyles.heading}>{section.heading}</Text>
+            {section.heading ? (
+              <Text style={legalStyles.heading}>{section.heading}</Text>
+            ) : null}
             <Text style={legalStyles.body}>{section.body}</Text>
           </View>
         ))}
+
+        {/* Append custom rules below default if present */}
+        {customRulesText ? (
+          <View style={legalStyles.customSection}>
+            <Text style={legalStyles.customHeading}>Additional Rules</Text>
+            <Text style={legalStyles.body}>{customRulesText}</Text>
+          </View>
+        ) : null}
       </ScrollView>
       <View style={legalStyles.bottomBar}>
         <Pressable style={legalStyles.acceptButton} onPress={onClose}>
@@ -172,11 +180,7 @@ function LegalViewerModal({
   if (isWeb) {
     return (
       <>
-        <TouchableOpacity
-          style={legalStyles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        <TouchableOpacity style={legalStyles.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={legalStyles.dialogWrap} pointerEvents="box-none">
           <View style={legalStyles.dialog}>{content}</View>
         </View>
@@ -195,130 +199,72 @@ function LegalViewerModal({
 }
 
 const legalStyles = StyleSheet.create({
-  // Web
   backdrop: {
-    position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    zIndex: 3000,
+    position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)", zIndex: 3000,
   },
   dialogWrap: {
-    position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 3001,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+    position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 3001, alignItems: "center", justifyContent: "center", padding: 24,
   },
   dialog: {
-    width: 640,
-    maxWidth: "92%" as any,
-    maxHeight: "88vh" as any,
-    backgroundColor: "#0F1117",
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    width: 640, maxWidth: "92%" as any, maxHeight: "88vh" as any,
+    backgroundColor: "#0F1117", borderRadius: RADIUS.xl,
+    borderWidth: 1, borderColor: COLORS.cardBorder,
     overflow: "hidden" as any,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5, shadowRadius: 24,
   },
-  // Mobile
   mobileBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: "rgba(0,0,0,0.7)",
   },
-  mobileCardWrapper: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
+  mobileCardWrapper: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   mobileCard: {
-    backgroundColor: "#0F1117",
-    borderRadius: 20,
-    width: "100%",
-    maxWidth: 480,
-    height: "80%" as any,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    overflow: "hidden",
+    backgroundColor: "#0F1117", borderRadius: 20,
+    width: "100%", maxWidth: 480, height: "82%" as any,
+    borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden",
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-  },
+  closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
+  headerTitle: { color: COLORS.white, fontSize: FONT_SIZES.lg, fontWeight: "700" },
   divider: { height: 1, backgroundColor: COLORS.cardBorder },
   scrollView: { flex: 1 },
   scrollContent: { padding: SPACING.xl, paddingBottom: SPACING.lg },
   section: { marginBottom: 20 },
-  heading: {
-    color: COLORS.blue,
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
+  heading: { color: COLORS.blue, fontSize: 16, fontWeight: "600", marginBottom: 8 },
   body: { color: "#D1D5DB", fontSize: 14, lineHeight: 22 },
+  customSection: {
+    marginTop: 8, marginBottom: 20,
+    paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORS.cardBorder,
+  },
+  customHeading: { color: COLORS.amber, fontSize: 16, fontWeight: "600", marginBottom: 8 },
   bottomBar: {
     padding: SPACING.lg,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.cardBorder,
+    borderTopWidth: 1, borderTopColor: COLORS.cardBorder,
   },
   acceptButton: {
-    paddingVertical: 14,
-    borderRadius: 10,
-    backgroundColor: COLORS.blue,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 14, borderRadius: 10,
+    backgroundColor: COLORS.blue, alignItems: "center", justifyContent: "center",
   },
   acceptButtonText: { color: COLORS.white, fontSize: 16, fontWeight: "600" },
 });
 
-// ============================================
-// MAIN ENTRY MODAL
-// ============================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Entry Modal
+// ─────────────────────────────────────────────────────────────────────────────
 interface Props {
   visible: boolean;
   giveaway: Giveaway | null;
-  userId: number;
   onClose: () => void;
   onSuccess: (giveawayId: number) => void;
 }
 
-export function GiveawayEntryModal({
-  visible,
-  giveaway,
-  userId,
-  onClose,
-  onSuccess,
-}: Props) {
+export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Props) {
   const vm = useGiveawayEntry(giveaway);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = React.useState(false);
@@ -338,6 +284,20 @@ export function GiveawayEntryModal({
     vm.resetForm();
   };
 
+  // When user taps "official rules" link — open modal then auto-check when closed
+  const handleRulesLinkPress = () => {
+    Keyboard.dismiss();
+    setShowRulesModal(true);
+  };
+
+  const handleRulesModalClose = () => {
+    setShowRulesModal(false);
+    // Auto-check the rules checkbox when user views and closes the rules
+    if (!vm.form.agreed_to_rules) {
+      vm.toggleCheckbox("agreed_to_rules");
+    }
+  };
+
   if (!visible) return null;
 
   const formContent = (
@@ -352,11 +312,6 @@ export function GiveawayEntryModal({
       </View>
       <View style={styles.divider} />
 
-      {/*
-        onScrollBeginDrag — fires the instant the user starts a swipe in
-        any direction, dismissing the keyboard before the scroll moves.
-        Works for both up and down swipes.
-      */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -441,19 +396,23 @@ export function GiveawayEntryModal({
             checked={vm.form.confirmed_age}
             onToggle={() => vm.toggleCheckbox("confirmed_age")}
           />
+          {/* Tapping the "official rules" link opens the modal and auto-checks */}
           <CheckboxRowWithLink
             prefix="I agree to the "
             linkText="official rules"
             checked={vm.form.agreed_to_rules}
             onToggle={() => vm.toggleCheckbox("agreed_to_rules")}
-            onLinkPress={() => setShowRulesModal(true)}
+            onLinkPress={handleRulesLinkPress}
           />
           <CheckboxRowWithLink
             prefix="I agree to the "
             linkText="privacy policy"
             checked={vm.form.agreed_to_privacy}
             onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
-            onLinkPress={() => setShowPrivacyModal(true)}
+            onLinkPress={() => {
+              Keyboard.dismiss();
+              setShowPrivacyModal(true);
+            }}
           />
           <CheckboxRow
             label="I understand this is one entry per person"
@@ -474,8 +433,7 @@ export function GiveawayEntryModal({
         <Pressable
           style={[
             styles.submitButton,
-            (!vm.isFormComplete || vm.isSubmitting) &&
-              styles.submitButtonDisabled,
+            (!vm.isFormComplete || vm.isSubmitting) && styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
           disabled={!vm.isFormComplete || vm.isSubmitting}
@@ -491,23 +449,20 @@ export function GiveawayEntryModal({
     </>
   );
 
-  // ── Web: fixed centered dialog ────────────────────────────────────────────
   if (isWeb) {
     return (
       <>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={handleClose}
-        />
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
         <View style={styles.dialogWrap} pointerEvents="box-none">
           <View style={styles.dialog}>{formContent}</View>
         </View>
+        {/* Official rules = default + custom appended */}
         <LegalViewerModal
           visible={showRulesModal}
           title="Official Giveaway Rules"
-          sections={OFFICIAL_RULES_SECTIONS}
-          onClose={() => setShowRulesModal(false)}
+          sections={DEFAULT_RULES_SECTIONS}
+          customRulesText={giveaway?.rules_text}
+          onClose={handleRulesModalClose}
         />
         <LegalViewerModal
           visible={showPrivacyModal}
@@ -519,7 +474,6 @@ export function GiveawayEntryModal({
     );
   }
 
-  // ── Mobile: centered floating card ───────────────────────────────────────
   return (
     <Modal visible={visible} animationType="fade" transparent>
       <Pressable style={styles.mobileBackdrop} onPress={handleClose} />
@@ -529,8 +483,9 @@ export function GiveawayEntryModal({
       <LegalViewerModal
         visible={showRulesModal}
         title="Official Giveaway Rules"
-        sections={OFFICIAL_RULES_SECTIONS}
-        onClose={() => setShowRulesModal(false)}
+        sections={DEFAULT_RULES_SECTIONS}
+        customRulesText={giveaway?.rules_text}
+        onClose={handleRulesModalClose}
       />
       <LegalViewerModal
         visible={showPrivacyModal}
@@ -542,15 +497,11 @@ export function GiveawayEntryModal({
   );
 }
 
-// ============================================
-// DROPDOWN
-// ============================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Dropdown (local)
+// ─────────────────────────────────────────────────────────────────────────────
 function Dropdown({
-  options,
-  value,
-  onSelect,
-  placeholder,
-  flex = 1,
+  options, value, onSelect, placeholder, flex = 1,
 }: {
   options: { label: string; value: string }[];
   value: string;
@@ -559,47 +510,29 @@ function Dropdown({
   flex?: number;
 }) {
   const [open, setOpen] = React.useState(false);
-  const selectedLabel =
-    options.find((o) => o.value === value)?.label || placeholder;
+  const selectedLabel = options.find((o) => o.value === value)?.label || placeholder;
 
-  // Web: native <select>
   if (isWeb) {
     return (
       <View style={{ flex }}>
         <select
           value={value}
           onChange={(e) => onSelect(e.target.value)}
-          style={
-            {
-              flex: 1,
-              backgroundColor: COLORS.card,
-              color: value ? COLORS.white : COLORS.gray,
-              fontSize: 15,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: COLORS.cardBorder,
-              padding: "12px 14px",
-              width: "100%",
-              appearance: "auto",
-              cursor: "pointer",
-              outline: "none",
-            } as any
-          }
+          style={{
+            flex: 1, backgroundColor: COLORS.card,
+            color: value ? COLORS.white : COLORS.gray,
+            fontSize: 15, borderRadius: 10, borderWidth: 1,
+            borderColor: COLORS.cardBorder, padding: "12px 14px",
+            width: "100%", appearance: "auto", cursor: "pointer", outline: "none",
+          } as any}
         >
-          <option value="" disabled style={{ color: COLORS.gray }}>
-            {placeholder}
-          </option>
-          {options
-            .filter((o) => o.value !== "")
-            .map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                style={{ color: COLORS.white, backgroundColor: COLORS.card }}
-              >
-                {option.label}
-              </option>
-            ))}
+          <option value="" disabled style={{ color: COLORS.gray }}>{placeholder}</option>
+          {options.filter((o) => o.value !== "").map((option) => (
+            <option key={option.value} value={option.value}
+              style={{ color: COLORS.white, backgroundColor: COLORS.card }}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </View>
     );
@@ -609,59 +542,29 @@ function Dropdown({
     <View style={{ flex }}>
       <Pressable
         style={styles.dropdownButton}
-        onPress={() => {
-          Keyboard.dismiss();
-          setOpen(!open);
-        }}
+        onPress={() => { Keyboard.dismiss(); setOpen(!open); }}
       >
-        <Text
-          style={[styles.dropdownText, !value && styles.dropdownPlaceholder]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.dropdownText, !value && styles.dropdownPlaceholder]} numberOfLines={1}>
           {selectedLabel}
         </Text>
-        <Ionicons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={14}
-          color={COLORS.gray}
-        />
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color={COLORS.gray} />
       </Pressable>
       {open && (
         <Modal transparent animationType="fade">
-          <Pressable
-            style={styles.dropdownOverlay}
-            onPress={() => setOpen(false)}
-          >
+          <Pressable style={styles.dropdownOverlay} onPress={() => setOpen(false)}>
             <View style={styles.dropdownList}>
-              <ScrollView
-                style={{ maxHeight: 250 }}
-                showsVerticalScrollIndicator
-              >
-                {options
-                  .filter((o) => o.value !== "")
-                  .map((option) => (
-                    <Pressable
-                      key={option.value}
-                      style={[
-                        styles.dropdownOption,
-                        option.value === value && styles.dropdownOptionActive,
-                      ]}
-                      onPress={() => {
-                        onSelect(option.value);
-                        setOpen(false);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownOptionText,
-                          option.value === value &&
-                            styles.dropdownOptionTextActive,
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  ))}
+              <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator>
+                {options.filter((o) => o.value !== "").map((option) => (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.dropdownOption, option.value === value && styles.dropdownOptionActive]}
+                    onPress={() => { onSelect(option.value); setOpen(false); }}
+                  >
+                    <Text style={[styles.dropdownOptionText, option.value === value && styles.dropdownOptionTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                ))}
               </ScrollView>
             </View>
           </Pressable>
@@ -671,30 +574,14 @@ function Dropdown({
   );
 }
 
-// ============================================
-// CHECKBOX COMPONENTS
-// ============================================
-function CheckboxRow({
-  label,
-  checked,
-  onToggle,
-}: {
-  label: string;
-  checked: boolean;
-  onToggle: () => void;
-}) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkbox components
+// ─────────────────────────────────────────────────────────────────────────────
+function CheckboxRow({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
   return (
-    <Pressable
-      style={styles.checkboxRow}
-      onPress={() => {
-        Keyboard.dismiss();
-        onToggle();
-      }}
-    >
+    <Pressable style={styles.checkboxRow} onPress={() => { Keyboard.dismiss(); onToggle(); }}>
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-        {checked && (
-          <Ionicons name="checkmark" size={14} color={COLORS.white} />
-        )}
+        {checked && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
       </View>
       <Text style={styles.checkboxLabel}>{label}</Text>
     </Pressable>
@@ -702,201 +589,100 @@ function CheckboxRow({
 }
 
 function CheckboxRowWithLink({
-  prefix,
-  linkText,
-  checked,
-  onToggle,
-  onLinkPress,
+  prefix, linkText, checked, onToggle, onLinkPress,
 }: {
-  prefix: string;
-  linkText: string;
-  checked: boolean;
-  onToggle: () => void;
-  onLinkPress: () => void;
+  prefix: string; linkText: string; checked: boolean;
+  onToggle: () => void; onLinkPress: () => void;
 }) {
   return (
     <View style={styles.checkboxRow}>
-      <Pressable
-        onPress={() => {
-          Keyboard.dismiss();
-          onToggle();
-        }}
-      >
+      <Pressable onPress={() => { Keyboard.dismiss(); onToggle(); }}>
         <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-          {checked && (
-            <Ionicons name="checkmark" size={14} color={COLORS.white} />
-          )}
+          {checked && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
         </View>
       </Pressable>
       <Text style={styles.checkboxLabel}>
         {prefix}
-        <Text
-          style={styles.linkText}
-          onPress={() => {
-            Keyboard.dismiss();
-            onLinkPress();
-          }}
-        >
-          {linkText}
-        </Text>
+        <Text style={styles.linkText} onPress={onLinkPress}>{linkText}</Text>
       </Text>
     </View>
   );
 }
 
-// ============================================
-// STYLES
-// ============================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // ── Web ───────────────────────────────────────────────────────────────────
   backdrop: {
-    position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    zIndex: 2000,
+    position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.75)", zIndex: 2000,
   },
   dialogWrap: {
-    position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 2001,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+    position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24,
   },
   dialog: {
-    width: 640,
-    maxWidth: "92%" as any,
-    maxHeight: "90vh" as any,
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    width: 640, maxWidth: "92%" as any, maxHeight: "90vh" as any,
+    backgroundColor: COLORS.background, borderRadius: RADIUS.xl,
+    borderWidth: 1, borderColor: COLORS.cardBorder,
     overflow: "hidden" as any,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5, shadowRadius: 24,
   },
-
-  // ── Mobile ────────────────────────────────────────────────────────────────
   mobileBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
-  mobileCardWrapper: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
+  mobileCardWrapper: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
   mobileCard: {
-    width: "100%",
-    maxWidth: 480,
-    height: "78%" as any,
-    backgroundColor: COLORS.background,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
+    width: "100%", maxWidth: 480, height: "78%" as any,
+    backgroundColor: COLORS.background, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5, shadowRadius: 24,
   },
-
-  // ── Shared chrome ─────────────────────────────────────────────────────────
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.md,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-  },
+  closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
+  headerTitle: { color: COLORS.white, fontSize: FONT_SIZES.lg, fontWeight: "700" },
   divider: { height: 1, backgroundColor: COLORS.cardBorder },
   scrollView: { flex: 1 },
-  scrollContent: {
-    padding: SPACING.xl,
-    paddingBottom: SPACING.lg,
-    flexGrow: 1,
-  },
+  scrollContent: { padding: SPACING.xl, paddingBottom: SPACING.lg, flexGrow: 1 },
   giveawayName: {
-    color: COLORS.blue,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: SPACING.xl,
+    color: COLORS.blue, fontSize: FONT_SIZES.lg, fontWeight: "600",
+    textAlign: "center", marginBottom: SPACING.xl,
   },
   label: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    marginBottom: SPACING.sm,
-    marginTop: SPACING.lg,
+    color: COLORS.white, fontSize: FONT_SIZES.md, fontWeight: "600",
+    marginBottom: SPACING.sm, marginTop: SPACING.lg,
   },
   input: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    padding: SPACING.lg,
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.card, borderRadius: 10, padding: SPACING.lg,
+    color: COLORS.white, fontSize: FONT_SIZES.md,
+    borderWidth: 1, borderColor: COLORS.cardBorder,
   },
   birthdayRow: { flexDirection: "row", gap: SPACING.sm },
   dropdownButton: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    backgroundColor: COLORS.card, borderRadius: 10, padding: SPACING.lg,
+    borderWidth: 1, borderColor: COLORS.cardBorder,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
   },
   dropdownText: { color: COLORS.white, fontSize: FONT_SIZES.sm, flex: 1 },
   dropdownPlaceholder: { color: COLORS.gray },
   dropdownOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
+    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center", alignItems: "center",
   },
   dropdownList: {
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    width: "80%",
-    maxHeight: 300,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    overflow: "hidden",
+    backgroundColor: COLORS.card, borderRadius: 12,
+    width: "80%", maxHeight: 300,
+    borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden",
   },
   dropdownOption: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.cardBorder,
+    paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg,
+    borderBottomWidth: 1, borderBottomColor: COLORS.cardBorder,
   },
   dropdownOptionActive: { backgroundColor: COLORS.blue },
   dropdownOptionText: { color: COLORS.white, fontSize: FONT_SIZES.md },
@@ -904,67 +690,30 @@ const styles = StyleSheet.create({
   checkboxSection: { marginTop: SPACING.xl, gap: SPACING.md },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: SPACING.md },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: COLORS.gray,
-    justifyContent: "center",
-    alignItems: "center",
+    width: 24, height: 24, borderRadius: 6,
+    borderWidth: 2, borderColor: COLORS.gray,
+    justifyContent: "center", alignItems: "center",
   },
   checkboxChecked: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
   checkboxLabel: { color: COLORS.lightGray, fontSize: FONT_SIZES.sm, flex: 1 },
-  linkText: {
-    color: COLORS.blue,
-    textDecorationLine: "underline",
-    fontSize: FONT_SIZES.sm,
-  },
-  errorField: {
-    color: COLORS.red,
-    fontSize: FONT_SIZES.xs,
-    marginTop: SPACING.xs,
-  },
-  errorText: {
-    color: COLORS.red,
-    fontSize: FONT_SIZES.sm,
-    marginTop: SPACING.md,
-    textAlign: "center",
-  },
-
-  // Bottom buttons
+  linkText: { color: COLORS.blue, textDecorationLine: "underline", fontSize: FONT_SIZES.sm },
+  errorField: { color: COLORS.red, fontSize: FONT_SIZES.xs, marginTop: SPACING.xs },
+  errorText: { color: COLORS.red, fontSize: FONT_SIZES.sm, marginTop: SPACING.md, textAlign: "center" },
   bottomBar: {
-    flexDirection: "row",
-    padding: SPACING.lg,
-    gap: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.cardBorder,
+    flexDirection: "row", padding: SPACING.lg, gap: SPACING.md,
+    borderTopWidth: 1, borderTopColor: COLORS.cardBorder,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.lg,
   },
   submitButton: {
-    flex: 1,
-    backgroundColor: COLORS.blue,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: "center",
+    flex: 1, backgroundColor: COLORS.blue, borderRadius: 12,
+    paddingVertical: SPACING.lg, alignItems: "center",
   },
   submitButtonDisabled: { opacity: 0.5 },
-  submitButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-  },
+  submitButtonText: { color: COLORS.white, fontSize: FONT_SIZES.md, fontWeight: "700" },
   cancelButton: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    flex: 1, backgroundColor: COLORS.card, borderRadius: 12,
+    paddingVertical: SPACING.lg, alignItems: "center",
+    borderWidth: 1, borderColor: COLORS.cardBorder,
   },
-  cancelButtonText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-  },
+  cancelButtonText: { color: COLORS.white, fontSize: FONT_SIZES.md, fontWeight: "600" },
 });

@@ -44,6 +44,52 @@ export const giveawayService = {
     return giveawaysWithCounts;
   },
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Returns active giveaways first (sorted by end_date asc), then the 10
+  // most recently ended/awarded so users can see "Drawing Soon" / "Winner
+  // Drawn" states without the card vanishing the moment a giveaway closes.
+  // ─────────────────────────────────────────────────────────────────────────
+  async getVisibleGiveaways(): Promise<Giveaway[]> {
+    const now = new Date().toISOString();
+
+    const [activeResult, endedResult] = await Promise.all([
+      supabase
+        .from("giveaways")
+        .select("*")
+        .eq("status", "active")
+        .or(`end_date.is.null,end_date.gt.${now}`)
+        .order("end_date", { ascending: true }),
+      supabase
+        .from("giveaways")
+        .select("*")
+        .in("status", ["ended", "awarded"])
+        .order("ended_at", { ascending: false })
+        .limit(10),
+    ]);
+
+    if (activeResult.error) {
+      console.error("Error fetching active giveaways:", activeResult.error);
+      throw activeResult.error;
+    }
+
+    const allData = [
+      ...(activeResult.data || []),
+      ...(endedResult.data || []),
+    ];
+
+    const giveawaysWithCounts = await Promise.all(
+      allData.map(async (g) => {
+        const { count } = await supabase
+          .from("giveaway_entries")
+          .select("*", { count: "exact", head: true })
+          .eq("giveaway_id", g.id);
+        return { ...g, entry_count: count || 0 };
+      }),
+    );
+
+    return giveawaysWithCounts;
+  },
+
   async getGiveawayById(id: number): Promise<Giveaway | null> {
     const { data, error } = await supabase
       .from("giveaways")
@@ -331,11 +377,11 @@ export const giveawayService = {
     }
 
     const prizeStr =
-      giveaway.prize_value > 0 ? ` – $${giveaway.prize_value} value!` : "";
+      giveaway.prize_value > 0 ? ` — $${giveaway.prize_value} value!` : "";
     notificationDispatcher
       .sendToAllUsers(
         "giveaway_update",
-        "?? New Giveaway!",
+        "🎁 New Giveaway!",
         `${giveaway.name.trim()}${prizeStr} Enter now for a chance to win!`,
         {
           giveaway_id: data.id,
@@ -344,7 +390,7 @@ export const giveawayService = {
         },
       )
       .catch((err) =>
-        console.error("?? Error sending new giveaway notifications:", err),
+        console.error("Error sending new giveaway notifications:", err),
       );
 
     return { success: true, data };
@@ -489,7 +535,7 @@ export const giveawayService = {
       .send({
         category: "giveaway_update",
         recipientIdAutos: [winnerEntry.user_id],
-        title: "?? You Won!",
+        title: "🏆 You Won!",
         body: `Congratulations! You won ${giveawayName}!`,
         data: {
           giveaway_id: giveawayId,
@@ -498,7 +544,7 @@ export const giveawayService = {
         },
       })
       .catch((err) =>
-        console.error("?? Error sending winner notification:", err),
+        console.error("Error sending winner notification:", err),
       );
 
     const otherEntrantIds = entries
@@ -511,7 +557,7 @@ export const giveawayService = {
         .send({
           category: "giveaway_update",
           recipientIdAutos: uniqueOtherIds,
-          title: "?? Giveaway Results",
+          title: "🎁 Giveaway Results",
           body: `The winner of ${giveawayName} has been drawn. Stay tuned for the next one!`,
           data: {
             giveaway_id: giveawayId,
@@ -520,7 +566,7 @@ export const giveawayService = {
           },
         })
         .catch((err) =>
-          console.error("?? Error sending entrant notifications:", err),
+          console.error("Error sending entrant notifications:", err),
         );
     }
 
@@ -894,7 +940,7 @@ export const giveawayService = {
       .send({
         category: "giveaway_update",
         recipientIdAutos: [newWinnerEntry.user_id],
-        title: "?? You Won!",
+        title: "🏆 You Won!",
         body: `Congratulations! You won ${giveawayName}!`,
         data: {
           giveaway_id: giveawayId,
@@ -903,7 +949,7 @@ export const giveawayService = {
         },
       })
       .catch((err) =>
-        console.error("?? Error sending redraw winner notification:", err),
+        console.error("Error sending redraw winner notification:", err),
       );
 
     return {
@@ -918,5 +964,3 @@ export const giveawayService = {
     };
   },
 };
-
-

@@ -8,7 +8,11 @@ import { useAuthContext } from "../providers/AuthProvider";
 export function useGiveaways() {
   const { profile } = useAuthContext();
 
+  // Active giveaways — shown with "Enter Now" CTA
   const [giveaways, setGiveaways] = useState<Giveaway[]>([]);
+  // Ended / awarded — shown with muted "Drawing Soon" / "Winner Drawn" state
+  const [endedGiveaways, setEndedGiveaways] = useState<Giveaway[]>([]);
+
   const [stats, setStats] = useState<GiveawayStats>({
     completedCount: 0,
     totalValueGiven: 0,
@@ -26,12 +30,20 @@ export function useGiveaways() {
     try {
       setError(null);
 
-      const [giveawaysData, statsData] = await Promise.all([
-        giveawayService.getActiveGiveaways(),
+      // getVisibleGiveaways returns active first, then recently ended/awarded.
+      // getGiveawayStats is a separate lightweight query (no entry counts needed).
+      const [allVisible, statsData] = await Promise.all([
+        giveawayService.getVisibleGiveaways(),
         giveawayService.getGiveawayStats(),
       ]);
 
-      setGiveaways(giveawaysData);
+      // Split at the VM level so views don't need to know about status values
+      setGiveaways(allVisible.filter((g) => g.status === "active"));
+      setEndedGiveaways(
+        allVisible.filter(
+          (g) => g.status === "ended" || g.status === "awarded",
+        ),
+      );
       setStats(statsData);
 
       if (profile?.id_auto) {
@@ -97,6 +109,7 @@ export function useGiveaways() {
 
   return {
     giveaways,
+    endedGiveaways,
     stats,
     loading,
     refreshing,
