@@ -24,6 +24,7 @@ import { Loading } from "../common/loading";
 import ReportModal from "../common/ReportModal";
 
 interface TournamentDetailModalProps {
+  onReport?: (contentType: any, contentId: string) => void;
   id: string | null;
   visible: boolean;
   onClose: () => void;
@@ -753,5 +754,8 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+
+
 
 

@@ -1,4 +1,4 @@
-// ─── Bulk Import Service ─────────────────────────────────────────────────────
+﻿// â”€â”€â”€ Bulk Import Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // src/models/services/bulk-import.service.ts
 
 import { supabase } from "../../lib/supabase";
@@ -11,7 +11,7 @@ import {
 } from "../types/bulk-import.types";
 import { THUMBNAIL_OPTIONS } from "../../utils/tournament-form-data";
 
-// ─── Image Upload ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Image Upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Returns true if the thumbnail value looks like a local image filename
@@ -30,7 +30,7 @@ async function uploadTournamentImage(
   localUri: string,
   filename: string,
 ): Promise<string> {
-  // Read the file as a blob via fetch — works on both mobile and web
+  // Read the file as a blob via fetch â€” works on both mobile and web
   const response = await fetch(localUri);
   if (!response.ok) {
     throw new Error(`Failed to read image file: ${filename}`);
@@ -69,7 +69,7 @@ async function uploadTournamentImage(
   return data.publicUrl;
 }
 
-// ─── CSV Parsing ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ CSV Parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Parse a CSV string into an array of BulkTournamentRow objects.
@@ -199,7 +199,7 @@ function mapRowToObject(
   };
 }
 
-// ─── Validation ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Validate all parsed rows against required fields and DB constraints.
@@ -218,7 +218,7 @@ async function validateRows(
   for (const row of rows) {
     const rowErrors: string[] = [];
 
-    // ── Required field checks ──
+    // â”€â”€ Required field checks â”€â”€
     if (!row.venue_id || row.venue_id === 0) {
       rowErrors.push("venue_id is required");
     } else if (!venueIds.has(row.venue_id)) {
@@ -274,7 +274,7 @@ async function validateRows(
       );
     }
 
-    // ── DB constraint checks ──
+    // â”€â”€ DB constraint checks â”€â”€
     if (row.open_tournament && row.max_fargo != null) {
       rowErrors.push(
         "Cannot set max_fargo when open_tournament is TRUE (DB constraint: chk_open_vs_fargo)",
@@ -282,10 +282,10 @@ async function validateRows(
     }
 
     if (row.max_fargo != null && row.max_fargo > 1000) {
-      rowErrors.push("max_fargo must be ≤ 1000 (DB constraint)");
+      rowErrors.push("max_fargo must be â‰¤ 1000 (DB constraint)");
     }
 
-    // ── Result ──
+    // â”€â”€ Result â”€â”€
     if (rowErrors.length === 0) {
       valid.push({ rowNumber: row.rowNumber, isValid: true, errors: [], data: row });
     } else {
@@ -296,7 +296,7 @@ async function validateRows(
   return { valid, errors };
 }
 
-// ─── Import ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Import â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Import validated rows one at a time via tournamentService.createTournament().
@@ -306,7 +306,7 @@ async function validateRows(
 async function importTournaments(
   validRows: RowValidationResult[],
   onProgress: (current: number, total: number) => void,
-  imageFiles?: Map<string, string>, // filename → local URI
+  imageFiles?: Map<string, string>, // filename â†’ local URI
 ): Promise<{ imported: number; failed: { rowNumber: number; error: string }[] }> {
   let imported = 0;
   const failed: { rowNumber: number; error: string }[] = [];
@@ -318,24 +318,24 @@ async function importTournaments(
 
     try {
       // Upload flyer image if thumbnail is a local filename and we have the file
-      let resolvedThumbnail = row.thumbnail;
+      let resolvedThumbnail: string | null = row.thumbnail ?? null;
       if (
-        isImageFilename(row.thumbnail) &&
+        isImageFilename(row.thumbnail ?? null) &&
         imageFiles &&
         row.thumbnail &&
-        imageFiles.has(row.thumbnail)
+        imageFiles.has(row.thumbnail as string)
       ) {
         const localUri = imageFiles.get(row.thumbnail)!;
-        console.log(`📸 Uploading flyer image: ${row.thumbnail}`);
-        resolvedThumbnail = await uploadTournamentImage(localUri, row.thumbnail);
-        console.log(`✅ Image uploaded: ${resolvedThumbnail}`);
+        console.log(`ðŸ“¸ Uploading flyer image: ${row.thumbnail}`);
+        resolvedThumbnail = await uploadTournamentImage(localUri, row.thumbnail as string);
+        console.log(`âœ… Image uploaded: ${resolvedThumbnail}`);
       }
 
       const payload = buildPayload({ ...row, thumbnail: resolvedThumbnail });
       await tournamentService.createTournament(payload);
       imported++;
     } catch (err: any) {
-      console.error(`❌ Bulk import row ${row.rowNumber} failed:`, err);
+      console.error(`âŒ Bulk import row ${row.rowNumber} failed:`, err);
       failed.push({
         rowNumber: row.rowNumber,
         error: err.message || "Unknown database error",
@@ -346,7 +346,7 @@ async function importTournaments(
   return { imported, failed };
 }
 
-// ─── Payload Builder ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Payload Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Convert a BulkTournamentRow into the shape tournamentService.createTournament() expects.
@@ -395,12 +395,12 @@ function buildPayload(row: BulkTournamentRow): Record<string, any> {
     side_pots: row.side_pots || null,
     chip_ranges: row.chip_ranges || null,
     thumbnail,
-    is_recurring: false, // Bulk import never creates recurring — use recurring_flag to track
+    is_recurring: false, // Bulk import never creates recurring â€” use recurring_flag to track
     status: "active",
   };
 }
 
-// ─── Database Lookups (cached) ────────────────────────────────────────────────
+// â”€â”€â”€ Database Lookups (cached) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function fetchAllVenueIds(): Promise<Set<number>> {
   const { data, error } = await supabase.from("venues").select("id");
@@ -424,10 +424,17 @@ async function fetchAllDirectorIds(): Promise<Set<number>> {
   return new Set((data || []).map((p: any) => p.id_auto));
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const bulkImportService = {
   parseCSV,
   validateRows,
   importTournaments,
 };
+
+
+
+
+
+
+

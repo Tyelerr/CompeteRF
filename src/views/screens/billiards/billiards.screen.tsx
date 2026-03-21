@@ -1,4 +1,4 @@
-import { getActiveFilterCount } from "../../../models/types/filter.types";
+﻿import { getActiveFilterCount } from "../../../models/types/filter.types";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -46,7 +46,7 @@ export const BilliardsScreen = () => {
   const vm = useBilliards();
   const recommend = useRecommendVenue();
   const scrollRef = useScrollToTopOnFocus();
-  const { session } = useAuth();
+  const { user } = useAuth();
 
   const {
     isModalVisible: isReportVisible,
@@ -59,7 +59,7 @@ export const BilliardsScreen = () => {
     handleSubmit: handleReportSubmit,
     isSubmitting: isReportSubmitting,
     contentType: reportContentType,
-  } = useReport({ userId: session?.user?.id });
+  } = useReport({ userId: user?.id });
 
   const pagination = usePagination(vm.filteredTournaments as any, {
     itemsPerPage: ITEMS_PER_PAGE,
@@ -87,7 +87,6 @@ export const BilliardsScreen = () => {
     return found ? found.label : abbrev;
   };
 
-  // ── Web compact filter bar ──────────────────────────────────────────────────
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       <View style={webS.searchWrap}>
@@ -148,7 +147,6 @@ export const BilliardsScreen = () => {
     </View>
   );
 
-  // ── Radius slider ───────────────────────────────────────────────────────────
   const renderRadiusSlider = () => {
     if (!vm.zipCode.length) return null;
     return (
@@ -196,7 +194,6 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Pagination ──────────────────────────────────────────────────────────────
   const renderPagination = () => (
     <Pagination
       totalCount={pagination.totalCount}
@@ -211,7 +208,6 @@ export const BilliardsScreen = () => {
     />
   );
 
-  // ── Tournament card ─────────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
       return <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />;
@@ -232,7 +228,6 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Recommend venue card ────────────────────────────────────────────────────
   const renderRecommendCard = () => {
     if (!vm.user) return null;
     return (
@@ -268,7 +263,6 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Empty state ─────────────────────────────────────────────────────────────
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎱</Text>

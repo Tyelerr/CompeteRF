@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Platform,
@@ -27,9 +27,9 @@ import {
 
 const isWeb = Platform.OS === "web";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Design tokens
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
   gold:        "#F5A623",
   goldDim:     "#F5A62325",
@@ -51,9 +51,9 @@ const T = {
   bg:          "#000000",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SectionHeader
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SectionHeader({ label, accent }: { label: string; accent: string }) {
   return (
     <View style={shS.row}>
@@ -83,9 +83,9 @@ const shS = StyleSheet.create({
   line: { flex: 1, height: 1 },
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ActiveGiveawayWrapper — glowing border around active cards
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ActiveGiveawayWrapper â€” glowing border around active cards
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ActiveGiveawayWrapper({ children }: { children: React.ReactNode }) {
   return (
     <View style={awS.outer}>
@@ -114,16 +114,16 @@ const awS = StyleSheet.create({
   },
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // EndedGiveawayCard
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function EndedGiveawayCard({ giveaway }: { giveaway: Giveaway }) {
   const isAwarded   = giveaway.status === "awarded";
   const cardBg      = isAwarded ? "#1A1710" : "#171510";
   const accent      = isAwarded ? T.gold : T.amber;
   const accentDim   = isAwarded ? T.goldDim : T.amberDim;
   const accentBorder= isAwarded ? T.goldBorder : T.amberBorder;
-  const badgeLabel  = isAwarded ? "🏆  Winner Drawn" : "🎲  Drawing Soon";
+  const badgeLabel  = isAwarded ? "\uD83C\uDFC6  Winner Drawn" : "\uD83C\uDFB2  Drawing Soon";
   const statusLabel = isAwarded ? "Giveaway Complete" : "Entry Period Closed";
 
   return (
@@ -178,9 +178,9 @@ const ecS = StyleSheet.create({
   statusText: { fontSize: FONT_SIZES.sm, fontWeight: "600", letterSpacing: 0.3 },
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Main Screen
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ShopScreen() {
   const router = useRouter();
   const giveawaysVm = useGiveaways();
@@ -257,7 +257,7 @@ export default function ShopScreen() {
       {/* Login banner */}
       {!authLoading && !profile && (
         <View style={s.loginBanner}>
-          <Text style={s.loginText}>🎁  Log in to enter giveaways!</Text>
+          <Text style={s.loginText}>🎁  Log in to enter giveaways!</Text>
           <View style={s.loginButtons}>
             <Button title="Log In" onPress={() => router.push("/(tabs)/profile")} size="sm" />
             <Button title="Sign Up" onPress={() => router.push("/auth/register")} variant="outline" size="sm" />
@@ -276,13 +276,13 @@ export default function ShopScreen() {
       {/* Empty */}
       {!giveawaysVm.error && !hasActive && !hasEnded && (
         <View style={s.empty}>
-          <Text style={s.emptyIcon}>{"\uD83C\uDF81"}</Text>
+          <Text style={s.emptyIcon}>{"🎁"}</Text>
           <Text style={s.emptyTitle}>No Active Giveaways</Text>
           <Text style={s.emptySubtitle}>Check back soon for new giveaways!</Text>
         </View>
       )}
 
-      {/* ── Active ─────────────────────────────────────────────────────────── */}
+      {/* â”€â”€ Active â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {hasActive && (
         <>
           <SectionHeader label="Active Now" accent={T.green} />
@@ -317,7 +317,7 @@ export default function ShopScreen() {
         </>
       )}
 
-      {/* ── Latest Results ─────────────────────────────────────────────────── */}
+      {/* â”€â”€ Latest Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {hasEnded && (
         <>
           <SectionHeader label="Latest Results" accent={T.gold} />
@@ -374,7 +374,6 @@ export default function ShopScreen() {
         <GiveawayEntryModal
           visible={showEntryModal}
           giveaway={selectedGiveaway}
-          userId={profile?.id_auto}
           onClose={() => setShowEntryModal(false)}
           onSuccess={handleEntrySuccess}
         />
@@ -422,3 +421,8 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: T.white, marginBottom: SPACING.sm },
   emptySubtitle: { fontSize: FONT_SIZES.md, color: T.gray, textAlign: "center" },
 });
+
+
+
+
+

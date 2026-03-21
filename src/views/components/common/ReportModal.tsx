@@ -22,6 +22,7 @@ import {
 const isWeb = Platform.OS === "web";
 
 interface ReportModalProps {
+  asOverlay?: boolean;
   visible: boolean;
   onClose: () => void;
   contentType: ReportContentType | null;
@@ -316,3 +317,6 @@ const wStyles = StyleSheet.create({
     pointerEvents: "box-none" as any,
   },
 });
+
+
+

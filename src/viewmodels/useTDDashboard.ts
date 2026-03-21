@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import {
   DashboardStats,
@@ -23,6 +23,8 @@ export const useTDDashboard = () => {
     venues: 0,
     totalFavorites: 0,
     totalViews: 0,
+    todayViews: 0,
+    todayFavorites: 0,
   });
 
   // Data
@@ -373,3 +375,4 @@ export const useTDDashboard = () => {
     handleTimePeriodChange,
   };
 };
+

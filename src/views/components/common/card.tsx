@@ -1,16 +1,18 @@
-import { ReactNode } from "react";
+﻿import { ReactNode } from "react";
+import { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 
 interface CardProps {
+  style?: StyleProp<ViewStyle>;
   children: ReactNode;
   onPress?: () => void;
   padding?: "none" | "sm" | "md" | "lg";
 }
 
-export const Card = ({ children, onPress, padding = "md" }: CardProps) => {
-  const cardStyles = [styles.card, styles[padding]];
+export const Card = ({ children, onPress, padding = "md", style }: CardProps) => {
+  const cardStyles = [styles.card, styles[padding], style];
 
   if (onPress) {
     return (
@@ -47,3 +49,4 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
 });
+

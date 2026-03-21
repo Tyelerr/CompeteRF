@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import {
   EventTypeStats,
@@ -40,6 +40,8 @@ export const useBarOwnerDashboard = () => {
     activeTournaments: 0,
     totalViews: 0,
     totalFavorites: 0,
+    todayViews: 0,
+    todayFavorites: 0,
   });
 
   // Recent venues
@@ -338,3 +340,4 @@ export const useBarOwnerDashboard = () => {
     handleTimePeriodChange,
   };
 };
+

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Image, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { giveawayService } from "../../../models/services/giveaway.service";
@@ -17,7 +17,7 @@ import { GiveawayEntryModal } from "../../components/shop/giveaway-entry-modal";
 const isWeb = Platform.OS === "web";
 
 export const GiveawayScreen = () => {
-  // Read directly from Zustand store so userId is always the live value —
+  // Read directly from Zustand store so userId is always the live value â€”
   // not a snapshot captured inside a stale React context render.
   const profile = useAuthStore((s) => s.profile);
 
@@ -55,7 +55,7 @@ export const GiveawayScreen = () => {
         style={styles.container}
         contentContainerStyle={isWeb ? styles.contentContainerWeb : undefined}
       >
-        {/* Header — web skips extra paddingTop since nav handles safe area */}
+        {/* Header â€” web skips extra paddingTop since nav handles safe area */}
         <View style={[styles.header, isWeb && styles.headerWeb]}>
           <Text style={styles.title}>GIVEAWAYS</Text>
           <Text style={styles.subtitle}>Enter to win free gear!</Text>
@@ -63,14 +63,14 @@ export const GiveawayScreen = () => {
 
         {giveaways?.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🎁</Text>
+            <Text style={styles.emptyIcon}>🎁</Text>
             <Text style={styles.emptyText}>No active giveaways right now</Text>
             <Text style={styles.emptySubtext}>Check back soon!</Text>
           </View>
         ) : (
           <View style={[styles.list, isWeb && styles.listWeb]}>
             {giveaways?.map((giveaway) => (
-              <Card key={giveaway.id} style={isWeb ? styles.cardWeb : undefined}>
+              <View key={giveaway.id} style={isWeb ? styles.cardWeb : undefined}><Card>
                 {giveaway.image_url && (
                   <Image
                     source={{ uri: giveaway.image_url }}
@@ -96,18 +96,17 @@ export const GiveawayScreen = () => {
                   onPress={() => handleEnterNow(giveaway)}
                   fullWidth
                 />
-              </Card>
+              </Card></View>
             ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Entry modal — rendered once at screen level so it always has
+      {/* Entry modal â€” rendered once at screen level so it always has
           the live profile in scope, not a per-card stale closure */}
       <GiveawayEntryModal
         visible={entryModalVisible}
         giveaway={selectedGiveaway}
-        userId={profile?.id_auto ?? 0}
         onClose={handleModalClose}
         onSuccess={handleEntrySuccess}
       />
@@ -213,3 +212,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
 });
+
+
+
+
+
