@@ -268,7 +268,7 @@ export const BilliardsScreen = () => {
       <Text style={styles.emptyIcon}>🎱</Text>
       <Text style={styles.emptyText}>
         {vm.isStateFilterEmpty && vm.selectedState
-          ? `No tournaments in ${getStateName(vm.selectedState)} yet`
+          ? "No tournaments available in this area yet"
           : "No tournaments found"}
       </Text>
       <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
@@ -552,3 +552,4 @@ const webS = StyleSheet.create({
 });
 
 export default BilliardsScreen;
+

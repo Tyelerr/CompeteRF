@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   Alert,
   Image,
@@ -86,7 +86,7 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
           {/* Header Row with Game Badge and Heart */}
           <View style={styles.headerRow}>
             <View style={styles.gameTypeBadge}>
-              <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+              <Text style={styles.gameTypeText} numberOfLines={1}>{tournament.game_type}</Text>
             </View>
             <TouchableOpacity
               style={styles.favoriteButton}
@@ -102,20 +102,15 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
           </Text>
 
           {/* Venue Info */}
-          <Text style={styles.venueInfo} numberOfLines={1}>
-            📍 {tournament.venues.venue} • {tournament.venues.city},{" "}
-            {tournament.venues.state}
-          </Text>
+          <Text style={styles.venueInfo} numberOfLines={1}>{"📍"} {tournament.venues.venue} {"•"} {tournament.venues.city}, {tournament.venues.state}</Text>
 
           {/* Date and Time */}
-          <Text style={styles.dateTimeInfo}>
-            📅 {dateStr} • ⏰ {timeStr}
-          </Text>
+          <Text style={styles.dateTimeInfo}>{"📅"} {dateStr} {"•"} {"⏰"} {timeStr}</Text>
 
           {/* Share Button - moved left */}
           <View style={styles.shareRow}>
             <TouchableOpacity style={styles.shareButton} onPress={onShare}>
-              <Text style={styles.shareIcon}>📤</Text>
+              <Text style={styles.shareIcon}>{"📤"}</Text>
               <Text style={styles.shareText}>Share</Text>
             </TouchableOpacity>
           </View>
@@ -143,7 +138,7 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({
               style={styles.viewImageButton}
               onPress={onViewImage}
             >
-              <Text style={styles.viewImageIcon}>🔍</Text>
+              <Text style={styles.viewImageIcon}>{"🔍"}</Text>
               <Text style={styles.viewImageText}>View Image</Text>
             </TouchableOpacity>
           )}
@@ -222,6 +217,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   gameTypeBadge: {
+    flexShrink: 1,
+    maxWidth: "75%",
     backgroundColor: COLORS.primary,
     paddingVertical: 3,
     paddingHorizontal: SPACING.sm + 1,
@@ -237,7 +234,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   heartIcon: {
-    fontSize: FONT_SIZES.lg * 2, // Double the size
+    fontSize: FONT_SIZES.lg,
     color: COLORS.error, // Always red since these are favorites
   },
   tournamentName: {
@@ -277,3 +274,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+
+
+
+
+
+
+
+
+
+
+

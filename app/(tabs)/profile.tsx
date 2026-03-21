@@ -3,8 +3,7 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import {
-  Animated,
+import { useWindowDimensions, Animated,
   Easing,
   Image,
   Platform,
@@ -206,6 +205,8 @@ const LoggedOutView = ({ router }: { router: any }) => {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
+  const { width } = useWindowDimensions();
+  const isSmall = width < 390;
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
 
@@ -864,34 +865,38 @@ const styles = StyleSheet.create({
   memberSince: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
   actionButtons: {
     flexDirection: "row",
-    gap: SPACING.sm,
+    gap: SPACING.xs,
     marginBottom: SPACING.sm,
   },
   actionButtonsWeb: { flexDirection: "row" },
   actionButton: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderRadius: RADIUS.md,
     alignItems: "center",
+    paddingHorizontal: 4,
   },
   actionButtonWeb: { paddingVertical: SPACING.md + 2 },
   editButton: { backgroundColor: COLORS.secondary },
   editButtonText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+    fontSize: 11,
     fontWeight: "600",
+    textAlign: "center",
   },
   notificationButton: { backgroundColor: COLORS.primary },
   notificationButtonText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+    fontSize: 11,
     fontWeight: "600",
+    textAlign: "center",
   },
   signOutButton: { backgroundColor: COLORS.error },
   signOutButtonText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+    fontSize: 11,
     fontWeight: "600",
+    textAlign: "center",
   },
   userDetails: { gap: SPACING.md },
   detailItem: {
@@ -927,12 +932,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   navButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.white,
+    textAlign: "center",
   },
   alertsButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.text,
   },
@@ -950,3 +956,9 @@ const styles = StyleSheet.create({
   },
   spacerSm: { height: SPACING.sm },
 });
+
+
+
+
+
+
