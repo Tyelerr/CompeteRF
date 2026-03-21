@@ -1,3 +1,4 @@
+import { getActiveFilterCount } from "../../../models/types/filter.types";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -76,6 +77,8 @@ export const BilliardsScreen = () => {
   ]);
 
   const stateOptions = [{ label: "All States", value: "" }, ...US_STATES];
+  const activeFilterCount = getActiveFilterCount(vm.filters);
+  const hasActiveFilters = activeFilterCount > 0;
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
 
@@ -84,7 +87,7 @@ export const BilliardsScreen = () => {
     return found ? found.label : abbrev;
   };
 
-  // ── Web compact filter bar ─────────────────────────────────────────────────
+  // ── Web compact filter bar ──────────────────────────────────────────────────
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       <View style={webS.searchWrap}>
@@ -145,7 +148,7 @@ export const BilliardsScreen = () => {
     </View>
   );
 
-  // ── Radius slider ──────────────────────────────────────────────────────────
+  // ── Radius slider ───────────────────────────────────────────────────────────
   const renderRadiusSlider = () => {
     if (!vm.zipCode.length) return null;
     return (
@@ -193,7 +196,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Pagination ─────────────────────────────────────────────────────────────
+  // ── Pagination ──────────────────────────────────────────────────────────────
   const renderPagination = () => (
     <Pagination
       totalCount={pagination.totalCount}
@@ -208,7 +211,7 @@ export const BilliardsScreen = () => {
     />
   );
 
-  // ── Tournament card ────────────────────────────────────────────────────────
+  // ── Tournament card ─────────────────────────────────────────────────────────
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
       return <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />;
@@ -229,7 +232,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Recommend venue card ───────────────────────────────────────────────────
+  // ── Recommend venue card ────────────────────────────────────────────────────
   const renderRecommendCard = () => {
     if (!vm.user) return null;
     return (
@@ -265,7 +268,7 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // ── Empty state ────────────────────────────────────────────────────────────
+  // ── Empty state ─────────────────────────────────────────────────────────────
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyIcon}>🎱</Text>
@@ -390,7 +393,9 @@ export const BilliardsScreen = () => {
                     style={styles.filtersButton}
                     onPress={() => vm.setFilterModalVisible(true)}
                   >
-                    <Text style={styles.filtersButtonText}>☰ Filters</Text>
+                    <Text style={styles.filtersButtonText}>
+                      {hasActiveFilters ? "✓ Filters Applied" : "☰ Filters"}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
                     <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
@@ -505,18 +510,15 @@ const webS = StyleSheet.create({
   },
   searchIcon: { fontSize: 12, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.text, height: 32 },
-  // ── Clear button (web) ────────────────────────────────────────────────────
-  // paddingRight increased → X moves left toward typed text
-  // fontSize 22 * 0.8 = ~18 (doubled original 11, then -20%)
   clearBtn: {
     height: 32,
     paddingLeft: 4,
-    paddingRight: 12,  // increased from 4 → shifts X left
+    paddingRight: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   clearBtnText: {
-    fontSize: 18,       // was 22, -20% ≈ 18
+    fontSize: 18,
     color: COLORS.textMuted,
     fontWeight: "600",
     lineHeight: 22,

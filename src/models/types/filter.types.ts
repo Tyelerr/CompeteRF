@@ -1,4 +1,4 @@
-// ─── Modal-level filter state ────────────────────────────────────────────────
+// ─── Modal-level filter state ─────────────────────────────────────────────────
 // Used by FilterModal and the billiards viewmodel for client-side filtering.
 // Distinct from TournamentFilters in tournament.types.ts which drives the
 // service-layer / Supabase queries.
@@ -54,3 +54,28 @@ export const defaultFilters: Filters = {
   calcutta: false,
   openTournament: false,
 };
+
+/**
+ * Returns the number of non-default filters currently active.
+ * Used to drive the "Filters Applied" label in the UI.
+ */
+export const getActiveFilterCount = (filters: Filters): number => {
+  let count = 0;
+  if (filters.gameType) count++;
+  if (filters.tournamentFormat) count++;
+  if (filters.tableSize) count++;
+  if (filters.equipment) count++;
+  if (filters.daysOfWeek.length > 0) count++;
+  if (filters.fromDate) count++;
+  if (filters.toDate) count++;
+  if (filters.minEntryFee > 0) count++;
+  if (filters.maxEntryFee < 1000) count++;
+  if (filters.minFargo > 0) count++;
+  if (filters.maxFargo < 1000) count++;
+  if (filters.requiresFargoGames) count++;
+  if (filters.reportsToFargo) count++;
+  if (filters.calcutta) count++;
+  if (filters.openTournament) count++;
+  return count;
+};
+

@@ -55,7 +55,7 @@ export const BilliardsTournamentCard = ({
     );
   };
 
-  // ── Mobile card ───────────────────────────────────────────────────────────────
+  // ── Mobile card ─────────────────────────────────────────────────────────────
   if (!isWeb) {
     return (
       <TouchableOpacity
@@ -117,13 +117,13 @@ export const BilliardsTournamentCard = ({
     );
   }
 
-  // ── Web card ──────────────────────────────────────────────────────────────────
+  // ── Web card ─────────────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
       style={[styles.webCard, hovered && styles.webCardHovered]}
       activeOpacity={0.85}
       onPress={onPress}
-      // @ts-ignore — web-only events
+      // @ts-ignore – web-only events
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -134,7 +134,7 @@ export const BilliardsTournamentCard = ({
         {/* Hover overlay shimmer */}
         {hovered && <View style={styles.webImageOverlay} />}
 
-        {/* ID badge — top left */}
+        {/* ID badge – top left */}
         <View style={styles.webIdBadge}>
           <Text style={styles.webIdText}>ID:{tournament.id}</Text>
         </View>
@@ -261,7 +261,7 @@ export const BilliardsTournamentCard = ({
 };
 
 const styles = StyleSheet.create({
-  // ── Mobile ────────────────────────────────────────────────────────────────────
+  // ── Mobile ──────────────────────────────────────────────────────────────────
   card: {
     width: "48%",
     backgroundColor: COLORS.backgroundCard,
@@ -383,10 +383,10 @@ const styles = StyleSheet.create({
   feeAmount: {
     fontSize: FONT_SIZES.xl,
     fontWeight: "700",
-    color: COLORS.text,
+    color: COLORS.secondary,
   },
 
-  // ── Web card ──────────────────────────────────────────────────────────────────
+  // ── Web card ──────────────────────────────────────────────────────────────
   webCard: {
     width: "23.5%",
     backgroundColor: COLORS.backgroundCard,
@@ -395,14 +395,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     margin: "0.75%",
-    // @ts-ignore — web only
+    // @ts-ignore – web only
     transition:
       "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
     cursor: "pointer",
   },
   webCardHovered: {
     borderColor: COLORS.primary,
-    // @ts-ignore — web only
+    // @ts-ignore – web only
     transform: [{ scale: 1.03 }],
     boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
   },
@@ -423,7 +423,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // Blue tint shimmer that appears on hover over the image
   webImageOverlay: {
     position: "absolute",
     top: 0,
