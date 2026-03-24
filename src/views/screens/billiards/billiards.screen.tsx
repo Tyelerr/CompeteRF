@@ -11,12 +11,14 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
+import { computeMobileCardLayout } from "../../../utils/layout.utils";
 import { useRecommendVenue } from "../../../viewmodels/hooks/use.recommend.venue";
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
@@ -47,6 +49,12 @@ export const BilliardsScreen = () => {
   const recommend = useRecommendVenue();
   const scrollRef = useScrollToTopOnFocus();
   const { user } = useAuth();
+
+  // ── Responsive card sizing (mobile only) ───────────────────────────────────
+  // useWindowDimensions re-renders automatically on rotation or window resize.
+  // The actual math lives in layout.utils.ts to keep the view clean.
+  const { width: screenWidth } = useWindowDimensions();
+  const { cardWidth, imageHeight } = computeMobileCardLayout(screenWidth);
 
   const {
     isModalVisible: isReportVisible,
@@ -210,7 +218,7 @@ export const BilliardsScreen = () => {
 
   const renderTournament = ({ item }: { item: any }) => {
     if (!item)
-      return <View style={{ flex: 1, margin: isWeb ? 6 : 0, minHeight: 300 }} />;
+      return <View style={{ flex: 1, margin: isWeb ? 6 : SPACING.xs, minHeight: 300 }} />;
     return (
       <BilliardsTournamentCard
         tournament={item as any}
@@ -224,6 +232,9 @@ export const BilliardsScreen = () => {
         }}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
         getTournamentImageUrl={vm.getTournamentImageUrl}
+        // Pass computed dimensions on mobile only — web manages its own sizing
+        cardWidth={isWeb ? undefined : cardWidth}
+        imageHeight={isWeb ? undefined : imageHeight}
       />
     );
   };
@@ -552,4 +563,3 @@ const webS = StyleSheet.create({
 });
 
 export default BilliardsScreen;
-

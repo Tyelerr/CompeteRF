@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   Image,
   Platform,
@@ -23,6 +23,10 @@ interface BilliardsTournamentCardProps {
   onPress: () => void;
   onToggleFavorite: () => void;
   getTournamentImageUrl: (tournament: Tournament) => string | null;
+  /** Computed by computeMobileCardLayout — mobile only, omit on web */
+  cardWidth?: number;
+  /** Computed by computeMobileCardLayout — mobile only, omit on web */
+  imageHeight?: number;
 }
 
 const isWeb = Platform.OS === "web";
@@ -33,6 +37,8 @@ export const BilliardsTournamentCard = ({
   onPress,
   onToggleFavorite,
   getTournamentImageUrl,
+  cardWidth,
+  imageHeight,
 }: BilliardsTournamentCardProps) => {
   const venue = tournament.venues;
   const imageUrl = getTournamentImageUrl(tournament);
@@ -55,15 +61,26 @@ export const BilliardsTournamentCard = ({
     );
   };
 
-  // ── Mobile card ─────────────────────────────────────────────────────────────
+  // ── Mobile card ────────────────────────────────────────────────────────────
   if (!isWeb) {
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[
+          styles.card,
+          // Replace the unreliable percentage width with an exact pixel value
+          // derived from the screen width by computeMobileCardLayout.
+          cardWidth !== undefined ? { width: cardWidth } : undefined,
+        ]}
         activeOpacity={0.7}
         onPress={onPress}
       >
-        <View style={styles.imageSection}>
+        <View
+          style={[
+            styles.imageSection,
+            // Scale image height proportionally with card width (58% ratio).
+            imageHeight !== undefined ? { height: imageHeight } : undefined,
+          ]}
+        >
           {renderImage()}
           <View style={styles.idBadge}>
             <Text style={styles.idText}>ID:{tournament.id}</Text>
@@ -117,13 +134,13 @@ export const BilliardsTournamentCard = ({
     );
   }
 
-  // ── Web card ─────────────────────────────────────────────────────────────────
+  // ── Web card ───────────────────────────────────────────────────────────────
   return (
     <TouchableOpacity
       style={[styles.webCard, hovered && styles.webCardHovered]}
       activeOpacity={0.85}
       onPress={onPress}
-      // @ts-ignore – web-only events
+      // @ts-ignore — web-only events
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -134,7 +151,7 @@ export const BilliardsTournamentCard = ({
         {/* Hover overlay shimmer */}
         {hovered && <View style={styles.webImageOverlay} />}
 
-        {/* ID badge – top left */}
+        {/* ID badge — top left */}
         <View style={styles.webIdBadge}>
           <Text style={styles.webIdText}>ID:{tournament.id}</Text>
         </View>
@@ -261,8 +278,10 @@ export const BilliardsTournamentCard = ({
 };
 
 const styles = StyleSheet.create({
-  // ── Mobile ──────────────────────────────────────────────────────────────────
+  // ── Mobile ─────────────────────────────────────────────────────────────────
   card: {
+    // width is overridden at render time via cardWidth prop.
+    // "48%" is kept only as a safe fallback if the prop is not provided.
     width: "48%",
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
@@ -272,6 +291,8 @@ const styles = StyleSheet.create({
     margin: SPACING.xs,
   },
   imageSection: {
+    // height is overridden at render time via imageHeight prop.
+    // 120 is kept only as a safe fallback.
     height: 120,
     backgroundColor: COLORS.surface,
     position: "relative",
@@ -320,22 +341,22 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   contentSection: {
-    padding: SPACING.md,
+    padding: SPACING.sm,
     alignItems: "center",
   },
   name: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "center",
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   gameTypeBadge: {
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   gameTypeText: {
     color: COLORS.white,
@@ -343,16 +364,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   dateTime: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 18,
   },
   venueName: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.text,
     textAlign: "center",
-    marginTop: SPACING.md,
+    marginTop: SPACING.sm,
     fontWeight: "500",
   },
   cityState: {
@@ -368,9 +389,9 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   feeSection: {
-    marginTop: SPACING.md,
+    marginTop: SPACING.sm,
     alignItems: "center",
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     width: "100%",
@@ -381,12 +402,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   feeAmount: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: FONT_SIZES.lg,
     fontWeight: "700",
     color: COLORS.secondary,
   },
 
-  // ── Web card ──────────────────────────────────────────────────────────────
+  // ── Web card ───────────────────────────────────────────────────────────────
   webCard: {
     width: "23.5%",
     backgroundColor: COLORS.backgroundCard,
@@ -395,14 +416,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     margin: "0.75%",
-    // @ts-ignore – web only
+    // @ts-ignore — web only
     transition:
       "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
     cursor: "pointer",
   },
   webCardHovered: {
     borderColor: COLORS.primary,
-    // @ts-ignore – web only
+    // @ts-ignore — web only
     transform: [{ scale: 1.03 }],
     boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
   },
