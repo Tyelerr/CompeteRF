@@ -1,4 +1,4 @@
-// src/views/components/profile/EditProfileModal.tsx
+﻿// src/views/components/profile/EditProfileModal.tsx
 
 import {
   ActivityIndicator,
@@ -131,8 +131,8 @@ export function EditProfileModal({ visible, onClose }: EditProfileModalProps) {
             <View style={s.fieldContainer}>
               <Text style={s.fieldLabel}>Username</Text>
               <TextInput
-                style={[s.textInput, s.disabledInput, s.uppercaseInput]}
-                value={"@" + vm.username.toUpperCase()}
+                style={[s.textInput, s.disabledInput]}
+                value={"@" + vm.username.charAt(0).toUpperCase() + vm.username.slice(1).toLowerCase()}
                 editable={false}
               />
               <Text style={s.disabledHint}>Username cannot be changed</Text>

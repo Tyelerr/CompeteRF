@@ -503,7 +503,7 @@ export default function ProfileScreen() {
               <View style={styles.profileInfo}>
                 <Text style={styles.name}>
                   {profile?.user_name
-                    ? "@" + profile.user_name
+                    ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
                     : user.email?.split("@")[0] || "Player"}
                 </Text>
                 <Text style={styles.playerID}>
