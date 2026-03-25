@@ -1,4 +1,4 @@
-// app/(tabs)/admin/edit-user/[id].tsx
+﻿// app/(tabs)/admin/edit-user/[id].tsx
 
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -37,7 +37,7 @@ export default function EditUserScreen() {
   if (!vm.user) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorIcon}>❌</Text>
+        <Text style={styles.errorIcon}>âŒ</Text>
         <Text style={styles.errorText}>User not found</Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -52,7 +52,7 @@ export default function EditUserScreen() {
   if (!vm.canEdit) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorIcon}>🔒</Text>
+        <Text style={styles.errorIcon}>ðŸ”’</Text>
         <Text style={styles.errorText}>
           You do not have permission to edit this user
         </Text>
@@ -90,7 +90,7 @@ export default function EditUserScreen() {
           onPress={() => router.back()}
           style={styles.headerBack}
         >
-          <Text style={styles.headerBackText}>← Back</Text>
+          <Text style={styles.headerBackText}>{"← Back"}</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>EDIT USER</Text>
         <View style={styles.headerSpacer} />
@@ -119,6 +119,10 @@ export default function EditUserScreen() {
               <InfoRow label="Email" value={vm.user.email} />
               <InfoRow label="Username" value={`@${vm.user.user_name}`} />
               <InfoRow label="Created" value={formatDate(vm.user.created_at)} />
+              <InfoRow
+                label="Last Active"
+                value={formatDate(vm.user.last_active_at)}
+              />
               <InfoRow
                 label="Last Login"
                 value={formatDate(vm.user.last_login_at)}
@@ -349,7 +353,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // ── Header ────────────────────────────────────────────────────────────────
+  // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -377,13 +381,13 @@ const styles = StyleSheet.create({
   },
   headerSpacer: { width: 60 },
 
-  // ── Web centering ─────────────────────────────────────────────────────────
+  // â”€â”€ Web centering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   scrollView: { flex: 1 },
   scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
   webInner: { width: "100%" as any, maxWidth: 860, padding: SPACING.md },
   mobileInner: { flex: 1, padding: SPACING.md },
 
-  // ── Disabled banner ───────────────────────────────────────────────────────
+  // â”€â”€ Disabled banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   disabledBanner: {
     backgroundColor: "#E53935",
     borderRadius: 8,
@@ -400,7 +404,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ── Sections ──────────────────────────────────────────────────────────────
+  // â”€â”€ Sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   section: { marginBottom: SPACING.lg },
   sectionTitle: {
     fontSize: FONT_SIZES.xs,
@@ -457,7 +461,7 @@ const styles = StyleSheet.create({
     height: 40,
   },
 
-  // ── Disable/Enable ────────────────────────────────────────────────────────
+  // â”€â”€ Disable/Enable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   disableCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
@@ -502,7 +506,7 @@ const styles = StyleSheet.create({
   disableButtonTextWhite: { color: "#fff" },
   enableButtonText: { color: "#4CAF50" },
 
-  // ── Action buttons ────────────────────────────────────────────────────────
+  // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   actions: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
   button: {
     flex: 1,
@@ -527,3 +531,6 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.5 },
   bottomSpacer: { height: SPACING.xl * 2 },
 });
+
+
+

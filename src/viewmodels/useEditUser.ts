@@ -1,14 +1,15 @@
-// src/viewmodels/useEditUser.ts
+﻿// src/viewmodels/useEditUser.ts
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Split "name" into "first_name" + "last_name"
 // UPDATED: Added disable/enable user toggle (App Store compliance)
+// UPDATED: last_active_at replaces last_login_at — sourced from profiles
 // ═══════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
-import { buildFullName } from "../utils/name.utils"; // NAME CHANGE
+import { buildFullName } from "../utils/name.utils";
 
 export type UserRole =
   | "basic_user"
@@ -19,23 +20,26 @@ export type UserRole =
 
 export type UserStatus = "active" | "suspended" | "banned";
 
-// NAME CHANGE: Added first_name and last_name
 export interface EditableUser {
   id: string;
   id_auto: number;
   email: string;
-  name: string;           // kept for display fallback
-  first_name: string;     // NEW
-  last_name: string;      // NEW
+  name: string;
+  first_name: string;
+  last_name: string;
   user_name: string;
   role: UserRole;
   status: UserStatus;
-  is_disabled: boolean;   // ← NEW: App Store compliance
+  is_disabled: boolean;
   created_at: string;
+  // last_active_at: written by AuthProvider on every app foreground.
+  // Much more meaningful than last_sign_in_at which only updates on auth.
+  last_active_at: string | null;
+  // last_login_at: from profiles, backfilled from auth.users.last_sign_in_at.
+  // Tells you when they last authenticated, not just when they used the app.
   last_login_at: string | null;
 }
 
-// Role hierarchy for permissions
 const ROLE_HIERARCHY: Record<UserRole, number> = {
   basic_user: 1,
   tournament_director: 2,
@@ -50,25 +54,19 @@ export const useEditUser = (userId: string) => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [togglingDisable, setTogglingDisable] = useState(false); // ← NEW
+  const [togglingDisable, setTogglingDisable] = useState(false);
   const [user, setUser] = useState<EditableUser | null>(null);
 
-  // NAME CHANGE: Two name fields instead of one
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [role, setRole] = useState<UserRole>("basic_user");
   const [status, setStatus] = useState<UserStatus>("active");
-
-  // Track if form has changes
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    if (userId) {
-      loadUser();
-    }
+    if (userId) loadUser();
   }, [userId]);
 
-  // NAME CHANGE: Track changes on both name fields
   useEffect(() => {
     if (user) {
       const changed =
@@ -82,12 +80,12 @@ export const useEditUser = (userId: string) => {
 
   const loadUser = async () => {
     try {
-      // NAME CHANGE: Select first_name and last_name too
-      // NEW: Also select is_disabled
+      // last_active_at lives on profiles and is updated by AuthProvider
+      // on every app foreground — no auth.admin or RPC needed.
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, id_auto, email, name, first_name, last_name, user_name, role, status, is_disabled, created_at, last_login_at",
+          "id, id_auto, email, name, first_name, last_name, user_name, role, status, is_disabled, created_at, last_active_at, last_login_at",
         )
         .eq("id", userId)
         .single();
@@ -99,10 +97,8 @@ export const useEditUser = (userId: string) => {
       }
 
       if (data) {
-        // NAME CHANGE: Read first_name/last_name, fall back to splitting name
         let first = data.first_name || "";
         let last = data.last_name || "";
-
         if (!first && !last && data.name) {
           const parts = data.name.trim().split(/\s+/);
           first = parts[0] || "";
@@ -119,9 +115,20 @@ export const useEditUser = (userId: string) => {
           user_name: data.user_name,
           role: data.role as UserRole,
           status: data.status as UserStatus,
-          is_disabled: data.is_disabled ?? false,   // ← NEW
+          is_disabled: data.is_disabled ?? false,
           created_at: data.created_at,
-          last_login_at: data.last_login_at,
+          last_active_at: data.last_active_at || null,
+          last_login_at: await (async () => {
+            // profiles.last_login_at is rarely populated — the real value
+            // lives in auth.users.last_sign_in_at, readable via the
+            // get_user_last_sign_in RPC (SECURITY DEFINER).
+            try {
+              const { data: rpcData, error: rpcError } = await supabase
+                .rpc("get_user_last_sign_in", { user_id: userId });
+              if (!rpcError && rpcData) return rpcData as string;
+            } catch {}
+            return data.last_login_at || null;
+          })(),
         };
 
         setUser(userData);
@@ -138,20 +145,15 @@ export const useEditUser = (userId: string) => {
     }
   };
 
-  // Check if current user can edit this user
   const canEdit = useCallback((): boolean => {
     if (!user) return false;
-
-    if (currentUserRole === "super_admin") {
-      return true;
-    }
+    if (currentUserRole === "super_admin") return true;
     if (currentUserRole === "compete_admin") {
       return ROLE_HIERARCHY[user.role] < ROLE_HIERARCHY["compete_admin"];
     }
     return false;
   }, [currentUserRole, user]);
 
-  // Get available role options based on current user's permissions
   const getRoleOptions = useCallback(() => {
     const allRoles = [
       { label: "Basic User", value: "basic_user" },
@@ -160,46 +162,34 @@ export const useEditUser = (userId: string) => {
       { label: "Compete Admin", value: "compete_admin" },
       { label: "Super Admin", value: "super_admin" },
     ];
-
-    if (currentUserRole === "super_admin") {
-      return allRoles;
-    }
-
+    if (currentUserRole === "super_admin") return allRoles;
     if (currentUserRole === "compete_admin") {
       return allRoles.filter(
-        (r) =>
-          ROLE_HIERARCHY[r.value as UserRole] < ROLE_HIERARCHY["compete_admin"],
+        (r) => ROLE_HIERARCHY[r.value as UserRole] < ROLE_HIERARCHY["compete_admin"],
       );
     }
-
     return [];
   }, [currentUserRole]);
 
-  // Status options
   const statusOptions = [
     { label: "Active", value: "active" },
     { label: "Suspended", value: "suspended" },
     { label: "Banned", value: "banned" },
   ];
 
-  // Save changes
   const saveUser = useCallback(async (): Promise<boolean> => {
     if (!user || !canEdit()) {
       Alert.alert("Error", "You do not have permission to edit this user");
       return false;
     }
-
     setSaving(true);
-
     try {
-      // NAME CHANGE: Save first_name, last_name, AND name (backward compat)
       const trimmedFirst = firstName.trim();
       const trimmedLast = lastName.trim();
-
       const { data, error } = await supabase
         .from("profiles")
         .update({
-          name: buildFullName(trimmedFirst, trimmedLast), // backward compat
+          name: buildFullName(trimmedFirst, trimmedLast),
           first_name: trimmedFirst,
           last_name: trimmedLast,
           role,
@@ -211,17 +201,14 @@ export const useEditUser = (userId: string) => {
         .single();
 
       if (error) {
-        console.error("Error saving user:", error);
         Alert.alert("Error", `Failed to save: ${error.message}`);
         return false;
       }
-
       if (!data) {
-        Alert.alert("Error", "Update failed — no rows were modified. Check database permissions.");
+        Alert.alert("Error", "Update failed — no rows were modified.");
         return false;
       }
 
-      // Update local state
       setUser((prev) =>
         prev
           ? {
@@ -234,12 +221,10 @@ export const useEditUser = (userId: string) => {
             }
           : null,
       );
-
       setHasChanges(false);
       Alert.alert("Success", "User updated successfully");
       return true;
-    } catch (error) {
-      console.error("Error saving user:", error);
+    } catch {
       Alert.alert("Error", "Failed to save user");
       return false;
     } finally {
@@ -247,77 +232,57 @@ export const useEditUser = (userId: string) => {
     }
   }, [user, userId, firstName, lastName, role, status, canEdit]);
 
-  // ═══════════════════════════════════════════════════════
-  // NEW: Toggle disable/enable user (App Store compliance)
-  // ═══════════════════════════════════════════════════════
   const toggleDisabled = useCallback(async () => {
     if (!user || !canEdit()) {
       Alert.alert("Error", "You do not have permission to modify this user.");
       return;
     }
-
     const newDisabledState = !user.is_disabled;
     const actionLabel = newDisabledState ? "Disable" : "Enable";
     const confirmMessage = newDisabledState
-      ? `This will immediately prevent "${user.first_name || user.user_name}" from logging in or using the app. They will see a "disabled" message on their next login attempt.`
-      : `This will re-enable "${user.first_name || user.user_name}"'s account. They will be able to log in and use the app normally.`;
+      ? `This will immediately prevent "${user.first_name || user.user_name}" from logging in or using the app.`
+      : `This will re-enable "${user.first_name || user.user_name}"'s account. They will be able to log in normally.`;
 
-    Alert.alert(
-      `${actionLabel} User?`,
-      confirmMessage,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: actionLabel,
-          style: newDisabledState ? "destructive" : "default",
-          onPress: async () => {
-            setTogglingDisable(true);
-            try {
-              const { data, error } = await supabase
-                .from("profiles")
-                .update({
-                  is_disabled: newDisabledState,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", userId)
-                .select()
-                .single();
+    Alert.alert(`${actionLabel} User?`, confirmMessage, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: actionLabel,
+        style: newDisabledState ? "destructive" : "default",
+        onPress: async () => {
+          setTogglingDisable(true);
+          try {
+            const { data, error } = await supabase
+              .from("profiles")
+              .update({ is_disabled: newDisabledState, updated_at: new Date().toISOString() })
+              .eq("id", userId)
+              .select()
+              .single();
 
-              if (error) {
-                console.error("Error toggling disabled:", error);
-                Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user: ${error.message}`);
-                return;
-              }
-
-              if (!data) {
-                Alert.alert("Error", "Update failed — no rows modified. Check database permissions.");
-                return;
-              }
-
-              // Update local state
-              setUser((prev) =>
-                prev ? { ...prev, is_disabled: newDisabledState } : null,
-              );
-
-              Alert.alert(
-                "Success",
-                newDisabledState
-                  ? `User has been disabled. They will be signed out on their next action.`
-                  : `User has been re-enabled. They can now log in normally.`,
-              );
-            } catch (error) {
-              console.error("Error toggling disabled:", error);
-              Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user.`);
-            } finally {
-              setTogglingDisable(false);
+            if (error) {
+              Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user: ${error.message}`);
+              return;
             }
-          },
+            if (!data) {
+              Alert.alert("Error", "Update failed — no rows modified.");
+              return;
+            }
+            setUser((prev) => prev ? { ...prev, is_disabled: newDisabledState } : null);
+            Alert.alert(
+              "Success",
+              newDisabledState
+                ? "User has been disabled. They will be signed out on their next action."
+                : "User has been re-enabled. They can now log in normally.",
+            );
+          } catch {
+            Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user.`);
+          } finally {
+            setTogglingDisable(false);
+          }
         },
-      ],
-    );
+      },
+    ]);
   }, [user, userId, canEdit]);
 
-  // Reset form to original values
   const resetForm = useCallback(() => {
     if (user) {
       setFirstName(user.first_name);
@@ -328,38 +293,25 @@ export const useEditUser = (userId: string) => {
   }, [user]);
 
   return {
-    // State
     loading,
     saving,
-    togglingDisable,           // ← NEW
+    togglingDisable,
     user,
     hasChanges,
-
-    // NAME CHANGE: Two name fields
     firstName,
     lastName,
     role,
     status,
-
-    // NAME CHANGE: Two setters
     setFirstName,
     setLastName,
     setRole,
     setStatus,
-
-    // Options
     roleOptions: getRoleOptions(),
     statusOptions,
-
-    // Permissions
     canEdit: canEdit(),
-
-    // Actions
     saveUser,
     resetForm,
-    toggleDisabled,            // ← NEW
-
-    // DEPRECATED: kept for any code still using "name"
+    toggleDisabled,
     name: buildFullName(firstName, lastName),
     setName: (fullName: string) => {
       const parts = fullName.trim().split(/\s+/);
@@ -368,3 +320,5 @@ export const useEditUser = (userId: string) => {
     },
   };
 };
+
+

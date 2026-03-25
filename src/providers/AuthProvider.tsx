@@ -1,33 +1,7 @@
-// src/providers/AuthProvider.tsx
+﻿// src/providers/AuthProvider.tsx
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Single auth session hydration via RPC
-//
-// WHAT CHANGED (original):
-// - Replaced fetchProfile() with hydrateAuthSession()
-//   that calls get_auth_session() RPC (1 query instead of 1)
-// - Populates Zustand store directly (kills the double fetch)
-// - Context still exists for backward compat but reads from store
-// - Push notifications wait for profile to exist before registering
-//
-// WHAT CHANGED (App Store compliance):
-// - After profile fetch, checks is_disabled flag
-// - If disabled → shows Alert + signs out immediately
-//
-// WHAT CHANGED (race condition fix — generation counter):
-// - hydrateAuthSession() now uses a generation counter (hydrationGenRef).
-// - On signup, onAuthStateChange fires and starts Call A before the profile
-//   exists in the DB. The register screen then creates the profile and calls
-//   refreshSession(), which starts Call B. Call B finds the profile and sets
-//   the store correctly — but Call A is still in flight. When Call A finishes
-//   it would overwrite the store with null, wiping out Call B's result.
-// - The counter increments on every new hydrateAuthSession call. Each call
-//   captures its own generation number. Before writing to the store, it checks
-//   whether it is still the most recent call. If not, it discards the result.
-//   This means Call A can never overwrite a more recent Call B result.
-//
-// WHAT CHANGED (refreshSession forceUserId):
-// - refreshSession() accepts optional forceUserId so the register screen can
-//   pass authData.user.id directly, bypassing stale React state.
+// UPDATED: App foreground tracking writes last_active_at to profiles
 // ═══════════════════════════════════════════════════════════
 
 import { Session, User } from "@supabase/supabase-js";
@@ -39,7 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
+import { Alert, AppState, AppStateStatus, Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { profileService } from "../models/services/profile.service";
 import { Profile, ProfileInsert } from "../models/types/profile.types";
@@ -98,18 +72,60 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Zustand store — single source of truth
   const { profile, hydrateSession, reset: resetStore } = useAuthStore();
 
-  // ── Generation counter ─────────────────────────────────────────────
-  // Incremented on every hydrateAuthSession() call. Each call captures
-  // its own generation number and checks it before writing to the store.
-  // This ensures a slow, stale hydration (e.g. onAuthStateChange during
-  // signup before the profile exists) can never overwrite a more recent
-  // successful hydration (e.g. refreshSession after profile is created).
+  // ── Generation counter ─────────────────────────────────────────────────────
   const hydrationGenRef = useRef(0);
+
+  // Keep a ref to the current user id so the AppState handler can read it
+  // without closing over a stale value.
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user?.id]);
 
   // 🔔 Push notification registration
   const { pushToken } = useNotifications(profile ? user?.id : undefined);
 
-  // ── Disabled user check ───────────────────────────────────────────
+  // ── Last-active tracking ───────────────────────────────────────────────────
+  // Write last_active_at on every app foreground event and on initial mount.
+  // Uses a simple debounce so rapid foreground/background cycles don't spam
+  // the database — at most one write per 60 seconds per session.
+  const lastActivePingRef = useRef<number>(0);
+
+  const pingLastActive = async () => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+
+    const now = Date.now();
+    if (now - lastActivePingRef.current < 60_000) return; // 60 s debounce
+    lastActivePingRef.current = now;
+
+    try {
+      await supabase
+        .from("profiles")
+        .update({ last_active_at: new Date().toISOString() })
+        .eq("id", uid);
+    } catch {
+      // Non-critical — silently ignore
+    }
+  };
+
+  useEffect(() => {
+    // Write on mount (first foreground)
+    pingLastActive();
+
+    if (Platform.OS === "web") return; // AppState not meaningful on web
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        pingLastActive();
+      }
+    };
+
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
+
+  // ── Disabled user check ───────────────────────────────────────────────────
   const checkDisabledAndEject = async (profileData: any): Promise<boolean> => {
     if (profileData?.is_disabled === true) {
       hydrateSession(null, [], []);
@@ -135,17 +151,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return false;
   };
 
-  // ── Session hydration via RPC ──────────────────────────────────────
+  // ── Session hydration via RPC ─────────────────────────────────────────────
   const hydrateAuthSession = async (userId: string) => {
-    // Capture this call's generation. If a newer call starts before
-    // this one finishes, myGen will no longer equal hydrationGenRef.current
-    // and we discard our result rather than overwriting the newer one.
     const myGen = ++hydrationGenRef.current;
 
     try {
       const { data, error } = await supabase.rpc("get_auth_session");
 
-      // A newer hydration has started — this result is stale, discard it
       if (myGen !== hydrationGenRef.current) return;
 
       if (error) {
@@ -162,7 +174,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const wasDisabled = await checkDisabledAndEject(data.profile);
       if (wasDisabled) return;
 
-      // Check generation again after the async disabled check
       if (myGen !== hydrationGenRef.current) return;
 
       hydrateSession(
@@ -170,19 +181,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         data.owned_venue_ids || [],
         data.directed_venue_ids || [],
       );
+
+      // Ping last active after successful hydration
+      pingLastActive();
     } catch (error) {
       console.error("Auth session hydration error:", error);
       if (myGen !== hydrationGenRef.current) return;
       await fallbackFetchProfile(userId, myGen);
     } finally {
-      // Only update loading state if this is still the current hydration
       if (myGen === hydrationGenRef.current) {
         setLoading(false);
       }
     }
   };
 
-  // Fallback in case the RPC isn't deployed yet
   const fallbackFetchProfile = async (userId: string, gen: number) => {
     try {
       const { data, error } = await supabase
@@ -211,7 +223,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  // ── Auth state listener ────────────────────────────────────────────
+  // ── Auth state listener ───────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -240,28 +252,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Refresh ────────────────────────────────────────────────────────
+  // ── Refresh ───────────────────────────────────────────────────────────────
   const refreshSession = async (forceUserId?: string) => {
     const id = forceUserId ?? user?.id;
-    if (id) {
-      await hydrateAuthSession(id);
-    }
+    if (id) await hydrateAuthSession(id);
   };
 
-  // ── Create profile ─────────────────────────────────────────────────
+  // ── Create profile ────────────────────────────────────────────────────────
   const createProfile = async (profileData: ProfileInsert) => {
     try {
       await profileService.createProfile(profileData);
-      if (user?.id) {
-        await hydrateAuthSession(user.id);
-      }
+      if (user?.id) await hydrateAuthSession(user.id);
     } catch (error) {
       console.error("Create profile error:", error);
       throw error;
     }
   };
 
-  // ── Sign out ───────────────────────────────────────────────────────
+  // ── Sign out ──────────────────────────────────────────────────────────────
   const signOut = async () => {
     if (user?.id) {
       try {
@@ -278,7 +286,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     resetStore();
   };
 
-  // ── Context value ──────────────────────────────────────────────────
+  // ── Context value ─────────────────────────────────────────────────────────
   const value: AuthContextType = {
     session,
     user,
