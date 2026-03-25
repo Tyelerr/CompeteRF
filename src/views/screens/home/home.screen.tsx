@@ -1,6 +1,8 @@
-import { Platform, RefreshControl, ScrollView, Text, View } from "react-native";
+﻿import { Platform, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useHome } from "../../../viewmodels/useHome";
+import { COLORS } from "../../../theme/colors";
+import { FONT_SIZES, SPACING } from "../../../theme/typography";
 import { Loading } from "../../components/common/loading";
 import { WebContainer } from "../../components/common/WebContainer";
 import {
@@ -18,12 +20,14 @@ export default function HomeScreen() {
   const {
     newsItems,
     newsLoading,
+    newsError,
     refreshing,
     activeTab,
     featuredPlayer,
     featuredBar,
     setActiveTab,
     handleRefresh,
+    retryNews,
     openArticle,
     openAddress,
     callPhone,
@@ -31,6 +35,7 @@ export default function HomeScreen() {
   } = useHome();
 
   const renderNews = () => {
+    // ── Loading ──────────────────────────────────────────────────────────────
     if (newsLoading) {
       return (
         <View style={styles.loadingContainer}>
@@ -38,6 +43,33 @@ export default function HomeScreen() {
         </View>
       );
     }
+
+    // ── Fetch failure — network error or timeout after all retries ───────────
+    // Distinct from an empty feed: show an actionable error with a Retry button.
+    if (newsError) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.emptyText, { color: COLORS.error, marginBottom: SPACING.md }]}>
+            {"Couldn't load news. Check your connection and try again."}
+          </Text>
+          <TouchableOpacity
+            onPress={retryNews}
+            style={{
+              backgroundColor: COLORS.primary,
+              paddingHorizontal: SPACING.lg,
+              paddingVertical: SPACING.sm,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: "600" }}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // ── Genuinely empty — fetch succeeded but feed has no articles ───────────
     if (newsItems.length === 0) {
       return (
         <View style={styles.loadingContainer}>
@@ -45,6 +77,8 @@ export default function HomeScreen() {
         </View>
       );
     }
+
+    // ── Success ──────────────────────────────────────────────────────────────
     if (isWeb) {
       const rows: (typeof newsItems)[] = [];
       for (let i = 0; i < newsItems.length; i += 2) {

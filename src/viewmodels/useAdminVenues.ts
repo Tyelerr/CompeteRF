@@ -1,11 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-export type SortOption =
-  | "name_asc"
-  | "name_desc"
-  | "date_newest"
-  | "date_oldest";
+export type SortOption = "name_asc" | "name_desc" | "date_newest" | "date_oldest";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -34,86 +30,106 @@ export const useAdminVenues = () => {
   const [sortOption, setSortOption] = useState<SortOption>("name_asc");
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
-    loadVenues();
-  }, []);
+  useEffect(() => { loadVenues(); }, []);
 
   const loadVenues = async () => {
     try {
-      // Get ALL venues (admin sees everything)
+      // ── Step 1: all venues in one query ───────────────────────────────────
       const { data: venuesData, error } = await supabase
         .from("venues")
-        .select(
-          "id, venue, address, city, state, zip_code, phone, photo_url, status, created_at",
-        )
+        .select("id, venue, address, city, state, zip_code, phone, photo_url, status, created_at")
         .order("venue", { ascending: true });
 
-      if (error) {
-        console.error("Error loading venues:", error);
-        setVenues([]);
-        return;
+      if (error) { console.error("Error loading venues:", error); setVenues([]); return; }
+      if (!venuesData || venuesData.length === 0) { setVenues([]); return; }
+
+      const venueIds = venuesData.map((v: any) => v.id);
+      const today = new Date().toISOString().split("T")[0];
+
+      // ── Step 2: batch active tournament counts (1 query) ──────────────────
+      const { data: activeTournamentsData } = await supabase
+        .from("tournaments")
+        .select("venue_id")
+        .in("venue_id", venueIds)
+        .eq("status", "active")
+        .gte("tournament_date", today);
+
+      const activeTournsByVenue: Record<number, number> = {};
+      for (const t of activeTournamentsData || []) {
+        activeTournsByVenue[t.venue_id] = (activeTournsByVenue[t.venue_id] || 0) + 1;
       }
 
-      if (!venuesData || venuesData.length === 0) {
-        setVenues([]);
-        return;
+      // ── Step 3: batch director counts (1 query) ───────────────────────────
+      const { data: directorsData } = await supabase
+        .from("venue_directors")
+        .select("venue_id")
+        .in("venue_id", venueIds)
+        .is("archived_at", null);
+
+      const directorsByVenue: Record<number, number> = {};
+      for (const d of directorsData || []) {
+        directorsByVenue[d.venue_id] = (directorsByVenue[d.venue_id] || 0) + 1;
       }
 
-      // Get stats for each venue
-      const venuesWithStats: AdminVenueWithStats[] = await Promise.all(
-        venuesData.map(async (venue: any) => {
-          // Count active tournaments at this venue
-          const { count: tournamentCount } = await supabase
-            .from("tournaments")
-            .select("id", { count: "exact", head: true })
-            .eq("venue_id", venue.id)
-            .eq("status", "active")
-            .gte("tournament_date", new Date().toISOString().split("T")[0]);
+      // ── Step 4: batch views via tournament join (2 queries, not N×2) ──────
+      // First get all tournament IDs and their venue mappings in one query
+      const { data: tournamentVenueData } = await supabase
+        .from("tournaments")
+        .select("id, venue_id")
+        .in("venue_id", venueIds);
 
-          // Count directors assigned to this venue
-          const { count: directorCount } = await supabase
-            .from("venue_directors")
-            .select("id", { count: "exact", head: true })
-            .eq("venue_id", venue.id)
-            .is("archived_at", null);
+      const tournamentToVenue: Record<number, number> = {};
+      for (const t of tournamentVenueData || []) {
+        tournamentToVenue[t.id] = t.venue_id;
+      }
 
-          // Count total views for tournaments at this venue
-          const { count: viewsCount } = await supabase
-            .from("tournament_analytics")
-            .select("id, tournaments!inner(venue_id)", {
-              count: "exact",
-              head: true,
-            })
-            .eq("tournaments.venue_id", venue.id)
-            .eq("event_type", "view");
+      const allTournamentIds = Object.keys(tournamentToVenue).map(Number);
+      const viewsByVenue: Record<number, number> = {};
+      if (allTournamentIds.length > 0) {
+        const { data: viewsData } = await supabase
+          .from("tournament_analytics")
+          .select("tournament_id")
+          .in("tournament_id", allTournamentIds)
+          .eq("event_type", "view");
 
-          // Get owner name (if any)
-          const { data: ownerData } = await supabase
-            .from("venue_owners")
-            .select("profiles:owner_id(name)")
-            .eq("venue_id", venue.id)
-            .is("archived_at", null)
-            .limit(1)
-            .single();
+        for (const v of viewsData || []) {
+          const venueId = tournamentToVenue[v.tournament_id];
+          if (venueId) viewsByVenue[venueId] = (viewsByVenue[venueId] || 0) + 1;
+        }
+      }
 
-          return {
-            id: venue.id,
-            venue: venue.venue,
-            address: venue.address,
-            city: venue.city,
-            state: venue.state,
-            zip_code: venue.zip_code,
-            phone: venue.phone,
-            photo_url: venue.photo_url,
-            status: venue.status || "active",
-            created_at: venue.created_at,
-            activeTournaments: tournamentCount || 0,
-            totalDirectors: directorCount || 0,
-            totalViews: viewsCount || 0,
-            ownerName: (ownerData?.profiles as any)?.name || undefined,
-          };
-        }),
-      );
+      // ── Step 5: batch owner names (1 query) ───────────────────────────────
+      const { data: ownersData } = await supabase
+        .from("venue_owners")
+        .select("venue_id, profiles:owner_id(name)")
+        .in("venue_id", venueIds)
+        .is("archived_at", null);
+
+      const ownerByVenue: Record<number, string> = {};
+      for (const o of ownersData || []) {
+        // Only store first owner per venue
+        if (!ownerByVenue[o.venue_id]) {
+          ownerByVenue[o.venue_id] = (o.profiles as any)?.name || "";
+        }
+      }
+
+      // ── Step 6: map into final shape (pure JS, no more DB calls) ──────────
+      const venuesWithStats: AdminVenueWithStats[] = venuesData.map((venue: any) => ({
+        id: venue.id,
+        venue: venue.venue,
+        address: venue.address,
+        city: venue.city,
+        state: venue.state,
+        zip_code: venue.zip_code,
+        phone: venue.phone,
+        photo_url: venue.photo_url,
+        status: venue.status || "active",
+        created_at: venue.created_at,
+        activeTournaments: activeTournsByVenue[venue.id] || 0,
+        totalDirectors: directorsByVenue[venue.id] || 0,
+        totalViews: viewsByVenue[venue.id] || 0,
+        ownerName: ownerByVenue[venue.id] || undefined,
+      }));
 
       setVenues(venuesWithStats);
     } catch (error) {
@@ -125,91 +141,49 @@ export const useAdminVenues = () => {
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadVenues();
-  };
+  const onRefresh = () => { setRefreshing(true); loadVenues(); };
 
-  // Filter and sort venues
   const filteredAndSortedVenues = useMemo(() => {
     let result = [...venues];
-
-    // Search filter
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (venue) =>
-          venue.venue.toLowerCase().includes(query) ||
-          venue.city.toLowerCase().includes(query) ||
-          venue.address.toLowerCase().includes(query) ||
-          venue.state.toLowerCase().includes(query) ||
-          (venue.ownerName && venue.ownerName.toLowerCase().includes(query)),
+      const q = searchQuery.toLowerCase();
+      result = result.filter((v) =>
+        v.venue.toLowerCase().includes(q) ||
+        v.city.toLowerCase().includes(q) ||
+        v.address.toLowerCase().includes(q) ||
+        v.state.toLowerCase().includes(q) ||
+        (v.ownerName && v.ownerName.toLowerCase().includes(q)),
       );
     }
-
-    // Sort
     switch (sortOption) {
-      case "name_asc":
-        result.sort((a, b) => a.venue.localeCompare(b.venue));
-        break;
-      case "name_desc":
-        result.sort((a, b) => b.venue.localeCompare(a.venue));
-        break;
-      case "date_newest":
-        result.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-      case "date_oldest":
-        result.sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        );
-        break;
+      case "name_asc": result.sort((a, b) => a.venue.localeCompare(b.venue)); break;
+      case "name_desc": result.sort((a, b) => b.venue.localeCompare(a.venue)); break;
+      case "date_newest": result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
+      case "date_oldest": result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()); break;
     }
-
     return result;
   }, [venues, searchQuery, sortOption]);
 
-  // Pagination
   const totalPages = Math.ceil(filteredAndSortedVenues.length / ITEMS_PER_PAGE);
 
   const paginatedVenues = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredAndSortedVenues.slice(
-      startIndex,
-      startIndex + ITEMS_PER_PAGE,
-    );
+    return filteredAndSortedVenues.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [filteredAndSortedVenues, currentPage]);
 
-  const displayStart =
-    filteredAndSortedVenues.length === 0
-      ? 0
-      : (currentPage - 1) * ITEMS_PER_PAGE + 1;
-  const displayEnd = Math.min(
-    currentPage * ITEMS_PER_PAGE,
-    filteredAndSortedVenues.length,
-  );
+  const displayStart = filteredAndSortedVenues.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const displayEnd = Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedVenues.length);
 
-  // Reset to page 1 when search or sort changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, sortOption]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, sortOption]);
 
   const goToNextPage = useCallback(() => {
-    if (currentPage < totalPages) {
-      setCurrentPage((prev) => prev + 1);
-    }
+    if (currentPage < totalPages) setCurrentPage((p) => p + 1);
   }, [currentPage, totalPages]);
 
   const goToPrevPage = useCallback(() => {
-    if (currentPage > 1) {
-      setCurrentPage((prev) => prev - 1);
-    }
+    if (currentPage > 1) setCurrentPage((p) => p - 1);
   }, [currentPage]);
 
-  // Sort options
   const sortOptions = [
     { label: "A-Z", value: "name_asc" },
     { label: "Z-A", value: "name_desc" },
@@ -218,30 +192,14 @@ export const useAdminVenues = () => {
   ];
 
   return {
-    // State
-    loading,
-    refreshing,
+    loading, refreshing,
     venues: paginatedVenues,
     totalCount: filteredAndSortedVenues.length,
-    searchQuery,
-    sortOption,
-
-    // Pagination
-    currentPage,
-    totalPages,
-    displayStart,
-    displayEnd,
+    searchQuery, sortOption,
+    currentPage, totalPages, displayStart, displayEnd,
     canGoNext: currentPage < totalPages,
     canGoPrev: currentPage > 1,
-
-    // Options
     sortOptions,
-
-    // Actions
-    onRefresh,
-    setSearchQuery,
-    setSortOption,
-    goToNextPage,
-    goToPrevPage,
+    onRefresh, setSearchQuery, setSortOption, goToNextPage, goToPrevPage,
   };
 };

@@ -11,11 +11,7 @@ export type UserRole =
   | "super_admin";
 
 export type ViewMode = "compact" | "full";
-export type SortOption =
-  | "name_asc"
-  | "name_desc"
-  | "date_newest"
-  | "date_oldest";
+export type SortOption = "name_asc" | "name_desc" | "date_newest" | "date_oldest";
 
 export interface AdminUser {
   id: string;
@@ -72,85 +68,98 @@ export const useAdminUsers = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
   const [sortOption, setSortOption] = useState<SortOption>("date_newest");
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useEffect(() => { loadUsers(); }, []);
 
   const loadUsers = async () => {
     try {
-      // Include last_login_at from profiles as the base value.
-      // If auth.admin is available the edit screen will surface the real
-      // auth.users.last_sign_in_at; for the list view profiles.last_login_at
-      // is sufficient and avoids N+1 admin API calls.
+      // ── Step 1: all profiles in one query ─────────────────────────────────
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("id, id_auto, name, email, role, created_at, status, last_active_at, last_login_at")
         .neq("status", "deleted")
         .order("created_at", { ascending: false });
 
-      if (profilesError) {
-        console.error("Error loading users:", profilesError);
-        return;
+      if (profilesError) { console.error("Error loading users:", profilesError); return; }
+      if (!profilesData || profilesData.length === 0) { setUsers([]); return; }
+
+      const allIdAutos = profilesData.map((u: any) => u.id_auto);
+
+      // ── Step 2: batch venue owner counts (1 query) ────────────────────────
+      const { data: venueOwnerData } = await supabase
+        .from("venue_owners")
+        .select("owner_id, venue_id")
+        .in("owner_id", allIdAutos)
+        .is("archived_at", null);
+
+      // venue count per owner
+      const venueCountByOwner: Record<number, number> = {};
+      // venue IDs per owner — needed to count directors under bar owner venues
+      const venueIdsByOwner: Record<number, number[]> = {};
+      for (const r of venueOwnerData || []) {
+        venueCountByOwner[r.owner_id] = (venueCountByOwner[r.owner_id] || 0) + 1;
+        if (!venueIdsByOwner[r.owner_id]) venueIdsByOwner[r.owner_id] = [];
+        venueIdsByOwner[r.owner_id].push(r.venue_id);
       }
 
-      if (!profilesData) {
-        setUsers([]);
-        return;
+      // ── Step 3: batch venue director counts (1 query) ─────────────────────
+      // We need:
+      //   • venue_count for tournament directors = venues they direct
+      //   • director_count for bar owners = unique directors across their venues
+      const allOwnedVenueIds = Object.values(venueIdsByOwner).flat();
+      const { data: venueDirectorData } = await supabase
+        .from("venue_directors")
+        .select("director_id, venue_id")
+        .is("archived_at", null);
+
+      // venues directed per TD
+      const venueCountByDirector: Record<number, number> = {};
+      // directors per venue (used to aggregate bar owner director counts)
+      const directorsByVenue: Record<number, Set<number>> = {};
+      for (const r of venueDirectorData || []) {
+        venueCountByDirector[r.director_id] = (venueCountByDirector[r.director_id] || 0) + 1;
+        if (!directorsByVenue[r.venue_id]) directorsByVenue[r.venue_id] = new Set();
+        directorsByVenue[r.venue_id].add(r.director_id);
       }
 
-      const usersWithStats: AdminUser[] = await Promise.all(
-        profilesData.map(async (user: any) => {
-          let venueCount = 0;
-          let directorCount = 0;
-
-          if (user.role === "bar_owner") {
-            const { count: vCount } = await supabase
-              .from("venue_owners")
-              .select("id", { count: "exact", head: true })
-              .eq("owner_id", user.id_auto)
-              .is("archived_at", null);
-            venueCount = vCount || 0;
-
-            const { data: venueIds } = await supabase
-              .from("venue_owners")
-              .select("venue_id")
-              .eq("owner_id", user.id_auto)
-              .is("archived_at", null);
-
-            if (venueIds && venueIds.length > 0) {
-              const ids = venueIds.map((v: any) => v.venue_id);
-              const { count: dCount } = await supabase
-                .from("venue_directors")
-                .select("id", { count: "exact", head: true })
-                .in("venue_id", ids)
-                .is("archived_at", null);
-              directorCount = dCount || 0;
-            }
+      // For each bar owner, count unique directors across all their venues
+      const directorCountByOwner: Record<number, number> = {};
+      for (const [ownerIdStr, venueIds] of Object.entries(venueIdsByOwner)) {
+        const ownerId = Number(ownerIdStr);
+        const allDirectors = new Set<number>();
+        for (const venueId of venueIds) {
+          for (const dirId of directorsByVenue[venueId] ?? []) {
+            allDirectors.add(dirId);
           }
+        }
+        directorCountByOwner[ownerId] = allDirectors.size;
+      }
 
-          if (user.role === "tournament_director") {
-            const { count: vCount } = await supabase
-              .from("venue_directors")
-              .select("id", { count: "exact", head: true })
-              .eq("director_id", user.id_auto)
-              .is("archived_at", null);
-            venueCount = vCount || 0;
-          }
+      // ── Step 4: map into final shape (pure JS) ────────────────────────────
+      const usersWithStats: AdminUser[] = profilesData.map((user: any) => {
+        const role = user.role as UserRole;
+        let venueCount = 0;
+        let directorCount = 0;
 
-          return {
-            id: user.id,
-            id_auto: user.id_auto,
-            name: user.name || "Unknown",
-            email: user.email || "",
-            role: user.role as UserRole,
-            created_at: user.created_at,
-            last_active_at: user.last_active_at || null,
-            last_login_at: user.last_login_at || null,
-            venue_count: venueCount,
-            director_count: directorCount,
-          };
-        }),
-      );
+        if (role === "bar_owner") {
+          venueCount = venueCountByOwner[user.id_auto] || 0;
+          directorCount = directorCountByOwner[user.id_auto] || 0;
+        } else if (role === "tournament_director") {
+          venueCount = venueCountByDirector[user.id_auto] || 0;
+        }
+
+        return {
+          id: user.id,
+          id_auto: user.id_auto,
+          name: user.name || "Unknown",
+          email: user.email || "",
+          role,
+          created_at: user.created_at,
+          last_active_at: user.last_active_at || null,
+          last_login_at: user.last_login_at || null,
+          venue_count: venueCount,
+          director_count: directorCount,
+        };
+      });
 
       setUsers(usersWithStats);
     } catch (error) {
@@ -161,106 +170,59 @@ export const useAdminUsers = () => {
     }
   };
 
-  const canEditUser = useCallback(
-    (targetRole: UserRole): boolean => {
-      if (currentUserRole === "super_admin") return true;
-      if (currentUserRole === "compete_admin") {
-        return ROLE_HIERARCHY[targetRole] < ROLE_HIERARCHY["compete_admin"];
-      }
-      return false;
-    },
-    [currentUserRole],
-  );
+  const canEditUser = useCallback((targetRole: UserRole): boolean => {
+    if (currentUserRole === "super_admin") return true;
+    if (currentUserRole === "compete_admin") return ROLE_HIERARCHY[targetRole] < ROLE_HIERARCHY["compete_admin"];
+    return false;
+  }, [currentUserRole]);
 
-  const canDeleteUser = useCallback(
-    (targetRole: UserRole): boolean => {
-      if (currentUserRole === "super_admin") return true;
-      if (currentUserRole === "compete_admin") {
-        return ROLE_HIERARCHY[targetRole] < ROLE_HIERARCHY["compete_admin"];
-      }
-      return false;
-    },
-    [currentUserRole],
-  );
+  const canDeleteUser = useCallback((targetRole: UserRole): boolean => {
+    if (currentUserRole === "super_admin") return true;
+    if (currentUserRole === "compete_admin") return ROLE_HIERARCHY[targetRole] < ROLE_HIERARCHY["compete_admin"];
+    return false;
+  }, [currentUserRole]);
 
-  const deleteUser = useCallback(
-    async (userId: string, userName: string) => {
-      Alert.alert(
-        "Delete User",
-        `Are you sure you want to delete ${userName}? This action cannot be undone.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                const { error } = await supabase
-                  .from("profiles")
-                  .update({
-                    status: "deleted",
-                    deleted_by: profile?.id_auto,
-                    deleted_at: new Date().toISOString(),
-                  })
-                  .eq("id", userId);
-
-                if (error) {
-                  Alert.alert("Error", `Failed to delete user: ${error.message}`);
-                  return;
-                }
-                setUsers((prev) => prev.filter((u) => u.id !== userId));
-                Alert.alert("Success", "User deleted successfully");
-              } catch {
-                Alert.alert("Error", "Failed to delete user");
-              }
-            },
-          },
-        ],
-      );
-    },
-    [profile?.id_auto],
-  );
-
-  const editUser = useCallback((userId: string) => userId, []);
+  const deleteUser = useCallback(async (userId: string, userName: string) => {
+    Alert.alert("Delete User", `Are you sure you want to delete ${userName}? This action cannot be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive",
+        onPress: async () => {
+          try {
+            const { error } = await supabase.from("profiles").update({
+              status: "deleted", deleted_by: profile?.id_auto,
+              deleted_at: new Date().toISOString(),
+            }).eq("id", userId);
+            if (error) { Alert.alert("Error", `Failed to delete user: ${error.message}`); return; }
+            setUsers((prev) => prev.filter((u) => u.id !== userId));
+            Alert.alert("Success", "User deleted successfully");
+          } catch {
+            Alert.alert("Error", "Failed to delete user");
+          }
+        },
+      },
+    ]);
+  }, [profile?.id_auto]);
 
   const filteredUsers = useMemo(() => {
     let result = [...users];
-    if (roleFilter !== "all") {
-      result = result.filter((u) => u.role === roleFilter);
-    }
+    if (roleFilter !== "all") result = result.filter((u) => u.role === roleFilter);
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (u) =>
-          u.name.toLowerCase().includes(query) ||
-          u.email.toLowerCase().includes(query),
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((u) =>
+        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
       );
     }
     switch (sortOption) {
-      case "name_asc":
-        result.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case "name_desc":
-        result.sort((a, b) => b.name.localeCompare(a.name));
-        break;
-      case "date_newest":
-        result.sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-      case "date_oldest":
-        result.sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-        );
-        break;
+      case "name_asc": result.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case "name_desc": result.sort((a, b) => b.name.localeCompare(a.name)); break;
+      case "date_newest": result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
+      case "date_oldest": result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()); break;
     }
     return result;
   }, [users, roleFilter, searchQuery, sortOption]);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadUsers();
-  }, []);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadUsers(); }, []);
 
   const roleFilterOptions: RoleOption[] = [
     { label: "All Roles", value: "all", color: "#888" },
@@ -279,25 +241,13 @@ export const useAdminUsers = () => {
   ];
 
   return {
-    loading,
-    refreshing,
+    loading, refreshing,
     users: filteredUsers,
     totalCount: users.length,
-    searchQuery,
-    roleFilter,
-    viewMode,
-    sortOption,
-    roleFilterOptions,
-    sortOptions,
-    canEditUser,
-    canDeleteUser,
-    onRefresh,
-    setSearchQuery,
-    setRoleFilter,
-    setViewMode,
-    setSortOption,
+    searchQuery, roleFilter, viewMode, sortOption,
+    roleFilterOptions, sortOptions,
+    canEditUser, canDeleteUser,
+    onRefresh, setSearchQuery, setRoleFilter, setViewMode, setSortOption,
     deleteUser,
   };
 };
-
-
