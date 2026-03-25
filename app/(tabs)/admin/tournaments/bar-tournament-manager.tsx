@@ -1,8 +1,8 @@
-// app/(tabs)/admin/tournaments/bar-tournament-manager.tsx
+﻿// app/(tabs)/admin/tournaments/bar-tournament-manager.tsx
 // UPDATED: Added Reassign Director button + modal with confirmation
 
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -132,6 +132,12 @@ export default function BarTournamentManagerScreen() {
   const pagination = usePagination(vm.tournaments, {
     itemsPerPage: 10,
   });
+  const listRef = useRef<any>(null);
+
+  // Scroll to top on page change
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [pagination.currentPage]);
 
   const handleStatusFilter = (filter: TournamentStatusFilter) => {
     vm.setStatusFilter(filter);
@@ -489,6 +495,7 @@ export default function BarTournamentManagerScreen() {
 
       {/* Tournament List */}
       <FlatList
+        ref={listRef}
         data={pagination.paginatedItems}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}

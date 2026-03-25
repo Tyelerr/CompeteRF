@@ -1,4 +1,5 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -138,6 +139,12 @@ export default function MyVenuesTournamentsScreen() {
   const pagination = usePagination(vm.filteredTournaments, {
     itemsPerPage: 10,
   });
+  const listRef = useRef<any>(null);
+
+  // Scroll to top on page change
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [pagination.currentPage]);
 
   // Reset pagination when filters change
   const handleStatusFilter = (filter: TournamentStatusFilter) => {
@@ -299,6 +306,7 @@ export default function MyVenuesTournamentsScreen() {
 
       {/* Tournament List */}
       <FlatList
+        ref={listRef}
         data={pagination.paginatedItems}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}

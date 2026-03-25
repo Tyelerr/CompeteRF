@@ -73,6 +73,11 @@ export const BilliardsScreen = () => {
     itemsPerPage: ITEMS_PER_PAGE,
   });
 
+  // Scroll to top whenever the active page changes
+  useEffect(() => {
+    scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [pagination.currentPage]);
+
   useEffect(() => {
     pagination.resetPage();
   }, [

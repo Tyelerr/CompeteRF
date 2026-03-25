@@ -1,7 +1,7 @@
-// app/(tabs)/admin/tournaments/super-admin-tournament-manager.tsx
+﻿// app/(tabs)/admin/tournaments/super-admin-tournament-manager.tsx
 
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -365,6 +365,12 @@ export default function SuperAdminTournamentManager() {
     }
   });
   const pg = usePagination(sorted, { itemsPerPage: 20 });
+  const listRef = useRef<any>(null);
+
+  // Scroll to top on page change
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [pg.currentPage]);
 
   const handleFilter = (f: TournamentStatusFilter) => {
     vm.setStatusFilter(f);
@@ -555,6 +561,7 @@ export default function SuperAdminTournamentManager() {
       />
 
       <FlatList
+        ref={listRef}
         data={pg.paginatedItems}
         keyExtractor={(i) => i.id.toString()}
         contentContainerStyle={styles.list}

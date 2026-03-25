@@ -1,8 +1,8 @@
-// app/(tabs)/admin/venue-management.tsx
+﻿// app/(tabs)/admin/venue-management.tsx
 // UPDATED: Venue ID badges, DELETE old owners on reassign
 
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -233,6 +233,12 @@ export default function VenueManagementScreen() {
   const [reassignVis, setReassignVis] = useState(false);
   const [venueToReassign, setVenueToReassign] = useState<any>(null);
   const [currentOwnerName, setCurrentOwnerName] = useState("");
+  const listRef = useRef<any>(null);
+
+  // Scroll to top on page change
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [vm.currentPage]);
 
   const handleVenuePress = (venueId: number) => {
     router.push(`/(tabs)/admin/edit-venue/${venueId}` as any);
@@ -466,6 +472,7 @@ export default function VenueManagementScreen() {
       />
 
       <FlatList
+        ref={listRef}
         data={vm.venues}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}

@@ -210,6 +210,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
 
+  // Scroll to top whenever the favorites page changes
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentPage]);
+
   // ── Seed profile from Zustand store immediately ───────────────────────────
   // This is the key fix: instead of starting with null and waiting for a
   // fresh DB fetch, we initialise directly from the auth store which is

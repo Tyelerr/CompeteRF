@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useState } from "react";
+﻿import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -367,6 +367,12 @@ export default function TournamentManagementScreen() {
   const pagination = usePagination(vm.filteredTournaments, {
     itemsPerPage: 10,
   });
+  const listRef = useRef<any>(null);
+
+  // Scroll to top on page change
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [pagination.currentPage]);
 
   const handleStatusFilter = (filter: TournamentStatusFilter) => {
     vm.setStatusFilter(filter);
@@ -658,6 +664,7 @@ export default function TournamentManagementScreen() {
 
       {/* Tournament List */}
       <FlatList
+        ref={listRef}
         data={pagination.paginatedItems}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
