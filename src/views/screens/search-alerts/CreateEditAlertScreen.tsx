@@ -267,7 +267,7 @@ export default function CreateEditAlertScreen() {
   };
 
   const stateOptions = [{ label: "Any State", value: "" }, ...US_STATES];
-  const cityList = form.state ? US_CITIES_BY_STATE[form.state] || [] : [];
+  const cityList = form.state && US_CITIES_BY_STATE ? (US_CITIES_BY_STATE[form.state] || []) : [];
   const cityOptions = [
     { label: "Any City", value: "" },
     ...cityList.map((city: string) => ({ label: city, value: city })),

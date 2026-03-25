@@ -195,8 +195,12 @@ export function useRecommendVenue(): UseRecommendVenueReturn {
           city, state, zip_code: zipCode,
           phone: result.formatted_phone_number || "",
           google_place_id: placeId,
-          latitude: result.geometry?.location?.lat?.() ?? result.geometry?.location?.lat ?? null,
-          longitude: result.geometry?.location?.lng?.() ?? result.geometry?.location?.lng ?? null,
+          latitude: typeof result.geometry?.location?.lat === "function"
+            ? result.geometry.location.lat()
+            : (result.geometry?.location?.lat ?? null),
+          longitude: typeof result.geometry?.location?.lng === "function"
+            ? result.geometry.location.lng()
+            : (result.geometry?.location?.lng ?? null),
         });
 
         setVenueSelected(true);

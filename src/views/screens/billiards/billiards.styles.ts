@@ -1,4 +1,4 @@
-import { Platform, StyleSheet } from "react-native";
+﻿import { Platform, StyleSheet } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -47,13 +47,13 @@ export const styles = StyleSheet.create({
     paddingRight: 0,
   },
   searchIcon: {
-    fontSize: isWeb ? 12 : FONT_SIZES.md,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
     marginRight: SPACING.xs,
   },
   searchInput: {
     flex: 1,
     paddingVertical: isWeb ? 7 : SPACING.md,
-    fontSize: isWeb ? 12 : FONT_SIZES.md,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
     color: COLORS.text,
   },
   clearBtn: {
@@ -90,12 +90,12 @@ export const styles = StyleSheet.create({
     flex: 2,
   },
   filterLabel: {
-    fontSize: isWeb ? 10 : FONT_SIZES.sm,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.sm,
     color: COLORS.textSecondary,
     marginBottom: 2,
   },
 
-  // ── Zip input ───────────────────────────────────────────────────────────────
+  // ── Zip input ────────────────────────────────────────────────────────────────
   zipInput: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
@@ -111,7 +111,7 @@ export const styles = StyleSheet.create({
     includeFontPadding: false,
   },
 
-  // ── Radius slider ───────────────────────────────────────────────────────────
+  // ── Radius slider ────────────────────────────────────────────────────────────
   radiusContainer: {
     paddingHorizontal: SPACING.md,
     marginBottom: isWeb ? 6 : SPACING.sm,
@@ -123,12 +123,12 @@ export const styles = StyleSheet.create({
     marginBottom: 2,
   },
   radiusLabel: {
-    fontSize: isWeb ? 10 : FONT_SIZES.sm,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.sm,
     fontWeight: "600",
     color: COLORS.text,
   },
   radiusValue: {
-    fontSize: isWeb ? 10 : FONT_SIZES.sm,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.sm,
     fontWeight: "700",
     color: COLORS.primary,
   },
@@ -146,12 +146,12 @@ export const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
-  // ── Filter buttons ──────────────────────────────────────────────────────────
+  // ── Filter buttons ───────────────────────────────────────────────────────────
   filterButtonsRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
     gap: isWeb ? 6 : SPACING.md,
-    marginBottom: isWeb ? 8 : SPACING.md,
+    marginBottom: isWeb ? SPACING.sm : SPACING.md,
   },
   filtersButton: {
     flex: 1,
@@ -163,7 +163,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   filtersButtonText: {
-    fontSize: isWeb ? 11 : FONT_SIZES.md,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
     color: COLORS.text,
   },
   resetButton: {
@@ -174,12 +174,32 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   resetButtonText: {
-    fontSize: isWeb ? 11 : FONT_SIZES.md,
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
     color: COLORS.white,
     fontWeight: "600",
   },
 
-  // ── List ────────────────────────────────────────────────────────────────────
+  // ── Search Alerts button (empty state only) ──────────────────────────────────
+  alertsButton: {
+    alignSelf: "stretch",
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+  },
+  alertsButtonText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+
+  // ── List ─────────────────────────────────────────────────────────────────────
   list: {
     padding: isWeb ? SPACING.xs : SPACING.sm,
   },
@@ -187,7 +207,7 @@ export const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
 
-  // ── States ──────────────────────────────────────────────────────────────────
+  // ── States ───────────────────────────────────────────────────────────────────
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -199,10 +219,13 @@ export const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     textAlign: "center",
   },
+  // paddingVertical instead of justifyContent:center so content is never
+  // clipped on smaller screens — the ScrollView wrapper handles overflow.
   emptyContainer: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xl,
+    paddingHorizontal: SPACING.md,
   },
   emptyIcon: {
     fontSize: 60,
@@ -211,11 +234,14 @@ export const styles = StyleSheet.create({
   emptyText: {
     fontSize: FONT_SIZES.lg,
     color: COLORS.textMuted,
+    textAlign: "center",
   },
   emptySubtext: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textMuted,
     marginTop: SPACING.xs,
+    marginBottom: SPACING.sm,
+    textAlign: "center",
   },
 });
 

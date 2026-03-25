@@ -1,4 +1,4 @@
-import {
+﻿import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
@@ -8,7 +8,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
@@ -153,7 +152,7 @@ export const RecommendVenueModal = ({ vm }: Props) => {
   return (
     <Modal
       visible={vm.visible}
-      animationType={isWeb ? "fade" : "slide"}
+      animationType="fade"
       transparent
       onRequestClose={vm.close}
     >
@@ -171,10 +170,14 @@ export const RecommendVenueModal = ({ vm }: Props) => {
           style={styles.overlay}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <TouchableWithoutFeedback onPress={vm.close}>
-            <View style={styles.backdrop} />
-          </TouchableWithoutFeedback>
-          {inner}
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={vm.close}
+          />
+          <View style={styles.cardWrapper}>
+            <View style={styles.card}>{inner}</View>
+          </View>
         </KeyboardAvoidingView>
       )}
     </Modal>
@@ -182,14 +185,33 @@ export const RecommendVenueModal = ({ vm }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+  },
+  cardWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  card: {
+    width: "100%" as any,
+    maxWidth: 480,
+    maxHeight: "85%" as any,
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+  },
   sheet: {
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : SPACING.md,
-    maxHeight: "80%",
   },
   header: {
     flexDirection: "row",

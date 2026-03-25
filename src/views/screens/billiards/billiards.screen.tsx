@@ -2,10 +2,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Keyboard,
   Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -33,6 +35,7 @@ import { RecommendVenueModal } from "../../components/common/RecommendVenueModal
 import ReportModal from "../../components/common/ReportModal";
 import { WebContainer } from "../../components/common/WebContainer";
 import { TournamentDetailModal } from "../../components/tournament/TournamentDetailModal";
+import { SearchAlertsModal } from "../../components/profile/SearchAlertsModal";
 import { styles } from "./billiards.styles";
 import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
 import { useAuth } from "../../../viewmodels/hooks/use.auth";
@@ -44,14 +47,13 @@ const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 export const BilliardsScreen = () => {
   const [webDetailId, setWebDetailId] = useState<string | null>(null);
   const [mobileDetailId, setMobileDetailId] = useState<string | null>(null);
+  const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const { tournamentId: deepLinkId } = useLocalSearchParams<{ tournamentId?: string }>();
   const deepLinkHandled = useRef(false);
 
-  // Open modal once when arriving from a deep link — replace URL to clear the param
   useEffect(() => {
     if (deepLinkId) {
       setMobileDetailId(String(deepLinkId));
-      // Short delay so the modal opens before we clear the param from the URL
       setTimeout(() => {
         router.replace("/(tabs)/billiards" as any);
       }, 500);
@@ -63,9 +65,6 @@ export const BilliardsScreen = () => {
   const scrollRef = useScrollToTopOnFocus();
   const { user } = useAuth();
 
-  // ── Responsive card sizing (mobile only) ───────────────────────────────────
-  // useWindowDimensions re-renders automatically on rotation or window resize.
-  // The actual math lives in layout.utils.ts to keep the view clean.
   const { width: screenWidth } = useWindowDimensions();
   const { cardWidth, imageHeight } = computeMobileCardLayout(screenWidth);
 
@@ -86,7 +85,6 @@ export const BilliardsScreen = () => {
     itemsPerPage: ITEMS_PER_PAGE,
   });
 
-  // Scroll to top whenever the active page changes
   useEffect(() => {
     scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [pagination.currentPage]);
@@ -108,9 +106,36 @@ export const BilliardsScreen = () => {
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
 
-  const getStateName = (abbrev: string) => {
-    const found = US_STATES.find((s) => s.value === abbrev);
-    return found ? found.label : abbrev;
+  // Always callable - prompts login if not authenticated, opens modal if logged in
+  const handleSearchAlertsPress = () => {
+    if (!user) {
+      Alert.alert(
+        "Sign In Required",
+        "Sign in or create a free account to set up search alerts and get notified when new tournaments match your criteria.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
+        ]
+      );
+      return;
+    }
+    setSearchAlertsVisible(true);
+  };
+
+  // Always callable - prompts login if not authenticated, opens modal if logged in
+  const handleRecommendPress = () => {
+    if (!user) {
+      Alert.alert(
+        "Sign In Required",
+        "Sign in or create a free account to recommend a venue to our community.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
+        ]
+      );
+      return;
+    }
+    recommend.open();
   };
 
   const renderWebFilters = () => (
@@ -250,50 +275,53 @@ export const BilliardsScreen = () => {
         }}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
         getTournamentImageUrl={vm.getTournamentImageUrl}
-        // Pass computed dimensions on mobile only — web manages its own sizing
         cardWidth={isWeb ? undefined : cardWidth}
         imageHeight={isWeb ? undefined : imageHeight}
       />
     );
   };
 
-  const renderRecommendCard = () => {
-    if (!vm.user) return null;
-    return (
-      <View
-        style={{
-          backgroundColor: COLORS.surface,
-          borderRadius: 12,
-          padding: SPACING.md,
-          marginHorizontal: SPACING.xs,
-          marginTop: SPACING.md,
-          marginBottom: SPACING.md,
-          borderWidth: 1,
-          borderColor: COLORS.primary + "30",
-          alignItems: "center",
-        }}
+  // Always rendered - no user gate. handleRecommendPress handles auth check.
+  const renderRecommendCard = () => (
+    <View
+      style={{
+        backgroundColor: COLORS.surface,
+        borderRadius: RADIUS.md,
+        padding: SPACING.md,
+        marginHorizontal: SPACING.xs,
+        marginTop: SPACING.md,
+        marginBottom: SPACING.md,
+        borderWidth: 1,
+        borderColor: COLORS.primary + "30",
+        alignItems: "center",
+      }}
+    >
+      <Text style={{ fontSize: 24, marginBottom: SPACING.sm }}>🎱</Text>
+      <Text style={{ fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
+        Know a spot that hosts pool tournaments?
+      </Text>
+      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", marginTop: SPACING.xs, marginBottom: SPACING.md }}>
+        Help us grow the community - recommend a venue!
+      </Text>
+      <TouchableOpacity
+        style={{ backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm }}
+        onPress={handleRecommendPress}
       >
-        <Text style={{ fontSize: 24, marginBottom: 8 }}>🎱</Text>
-        <Text style={{ fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
-          Know a spot that hosts pool tournaments?
+        <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: FONT_SIZES.sm }}>
+          Recommend a Venue
         </Text>
-        <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", marginTop: 4, marginBottom: 12 }}>
-          Help us grow the community — recommend a venue!
-        </Text>
-        <TouchableOpacity
-          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
-          onPress={recommend.open}
-        >
-          <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: FONT_SIZES.sm }}>
-            Recommend a Venue
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+      </TouchableOpacity>
+    </View>
+  );
 
+  // Always rendered - no user gate. handleSearchAlertsPress handles auth check.
   const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.emptyContainer}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.emptyIcon}>🎱</Text>
       <Text style={styles.emptyText}>
         {vm.isStateFilterEmpty && vm.selectedState
@@ -301,16 +329,14 @@ export const BilliardsScreen = () => {
           : "No tournaments found"}
       </Text>
       <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
-      {vm.isStateFilterEmpty && vm.selectedState && vm.user && (
-        <TouchableOpacity
-          style={{ backgroundColor: COLORS.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, marginTop: 16 }}
-          onPress={() => router.push(`/search-alerts/create?state=${vm.selectedState}` as any)}
-        >
-          <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: 15 }}>Create Search Alert</Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.alertsButton}
+        onPress={handleSearchAlertsPress}
+      >
+        <Text style={styles.alertsButtonText}>🔔 Create Search Alert</Text>
+      </TouchableOpacity>
       {renderRecommendCard()}
-    </View>
+    </ScrollView>
   );
 
   if (vm.loading) return <Loading fullScreen message="Loading tournaments..." />;
@@ -346,9 +372,18 @@ export const BilliardsScreen = () => {
             ) : (
               <>
                 {vm.isHomeStateEmpty && (
-                  <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: 16, paddingVertical: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 8, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
-                    <Text style={{ color: COLORS.text, fontSize: 13, textAlign: "center" }}>
-                      No tournaments in your state yet — showing all tournaments
+                  <View style={{
+                    backgroundColor: COLORS.primary + "15",
+                    paddingHorizontal: SPACING.md,
+                    paddingVertical: SPACING.sm,
+                    marginHorizontal: SPACING.md,
+                    marginBottom: SPACING.sm,
+                    borderRadius: RADIUS.sm,
+                    borderWidth: 1,
+                    borderColor: COLORS.primary + "30",
+                  }}>
+                    <Text style={{ color: COLORS.text, fontSize: FONT_SIZES.sm, textAlign: "center" }}>
+                      No tournaments in your state yet - showing all tournaments
                     </Text>
                   </View>
                 )}
@@ -504,6 +539,11 @@ export const BilliardsScreen = () => {
           onSubmit={handleReportSubmit}
           isSubmitting={isReportSubmitting}
         />
+
+        <SearchAlertsModal
+          visible={searchAlertsVisible}
+          onClose={() => setSearchAlertsVisible(false)}
+        />
       </View>
     </WebContainer>
   );
@@ -515,9 +555,9 @@ const webS = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
     gap: 6,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   searchWrap: {
     width: 220,
@@ -527,24 +567,24 @@ const webS = StyleSheet.create({
     borderRadius: RADIUS.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingLeft: 8,
+    paddingLeft: SPACING.sm,
     paddingRight: 0,
     height: 32,
   },
-  searchIcon: { fontSize: 12, marginRight: 4 },
-  searchInput: { flex: 1, fontSize: 12, color: COLORS.text, height: 32 },
+  searchIcon: { fontSize: FONT_SIZES.xs, marginRight: SPACING.xs },
+  searchInput: { flex: 1, fontSize: FONT_SIZES.xs, color: COLORS.text, height: 32 },
   clearBtn: {
     height: 32,
-    paddingLeft: 4,
-    paddingRight: 12,
+    paddingLeft: SPACING.xs,
+    paddingRight: SPACING.md,
     justifyContent: "center",
     alignItems: "center",
   },
   clearBtnText: {
-    fontSize: 18,
+    fontSize: FONT_SIZES.md,
     color: COLORS.textMuted,
     fontWeight: "600",
-    lineHeight: 22,
+    lineHeight: FONT_SIZES.md + 4,
   },
   dropWrap: { width: 150, height: 32 },
   zipInput: {
@@ -554,13 +594,13 @@ const webS = StyleSheet.create({
     borderRadius: RADIUS.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 8,
-    fontSize: 12,
+    paddingHorizontal: SPACING.sm,
+    fontSize: FONT_SIZES.xs,
     color: COLORS.text,
   },
   filterBtn: {
     height: 32,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.sm,
     borderWidth: 1,
@@ -568,16 +608,18 @@ const webS = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterBtnText: { fontSize: 11, color: COLORS.text },
+  filterBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.text },
   resetBtn: {
     height: 32,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.sm,
     alignItems: "center",
     justifyContent: "center",
   },
-  resetBtnText: { fontSize: 11, color: COLORS.white, fontWeight: "600" },
+  resetBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.white, fontWeight: "600" },
 });
 
 export default BilliardsScreen;
+
+
