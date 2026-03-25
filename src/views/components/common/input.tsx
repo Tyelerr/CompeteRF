@@ -1,9 +1,10 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   Platform,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
   type TextInputProps,
 } from "react-native";
@@ -19,6 +20,7 @@ interface InputProps {
   onChangeText: (text: string) => void;
   placeholder?: string;
   secureTextEntry?: boolean;
+  showPasswordToggle?: boolean;
   keyboardType?: "default" | "email-address" | "numeric" | "phone-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   error?: string;
@@ -40,6 +42,7 @@ export const Input = ({
   onChangeText,
   placeholder,
   secureTextEntry = false,
+  showPasswordToggle = false,
   keyboardType = "default",
   autoCapitalize = "sentences",
   error,
@@ -53,6 +56,9 @@ export const Input = ({
   autoFillActive = false,
 }: InputProps) => {
   const [focused, setFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  const isSecure = secureTextEntry && !passwordVisible;
 
   return (
     <View style={styles.container}>
@@ -65,11 +71,11 @@ export const Input = ({
         <TextInput
           style={[
             styles.input,
+            showPasswordToggle && styles.inputWithToggle,
             error && styles.inputError,
             disabled && styles.inputDisabled,
             multiline && styles.multiline,
             autoFillActive && styles.autoFillInput,
-            // Web focus glow
             isWeb && focused && !error && styles.inputFocused,
             isWeb && {
               // @ts-ignore — web only
@@ -81,7 +87,7 @@ export const Input = ({
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textMuted}
-          secureTextEntry={secureTextEntry}
+          secureTextEntry={isSecure}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           editable={!disabled}
@@ -93,6 +99,17 @@ export const Input = ({
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
+        {showPasswordToggle && secureTextEntry && (
+          <TouchableOpacity
+            style={styles.toggleButton}
+            onPress={() => setPasswordVisible((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.toggleText}>
+              {passwordVisible ? "Hide" : "Show"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
       {helper && !error && <Text style={styles.helper}>{helper}</Text>}
@@ -128,6 +145,9 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
   },
+  inputWithToggle: {
+    paddingRight: SPACING.xl + SPACING.lg,
+  },
   inputFocused: {
     borderColor: COLORS.primary,
     // @ts-ignore — web only
@@ -147,6 +167,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a3a5c",
     borderColor: "#2d6cb4",
     color: "#ffffff",
+  },
+  toggleButton: {
+    position: "absolute",
+    right: SPACING.md,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    paddingHorizontal: SPACING.xs,
+  },
+  toggleText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.primary,
+    fontWeight: "600",
   },
   error: {
     fontSize: FONT_SIZES.xs,

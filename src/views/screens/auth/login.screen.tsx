@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
@@ -86,6 +86,7 @@ export const LoginScreen = () => {
           onChangeText={setPassword}
           placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"}
           secureTextEntry
+          showPasswordToggle
         />
 
         <TouchableOpacity

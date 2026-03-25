@@ -1,4 +1,4 @@
-// src/views/components/faq/ContactModal.tsx
+﻿// src/views/components/faq/ContactModal.tsx
 
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -18,6 +18,7 @@ import { supabase } from "../../../lib/supabase";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { useAuthStore } from "../../../viewmodels/stores/auth.store";
 import { SUPPORT_CATEGORIES } from "../../../utils/support-categories";
 import { Dropdown } from "../common/dropdown";
 
@@ -44,6 +45,8 @@ export function ContactModal({
   const [sending, setSending] = useState(false);
 
   const [tournamentSearch, setTournamentSearch] = useState("");
+  // FIX Bug 2: restored missing `<` on the generic — bare `useState` followed by
+  // `{ id: number; ... }[]>([])` was not an array, causing the destructure crash.
   const [tournamentResults, setTournamentResults] = useState<
     { id: number; name: string; venue_name: string }[]
   >([]);
@@ -121,34 +124,58 @@ export function ContactModal({
       return;
     }
     if (!user) {
-      Alert.alert("Login Required", "Please log in to send a message.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Log In",
-          onPress: () => {
-            handleClose();
-            router.push("/auth/login");
-          },
-        },
-      ]);
-      return;
-    }
-    if (!profile?.id_auto) {
       Alert.alert(
-        "Error",
-        "Could not find your profile. Please try logging out and back in.",
+        "Sign In Required",
+        "Sign in or create a free account to send us a message.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Sign In / Sign Up",
+            onPress: () => {
+              handleClose();
+              router.push("/(tabs)/profile" as any);
+            },
+          },
+        ],
       );
       return;
     }
 
     setSending(true);
     try {
+      // FIX Bug 1: read the live Zustand value at call-time so we never hit a
+      // stale prop closure. Falls back to the prop value only as a secondary
+      // safety net, then fetches from Supabase if both are missing.
+      const liveProfile = useAuthStore.getState().profile;
+      let idAuto: number | undefined =
+        liveProfile?.id_auto ?? profile?.id_auto;
+
+      if (!idAuto) {
+        const userId = liveProfile?.id ?? user?.id;
+        if (userId) {
+          const { data: fetchedProfile } = await supabase
+            .from("profiles")
+            .select("id_auto")
+            .eq("id", userId)
+            .maybeSingle();
+          idAuto = fetchedProfile?.id_auto;
+        }
+      }
+
+      if (!idAuto) {
+        Alert.alert(
+          "Error",
+          "Could not load your profile. Please try again in a moment.",
+        );
+        return;
+      }
+
       const fullSubject = selectedTournament
         ? `${subject.trim()} - Tournament: ${selectedTournament.name}`
         : subject.trim();
 
       const { error } = await supabase.from("support_tickets").insert({
-        user_id: profile.id_auto,
+        user_id: idAuto,
         subject: fullSubject,
         description: message.trim(),
         category,
@@ -324,7 +351,7 @@ export function ContactModal({
         </View>
       </ScrollView>
 
-      {/* Footer */}
+      {/* Footer — UI Change: Cancel button removed; header ✕ is the only dismiss */}
       <View style={s.divider} />
       <View style={s.footer}>
         <TouchableOpacity
@@ -348,13 +375,6 @@ export function ContactModal({
             <Text style={s.sendButtonText}>Send Message</Text>
           )}
         </TouchableOpacity>
-        <TouchableOpacity
-          style={s.cancelButton}
-          onPress={handleClose}
-          disabled={sending}
-        >
-          <Text style={s.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
       </View>
     </>
   );
@@ -375,7 +395,7 @@ export function ContactModal({
     );
   }
 
-  // Mobile
+  // Mobile — header ✕ is the only dismiss action
   return (
     <Modal
       visible={visible}
@@ -390,9 +410,6 @@ export function ContactModal({
           onPress={handleClose}
         />
         <View style={s.mobileContainer}>{innerContent}</View>
-        <TouchableOpacity style={s.mobileCloseButton} onPress={handleClose}>
-          <Text style={s.mobileCloseButtonText}>Close</Text>
-        </TouchableOpacity>
       </View>
     </Modal>
   );
@@ -417,16 +434,16 @@ const s = StyleSheet.create({
     zIndex: 2001,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
+    padding: SPACING.lg,
   },
   dialog: {
     width: 700,
     maxWidth: "92%" as any,
     height: "82vh" as any,
-    backgroundColor: "#000000",
+    backgroundColor: COLORS.background,
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: "#2C2C2E",
+    borderColor: COLORS.border,
     overflow: "hidden" as any,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
@@ -440,30 +457,16 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "flex-end",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.md,
     paddingBottom: 110,
   },
   mobileContainer: {
     backgroundColor: COLORS.background,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     width: "100%" as any,
     maxWidth: 500,
     height: "85%" as any,
     overflow: "hidden",
-  },
-  mobileCloseButton: {
-    backgroundColor: "#E74C3C",
-    borderRadius: 12,
-    margin: 12,
-    width: "100%" as any,
-    maxWidth: 500,
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-  },
-  mobileCloseButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: FONT_SIZES.md,
   },
   header: {
     flexDirection: "row",
@@ -486,7 +489,7 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   closeButtonText: { color: COLORS.text, fontSize: 20, fontWeight: "700" },
-  divider: { height: 1, backgroundColor: "#2C2C2E" },
+  divider: { height: 1, backgroundColor: COLORS.border },
   scrollContent: { padding: SPACING.lg, paddingBottom: SPACING.xl },
 
   userInfo: {
@@ -526,7 +529,7 @@ const s = StyleSheet.create({
     fontWeight: "500",
     marginBottom: SPACING.sm,
   },
-  required: { color: "#E74C3C" },
+  required: { color: COLORS.error },
   optional: {
     color: COLORS.textMuted,
     fontWeight: "400",
@@ -610,29 +613,17 @@ const s = StyleSheet.create({
     paddingLeft: SPACING.sm,
   },
 
-  footer: { flexDirection: "row", gap: SPACING.sm, padding: SPACING.md },
+  footer: { padding: SPACING.md },
   sendButton: {
-    flex: 1,
     paddingVertical: SPACING.md,
     borderRadius: RADIUS.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.primary,
   },
-  sendButtonText: { fontSize: FONT_SIZES.md, color: "#fff", fontWeight: "600" },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    borderRadius: RADIUS.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cancelButtonText: {
+  sendButtonText: {
     fontSize: FONT_SIZES.md,
-    color: COLORS.text,
+    color: COLORS.white,
     fontWeight: "600",
   },
   buttonDisabled: { opacity: 0.5 },
