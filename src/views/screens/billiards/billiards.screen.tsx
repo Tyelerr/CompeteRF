@@ -1,6 +1,6 @@
 ﻿import { getActiveFilterCount } from "../../../models/types/filter.types";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Keyboard,
@@ -44,6 +44,19 @@ const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 export const BilliardsScreen = () => {
   const [webDetailId, setWebDetailId] = useState<string | null>(null);
   const [mobileDetailId, setMobileDetailId] = useState<string | null>(null);
+  const { tournamentId: deepLinkId } = useLocalSearchParams<{ tournamentId?: string }>();
+  const deepLinkHandled = useRef(false);
+
+  // Open modal once when arriving from a deep link — replace URL to clear the param
+  useEffect(() => {
+    if (deepLinkId) {
+      setMobileDetailId(String(deepLinkId));
+      // Short delay so the modal opens before we clear the param from the URL
+      setTimeout(() => {
+        router.replace("/(tabs)/billiards" as any);
+      }, 500);
+    }
+  }, [deepLinkId]);
   const router = useRouter();
   const vm = useBilliards();
   const recommend = useRecommendVenue();

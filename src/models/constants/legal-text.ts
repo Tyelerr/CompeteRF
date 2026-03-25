@@ -1,9 +1,9 @@
-// src/models/constants/legal-text.ts
+﻿// src/models/constants/legal-text.ts
 // Centralised legal copy — imported by signup checkboxes and legal screens.
 
 export const TERMS_OF_SERVICE = {
   title: 'Terms of Service',
-  lastUpdated: 'February 11, 2026',
+  lastUpdated: 'March 25, 2026',
   preamble:
     'Welcome to Compete. These Terms of Service (\u201CTerms\u201D) govern your access to and use of the Compete mobile application (\u201CApp\u201D), operated by AZ Tech Guys LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). By creating an account or using the App, you agree to be bound by these Terms. If you do not agree, do not use the App.',
   sections: [
@@ -179,7 +179,7 @@ export const TERMS_OF_SERVICE = {
 
 export const PRIVACY_POLICY = {
   title: 'Privacy Policy',
-  lastUpdated: 'February 11, 2026',
+  lastUpdated: 'March 25, 2026',
   preamble:
     'Compete is operated by AZ Tech Guys LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). This Privacy Policy explains what personal information we collect through the Compete mobile application (\u201CApp\u201D), how we use and protect it, and your rights regarding your data. By using the App, you agree to the collection and use of information as described in this policy.',
   sections: [
@@ -192,7 +192,7 @@ export const PRIVACY_POLICY = {
         '\u2022 Email address\n' +
         '\u2022 Phone number\n' +
         '\u2022 Date of birth\n' +
-        '\u2022 Profile image or photo\n' +
+        '\u2022 Profile image or photo (selected from your photo library or taken with your camera)\n' +
         '\u2022 Tournament listings and related content you submit\n' +
         '\u2022 Any other information you voluntarily provide through the App (such as favorites, giveaway entries, or messages)\n\n' +
         '1.2 Information Collected Automatically\n\n' +
@@ -201,9 +201,17 @@ export const PRIVACY_POLICY = {
         '\u2022 App usage data (features accessed, actions taken, timestamps)\n' +
         '\u2022 Approximate location data (based on IP address or, if you grant permission, more precise location data to help you find nearby tournaments)\n' +
         '\u2022 Crash logs and performance data\n\n' +
-        '1.3 Information from Third Parties\n\n' +
+        '1.3 Device Permissions\n\n' +
+        'The App may request access to the following device resources, only when you use features that require them:\n\n' +
+        '\u2022 Photo Library: Accessed only when you choose to upload a profile picture or tournament image. For example, you can select a photo from your library to set as your profile image or attach to a tournament listing. We do not access your photo library without your explicit action.\n' +
+        '\u2022 Camera: Accessed only when you choose to take a new photo for your profile or a tournament listing. We do not access your camera in the background.\n' +
+        '\u2022 Location: Accessed when you grant permission, to show you nearby tournaments and venues. We do not store your precise location permanently.\n' +
+        '\u2022 Contacts: Only accessed if you choose to share tournament information with a contact. We do not upload, store, or sync your contacts.\n' +
+        '\u2022 Push Notifications: Sent to notify you about tournaments you follow, giveaway results, and account activity. You can manage notification preferences at any time through your device settings.\n\n' +
+        'All device permissions are optional where technically possible. Denying a permission will disable the related feature but will not affect other App functionality.\n\n' +
+        '1.4 Information from Third Parties\n\n' +
         'If you sign in using a third-party authentication provider (such as Google or Apple), we may receive basic profile information from that provider, such as your name and email address, in accordance with their privacy policies.\n\n' +
-        '1.4 Payment Information\n\n' +
+        '1.5 Payment Information\n\n' +
         'If you make a payment through the App, your payment information (such as credit card number and billing details) is collected and processed directly by Stripe, Inc. Compete does not receive, store, or have access to your full payment card numbers. We may receive limited transaction information from Stripe, such as the last four digits of your card, transaction amount, and payment status, for the purpose of managing your account and providing receipts.',
     },
     {
@@ -260,8 +268,10 @@ export const PRIVACY_POLICY = {
         '\u2022 Access: You may request a copy of the personal information we hold about you.\n' +
         '\u2022 Correction: You may update or correct inaccurate information through your account settings or by contacting us.\n' +
         '\u2022 Deletion: You may request deletion of your account and associated personal data. You can initiate account deletion through the App or by contacting us at support@thecompeteapp.com. We will process deletion requests within a reasonable timeframe.\n' +
-        '\u2022 Location: You can control whether the App accesses your precise location through your device\u2019s permission settings.\n' +
-        '\u2022 Notifications: You can manage push notification preferences through your device settings.\n\n' +
+        '\u2022 Photo Library & Camera: You can revoke photo library or camera access at any time through your device\u2019s Settings app under Compete. Revoking access will disable photo upload features.\n' +
+        '\u2022 Location: You can control whether the App accesses your precise location through your device\u2019s permission settings under Compete.\n' +
+        '\u2022 Contacts: You can revoke contacts access at any time through your device\u2019s Settings app. We do not retain any contact data.\n' +
+        '\u2022 Notifications: You can manage push notification preferences through your device settings or within the App.\n\n' +
         'To exercise any of these rights, contact us at support@thecompeteapp.com.',
     },
     {

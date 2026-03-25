@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Alert, Platform } from "react-native";
 import { barRequestService } from "../../models/services/bar-request.service";
 import { useAuthContext } from "../../providers/AuthProvider";
@@ -129,6 +129,10 @@ async function nativeGetPlaceDetails(placeId: string): Promise<any> {
   const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,address_components,geometry,formatted_phone_number&key=${GOOGLE_PLACES_API_KEY}`;
   const response = await fetch(url);
   const data = await response.json();
+  console.log("[Places] Details status:", data.status, "result:", data.result ? "ok" : "null", "error:", data.error_message);
+  if (data.status !== "OK") {
+    throw new Error(`Places API error: ${data.status} - ${data.error_message || "unknown"}`);
+  }
   return data.result;
 }
 

@@ -9,6 +9,7 @@ import { useWindowDimensions, Animated,
   Platform,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,6 +20,7 @@ import { authService } from "../../src/models/services/auth.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
@@ -222,6 +224,7 @@ export default function ProfileScreen() {
   // "No ID" flash that occurred because the screen rendered before its own
   // independent loadProfile() fetch completed.
   const storeProfile = useAuthStore((s) => s.profile);
+  const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -422,7 +425,14 @@ export default function ProfileScreen() {
 
   const handleRemoveFavorite = (favId: number) => {
     const run = async () => {
-      await supabase.from("favorites").delete().eq("id", favId);
+      const fav = favorites.find((f) => f.id === favId);
+      if (fav?.tournament_id) {
+        // Use the shared hook so React Query cache is invalidated
+        // and billiards + tournament detail modal update instantly
+        await toggleFav(fav.tournament_id);
+      } else {
+        await supabase.from("favorites").delete().eq("id", favId);
+      }
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
       if (
@@ -651,9 +661,22 @@ export default function ProfileScreen() {
                       tournament={t}
                       onPress={() => openDetailModal(fav.tournament_id)}
                       onToggleFavorite={() => handleRemoveFavorite(fav.id)}
-                      onShare={() =>
-                        console.log("share", fav.tournaments?.name)
-                      }
+                      onShare={async () => {
+                        try {
+                          const t = fav.tournaments;
+                          if (!t) return;
+                          const deepLink = `competerf://tournament/${t.id}`;
+                          const date = new Date(t.tournament_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          const message =
+                            `\uD83C\uDFB1 ${t.name}\n` +
+                            `\uD83D\uDCC5 ${date}\n` +
+                            `\uD83D\uDCCD ${t.venues?.venue || ""}, ${t.venues?.city || ""}, ${t.venues?.state || ""}\n\n` +
+                            deepLink;
+                          await Share.share({ message });
+                        } catch (e) {
+                          console.error("Share error:", e);
+                        }
+                      }}
                       onViewImage={() => handleViewImage(t)}
                       getTournamentImageUrl={getTournamentImageUrl}
                     />

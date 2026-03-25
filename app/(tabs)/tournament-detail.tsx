@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
@@ -76,28 +76,20 @@ export default function TournamentDetailScreen() {
   const handleShare = async () => {
     if (!tournament) return;
     try {
-      const chipInfo = chipRanges
-        ? "\n\n🎰 Chip Chart:\n" +
-          chipRanges
-            .map(
-              (r: any) =>
-                `${r.label || `${r.minRating}–${r.maxRating}`}: ${r.chips} Chip${r.chips !== 1 ? "s" : ""}`,
-            )
-            .join("\n")
-        : "";
+      const deepLink = `competerf://tournament/${tournament.id}`;
       const message =
-        `🎱 ${tournament.name}\n\n` +
-        `📅 ${vm.formattedDate} at ${vm.formattedTime}\n` +
-        `🏠 ${tournament.venues?.venue || "TBD"}\n` +
-        `💰 Entry: ${vm.formattedEntryFee}` +
-        chipInfo +
-        `\n\n📍 ${tournament.venues?.address || ""}, ${tournament.venues?.city || ""}, ${tournament.venues?.state || ""} ${tournament.venues?.zip_code || ""}`;
+        `\uD83C\uDFB1 ${tournament.name}\n` +
+        `\uD83D\uDCC5 ${vm.formattedDate} \u2022 ${vm.formattedTime}\n` +
+        `\uD83D\uDCB0 ${vm.formattedEntryFee}\n\n` +
+        deepLink;
       await Share.share({ message });
       analyticsService.trackTournamentShared(tournament.id);
     } catch (error) {
       console.error("Share error:", error);
     }
   };
+
+
 
   if (vm.loading) return <Loading fullScreen message="Loading tournament..." />;
 
