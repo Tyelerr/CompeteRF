@@ -1,4 +1,4 @@
-export const SPACING = {
+﻿export const SPACING = {
   xs: 4,
   sm: 8,
   md: 16,
@@ -14,4 +14,14 @@ export const RADIUS = {
   lg: 16,
   xl: 24,
   full: 9999,
+};
+
+export const FONT_SIZES = {
+  xs: 10,
+  sm: 12,
+  md: 14,
+  lg: 16,
+  xl: 18,
+  xxl: 22,
+  xxxl: 28,
 };

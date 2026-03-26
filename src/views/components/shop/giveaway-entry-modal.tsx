@@ -1,6 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
+  ActivityIndicator,
   Keyboard,
   Modal,
   Platform,
@@ -36,7 +37,7 @@ const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
 const FONT_SIZES = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Default Official Rules — always shown first
+// Default Official Rules
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFAULT_RULES_SECTIONS = [
   {
@@ -118,7 +119,6 @@ const PRIVACY_SECTIONS = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Legal viewer sub-modal
-// Builds final sections = default rules + optional custom rules appended
 // ─────────────────────────────────────────────────────────────────────────────
 function LegalViewerModal({
   visible,
@@ -151,7 +151,6 @@ function LegalViewerModal({
         showsVerticalScrollIndicator
         onScrollBeginDrag={Keyboard.dismiss}
       >
-        {/* Default sections */}
         {sections.map((section, index) => (
           <View key={index} style={legalStyles.section}>
             {section.heading ? (
@@ -160,8 +159,6 @@ function LegalViewerModal({
             <Text style={legalStyles.body}>{section.body}</Text>
           </View>
         ))}
-
-        {/* Append custom rules below default if present */}
         {customRulesText ? (
           <View style={legalStyles.customSection}>
             <Text style={legalStyles.customHeading}>Additional Rules</Text>
@@ -265,17 +262,23 @@ interface Props {
 }
 
 export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Props) {
-  const vm = useGiveawayEntry(giveaway);
+  // ── Hook called unconditionally — giveawayId guarded inside the hook ──
+  const vm = useGiveawayEntry({
+    giveawayId: giveaway?.id ?? null,
+    minAge: giveaway?.min_age ?? 18,
+    onSuccess: () => {
+      if (giveaway) onSuccess(giveaway.id);
+    },
+  });
+
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = React.useState(false);
 
   const handleSubmit = async () => {
-    if (!giveaway) return;
     const success = await vm.submitEntry();
     if (success) {
-      onSuccess(giveaway.id);
-      onClose();
       vm.resetForm();
+      onClose();
     }
   };
 
@@ -284,7 +287,6 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
     vm.resetForm();
   };
 
-  // When user taps "official rules" link — open modal then auto-check when closed
   const handleRulesLinkPress = () => {
     Keyboard.dismiss();
     setShowRulesModal(true);
@@ -292,22 +294,153 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
 
   const handleRulesModalClose = () => {
     setShowRulesModal(false);
-    // Auto-check the rules checkbox when user views and closes the rules
-    if (!vm.form.agreed_to_rules) {
-      vm.toggleCheckbox("agreed_to_rules");
-    }
+    if (!vm.form.agreed_to_rules) vm.toggleCheckbox("agreed_to_rules");
   };
 
   if (!visible) return null;
 
+  // ── Quick-confirm UI (returning user) ─────────────────────────────────────
+  if (vm.mode === "loading") {
+    const loadingContent = (
+      <>
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} style={styles.closeButton}>
+            <Ionicons name="close" size={24} color={COLORS.white} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Enter Giveaway</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.centeredLoader}>
+          <ActivityIndicator color={COLORS.blue} />
+        </View>
+      </>
+    );
+    return renderShell(loadingContent, handleClose, isWeb);
+  }
+
+  if (vm.mode === "quick-confirm") {
+    const quickContent = (
+      <>
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} style={styles.closeButton}>
+            <Ionicons name="close" size={24} color={COLORS.white} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Enter Giveaway</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.divider} />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.giveawayName}>{giveaway?.name}</Text>
+
+          {/* Saved identity card */}
+          <View style={styles.identityCard}>
+            <Ionicons name="person-circle" size={36} color={COLORS.blue} />
+            <View style={styles.identityInfo}>
+              <Text style={styles.identityName}>
+                {vm.savedInfo?.name_as_on_id ?? ""}
+              </Text>
+              <Text style={styles.identityDetail}>{vm.savedInfo?.email ?? ""}</Text>
+              <Text style={styles.identityDetail}>{vm.savedInfo?.phone ?? ""}</Text>
+            </View>
+            <TouchableOpacity onPress={vm.startEdit} style={styles.editChip}>
+              <Text style={styles.editChipText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.savedDisclosure}>
+            Your saved information will be used for this entry.
+          </Text>
+
+          <View style={styles.checkboxSection}>
+            <CheckboxRowWithLink
+              prefix="I agree to the "
+              linkText="official rules"
+              checked={vm.form.agreed_to_rules}
+              onToggle={() => vm.toggleCheckbox("agreed_to_rules")}
+              onLinkPress={handleRulesLinkPress}
+            />
+            <CheckboxRow
+              label="I confirm I am 18+ years old and meet eligibility requirements"
+              checked={vm.form.confirmed_age}
+              onToggle={() => vm.toggleCheckbox("confirmed_age")}
+            />
+            <CheckboxRowWithLink
+              prefix="I agree to the "
+              linkText="privacy policy"
+              checked={vm.form.agreed_to_privacy}
+              onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
+              onLinkPress={() => { Keyboard.dismiss(); setShowPrivacyModal(true); }}
+            />
+            <CheckboxRow
+              label="I understand this is one entry per person"
+              checked={vm.form.understood_one_entry}
+              onToggle={() => vm.toggleCheckbox("understood_one_entry")}
+            />
+          </View>
+
+          {vm.errors.checkboxes && (
+            <Text style={styles.errorField}>{vm.errors.checkboxes}</Text>
+          )}
+          {vm.submitError && (
+            <Text style={styles.errorText}>{vm.submitError}</Text>
+          )}
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <Pressable
+            style={[
+              styles.submitButton,
+              (!vm.isFormComplete || vm.isSubmitting) && styles.submitButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!vm.isFormComplete || vm.isSubmitting}
+          >
+            <Text style={styles.submitButtonText}>
+              {vm.isSubmitting ? "Submitting..." : "Enter Giveaway"}
+            </Text>
+          </Pressable>
+          <Pressable style={styles.cancelButton} onPress={handleClose}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </>
+    );
+
+    return (
+      <>
+        {renderShell(quickContent, handleClose, isWeb)}
+        <LegalViewerModal
+          visible={showRulesModal}
+          title="Official Giveaway Rules"
+          sections={DEFAULT_RULES_SECTIONS}
+          customRulesText={giveaway?.rules_text}
+          onClose={handleRulesModalClose}
+        />
+        <LegalViewerModal
+          visible={showPrivacyModal}
+          title="Giveaway Privacy Policy"
+          sections={PRIVACY_SECTIONS}
+          onClose={() => setShowPrivacyModal(false)}
+        />
+      </>
+    );
+  }
+
+  // ── Full form UI (first-time or edit mode) ────────────────────────────────
   const formContent = (
     <>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <Ionicons name="close" size={24} color={COLORS.white} />
         </Pressable>
-        <Text style={styles.headerTitle}>Enter Giveaway</Text>
+        <Text style={styles.headerTitle}>
+          {vm.mode === "edit" ? "Update Your Info" : "Enter Giveaway"}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
       <View style={styles.divider} />
@@ -321,6 +454,16 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         onScrollBeginDrag={Keyboard.dismiss}
       >
         <Text style={styles.giveawayName}>{giveaway?.name}</Text>
+
+        {vm.mode === "full-form" && (
+          <View style={styles.disclosureBanner}>
+            <Ionicons name="information-circle-outline" size={14} color={COLORS.gray} />
+            <Text style={styles.disclosureText}>
+              Your information will be saved for faster entry in future giveaways.
+              It will only be used for giveaway entry purposes.
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.label}>Full Name (as on ID) *</Text>
         <TextInput
@@ -396,7 +539,6 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
             checked={vm.form.confirmed_age}
             onToggle={() => vm.toggleCheckbox("confirmed_age")}
           />
-          {/* Tapping the "official rules" link opens the modal and auto-checks */}
           <CheckboxRowWithLink
             prefix="I agree to the "
             linkText="official rules"
@@ -409,10 +551,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
             linkText="privacy policy"
             checked={vm.form.agreed_to_privacy}
             onToggle={() => vm.toggleCheckbox("agreed_to_privacy")}
-            onLinkPress={() => {
-              Keyboard.dismiss();
-              setShowPrivacyModal(true);
-            }}
+            onLinkPress={() => { Keyboard.dismiss(); setShowPrivacyModal(true); }}
           />
           <CheckboxRow
             label="I understand this is one entry per person"
@@ -428,7 +567,6 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         )}
       </ScrollView>
 
-      {/* Bottom buttons */}
       <View style={styles.bottomBar}>
         <Pressable
           style={[
@@ -439,7 +577,11 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
           disabled={!vm.isFormComplete || vm.isSubmitting}
         >
           <Text style={styles.submitButtonText}>
-            {vm.isSubmitting ? "Submitting..." : "Enter Giveaway"}
+            {vm.isSubmitting
+              ? "Submitting..."
+              : vm.mode === "edit"
+              ? "Save & Enter Giveaway"
+              : "Enter Giveaway"}
           </Text>
         </Pressable>
         <Pressable style={styles.cancelButton} onPress={handleClose}>
@@ -449,37 +591,9 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
     </>
   );
 
-  if (isWeb) {
-    return (
-      <>
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
-        <View style={styles.dialogWrap} pointerEvents="box-none">
-          <View style={styles.dialog}>{formContent}</View>
-        </View>
-        {/* Official rules = default + custom appended */}
-        <LegalViewerModal
-          visible={showRulesModal}
-          title="Official Giveaway Rules"
-          sections={DEFAULT_RULES_SECTIONS}
-          customRulesText={giveaway?.rules_text}
-          onClose={handleRulesModalClose}
-        />
-        <LegalViewerModal
-          visible={showPrivacyModal}
-          title="Giveaway Privacy Policy"
-          sections={PRIVACY_SECTIONS}
-          onClose={() => setShowPrivacyModal(false)}
-        />
-      </>
-    );
-  }
-
   return (
-    <Modal visible={visible} animationType="fade" transparent>
-      <Pressable style={styles.mobileBackdrop} onPress={handleClose} />
-      <View style={styles.mobileCardWrapper} pointerEvents="box-none">
-        <View style={styles.mobileCard}>{formContent}</View>
-      </View>
+    <>
+      {renderShell(formContent, handleClose, isWeb)}
       <LegalViewerModal
         visible={showRulesModal}
         title="Official Giveaway Rules"
@@ -493,12 +607,40 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         sections={PRIVACY_SECTIONS}
         onClose={() => setShowPrivacyModal(false)}
       />
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shell renderer — web dialog vs mobile modal
+// ─────────────────────────────────────────────────────────────────────────────
+function renderShell(
+  content: React.ReactNode,
+  onClose: () => void,
+  web: boolean,
+) {
+  if (web) {
+    return (
+      <>
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+        <View style={styles.dialogWrap} pointerEvents="box-none">
+          <View style={styles.dialog}>{content}</View>
+        </View>
+      </>
+    );
+  }
+  return (
+    <Modal visible animationType="fade" transparent>
+      <Pressable style={styles.mobileBackdrop} onPress={onClose} />
+      <View style={styles.mobileCardWrapper} pointerEvents="box-none">
+        <View style={styles.mobileCard}>{content}</View>
+      </View>
     </Modal>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dropdown (local)
+// Dropdown
 // ─────────────────────────────────────────────────────────────────────────────
 function Dropdown({
   options, value, onSelect, placeholder, flex = 1,
@@ -577,7 +719,11 @@ function Dropdown({
 // ─────────────────────────────────────────────────────────────────────────────
 // Checkbox components
 // ─────────────────────────────────────────────────────────────────────────────
-function CheckboxRow({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
+function CheckboxRow({
+  label, checked, onToggle,
+}: {
+  label: string; checked: boolean; onToggle: () => void;
+}) {
   return (
     <Pressable style={styles.checkboxRow} onPress={() => { Keyboard.dismiss(); onToggle(); }}>
       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
@@ -641,6 +787,7 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5, shadowRadius: 24,
   },
+  centeredLoader: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: SPACING.md,
@@ -654,6 +801,40 @@ const styles = StyleSheet.create({
     color: COLORS.blue, fontSize: FONT_SIZES.lg, fontWeight: "600",
     textAlign: "center", marginBottom: SPACING.xl,
   },
+
+  // Identity card (quick-confirm)
+  identityCard: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: COLORS.card, borderRadius: 12, padding: SPACING.lg,
+    marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.cardBorder, gap: SPACING.md,
+  },
+  identityInfo: { flex: 1 },
+  identityName: { color: COLORS.white, fontSize: FONT_SIZES.md, fontWeight: "600", marginBottom: 2 },
+  identityDetail: { color: COLORS.gray, fontSize: FONT_SIZES.sm, marginTop: 1 },
+  editChip: {
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    borderRadius: 8, borderWidth: 1, borderColor: COLORS.blue,
+  },
+  editChipText: { color: COLORS.blue, fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  savedDisclosure: {
+    color: COLORS.gray, fontSize: FONT_SIZES.xs, textAlign: "center",
+    marginBottom: SPACING.lg,
+  },
+
+  // Edit / disclosure banners
+  editBanner: {
+    flexDirection: "row", alignItems: "center", gap: SPACING.sm,
+    backgroundColor: COLORS.card, borderRadius: 8, padding: SPACING.md,
+    marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.cardBorder,
+  },
+  editBannerText: { color: COLORS.blue, fontSize: FONT_SIZES.sm },
+  disclosureBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: SPACING.sm,
+    backgroundColor: COLORS.card, borderRadius: 8, padding: SPACING.md,
+    marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.cardBorder,
+  },
+  disclosureText: { flex: 1, color: COLORS.gray, fontSize: FONT_SIZES.xs, lineHeight: 16 },
+
   label: {
     color: COLORS.white, fontSize: FONT_SIZES.md, fontWeight: "600",
     marginBottom: SPACING.sm, marginTop: SPACING.lg,

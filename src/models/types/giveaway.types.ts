@@ -1,4 +1,4 @@
-export interface Giveaway {
+﻿export interface Giveaway {
   id: number;
   name: string;
   description: string | null;
@@ -18,7 +18,6 @@ export interface Giveaway {
   updated_at: string;
   ended_at: string | null;
   archived_at: string | null;
-  // Computed (from join/count)
   entry_count?: number;
 }
 
@@ -56,7 +55,6 @@ export interface WinnerHistoryRecord {
   disqualified_by: number | null;
   disqualified_reason: string | null;
   created_at: string;
-  // Joined fields
   user_name?: string;
   user_email?: string;
   user_phone?: string;
@@ -70,7 +68,7 @@ export interface GiveawayEntryForm {
   confirmed_age: boolean;
   agreed_to_rules: boolean;
   agreed_to_privacy: boolean;
-  understood_one_entry: boolean; // UI only, not stored in DB
+  understood_one_entry: boolean;
   opted_in_promotions: boolean;
 }
 
@@ -85,3 +83,12 @@ export const INITIAL_ENTRY_FORM: GiveawayEntryForm = {
   understood_one_entry: false,
   opted_in_promotions: false,
 };
+
+// Persisted personal info reused across giveaway entries.
+// Sourced from the user most recent giveaway_entries row — no extra table needed.
+export interface GiveawaySavedInfo {
+  name_as_on_id: string;
+  birthday: string; // ISO date: YYYY-MM-DD
+  email: string;
+  phone: string;
+}

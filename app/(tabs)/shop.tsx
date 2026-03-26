@@ -24,8 +24,10 @@ import {
   GiveawayEntryModal,
   GiveawayStatsCard,
 } from "../../src/views/components/shop";
+import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/common/ConfettiBurst";
 
 const isWeb = Platform.OS === "web";
+const { width: SW, height: SH } = require("react-native").Dimensions.get("window");
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Design tokens
@@ -185,6 +187,7 @@ export default function ShopScreen() {
   const router = useRouter();
   const giveawaysVm = useGiveaways();
   const scrollRef = useScrollToTopOnFocus();
+  const confettiRef = React.useRef<ConfettiBurstRef>(null);
 
   const [profile, setProfile] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -220,6 +223,7 @@ export default function ShopScreen() {
 
   const handleEntrySuccess = () => {
     if (selectedGiveaway) giveawaysVm.markAsEntered(selectedGiveaway.id);
+    confettiRef.current?.fire(SW / 2, SH * 0.55);
   };
 
   const handleEnterFromDetail = () => {
@@ -378,6 +382,7 @@ export default function ShopScreen() {
           onSuccess={handleEntrySuccess}
         />
       </View>
+      <ConfettiBurst ref={confettiRef} />
     </WebContainer>
   );
 }
