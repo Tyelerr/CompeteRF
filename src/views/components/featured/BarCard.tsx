@@ -1,4 +1,4 @@
-import {
+﻿import {
   CreateFeaturedBarData,
   FeaturedBar,
   PlacePrediction,
@@ -13,6 +13,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -152,11 +153,31 @@ export function BarCard({ bar }: BarCardProps) {
   // Image Picker
   // ─────────────────────────────────────────────────
   const pickImage = async () => {
+    const { status: existingStatus } =
+      await ImagePicker.getMediaLibraryPermissionsAsync();
+
+    if (existingStatus === "denied") {
+      Alert.alert(
+        "Photo Access Disabled",
+        "Compete needs access to your photo library to upload images. Please enable it in Settings.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (status !== "granted") {
       Alert.alert(
         "Permission Required",
         "Please allow access to your photo library.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
       );
       return;
     }

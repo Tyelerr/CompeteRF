@@ -1,4 +1,4 @@
-import * as ImagePicker from "expo-image-picker";
+﻿import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Platform, TextInput } from "react-native";
@@ -378,10 +378,32 @@ export const useSubmitTournament = () => {
 
   const handleImageUpload = async () => {
     try {
+      const { status: existingStatus } =
+        await ImagePicker.getMediaLibraryPermissionsAsync();
+
+      if (existingStatus === "denied") {
+        Alert.alert(
+          "Photo Access Disabled",
+          "Compete needs access to your photo library to upload images. Please enable it in Settings.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Please grant photo library access to upload images.");
+        Alert.alert(
+          "Permission needed",
+          "Please grant photo library access to upload images.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() },
+          ],
+        );
         return;
       }
 

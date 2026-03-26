@@ -1,18 +1,46 @@
-import * as ImagePicker from "expo-image-picker";
+﻿import * as ImagePicker from "expo-image-picker";
+import { Alert, Linking } from "react-native";
 import { supabase } from "../../lib/supabase";
 
 export const imageUploadService = {
   /**
-   * Pick an image from the device library
+   * Pick an image from the device library.
+   * Returns null if the user cancels or permission is unavailable.
+   * Shows an actionable alert guiding the user to Settings if access was previously denied.
    */
   async pickImage(): Promise<string | null> {
-    // Request permission
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      throw new Error("Permission to access media library was denied");
+    // Check existing status before requesting — iOS silently ignores
+    // requestMediaLibraryPermissionsAsync() once status is "denied"
+    const { status: existingStatus } =
+      await ImagePicker.getMediaLibraryPermissionsAsync();
+
+    if (existingStatus === "denied") {
+      Alert.alert(
+        "Photo Access Disabled",
+        "Compete needs access to your photo library to upload images. Please enable it in Settings.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
+      );
+      return null;
     }
 
-    // Launch image picker
+    // Either undetermined or already granted — request/confirm
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Please allow access to your photo library to upload images.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+        ],
+      );
+      return null;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
@@ -35,21 +63,16 @@ export const imageUploadService = {
     folder?: string,
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     try {
-      // Get file extension, convert HEIC/HEIF to jpg
       let ext = uri.split(".").pop()?.toLowerCase() || "jpg";
       if (ext === "heic" || ext === "heif") {
         ext = "jpg";
       }
       const fileName = `${folder ? folder + "/" : ""}${Date.now()}.${ext}`;
 
-      // Fetch the image and convert to blob
       const response = await fetch(uri);
       const blob = await response.blob();
-
-      // Convert blob to array buffer
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
-      // Upload to Supabase
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(fileName, arrayBuffer, {
@@ -62,7 +85,6 @@ export const imageUploadService = {
         return { success: false, error: error.message };
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from(bucket)
         .getPublicUrl(data.path);
@@ -85,14 +107,12 @@ export const imageUploadService = {
     bucket: string,
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Extract file path from URL
       const urlParts = url.split(`${bucket}/`);
       if (urlParts.length < 2) {
         return { success: false, error: "Invalid URL format" };
       }
 
       const filePath = urlParts[1];
-
       const { error } = await supabase.storage.from(bucket).remove([filePath]);
 
       if (error) {

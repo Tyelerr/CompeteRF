@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "Compete",
     "slug": "competerf",
@@ -11,10 +11,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.thecompeteapp.competerf",
+      "buildNumber": "1",
       "usesAppleSignIn": true,
       "associatedDomains": ["applinks:thecompeteapp.com"],
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Compete uses your photo library so you can upload images to your profile or tournament listings. For example, you can choose a photo for your profile picture or select an image to attach to a tournament.",
+        "NSCameraUsageDescription": "Compete uses your camera so you can take a photo for your profile or tournament listings, such as capturing a new profile picture or event image."
       }
     },
     "android": {
@@ -68,4 +71,3 @@
     "owner": "tyelerr"
   }
 }
-

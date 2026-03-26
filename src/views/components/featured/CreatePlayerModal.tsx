@@ -1,4 +1,4 @@
-import { featuredImageService } from "@/src/models/services/featured-content.service";
+﻿import { featuredImageService } from "@/src/models/services/featured-content.service";
 import { useCreateFeaturedPlayer } from "@/src/viewmodels/useFeaturedContent";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -60,12 +61,40 @@ export function CreatePlayerModal({
   // Image Picker
   // ─────────────────────────────────────────────────
   const pickImage = async () => {
-    // Request permission
+    // Check existing permission status before requesting
+    const { status: existingStatus } =
+      await ImagePicker.getMediaLibraryPermissionsAsync();
+
+    if (existingStatus === "denied") {
+      // User previously denied — cannot request again, must go to Settings
+      Alert.alert(
+        "Photo Access Disabled",
+        "Compete needs access to your photo library to upload player images. Please enable it in Settings.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Open Settings",
+            onPress: () => Linking.openSettings(),
+          },
+        ],
+      );
+      return;
+    }
+
+    // Either undetermined or already granted — request/confirm permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (status !== "granted") {
       Alert.alert(
         "Permission Required",
         "Please allow access to your photo library to upload player images.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Open Settings",
+            onPress: () => Linking.openSettings(),
+          },
+        ],
       );
       return;
     }
@@ -73,7 +102,7 @@ export function CreatePlayerModal({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: false,
-      aspect: [1, 1], // Square crop for circular display
+      aspect: [1, 1],
       quality: 0.8,
     });
 
@@ -101,19 +130,11 @@ export function CreatePlayerModal({
     }
 
     try {
-      // Step 1: Create the player record first (to get the ID)
       const success = await createPlayer(formData);
 
       if (success) {
-        // Step 2: If we have a selected image, upload it
-        // Note: Since createPlayer doesn't return the ID directly,
-        // we upload with a temp ID. For a cleaner approach, you could
-        // modify createPlayer to return the created record.
         if (selectedImageUri) {
           setUploadingImage(true);
-          // Upload using the user_id as identifier since we don't have
-          // the featured_player ID yet. Alternatively, modify your
-          // createPlayer to return the new record's ID.
           const publicUrl = await featuredImageService.uploadImage(
             selectedImageUri,
             "players",
@@ -121,7 +142,6 @@ export function CreatePlayerModal({
           );
 
           if (publicUrl) {
-            // The photo_url was set during upload via the service
             console.log("✅ Player image uploaded:", publicUrl);
           } else {
             Alert.alert(
@@ -228,7 +248,6 @@ export function CreatePlayerModal({
               <View style={styles.imagePickerContainer}>
                 {selectedImageUri ? (
                   <View style={styles.imagePreviewContainer}>
-                    {/* Circular preview mimicking the home page style */}
                     <View style={styles.imagePreviewGlow}>
                       <View style={styles.imagePreviewBorder}>
                         <Image
@@ -553,10 +572,6 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: "top",
   },
-
-  // ─────────────────────────────────────────
-  // Image Picker Styles
-  // ─────────────────────────────────────────
   imagePickerContainer: {
     marginTop: 4,
   },
@@ -593,7 +608,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  // Circular preview with blue glow (matches home page style)
   imagePreviewGlow: {
     width: 108,
     height: 108,
@@ -669,10 +683,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#3B82F6",
   },
-
-  // ─────────────────────────────────────────
-  // Dropdown & Form Styles (unchanged)
-  // ─────────────────────────────────────────
   dropdown: {
     flexDirection: "row",
     justifyContent: "space-between",
