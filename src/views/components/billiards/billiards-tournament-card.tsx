@@ -16,6 +16,7 @@ import {
   formatDate,
   formatTime,
 } from "../../../utils/formatters";
+import { moderateScale, scale } from "../../../utils/scaling";
 
 interface BilliardsTournamentCardProps {
   tournament: Tournament;
@@ -56,7 +57,7 @@ export const BilliardsTournamentCard = ({
     }
     return (
       <View style={isWeb ? styles.fallbackWeb : styles.fallbackImageContainer}>
-        <Text style={styles.fallbackEmoji}>🎱</Text>
+        <Text allowFontScaling={false} style={styles.fallbackEmoji}>🎱</Text>
       </View>
     );
   };
@@ -67,8 +68,6 @@ export const BilliardsTournamentCard = ({
       <TouchableOpacity
         style={[
           styles.card,
-          // Replace the unreliable percentage width with an exact pixel value
-          // derived from the screen width by computeMobileCardLayout.
           cardWidth !== undefined ? { width: cardWidth } : undefined,
         ]}
         activeOpacity={0.7}
@@ -77,13 +76,12 @@ export const BilliardsTournamentCard = ({
         <View
           style={[
             styles.imageSection,
-            // Scale image height proportionally with card width (58% ratio).
             imageHeight !== undefined ? { height: imageHeight } : undefined,
           ]}
         >
           {renderImage()}
           <View style={styles.idBadge}>
-            <Text style={styles.idText}>ID:{tournament.id}</Text>
+            <Text allowFontScaling={false} style={styles.idText}>ID:{tournament.id}</Text>
           </View>
           <TouchableOpacity
             onPress={(e) => {
@@ -92,35 +90,35 @@ export const BilliardsTournamentCard = ({
             }}
             style={styles.heartButton}
           >
-            <Text style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
+            <Text allowFontScaling={false} style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
               {isFavorited ? "♥" : "♡"}
             </Text>
           </TouchableOpacity>
         </View>
         <View style={styles.contentSection}>
-          <Text style={styles.name} numberOfLines={2}>
+          <Text allowFontScaling={false} style={styles.name} numberOfLines={2}>
             {tournament.name}
           </Text>
           <View style={styles.gameTypeBadge}>
-            <Text style={styles.gameTypeText}>{tournament.game_type}</Text>
+            <Text allowFontScaling={false} style={styles.gameTypeText}>{tournament.game_type}</Text>
           </View>
-          <Text style={styles.dateTime}>
+          <Text allowFontScaling={false} style={styles.dateTime}>
             {formatDate(tournament.tournament_date)}
           </Text>
-          <Text style={styles.dateTime}>
+          <Text allowFontScaling={false} style={styles.dateTime}>
             {formatTime(tournament.start_time)}
           </Text>
-          <Text style={styles.venueName} numberOfLines={2}>
+          <Text allowFontScaling={false} style={styles.venueName} numberOfLines={2}>
             {venue?.venue || "Venue TBD"}
           </Text>
           {venue?.city && venue?.state && (
-            <Text style={styles.cityState}>
+            <Text allowFontScaling={false} style={styles.cityState}>
               {venue.city}, {venue.state}
             </Text>
           )}
           <View style={styles.feeSection}>
-            <Text style={styles.feeLabel}>Tournament Fee</Text>
-            <Text style={styles.feeAmount}>
+            <Text allowFontScaling={false} style={styles.feeLabel}>Tournament Fee</Text>
+            <Text allowFontScaling={false} style={styles.feeAmount}>
               {formatCurrency(tournament.entry_fee || 0)}
             </Text>
           </View>
@@ -139,18 +137,12 @@ export const BilliardsTournamentCard = ({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Image */}
       <View style={styles.webImageSection}>
         {renderImage()}
-
-        {/* Hover overlay shimmer */}
         {hovered && <View style={styles.webImageOverlay} />}
-
-        {/* ID badge — top left */}
         <View style={styles.webIdBadge}>
-          <Text style={styles.webIdText}>ID:{tournament.id}</Text>
+          <Text allowFontScaling={false} style={styles.webIdText}>ID:{tournament.id}</Text>
         </View>
-
         <TouchableOpacity
           onPress={(e) => {
             e.stopPropagation();
@@ -158,45 +150,39 @@ export const BilliardsTournamentCard = ({
           }}
           style={styles.webHeartButton}
         >
-          <Text
-            style={[styles.webHeartIcon, isFavorited && styles.heartFilled]}
-          >
+          <Text allowFontScaling={false} style={[styles.webHeartIcon, isFavorited && styles.heartFilled]}>
             {isFavorited ? "♥" : "♡"}
           </Text>
         </TouchableOpacity>
         <View style={styles.webGameTypeBadge}>
-          <Text style={styles.webGameTypeText}>{tournament.game_type}</Text>
+          <Text allowFontScaling={false} style={styles.webGameTypeText}>{tournament.game_type}</Text>
         </View>
       </View>
 
-      {/* Details */}
       <View style={styles.webContent}>
-        <Text
-          style={[styles.webName, hovered && styles.webNameHovered]}
-          numberOfLines={2}
-        >
+        <Text allowFontScaling={false} style={[styles.webName, hovered && styles.webNameHovered]} numberOfLines={2}>
           {tournament.name}
         </Text>
 
         <View style={styles.webRow}>
-          <Text style={styles.webIcon}>📅</Text>
-          <Text style={styles.webDetail}>
+          <Text allowFontScaling={false} style={styles.webIcon}>📅</Text>
+          <Text allowFontScaling={false} style={styles.webDetail}>
             {formatDate(tournament.tournament_date)} •{" "}
             {formatTime(tournament.start_time)}
           </Text>
         </View>
 
         <View style={styles.webRow}>
-          <Text style={styles.webIcon}>📍</Text>
-          <Text style={styles.webDetail} numberOfLines={1}>
+          <Text allowFontScaling={false} style={styles.webIcon}>📍</Text>
+          <Text allowFontScaling={false} style={styles.webDetail} numberOfLines={1}>
             {venue?.venue || "Venue TBD"}
           </Text>
         </View>
 
         {venue?.city && venue?.state && (
           <View style={styles.webRow}>
-            <Text style={styles.webIcon}>🗺️</Text>
-            <Text style={styles.webDetail}>
+            <Text allowFontScaling={false} style={styles.webIcon}>🗺️</Text>
+            <Text allowFontScaling={false} style={styles.webDetail}>
               {venue.city}, {venue.state}
             </Text>
           </View>
@@ -204,8 +190,8 @@ export const BilliardsTournamentCard = ({
 
         {tournament.tournament_format && (
           <View style={styles.webRow}>
-            <Text style={styles.webIcon}>🏆</Text>
-            <Text style={styles.webDetail}>
+            <Text allowFontScaling={false} style={styles.webIcon}>🏆</Text>
+            <Text allowFontScaling={false} style={styles.webDetail}>
               {tournament.tournament_format.replace(/-/g, " ")}
             </Text>
           </View>
@@ -213,8 +199,8 @@ export const BilliardsTournamentCard = ({
 
         {(tournament.race || tournament.game_spot) && (
           <View style={styles.webRow}>
-            <Text style={styles.webIcon}>🎯</Text>
-            <Text style={styles.webDetail}>
+            <Text allowFontScaling={false} style={styles.webIcon}>🎯</Text>
+            <Text allowFontScaling={false} style={styles.webDetail}>
               {[
                 tournament.race && `Race ${tournament.race}`,
                 tournament.game_spot && `Spot ${tournament.game_spot}`,
@@ -227,8 +213,8 @@ export const BilliardsTournamentCard = ({
 
         {!!tournament.max_fargo && (
           <View style={styles.webRow}>
-            <Text style={styles.webIcon}>📊</Text>
-            <Text style={styles.webDetail}>
+            <Text allowFontScaling={false} style={styles.webIcon}>📊</Text>
+            <Text allowFontScaling={false} style={styles.webDetail}>
               Max Fargo: {tournament.max_fargo}
             </Text>
           </View>
@@ -237,22 +223,22 @@ export const BilliardsTournamentCard = ({
         <View style={styles.webTagsRow}>
           {tournament.reports_to_fargo && (
             <View style={styles.webTag}>
-              <Text style={styles.webTagText}>Fargo Rated</Text>
+              <Text allowFontScaling={false} style={styles.webTagText}>Fargo Rated</Text>
             </View>
           )}
           {tournament.calcutta && (
             <View style={styles.webTag}>
-              <Text style={styles.webTagText}>Calcutta</Text>
+              <Text allowFontScaling={false} style={styles.webTagText}>Calcutta</Text>
             </View>
           )}
           {tournament.open_tournament && (
             <View style={styles.webTag}>
-              <Text style={styles.webTagText}>Open</Text>
+              <Text allowFontScaling={false} style={styles.webTagText}>Open</Text>
             </View>
           )}
           {!!tournament.added_money && tournament.added_money > 0 && (
             <View style={[styles.webTag, styles.webTagGreen]}>
-              <Text style={styles.webTagText}>
+              <Text allowFontScaling={false} style={styles.webTagText}>
                 +{formatCurrency(tournament.added_money)} Added
               </Text>
             </View>
@@ -260,10 +246,8 @@ export const BilliardsTournamentCard = ({
         </View>
 
         <View style={[styles.webFeeRow, hovered && styles.webFeeRowHovered]}>
-          <Text style={styles.webFeeLabel}>Entry Fee</Text>
-          <Text
-            style={[styles.webFeeAmount, hovered && styles.webFeeAmountHovered]}
-          >
+          <Text allowFontScaling={false} style={styles.webFeeLabel}>Entry Fee</Text>
+          <Text allowFontScaling={false} style={[styles.webFeeAmount, hovered && styles.webFeeAmountHovered]}>
             {formatCurrency(tournament.entry_fee || 0)}
           </Text>
         </View>
@@ -275,19 +259,15 @@ export const BilliardsTournamentCard = ({
 const styles = StyleSheet.create({
   // ── Mobile ─────────────────────────────────────────────────────────────────
   card: {
-    // width is overridden at render time via cardWidth prop.
-    // "48%" is kept only as a safe fallback if the prop is not provided.
     width: "48%",
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.border,
-    margin: SPACING.xs,
+    margin: scale(SPACING.xs),
   },
   imageSection: {
-    // height is overridden at render time via imageHeight prop.
-    // 120 is kept only as a safe fallback.
     height: 120,
     backgroundColor: COLORS.surface,
     position: "relative",
@@ -305,99 +285,99 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   fallbackEmoji: {
-    fontSize: 48,
+    fontSize: moderateScale(48),
     color: COLORS.textMuted,
   },
   idBadge: {
     position: "absolute",
-    top: SPACING.sm,
-    left: SPACING.sm,
+    top: scale(SPACING.sm),
+    left: scale(SPACING.sm),
     backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: scale(SPACING.xs),
     borderRadius: RADIUS.sm,
   },
   idText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "500",
   },
   heartButton: {
     position: "absolute",
-    top: SPACING.sm,
-    right: SPACING.sm,
-    padding: SPACING.xs,
+    top: scale(SPACING.sm),
+    right: scale(SPACING.sm),
+    padding: scale(SPACING.xs),
   },
   heartIcon: {
-    fontSize: 34,
+    fontSize: moderateScale(34),
     color: COLORS.white,
   },
   heartFilled: {
     color: COLORS.primary,
   },
   contentSection: {
-    padding: SPACING.sm,
+    padding: scale(SPACING.sm),
     alignItems: "center",
   },
   name: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "center",
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   gameTypeBadge: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.sm,
+    paddingVertical: scale(SPACING.xs),
+    paddingHorizontal: scale(SPACING.sm),
     borderRadius: RADIUS.sm,
-    marginBottom: SPACING.sm,
+    marginBottom: scale(SPACING.sm),
   },
   gameTypeText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
   },
   dateTime: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: moderateScale(18),
   },
   venueName: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.text,
     textAlign: "center",
-    marginTop: SPACING.sm,
+    marginTop: scale(SPACING.sm),
     fontWeight: "500",
   },
   cityState: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginTop: scale(SPACING.xs),
   },
   venueAddress: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginTop: scale(SPACING.xs),
   },
   feeSection: {
-    marginTop: SPACING.sm,
+    marginTop: scale(SPACING.sm),
     alignItems: "center",
-    paddingTop: SPACING.sm,
+    paddingTop: scale(SPACING.sm),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     width: "100%",
   },
   feeLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   feeAmount: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.secondary,
   },
@@ -412,8 +392,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     margin: "0.75%",
     // @ts-ignore — web only
-    transition:
-      "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
+    transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
     cursor: "pointer",
   },
   webCardHovered: {

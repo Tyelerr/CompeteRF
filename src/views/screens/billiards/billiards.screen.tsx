@@ -22,6 +22,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
 import { computeMobileCardLayout } from "../../../utils/layout.utils";
+import { moderateScale, scale } from "../../../utils/scaling";
 import { useRecommendVenue } from "../../../viewmodels/hooks/use.recommend.venue";
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
@@ -45,8 +46,6 @@ const isWeb = Platform.OS === "web";
 const NUM_COLUMNS = isWeb ? 4 : 2;
 const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 
-// How many px the user must scroll up before filter reappears.
-// Prevents rubber-band bounce and accidental micro-flicks from triggering it.
 const SCROLL_UP_THRESHOLD = 50;
 
 export const BilliardsScreen = () => {
@@ -80,9 +79,6 @@ export const BilliardsScreen = () => {
   const filterMeasured = useRef(false);
   const filterVisibleRef = useRef(true);
   const lastScrollYRef = useRef(0);
-  // Accumulates upward scroll distance since direction last changed to up.
-  // Reset to 0 whenever user scrolls down. Filter only re-shows once this
-  // exceeds SCROLL_UP_THRESHOLD — prevents rubber-band/bounce false triggers.
   const scrollUpAccRef = useRef(0);
   const [filterReady, setFilterReady] = useState(false);
 
@@ -108,7 +104,6 @@ export const BilliardsScreen = () => {
       lastScrollYRef.current = y;
 
       if (dy > 2) {
-        // Scrolling down — reset upward accumulator, collapse filter
         scrollUpAccRef.current = 0;
         if (y > 40 && filterVisibleRef.current) {
           filterVisibleRef.current = false;
@@ -119,7 +114,6 @@ export const BilliardsScreen = () => {
           }).start();
         }
       } else if (dy < -2) {
-        // Scrolling up — accumulate distance, only re-show after threshold
         scrollUpAccRef.current += Math.abs(dy);
         if (!filterVisibleRef.current && scrollUpAccRef.current >= SCROLL_UP_THRESHOLD) {
           filterVisibleRef.current = true;
@@ -207,8 +201,9 @@ export const BilliardsScreen = () => {
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       <View style={webS.searchWrap}>
-        <Text style={webS.searchIcon}>🔍</Text>
+        <Text allowFontScaling={false} style={webS.searchIcon}>🔍</Text>
         <TextInput
+          allowFontScaling={false}
           style={webS.searchInput}
           placeholder="Search tournaments..."
           placeholderTextColor={COLORS.textMuted}
@@ -221,7 +216,7 @@ export const BilliardsScreen = () => {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={webS.clearBtn}
           >
-            <Text style={webS.clearBtnText}>✕</Text>
+            <Text allowFontScaling={false} style={webS.clearBtnText}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -244,6 +239,7 @@ export const BilliardsScreen = () => {
         />
       </View>
       <TextInput
+        allowFontScaling={false}
         style={webS.zipInput}
         placeholder="Zip"
         placeholderTextColor={COLORS.textMuted}
@@ -256,10 +252,10 @@ export const BilliardsScreen = () => {
         style={webS.filterBtn}
         onPress={() => vm.setFilterModalVisible(true)}
       >
-        <Text style={webS.filterBtnText}>☰ Filters</Text>
+        <Text allowFontScaling={false} style={webS.filterBtnText}>☰ Filters</Text>
       </TouchableOpacity>
       <TouchableOpacity style={webS.resetBtn} onPress={vm.resetAllFilters}>
-        <Text style={webS.resetBtnText}>Reset</Text>
+        <Text allowFontScaling={false} style={webS.resetBtnText}>Reset</Text>
       </TouchableOpacity>
     </View>
   );
@@ -269,8 +265,8 @@ export const BilliardsScreen = () => {
     return (
       <View style={styles.radiusContainer}>
         <View style={styles.radiusHeader}>
-          <Text style={styles.radiusLabel}>Search Radius</Text>
-          <Text style={styles.radiusValue}>
+          <Text allowFontScaling={false} style={styles.radiusLabel}>Search Radius</Text>
+          <Text allowFontScaling={false} style={styles.radiusValue}>
             {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
           </Text>
         </View>
@@ -304,8 +300,8 @@ export const BilliardsScreen = () => {
           })()
         )}
         <View style={styles.radiusLabels}>
-          <Text style={styles.radiusMinMax}>0 miles</Text>
-          <Text style={styles.radiusMinMax}>100 miles</Text>
+          <Text allowFontScaling={false} style={styles.radiusMinMax}>0 miles</Text>
+          <Text allowFontScaling={false} style={styles.radiusMinMax}>100 miles</Text>
         </View>
       </View>
     );
@@ -352,27 +348,27 @@ export const BilliardsScreen = () => {
       style={{
         backgroundColor: COLORS.surface,
         borderRadius: RADIUS.md,
-        padding: SPACING.md,
-        marginHorizontal: SPACING.xs,
-        marginTop: SPACING.md,
-        marginBottom: SPACING.md,
+        padding: scale(SPACING.md),
+        marginHorizontal: scale(SPACING.xs),
+        marginTop: scale(SPACING.md),
+        marginBottom: scale(SPACING.md),
         borderWidth: 1,
         borderColor: COLORS.primary + "30",
         alignItems: "center",
       }}
     >
-      <Text style={{ fontSize: 24, marginBottom: SPACING.sm }}>🎱</Text>
-      <Text style={{ fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(24), marginBottom: scale(SPACING.sm) }}>🎱</Text>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
         Know a spot that hosts pool tournaments?
       </Text>
-      <Text style={{ fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, textAlign: "center", marginTop: SPACING.xs, marginBottom: SPACING.md }}>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.xs), marginBottom: scale(SPACING.md) }}>
         Help us grow the community - recommend a venue!
       </Text>
       <TouchableOpacity
-        style={{ backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm }}
+        style={{ backgroundColor: COLORS.primary, paddingHorizontal: scale(SPACING.lg), paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.sm }}
         onPress={handleRecommendPress}
       >
-        <Text style={{ color: COLORS.white, fontWeight: "600", fontSize: FONT_SIZES.sm }}>
+        <Text allowFontScaling={false} style={{ color: COLORS.white, fontWeight: "600", fontSize: moderateScale(FONT_SIZES.sm) }}>
           Recommend a Venue
         </Text>
       </TouchableOpacity>
@@ -386,18 +382,18 @@ export const BilliardsScreen = () => {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.emptyIcon}>🎱</Text>
-      <Text style={styles.emptyText}>
+      <Text allowFontScaling={false} style={styles.emptyIcon}>🎱</Text>
+      <Text allowFontScaling={false} style={styles.emptyText}>
         {vm.isStateFilterEmpty && vm.selectedState
           ? "No tournaments available in this area yet"
           : "No tournaments found"}
       </Text>
-      <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+      <Text allowFontScaling={false} style={styles.emptySubtext}>Try adjusting your filters</Text>
       <TouchableOpacity
         style={styles.alertsButton}
         onPress={handleSearchAlertsPress}
       >
-        <Text style={styles.alertsButtonText}>🔔 Create Search Alert</Text>
+        <Text allowFontScaling={false} style={styles.alertsButtonText}>🔔 Create Search Alert</Text>
       </TouchableOpacity>
       {renderRecommendCard()}
     </ScrollView>
@@ -422,8 +418,8 @@ export const BilliardsScreen = () => {
         >
           <View pointerEvents={isWeb ? "box-none" : "auto"}>
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
-              <Text style={styles.headerSubtitle}>
+              <Text allowFontScaling={false} style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
+              <Text allowFontScaling={false} style={styles.headerSubtitle}>
                 Browse all billiards tournaments by game type and location
               </Text>
             </View>
@@ -441,23 +437,24 @@ export const BilliardsScreen = () => {
                 {vm.isHomeStateEmpty && (
                   <View style={{
                     backgroundColor: COLORS.primary + "15",
-                    paddingHorizontal: SPACING.md,
-                    paddingVertical: SPACING.sm,
-                    marginHorizontal: SPACING.md,
-                    marginBottom: SPACING.sm,
+                    paddingHorizontal: scale(SPACING.md),
+                    paddingVertical: scale(SPACING.sm),
+                    marginHorizontal: scale(SPACING.md),
+                    marginBottom: scale(SPACING.sm),
                     borderRadius: RADIUS.sm,
                     borderWidth: 1,
                     borderColor: COLORS.primary + "30",
                   }}>
-                    <Text style={{ color: COLORS.text, fontSize: FONT_SIZES.sm, textAlign: "center" }}>
+                    <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>
                       No tournaments in your state yet - showing all tournaments
                     </Text>
                   </View>
                 )}
                 <View style={styles.searchContainer}>
                   <View style={styles.searchBar}>
-                    <Text style={styles.searchIcon}>🔍</Text>
+                    <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
                     <TextInput
+                      allowFontScaling={false}
                       style={styles.searchInput}
                       placeholder="Search tournaments..."
                       placeholderTextColor={COLORS.textMuted}
@@ -472,7 +469,7 @@ export const BilliardsScreen = () => {
                         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                         style={styles.clearBtn}
                       >
-                        <Text style={styles.clearBtnText}>✕</Text>
+                        <Text allowFontScaling={false} style={styles.clearBtnText}>✕</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -497,6 +494,7 @@ export const BilliardsScreen = () => {
                   </View>
                   <View style={styles.filterItemZip}>
                     <TextInput
+                      allowFontScaling={false}
                       style={styles.zipInput}
                       placeholder="Zip"
                       placeholderTextColor={COLORS.textMuted}
@@ -515,12 +513,12 @@ export const BilliardsScreen = () => {
                     style={styles.filtersButton}
                     onPress={() => vm.setFilterModalVisible(true)}
                   >
-                    <Text style={styles.filtersButtonText}>
+                    <Text allowFontScaling={false} style={styles.filtersButtonText}>
                       {hasActiveFilters ? "✓ Filters Applied" : "☰ Filters"}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
-                    <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
+                    <Text allowFontScaling={false} style={styles.resetButtonText}>🗑️ Reset Filters</Text>
                   </TouchableOpacity>
                 </View>
               </Animated.View>
@@ -532,7 +530,7 @@ export const BilliardsScreen = () => {
 
         {vm.error ? (
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{vm.error}</Text>
+            <Text allowFontScaling={false} style={styles.errorText}>{vm.error}</Text>
           </View>
         ) : pagination.paginatedItems.length === 0 ? (
           renderEmptyState()
