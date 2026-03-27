@@ -1,9 +1,9 @@
-import { FeaturedBar, FeaturedPlayer } from "../models/types/home.types";
+﻿import { FeaturedBar, FeaturedPlayer } from "../models/types/home.types";
 
 // =============================================================
 // Home Screen Mappers
-// Convert raw Supabase responses → clean domain types.
-// If the DB schema changes, update these — not the ViewModel.
+// Convert raw Supabase responses â†’ clean domain types.
+// If the DB schema changes, update these â€” not the ViewModel.
 // =============================================================
 
 /**
@@ -21,6 +21,7 @@ export function mapToFeaturedPlayer(raw: any): FeaturedPlayer {
     profile_image_url: raw.photo_url,
     fargo_rating: raw.fargo_rating,
     preferred_game: raw.preferred_game,
+    years_playing: raw.years_playing,
     achievements: raw.achievements,
   };
 }
@@ -47,3 +48,4 @@ export function mapToFeaturedBar(raw: any): FeaturedBar {
     highlights: raw.highlights,
   };
 }
+

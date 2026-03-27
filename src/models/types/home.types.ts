@@ -1,4 +1,4 @@
-// =============================================================
+﻿// =============================================================
 // Home Screen Domain Types
 // =============================================================
 
@@ -22,6 +22,7 @@ export interface FeaturedPlayer {
   avatar_url?: string;
   preferred_game?: string;
   fargo_rating?: number;
+  years_playing?: number;
   favorite_player?: string;
   achievements?: string[];
 }
@@ -41,3 +42,4 @@ export interface FeaturedBar {
 }
 
 export type HomeTabType = "latest" | "featured" | "bars";
+

@@ -32,7 +32,7 @@ export function FeaturedPlayerTab({ player }: FeaturedPlayerTabProps) {
       </View>
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
-          <Text allowFontScaling={false} style={styles.statNumber}>8</Text>
+          <Text allowFontScaling={false} style={styles.statNumber}>{player.years_playing || "N/A"}</Text>
           <Text allowFontScaling={false} style={styles.statLabel}>Years Playing</Text>
         </View>
         <View style={styles.statCard}>
@@ -58,3 +58,4 @@ export function FeaturedPlayerTab({ player }: FeaturedPlayerTabProps) {
     </View>
   );
 }
+
