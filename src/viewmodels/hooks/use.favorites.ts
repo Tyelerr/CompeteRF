@@ -1,6 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { Alert } from "react-native";
 import { favoriteService } from "../../models/services/favorite.service";
+import { Favorite } from "../../models/types/tournament.types";
 
 /**
  * Shared hook for tournament favorites.
@@ -15,13 +17,15 @@ import { favoriteService } from "../../models/services/favorite.service";
 export const useFavorites = (userId?: number) => {
   const queryClient = useQueryClient();
 
+  const QUERY_KEY = ["favorites", "tournaments", userId];
+
   // ── Query ────────────────────────────────────────────────────────────────
   const {
     data: favorites = [],
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ["favorites", "tournaments", userId],
+    queryKey: QUERY_KEY,
     queryFn: () => favoriteService.getFavoriteTournaments(userId!),
     enabled: !!userId,
   });
@@ -35,10 +39,30 @@ export const useFavorites = (userId?: number) => {
     [favorites],
   );
 
-  // ── Mutations ────────────────────────────────────────────────────────────
+  // ── Mutations ─────────────────────────────────────────────────────────────
   const addMutation = useMutation({
     mutationFn: (tournamentId: number) =>
       favoriteService.addFavoriteTournament(userId!, tournamentId),
+
+    // Optimistic update — fill the heart instantly
+    onMutate: async (tournamentId: number) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+      const previous = queryClient.getQueryData<Favorite[]>(QUERY_KEY);
+      queryClient.setQueryData<Favorite[]>(QUERY_KEY, (old = []) => [
+        ...old,
+        { tournament_id: tournamentId, favorite_type: "single" } as Favorite,
+      ]);
+      return { previous };
+    },
+
+    // Roll back on failure
+    onError: (_err, _tournamentId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(QUERY_KEY, context.previous);
+      }
+      Alert.alert("Error", "Could not save favourite. Please try again.");
+    },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["favorites"] });
     },
@@ -47,18 +71,47 @@ export const useFavorites = (userId?: number) => {
   const removeMutation = useMutation({
     mutationFn: (tournamentId: number) =>
       favoriteService.removeFavoriteTournament(userId!, tournamentId),
+
+    // Optimistic update — unfill the heart instantly
+    onMutate: async (tournamentId: number) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+      const previous = queryClient.getQueryData<Favorite[]>(QUERY_KEY);
+      queryClient.setQueryData<Favorite[]>(QUERY_KEY, (old = []) =>
+        old.filter((f) => f.tournament_id !== tournamentId),
+      );
+      return { previous };
+    },
+
+    // Roll back on failure
+    onError: (_err, _tournamentId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(QUERY_KEY, context.previous);
+      }
+      Alert.alert("Error", "Could not remove favourite. Please try again.");
+    },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["favorites"] });
     },
   });
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Toggle favourite state for a tournament.
+   * Errors are caught here — mutations handle their own rollback and alerts.
+   */
   const toggleFavorite = async (tournamentId: number) => {
     if (!userId) return;
-    if (favoritedIds.includes(tournamentId)) {
-      await removeMutation.mutateAsync(tournamentId);
-    } else {
-      await addMutation.mutateAsync(tournamentId);
+    try {
+      if (favoritedIds.includes(tournamentId)) {
+        await removeMutation.mutateAsync(tournamentId);
+      } else {
+        await addMutation.mutateAsync(tournamentId);
+      }
+    } catch {
+      // onError in each mutation already rolled back and showed the alert.
+      // Catch here prevents the unhandled promise rejection.
     }
   };
 

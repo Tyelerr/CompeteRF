@@ -1,4 +1,4 @@
-import { supabase } from "../../lib/supabase";
+﻿import { supabase } from "../../lib/supabase";
 import { Favorite } from "../types/tournament.types";
 import { analyticsService } from "./analytics.service";
 
@@ -120,8 +120,9 @@ export const favoriteService = {
       query = query.eq("template_id", templateId);
     }
 
-    const { data, error } = await query.single();
-    if (error && error.code === "PGRST116") return false;
+    // FIX: use maybeSingle() per code standards — returns null instead of
+    // throwing PGRST116 when no row is found.
+    const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return !!data;
   },
