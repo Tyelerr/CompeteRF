@@ -45,7 +45,6 @@ import { useAuth } from "../../../viewmodels/hooks/use.auth";
 const isWeb = Platform.OS === "web";
 const NUM_COLUMNS = isWeb ? 4 : 2;
 const ITEMS_PER_PAGE = isWeb ? 40 : 20;
-
 const SCROLL_UP_THRESHOLD = 50;
 
 export const BilliardsScreen = () => {
@@ -58,9 +57,7 @@ export const BilliardsScreen = () => {
   useEffect(() => {
     if (deepLinkId) {
       setMobileDetailId(String(deepLinkId));
-      setTimeout(() => {
-        router.replace("/(tabs)/billiards" as any);
-      }, 500);
+      setTimeout(() => { router.replace("/(tabs)/billiards" as any); }, 500);
     }
   }, [deepLinkId]);
 
@@ -73,7 +70,7 @@ export const BilliardsScreen = () => {
   const { width: screenWidth } = useWindowDimensions();
   const { cardWidth, imageHeight } = computeMobileCardLayout(screenWidth);
 
-  // ── Collapsing filter header (mobile only) ─────────────────────────────────
+  // ── Collapsing filter header (mobile only) ────────────────────────────────
   const filterAnim = useRef(new Animated.Value(0)).current;
   const filterHeightRef = useRef(0);
   const filterMeasured = useRef(false);
@@ -82,102 +79,69 @@ export const BilliardsScreen = () => {
   const scrollUpAccRef = useRef(0);
   const [filterReady, setFilterReady] = useState(false);
 
-  const onFilterLayout = useCallback(
-    (e: any) => {
-      if (isWeb) return;
-      const h = e.nativeEvent.layout.height;
-      if (h > 0 && !filterMeasured.current) {
-        filterMeasured.current = true;
-        filterHeightRef.current = h;
-        filterAnim.setValue(h);
-        setFilterReady(true);
+  const onFilterLayout = useCallback((e: any) => {
+    if (isWeb) return;
+    const h = e.nativeEvent.layout.height;
+    if (h > 0 && !filterMeasured.current) {
+      filterMeasured.current = true;
+      filterHeightRef.current = h;
+      filterAnim.setValue(h);
+      setFilterReady(true);
+    }
+  }, [filterAnim]);
+
+  const handleScroll = useCallback((e: any) => {
+    if (isWeb) return;
+    const y = e.nativeEvent.contentOffset.y;
+    const dy = y - lastScrollYRef.current;
+    lastScrollYRef.current = y;
+
+    if (dy > 2) {
+      scrollUpAccRef.current = 0;
+      if (y > 40 && filterVisibleRef.current) {
+        filterVisibleRef.current = false;
+        Animated.timing(filterAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start();
       }
-    },
-    [filterAnim]
-  );
-
-  const handleScroll = useCallback(
-    (e: any) => {
-      if (isWeb) return;
-      const y = e.nativeEvent.contentOffset.y;
-      const dy = y - lastScrollYRef.current;
-      lastScrollYRef.current = y;
-
-      if (dy > 2) {
+    } else if (dy < -2) {
+      scrollUpAccRef.current += Math.abs(dy);
+      if (!filterVisibleRef.current && scrollUpAccRef.current >= SCROLL_UP_THRESHOLD) {
+        filterVisibleRef.current = true;
         scrollUpAccRef.current = 0;
-        if (y > 40 && filterVisibleRef.current) {
-          filterVisibleRef.current = false;
-          Animated.timing(filterAnim, {
-            toValue: 0,
-            duration: 220,
-            useNativeDriver: false,
-          }).start();
-        }
-      } else if (dy < -2) {
-        scrollUpAccRef.current += Math.abs(dy);
-        if (!filterVisibleRef.current && scrollUpAccRef.current >= SCROLL_UP_THRESHOLD) {
-          filterVisibleRef.current = true;
-          scrollUpAccRef.current = 0;
-          Animated.timing(filterAnim, {
-            toValue: filterHeightRef.current,
-            duration: 220,
-            useNativeDriver: false,
-          }).start();
-        }
+        Animated.timing(filterAnim, { toValue: filterHeightRef.current, duration: 220, useNativeDriver: false }).start();
       }
-    },
-    [filterAnim]
-  );
-  // ──────────────────────────────────────────────────────────────────────────
+    }
+  }, [filterAnim]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const {
-    isModalVisible: isReportVisible,
-    openReportModal,
-    closeReportModal,
-    reason: reportReason,
-    setReason: setReportReason,
-    details: reportDetails,
-    setDetails: setReportDetails,
-    handleSubmit: handleReportSubmit,
-    isSubmitting: isReportSubmitting,
+    isModalVisible: isReportVisible, openReportModal, closeReportModal,
+    reason: reportReason, setReason: setReportReason,
+    details: reportDetails, setDetails: setReportDetails,
+    handleSubmit: handleReportSubmit, isSubmitting: isReportSubmitting,
     contentType: reportContentType,
   } = useReport({ userId: user?.id });
 
-  const pagination = usePagination(vm.filteredTournaments as any, {
-    itemsPerPage: ITEMS_PER_PAGE,
-  });
+  const pagination = usePagination(vm.filteredTournaments as any, { itemsPerPage: ITEMS_PER_PAGE });
 
   useEffect(() => {
-    scrollRef.current?.scrollToOffset({ offset: 0, animated: true });
+    scrollRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [pagination.currentPage]);
 
   useEffect(() => {
     pagination.resetPage();
-  }, [
-    vm.searchQuery,
-    vm.selectedState,
-    vm.selectedCity,
-    vm.zipCode,
-    vm.searchRadius,
-    vm.filters,
-  ]);
+  }, [vm.searchQuery, vm.selectedState, vm.selectedCity, vm.zipCode, vm.searchRadius, vm.filters]);
 
   const stateOptions = [{ label: "All States", value: "" }, ...US_STATES];
   const activeFilterCount = getActiveFilterCount(vm.filters);
   const hasActiveFilters = activeFilterCount > 0;
-  const cityOptions =
-    vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
+  const cityOptions = vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
 
   const handleSearchAlertsPress = () => {
     if (!user) {
-      Alert.alert(
-        "Sign In Required",
-        "Sign in or create a free account to set up search alerts and get notified when new tournaments match your criteria.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
-        ]
-      );
+      Alert.alert("Sign In Required", "Sign in or create a free account to set up search alerts and get notified when new tournaments match your criteria.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
+      ]);
       return;
     }
     setSearchAlertsVisible(true);
@@ -185,14 +149,10 @@ export const BilliardsScreen = () => {
 
   const handleRecommendPress = () => {
     if (!user) {
-      Alert.alert(
-        "Sign In Required",
-        "Sign in or create a free account to recommend a venue to our community.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
-        ]
-      );
+      Alert.alert("Sign In Required", "Sign in or create a free account to recommend a venue to our community.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In / Sign Up", onPress: () => router.push("/(tabs)/profile" as any) },
+      ]);
       return;
     }
     recommend.open();
@@ -202,56 +162,17 @@ export const BilliardsScreen = () => {
     <View style={webS.filterBar}>
       <View style={webS.searchWrap}>
         <Text allowFontScaling={false} style={webS.searchIcon}>🔍</Text>
-        <TextInput
-          allowFontScaling={false}
-          style={webS.searchInput}
-          placeholder="Search tournaments..."
-          placeholderTextColor={COLORS.textMuted}
-          value={vm.searchQuery}
-          onChangeText={vm.setSearchQuery}
-        />
+        <TextInput allowFontScaling={false} style={webS.searchInput} placeholder="Search tournaments..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} />
         {vm.searchQuery.length > 0 && (
-          <TouchableOpacity
-            onPress={() => vm.setSearchQuery("")}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={webS.clearBtn}
-          >
+          <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={webS.clearBtn}>
             <Text allowFontScaling={false} style={webS.clearBtnText}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
-      <View style={webS.dropWrap}>
-        <Dropdown
-          placeholder="State"
-          compact={isWeb}
-          options={stateOptions}
-          value={vm.selectedState}
-          onSelect={vm.setSelectedState}
-        />
-      </View>
-      <View style={webS.dropWrap}>
-        <Dropdown
-          placeholder="City"
-          compact={isWeb}
-          options={cityOptions}
-          value={vm.selectedCity}
-          onSelect={vm.setSelectedCity}
-        />
-      </View>
-      <TextInput
-        allowFontScaling={false}
-        style={webS.zipInput}
-        placeholder="Zip"
-        placeholderTextColor={COLORS.textMuted}
-        value={vm.zipCode}
-        onChangeText={vm.setZipCode}
-        keyboardType="numeric"
-        maxLength={5}
-      />
-      <TouchableOpacity
-        style={webS.filterBtn}
-        onPress={() => vm.setFilterModalVisible(true)}
-      >
+      <View style={webS.dropWrap}><Dropdown placeholder="State" compact={isWeb} options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
+      <View style={webS.dropWrap}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
+      <TextInput allowFontScaling={false} style={webS.zipInput} placeholder="Zip" placeholderTextColor={COLORS.textMuted} value={vm.zipCode} onChangeText={vm.setZipCode} keyboardType="numeric" maxLength={5} />
+      <TouchableOpacity style={webS.filterBtn} onPress={() => vm.setFilterModalVisible(true)}>
         <Text allowFontScaling={false} style={webS.filterBtnText}>☰ Filters</Text>
       </TouchableOpacity>
       <TouchableOpacity style={webS.resetBtn} onPress={vm.resetAllFilters}>
@@ -266,37 +187,14 @@ export const BilliardsScreen = () => {
       <View style={styles.radiusContainer}>
         <View style={styles.radiusHeader}>
           <Text allowFontScaling={false} style={styles.radiusLabel}>Search Radius</Text>
-          <Text allowFontScaling={false} style={styles.radiusValue}>
-            {vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}
-          </Text>
+          <Text allowFontScaling={false} style={styles.radiusValue}>{vm.searchRadius} mile{vm.searchRadius !== 1 ? "s" : ""}</Text>
         </View>
         {isWeb ? (
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={vm.searchRadius}
-            onChange={(e) => vm.setSearchRadius(Number(e.target.value))}
-            style={{ width: "100%", height: 28, accentColor: COLORS.primary, cursor: "pointer" }}
-          />
+          <input type="range" min={0} max={100} step={5} value={vm.searchRadius} onChange={(e) => vm.setSearchRadius(Number(e.target.value))} style={{ width: "100%", height: 28, accentColor: COLORS.primary, cursor: "pointer" }} />
         ) : (
           (() => {
             const Slider = require("@react-native-community/slider").default;
-            return (
-              <Slider
-                style={styles.radiusSlider}
-                minimumValue={0}
-                maximumValue={100}
-                step={5}
-                value={vm.searchRadius}
-                onValueChange={vm.setSearchRadius}
-                onSlidingStart={() => Keyboard.dismiss()}
-                minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.border}
-                thumbTintColor={COLORS.primary}
-              />
-            );
+            return <Slider style={styles.radiusSlider} minimumValue={0} maximumValue={100} step={5} value={vm.searchRadius} onValueChange={vm.setSearchRadius} onSlidingStart={() => Keyboard.dismiss()} minimumTrackTintColor={COLORS.primary} maximumTrackTintColor={COLORS.border} thumbTintColor={COLORS.primary} />;
           })()
         )}
         <View style={styles.radiusLabels}>
@@ -322,19 +220,12 @@ export const BilliardsScreen = () => {
   );
 
   const renderTournament = ({ item }: { item: any }) => {
-    if (!item)
-      return <View style={{ flex: 1, margin: isWeb ? 6 : SPACING.xs, minHeight: 300 }} />;
+    if (!item) return <View style={{ flex: 1, margin: isWeb ? 6 : SPACING.xs, minHeight: 300 }} />;
     return (
       <BilliardsTournamentCard
         tournament={item as any}
         isFavorited={vm.favorites.includes(item.id)}
-        onPress={() => {
-          if (isWeb) {
-            setWebDetailId(String(item.id));
-          } else {
-            setMobileDetailId(String(item.id));
-          }
-        }}
+        onPress={() => { if (isWeb) { setWebDetailId(String(item.id)); } else { setMobileDetailId(String(item.id)); } }}
         onToggleFavorite={() => vm.toggleFavorite(item.id)}
         getTournamentImageUrl={vm.getTournamentImageUrl}
         cardWidth={isWeb ? undefined : cardWidth}
@@ -344,55 +235,22 @@ export const BilliardsScreen = () => {
   };
 
   const renderRecommendCard = () => (
-    <View
-      style={{
-        backgroundColor: COLORS.surface,
-        borderRadius: RADIUS.md,
-        padding: scale(SPACING.md),
-        marginHorizontal: scale(SPACING.xs),
-        marginTop: scale(SPACING.md),
-        marginBottom: scale(SPACING.md),
-        borderWidth: 1,
-        borderColor: COLORS.primary + "30",
-        alignItems: "center",
-      }}
-    >
+    <View style={{ backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), marginHorizontal: scale(SPACING.xs), marginTop: scale(SPACING.md), marginBottom: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.primary + "30", alignItems: "center" }}>
       <Text allowFontScaling={false} style={{ fontSize: moderateScale(24), marginBottom: scale(SPACING.sm) }}>🎱</Text>
-      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, textAlign: "center" }}>
-        Know a spot that hosts pool tournaments?
-      </Text>
-      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.xs), marginBottom: scale(SPACING.md) }}>
-        Help us grow the community - recommend a venue!
-      </Text>
-      <TouchableOpacity
-        style={{ backgroundColor: COLORS.primary, paddingHorizontal: scale(SPACING.lg), paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.sm }}
-        onPress={handleRecommendPress}
-      >
-        <Text allowFontScaling={false} style={{ color: COLORS.white, fontWeight: "600", fontSize: moderateScale(FONT_SIZES.sm) }}>
-          Recommend a Venue
-        </Text>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, textAlign: "center" }}>Know a spot that hosts pool tournaments?</Text>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.xs), marginBottom: scale(SPACING.md) }}>Help us grow the community - recommend a venue!</Text>
+      <TouchableOpacity style={{ backgroundColor: COLORS.primary, paddingHorizontal: scale(SPACING.lg), paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.sm }} onPress={handleRecommendPress}>
+        <Text allowFontScaling={false} style={{ color: COLORS.white, fontWeight: "600", fontSize: moderateScale(FONT_SIZES.sm) }}>Recommend a Venue</Text>
       </TouchableOpacity>
     </View>
   );
 
   const renderEmptyState = () => (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={styles.emptyContainer}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.emptyContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text allowFontScaling={false} style={styles.emptyIcon}>🎱</Text>
-      <Text allowFontScaling={false} style={styles.emptyText}>
-        {vm.isStateFilterEmpty && vm.selectedState
-          ? "No tournaments available in this area yet"
-          : "No tournaments found"}
-      </Text>
+      <Text allowFontScaling={false} style={styles.emptyText}>{vm.isStateFilterEmpty && vm.selectedState ? "No tournaments available in this area yet" : "No tournaments found"}</Text>
       <Text allowFontScaling={false} style={styles.emptySubtext}>Try adjusting your filters</Text>
-      <TouchableOpacity
-        style={styles.alertsButton}
-        onPress={handleSearchAlertsPress}
-      >
+      <TouchableOpacity style={styles.alertsButton} onPress={handleSearchAlertsPress}>
         <Text allowFontScaling={false} style={styles.alertsButtonText}>🔔 Create Search Alert</Text>
       </TouchableOpacity>
       {renderRecommendCard()}
@@ -401,33 +259,25 @@ export const BilliardsScreen = () => {
 
   if (vm.loading) return <Loading fullScreen message="Loading tournaments..." />;
 
-  const paddedData =
-    pagination.paginatedItems.length % NUM_COLUMNS !== 0
-      ? [
-          ...pagination.paginatedItems,
-          ...Array(NUM_COLUMNS - (pagination.paginatedItems.length % NUM_COLUMNS)).fill(null),
-        ]
-      : pagination.paginatedItems;
+  const paddedData = pagination.paginatedItems.length % NUM_COLUMNS !== 0
+    ? [...pagination.paginatedItems, ...Array(NUM_COLUMNS - (pagination.paginatedItems.length % NUM_COLUMNS)).fill(null)]
+    : pagination.paginatedItems;
 
   return (
     <WebContainer>
       <View style={styles.container}>
-        <TouchableWithoutFeedback
-          onPress={isWeb ? undefined : Keyboard.dismiss}
-          accessible={false}
-        >
+        <TouchableWithoutFeedback onPress={isWeb ? undefined : Keyboard.dismiss} accessible={false}>
           <View pointerEvents={isWeb ? "box-none" : "auto"}>
             <View style={styles.header}>
               <Text allowFontScaling={false} style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
-              <Text allowFontScaling={false} style={styles.headerSubtitle}>
-                Browse all billiards tournaments by game type and location
-              </Text>
+              <Text allowFontScaling={false} style={styles.headerSubtitle}>Browse all billiards tournaments by game type and location</Text>
             </View>
 
             {isWeb ? (
               <>
                 {renderWebFilters()}
                 {renderRadiusSlider()}
+                {renderPagination()}
               </>
             ) : (
               <Animated.View
@@ -435,96 +285,40 @@ export const BilliardsScreen = () => {
                 style={filterReady ? { height: filterAnim, overflow: "hidden" } : undefined}
               >
                 {vm.isHomeStateEmpty && (
-                  <View style={{
-                    backgroundColor: COLORS.primary + "15",
-                    paddingHorizontal: scale(SPACING.md),
-                    paddingVertical: scale(SPACING.sm),
-                    marginHorizontal: scale(SPACING.md),
-                    marginBottom: scale(SPACING.sm),
-                    borderRadius: RADIUS.sm,
-                    borderWidth: 1,
-                    borderColor: COLORS.primary + "30",
-                  }}>
-                    <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>
-                      No tournaments in your state yet - showing all tournaments
-                    </Text>
+                  <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), marginHorizontal: scale(SPACING.md), marginBottom: scale(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
+                    <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>No tournaments in your state yet - showing all tournaments</Text>
                   </View>
                 )}
                 <View style={styles.searchContainer}>
                   <View style={styles.searchBar}>
                     <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
-                    <TextInput
-                      allowFontScaling={false}
-                      style={styles.searchInput}
-                      placeholder="Search tournaments..."
-                      placeholderTextColor={COLORS.textMuted}
-                      value={vm.searchQuery}
-                      onChangeText={vm.setSearchQuery}
-                      returnKeyType="search"
-                      onSubmitEditing={Keyboard.dismiss}
-                    />
+                    <TextInput allowFontScaling={false} style={styles.searchInput} placeholder="Search tournaments..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} returnKeyType="search" onSubmitEditing={Keyboard.dismiss} />
                     {vm.searchQuery.length > 0 && (
-                      <TouchableOpacity
-                        onPress={() => vm.setSearchQuery("")}
-                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                        style={styles.clearBtn}
-                      >
+                      <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.clearBtn}>
                         <Text allowFontScaling={false} style={styles.clearBtnText}>✕</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                 </View>
                 <View style={styles.filterRow}>
-                  <View style={styles.filterItemState}>
-                    <Dropdown
-                      placeholder="All States"
-                      options={stateOptions}
-                      value={vm.selectedState}
-                      onSelect={vm.setSelectedState}
-                    />
-                  </View>
-                  <View style={styles.filterItemCity}>
-                    <Dropdown
-                      placeholder="City"
-                      compact={isWeb}
-                      options={cityOptions}
-                      value={vm.selectedCity}
-                      onSelect={vm.setSelectedCity}
-                    />
-                  </View>
+                  <View style={styles.filterItemState}><Dropdown placeholder="All States" options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
+                  <View style={styles.filterItemCity}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
                   <View style={styles.filterItemZip}>
-                    <TextInput
-                      allowFontScaling={false}
-                      style={styles.zipInput}
-                      placeholder="Zip"
-                      placeholderTextColor={COLORS.textMuted}
-                      value={vm.zipCode}
-                      onChangeText={vm.setZipCode}
-                      keyboardType="numeric"
-                      maxLength={5}
-                      returnKeyType="done"
-                      onSubmitEditing={Keyboard.dismiss}
-                    />
+                    <TextInput allowFontScaling={false} style={styles.zipInput} placeholder="Zip" placeholderTextColor={COLORS.textMuted} value={vm.zipCode} onChangeText={vm.setZipCode} keyboardType="numeric" maxLength={5} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
                   </View>
                 </View>
                 {renderRadiusSlider()}
                 <View style={styles.filterButtonsRow}>
-                  <TouchableOpacity
-                    style={styles.filtersButton}
-                    onPress={() => vm.setFilterModalVisible(true)}
-                  >
-                    <Text allowFontScaling={false} style={styles.filtersButtonText}>
-                      {hasActiveFilters ? "✓ Filters Applied" : "☰ Filters"}
-                    </Text>
+                  <TouchableOpacity style={styles.filtersButton} onPress={() => vm.setFilterModalVisible(true)}>
+                    <Text allowFontScaling={false} style={styles.filtersButtonText}>{hasActiveFilters ? "✓ Filters Applied" : "☰ Filters"}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
                     <Text allowFontScaling={false} style={styles.resetButtonText}>🗑️ Reset Filters</Text>
                   </TouchableOpacity>
                 </View>
+                {renderPagination()}
               </Animated.View>
             )}
-
-            {renderPagination()}
           </View>
         </TouchableWithoutFeedback>
 
@@ -540,9 +334,7 @@ export const BilliardsScreen = () => {
             style={{ flex: 1 }}
             data={paddedData}
             renderItem={renderTournament}
-            keyExtractor={(item: any, index: number) =>
-              item ? item.id.toString() : `placeholder-${index}`
-            }
+            keyExtractor={(item: any, index: number) => item ? item.id.toString() : `placeholder-${index}`}
             numColumns={NUM_COLUMNS}
             key={`cols-${NUM_COLUMNS}`}
             contentContainerStyle={styles.list}
@@ -553,15 +345,6 @@ export const BilliardsScreen = () => {
             onScroll={handleScroll}
             scrollEventThrottle={16}
             bounces={false}
-            refreshControl={
-              !isWeb ? (
-                <RefreshControl
-                  refreshing={vm.refreshing}
-                  onRefresh={vm.onRefresh}
-                  tintColor={COLORS.primary}
-                />
-              ) : undefined
-            }
             ListFooterComponent={
               <>
                 {pagination.totalCount > 0 && renderPagination()}
@@ -571,117 +354,33 @@ export const BilliardsScreen = () => {
           />
         )}
 
-        <FilterModal
-          visible={vm.filterModalVisible}
-          onClose={() => vm.setFilterModalVisible(false)}
-          filters={vm.filters}
-          onApply={vm.setFilters}
-        />
+        <FilterModal visible={vm.filterModalVisible} onClose={() => vm.setFilterModalVisible(false)} filters={vm.filters} onApply={vm.setFilters} />
         <RecommendVenueModal vm={recommend} />
 
-        {isWeb && webDetailId && (
-          <WebTournamentDetailOverlay
-            id={webDetailId}
-            onClose={() => setWebDetailId(null)}
-          />
-        )}
+        {isWeb && webDetailId && <WebTournamentDetailOverlay id={webDetailId} onClose={() => setWebDetailId(null)} />}
 
-        <TournamentDetailModal
-          id={mobileDetailId}
-          visible={mobileDetailId !== null}
-          onClose={() => setMobileDetailId(null)}
-          onReport={openReportModal}
-        />
+        <TournamentDetailModal id={mobileDetailId} visible={mobileDetailId !== null} onClose={() => setMobileDetailId(null)} onReport={openReportModal} />
 
-        <ReportModal
-          visible={isReportVisible}
-          onClose={closeReportModal}
-          contentType={reportContentType}
-          reason={reportReason}
-          onReasonChange={setReportReason}
-          details={reportDetails}
-          onDetailsChange={setReportDetails}
-          onSubmit={handleReportSubmit}
-          isSubmitting={isReportSubmitting}
-        />
+        <ReportModal visible={isReportVisible} onClose={closeReportModal} contentType={reportContentType} reason={reportReason} onReasonChange={setReportReason} details={reportDetails} onDetailsChange={setReportDetails} onSubmit={handleReportSubmit} isSubmitting={isReportSubmitting} />
 
-        <SearchAlertsModal
-          visible={searchAlertsVisible}
-          onClose={() => setSearchAlertsVisible(false)}
-        />
+        <SearchAlertsModal visible={searchAlertsVisible} onClose={() => setSearchAlertsVisible(false)} />
       </View>
     </WebContainer>
   );
 };
 
 const webS = StyleSheet.create({
-  filterBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    gap: 6,
-    marginBottom: SPACING.sm,
-  },
-  searchWrap: {
-    width: 220,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingLeft: SPACING.sm,
-    paddingRight: 0,
-    height: 32,
-  },
+  filterBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: 6, marginBottom: SPACING.sm },
+  searchWrap: { width: 220, flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, paddingLeft: SPACING.sm, paddingRight: 0, height: 32 },
   searchIcon: { fontSize: FONT_SIZES.xs, marginRight: SPACING.xs },
   searchInput: { flex: 1, fontSize: FONT_SIZES.xs, color: COLORS.text, height: 32 },
-  clearBtn: {
-    height: 32,
-    paddingLeft: SPACING.xs,
-    paddingRight: SPACING.md,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  clearBtnText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textMuted,
-    fontWeight: "600",
-    lineHeight: FONT_SIZES.md + 4,
-  },
+  clearBtn: { height: 32, paddingLeft: SPACING.xs, paddingRight: SPACING.md, justifyContent: "center", alignItems: "center" },
+  clearBtnText: { fontSize: FONT_SIZES.md, color: COLORS.textMuted, fontWeight: "600", lineHeight: FONT_SIZES.md + 4 },
   dropWrap: { width: 150, height: 32 },
-  zipInput: {
-    width: 100,
-    height: 32,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: SPACING.sm,
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.text,
-  },
-  filterBtn: {
-    height: 32,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  zipInput: { width: 100, height: 32, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: SPACING.sm, fontSize: FONT_SIZES.xs, color: COLORS.text },
+  filterBtn: { height: 32, paddingHorizontal: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center" },
   filterBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.text },
-  resetBtn: {
-    height: 32,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  resetBtn: { height: 32, paddingHorizontal: SPACING.md, backgroundColor: COLORS.primary, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
   resetBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.white, fontWeight: "600" },
 });
 
