@@ -17,11 +17,13 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { useReport } from "../../src/viewmodels/hooks/useReport";
+import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { useTournamentDetail } from "../../src/viewmodels/useTournamentDetail";
 import { Button } from "../../src/views/components/common/button";
 import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
 import ReportModal from "../../src/views/components/common/ReportModal";
+import { useAuthContext } from "../../src/providers/AuthProvider";
 
 const isWeb = Platform.OS === "web";
 
@@ -29,6 +31,8 @@ export default function TournamentDetailScreen() {
   const { id } = useLocalSearchParams();
   const vm = useTournamentDetail(id as string);
   const { session, isAdmin } = useAuth();
+  const { profile } = useAuthContext();
+  const { isFavorited, toggleFavorite, isToggling } = useFavorites(profile?.id_auto);
   const {
     isModalVisible,
     openReportModal,
@@ -76,7 +80,10 @@ export default function TournamentDetailScreen() {
   const handleShare = async () => {
     if (!tournament) return;
     try {
-      const deepLink = `competerf://tournament/${tournament.id}`;
+      // FIX: use competerf:///tournament-detail?id= so Expo Router can resolve
+      // the route to app/(tabs)/tournament-detail.tsx via search params.
+      // The previous competerf://tournament/123 had no matching route file.
+      const deepLink = `competerf:///tournament-detail?id=${tournament.id}`;
       const message =
         `\uD83C\uDFB1 ${tournament.name}\n` +
         `\uD83D\uDCC5 ${vm.formattedDate} \u2022 ${vm.formattedTime}\n` +
@@ -88,8 +95,6 @@ export default function TournamentDetailScreen() {
       console.error("Share error:", error);
     }
   };
-
-
 
   if (vm.loading) return <Loading fullScreen message="Loading tournament..." />;
 
@@ -120,13 +125,13 @@ export default function TournamentDetailScreen() {
       ? tournament.chip_ranges
       : null;
 
-  // ── Inner content (shared between web modal and mobile page) ─────────────
+  const favorited = isFavorited(tournament.id);
+
   const content = (
     <ScrollView
       style={isWeb ? wStyles.scrollView : styles.scrollContent}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header / back button */}
       {!isWeb && (
         <View style={styles.header}>
           <TouchableOpacity onPress={vm.goBack} style={styles.backButton}>
@@ -186,7 +191,7 @@ export default function TournamentDetailScreen() {
             )}
           </View>
 
-          {/* Image */}
+          {/* Image + Heart */}
           <View style={[styles.imageSection, isWeb && wStyles.imageSection]}>
             <View style={styles.imageContainer}>
               {imageUrl ? (
@@ -218,6 +223,19 @@ export default function TournamentDetailScreen() {
                 <Text style={styles.viewImageText}>View Image</Text>
               </TouchableOpacity>
             )}
+            {/* ADDED: Heart button — always visible, prompts login if needed */}
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={() => toggleFavorite(tournament.id)}
+              disabled={isToggling}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={favorited ? "heart" : "heart-outline"}
+                size={44}
+                color={favorited ? "#E53935" : COLORS.textSecondary}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -363,21 +381,16 @@ export default function TournamentDetailScreen() {
     </ScrollView>
   );
 
-  // ── Web: modal overlay ────────────────────────────────────────────────────
   if (isWeb) {
     return (
       <>
-        {/* Dimmed backdrop — clicking it goes back */}
         <TouchableOpacity
           style={wStyles.backdrop}
           activeOpacity={1}
           onPress={vm.goBack}
         />
-
-        {/* Centered dialog */}
         <View style={wStyles.dialogWrap}>
           <View style={wStyles.dialog}>
-            {/* Dialog header */}
             <View style={wStyles.dialogHeader}>
               <TouchableOpacity onPress={vm.goBack} style={wStyles.backBtn}>
                 <Text style={wStyles.backBtnText}>← Back</Text>
@@ -389,7 +402,6 @@ export default function TournamentDetailScreen() {
             {content}
           </View>
         </View>
-
         <FullScreenImageViewer
           visible={showImageViewer}
           imageUrl={imageUrl}
@@ -411,7 +423,6 @@ export default function TournamentDetailScreen() {
     );
   }
 
-  // ── Mobile: full page ─────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
       {content}
@@ -436,7 +447,6 @@ export default function TournamentDetailScreen() {
   );
 }
 
-// ── Mobile styles (unchanged) ─────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { flex: 1 },
@@ -478,11 +488,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
   },
-  hiddenInlineText: {
-    color: "#fff",
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "700",
-  },
+  hiddenInlineText: { color: "#fff", fontSize: FONT_SIZES.xs, fontWeight: "700" },
   topSection: {
     flexDirection: "row",
     marginBottom: SPACING.lg,
@@ -520,6 +526,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.primary,
     fontWeight: "600",
+  },
+  favoriteButton: {
+    marginTop: SPACING.md,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
   },
   badges: {
     flexDirection: "row",
@@ -600,11 +612,7 @@ const styles = StyleSheet.create({
   },
   feeLabel: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
   feeValue: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.text },
-  addedMoney: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.success,
-  },
+  addedMoney: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.success },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -718,23 +726,16 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── Web-only styles ───────────────────────────────────────────────────────
 const wStyles = StyleSheet.create({
   backdrop: {
     position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: "rgba(0,0,0,0.75)",
     zIndex: 1000,
   },
   dialogWrap: {
     position: "fixed" as any,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 1001,
     alignItems: "center",
     justifyContent: "center",
@@ -764,50 +765,20 @@ const wStyles = StyleSheet.create({
     paddingTop: 16,
     backgroundColor: COLORS.background,
   },
-  backBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  backBtnText: {
-    color: COLORS.primary,
-    fontSize: FONT_SIZES.sm,
-  },
+  backBtn: { paddingVertical: 4, paddingHorizontal: 8 },
+  backBtnText: { color: COLORS.primary, fontSize: FONT_SIZES.sm },
   closeBtn: {
     backgroundColor: COLORS.error,
-    width: 28,
-    height: 28,
+    width: 28, height: 28,
     borderRadius: RADIUS.sm,
     alignItems: "center",
     justifyContent: "center",
   },
-  closeBtnText: {
-    color: "#fff",
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-  },
-  scrollView: {
-    maxHeight: "calc(88vh - 50px)" as any,
-  },
-  contentPadding: {
-    paddingTop: SPACING.md,
-  },
-  content: {
-    padding: SPACING.lg,
-  },
-  topSection: {
-    flexDirection: "row",
-    gap: SPACING.lg,
-  },
-  title: {
-    fontSize: FONT_SIZES.xl,
-  },
-  imageSection: {
-    alignItems: "center",
-    minWidth: 140,
-  },
-  tournamentImage: {
-    width: 140,
-    height: 140,
-    borderRadius: RADIUS.md,
-  },
+  closeBtnText: { color: "#fff", fontSize: FONT_SIZES.sm, fontWeight: "700" },
+  scrollView: { maxHeight: "calc(88vh - 50px)" as any },
+  content: { padding: SPACING.lg },
+  topSection: { flexDirection: "row", gap: SPACING.lg },
+  title: { fontSize: FONT_SIZES.xl },
+  imageSection: { alignItems: "center", minWidth: 140 },
+  tournamentImage: { width: 140, height: 140, borderRadius: RADIUS.md },
 });
