@@ -1,8 +1,8 @@
-// src/models/services/notification.service.ts
-// ═══════════════════════════════════════════════════════════
+﻿// src/models/services/notification.service.ts
+// ─────────────────────────────────────────────────────────
 // Push token management & Expo push notification sending
 // Model layer: Supabase + Expo API calls only. No React, no hooks.
-// ═══════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────
 
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -37,12 +37,25 @@ export const notificationService = {
         return null;
       }
 
-      const { status: existingStatus } =
+      // FIX 1: Destructure canAskAgain so we can guard the request call.
+      // If the user previously denied, canAskAgain is false and iOS silently
+      // ignores requestPermissionsAsync — checking first avoids a dead call.
+      const { status: existingStatus, canAskAgain } =
         await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
 
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
+      // FIX 2: Pass explicit iOS options so the OS registers alert/badge/sound
+      // entitlements. Without this object, iOS may skip registering the app
+      // entirely — which is why the Notifications row is missing from Settings
+      // on affected devices.
+      if (existingStatus !== "granted" && canAskAgain) {
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+          },
+        });
         finalStatus = status;
       }
 
@@ -73,7 +86,7 @@ export const notificationService = {
   },
 
   async registerPushToken(userId: string, token: string): Promise<void> {
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
     // CRITICAL: Remove this token from ALL other user accounts before
     // registering it for the current user.
     //
@@ -88,7 +101,7 @@ export const notificationService = {
     //
     // Removing the token from other accounts first ensures one token = one
     // owner at any given time, which is the correct invariant.
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
     const { error: removeError } = await supabase
       .from("push_tokens")
       .delete()
