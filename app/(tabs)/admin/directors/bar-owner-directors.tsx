@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -36,11 +37,13 @@ const StatusTab = ({
     onPress={onPress}
   >
     <Text
+      allowFontScaling={false}
       style={[styles.statusTabText, isActive && styles.statusTabTextActive]}
     >
       {label}
     </Text>
     <Text
+      allowFontScaling={false}
       style={[styles.statusTabCount, isActive && styles.statusTabCountActive]}
     >
       {count}
@@ -55,7 +58,7 @@ export default function BarOwnerDirectorsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading directors...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading directors...</Text>
       </View>
     );
   }
@@ -64,7 +67,6 @@ export default function BarOwnerDirectorsScreen() {
     <DirectorCard
       director={item}
       onPress={() => {
-        // Navigate to director details if needed
         console.log("Director pressed:", item);
       }}
       onRemove={() => vm.handleRemoveDirector(item)}
@@ -78,27 +80,24 @@ export default function BarOwnerDirectorsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Directors</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>My Directors</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Stats Summary */}
       <View style={styles.statsContainer}>
-        <Text style={styles.statsText}>
+        <Text allowFontScaling={false} style={styles.statsText}>
           {vm.stats.totalDirectors} directors across{" "}
           {vm.stats.venuesWithDirectors} venues
         </Text>
       </View>
 
-      {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -109,17 +108,15 @@ export default function BarOwnerDirectorsScreen() {
         />
       </View>
 
-      {/* Add Director Button — FIX: Navigate to add-director page instead of dead modal */}
       {vm.canAddDirectors && (
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => router.push("/(tabs)/admin/add-director" as any)}
         >
-          <Text style={styles.addButtonText}>+ Add Director</Text>
+          <Text allowFontScaling={false} style={styles.addButtonText}>+ Add Director</Text>
         </TouchableOpacity>
       )}
 
-      {/* Status Tabs */}
       <View style={styles.statusTabs}>
         <StatusTab
           label="Active"
@@ -141,7 +138,6 @@ export default function BarOwnerDirectorsScreen() {
         />
       </View>
 
-      {/* Directors List */}
       <FlatList
         data={vm.directors}
         renderItem={renderDirector}
@@ -175,7 +171,6 @@ export default function BarOwnerDirectorsScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Remove Director Modal */}
       <RemoveDirectorModal
         visible={vm.showRemoveModal}
         director={vm.selectedDirector}
@@ -190,7 +185,6 @@ export default function BarOwnerDirectorsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -207,7 +201,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -227,17 +221,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   statsContainer: {
     paddingHorizontal: SPACING.md,
@@ -247,7 +241,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   statsText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
   },
@@ -260,10 +254,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
   },
   addButton: {
@@ -272,11 +266,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
   },
   addButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.white,
   },
@@ -285,7 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.md,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.xs,
     gap: SPACING.xs,
   },
@@ -293,14 +287,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    borderRadius: 6,
+    borderRadius: scale(6),
     alignItems: "center",
   },
   statusTabActive: {
     backgroundColor: COLORS.primary,
   },
   statusTabText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
@@ -308,9 +302,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   statusTabCount: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   statusTabCountActive: {
     color: COLORS.white,

@@ -1,4 +1,5 @@
-﻿import { useRouter } from "expo-router";
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -23,7 +24,6 @@ import { Dropdown } from "../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
 
-// Shared date formatter used by both the full card and the edit screen
 const formatLastLogin = (dateString: string | null | undefined): string => {
   if (!dateString) return "Never";
   return new Date(dateString).toLocaleDateString(undefined, {
@@ -43,7 +43,7 @@ export default function UserManagementScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading users...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading users...</Text>
       </View>
     );
   }
@@ -52,14 +52,14 @@ export default function UserManagementScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <Text style={styles.headerTitle}>USER MANAGEMENT</Text>
-        <Text style={styles.headerSubtitle}>{vm.totalCount} total users</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>USER MANAGEMENT</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>{vm.totalCount} total users</Text>
       </View>
 
       {/* Search & Filters */}
       <View style={styles.filtersContainer}>
         <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search users..."
@@ -99,7 +99,7 @@ export default function UserManagementScreen() {
               ]}
               onPress={() => vm.setViewMode("compact")}
             >
-              <Text style={styles.viewToggleIcon}>☰</Text>
+              <Text allowFontScaling={false} style={styles.viewToggleIcon}>☰</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -108,7 +108,7 @@ export default function UserManagementScreen() {
               ]}
               onPress={() => vm.setViewMode("full")}
             >
-              <Text style={styles.viewToggleIcon}>▦</Text>
+              <Text allowFontScaling={false} style={styles.viewToggleIcon}>▦</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -150,17 +150,14 @@ export default function UserManagementScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>👥</Text>
-            <Text style={styles.emptyText}>No users found</Text>
+            <Text allowFontScaling={false} style={styles.emptyIcon}>👥</Text>
+            <Text allowFontScaling={false} style={styles.emptyText}>No users found</Text>
           </View>
         }
       />
     </View>
   );
 }
-
-// ── Compact card ─────────────────────────────────────────────────────────────
-// No last login shown here — kept intentionally minimal.
 
 interface UserCardProps {
   user: AdminUser;
@@ -179,37 +176,37 @@ const CompactUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCar
     <View style={styles.compactCard}>
       <View style={styles.compactContent}>
         <View style={[styles.avatar, { backgroundColor: roleColor }]}>
-          <Text style={styles.avatarText}>{initial}</Text>
+          <Text allowFontScaling={false} style={styles.avatarText}>{initial}</Text>
         </View>
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>{user.name}</Text>
+          <Text allowFontScaling={false} style={styles.userName}>{user.name}</Text>
           <View style={[styles.roleBadge, { backgroundColor: `${roleColor}20` }]}>
-            <Text style={[styles.roleBadgeText, { color: roleColor }]}>{roleLabel}</Text>
+            <Text allowFontScaling={false} style={[styles.roleBadgeText, { color: roleColor }]}>{roleLabel}</Text>
           </View>
         </View>
         <View style={styles.statsContainer}>
           {user.venue_count > 0 && (
             <View style={styles.statItem}>
-              <Text style={styles.statIcon}>🏢</Text>
-              <Text style={styles.statText}>{user.venue_count}</Text>
+              <Text allowFontScaling={false} style={styles.statIcon}>🏢</Text>
+              <Text allowFontScaling={false} style={styles.statText}>{user.venue_count}</Text>
             </View>
           )}
           {user.director_count > 0 && (
             <View style={styles.statItem}>
-              <Text style={styles.statIcon}>👤</Text>
-              <Text style={styles.statText}>{user.director_count}</Text>
+              <Text allowFontScaling={false} style={styles.statIcon}>👤</Text>
+              <Text allowFontScaling={false} style={styles.statText}>{user.director_count}</Text>
             </View>
           )}
         </View>
         <View style={styles.actionsContainer}>
           {canEdit && (
             <TouchableOpacity style={styles.iconButton} onPress={onEdit}>
-              <Text style={styles.iconButtonText}>✏️</Text>
+              <Text allowFontScaling={false} style={styles.iconButtonText}>✏️</Text>
             </TouchableOpacity>
           )}
           {canDelete && (
             <TouchableOpacity style={styles.iconButton} onPress={onDelete}>
-              <Text style={styles.iconButtonText}>🗑️</Text>
+              <Text allowFontScaling={false} style={styles.iconButtonText}>🗑️</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -217,9 +214,6 @@ const CompactUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCar
     </View>
   );
 };
-
-// ── Full card ─────────────────────────────────────────────────────────────────
-// Last Login row is shown here only, consistent with the edit screen's InfoRow.
 
 const FullUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCardProps) => {
   const roleColor = ROLE_COLORS[user.role];
@@ -235,12 +229,12 @@ const FullUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCardPr
     <View style={styles.fullCard}>
       <View style={styles.fullTopRow}>
         <View style={[styles.avatar, { backgroundColor: roleColor }]}>
-          <Text style={styles.avatarText}>{initial}</Text>
+          <Text allowFontScaling={false} style={styles.avatarText}>{initial}</Text>
         </View>
         <View style={styles.fullUserInfo}>
-          <Text style={styles.userName}>{user.name}</Text>
+          <Text allowFontScaling={false} style={styles.userName}>{user.name}</Text>
           <View style={[styles.roleBadge, { backgroundColor: `${roleColor}20` }]}>
-            <Text style={[styles.roleBadgeText, { color: roleColor }]}>{roleLabel}</Text>
+            <Text allowFontScaling={false} style={[styles.roleBadgeText, { color: roleColor }]}>{roleLabel}</Text>
           </View>
         </View>
       </View>
@@ -249,34 +243,33 @@ const FullUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCardPr
         {(user.venue_count > 0 || user.director_count > 0) && (
           <View style={styles.fullStatsRow}>
             {user.venue_count > 0 && (
-              <Text style={styles.fullDetailText}>🏢 Venues: {user.venue_count}</Text>
+              <Text allowFontScaling={false} style={styles.fullDetailText}>🏢 Venues: {user.venue_count}</Text>
             )}
             {user.director_count > 0 && (
-              <Text style={styles.fullDetailText}>👤 Directors: {user.director_count}</Text>
+              <Text allowFontScaling={false} style={styles.fullDetailText}>👤 Directors: {user.director_count}</Text>
             )}
           </View>
         )}
-        <Text style={styles.fullDetailText}>📅 Joined: {joinedDate}</Text>
-        {/* Last Active + Last Login — only on the full card */}
-        <Text style={styles.fullDetailText}>
+        <Text allowFontScaling={false} style={styles.fullDetailText}>📅 Joined: {joinedDate}</Text>
+        <Text allowFontScaling={false} style={styles.fullDetailText}>
           🕐 Last Active: {formatLastLogin(user.last_active_at)}
         </Text>
-        <Text style={styles.fullDetailText}>
+        <Text allowFontScaling={false} style={styles.fullDetailText}>
           🔑 Last Login: {formatLastLogin(user.last_login_at)}
         </Text>
-        <Text style={styles.fullDetailText}>🆔 User ID: {user.id_auto}</Text>
+        <Text allowFontScaling={false} style={styles.fullDetailText}>🆔 User ID: {user.id_auto}</Text>
       </View>
 
       {(canEdit || canDelete) && (
         <View style={styles.fullActions}>
           {canEdit && (
             <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
-              <Text style={styles.actionButtonText}>✏️ Edit</Text>
+              <Text allowFontScaling={false} style={styles.actionButtonText}>✏️ Edit</Text>
             </TouchableOpacity>
           )}
           {canDelete && (
             <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={onDelete}>
-              <Text style={[styles.actionButtonText, styles.deleteButtonText]}>🗑️ Delete</Text>
+              <Text allowFontScaling={false} style={[styles.actionButtonText, styles.deleteButtonText]}>🗑️ Delete</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -284,8 +277,6 @@ const FullUserCard = ({ user, canEdit, canDelete, onEdit, onDelete }: UserCardPr
     </View>
   );
 };
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
@@ -298,7 +289,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: COLORS.background,
     justifyContent: "center", alignItems: "center",
   },
-  loadingText: { marginTop: SPACING.sm, fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  loadingText: { marginTop: SPACING.sm, fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
   header: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.xl + SPACING.sm,
@@ -308,79 +299,77 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   headerWeb: { paddingTop: SPACING.lg },
-  headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: "600", color: COLORS.text, letterSpacing: 0.5 },
-  headerSubtitle: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, opacity: 0.7, marginTop: 4 },
+  headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "600", color: COLORS.text, letterSpacing: 0.5 },
+  headerSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, opacity: 0.7, marginTop: scale(4) },
   filtersContainer: { padding: SPACING.md, gap: SPACING.md },
   searchContainer: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: COLORS.surface, borderRadius: 8,
+    backgroundColor: COLORS.surface, borderRadius: scale(8),
     paddingHorizontal: SPACING.sm, borderWidth: 1,
-    borderColor: COLORS.border, height: 40,
+    borderColor: COLORS.border, height: scale(40),
   },
-  searchIcon: { fontSize: 14, marginRight: SPACING.sm, opacity: 0.6 },
-  searchInput: { flex: 1, height: 40, fontSize: FONT_SIZES.sm, color: COLORS.text },
+  searchIcon: { fontSize: moderateScale(14), marginRight: SPACING.sm, opacity: 0.6 },
+  searchInput: { flex: 1, height: scale(40), fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text },
   dropdownRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm },
   dropdownWrapper: { flex: 1 },
   viewToggle: {
     flexDirection: "row", backgroundColor: COLORS.surface,
-    borderRadius: 6, borderWidth: 1, borderColor: COLORS.border,
-    height: 38, alignItems: "center", paddingHorizontal: 2,
+    borderRadius: scale(6), borderWidth: 1, borderColor: COLORS.border,
+    height: scale(38), alignItems: "center", paddingHorizontal: scale(2),
   },
   viewToggleButton: {
-    paddingHorizontal: SPACING.sm, paddingVertical: 6,
-    height: 32, justifyContent: "center", alignItems: "center",
+    paddingHorizontal: SPACING.sm, paddingVertical: scale(6),
+    height: scale(32), justifyContent: "center", alignItems: "center",
   },
-  viewToggleButtonActive: { backgroundColor: COLORS.primary, borderRadius: 4 },
-  viewToggleIcon: { fontSize: 14, color: COLORS.text },
+  viewToggleButtonActive: { backgroundColor: COLORS.primary, borderRadius: scale(4) },
+  viewToggleIcon: { fontSize: moderateScale(14), color: COLORS.text },
   listContainer: {
     flex: 1, marginHorizontal: SPACING.md, marginBottom: SPACING.md,
-    borderWidth: 1, borderColor: COLORS.border, borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(8),
     backgroundColor: COLORS.background,
   },
   listContent: { padding: SPACING.sm, paddingBottom: SPACING.xl },
   emptyContainer: { alignItems: "center", paddingVertical: SPACING.xl * 2 },
-  emptyIcon: { fontSize: 40, marginBottom: SPACING.md, opacity: 0.5 },
-  emptyText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  emptyIcon: { fontSize: moderateScale(40), marginBottom: SPACING.md, opacity: 0.5 },
+  emptyText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
 
   // Compact card
   compactCard: {
-    backgroundColor: COLORS.surface, borderRadius: 6,
+    backgroundColor: COLORS.surface, borderRadius: scale(6),
     padding: SPACING.sm, marginBottom: SPACING.xs,
   },
   compactContent: { flexDirection: "row", alignItems: "center" },
-  avatar: { width: 38, height: 38, borderRadius: 19, justifyContent: "center", alignItems: "center" },
-  avatarText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: "#fff" },
+  avatar: { width: scale(38), height: scale(38), borderRadius: scale(19), justifyContent: "center", alignItems: "center" },
+  avatarText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: "#fff" },
   userInfo: { flex: 1, marginLeft: SPACING.sm },
-  userName: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.text, marginBottom: 3 },
-  roleBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  roleBadgeText: { fontSize: 11, fontWeight: "600" },
+  userName: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, marginBottom: scale(3) },
+  roleBadge: { alignSelf: "flex-start", paddingHorizontal: scale(8), paddingVertical: scale(2), borderRadius: scale(6) },
+  roleBadgeText: { fontSize: moderateScale(11), fontWeight: "600" },
   statsContainer: { flexDirection: "row", alignItems: "center", marginRight: SPACING.sm },
   statItem: { flexDirection: "row", alignItems: "center", marginLeft: SPACING.sm },
-  statIcon: { fontSize: 12, marginRight: 3, opacity: 0.7 },
-  statText: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, fontWeight: "500" },
-  actionsContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
-  iconButton: { padding: 6 },
-  iconButtonText: { fontSize: 16, opacity: 0.6 },
+  statIcon: { fontSize: moderateScale(12), marginRight: scale(3), opacity: 0.7 },
+  statText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "500" },
+  actionsContainer: { flexDirection: "row", alignItems: "center", gap: scale(4) },
+  iconButton: { padding: scale(6) },
+  iconButtonText: { fontSize: moderateScale(16), opacity: 0.6 },
 
   // Full card
   fullCard: {
-    backgroundColor: COLORS.surface, borderRadius: 6,
+    backgroundColor: COLORS.surface, borderRadius: scale(6),
     padding: SPACING.sm, marginBottom: SPACING.xs,
   },
   fullTopRow: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.sm },
   fullUserInfo: { marginLeft: SPACING.sm },
-  fullDetails: { marginLeft: 38 + SPACING.sm, marginBottom: SPACING.sm, gap: 4 },
+  fullDetails: { marginLeft: scale(38) + SPACING.sm, marginBottom: SPACING.sm, gap: scale(4) },
   fullStatsRow: { flexDirection: "row", gap: SPACING.md },
-  fullDetailText: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary },
-  fullActions: { flexDirection: "row", gap: SPACING.sm, marginLeft: 38 + SPACING.sm },
+  fullDetailText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
+  fullActions: { flexDirection: "row", gap: SPACING.sm, marginLeft: scale(38) + SPACING.sm },
   actionButton: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: COLORS.background, paddingHorizontal: SPACING.md,
-    paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border,
+    paddingVertical: scale(8), borderRadius: scale(6), borderWidth: 1, borderColor: COLORS.border,
   },
-  actionButtonText: { fontSize: FONT_SIZES.xs, color: COLORS.text, fontWeight: "500" },
+  actionButtonText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.text, fontWeight: "500" },
   deleteButton: { borderColor: "rgba(239,68,68,0.4)", backgroundColor: "rgba(239,68,68,0.08)" },
   deleteButtonText: { color: "#ef4444" },
 });
-
-

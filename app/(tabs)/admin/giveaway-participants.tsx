@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -15,6 +15,7 @@ import {
   Platform,
 } from "react-native";
 import { useGiveawayParticipants } from "../../../src/viewmodels/useGiveawayParticipants";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 
 const isWeb = Platform.OS === "web";
 
@@ -72,12 +73,12 @@ export default function GiveawayParticipantsScreen() {
     <View style={styles.participantCard}>
       {/* Header row: name + giveaway badge */}
       <View style={styles.cardHeader}>
-        <Text style={styles.participantName} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.participantName} numberOfLines={1}>
           {item.name_as_on_id || "Unknown"}
         </Text>
         {item.giveaway_name && (
           <View style={styles.giveawayBadge}>
-            <Text style={styles.giveawayBadgeText} numberOfLines={1}>
+            <Text allowFontScaling={false} style={styles.giveawayBadgeText} numberOfLines={1}>
               {item.giveaway_name}
             </Text>
           </View>
@@ -88,6 +89,7 @@ export default function GiveawayParticipantsScreen() {
       <View style={styles.infoRow}>
         <Ionicons name="mail-outline" size={14} color={COLORS.gray} />
         <Text
+          allowFontScaling={false}
           style={styles.infoText}
           onPress={() => handleEmail(item.email)}
           numberOfLines={1}
@@ -99,6 +101,7 @@ export default function GiveawayParticipantsScreen() {
       <View style={styles.infoRow}>
         <Ionicons name="call-outline" size={14} color={COLORS.gray} />
         <Text
+          allowFontScaling={false}
           style={styles.infoText}
           onPress={() => handleCall(item.phone)}
           numberOfLines={1}
@@ -110,21 +113,21 @@ export default function GiveawayParticipantsScreen() {
       {/* Bottom row: birthday + entry date + prize */}
       <View style={styles.cardFooter}>
         <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Birthday</Text>
-          <Text style={styles.footerValue}>
+          <Text allowFontScaling={false} style={styles.footerLabel}>Birthday</Text>
+          <Text allowFontScaling={false} style={styles.footerValue}>
             {vm.formatBirthday(item.birthday)}
           </Text>
         </View>
         <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Entered</Text>
-          <Text style={styles.footerValue}>
+          <Text allowFontScaling={false} style={styles.footerLabel}>Entered</Text>
+          <Text allowFontScaling={false} style={styles.footerValue}>
             {vm.formatDate(item.created_at)}
           </Text>
         </View>
         {item.giveaway_prize > 0 && (
           <View style={styles.footerItem}>
-            <Text style={styles.footerLabel}>Prize</Text>
-            <Text style={[styles.footerValue, { color: COLORS.green }]}>
+            <Text allowFontScaling={false} style={styles.footerLabel}>Prize</Text>
+            <Text allowFontScaling={false} style={[styles.footerValue, { color: COLORS.green }]}>
               ${item.giveaway_prize?.toLocaleString()}
             </Text>
           </View>
@@ -138,8 +141,8 @@ export default function GiveawayParticipantsScreen() {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="people-outline" size={48} color={COLORS.darkGray} />
-        <Text style={styles.emptyTitle}>No Participants</Text>
-        <Text style={styles.emptySubtitle}>
+        <Text allowFontScaling={false} style={styles.emptyTitle}>No Participants</Text>
+        <Text allowFontScaling={false} style={styles.emptySubtitle}>
           {vm.searchQuery
             ? "No results match your search"
             : "No one has entered any giveaways yet"}
@@ -154,27 +157,27 @@ export default function GiveawayParticipantsScreen() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={COLORS.blue} />
-          <Text style={styles.backText}>Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>ALL PARTICIPANTS</Text>
-        <View style={{ width: 70 }} />
+        <Text allowFontScaling={false} style={styles.headerTitle}>ALL PARTICIPANTS</Text>
+        <View style={{ width: scale(70) }} />
       </View>
 
       {/* Stats bar */}
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{vm.totalCount}</Text>
-          <Text style={styles.statLabel}>Total</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{vm.totalCount}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Total</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{vm.filteredCount}</Text>
-          <Text style={styles.statLabel}>Showing</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{vm.filteredCount}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Showing</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{vm.giveaways.length}</Text>
-          <Text style={styles.statLabel}>Giveaways</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{vm.giveaways.length}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Giveaways</Text>
         </View>
       </View>
 
@@ -221,7 +224,7 @@ export default function GiveawayParticipantsScreen() {
       {/* Active filter indicator */}
       {activeFilterName && (
         <View style={styles.activeFilterRow}>
-          <Text style={styles.activeFilterText}>
+          <Text allowFontScaling={false} style={styles.activeFilterText}>
             Showing: {activeFilterName}
           </Text>
           <Pressable onPress={() => vm.selectGiveaway(null)}>
@@ -232,7 +235,7 @@ export default function GiveawayParticipantsScreen() {
 
       {/* Sort indicator */}
       <View style={styles.sortIndicator}>
-        <Text style={styles.sortIndicatorText}>
+        <Text allowFontScaling={false} style={styles.sortIndicatorText}>
           Sorted by:{" "}
           {vm.sortBy === "newest"
             ? "Newest first"
@@ -274,7 +277,7 @@ export default function GiveawayParticipantsScreen() {
             style={styles.filterModal}
             onStartShouldSetResponder={() => true}
           >
-            <Text style={styles.filterModalTitle}>Filter by Giveaway</Text>
+            <Text allowFontScaling={false} style={styles.filterModalTitle}>Filter by Giveaway</Text>
 
             {/* All option */}
             <Pressable
@@ -288,6 +291,7 @@ export default function GiveawayParticipantsScreen() {
               }}
       >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.filterOptionText,
                   vm.selectedGiveawayId === null &&
@@ -317,6 +321,7 @@ export default function GiveawayParticipantsScreen() {
                   }}
       >
                   <Text
+                    allowFontScaling={false}
                     style={[
                       styles.filterOptionText,
                       vm.selectedGiveawayId === g.id &&
@@ -331,7 +336,7 @@ export default function GiveawayParticipantsScreen() {
                   )}
                 </Pressable>
               )}
-              style={{ maxHeight: 300 }}
+              style={{ maxHeight: scale(300) }}
             />
           </View>
         </Pressable>
@@ -344,7 +349,7 @@ const styles = StyleSheet.create({
   // Web centering
   scrollContentWeb: {
     alignItems: "center",
-    paddingBottom: SPACING.xl,
+    paddingBottom: scale(SPACING.xl),
   },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
@@ -355,22 +360,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 60,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingTop: scale(60),
+    paddingHorizontal: scale(SPACING.lg),
+    paddingBottom: scale(SPACING.md),
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    width: 70,
+    width: scale(70),
   },
   backText: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
   },
   headerTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     textAlign: "center",
   },
@@ -379,10 +384,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.card,
-    marginHorizontal: SPACING.lg,
-    borderRadius: 12,
-    paddingVertical: SPACING.md,
-    marginBottom: SPACING.md,
+    marginHorizontal: scale(SPACING.lg),
+    borderRadius: scale(12),
+    paddingVertical: scale(SPACING.md),
+    marginBottom: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
@@ -392,48 +397,48 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
   },
   statLabel: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.xs,
-    marginTop: 2,
+    fontSize: moderateScale(FONT_SIZES.xs),
+    marginTop: scale(2),
   },
   statDivider: {
-    width: 1,
-    height: 30,
+    width: scale(1),
+    height: scale(30),
     backgroundColor: COLORS.cardBorder,
   },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
-    gap: SPACING.sm,
+    marginHorizontal: scale(SPACING.lg),
+    marginBottom: scale(SPACING.sm),
+    gap: scale(SPACING.sm),
   },
   searchBox: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.card,
-    borderRadius: 10,
-    paddingHorizontal: SPACING.md,
-    height: 40,
+    borderRadius: scale(10),
+    paddingHorizontal: scale(SPACING.md),
+    height: scale(40),
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
-    gap: SPACING.sm,
+    gap: scale(SPACING.sm),
   },
   searchInput: {
     flex: 1,
     color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
   },
   iconButton: {
     backgroundColor: COLORS.card,
-    borderRadius: 10,
-    width: 40,
-    height: 40,
+    borderRadius: scale(10),
+    width: scale(40),
+    height: scale(40),
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
@@ -447,35 +452,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginHorizontal: scale(SPACING.lg),
+    marginBottom: scale(SPACING.sm),
     backgroundColor: COLORS.blue + "20",
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.sm),
   },
   activeFilterText: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   sortIndicator: {
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginHorizontal: scale(SPACING.lg),
+    marginBottom: scale(SPACING.sm),
   },
   sortIndicatorText: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
   },
   listContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 100,
+    paddingHorizontal: scale(SPACING.lg),
+    paddingBottom: scale(100),
   },
   participantCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
+    borderRadius: scale(12),
+    padding: scale(SPACING.lg),
+    marginBottom: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
@@ -483,57 +488,57 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.md),
   },
   participantName: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     flex: 1,
-    marginRight: SPACING.sm,
+    marginRight: scale(SPACING.sm),
   },
   giveawayBadge: {
     backgroundColor: COLORS.darkGray,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    maxWidth: 140,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: scale(SPACING.xs),
+    maxWidth: scale(140),
   },
   giveawayBadgeText: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: scale(SPACING.sm),
+    marginBottom: scale(SPACING.sm),
   },
   infoText: {
     color: COLORS.lightGray,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     flex: 1,
   },
   cardFooter: {
     flexDirection: "row",
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.md,
+    marginTop: scale(SPACING.sm),
+    paddingTop: scale(SPACING.md),
     borderTopWidth: 1,
     borderTopColor: COLORS.cardBorder,
-    gap: SPACING.lg,
+    gap: scale(SPACING.lg),
   },
   footerItem: {
     flex: 1,
   },
   footerLabel: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.xs,
-    marginBottom: 2,
+    fontSize: moderateScale(FONT_SIZES.xs),
+    marginBottom: scale(2),
   },
   footerValue: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "500",
   },
   loadingContainer: {
@@ -544,18 +549,18 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 80,
-    gap: SPACING.sm,
+    paddingTop: scale(80),
+    gap: scale(SPACING.sm),
   },
   emptyTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
-    marginTop: SPACING.md,
+    marginTop: scale(SPACING.md),
   },
   emptySubtitle: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     textAlign: "center",
   },
   // Filter Modal
@@ -567,7 +572,7 @@ const styles = StyleSheet.create({
   },
   filterModal: {
     backgroundColor: COLORS.card,
-    borderRadius: 16,
+    borderRadius: scale(16),
     width: "85%",
     maxHeight: "60%",
     borderWidth: 1,
@@ -576,9 +581,9 @@ const styles = StyleSheet.create({
   },
   filterModalTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.cardBorder,
   },
@@ -586,7 +591,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.cardBorder,
   },
@@ -595,7 +600,7 @@ const styles = StyleSheet.create({
   },
   filterOptionText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     flex: 1,
   },
   filterOptionTextActive: {

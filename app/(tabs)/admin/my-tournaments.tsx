@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -14,6 +14,7 @@ import {
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useTDDashboard } from "../../../src/viewmodels/useTDDashboard";
 import { EmptyState } from "../../../src/views/components/dashboard";
 
@@ -65,60 +66,60 @@ const TDTournamentCard = ({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.tournamentName} numberOfLines={2}>
+        <Text allowFontScaling={false} style={styles.tournamentName} numberOfLines={2}>
           {tournament.name}
         </Text>
         <View
           style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}
         >
-          <Text style={[styles.statusText, { color: statusColor }]}>
+          <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>
             {tournament.status}
           </Text>
         </View>
       </View>
 
-      <Text style={styles.gameType}>
-        {tournament.game_type} •{" "}
+      <Text allowFontScaling={false} style={styles.gameType}>
+        {tournament.game_type} \u2022{" "}
         {tournament.tournament_format?.replace("_", " ")}
       </Text>
 
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📅</Text>
-        <Text style={styles.infoText}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>{"\uD83D\uDCC5"}</Text>
+        <Text allowFontScaling={false} style={styles.infoText}>
           {formatDate(tournament.tournament_date)}
           {tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
         </Text>
       </View>
 
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📍</Text>
-        <Text style={styles.infoText} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>{"\uD83D\uDCCD"}</Text>
+        <Text allowFontScaling={false} style={styles.infoText} numberOfLines={1}>
           {tournament.venue_name}
         </Text>
       </View>
 
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{tournament.views_count || 0}</Text>
-          <Text style={styles.statLabel}>Views</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{tournament.views_count || 0}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Views</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>
+          <Text allowFontScaling={false} style={styles.statValue}>
             {tournament.favorites_count || 0}
           </Text>
-          <Text style={styles.statLabel}>Favorites</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
         </View>
       </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
-          <Text style={styles.actionButtonText}>✏️ Edit</Text>
+          <Text allowFontScaling={false} style={styles.actionButtonText}>{"\u270F\uFE0F"} Edit</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
           onPress={onDelete}
         >
-          <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
+          <Text allowFontScaling={false} style={styles.deleteButtonText}>ðŸ—'ï¸ Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -171,7 +172,7 @@ export default function MyTournamentsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading your tournaments...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading your tournaments...</Text>
       </View>
     );
   }
@@ -183,11 +184,11 @@ export default function MyTournamentsScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>MY TOURNAMENTS</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>MY TOURNAMENTS</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             {vm.tournaments.length} tournament
             {vm.tournaments.length !== 1 ? "s" : ""} you're directing
           </Text>
@@ -197,7 +198,7 @@ export default function MyTournamentsScreen() {
 
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDCCD"}</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search your tournaments..."
@@ -219,6 +220,7 @@ export default function MyTournamentsScreen() {
             onPress={() => setSelectedFilter(filter.toLowerCase())}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.filterText,
                 selectedFilter === filter.toLowerCase() &&
@@ -282,7 +284,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -302,7 +304,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
@@ -310,19 +312,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -333,22 +335,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: 40,
+    height: scale(40),
   },
   searchIcon: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     marginRight: SPACING.sm,
     opacity: 0.6,
   },
   searchInput: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 40,
+    height: scale(40),
   },
   filterContainer: {
     flexDirection: "row",
@@ -356,20 +358,20 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.md,
-    borderRadius: 8,
-    padding: 4,
+    borderRadius: scale(8),
+    padding: scale(4),
   },
   filterTab: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 6,
+    borderRadius: scale(6),
     alignItems: "center",
   },
   activeFilterTab: {
     backgroundColor: COLORS.primary,
   },
   filterText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -383,7 +385,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -396,7 +398,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   tournamentName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
@@ -404,16 +406,16 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: scale(2),
+    borderRadius: scale(12),
   },
   statusText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textTransform: "capitalize",
   },
   gameType: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     marginBottom: SPACING.sm,
     textTransform: "capitalize",
@@ -421,15 +423,15 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   infoIcon: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     marginRight: SPACING.xs,
-    width: 20,
+    width: scale(20),
   },
   infoText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     flex: 1,
   },
@@ -445,17 +447,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   statLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   cardActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: scale(8),
     marginTop: SPACING.md,
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
@@ -463,16 +465,16 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: scale(12),
+    paddingVertical: scale(6),
+    borderRadius: scale(6),
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
     flex: 1,
     alignItems: "center",
   },
   actionButtonText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: "#FFFFFF",
     fontWeight: "600",
   },
@@ -481,8 +483,9 @@ const styles = StyleSheet.create({
     borderColor: "#991B1B",
   },
   deleteButtonText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: "#FFFFFF",
     fontWeight: "600",
   },
 });
+

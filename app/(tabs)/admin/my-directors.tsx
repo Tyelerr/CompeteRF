@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
   FlatList,
@@ -52,42 +53,40 @@ const DirectorCard = ({
 }) => {
   return (
     <View style={styles.card}>
-      {/* Top Row: Avatar, Info, Remove Button */}
       <View style={styles.cardHeader}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
+          <Text allowFontScaling={false} style={styles.avatarText}>
             {director.name.charAt(0).toUpperCase()}
           </Text>
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.directorName}>{director.name}</Text>
-          <Text style={styles.directorEmail}>{director.email}</Text>
-          <Text style={styles.directorId}>ID: {director.director_id}</Text>
+          <Text allowFontScaling={false} style={styles.directorName}>{director.name}</Text>
+          <Text allowFontScaling={false} style={styles.directorEmail}>{director.email}</Text>
+          <Text allowFontScaling={false} style={styles.directorId}>ID: {director.director_id}</Text>
         </View>
         <TouchableOpacity
           style={styles.removeDirectorButton}
           onPress={onDelete}
         >
-          <Text style={styles.removeDirectorButtonText}>Remove Director</Text>
+          <Text allowFontScaling={false} style={styles.removeDirectorButtonText}>Remove Director</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Stats Box */}
       <View style={styles.statsBox}>
         <View style={styles.statRow}>
-          <Text style={styles.statIcon}>🏢</Text>
-          <Text style={styles.statText}>{director.venue_name}</Text>
+          <Text allowFontScaling={false} style={styles.statIcon}>{"\uD83C\uDFE2"}</Text>
+          <Text allowFontScaling={false} style={styles.statText}>{director.venue_name}</Text>
         </View>
         <View style={styles.statRow}>
-          <Text style={styles.statIcon}>📅</Text>
-          <Text style={styles.statText}>
+          <Text allowFontScaling={false} style={styles.statIcon}>{"\uD83D\uDCC5"}</Text>
+          <Text allowFontScaling={false} style={styles.statText}>
             {formatDate(director.assigned_at)} (
             {formatTimeAgo(director.assigned_at)})
           </Text>
         </View>
         <View style={styles.statRow}>
-          <Text style={styles.statIcon}>🏆</Text>
-          <Text style={styles.statText}>
+          <Text allowFontScaling={false} style={styles.statIcon}>{"\uD83C\uDFC6"}</Text>
+          <Text allowFontScaling={false} style={styles.statText}>
             {director.tournament_count} tournament
             {director.tournament_count !== 1 ? "s" : ""}
           </Text>
@@ -104,35 +103,32 @@ export default function MyDirectorsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading directors...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading directors...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Directors</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>My Directors</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Stats Banner */}
       <View style={styles.statsBanner}>
-        <Text style={styles.statsText}>
+        <Text allowFontScaling={false} style={styles.statsText}>
           {vm.directors.length} director{vm.directors.length !== 1 ? "s" : ""}{" "}
           across {Object.keys(vm.directorsByVenue).length} venue
           {Object.keys(vm.directorsByVenue).length !== 1 ? "s" : ""}
         </Text>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -143,17 +139,15 @@ export default function MyDirectorsScreen() {
         />
       </View>
 
-      {/* Add Director Button */}
       <View style={styles.addButtonContainer}>
         <TouchableOpacity
           style={styles.addDirectorButton}
           onPress={() => router.push("/(tabs)/admin/add-director" as any)}
         >
-          <Text style={styles.addDirectorButtonText}>+ Add Director</Text>
+          <Text allowFontScaling={false} style={styles.addDirectorButtonText}>+ Add Director</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Directors List */}
       <FlatList
         data={vm.directors}
         keyExtractor={(item) => item.id.toString()}
@@ -183,7 +177,6 @@ export default function MyDirectorsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -200,7 +193,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -220,17 +213,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   statsBanner: {
     backgroundColor: COLORS.surface,
@@ -240,7 +233,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   statsText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
   },
@@ -251,10 +244,10 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -265,20 +258,17 @@ const styles = StyleSheet.create({
   },
   addDirectorButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingVertical: SPACING.sm,
     alignItems: "center",
     shadowColor: COLORS.primary,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
   },
   addDirectorButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.surface,
   },
@@ -288,7 +278,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -300,16 +290,16 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
     marginRight: SPACING.md,
   },
   avatarText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.surface,
   },
@@ -317,54 +307,55 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   directorName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   directorEmail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   directorId: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   removeDirectorButton: {
-    backgroundColor: "#ef4444", // Red
+    backgroundColor: "#ef4444",
     borderWidth: 1,
     borderColor: "#dc2626",
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 120,
+    minWidth: scale(120),
   },
   removeDirectorButtonText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: "#ffffff",
   },
   statsBox: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
   },
   statRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: scale(4),
   },
   statIcon: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     marginRight: SPACING.sm,
-    width: 24,
+    width: scale(24),
   },
   statText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     flex: 1,
   },
 });
+

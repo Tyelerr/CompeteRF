@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
   RefreshControl,
@@ -24,7 +25,7 @@ export default function AnalyticsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading analytics...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading analytics...</Text>
       </View>
     );
   }
@@ -43,15 +44,15 @@ export default function AnalyticsScreen() {
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>📊 ANALYTICS</Text>
-        <Text style={styles.headerSubtitle}>App-wide event tracking</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCCA"} ANALYTICS</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>App-wide event tracking</Text>
       </View>
 
       {/* Time Period Filter */}
       <View style={styles.filterSection}>
-        <Text style={styles.filterLabel}>Period</Text>
+        <Text allowFontScaling={false} style={styles.filterLabel}>Period</Text>
         <View style={styles.filterDropdown}>
           <Dropdown
             options={vm.timePeriodOptions}
@@ -62,64 +63,25 @@ export default function AnalyticsScreen() {
         </View>
       </View>
 
-      {/* ── Summary Stats Grid ───────────────────────────────────── */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Overview</Text>
+        <Text allowFontScaling={false} style={styles.sectionTitle}>Overview</Text>
       </View>
       <View style={styles.statsGrid}>
-        <MiniStatCard
-          icon="👁️"
-          value={vm.summaryStats.totalViews}
-          label="Views"
-        />
-        <MiniStatCard
-          icon="🗺️"
-          value={vm.summaryStats.totalDirections}
-          label="Directions"
-        />
-        <MiniStatCard
-          icon="📞"
-          value={vm.summaryStats.totalCalls}
-          label="Venue Calls"
-        />
-        <MiniStatCard
-          icon="❤️"
-          value={vm.summaryStats.totalFavorites}
-          label="Favorites"
-        />
-        <MiniStatCard
-          icon="📤"
-          value={vm.summaryStats.totalShares}
-          label="Shares"
-        />
-        <MiniStatCard
-          icon="🔍"
-          value={vm.summaryStats.totalSearches}
-          label="Searches"
-        />
-        <MiniStatCard
-          icon="🎁"
-          value={vm.summaryStats.totalGiveawayViews}
-          label="Giveaway Views"
-        />
-        <MiniStatCard
-          icon="📱"
-          value={vm.summaryStats.totalAppOpens}
-          label="App Opens"
-        />
-        <MiniStatCard
-          icon="📈"
-          value={vm.summaryStats.totalEvents}
-          label="Total Events"
-          highlight
-        />
+        <MiniStatCard icon={"\uD83D\uDC41\uFE0F"} value={vm.summaryStats.totalViews} label="Views" />
+        <MiniStatCard icon={"\uD83D\uDDFA\uFE0F"} value={vm.summaryStats.totalDirections} label="Directions" />
+        <MiniStatCard icon={"\uD83D\uDCDE"} value={vm.summaryStats.totalCalls} label="Venue Calls" />
+        <MiniStatCard icon={"\u2764\uFE0F"} value={vm.summaryStats.totalFavorites} label="Favorites" />
+        <MiniStatCard icon={"\uD83D\uDCE4"} value={vm.summaryStats.totalShares} label="Shares" />
+        <MiniStatCard icon={"\uD83D\uDD0D"} value={vm.summaryStats.totalSearches} label="Searches" />
+        <MiniStatCard icon={"\uD83C\uDF81"} value={vm.summaryStats.totalGiveawayViews} label="Giveaway Views" />
+        <MiniStatCard icon={"\uD83D\uDCF1"} value={vm.summaryStats.totalAppOpens} label="App Opens" />
+        <MiniStatCard icon={"\uD83D\uDCC8"} value={vm.summaryStats.totalEvents} label="Total Events" highlight />
       </View>
 
-      {/* ── Event Breakdown ──────────────────────────────────────── */}
       {vm.eventBreakdown.length > 0 && (
         <>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Event Breakdown</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Event Breakdown</Text>
           </View>
           <View style={styles.card}>
             {vm.eventBreakdown.map((item, index) => {
@@ -127,7 +89,7 @@ export default function AnalyticsScreen() {
               const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
               return (
                 <View key={item.label} style={styles.barRow}>
-                  <Text style={styles.barLabel}>{item.label}</Text>
+                  <Text allowFontScaling={false} style={styles.barLabel}>{item.label}</Text>
                   <View style={styles.barTrack}>
                     <View
                       style={[
@@ -136,7 +98,7 @@ export default function AnalyticsScreen() {
                       ]}
                     />
                   </View>
-                  <Text style={styles.barValue}>{item.value}</Text>
+                  <Text allowFontScaling={false} style={styles.barValue}>{item.value}</Text>
                 </View>
               );
             })}
@@ -144,9 +106,8 @@ export default function AnalyticsScreen() {
         </>
       )}
 
-      {/* ── Top Viewed Tournaments ───────────────────────────────── */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Top Viewed Tournaments</Text>
+        <Text allowFontScaling={false} style={styles.sectionTitle}>Top Viewed Tournaments</Text>
       </View>
       {vm.topViewedTournaments.length > 0 ? (
         <View style={styles.card}>
@@ -155,27 +116,23 @@ export default function AnalyticsScreen() {
               key={item.entity_id}
               style={[
                 styles.rankRow,
-                index < vm.topViewedTournaments.length - 1 &&
-                  styles.rankRowBorder,
+                index < vm.topViewedTournaments.length - 1 && styles.rankRowBorder,
               ]}
             >
-              <Text style={styles.rankNumber}>#{index + 1}</Text>
-              <Text style={styles.rankName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text style={styles.rankCount}>{item.count} views</Text>
+              <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
+              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
+              <Text allowFontScaling={false} style={styles.rankCount}>{item.count} views</Text>
             </View>
           ))}
         </View>
       ) : (
         <View style={styles.card}>
-          <Text style={styles.emptyText}>No view data yet</Text>
+          <Text allowFontScaling={false} style={styles.emptyText}>No view data yet</Text>
         </View>
       )}
 
-      {/* ── Top Favorited Tournaments ────────────────────────────── */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Top Favorited Tournaments</Text>
+        <Text allowFontScaling={false} style={styles.sectionTitle}>Top Favorited Tournaments</Text>
       </View>
       {vm.topFavoritedTournaments.length > 0 ? (
         <View style={styles.card}>
@@ -184,53 +141,35 @@ export default function AnalyticsScreen() {
               key={item.entity_id}
               style={[
                 styles.rankRow,
-                index < vm.topFavoritedTournaments.length - 1 &&
-                  styles.rankRowBorder,
+                index < vm.topFavoritedTournaments.length - 1 && styles.rankRowBorder,
               ]}
             >
-              <Text style={styles.rankNumber}>#{index + 1}</Text>
-              <Text style={styles.rankName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text style={styles.rankCount}>{item.count} ❤️</Text>
+              <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
+              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
+              <Text allowFontScaling={false} style={styles.rankCount}>{`${item.count} \u2764\uFE0F`}</Text>
             </View>
           ))}
         </View>
       ) : (
         <View style={styles.card}>
-          <Text style={styles.emptyText}>No favorite data yet</Text>
+          <Text allowFontScaling={false} style={styles.emptyText}>No favorite data yet</Text>
         </View>
       )}
 
-      {/* ── Period Comparison (Detail Stats) ─────────────────────── */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Views by Period</Text>
+        <Text allowFontScaling={false} style={styles.sectionTitle}>Views by Period</Text>
       </View>
       <View style={styles.card}>
         <PeriodRow label="Today" value={vm.rawStats.tournamentViews.today} />
-        <PeriodRow
-          label="This Week"
-          value={vm.rawStats.tournamentViews.thisWeek}
-        />
-        <PeriodRow
-          label="This Month"
-          value={vm.rawStats.tournamentViews.thisMonth}
-        />
-        <PeriodRow
-          label="All Time"
-          value={vm.rawStats.tournamentViews.total}
-          isLast
-        />
+        <PeriodRow label="This Week" value={vm.rawStats.tournamentViews.thisWeek} />
+        <PeriodRow label="This Month" value={vm.rawStats.tournamentViews.thisMonth} />
+        <PeriodRow label="All Time" value={vm.rawStats.tournamentViews.total} isLast />
       </View>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
 }
-
-// ============================================
-// SUB-COMPONENTS (View-only, no logic)
-// ============================================
 
 interface MiniStatCardProps {
   icon: string;
@@ -241,11 +180,11 @@ interface MiniStatCardProps {
 
 const MiniStatCard = ({ icon, value, label, highlight }: MiniStatCardProps) => (
   <View style={[styles.miniCard, highlight && styles.miniCardHighlight]}>
-    <Text style={styles.miniIcon}>{icon}</Text>
-    <Text style={[styles.miniValue, highlight && styles.miniValueHighlight]}>
+    <Text allowFontScaling={false} style={styles.miniIcon}>{icon}</Text>
+    <Text allowFontScaling={false} style={[styles.miniValue, highlight && styles.miniValueHighlight]}>
       {value.toLocaleString()}
     </Text>
-    <Text style={styles.miniLabel}>{label}</Text>
+    <Text allowFontScaling={false} style={styles.miniLabel}>{label}</Text>
   </View>
 );
 
@@ -257,16 +196,12 @@ interface PeriodRowProps {
 
 const PeriodRow = ({ label, value, isLast }: PeriodRowProps) => (
   <View style={[styles.periodRow, !isLast && styles.periodRowBorder]}>
-    <Text style={styles.periodLabel}>{label}</Text>
-    <Text style={styles.periodValue}>{value.toLocaleString()}</Text>
+    <Text allowFontScaling={false} style={styles.periodLabel}>{label}</Text>
+    <Text allowFontScaling={false} style={styles.periodValue}>{value.toLocaleString()}</Text>
   </View>
 );
 
-// ============================================
-// STYLES
-// ============================================
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -284,11 +219,9 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
-
-  // Header
   header: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl + SPACING.lg,
@@ -307,23 +240,21 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
-
-  // Filter
   filterSection: {
     flexDirection: "row",
     alignItems: "center",
@@ -332,29 +263,25 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   filterLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   filterDropdown: {
     flex: 1,
-    maxWidth: 160,
+    maxWidth: scale(160),
     marginLeft: SPACING.md,
   },
-
-  // Section
   sectionHeader: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.xs,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
-
-  // Stats grid
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -362,29 +289,27 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     paddingTop: SPACING.xs,
   },
-
-  // Mini stat cards
   miniCard: {
     width: "48%",
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.sm,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 80,
+    minHeight: scale(80),
   },
   miniCardHighlight: {
     borderColor: COLORS.primary,
     borderWidth: 1.5,
   },
   miniIcon: {
-    fontSize: 20,
-    marginBottom: 2,
+    fontSize: moderateScale(20),
+    marginBottom: scale(2),
   },
   miniValue: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -392,56 +317,50 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   miniLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
-
-  // Card container
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     marginHorizontal: SPACING.md,
     marginTop: SPACING.xs,
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
-  // Bar chart rows
   barRow: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: SPACING.sm,
   },
   barLabel: {
-    width: 80,
-    fontSize: FONT_SIZES.sm,
+    width: scale(80),
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   barTrack: {
     flex: 1,
-    height: 8,
+    height: scale(8),
     backgroundColor: COLORS.border,
-    borderRadius: 4,
+    borderRadius: scale(4),
     marginHorizontal: SPACING.sm,
     overflow: "hidden",
   },
   barFill: {
     height: "100%",
-    borderRadius: 4,
+    borderRadius: scale(4),
   },
   barValue: {
-    width: 40,
-    fontSize: FONT_SIZES.sm,
+    width: scale(40),
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "right",
   },
-
-  // Rank rows (top tournaments)
   rankRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -452,25 +371,23 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   rankNumber: {
-    width: 30,
-    fontSize: FONT_SIZES.sm,
+    width: scale(30),
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.primary,
   },
   rankName: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   rankCount: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
     marginLeft: SPACING.sm,
   },
-
-  // Period rows
   periodRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -482,25 +399,23 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   periodLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
   periodValue: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
-
-  // Empty state
   emptyText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
     paddingVertical: SPACING.md,
   },
-
   bottomSpacer: {
     height: SPACING.xl * 2,
   },
 });
+

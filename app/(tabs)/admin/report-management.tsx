@@ -1,4 +1,4 @@
-// app/(tabs)/admin/report-management.tsx
+﻿// app/(tabs)/admin/report-management.tsx
 // ═══════════════════════════════════════════════════════════
 // Admin Report Management Screen
 // Allows super_admin and compete_admin to view, review,
@@ -26,7 +26,7 @@ import {
   getReports,
   updateReportStatus,
 } from "../../../src/models/services/report.service";
-import { tournamentService } from "../../../src/models/services/tournament.service"; // ← NEW
+import { tournamentService } from "../../../src/models/services/tournament.service";
 import {
   CONTENT_TYPE_LABELS,
   Report,
@@ -37,6 +37,7 @@ import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 
 const isWeb = Platform.OS === "web";
 
@@ -153,11 +154,9 @@ export default function ReportManagementScreen() {
           onPress: async () => {
             setProcessingId(report.id);
             try {
-              // 1. Hide the tournament
               const tournamentId = parseInt(report.content_id, 10);
               await tournamentService.hideTournament(tournamentId);
 
-              // 2. Auto-resolve the report
               await updateReportStatus(report.id, {
                 status: "resolved",
                 reviewed_by: user.id,
@@ -217,11 +216,11 @@ export default function ReportManagementScreen() {
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>CONTENT REPORTS</Text>
-        <Text style={styles.headerSubtitle}>
-          {totalCount} total Â· {pendingCount} pending review
+        <Text allowFontScaling={false} style={styles.headerTitle}>CONTENT REPORTS</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>
+          {totalCount} total · {pendingCount} pending review
         </Text>
       </View>
 
@@ -236,6 +235,7 @@ export default function ReportManagementScreen() {
               onPress={() => setStatusFilter(filter.value)}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.filterTabText,
                   isActive && styles.filterTabTextActive,
@@ -252,24 +252,24 @@ export default function ReportManagementScreen() {
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading reports...</Text>
+          <Text allowFontScaling={false} style={styles.loadingText}>Loading reports...</Text>
         </View>
       ) : (
         <ScrollView
           style={styles.scrollContent}
           refreshControl={
-          isWeb ? undefined : (
-            <RefreshControl refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={COLORS.primary}/>
-          )
-        }
+            isWeb ? undefined : (
+              <RefreshControl refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={COLORS.primary}/>
+            )
+          }
         >
           {reports.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
-              <Text style={styles.emptyTitle}>No Reports</Text>
-              <Text style={styles.emptySubtitle}>
+              <Ionicons name="checkmark-circle" size={scale(48)} color="#4CAF50" />
+              <Text allowFontScaling={false} style={styles.emptyTitle}>No Reports</Text>
+              <Text allowFontScaling={false} style={styles.emptySubtitle}>
                 {statusFilter === "all"
                   ? "No reports have been submitted yet."
                   : `No ${statusFilter} reports found.`}
@@ -292,10 +292,11 @@ export default function ReportManagementScreen() {
                     >
                       <Ionicons
                         name={STATUS_ICONS[report.status] as any}
-                        size={12}
+                        size={scale(12)}
                         color={STATUS_COLORS[report.status]}
                       />
                       <Text
+                        allowFontScaling={false}
                         style={[
                           styles.statusText,
                           { color: STATUS_COLORS[report.status] },
@@ -305,20 +306,20 @@ export default function ReportManagementScreen() {
                       </Text>
                     </View>
                     <View style={styles.contentTypeBadge}>
-                      <Text style={styles.contentTypeText}>
+                      <Text allowFontScaling={false} style={styles.contentTypeText}>
                         {CONTENT_TYPE_LABELS[report.content_type]}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.dateText}>
+                  <Text allowFontScaling={false} style={styles.dateText}>
                     {formatDate(report.created_at)}
                   </Text>
                 </View>
 
                 {/* Reason */}
                 <View style={styles.reasonRow}>
-                  <Ionicons name="flag" size={16} color="#E53935" />
-                  <Text style={styles.reasonText}>
+                  <Ionicons name="flag" size={scale(16)} color="#E53935" />
+                  <Text allowFontScaling={false} style={styles.reasonText}>
                     {REPORT_REASON_LABELS[
                       report.reason as keyof typeof REPORT_REASON_LABELS
                     ] || report.reason}
@@ -328,17 +329,17 @@ export default function ReportManagementScreen() {
                 {/* Details */}
                 {report.details && (
                   <View style={styles.detailsContainer}>
-                    <Text style={styles.detailsLabel}>Details:</Text>
-                    <Text style={styles.detailsText}>{report.details}</Text>
+                    <Text allowFontScaling={false} style={styles.detailsLabel}>Details:</Text>
+                    <Text allowFontScaling={false} style={styles.detailsText}>{report.details}</Text>
                   </View>
                 )}
 
                 {/* Meta Info */}
                 <View style={styles.metaRow}>
-                  <Text style={styles.metaText}>
+                  <Text allowFontScaling={false} style={styles.metaText}>
                     Reporter: {report.reporter_id.slice(0, 8)}...
                   </Text>
-                  <Text style={styles.metaText}>
+                  <Text allowFontScaling={false} style={styles.metaText}>
                     Content ID: {report.content_id}
                   </Text>
                 </View>
@@ -348,10 +349,10 @@ export default function ReportManagementScreen() {
                   <View style={styles.reviewedRow}>
                     <Ionicons
                       name="checkmark-done"
-                      size={14}
+                      size={scale(14)}
                       color={COLORS.textSecondary}
                     />
-                    <Text style={styles.reviewedText}>
+                    <Text allowFontScaling={false} style={styles.reviewedText}>
                       Reviewed {formatDate(report.reviewed_at)}
                     </Text>
                   </View>
@@ -365,10 +366,10 @@ export default function ReportManagementScreen() {
                   >
                     <Ionicons
                       name="eye-outline"
-                      size={14}
+                      size={scale(14)}
                       color={COLORS.primary}
                     />
-                    <Text style={styles.viewButtonText}>View Content</Text>
+                    <Text allowFontScaling={false} style={styles.viewButtonText}>View Content</Text>
                   </TouchableOpacity>
 
                   {/* ═══ NEW: Hide Tournament button ═══ */}
@@ -385,10 +386,10 @@ export default function ReportManagementScreen() {
                           <>
                             <Ionicons
                               name="eye-off-outline"
-                              size={14}
+                              size={scale(14)}
                               color="#E53935"
                             />
-                            <Text style={styles.hideButtonText}>
+                            <Text allowFontScaling={false} style={styles.hideButtonText}>
                               Hide Tournament
                             </Text>
                           </>
@@ -408,10 +409,10 @@ export default function ReportManagementScreen() {
                         <>
                           <Ionicons
                             name="eye-outline"
-                            size={14}
+                            size={scale(14)}
                             color="#2196F3"
                           />
-                          <Text style={styles.reviewButtonText}>
+                          <Text allowFontScaling={false} style={styles.reviewButtonText}>
                             Mark Reviewed
                           </Text>
                         </>
@@ -432,10 +433,10 @@ export default function ReportManagementScreen() {
                         <>
                           <Ionicons
                             name="checkmark-circle-outline"
-                            size={14}
+                            size={scale(14)}
                             color="#4CAF50"
                           />
-                          <Text style={styles.resolveButtonText}>Resolve</Text>
+                          <Text allowFontScaling={false} style={styles.resolveButtonText}>Resolve</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -479,16 +480,16 @@ const styles = StyleSheet.create({
   },
   backText: {
     color: COLORS.primary,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
   },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -514,7 +515,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   filterTabText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
@@ -528,7 +529,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginTop: SPACING.sm,
   },
@@ -542,13 +543,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
   },
   emptyTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginTop: SPACING.md,
   },
   emptySubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     textAlign: "center",
@@ -575,30 +576,30 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    gap: scale(4),
+    paddingVertical: scale(3),
+    paddingHorizontal: scale(8),
     borderRadius: RADIUS.sm,
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "700",
   },
   contentTypeBadge: {
     backgroundColor: COLORS.primary + "20",
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    paddingVertical: scale(3),
+    paddingHorizontal: scale(8),
     borderRadius: RADIUS.sm,
   },
   contentTypeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: "600",
     color: COLORS.primary,
     textTransform: "uppercase",
   },
   dateText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: COLORS.textSecondary,
   },
   reasonRow: {
@@ -608,7 +609,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   reasonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
@@ -619,13 +620,13 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   detailsLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   detailsText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     lineHeight: 20,
   },
@@ -635,17 +636,17 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   metaText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: COLORS.textSecondary,
   },
   reviewedRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     marginBottom: SPACING.sm,
   },
   reviewedText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: COLORS.textSecondary,
   },
   actionRow: {
@@ -659,7 +660,7 @@ const styles = StyleSheet.create({
   viewButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
@@ -668,7 +669,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + "10",
   },
   viewButtonText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.primary,
   },
@@ -676,7 +677,7 @@ const styles = StyleSheet.create({
   hideButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
@@ -685,14 +686,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(229, 57, 53, 0.1)",
   },
   hideButtonText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: "#E53935",
   },
   reviewButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
@@ -701,14 +702,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(33, 150, 243, 0.1)",
   },
   reviewButtonText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: "#2196F3",
   },
   resolveButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.sm,
     borderRadius: RADIUS.sm,
@@ -717,7 +718,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(76, 175, 80, 0.1)",
   },
   resolveButtonText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: "#4CAF50",
   },

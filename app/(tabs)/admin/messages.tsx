@@ -1,4 +1,4 @@
-// app/(tabs)/admin/messages.tsx
+﻿// app/(tabs)/admin/messages.tsx
 // ═══════════════════════════════════════════════════════════
 // Admin Message Center
 // Tab 1: Inbox - All conversations (support tickets, DMs)
@@ -28,6 +28,7 @@ import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useMessageCenter } from "../../../src/viewmodels/hooks/use.message.center";
 
 const isWeb = Platform.OS === "web";
@@ -103,32 +104,33 @@ const InboxCard = ({
           <View style={styles.inboxFromRow}>
             {convo.is_support && (
               <View style={styles.supportTag}>
-                <Text style={styles.supportTagText}>SUPPORT</Text>
+                <Text allowFontScaling={false} style={styles.supportTagText}>SUPPORT</Text>
               </View>
             )}
-            <Text style={styles.inboxFromText} numberOfLines={1}>
+            <Text allowFontScaling={false} style={styles.inboxFromText} numberOfLines={1}>
               {convo.other_participant_name || "Unknown User"}
             </Text>
           </View>
           <View style={styles.inboxTimeRow}>
             {hasUnread && (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{convo.unread_count}</Text>
+                <Text allowFontScaling={false} style={styles.unreadBadgeText}>{convo.unread_count}</Text>
               </View>
             )}
-            <Text style={styles.inboxTimeText}>
+            <Text allowFontScaling={false} style={styles.inboxTimeText}>
               {getTimeAgo(convo.last_message_at || convo.updated_at)}
             </Text>
           </View>
         </View>
         <Text
+          allowFontScaling={false}
           style={[styles.inboxSubject, hasUnread && styles.inboxSubjectUnread]}
           numberOfLines={1}
         >
           {convo.subject || getCategoryLabel(convo.category) || "No subject"}
         </Text>
         {convo.last_message && (
-          <Text style={styles.inboxPreview} numberOfLines={1}>
+          <Text allowFontScaling={false} style={styles.inboxPreview} numberOfLines={1}>
             {convo.last_message}
           </Text>
         )}
@@ -143,14 +145,14 @@ const InboxCard = ({
                 },
               ]}
             >
-              <Text style={[styles.categoryBadgeText, { color: catColor }]}>
+              <Text allowFontScaling={false} style={[styles.categoryBadgeText, { color: catColor }]}>
                 {getCategoryLabel(convo.category)}
               </Text>
             </View>
           )}
           {convo.tournament_id && (
             <View style={styles.tournamentBadge}>
-              <Text style={styles.tournamentBadgeText}>
+              <Text allowFontScaling={false} style={styles.tournamentBadgeText}>
                 🏆 #{convo.tournament_id}
               </Text>
             </View>
@@ -160,16 +162,16 @@ const InboxCard = ({
           <View style={styles.userDetailRow}>
             {convo.other_participant_id_auto && (
               <View style={styles.userDetailChip}>
-                <Text style={styles.userDetailLabel}>User ID</Text>
-                <Text style={styles.userDetailValue}>
+                <Text allowFontScaling={false} style={styles.userDetailLabel}>User ID</Text>
+                <Text allowFontScaling={false} style={styles.userDetailValue}>
                   #{convo.other_participant_id_auto}
                 </Text>
               </View>
             )}
             {convo.other_participant_email && (
               <View style={[styles.userDetailChip, styles.userDetailChipEmail]}>
-                <Text style={styles.userDetailLabel}>Email</Text>
-                <Text style={styles.userDetailValue} numberOfLines={1}>
+                <Text allowFontScaling={false} style={styles.userDetailLabel}>Email</Text>
+                <Text allowFontScaling={false} style={styles.userDetailValue} numberOfLines={1}>
                   {convo.other_participant_email}
                 </Text>
               </View>
@@ -197,17 +199,17 @@ const SentCard = ({
 }) => (
   <View style={styles.sentCard}>
     <View style={styles.sentTopRow}>
-      <Text style={styles.sentSubject} numberOfLines={1}>
+      <Text allowFontScaling={false} style={styles.sentSubject} numberOfLines={1}>
         {msg.subject}
       </Text>
-      <Text style={styles.sentTime}>{getTimeAgo(msg.sent_at)}</Text>
+      <Text allowFontScaling={false} style={styles.sentTime}>{getTimeAgo(msg.sent_at)}</Text>
     </View>
-    <Text style={styles.sentPreview} numberOfLines={1}>
+    <Text allowFontScaling={false} style={styles.sentPreview} numberOfLines={1}>
       {msg.body}
     </Text>
     <View style={styles.sentStatsRow}>
-      <Text style={styles.sentStat}>📬 {msg.recipient_count} sent</Text>
-      <Text style={styles.sentStat}>
+      <Text allowFontScaling={false} style={styles.sentStat}>📬 {msg.recipient_count} sent</Text>
+      <Text allowFontScaling={false} style={styles.sentStat}>
         👁️ {msg.read_count} read ({msg.read_rate}%)
       </Text>
     </View>
@@ -273,12 +275,12 @@ export default function AdminMessagesScreen() {
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
   const isBarOwner = role === "bar_owner";
 
-  // ── Bar Owner: render venue + tournament selection ─────────────────────────
+  // ── Bar Owner: render venue + tournament selection ────────────────────────
   const renderBarOwnerTargetSelection = () => {
     if (mc.isLoading) {
       return (
         <View style={styles.noTargetsBox}>
-          <Text style={styles.noTargetsText}>Loading venues...</Text>
+          <Text allowFontScaling={false} style={styles.noTargetsText}>Loading venues...</Text>
         </View>
       );
     }
@@ -286,35 +288,33 @@ export default function AdminMessagesScreen() {
     if (mc.venues.length === 0) {
       return (
         <View style={styles.noTargetsBox}>
-          <Text style={styles.noTargetsText}>
+          <Text allowFontScaling={false} style={styles.noTargetsText}>
             No venues found. You need to be assigned as an owner to a venue.
           </Text>
         </View>
       );
     }
 
-    // Auto-select on first render if only one venue
     if (mc.venues.length === 1 && mc.selectedVenueId === null) {
       mc.selectVenue(mc.venues[0].id);
     }
 
     return (
       <>
-        {/* Only show venue selector if 2+ venues */}
         {mc.venues.length > 1 && (
           <>
-            <Text style={styles.stepLabel}>STEP 1 — SELECT VENUE</Text>
+            <Text allowFontScaling={false} style={styles.stepLabel}>STEP 1 – SELECT VENUE</Text>
             <View style={styles.venueDropdownOuter}>
               <TouchableOpacity
                 style={styles.venueDropdownTrigger}
                 onPress={() => setVenueDropdownOpen((v) => !v)}
               >
-                <Text style={styles.venueDropdownTriggerText}>
+                <Text allowFontScaling={false} style={styles.venueDropdownTriggerText}>
                   {mc.selectedVenueId
                     ? `🏢 ${mc.venues.find((v) => v.id === mc.selectedVenueId)?.name}`
                     : "Select a venue..."}
                 </Text>
-                <Text style={styles.venueDropdownArrow}>
+                <Text allowFontScaling={false} style={styles.venueDropdownArrow}>
                   {venueDropdownOpen ? "▲" : "▼"}
                 </Text>
               </TouchableOpacity>
@@ -343,6 +343,7 @@ export default function AdminMessagesScreen() {
                           }}
                         >
                           <Text
+                            allowFontScaling={false}
                             style={[
                               styles.venueDropdownRowText,
                               mc.selectedVenueId === v.id &&
@@ -352,7 +353,7 @@ export default function AdminMessagesScreen() {
                           >
                             🏢 {v.name}
                           </Text>
-                          <Text style={styles.targetCount}>
+                          <Text allowFontScaling={false} style={styles.targetCount}>
                             {v.totalFollowers} followers
                           </Text>
                         </TouchableOpacity>
@@ -364,16 +365,14 @@ export default function AdminMessagesScreen() {
           </>
         )}
 
-        {/* Step 2: audience — only shown after venue selected */}
         {mc.selectedVenueId !== null && (
           <>
-            <Text style={styles.stepLabel}>
+            <Text allowFontScaling={false} style={styles.stepLabel}>
               {mc.venues.length === 1
                 ? "SELECT AUDIENCE"
-                : "STEP 2 — SELECT AUDIENCE"}
+                : "STEP 2 – SELECT AUDIENCE"}
             </Text>
 
-            {/* Option A: All venue followers */}
             {(() => {
               const venue = mc.venues.find((v) => v.id === mc.selectedVenueId);
               if (!venue) return null;
@@ -396,6 +395,7 @@ export default function AdminMessagesScreen() {
                 >
                   <View style={styles.allVenueChipLeft}>
                     <Text
+                      allowFontScaling={false}
                       style={[
                         styles.allVenueChipText,
                         isSelected && styles.allVenueChipTextActive,
@@ -403,11 +403,12 @@ export default function AdminMessagesScreen() {
                     >
                       👥 All {venue.name} followers
                     </Text>
-                    <Text style={styles.allVenueChipSub}>
+                    <Text allowFontScaling={false} style={styles.allVenueChipSub}>
                       Everyone who favorited any tournament at this venue
                     </Text>
                   </View>
                   <Text
+                    allowFontScaling={false}
                     style={[
                       styles.targetCount,
                       isSelected && styles.targetCountActive,
@@ -419,24 +420,23 @@ export default function AdminMessagesScreen() {
               );
             })()}
 
-            {/* Option B: Specific tournament */}
-            <Text style={styles.orDivider}>— or specific tournament —</Text>
+            <Text allowFontScaling={false} style={styles.orDivider}>– or specific tournament –</Text>
 
             {mc.venueTournamentsLoading ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Loading tournaments...</Text>
+                <Text allowFontScaling={false} style={styles.loadingText}>Loading tournaments...</Text>
               </View>
             ) : mc.venueTournaments.length === 0 ? (
               <View style={styles.noTargetsBox}>
-                <Text style={styles.noTargetsText}>
+                <Text allowFontScaling={false} style={styles.noTargetsText}>
                   No active tournaments at this venue
                 </Text>
               </View>
             ) : (
               <View style={styles.targetSearchOuter}>
                 <View style={styles.targetSearchWrap}>
-                  <Text style={styles.targetSearchIcon}>🔍</Text>
+                  <Text allowFontScaling={false} style={styles.targetSearchIcon}>🔍</Text>
                   <TextInput
                     style={styles.targetSearchInput}
                     value={targetSearch}
@@ -447,7 +447,7 @@ export default function AdminMessagesScreen() {
                   />
                   {targetSearch.length > 0 && (
                     <TouchableOpacity onPress={() => setTargetSearch("")}>
-                      <Text style={styles.targetSearchClear}>✕</Text>
+                      <Text allowFontScaling={false} style={styles.targetSearchClear}>✕</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -464,7 +464,7 @@ export default function AdminMessagesScreen() {
                       <View style={styles.targetDropdown}>
                         {filtered.length === 0 ? (
                           <View style={styles.targetDropdownEmpty}>
-                            <Text style={styles.targetNoResults}>
+                            <Text allowFontScaling={false} style={styles.targetNoResults}>
                               No tournaments match your search
                             </Text>
                           </View>
@@ -494,6 +494,7 @@ export default function AdminMessagesScreen() {
                                 >
                                   <View style={styles.targetChipLeft}>
                                     <Text
+                                      allowFontScaling={false}
                                       style={[
                                         styles.targetChipText,
                                         isSelected &&
@@ -504,17 +505,18 @@ export default function AdminMessagesScreen() {
                                       🏆 {t.name}
                                     </Text>
                                     <View style={styles.targetChipMeta}>
-                                      <Text style={styles.targetChipId}>
+                                      <Text allowFontScaling={false} style={styles.targetChipId}>
                                         ID: {t.id}
                                       </Text>
                                       {t.date && (
-                                        <Text style={styles.targetChipDate}>
+                                        <Text allowFontScaling={false} style={styles.targetChipDate}>
                                           📅 {t.date}
                                         </Text>
                                       )}
                                     </View>
                                   </View>
                                   <Text
+                                    allowFontScaling={false}
                                     style={[
                                       styles.targetCount,
                                       isSelected && styles.targetCountActive,
@@ -535,18 +537,17 @@ export default function AdminMessagesScreen() {
           </>
         )}
 
-        {/* Selected target summary */}
         {mc.selectedTargetId !== null && (
           <View style={styles.selectedTargetCard}>
             <View style={styles.selectedTargetLeft}>
-              <Text style={styles.selectedTargetLabel}>Selected</Text>
-              <Text style={styles.selectedTargetName} numberOfLines={1}>
+              <Text allowFontScaling={false} style={styles.selectedTargetLabel}>Selected</Text>
+              <Text allowFontScaling={false} style={styles.selectedTargetName} numberOfLines={1}>
                 {mc.form.target_type === "venue" ? "👥" : "🏆"}{" "}
                 {mc.form.target_name}
               </Text>
             </View>
             <View style={styles.selectedTargetRight}>
-              <Text style={styles.selectedFollowerCount}>
+              <Text allowFontScaling={false} style={styles.selectedFollowerCount}>
                 {mc.recipientCount} recipients
               </Text>
               <TouchableOpacity
@@ -555,7 +556,7 @@ export default function AdminMessagesScreen() {
                   setTargetSearch("");
                 }}
               >
-                <Text style={styles.clearSelection}>✕ Clear</Text>
+                <Text allowFontScaling={false} style={styles.clearSelection}>✕ Clear</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -564,12 +565,12 @@ export default function AdminMessagesScreen() {
     );
   };
 
-  // ── TD + Admin: render flat search list ───────────────────────────────────
+  // ── TD + Admin: render flat search list ──────────────────────────────────
   const renderTDTargetSelection = () => {
     if (mc.isLoading) {
       return (
         <View style={styles.noTargetsBox}>
-          <Text style={styles.noTargetsText}>Loading tournaments...</Text>
+          <Text allowFontScaling={false} style={styles.noTargetsText}>Loading tournaments...</Text>
         </View>
       );
     }
@@ -577,7 +578,7 @@ export default function AdminMessagesScreen() {
     if (mc.targets.length === 0) {
       return (
         <View style={styles.noTargetsBox}>
-          <Text style={styles.noTargetsText}>
+          <Text allowFontScaling={false} style={styles.noTargetsText}>
             No active tournaments found. Tournaments must have status = active
             to appear here.
           </Text>
@@ -587,7 +588,6 @@ export default function AdminMessagesScreen() {
 
     return (
       <>
-        {/* Selected target card */}
         {mc.selectedTargetId !== null &&
           (() => {
             const selected = mc.targets.find(
@@ -597,8 +597,8 @@ export default function AdminMessagesScreen() {
             return (
               <View style={styles.selectedTargetCard}>
                 <View style={styles.selectedTargetLeft}>
-                  <Text style={styles.selectedTargetLabel}>Selected</Text>
-                  <Text style={styles.selectedTargetName} numberOfLines={1}>
+                  <Text allowFontScaling={false} style={styles.selectedTargetLabel}>Selected</Text>
+                  <Text allowFontScaling={false} style={styles.selectedTargetName} numberOfLines={1}>
                     {selected.type === "tournament"
                       ? "🏆"
                       : selected.type === "all_users"
@@ -609,7 +609,7 @@ export default function AdminMessagesScreen() {
                 </View>
                 <View style={styles.selectedTargetRight}>
                   {selected.favoriteCount !== undefined && (
-                    <Text style={styles.selectedFollowerCount}>
+                    <Text allowFontScaling={false} style={styles.selectedFollowerCount}>
                       {selected.favoriteCount} followers
                     </Text>
                   )}
@@ -619,17 +619,16 @@ export default function AdminMessagesScreen() {
                       setTargetSearch("");
                     }}
                   >
-                    <Text style={styles.clearSelection}>✕ Clear</Text>
+                    <Text allowFontScaling={false} style={styles.clearSelection}>✕ Clear</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             );
           })()}
 
-        {/* Search with dropdown */}
         <View style={styles.targetSearchOuter}>
           <View style={styles.targetSearchWrap}>
-            <Text style={styles.targetSearchIcon}>🔍</Text>
+            <Text allowFontScaling={false} style={styles.targetSearchIcon}>🔍</Text>
             <TextInput
               style={styles.targetSearchInput}
               value={targetSearch}
@@ -640,7 +639,7 @@ export default function AdminMessagesScreen() {
             />
             {targetSearch.length > 0 && (
               <TouchableOpacity onPress={() => setTargetSearch("")}>
-                <Text style={styles.targetSearchClear}>✕</Text>
+                <Text allowFontScaling={false} style={styles.targetSearchClear}>✕</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -656,7 +655,7 @@ export default function AdminMessagesScreen() {
                 <View style={styles.targetDropdown}>
                   {filtered.length === 0 ? (
                     <View style={styles.targetDropdownEmpty}>
-                      <Text style={styles.targetNoResults}>
+                      <Text allowFontScaling={false} style={styles.targetNoResults}>
                         No tournaments match your search
                       </Text>
                     </View>
@@ -690,6 +689,7 @@ export default function AdminMessagesScreen() {
                           >
                             <View style={styles.targetChipLeft}>
                               <Text
+                                allowFontScaling={false}
                                 style={[
                                   styles.targetChipText,
                                   isSelected && styles.targetChipTextActive,
@@ -704,17 +704,18 @@ export default function AdminMessagesScreen() {
                                 {target.name}
                               </Text>
                               <View style={styles.targetChipMeta}>
-                                <Text style={styles.targetChipId}>
+                                <Text allowFontScaling={false} style={styles.targetChipId}>
                                   ID: {target.id}
                                 </Text>
                                 {target.date && (
-                                  <Text style={styles.targetChipDate}>
+                                  <Text allowFontScaling={false} style={styles.targetChipDate}>
                                     📅 {target.date}
                                   </Text>
                                 )}
                               </View>
                             </View>
                             <Text
+                              allowFontScaling={false}
                               style={[
                                 styles.targetCount,
                                 isSelected && styles.targetCountActive,
@@ -742,8 +743,8 @@ export default function AdminMessagesScreen() {
     >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <Text style={styles.headerTitle}>MESSAGE CENTER</Text>
-        <Text style={styles.headerSubtitle}>
+        <Text allowFontScaling={false} style={styles.headerTitle}>MESSAGE CENTER</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>
           Manage conversations and broadcasts
         </Text>
       </View>
@@ -755,6 +756,7 @@ export default function AdminMessagesScreen() {
           onPress={() => setActiveTab("inbox")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "inbox" && styles.tabTextActive,
@@ -764,7 +766,7 @@ export default function AdminMessagesScreen() {
           </Text>
           {totalUnread > 0 && (
             <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{totalUnread}</Text>
+              <Text allowFontScaling={false} style={styles.tabBadgeText}>{totalUnread}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -773,6 +775,7 @@ export default function AdminMessagesScreen() {
           onPress={() => setActiveTab("send")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "send" && styles.tabTextActive,
@@ -786,6 +789,7 @@ export default function AdminMessagesScreen() {
           onPress={() => setActiveTab("sent")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "sent" && styles.tabTextActive,
@@ -812,13 +816,13 @@ export default function AdminMessagesScreen() {
         >
           {inboxLoading ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptySubtitle}>Loading...</Text>
+              <Text allowFontScaling={false} style={styles.emptySubtitle}>Loading...</Text>
             </View>
           ) : conversations.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📥</Text>
-              <Text style={styles.emptyTitle}>No conversations</Text>
-              <Text style={styles.emptySubtitle}>
+              <Text allowFontScaling={false} style={styles.emptyIcon}>📥</Text>
+              <Text allowFontScaling={false} style={styles.emptyTitle}>No conversations</Text>
+              <Text allowFontScaling={false} style={styles.emptySubtitle}>
                 Support tickets and direct messages will appear here
               </Text>
             </View>
@@ -826,20 +830,20 @@ export default function AdminMessagesScreen() {
             <>
               <View style={styles.statsBar}>
                 <View style={styles.statItem}>
-                  <Text style={styles.statNumber}>{conversations.length}</Text>
-                  <Text style={styles.statLabel}>Total</Text>
+                  <Text allowFontScaling={false} style={styles.statNumber}>{conversations.length}</Text>
+                  <Text allowFontScaling={false} style={styles.statLabel}>Total</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statNumber, { color: "#E74C3C" }]}>
+                  <Text allowFontScaling={false} style={[styles.statNumber, { color: "#E74C3C" }]}>
                     {totalUnread}
                   </Text>
-                  <Text style={styles.statLabel}>Unread</Text>
+                  <Text allowFontScaling={false} style={styles.statLabel}>Unread</Text>
                 </View>
                 <View style={styles.statItem}>
-                  <Text style={[styles.statNumber, { color: "#3498DB" }]}>
+                  <Text allowFontScaling={false} style={[styles.statNumber, { color: "#3498DB" }]}>
                     {conversations.filter((c) => c.is_support).length}
                   </Text>
-                  <Text style={styles.statLabel}>Support</Text>
+                  <Text allowFontScaling={false} style={styles.statLabel}>Support</Text>
                 </View>
               </View>
               {conversations.map((convo) => (
@@ -873,6 +877,7 @@ export default function AdminMessagesScreen() {
               ]}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.rateLimitText,
                   !mc.rateLimit.allowed && styles.rateLimitTextBlocked,
@@ -887,21 +892,20 @@ export default function AdminMessagesScreen() {
             </View>
           )}
 
-          <Text style={styles.fieldLabel}>SEND TO</Text>
+          <Text allowFontScaling={false} style={styles.fieldLabel}>SEND TO</Text>
 
-          {/* Bar owner gets two-level venue → tournament flow */}
           {isBarOwner
             ? renderBarOwnerTargetSelection()
             : renderTDTargetSelection()}
 
           {mc.recipientCount > 0 && (
-            <Text style={styles.recipientCountText}>
+            <Text allowFontScaling={false} style={styles.recipientCountText}>
               Will reach {mc.recipientCount}{" "}
               {mc.recipientCount === 1 ? "person" : "people"}
             </Text>
           )}
 
-          <Text style={styles.fieldLabel}>SUBJECT</Text>
+          <Text allowFontScaling={false} style={styles.fieldLabel}>SUBJECT</Text>
           <TextInput
             style={styles.input}
             value={mc.form.subject}
@@ -912,7 +916,7 @@ export default function AdminMessagesScreen() {
             returnKeyType="next"
           />
 
-          <Text style={styles.fieldLabel}>MESSAGE</Text>
+          <Text allowFontScaling={false} style={styles.fieldLabel}>MESSAGE</Text>
           <TextInput
             style={[styles.input, styles.messageInput]}
             value={mc.form.body}
@@ -934,7 +938,7 @@ export default function AdminMessagesScreen() {
             onPress={mc.handleSend}
             disabled={!mc.isFormValid || mc.isSending || !mc.rateLimit?.allowed}
           >
-            <Text style={styles.broadcastButtonText}>
+            <Text allowFontScaling={false} style={styles.broadcastButtonText}>
               {mc.isSending
                 ? "Sending..."
                 : !mc.rateLimit?.allowed && mc.rateLimit?.reason
@@ -963,9 +967,9 @@ export default function AdminMessagesScreen() {
         >
           {mc.sentMessages.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>📨</Text>
-              <Text style={styles.emptyTitle}>No broadcasts sent</Text>
-              <Text style={styles.emptySubtitle}>
+              <Text allowFontScaling={false} style={styles.emptyIcon}>📨</Text>
+              <Text allowFontScaling={false} style={styles.emptyTitle}>No broadcasts sent</Text>
+              <Text allowFontScaling={false} style={styles.emptySubtitle}>
                 Broadcast messages you send will appear here with read stats
               </Text>
             </View>
@@ -1008,13 +1012,13 @@ const styles = StyleSheet.create({
   },
   headerWeb: { paddingTop: SPACING.lg },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -1024,7 +1028,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
-    padding: 3,
+    padding: scale(3),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -1035,25 +1039,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.md - 2,
-    gap: 4,
+    gap: scale(4),
   },
   tabActive: { backgroundColor: COLORS.primary },
   tabText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
   tabTextActive: { color: "#FFFFFF" },
   tabBadge: {
     backgroundColor: "#E74C3C",
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    borderRadius: scale(10),
+    minWidth: scale(18),
+    height: scale(18),
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: scale(4),
   },
-  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  tabBadgeText: { fontSize: moderateScale(10), fontWeight: "700", color: "#FFFFFF" },
   content: { flex: 1, marginTop: SPACING.sm },
 
   // Stats bar
@@ -1069,11 +1073,11 @@ const styles = StyleSheet.create({
   },
   statItem: { flex: 1, alignItems: "center" },
   statNumber: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
   },
-  statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: 2 },
+  statLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: scale(2) },
 
   // Inbox card
   inboxCard: {
@@ -1086,74 +1090,74 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   inboxCardUnread: { borderColor: COLORS.primary + "60" },
-  accentBar: { height: 3, width: "100%" },
+  accentBar: { height: scale(3), width: "100%" },
   inboxCardContent: { padding: SPACING.md },
   inboxTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
-  inboxFromRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  inboxFromRow: { flexDirection: "row", alignItems: "center", gap: scale(6), flex: 1 },
   supportTag: {
     backgroundColor: "#3498DB20",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    borderRadius: scale(4),
+    paddingHorizontal: scale(6),
+    paddingVertical: scale(1),
   },
   supportTagText: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: "700",
     color: "#3498DB",
     letterSpacing: 0.5,
   },
   inboxFromText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
     flex: 1,
   },
-  inboxTimeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  inboxTimeText: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
+  inboxTimeRow: { flexDirection: "row", alignItems: "center", gap: scale(6) },
+  inboxTimeText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
   unreadBadge: {
     backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    borderRadius: scale(10),
+    minWidth: scale(18),
+    height: scale(18),
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: scale(4),
   },
-  unreadBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  unreadBadgeText: { fontSize: moderateScale(10), fontWeight: "700", color: "#FFFFFF" },
   inboxSubject: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   inboxSubjectUnread: { fontWeight: "700" },
   inboxPreview: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     lineHeight: 18,
-    marginBottom: 6,
+    marginBottom: scale(6),
   },
-  badgeRow: { flexDirection: "row", gap: 6 },
+  badgeRow: { flexDirection: "row", gap: scale(6) },
   categoryBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(8),
+    paddingVertical: scale(2),
     borderWidth: 1,
   },
-  categoryBadgeText: { fontSize: 10, fontWeight: "600" },
+  categoryBadgeText: { fontSize: moderateScale(10), fontWeight: "600" },
   tournamentBadge: {
     backgroundColor: COLORS.primary + "15",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(8),
+    paddingVertical: scale(2),
   },
   tournamentBadgeText: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -1169,21 +1173,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderRadius: RADIUS.sm,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingVertical: scale(4),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   userDetailChipEmail: { flex: 1 },
   userDetailLabel: {
-    fontSize: 9,
+    fontSize: moderateScale(9),
     fontWeight: "700",
     color: COLORS.textMuted,
     letterSpacing: 0.5,
     textTransform: "uppercase",
-    marginBottom: 1,
+    marginBottom: scale(1),
   },
   userDetailValue: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
@@ -1202,21 +1206,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   sentSubject: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
     flex: 1,
   },
   sentTime: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     marginLeft: SPACING.sm,
   },
   sentPreview: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     marginBottom: SPACING.sm,
   },
@@ -1228,7 +1232,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
   },
   sentStat: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -1248,13 +1252,13 @@ const styles = StyleSheet.create({
     borderColor: "#E53935",
   },
   rateLimitText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   rateLimitTextBlocked: { color: "#E53935" },
   fieldLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -1263,7 +1267,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
   },
   stepLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     color: COLORS.primary,
     letterSpacing: 1,
@@ -1287,22 +1291,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.md,
-    height: 48,
+    height: scale(48),
   },
   venueDropdownTriggerText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
     flex: 1,
   },
   venueDropdownArrow: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     marginLeft: SPACING.sm,
   },
   venueDropdownList: {
     position: "absolute",
-    top: 52,
+    top: scale(52),
     left: 0,
     right: 0,
     backgroundColor: COLORS.surface,
@@ -1310,7 +1314,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary + "60",
     overflow: "hidden",
-    maxHeight: 5 * 56, // 5 rows × 56px each
+    maxHeight: scale(5 * 56),
     zIndex: 200,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -1323,7 +1327,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: SPACING.md,
-    height: 56,
+    height: scale(56),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -1331,7 +1335,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + "20",
   },
   venueDropdownRowText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
     flex: 1,
@@ -1360,20 +1364,20 @@ const styles = StyleSheet.create({
   },
   allVenueChipLeft: { flex: 1, marginRight: SPACING.sm },
   allVenueChipText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   allVenueChipTextActive: { color: COLORS.primary },
   allVenueChipSub: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: scale(2),
   },
 
   orDivider: {
     textAlign: "center",
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     marginVertical: SPACING.sm,
   },
@@ -1385,7 +1389,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
     padding: SPACING.md,
   },
-  loadingText: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
+  loadingText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
 
   // Shared target styles
   noTargetsBox: {
@@ -1397,24 +1401,24 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   noTargetsText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     textAlign: "center",
   },
-  targetCount: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
+  targetCount: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
   targetCountActive: { color: COLORS.primary },
   targetNoResults: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     textAlign: "center",
     fontStyle: "italic",
   },
   targetChipLeft: { flex: 1, marginRight: SPACING.sm },
-  targetChipMeta: { flexDirection: "row", gap: SPACING.sm, marginTop: 3 },
-  targetChipId: { fontSize: 11, color: COLORS.textMuted, fontWeight: "600" },
-  targetChipDate: { fontSize: 11, color: COLORS.textMuted },
+  targetChipMeta: { flexDirection: "row", gap: SPACING.sm, marginTop: scale(3) },
+  targetChipId: { fontSize: moderateScale(11), color: COLORS.textMuted, fontWeight: "600" },
+  targetChipDate: { fontSize: moderateScale(11), color: COLORS.textMuted },
   targetChipText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
     flex: 1,
@@ -1437,26 +1441,26 @@ const styles = StyleSheet.create({
   },
   selectedTargetLeft: { flex: 1, marginRight: SPACING.sm },
   selectedTargetLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     color: COLORS.primary,
     letterSpacing: 0.5,
     textTransform: "uppercase",
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   selectedTargetName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
-  selectedTargetRight: { alignItems: "flex-end", gap: 4 },
+  selectedTargetRight: { alignItems: "flex-end", gap: scale(4) },
   selectedFollowerCount: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "600",
   },
   clearSelection: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     fontWeight: "600",
   },
@@ -1475,23 +1479,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.sm,
-    height: 44,
+    height: scale(44),
   },
-  targetSearchIcon: { fontSize: 14, marginRight: SPACING.xs },
+  targetSearchIcon: { fontSize: moderateScale(14), marginRight: SPACING.xs },
   targetSearchInput: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 44,
+    height: scale(44),
   },
   targetSearchClear: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     paddingLeft: SPACING.xs,
   },
   targetDropdown: {
     position: "absolute",
-    top: 48,
+    top: scale(48),
     left: 0,
     right: 0,
     backgroundColor: COLORS.surface,
@@ -1506,7 +1510,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
-  targetDropdownScroll: { maxHeight: 280 },
+  targetDropdownScroll: { maxHeight: scale(280) },
   targetDropdownEmpty: { padding: SPACING.md, alignItems: "center" },
   targetDropdownRow: {
     flexDirection: "row",
@@ -1520,7 +1524,7 @@ const styles = StyleSheet.create({
 
   // Inputs
   recipientCountText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
     marginHorizontal: SPACING.md,
@@ -1530,13 +1534,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
     padding: SPACING.md,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
     marginHorizontal: SPACING.md,
   },
-  messageInput: { minHeight: 120 },
+  messageInput: { minHeight: scale(120) },
   broadcastButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
@@ -1546,7 +1550,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
   },
   broadcastButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: "#FFFFFF",
   },
@@ -1557,15 +1561,15 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xl * 2,
     paddingHorizontal: SPACING.xl,
   },
-  emptyIcon: { fontSize: 48, marginBottom: SPACING.md },
+  emptyIcon: { fontSize: moderateScale(48), marginBottom: SPACING.md },
   emptyTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   emptySubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
   },

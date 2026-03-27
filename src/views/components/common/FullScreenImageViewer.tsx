@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -13,6 +13,7 @@ import {
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { moderateScale, scale } from "../../../utils/scaling";
 
 const isWeb = Platform.OS === "web";
 
@@ -48,12 +49,11 @@ export const FullScreenImageViewer = ({
     }
   };
 
-  // ── Web: simple overlay with native <img> ─────────────────────────────
+  // ── Web: simple overlay with native <img> ────────────────────────────────
   if (isWeb) {
     if (!visible) return null;
     return (
       <>
-        {/* Backdrop */}
         <div
           onClick={onClose}
           style={{
@@ -69,7 +69,6 @@ export const FullScreenImageViewer = ({
             justifyContent: "center",
           }}
         >
-          {/* Image container — stop click propagation so clicking image doesn't close */}
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
@@ -91,7 +90,6 @@ export const FullScreenImageViewer = ({
                 display: "block",
               }}
             />
-            {/* Close only — no share on web */}
             <button
               onClick={onClose}
               style={{
@@ -114,7 +112,7 @@ export const FullScreenImageViewer = ({
     );
   }
 
-  // ── Mobile: original modal (unchanged) ───────────────────────────────
+  // ── Mobile ────────────────────────────────────────────────────────────────
   return (
     <Modal
       visible={visible}
@@ -156,7 +154,7 @@ export const FullScreenImageViewer = ({
               )}
               {imageError && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>Failed to load image</Text>
+                  <Text allowFontScaling={false} style={styles.errorText}>Failed to load image</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -164,12 +162,12 @@ export const FullScreenImageViewer = ({
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-              <Text style={styles.buttonIcon}>📤</Text>
-              <Text style={styles.buttonText}>Share</Text>
+              <Text allowFontScaling={false} style={styles.buttonIcon}>📤</Text>
+              <Text allowFontScaling={false} style={styles.buttonText}>Share</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.buttonIcon}>✕</Text>
-              <Text style={styles.buttonText}>Close</Text>
+              <Text allowFontScaling={false} style={styles.buttonIcon}>✕</Text>
+              <Text allowFontScaling={false} style={styles.buttonText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -184,14 +182,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.75)",
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
   },
   contentContainer: { alignItems: "center", maxWidth: "90%", maxHeight: "80%" },
   imageContainer: {
     width: "100%",
     aspectRatio: 1,
-    minHeight: 300,
-    maxHeight: 500,
+    minHeight: scale(300),
+    maxHeight: scale(500),
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.2)",
@@ -227,44 +225,44 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     textAlign: "center",
   },
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     width: "100%",
-    marginTop: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
+    marginTop: scale(SPACING.sm),
+    paddingHorizontal: scale(SPACING.sm),
   },
   shareButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg + SPACING.sm,
+    paddingVertical: scale(SPACING.md),
+    paddingHorizontal: scale(SPACING.lg + SPACING.sm),
     borderRadius: RADIUS.lg,
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    marginRight: SPACING.sm,
+    marginRight: scale(SPACING.sm),
     justifyContent: "center",
   },
   closeButton: {
     backgroundColor: "rgba(60,60,60,0.9)",
     borderColor: "rgba(255,255,255,0.3)",
     borderWidth: 1,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg + SPACING.sm,
+    paddingVertical: scale(SPACING.md),
+    paddingHorizontal: scale(SPACING.lg + SPACING.sm),
     borderRadius: RADIUS.lg,
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    marginLeft: SPACING.sm,
+    marginLeft: scale(SPACING.sm),
     justifyContent: "center",
   },
-  buttonIcon: { fontSize: FONT_SIZES.md, marginRight: SPACING.xs },
+  buttonIcon: { fontSize: moderateScale(FONT_SIZES.md), marginRight: scale(SPACING.xs) },
   buttonText: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
   },
 });

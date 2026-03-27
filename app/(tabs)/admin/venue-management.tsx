@@ -1,6 +1,7 @@
 ﻿// app/(tabs)/admin/venue-management.tsx
 // UPDATED: Venue ID badges, DELETE old owners on reassign
 
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -133,17 +134,17 @@ const ReassignOwnerModal = ({
           bounces={false}
         >
           <View style={ms.content}>
-            <Text style={ms.title}>{"\uD83D\uDD04"} Reassign Venue Owner</Text>
-            <Text style={ms.subtitle}>{`"${venueName}"`}</Text>
+            <Text allowFontScaling={false} style={ms.title}>{"\uD83D\uDD04"} Reassign Venue Owner</Text>
+            <Text allowFontScaling={false} style={ms.subtitle}>{`"${venueName}"`}</Text>
 
             {currentOwnerName ? (
               <View style={ms.currentRow}>
-                <Text style={ms.currentLabel}>Current Owner:</Text>
-                <Text style={ms.currentValue}>{currentOwnerName}</Text>
+                <Text allowFontScaling={false} style={ms.currentLabel}>Current Owner:</Text>
+                <Text allowFontScaling={false} style={ms.currentValue}>{currentOwnerName}</Text>
               </View>
             ) : null}
 
-            <Text style={ms.label}>Search New Owner *</Text>
+            <Text allowFontScaling={false} style={ms.label}>Search New Owner *</Text>
             <TextInput
               style={ms.searchInput}
               placeholder="Type name or email..."
@@ -164,6 +165,7 @@ const ReassignOwnerModal = ({
                     onPress={() => setSelected(item)}
                   >
                     <Text
+                      allowFontScaling={false}
                       style={[
                         ms.resultName,
                         selected?.id === item.id && ms.resultNameActive,
@@ -171,28 +173,28 @@ const ReassignOwnerModal = ({
                     >
                       {item.name}
                     </Text>
-                    <Text style={ms.resultDetail}>{item.email}</Text>
+                    <Text allowFontScaling={false} style={ms.resultDetail}>{item.email}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
-            {searching && <Text style={ms.hint}>Searching...</Text>}
+            {searching && <Text allowFontScaling={false} style={ms.hint}>Searching...</Text>}
             {query.length > 0 && query.length < 2 && !searching && (
-              <Text style={ms.hint}>Type at least 2 characters</Text>
+              <Text allowFontScaling={false} style={ms.hint}>Type at least 2 characters</Text>
             )}
 
             {selected && (
               <View style={ms.selectedBadge}>
-                <Text style={ms.selectedText}>
+                <Text allowFontScaling={false} style={ms.selectedText}>
                   {"\u2713"} {selected.name}
                 </Text>
                 <TouchableOpacity onPress={() => setSelected(null)}>
-                  <Text style={ms.selectedClear}>{"\u2715"}</Text>
+                  <Text allowFontScaling={false} style={ms.selectedClear}>{"\u2715"}</Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            <Text style={[ms.label, { marginTop: SPACING.md }]}>Reason *</Text>
+            <Text allowFontScaling={false} style={[ms.label, { marginTop: SPACING.md }]}>Reason *</Text>
             <TextInput
               style={ms.textArea}
               placeholder="Enter reason for reassignment..."
@@ -210,11 +212,11 @@ const ReassignOwnerModal = ({
                   reset();
                   onCancel();
                 }}
-      >
-                <Text style={ms.btnCancelText}>Back</Text>
+              >
+                <Text allowFontScaling={false} style={ms.btnCancelText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity style={ms.btnConfirm} onPress={handleConfirm}>
-                <Text style={ms.btnConfirmText}>Reassign</Text>
+                <Text allowFontScaling={false} style={ms.btnConfirmText}>Reassign</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -235,7 +237,6 @@ export default function VenueManagementScreen() {
   const [currentOwnerName, setCurrentOwnerName] = useState("");
   const listRef = useRef<any>(null);
 
-  // Scroll to top on page change
   useEffect(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [vm.currentPage]);
@@ -253,7 +254,6 @@ export default function VenueManagementScreen() {
     router.push("/(tabs)/admin/create-venue" as any);
   };
 
-  // Look up current owner(s) when opening modal
   const openReassignModal = useCallback(async (venue: any) => {
     setVenueToReassign(venue);
     try {
@@ -282,7 +282,6 @@ export default function VenueManagementScreen() {
       if (!venueToReassign || !profile?.id_auto) return;
 
       try {
-        // 1. Get current owners for logging
         const { data: currentOwners } = await supabase
           .from("venue_owners")
           .select("id, owner_id, profiles!venue_owners_owner_id_fkey(name)")
@@ -295,13 +294,11 @@ export default function VenueManagementScreen() {
             .join(", ") || "None";
         const previousOwnerId = currentOwners?.[0]?.owner_id || profile.id_auto;
 
-        // 2. DELETE all current owners for this venue
         await supabase
           .from("venue_owners")
           .delete()
           .eq("venue_id", venueToReassign.id);
 
-        // 3. Insert new owner
         const { error: insertError } = await supabase
           .from("venue_owners")
           .insert({
@@ -312,7 +309,6 @@ export default function VenueManagementScreen() {
 
         if (insertError) throw insertError;
 
-        // 4. Promote new owner to bar_owner if basic_user
         const { data: newOwnerProfile } = await supabase
           .from("profiles")
           .select("role")
@@ -326,11 +322,10 @@ export default function VenueManagementScreen() {
             .eq("id_auto", newOwnerId);
         }
 
-        // 5. Demote old owners to basic_user if they have no remaining venues or tournaments
         if (currentOwners) {
           for (const oldOwner of currentOwners) {
             const oid = oldOwner.owner_id;
-            if (oid === newOwnerId) continue; // skip if reassigning to same person
+            if (oid === newOwnerId) continue;
 
             const { count: remainingVenues } = await supabase
               .from("venue_owners")
@@ -363,7 +358,6 @@ export default function VenueManagementScreen() {
           }
         }
 
-        // 6. Log the reassignment
         await supabase.from("reassignment_logs").insert({
           entity_type: "venue_owner",
           entity_id: venueToReassign.id,
@@ -397,7 +391,7 @@ export default function VenueManagementScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading venues...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading venues...</Text>
       </View>
     );
   }
@@ -421,11 +415,11 @@ export default function VenueManagementScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>{"\u2190"} Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>VENUE MANAGEMENT</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>VENUE MANAGEMENT</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             {vm.totalCount} total venues
           </Text>
         </View>
@@ -434,7 +428,7 @@ export default function VenueManagementScreen() {
 
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search venues..."
@@ -444,7 +438,7 @@ export default function VenueManagementScreen() {
           />
         </View>
         <TouchableOpacity style={styles.addButton} onPress={handleCreateVenue}>
-          <Text style={styles.addButtonText}>+ Add Venue</Text>
+          <Text allowFontScaling={false} style={styles.addButtonText}>+ Add Venue</Text>
         </TouchableOpacity>
       </View>
 
@@ -485,10 +479,9 @@ export default function VenueManagementScreen() {
         }
         renderItem={({ item }) => (
           <View>
-            {/* Venue ID badge */}
             <View style={styles.idBadgeRow}>
               <View style={styles.idBadge}>
-                <Text style={styles.idBadgeText}>ID: {item.id}</Text>
+                <Text allowFontScaling={false} style={styles.idBadgeText}>ID: {item.id}</Text>
               </View>
             </View>
             <BarOwnerVenueCard
@@ -503,7 +496,7 @@ export default function VenueManagementScreen() {
                 style={styles.reassignOwnerBtn}
                 onPress={() => openReassignModal(item)}
               >
-                <Text style={styles.reassignOwnerText}>
+                <Text allowFontScaling={false} style={styles.reassignOwnerText}>
                   {"\uD83D\uDD04"} Reassign Owner
                 </Text>
               </TouchableOpacity>
@@ -522,7 +515,6 @@ export default function VenueManagementScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -535,7 +527,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
+  loadingText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -551,24 +543,24 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: SPACING.xs },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
   headerCenter: { alignItems: "center" },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: 2,
+    marginTop: scale(2),
   },
-  placeholder: { width: 50 },
+  placeholder: { width: scale(50) },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -581,54 +573,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: 40,
+    height: scale(40),
   },
-  searchIcon: { fontSize: 14, marginRight: SPACING.sm, opacity: 0.6 },
+  searchIcon: { fontSize: moderateScale(14), marginRight: SPACING.sm, opacity: 0.6 },
   searchInput: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 40,
+    height: scale(40),
   },
   addButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    height: 40,
+    borderRadius: scale(8),
+    height: scale(40),
     justifyContent: "center",
   },
-  addButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: "#fff" },
+  addButtonText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: "#fff" },
   sortRow: {
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
   },
-  sortContainer: { width: 120 },
+  sortContainer: { width: scale(120) },
   listContent: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
-  // ID Badge
   idBadgeRow: { flexDirection: "row", marginBottom: SPACING.xs },
   idBadge: {
     backgroundColor: COLORS.textSecondary + "30",
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingVertical: scale(2),
+    borderRadius: scale(8),
   },
   idBadgeText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
   },
-  // Reassign button
   reassignOwnerBtn: {
     backgroundColor: "#FF980020",
     borderWidth: 1,
     borderColor: "#FF9800",
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingVertical: SPACING.sm,
     alignItems: "center",
     marginTop: -SPACING.sm,
@@ -637,7 +627,7 @@ const styles = StyleSheet.create({
   },
   reassignOwnerText: {
     color: "#FF9800",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
 });
@@ -652,19 +642,19 @@ const ms = StyleSheet.create({
   },
   content: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.lg,
     width: "100%",
-    maxWidth: 400,
+    maxWidth: scale(400),
   },
   title: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   subtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginBottom: SPACING.xs,
   },
@@ -672,46 +662,46 @@ const ms = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
     marginBottom: SPACING.md,
     borderLeftWidth: 3,
     borderLeftColor: "#FF9800",
   },
   currentLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginRight: SPACING.xs,
   },
   currentValue: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "600",
     flex: 1,
   },
   label: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     marginBottom: SPACING.xs,
     fontWeight: "500",
   },
   searchInput: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: 40,
+    height: scale(40),
   },
   resultsBox: {
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
+    borderRadius: scale(8),
     marginTop: SPACING.xs,
     overflow: "hidden",
-    maxHeight: 160,
+    maxHeight: scale(160),
   },
   resultItem: {
     padding: SPACING.sm,
@@ -720,18 +710,18 @@ const ms = StyleSheet.create({
   },
   resultItemActive: { backgroundColor: COLORS.primary + "20" },
   resultName: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   resultNameActive: { color: COLORS.primary, fontWeight: "700" },
   resultDetail: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   hint: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
     fontStyle: "italic",
@@ -741,39 +731,39 @@ const ms = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: COLORS.success + "20",
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.success,
   },
   selectedText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.success,
     fontWeight: "600",
     flex: 1,
   },
   selectedClear: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.success,
     paddingLeft: SPACING.sm,
   },
   textArea: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 80,
+    minHeight: scale(80),
     textAlignVertical: "top",
   },
   buttons: { flexDirection: "row", marginTop: SPACING.lg, gap: SPACING.sm },
   btnCancel: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: COLORS.background,
     borderWidth: 1,
@@ -781,19 +771,19 @@ const ms = StyleSheet.create({
   },
   btnCancelText: {
     color: COLORS.text,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   btnConfirm: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: "#FF9800",
   },
   btnConfirmText: {
     color: "#FFFFFF",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
 });

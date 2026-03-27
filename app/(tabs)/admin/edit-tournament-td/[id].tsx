@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+﻿import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -15,6 +15,7 @@ import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
+import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
@@ -192,7 +193,7 @@ export default function EditTournamentTDScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading tournament...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading tournament...</Text>
       </View>
     );
   }
@@ -200,7 +201,7 @@ export default function EditTournamentTDScreen() {
   if (!tournament) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Tournament not found</Text>
+        <Text allowFontScaling={false} style={styles.errorText}>Tournament not found</Text>
       </View>
     );
   }
@@ -213,18 +214,18 @@ export default function EditTournamentTDScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Cancel</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Cancel</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>EDIT TOURNAMENT</Text>
-          <Text style={styles.headerSubtitle}>Tournament Director</Text>
+          <Text allowFontScaling={false} style={styles.headerTitle}>EDIT TOURNAMENT</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Tournament Director</Text>
         </View>
         <TouchableOpacity
           style={[styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={saving}
         >
-          <Text style={styles.saveButtonText}>
+          <Text allowFontScaling={false} style={styles.saveButtonText}>
             {saving ? "Saving..." : "Save"}
           </Text>
         </TouchableOpacity>
@@ -236,7 +237,7 @@ export default function EditTournamentTDScreen() {
         <View style={styles.form}>
           {/* Tournament Name */}
           <View style={styles.field}>
-            <Text style={styles.label}>Tournament Name *</Text>
+            <Text allowFontScaling={false} style={styles.label}>Tournament Name *</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
@@ -248,7 +249,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Description */}
           <View style={styles.field}>
-            <Text style={styles.label}>Description</Text>
+            <Text allowFontScaling={false} style={styles.label}>Description</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.description}
@@ -262,7 +263,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Game Type */}
           <View style={styles.field}>
-            <Text style={styles.label}>Game Type *</Text>
+            <Text allowFontScaling={false} style={styles.label}>Game Type *</Text>
             <Dropdown
               options={gameTypes}
               value={formData.game_type}
@@ -273,7 +274,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Tournament Format */}
           <View style={styles.field}>
-            <Text style={styles.label}>Format</Text>
+            <Text allowFontScaling={false} style={styles.label}>Format</Text>
             <Dropdown
               options={formatTypes}
               value={formData.tournament_format}
@@ -284,7 +285,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Date */}
           <View style={styles.field}>
-            <Text style={styles.label}>Tournament Date *</Text>
+            <Text allowFontScaling={false} style={styles.label}>Tournament Date *</Text>
             <TextInput
               style={styles.input}
               value={formData.tournament_date}
@@ -297,7 +298,7 @@ export default function EditTournamentTDScreen() {
           {/* Time Fields */}
           <View style={styles.timeRow}>
             <View style={[styles.field, styles.timeField]}>
-              <Text style={styles.label}>Start Time</Text>
+              <Text allowFontScaling={false} style={styles.label}>Start Time</Text>
               <TextInput
                 style={styles.input}
                 value={formData.start_time}
@@ -307,7 +308,7 @@ export default function EditTournamentTDScreen() {
               />
             </View>
             <View style={[styles.field, styles.timeField]}>
-              <Text style={styles.label}>End Time</Text>
+              <Text allowFontScaling={false} style={styles.label}>End Time</Text>
               <TextInput
                 style={styles.input}
                 value={formData.end_time}
@@ -320,7 +321,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Venue - Only shows venues TD is assigned to */}
           <View style={styles.field}>
-            <Text style={styles.label}>Venue</Text>
+            <Text allowFontScaling={false} style={styles.label}>Venue</Text>
             <Dropdown
               options={venues}
               value={formData.venue_id}
@@ -331,7 +332,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Entry Fee */}
           <View style={styles.field}>
-            <Text style={styles.label}>Entry Fee ($)</Text>
+            <Text allowFontScaling={false} style={styles.label}>Entry Fee ($)</Text>
             <TextInput
               style={styles.input}
               value={formData.entry_fee}
@@ -344,7 +345,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Prize Pool */}
           <View style={styles.field}>
-            <Text style={styles.label}>Prize Pool ($)</Text>
+            <Text allowFontScaling={false} style={styles.label}>Prize Pool ($)</Text>
             <TextInput
               style={styles.input}
               value={formData.prize_pool}
@@ -357,7 +358,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Max Participants */}
           <View style={styles.field}>
-            <Text style={styles.label}>Max Participants</Text>
+            <Text allowFontScaling={false} style={styles.label}>Max Participants</Text>
             <TextInput
               style={styles.input}
               value={formData.max_participants}
@@ -372,7 +373,7 @@ export default function EditTournamentTDScreen() {
 
           {/* Rules */}
           <View style={styles.field}>
-            <Text style={styles.label}>Rules</Text>
+            <Text allowFontScaling={false} style={styles.label}>Rules</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={formData.rules}
@@ -407,11 +408,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   errorText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.error,
   },
   header: {
@@ -431,7 +432,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
@@ -440,29 +441,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   saveButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
   },
   saveButtonDisabled: {
     backgroundColor: COLORS.textSecondary,
   },
   saveButtonText: {
     color: COLORS.surface,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   scrollView: {
@@ -476,24 +477,24 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   label: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   input: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 44,
+    minHeight: scale(44),
   },
   textArea: {
-    minHeight: 80,
+    minHeight: scale(80),
     textAlignVertical: "top",
   },
   timeRow: {

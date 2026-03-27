@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -33,14 +34,12 @@ interface UserVenue {
   state: string;
 }
 
-// Roles that CANNOT be changed to tournament_director
 const PROTECTED_ROLES = ["super_admin", "compete_admin", "bar_owner"];
 
 export default function AddDirectorScreen() {
   const router = useRouter();
   const { profile } = useAuthContext();
 
-  // State
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
   const [searching, setSearching] = useState(false);
@@ -53,61 +52,36 @@ export default function AddDirectorScreen() {
     loadVenues();
   }, []);
 
-  // FIX: Load venues through venue_owners table (not venues.owner_id)
   const loadVenues = async () => {
     if (!profile?.id_auto) return;
     try {
       const { data, error } = await supabase
         .from("venue_owners")
-        .select(
-          `
-          venues (
-            id,
-            venue,
-            city,
-            state
-          )
-        `,
-        )
+        .select(`venues (id, venue, city, state)`)
         .eq("owner_id", profile.id_auto)
         .is("archived_at", null);
 
-      if (error) {
-        console.error("Error loading venues:", error);
-        return;
-      }
+      if (error) { console.error("Error loading venues:", error); return; }
 
-      const venueList = (data || [])
-        .map((vo: any) => vo.venues)
-        .filter(Boolean) as UserVenue[];
-
+      const venueList = (data || []).map((vo: any) => vo.venues).filter(Boolean) as UserVenue[];
       setVenues(venueList);
     } catch (error) {
       console.error("Error loading venues:", error);
     }
   };
 
-  // ==================== SEARCH ====================
-
   const searchUsers = useCallback(
     async (query: string) => {
-      if (!query.trim() || query.trim().length < 2) {
-        setSearchResults([]);
-        return;
-      }
-
+      if (!query.trim() || query.trim().length < 2) { setSearchResults([]); return; }
       setSearching(true);
       try {
         const { data, error } = await supabase
           .from("profiles")
           .select("id_auto, name, email, user_name, role")
-          .or(
-            `email.ilike.%${query}%,name.ilike.%${query}%,user_name.ilike.%${query}%`,
-          )
+          .or(`email.ilike.%${query}%,name.ilike.%${query}%,user_name.ilike.%${query}%`)
           .neq("id_auto", profile!.id_auto)
           .eq("status", "active")
           .limit(20);
-
         if (error) throw error;
         setSearchResults(data || []);
       } catch (error) {
@@ -119,33 +93,21 @@ export default function AddDirectorScreen() {
     [profile],
   );
 
-  // Debounced auto-search
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearchChange = useCallback(
     (text: string) => {
       setSearchQuery(text);
       if (debounceRef.current) clearTimeout(debounceRef.current);
-
-      if (text.trim().length < 2) {
-        setSearchResults([]);
-        return;
-      }
-
-      debounceRef.current = setTimeout(() => {
-        searchUsers(text);
-      }, 400);
+      if (text.trim().length < 2) { setSearchResults([]); return; }
+      debounceRef.current = setTimeout(() => { searchUsers(text); }, 400);
     },
     [searchUsers],
   );
 
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, []);
-
-  // ==================== ROLE HELPERS ====================
 
   const canBeDirector = (user: SearchUser): boolean => {
     return user.role === "basic_user" || user.role === "tournament_director";
@@ -153,55 +115,33 @@ export default function AddDirectorScreen() {
 
   const getRoleLabel = (role: string): { text: string; color: string } => {
     if (PROTECTED_ROLES.includes(role)) {
-      return {
-        text: "Unavailable — Has elevated account role",
-        color: "#ef4444",
-      };
+      return { text: "Unavailable \u2013 Has elevated account role", color: "#ef4444" };
     }
     if (role === "tournament_director") {
       return { text: "Already a Tournament Director", color: "#22c55e" };
     }
     if (role === "basic_user") {
-      return {
-        text: "Will be promoted to Tournament Director",
-        color: "#f59e0b",
-      };
+      return { text: "Will be promoted to Tournament Director", color: "#f59e0b" };
     }
-    return {
-      text: "Unavailable",
-      color: COLORS.textSecondary,
-    };
+    return { text: "Unavailable", color: COLORS.textSecondary };
   };
-
-  // ==================== SELECT DIRECTOR ====================
 
   const handleSelectDirector = (user: SearchUser) => {
     if (!canBeDirector(user)) {
-      Alert.alert(
-        "Cannot Select",
-        `${user.name} has an elevated account role and cannot be added as a venue director.`,
-      );
+      Alert.alert("Cannot Select", `${user.name} has an elevated account role and cannot be added as a venue director.`);
       return;
     }
-
-    // Select immediately and collapse search
     setSelectedUser(user);
     setSearchQuery("");
     setSearchResults([]);
   };
-
-  // ==================== SAVE ====================
 
   const handleSave = async () => {
     if (!selectedUser || !selectedVenue) {
       Alert.alert("Error", "Please select a director and a venue.");
       return;
     }
-
-    const venueName =
-      venues.find((v) => v.id === selectedVenue)?.venue || "this venue";
-
-    // Final confirmation for basic_user role promotion
+    const venueName = venues.find((v) => v.id === selectedVenue)?.venue || "this venue";
     if (selectedUser.role === "basic_user") {
       Alert.alert(
         "Promote & Assign Director?",
@@ -225,10 +165,8 @@ export default function AddDirectorScreen() {
 
   const executeAdd = async () => {
     if (!selectedUser || !selectedVenue) return;
-
     setAdding(true);
     try {
-      // Check if already an active director at this venue
       const { data: existing } = await supabase
         .from("venue_directors")
         .select("id")
@@ -238,15 +176,11 @@ export default function AddDirectorScreen() {
         .single();
 
       if (existing) {
-        Alert.alert(
-          "Already Assigned",
-          "This user is already a director at this venue.",
-        );
+        Alert.alert("Already Assigned", "This user is already a director at this venue.");
         setAdding(false);
         return;
       }
 
-      // Promote basic_user to tournament_director
       if (selectedUser.role === "basic_user") {
         const { data: updatedProfile, error: roleError } = await supabase
           .from("profiles")
@@ -263,27 +197,20 @@ export default function AddDirectorScreen() {
         }
 
         if (!updatedProfile) {
-          console.error("Role update returned null — likely RLS block");
-          Alert.alert(
-            "Permission Error",
-            "The database blocked the role update. Please ensure the RLS policy has been applied in Supabase.",
-          );
+          console.error("Role update returned null \u2013 likely RLS block");
+          Alert.alert("Permission Error", "The database blocked the role update. Please ensure the RLS policy has been applied in Supabase.");
           setAdding(false);
           return;
         }
 
         if (updatedProfile.role !== "tournament_director") {
           console.error("Role did not change:", updatedProfile.role);
-          Alert.alert(
-            "Error",
-            "Role update did not take effect. Please contact support.",
-          );
+          Alert.alert("Error", "Role update did not take effect. Please contact support.");
           setAdding(false);
           return;
         }
       }
 
-      // Check if an archived record exists (previously removed director)
       const { data: archivedRecord } = await supabase
         .from("venue_directors")
         .select("id")
@@ -293,40 +220,23 @@ export default function AddDirectorScreen() {
         .single();
 
       if (archivedRecord) {
-        // Reactivate the archived record
         const { error: reactivateError } = await supabase
           .from("venue_directors")
-          .update({
-            archived_at: null,
-            archived_by: null,
-            assigned_by: profile!.id_auto,
-            assigned_at: new Date().toISOString(),
-          })
+          .update({ archived_at: null, archived_by: null, assigned_by: profile!.id_auto, assigned_at: new Date().toISOString() })
           .eq("id", archivedRecord.id);
-
         if (reactivateError) throw reactivateError;
       } else {
-        // Insert new venue_directors record
         const { error: insertError } = await supabase
           .from("venue_directors")
-          .insert({
-            venue_id: selectedVenue,
-            director_id: selectedUser.id_auto,
-            assigned_by: profile!.id_auto,
-            assigned_at: new Date().toISOString(),
-          });
-
+          .insert({ venue_id: selectedVenue, director_id: selectedUser.id_auto, assigned_by: profile!.id_auto, assigned_at: new Date().toISOString() });
         if (insertError) throw insertError;
       }
 
-      const msg =
-        selectedUser.role === "basic_user"
-          ? `${selectedUser.name} has been promoted to Tournament Director and assigned to the venue!`
-          : `${selectedUser.name} has been assigned as a director at the venue!`;
+      const msg = selectedUser.role === "basic_user"
+        ? `${selectedUser.name} has been promoted to Tournament Director and assigned to the venue!`
+        : `${selectedUser.name} has been assigned as a director at the venue!`;
 
-      Alert.alert("Success", msg, [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      Alert.alert("Success", msg, [{ text: "OK", onPress: () => router.back() }]);
     } catch (error) {
       console.error("Error adding director:", error);
       Alert.alert("Error", "Failed to add director. Please try again.");
@@ -339,11 +249,7 @@ export default function AddDirectorScreen() {
     if (selectedUser || selectedVenue) {
       Alert.alert("Discard Changes?", "You have unsaved selections.", [
         { text: "Keep Editing", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => router.back(),
-        },
+        { text: "Discard", style: "destructive", onPress: () => router.back() },
       ]);
     } else {
       router.back();
@@ -355,12 +261,9 @@ export default function AddDirectorScreen() {
     setSelectedVenue(null);
   };
 
-  // ==================== RENDER ====================
-
   const renderSearchResult = ({ item }: { item: SearchUser }) => {
     const roleInfo = getRoleLabel(item.role);
     const selectable = canBeDirector(item);
-
     return (
       <TouchableOpacity
         style={[styles.userCard, !selectable && styles.userCardDisabled]}
@@ -368,19 +271,13 @@ export default function AddDirectorScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
+          <Text allowFontScaling={false} style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>{item.name}</Text>
-          <Text style={styles.userEmail}>{item.email}</Text>
-          <Text style={styles.userUsername}>
-            @{item.user_name} Â· ID: {item.id_auto}
-          </Text>
-          <Text style={[styles.roleLabel, { color: roleInfo.color }]}>
-            {roleInfo.text}
-          </Text>
+          <Text allowFontScaling={false} style={styles.userName}>{item.name}</Text>
+          <Text allowFontScaling={false} style={styles.userEmail}>{item.email}</Text>
+          <Text allowFontScaling={false} style={styles.userUsername}>@{item.user_name} {"\u00B7"} ID: {item.id_auto}</Text>
+          <Text allowFontScaling={false} style={[styles.roleLabel, { color: roleInfo.color }]}>{roleInfo.text}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -388,49 +285,36 @@ export default function AddDirectorScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
-          <Text style={styles.backText}>← Cancel</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Cancel</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>ADD DIRECTOR</Text>
-          <Text style={styles.headerSubtitle}>Search & Assign</Text>
+          <Text allowFontScaling={false} style={styles.headerTitle}>ADD DIRECTOR</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Search & Assign</Text>
         </View>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
-        {/* ===== STEP 1: Select Director ===== */}
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
-          <Text style={styles.stepLabel}>STEP 1</Text>
-          <Text style={styles.sectionTitle}>Select Director</Text>
+          <Text allowFontScaling={false} style={styles.stepLabel}>STEP 1</Text>
+          <Text allowFontScaling={false} style={styles.sectionTitle}>Select Director</Text>
 
-          {/* Show selected director OR search input */}
           {selectedUser ? (
             <View style={styles.selectedCard}>
               <View style={styles.selectedInfo}>
                 <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {selectedUser.name.charAt(0).toUpperCase()}
-                  </Text>
+                  <Text allowFontScaling={false} style={styles.avatarText}>{selectedUser.name.charAt(0).toUpperCase()}</Text>
                 </View>
                 <View style={styles.selectedDetails}>
-                  <Text style={styles.selectedName}>{selectedUser.name}</Text>
-                  <Text style={styles.selectedEmail}>{selectedUser.email}</Text>
-                  <Text style={styles.selectedUsername}>
-                    @{selectedUser.user_name} Â· ID: {selectedUser.id_auto}
-                  </Text>
+                  <Text allowFontScaling={false} style={styles.selectedName}>{selectedUser.name}</Text>
+                  <Text allowFontScaling={false} style={styles.selectedEmail}>{selectedUser.email}</Text>
+                  <Text allowFontScaling={false} style={styles.selectedUsername}>@{selectedUser.user_name} {"\u00B7"} ID: {selectedUser.id_auto}</Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.changeButton}
-                onPress={handleClearDirector}
-              >
-                <Text style={styles.changeButtonText}>Change</Text>
+              <TouchableOpacity style={styles.changeButton} onPress={handleClearDirector}>
+                <Text allowFontScaling={false} style={styles.changeButtonText}>Change</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -448,55 +332,35 @@ export default function AddDirectorScreen() {
                 textContentType="none"
                 importantForAutofill="no"
               />
-              {searching && (
-                <Text style={styles.searchingText}>Searching...</Text>
-              )}
+              {searching && <Text allowFontScaling={false} style={styles.searchingText}>Searching...</Text>}
 
-              {/* Search Results — max 4 visible, scrollable */}
               {searchResults.length > 0 && (
                 <View style={styles.resultsContainer}>
-                  <Text style={styles.resultsCount}>
-                    {searchResults.length} result
-                    {searchResults.length !== 1 ? "s" : ""} found
+                  <Text allowFontScaling={false} style={styles.resultsCount}>
+                    {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} found
                   </Text>
-                  <ScrollView
-                    style={styles.resultsList}
-                    showsVerticalScrollIndicator={true}
-                    nestedScrollEnabled={true}
-                    keyboardShouldPersistTaps="handled">
+                  <ScrollView style={styles.resultsList} showsVerticalScrollIndicator nestedScrollEnabled keyboardShouldPersistTaps="handled">
                     {searchResults.map((item) => (
-                      <View key={item.id_auto}>
-                        {renderSearchResult({ item })}
-                      </View>
+                      <View key={item.id_auto}>{renderSearchResult({ item })}</View>
                     ))}
                   </ScrollView>
                 </View>
               )}
 
-              {searchQuery.length >= 2 &&
-                !searching &&
-                searchResults.length === 0 && (
-                  <Text style={styles.noResultsText}>
-                    No users found matching {'"'}
-                    {searchQuery}
-                    {'"'}
-                  </Text>
-                )}
+              {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
+                <Text allowFontScaling={false} style={styles.noResultsText}>No users found matching {'"'}{searchQuery}{'"'}</Text>
+              )}
             </>
           )}
         </View>
 
-        {/* ===== STEP 2: Select Venue ===== */}
         {selectedUser && (
           <View style={styles.section}>
-            <Text style={styles.stepLabel}>STEP 2</Text>
-            <Text style={styles.sectionTitle}>Select Venue</Text>
+            <Text allowFontScaling={false} style={styles.stepLabel}>STEP 2</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Select Venue</Text>
 
             {venues.length === 0 ? (
-              <Text style={styles.noVenuesText}>
-                No venues found. Make sure you have venues assigned to your
-                account.
-              </Text>
+              <Text allowFontScaling={false} style={styles.noVenuesText}>No venues found. Make sure you have venues assigned to your account.</Text>
             ) : (
               <View style={styles.venueList}>
                 {venues.map((venue) => {
@@ -504,35 +368,16 @@ export default function AddDirectorScreen() {
                   return (
                     <TouchableOpacity
                       key={venue.id}
-                      style={[
-                        styles.venueCard,
-                        isSelected && styles.venueCardSelected,
-                      ]}
+                      style={[styles.venueCard, isSelected && styles.venueCardSelected]}
                       onPress={() => setSelectedVenue(venue.id)}
                       activeOpacity={0.7}
                     >
                       <View style={styles.venueInfo}>
-                        <Text
-                          style={[
-                            styles.venueName,
-                            isSelected && styles.venueNameSelected,
-                          ]}
-                        >
-                          {venue.venue}
-                        </Text>
-                        <Text style={styles.venueLocation}>
-                          {venue.city}, {venue.state}
-                        </Text>
+                        <Text allowFontScaling={false} style={[styles.venueName, isSelected && styles.venueNameSelected]}>{venue.venue}</Text>
+                        <Text allowFontScaling={false} style={styles.venueLocation}>{venue.city}, {venue.state}</Text>
                       </View>
-                      <View
-                        style={[
-                          styles.checkbox,
-                          isSelected && styles.checkboxSelected,
-                        ]}
-                      >
-                        {isSelected && (
-                          <Text style={styles.checkboxText}>✓</Text>
-                        )}
+                      <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Text allowFontScaling={false} style={styles.checkboxText}>{"\u2713"}</Text>}
                       </View>
                     </TouchableOpacity>
                   );
@@ -542,61 +387,39 @@ export default function AddDirectorScreen() {
           </View>
         )}
 
-        {/* ===== ROLE WARNING ===== */}
-        {selectedUser &&
-          selectedUser.role === "basic_user" &&
-          selectedVenue && (
-            <View style={styles.section}>
-              <View style={styles.roleWarningBox}>
-                <Text style={styles.roleWarningTitle}>⚠️ Role Change</Text>
-                <Text style={styles.roleWarningText}>
-                  {selectedUser.name} will be promoted to Tournament Director.
-                  This changes their account role.
-                </Text>
-              </View>
+        {selectedUser && selectedUser.role === "basic_user" && selectedVenue && (
+          <View style={styles.section}>
+            <View style={styles.roleWarningBox}>
+              <Text allowFontScaling={false} style={styles.roleWarningTitle}>{"\u26A0\uFE0F"} Role Change</Text>
+              <Text allowFontScaling={false} style={styles.roleWarningText}>
+                {selectedUser.name} will be promoted to Tournament Director. This changes their account role.
+              </Text>
             </View>
-          )}
+          </View>
+        )}
 
-        {/* ===== ACTION BUTTONS ===== */}
         {selectedUser && (
           <View style={styles.actionSection}>
             <TouchableOpacity
-              style={[
-                styles.saveButton,
-                (!selectedVenue || adding) && styles.saveButtonDisabled,
-              ]}
+              style={[styles.saveButton, (!selectedVenue || adding) && styles.saveButtonDisabled]}
               onPress={handleSave}
               disabled={!selectedVenue || adding}
             >
-              <Text style={styles.saveButtonText}>
-                {adding
-                  ? "Saving..."
-                  : selectedUser.role === "basic_user"
-                    ? "Promote & Add Director"
-                    : "Add Director"}
+              <Text allowFontScaling={false} style={styles.saveButtonText}>
+                {adding ? "Saving..." : selectedUser.role === "basic_user" ? "Promote & Add Director" : "Add Director"}
               </Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelActionButton}
-              onPress={handleCancel}
-              disabled={adding}
-            >
-              <Text style={styles.cancelActionText}>Cancel</Text>
+            <TouchableOpacity style={styles.cancelActionButton} onPress={handleCancel} disabled={adding}>
+              <Text allowFontScaling={false} style={styles.cancelActionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Instructions — only show when no director selected */}
         {!selectedUser && (
           <View style={styles.section}>
-            <Text style={styles.instructionsTitle}>How it works:</Text>
-            <Text style={styles.instructionsText}>
-              1. Start typing a name or email to find users{"\n"}
-              2. Tap a user to select them as director{"\n"}
-              3. Choose which venue to assign them to{"\n"}
-              4. Basic users will be promoted to Tournament Director{"\n"}
-              5. Tap Save to confirm the assignment
+            <Text allowFontScaling={false} style={styles.instructionsTitle}>How it works:</Text>
+            <Text allowFontScaling={false} style={styles.instructionsText}>
+              {"1. Start typing a name or email to find users\n2. Tap a user to select them as director\n3. Choose which venue to assign them to\n4. Basic users will be promoted to Tournament Director\n5. Tap Save to confirm the assignment"}
             </Text>
           </View>
         )}
@@ -608,11 +431,7 @@ export default function AddDirectorScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
-  scrollContentWeb: {
-    alignItems: "center",
-    paddingBottom: SPACING.xl,
-  },
+  scrollContentWeb: { alignItems: "center", paddingBottom: scale(SPACING.xl) },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
@@ -622,330 +441,111 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.sm,
-    paddingBottom: SPACING.md,
+    paddingHorizontal: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl + SPACING.sm),
+    paddingBottom: scale(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  backText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: "500",
-  },
-  headerCenter: {
-    alignItems: "center",
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "600",
-    color: COLORS.text,
-    letterSpacing: 0.5,
-  },
-  headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  placeholder: {
-    width: 50,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    padding: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  stepLabel: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "700",
-    color: COLORS.primary,
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  sectionTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-  },
-
-  // ===== SEARCH INPUT =====
+  headerWeb: { paddingTop: scale(SPACING.lg) },
+  backButton: { padding: scale(SPACING.xs) },
+  backText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "500" },
+  headerCenter: { alignItems: "center", flex: 1 },
+  headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "600", color: COLORS.text, letterSpacing: 0.5 },
+  headerSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2) },
+  placeholder: { width: scale(50) },
+  scrollView: { flex: 1 },
+  section: { padding: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  stepLabel: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700", color: COLORS.primary, letterSpacing: 1, marginBottom: scale(4) },
+  sectionTitle: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.md) },
   searchInput: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.sm),
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  searchingText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    fontStyle: "italic",
-  },
-
-  // ===== SEARCH RESULTS =====
-  resultsContainer: {
-    marginTop: SPACING.sm,
-  },
-  resultsCount: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-  },
-  resultsList: {
-    maxHeight: 400, // ~4 cards visible
-  },
-  noResultsText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.md,
-    textAlign: "center",
-    fontStyle: "italic",
-  },
-
-  // ===== USER CARD (search results) =====
+  searchingText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(SPACING.xs), fontStyle: "italic" },
+  resultsContainer: { marginTop: scale(SPACING.sm) },
+  resultsCount: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginBottom: scale(SPACING.sm) },
+  resultsList: { maxHeight: scale(400) },
+  noResultsText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(SPACING.md), textAlign: "center", fontStyle: "italic" },
   userCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    borderRadius: scale(12),
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  userCardDisabled: {
-    opacity: 0.5,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: SPACING.md,
-  },
-  avatarText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-    color: COLORS.surface,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  userEmail: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  userUsername: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-    fontStyle: "italic",
-  },
-  roleLabel: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-
-  // ===== SELECTED DIRECTOR CARD =====
+  userCardDisabled: { opacity: 0.5 },
+  avatar: { width: scale(40), height: scale(40), borderRadius: scale(20), backgroundColor: COLORS.primary, justifyContent: "center", alignItems: "center", marginRight: scale(SPACING.md) },
+  avatarText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.surface },
+  userInfo: { flex: 1 },
+  userName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  userEmail: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(2) },
+  userUsername: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2), fontStyle: "italic" },
+  roleLabel: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", marginTop: scale(2) },
   selectedCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: COLORS.primary + "15",
-    borderRadius: 12,
-    padding: SPACING.md,
+    borderRadius: scale(12),
+    padding: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
-  selectedInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  selectedDetails: {
-    flex: 1,
-  },
-  selectedName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  selectedEmail: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  selectedUsername: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-    fontStyle: "italic",
-  },
+  selectedInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
+  selectedDetails: { flex: 1 },
+  selectedName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  selectedEmail: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(2) },
+  selectedUsername: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2), fontStyle: "italic" },
   changeButton: {
     backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.sm),
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginLeft: SPACING.sm,
+    marginLeft: scale(SPACING.sm),
   },
-  changeButtonText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-
-  // ===== VENUE LIST =====
-  venueList: {
-    gap: SPACING.sm,
-  },
+  changeButtonText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.text },
+  venueList: { gap: scale(SPACING.sm) },
   venueCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: COLORS.surface,
-    borderRadius: 10,
-    padding: SPACING.md,
+    borderRadius: scale(10),
+    padding: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  venueCardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + "15",
-  },
-  venueInfo: {
-    flex: 1,
-  },
-  venueName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  venueNameSelected: {
-    color: COLORS.primary,
-  },
-  venueLocation: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: SPACING.md,
-  },
-  checkboxSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary,
-  },
-  checkboxText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  noVenuesText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    padding: SPACING.lg,
-    fontStyle: "italic",
-  },
-
-  // ===== ROLE WARNING =====
-  roleWarningBox: {
-    backgroundColor: "#fef3c7",
-    borderRadius: 8,
-    padding: SPACING.md,
-    borderLeftWidth: 3,
-    borderLeftColor: "#f59e0b",
-  },
-  roleWarningTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: "#92400e",
-    marginBottom: 4,
-  },
-  roleWarningText: {
-    fontSize: FONT_SIZES.xs,
-    color: "#92400e",
-    lineHeight: 18,
-  },
-
-  // ===== ACTION BUTTONS =====
-  actionSection: {
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  saveButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-  },
-  saveButtonDisabled: {
-    opacity: 0.4,
-  },
-  saveButtonText: {
-    color: "#ffffff",
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-  },
-  cancelActionButton: {
-    borderRadius: 8,
-    paddingVertical: SPACING.md,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cancelActionText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.md,
-    fontWeight: "600",
-  },
-
-  // ===== INSTRUCTIONS =====
-  instructionsTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: SPACING.xs,
-  },
-  instructionsText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: 20,
-  },
-  bottomSpacer: {
-    height: SPACING.xl * 2,
-  },
+  venueCardSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "15" },
+  venueInfo: { flex: 1 },
+  venueName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  venueNameSelected: { color: COLORS.primary },
+  venueLocation: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(2) },
+  checkbox: { width: scale(24), height: scale(24), borderRadius: scale(12), borderWidth: 2, borderColor: COLORS.border, justifyContent: "center", alignItems: "center", marginLeft: scale(SPACING.md) },
+  checkboxSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primary },
+  checkboxText: { color: "#ffffff", fontSize: moderateScale(14), fontWeight: "700" },
+  noVenuesText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", padding: scale(SPACING.lg), fontStyle: "italic" },
+  roleWarningBox: { backgroundColor: "#fef3c7", borderRadius: scale(8), padding: scale(SPACING.md), borderLeftWidth: 3, borderLeftColor: "#f59e0b" },
+  roleWarningTitle: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: "#92400e", marginBottom: scale(4) },
+  roleWarningText: { fontSize: moderateScale(FONT_SIZES.xs), color: "#92400e", lineHeight: moderateScale(18) },
+  actionSection: { padding: scale(SPACING.md), gap: scale(SPACING.sm) },
+  saveButton: { backgroundColor: COLORS.primary, borderRadius: scale(8), paddingVertical: scale(SPACING.md), alignItems: "center" },
+  saveButtonDisabled: { opacity: 0.4 },
+  saveButtonText: { color: "#ffffff", fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
+  cancelActionButton: { borderRadius: scale(8), paddingVertical: scale(SPACING.md), alignItems: "center", borderWidth: 1, borderColor: COLORS.border },
+  cancelActionText: { color: COLORS.textSecondary, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
+  instructionsTitle: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.xs) },
+  instructionsText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: moderateScale(20) },
+  bottomSpacer: { height: scale(SPACING.xl * 2) },
 });

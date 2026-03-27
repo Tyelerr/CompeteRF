@@ -1,5 +1,6 @@
 ﻿// app/(tabs)/admin/edit-user/[id].tsx
 
+import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -29,7 +30,7 @@ export default function EditUserScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading user...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading user...</Text>
       </View>
     );
   }
@@ -37,13 +38,13 @@ export default function EditUserScreen() {
   if (!vm.user) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorIcon}>âŒ</Text>
-        <Text style={styles.errorText}>User not found</Text>
+        <Text allowFontScaling={false} style={styles.errorIcon}>{"\u274C"}</Text>
+        <Text allowFontScaling={false} style={styles.errorText}>User not found</Text>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>Go Back</Text>
+          <Text allowFontScaling={false} style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -52,15 +53,15 @@ export default function EditUserScreen() {
   if (!vm.canEdit) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorIcon}>ðŸ”’</Text>
-        <Text style={styles.errorText}>
+        <Text allowFontScaling={false} style={styles.errorIcon}>"\uD83D\uDD12"</Text>
+        <Text allowFontScaling={false} style={styles.errorText}>
           You do not have permission to edit this user
         </Text>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>Go Back</Text>
+          <Text allowFontScaling={false} style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -90,9 +91,9 @@ export default function EditUserScreen() {
           onPress={() => router.back()}
           style={styles.headerBack}
         >
-          <Text style={styles.headerBackText}>{"← Back"}</Text>
+          <Text allowFontScaling={false} style={styles.headerBackText}>{"← Back"}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>EDIT USER</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>EDIT USER</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -104,8 +105,8 @@ export default function EditUserScreen() {
         <View style={isWeb ? styles.webInner : styles.mobileInner}>
           {vm.user.is_disabled && (
             <View style={styles.disabledBanner}>
-              <Ionicons name="ban-outline" size={16} color="#fff" />
-              <Text style={styles.disabledBannerText}>
+              <Ionicons name="ban-outline" size={scale(16)} color="#fff" />
+              <Text allowFontScaling={false} style={styles.disabledBannerText}>
                 This user account is currently disabled
               </Text>
             </View>
@@ -113,7 +114,7 @@ export default function EditUserScreen() {
 
           {/* Read-only Info */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>User Info</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>User Info</Text>
             <View style={styles.infoCard}>
               <InfoRow label="User ID" value={`#${vm.user.id_auto}`} />
               <InfoRow label="Email" value={vm.user.email} />
@@ -138,12 +139,12 @@ export default function EditUserScreen() {
 
           {/* Editable Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Edit Details</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Edit Details</Text>
             <View style={styles.editCard}>
               <View style={styles.nameRow}>
                 <View style={styles.nameField}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>First Name</Text>
+                    <Text allowFontScaling={false} style={styles.inputLabel}>First Name</Text>
                     <TextInput
                       style={styles.textInput}
                       value={vm.firstName}
@@ -156,7 +157,7 @@ export default function EditUserScreen() {
                 </View>
                 <View style={styles.nameField}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Last Name</Text>
+                    <Text allowFontScaling={false} style={styles.inputLabel}>Last Name</Text>
                     <TextInput
                       style={styles.textInput}
                       value={vm.lastName}
@@ -170,7 +171,7 @@ export default function EditUserScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Role</Text>
+                <Text allowFontScaling={false} style={styles.inputLabel}>Role</Text>
                 <Dropdown
                   options={vm.roleOptions}
                   value={vm.role}
@@ -180,7 +181,7 @@ export default function EditUserScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Status</Text>
+                <Text allowFontScaling={false} style={styles.inputLabel}>Status</Text>
                 <Dropdown
                   options={vm.statusOptions}
                   value={vm.status}
@@ -193,7 +194,7 @@ export default function EditUserScreen() {
 
           {/* Account Access */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account Access</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Account Access</Text>
             <View style={styles.disableCard}>
               <View style={styles.disableInfo}>
                 <Ionicons
@@ -202,16 +203,16 @@ export default function EditUserScreen() {
                       ? "lock-closed-outline"
                       : "shield-checkmark-outline"
                   }
-                  size={20}
+                  size={scale(20)}
                   color={vm.user.is_disabled ? "#E53935" : "#4CAF50"}
                 />
                 <View style={styles.disableTextContainer}>
-                  <Text style={styles.disableTitle}>
+                  <Text allowFontScaling={false} style={styles.disableTitle}>
                     {vm.user.is_disabled
                       ? "Account Disabled"
                       : "Account Active"}
                   </Text>
-                  <Text style={styles.disableDescription}>
+                  <Text allowFontScaling={false} style={styles.disableDescription}>
                     {vm.user.is_disabled
                       ? "This user cannot log in or submit content. They will see a disabled message."
                       : "This user can log in and use the app normally."}
@@ -242,10 +243,11 @@ export default function EditUserScreen() {
                           ? "checkmark-circle-outline"
                           : "ban-outline"
                       }
-                      size={16}
+                      size={scale(16)}
                       color={vm.user.is_disabled ? "#4CAF50" : "#fff"}
                     />
                     <Text
+                      allowFontScaling={false}
                       style={[
                         styles.disableButtonText,
                         vm.user.is_disabled
@@ -267,7 +269,7 @@ export default function EditUserScreen() {
               style={[styles.button, styles.cancelButton]}
               onPress={() => router.back()}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -281,7 +283,7 @@ export default function EditUserScreen() {
               {vm.saving ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Text allowFontScaling={false} style={styles.saveButtonText}>Save Changes</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -305,8 +307,9 @@ const InfoRow = ({
   isLast?: boolean;
 }) => (
   <View style={[styles.infoRow, !isLast && styles.infoRowBorder]}>
-    <Text style={styles.infoLabel}>{label}</Text>
+    <Text allowFontScaling={false} style={styles.infoLabel}>{label}</Text>
     <Text
+      allowFontScaling={false}
       style={[
         styles.infoValue,
         valueColor ? { color: valueColor, fontWeight: "700" } : undefined,
@@ -329,12 +332,12 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: SPACING.md,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
-  errorIcon: { fontSize: 48, marginBottom: SPACING.md },
+  errorIcon: { fontSize: moderateScale(48), marginBottom: SPACING.md },
   errorText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.lg,
@@ -343,17 +346,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   backButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
-
-  // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -365,32 +366,28 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   headerWeb: {
-    paddingTop: SPACING.lg, // nav handles safe area
+    paddingTop: SPACING.lg,
   },
   headerBack: { padding: SPACING.xs },
   headerBackText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
-  headerSpacer: { width: 60 },
-
-  // â”€â”€ Web centering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  headerSpacer: { width: scale(60) },
   scrollView: { flex: 1 },
   scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
   webInner: { width: "100%" as any, maxWidth: 860, padding: SPACING.md },
   mobileInner: { flex: 1, padding: SPACING.md },
-
-  // â”€â”€ Disabled banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   disabledBanner: {
     backgroundColor: "#E53935",
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
     marginBottom: SPACING.md,
     flexDirection: "row",
@@ -400,14 +397,12 @@ const styles = StyleSheet.create({
   },
   disabledBannerText: {
     color: "#fff",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
-
-  // â”€â”€ Sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   section: { marginBottom: SPACING.lg },
   sectionTitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
     textTransform: "uppercase",
@@ -417,7 +412,7 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: "hidden",
@@ -430,11 +425,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   infoRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  infoLabel: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
-  infoValue: { fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: "500" },
+  infoLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
+  infoValue: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, fontWeight: "500" },
   editCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.md,
@@ -444,27 +439,25 @@ const styles = StyleSheet.create({
   nameField: { flex: 1 },
   inputGroup: { gap: SPACING.xs },
   inputLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "500",
     color: COLORS.textSecondary,
     marginLeft: SPACING.xs,
   },
   textInput: {
     backgroundColor: COLORS.background,
-    borderRadius: 6,
+    borderRadius: scale(6),
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 40,
+    height: scale(40),
   },
-
-  // â”€â”€ Disable/Enable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   disableCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.md,
@@ -477,15 +470,15 @@ const styles = StyleSheet.create({
   },
   disableTextContainer: { flex: 1 },
   disableTitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   disableDescription: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    lineHeight: 18,
+    lineHeight: moderateScale(18),
   },
   disableButton: {
     flexDirection: "row",
@@ -493,8 +486,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: SPACING.xs,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    height: 44,
+    borderRadius: scale(8),
+    height: scale(44),
   },
   disableButtonStyle: { backgroundColor: "#E53935" },
   enableButtonStyle: {
@@ -502,19 +495,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#4CAF50",
   },
-  disableButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  disableButtonText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
   disableButtonTextWhite: { color: "#fff" },
   enableButtonText: { color: "#4CAF50" },
-
-  // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   actions: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.md },
   button: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     justifyContent: "center",
-    height: 44,
+    height: scale(44),
   },
   cancelButton: {
     backgroundColor: COLORS.surface,
@@ -522,15 +513,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   cancelButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   saveButton: { backgroundColor: COLORS.primary },
-  saveButtonText: { fontSize: FONT_SIZES.sm, color: "#fff", fontWeight: "600" },
+  saveButtonText: { fontSize: moderateScale(FONT_SIZES.sm), color: "#fff", fontWeight: "600" },
   buttonDisabled: { opacity: 0.5 },
   bottomSpacer: { height: SPACING.xl * 2 },
 });
-
-
-

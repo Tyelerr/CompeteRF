@@ -21,6 +21,7 @@ import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
+import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { usePagination } from "../../../../src/viewmodels/hooks/use.pagination";
 import { DirectorSearchResult } from "../../../../src/viewmodels/useAdminTournaments";
 import {
@@ -73,10 +74,10 @@ const DeleteModal = ({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Delete Tournament</Text>
-          <Text style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
+          <Text allowFontScaling={false} style={styles.modalTitle}>Delete Tournament</Text>
+          <Text allowFontScaling={false} style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
 
-          <Text style={styles.modalLabel}>Deletion Reason *</Text>
+          <Text allowFontScaling={false} style={styles.modalLabel}>Deletion Reason *</Text>
           <TextInput
             style={styles.modalInput}
             placeholder="Enter reason for deletion..."
@@ -92,13 +93,13 @@ const DeleteModal = ({
               style={styles.modalButtonCancel}
               onPress={handleCancel}
             >
-              <Text style={styles.modalButtonCancelText}>Back</Text>
+              <Text allowFontScaling={false} style={styles.modalButtonCancelText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalButtonConfirm}
               onPress={handleConfirm}
             >
-              <Text style={styles.modalButtonConfirmText}>
+              <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>
                 Delete Tournament
               </Text>
             </TouchableOpacity>
@@ -123,9 +124,7 @@ export default function BarTournamentManagerScreen() {
   const [reassignModalVisible, setReassignModalVisible] = useState(false);
   const [tournamentToReassign, setTournamentToReassign] =
     useState<BarTournamentWithStats | null>(null);
-  const [directorResults, setDirectorResults] = useState<
-    DirectorSearchResult[]
-  >([]);
+  const [directorResults, setDirectorResults] = useState<DirectorSearchResult[]>([]);
   const [searchingDirectors, setSearchingDirectors] = useState(false);
 
   // Pagination
@@ -332,7 +331,7 @@ export default function BarTournamentManagerScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading tournaments...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading tournaments...</Text>
       </View>
     );
   }
@@ -372,11 +371,11 @@ export default function BarTournamentManagerScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>{"\u2190"} Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Tournament Manager</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>Tournament Manager</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             Managing tournaments at your venues
           </Text>
         </View>
@@ -386,7 +385,7 @@ export default function BarTournamentManagerScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search name, game type, venue, or director..."
@@ -436,6 +435,7 @@ export default function BarTournamentManagerScreen() {
               onPress={() => handleStatusFilter(tab.key)}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.tabText,
                   vm.statusFilter === tab.key && styles.tabTextActive,
@@ -451,7 +451,7 @@ export default function BarTournamentManagerScreen() {
 
       {/* Sort Options */}
       <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Sort:</Text>
+        <Text allowFontScaling={false} style={styles.sortLabel}>Sort:</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -467,6 +467,7 @@ export default function BarTournamentManagerScreen() {
               onPress={() => handleSortOption(option.key)}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.sortPillText,
                   vm.sortOption === option.key && styles.sortPillTextActive,
@@ -525,8 +526,8 @@ export default function BarTournamentManagerScreen() {
                 setTournamentToReassign(item);
                 setReassignModalVisible(true);
               }}
-      >
-              <Text style={styles.reassignBtnText}>
+            >
+              <Text allowFontScaling={false} style={styles.reassignBtnText}>
                 {"\uD83D\uDD04"} Reassign Director
               </Text>
             </TouchableOpacity>
@@ -571,7 +572,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -591,7 +592,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
@@ -599,19 +600,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -622,22 +623,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: 40,
+    height: scale(40),
   },
   searchIcon: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     marginRight: SPACING.sm,
     opacity: 0.6,
   },
   searchInput: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 40,
+    height: scale(40),
   },
   tabsContainer: {
     backgroundColor: COLORS.background,
@@ -648,7 +649,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 48,
+    minHeight: scale(48),
   },
   tab: {
     paddingHorizontal: SPACING.md,
@@ -661,7 +662,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -679,7 +680,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   sortLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginRight: SPACING.sm,
   },
@@ -690,7 +691,7 @@ const styles = StyleSheet.create({
   sortPill: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: scale(16),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -700,7 +701,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   sortPillText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   sortPillTextActive: {
@@ -716,7 +717,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF980020",
     borderWidth: 1,
     borderColor: "#FF9800",
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingVertical: SPACING.sm,
     alignItems: "center",
     marginTop: -SPACING.sm,
@@ -725,7 +726,7 @@ const styles = StyleSheet.create({
   },
   reassignBtnText: {
     color: "#FF9800",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   // Modal styles
@@ -738,37 +739,37 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.lg,
     width: "100%",
-    maxWidth: 400,
+    maxWidth: scale(400),
   },
   modalTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   modalSubtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
   },
   modalLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     marginBottom: SPACING.xs,
     fontWeight: "500",
   },
   modalInput: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 80,
+    minHeight: scale(80),
     textAlignVertical: "top",
   },
   modalButtons: {
@@ -779,7 +780,7 @@ const styles = StyleSheet.create({
   modalButtonCancel: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: COLORS.background,
     borderWidth: 1,
@@ -787,19 +788,20 @@ const styles = StyleSheet.create({
   },
   modalButtonCancelText: {
     color: COLORS.text,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   modalButtonConfirm: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: COLORS.error,
   },
   modalButtonConfirmText: {
     color: "#FFFFFF",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
 });
+

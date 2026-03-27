@@ -1,4 +1,4 @@
-// app/(tabs)/notification-preferences.tsx
+﻿// app/(tabs)/notification-preferences.tsx
 // ═══════════════════════════════════════════════════════════
 // Notification Preferences Screen
 // Users can toggle notification categories on/off
@@ -21,6 +21,7 @@ import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useNotificationPreferences } from "../../../src/viewmodels/hooks/use.notification.preferences";
 
 const isWeb = Platform.OS === "web";
@@ -48,7 +49,7 @@ export default function NotificationPreferencesScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading preferences...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading preferences...</Text>
       </View>
     );
   }
@@ -61,9 +62,9 @@ export default function NotificationPreferencesScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>NOTIFICATIONS</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>NOTIFICATIONS</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -85,16 +86,16 @@ export default function NotificationPreferencesScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.permissionContent}>
-              <Text style={styles.permissionIcon}>⚠️</Text>
+              <Text allowFontScaling={false} style={styles.permissionIcon}>⚠️</Text>
               <View style={styles.permissionTextContainer}>
-                <Text style={styles.permissionTitle}>
+                <Text allowFontScaling={false} style={styles.permissionTitle}>
                   Notifications are disabled
                 </Text>
-                <Text style={styles.permissionSubtitle}>
+                <Text allowFontScaling={false} style={styles.permissionSubtitle}>
                   Tap here to enable notifications in your device settings
                 </Text>
               </View>
-              <Text style={styles.permissionArrow}>→</Text>
+              <Text allowFontScaling={false} style={styles.permissionArrow}>→</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -102,22 +103,22 @@ export default function NotificationPreferencesScreen() {
         {/* Error State */}
         {error && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text allowFontScaling={false} style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={refresh}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text allowFontScaling={false} style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Description */}
-        <Text style={styles.sectionDescription}>
+        <Text allowFontScaling={false} style={styles.sectionDescription}>
           Choose which notifications you{"'"}d like to receive. You can change
           these
         </Text>
 
         {/* Notification Categories */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>NOTIFICATION CATEGORIES</Text>
+          <Text allowFontScaling={false} style={styles.sectionTitle}>NOTIFICATION CATEGORIES</Text>
 
           {categories.map((category, index) => {
             const isEnabled = preferences?.[category.key] ?? true;
@@ -133,10 +134,10 @@ export default function NotificationPreferencesScreen() {
               >
                 <View style={styles.preferenceInfo}>
                   <View style={styles.preferenceHeader}>
-                    <Text style={styles.preferenceIcon}>{category.icon}</Text>
-                    <Text style={styles.preferenceLabel}>{category.label}</Text>
+                    <Text allowFontScaling={false} style={styles.preferenceIcon}>{category.icon}</Text>
+                    <Text allowFontScaling={false} style={styles.preferenceLabel}>{category.label}</Text>
                   </View>
-                  <Text style={styles.preferenceDescription}>
+                  <Text allowFontScaling={false} style={styles.preferenceDescription}>
                     {category.description}
                   </Text>
                 </View>
@@ -159,7 +160,7 @@ export default function NotificationPreferencesScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+          <Text allowFontScaling={false} style={styles.sectionTitle}>QUICK ACTIONS</Text>
 
           <TouchableOpacity
             style={styles.quickActionRow}
@@ -168,8 +169,8 @@ export default function NotificationPreferencesScreen() {
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.quickActionIcon}>✅</Text>
-            <Text style={styles.quickActionText}>Enable all notifications</Text>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>✅</Text>
+            <Text allowFontScaling={false} style={styles.quickActionText}>Enable all notifications</Text>
           </TouchableOpacity>
 
           <View style={styles.quickActionDivider} />
@@ -181,8 +182,8 @@ export default function NotificationPreferencesScreen() {
             }}
             activeOpacity={0.7}
           >
-            <Text style={styles.quickActionIcon}>🔇</Text>
-            <Text style={[styles.quickActionText, { color: COLORS.error }]}>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>🔇</Text>
+            <Text allowFontScaling={false} style={[styles.quickActionText, { color: COLORS.error }]}>
               Disable all notifications
             </Text>
           </TouchableOpacity>
@@ -190,7 +191,7 @@ export default function NotificationPreferencesScreen() {
 
         {/* Info Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
+          <Text allowFontScaling={false} style={styles.footerText}>
             Even with notifications disabled, you can still view updates in the
             app. Push notifications require device permissions to be enabled.
           </Text>
@@ -199,7 +200,7 @@ export default function NotificationPreferencesScreen() {
               style={styles.deviceSettingsLink}
               onPress={openDeviceSettings}
             >
-              <Text style={styles.deviceSettingsText}>
+              <Text allowFontScaling={false} style={styles.deviceSettingsText}>
                 Open Device Settings →
               </Text>
             </TouchableOpacity>
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginTop: SPACING.md,
   },
@@ -251,15 +252,15 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.lg,
   },
   backButton: {
-    width: 70,
+    width: scale(70),
   },
   backButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
@@ -282,23 +283,23 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   permissionIcon: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
   },
   permissionTextContainer: {
     flex: 1,
   },
   permissionTitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
     color: "#92400E",
   },
   permissionSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: "#A16207",
-    marginTop: 2,
+    marginTop: scale(2),
   },
   permissionArrow: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     color: "#A16207",
   },
 
@@ -314,12 +315,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   errorText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.error,
     flex: 1,
   },
   retryText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -329,7 +330,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionDescription: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     lineHeight: 20,
     paddingHorizontal: SPACING.md,
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     color: COLORS.textMuted,
     letterSpacing: 1,
@@ -376,21 +377,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: SPACING.sm,
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   preferenceIcon: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
   },
   preferenceLabel: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   preferenceDescription: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     lineHeight: 16,
-    paddingLeft: 26, // align with label after icon
+    paddingLeft: scale(26),
   },
 
   // ── Quick Actions ──
@@ -407,10 +408,10 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
   },
   quickActionIcon: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
   },
   quickActionText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "500",
     color: COLORS.primary,
   },
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   footerText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     lineHeight: 18,
     textAlign: "center",
@@ -432,7 +433,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   deviceSettingsText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "600",
   },

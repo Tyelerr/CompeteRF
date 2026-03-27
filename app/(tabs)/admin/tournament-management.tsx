@@ -16,6 +16,7 @@ import {
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { usePagination } from "../../../src/viewmodels/hooks/use.pagination";
 import {
   AdminTournamentWithStats,
@@ -110,10 +111,10 @@ const CancelModal = ({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Cancel Tournament</Text>
-          <Text style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
+          <Text allowFontScaling={false} style={styles.modalTitle}>Cancel Tournament</Text>
+          <Text allowFontScaling={false} style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
 
-          <Text style={styles.modalLabel}>Cancellation Reason *</Text>
+          <Text allowFontScaling={false} style={styles.modalLabel}>Cancellation Reason *</Text>
           <TextInput
             style={styles.modalInput}
             placeholder="Enter reason for cancellation..."
@@ -129,13 +130,13 @@ const CancelModal = ({
               style={styles.modalButtonCancel}
               onPress={handleCancel}
             >
-              <Text style={styles.modalButtonCancelText}>Back</Text>
+              <Text allowFontScaling={false} style={styles.modalButtonCancelText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalButtonConfirm}
               onPress={handleConfirm}
             >
-              <Text style={styles.modalButtonConfirmText}>
+              <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>
                 Cancel Tournament
               </Text>
             </TouchableOpacity>
@@ -179,6 +180,7 @@ const TournamentCard = ({
       {/* Header: Name and Status */}
       <View style={styles.cardHeader}>
         <Text
+          allowFontScaling={false}
           style={[styles.tournamentName, isArchived && styles.textArchived]}
           numberOfLines={1}
         >
@@ -187,22 +189,22 @@ const TournamentCard = ({
         <View
           style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}
         >
-          <Text style={[styles.statusText, { color: statusColor }]}>
+          <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>
             {tournament.status}
           </Text>
         </View>
       </View>
 
       {/* Game Type & Format */}
-      <Text style={[styles.gameType, isArchived && styles.textArchived]}>
+      <Text allowFontScaling={false} style={[styles.gameType, isArchived && styles.textArchived]}>
         {tournament.game_type} •{" "}
         {tournament.tournament_format.replace("_", " ")}
       </Text>
 
       {/* Date & Time */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📅</Text>
-        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>📅</Text>
+        <Text allowFontScaling={false} style={[styles.infoText, isArchived && styles.textArchived]}>
           {formatDate(tournament.tournament_date)}
           {tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
         </Text>
@@ -210,8 +212,9 @@ const TournamentCard = ({
 
       {/* Venue */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📍</Text>
+        <Text allowFontScaling={false} style={styles.infoIcon}>📍</Text>
         <Text
+          allowFontScaling={false}
           style={[styles.infoText, isArchived && styles.textArchived]}
           numberOfLines={1}
         >
@@ -221,8 +224,8 @@ const TournamentCard = ({
 
       {/* Director */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>👤</Text>
-        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>👤</Text>
+        <Text allowFontScaling={false} style={[styles.infoText, isArchived && styles.textArchived]}>
           TD: {tournament.director_name}
         </Text>
       </View>
@@ -230,15 +233,15 @@ const TournamentCard = ({
       {/* Cancellation Info */}
       {isCancelled && tournament.cancelled_at && (
         <View style={styles.statusInfoBox}>
-          <Text style={styles.statusInfoTitle}>❌ Cancelled</Text>
-          <Text style={styles.statusInfoText}>
+          <Text allowFontScaling={false} style={styles.statusInfoTitle}>❌ Cancelled</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>
             By: {tournament.cancelled_by_name || "Unknown"}
           </Text>
-          <Text style={styles.statusInfoText}>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>
             On: {formatDateTime(tournament.cancelled_at)}
           </Text>
           {tournament.cancellation_reason && (
-            <Text style={styles.statusInfoReason}>
+            <Text allowFontScaling={false} style={styles.statusInfoReason}>
               Reason: {tournament.cancellation_reason}
             </Text>
           )}
@@ -248,11 +251,11 @@ const TournamentCard = ({
       {/* Archived Info */}
       {isArchived && tournament.archived_at && (
         <View style={[styles.statusInfoBox, styles.statusInfoBoxArchived]}>
-          <Text style={styles.statusInfoTitle}>📦 Archived</Text>
-          <Text style={styles.statusInfoText}>
+          <Text allowFontScaling={false} style={styles.statusInfoTitle}>📦 Archived</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>
             By: {tournament.archived_by_name || "Unknown"}
           </Text>
-          <Text style={styles.statusInfoText}>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>
             On: {formatDateTime(tournament.archived_at)}
           </Text>
         </View>
@@ -261,16 +264,16 @@ const TournamentCard = ({
       {/* Stats Row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={[styles.statValue, isArchived && styles.textArchived]}>
+          <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>
             {tournament.views_count}
           </Text>
-          <Text style={styles.statLabel}>Views</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Views</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={[styles.statValue, isArchived && styles.textArchived]}>
+          <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>
             {tournament.favorites_count}
           </Text>
-          <Text style={styles.statLabel}>Favorites</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
         </View>
       </View>
 
@@ -285,7 +288,7 @@ const TournamentCard = ({
           }}
           disabled={isProcessing}
         >
-          <Text style={styles.editButtonText}>✏️ Edit</Text>
+          <Text allowFontScaling={false} style={styles.editButtonText}>✏️ Edit</Text>
         </TouchableOpacity>
 
         {/* Active tournaments: Cancel or Archive */}
@@ -299,7 +302,7 @@ const TournamentCard = ({
               }}
               disabled={isProcessing}
             >
-              <Text style={styles.cancelButtonText}>
+              <Text allowFontScaling={false} style={styles.cancelButtonText}>
                 {isProcessing ? "..." : "❌ Cancel"}
               </Text>
             </TouchableOpacity>
@@ -311,7 +314,7 @@ const TournamentCard = ({
               }}
               disabled={isProcessing}
             >
-              <Text style={styles.archiveButtonText}>
+              <Text allowFontScaling={false} style={styles.archiveButtonText}>
                 {isProcessing ? "..." : "📦 Archive"}
               </Text>
             </TouchableOpacity>
@@ -328,7 +331,7 @@ const TournamentCard = ({
             }}
             disabled={isProcessing}
           >
-            <Text style={styles.archiveButtonText}>
+            <Text allowFontScaling={false} style={styles.archiveButtonText}>
               {isProcessing ? "..." : "📦 Archive"}
             </Text>
           </TouchableOpacity>
@@ -344,7 +347,7 @@ const TournamentCard = ({
             }}
             disabled={isProcessing}
           >
-            <Text style={styles.restoreButtonText}>
+            <Text allowFontScaling={false} style={styles.restoreButtonText}>
               {isProcessing ? "..." : "♻️ Restore"}
             </Text>
           </TouchableOpacity>
@@ -468,7 +471,7 @@ export default function TournamentManagementScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading tournaments...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading tournaments...</Text>
       </View>
     );
   }
@@ -492,11 +495,11 @@ export default function TournamentManagementScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>TOURNAMENT MANAGEMENT</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>TOURNAMENT MANAGEMENT</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             {vm.totalCount} total tournaments
           </Text>
         </View>
@@ -506,7 +509,7 @@ export default function TournamentManagementScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search name, game type, venue, or director..."
@@ -532,6 +535,7 @@ export default function TournamentManagementScreen() {
             onPress={() => handleStatusFilter("active")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 vm.statusFilter === "active" && styles.tabTextActive,
@@ -550,6 +554,7 @@ export default function TournamentManagementScreen() {
             onPress={() => handleStatusFilter("completed")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 vm.statusFilter === "completed" && styles.tabTextActive,
@@ -570,6 +575,7 @@ export default function TournamentManagementScreen() {
             onPress={() => handleStatusFilter("cancelled")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 vm.statusFilter === "cancelled" && styles.tabTextActive,
@@ -590,6 +596,7 @@ export default function TournamentManagementScreen() {
             onPress={() => handleStatusFilter("archived")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 vm.statusFilter === "archived" && styles.tabTextActive,
@@ -607,6 +614,7 @@ export default function TournamentManagementScreen() {
             onPress={() => handleStatusFilter("all")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 vm.statusFilter === "all" && styles.tabTextActive,
@@ -620,7 +628,7 @@ export default function TournamentManagementScreen() {
 
       {/* Sort Options */}
       <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Sort:</Text>
+        <Text allowFontScaling={false} style={styles.sortLabel}>Sort:</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -636,6 +644,7 @@ export default function TournamentManagementScreen() {
               onPress={() => handleSortOption(option.key)}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.sortPillText,
                   vm.sortOption === option.key && styles.sortPillTextActive,
@@ -725,7 +734,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -745,7 +754,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
@@ -753,19 +762,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -776,25 +785,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: 40,
+    height: scale(40),
   },
   searchIcon: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     marginRight: SPACING.sm,
     opacity: 0.6,
   },
   searchInput: {
     flex: 1,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    height: 40,
+    height: scale(40),
   },
   tabsWrapper: {
-    minHeight: 48,
+    minHeight: scale(48),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -802,7 +811,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     gap: SPACING.xs,
     alignItems: "center",
-    minHeight: 48,
+    minHeight: scale(48),
   },
   tab: {
     paddingHorizontal: SPACING.md,
@@ -814,7 +823,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -831,7 +840,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   sortLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginRight: SPACING.sm,
   },
@@ -842,7 +851,7 @@ const styles = StyleSheet.create({
   sortPill: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: scale(16),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -852,7 +861,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   sortPillText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   sortPillTextActive: {
@@ -865,7 +874,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -882,7 +891,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   tournamentName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
@@ -893,16 +902,16 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: scale(2),
+    borderRadius: scale(12),
   },
   statusText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textTransform: "capitalize",
   },
   gameType: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     marginBottom: SPACING.sm,
     textTransform: "capitalize",
@@ -910,21 +919,21 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   infoIcon: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     marginRight: SPACING.xs,
-    width: 20,
+    width: scale(20),
   },
   infoText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     flex: 1,
   },
   statusInfoBox: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
     marginTop: SPACING.sm,
     borderLeftWidth: 3,
@@ -934,19 +943,19 @@ const styles = StyleSheet.create({
     borderLeftColor: COLORS.textSecondary,
   },
   statusInfoTitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   statusInfoText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   statusInfoReason: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.text,
-    marginTop: 4,
+    marginTop: scale(4),
     fontStyle: "italic",
   },
   statsRow: {
@@ -961,12 +970,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   statLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   actionRow: {
@@ -981,11 +990,11 @@ const styles = StyleSheet.create({
   actionButton: {
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    minWidth: 80,
+    minWidth: scale(80),
   },
   editButton: {
     backgroundColor: COLORS.primary + "20",
@@ -993,7 +1002,7 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: COLORS.primary,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   cancelButton: {
@@ -1002,7 +1011,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: COLORS.error,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   archiveButton: {
@@ -1011,7 +1020,7 @@ const styles = StyleSheet.create({
   },
   archiveButtonText: {
     color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   restoreButton: {
@@ -1020,7 +1029,7 @@ const styles = StyleSheet.create({
   },
   restoreButtonText: {
     color: COLORS.success,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   // Modal styles
@@ -1033,37 +1042,37 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.lg,
     width: "100%",
-    maxWidth: 400,
+    maxWidth: scale(400),
   },
   modalTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   modalSubtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
   },
   modalLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     marginBottom: SPACING.xs,
     fontWeight: "500",
   },
   modalInput: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 80,
+    minHeight: scale(80),
     textAlignVertical: "top",
   },
   modalButtons: {
@@ -1074,7 +1083,7 @@ const styles = StyleSheet.create({
   modalButtonCancel: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: COLORS.background,
     borderWidth: 1,
@@ -1082,19 +1091,19 @@ const styles = StyleSheet.create({
   },
   modalButtonCancelText: {
     color: COLORS.text,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   modalButtonConfirm: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
     backgroundColor: COLORS.error,
   },
   modalButtonConfirmText: {
     color: "#FFFFFF",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
 });

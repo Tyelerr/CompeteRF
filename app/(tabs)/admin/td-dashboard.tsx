@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import React from "react";
 import {
   RefreshControl,
@@ -12,6 +12,7 @@ import {
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useTournamentDirectorDashboard } from "../../../src/viewmodels/useTournamentDirectorDashboard";
 
 const isWeb = Platform.OS === "web";
@@ -35,10 +36,10 @@ const StatsCard = ({
     onPress={onPress}
     activeOpacity={0.8}
   >
-    <Text style={styles.statsIcon}>{icon}</Text>
-    <Text style={styles.statsValue}>{value}</Text>
-    <Text style={styles.statsTitle}>{title}</Text>
-    {subtitle && <Text style={styles.statsSubtitle}>{subtitle}</Text>}
+    <Text allowFontScaling={false} style={styles.statsIcon}>{icon}</Text>
+    <Text allowFontScaling={false} style={styles.statsValue}>{value}</Text>
+    <Text allowFontScaling={false} style={styles.statsTitle}>{title}</Text>
+    {subtitle && <Text allowFontScaling={false} style={styles.statsSubtitle}>{subtitle}</Text>}
   </TouchableOpacity>
 );
 
@@ -54,10 +55,10 @@ const EventTypeBar = ({
 }) => (
   <View style={styles.eventTypeRow}>
     <View style={styles.eventTypeInfo}>
-      <Text style={styles.eventTypeName}>
+      <Text allowFontScaling={false} style={styles.eventTypeName}>
         {eventType.gameType.replace("_", " ")}
       </Text>
-      <Text style={styles.eventTypeCount}>{eventType.count}</Text>
+      <Text allowFontScaling={false} style={styles.eventTypeCount}>{eventType.count}</Text>
     </View>
     <View style={styles.progressBarContainer}>
       <View
@@ -78,10 +79,10 @@ const TimeFilterDropdown = ({
   onSelect: (filter: any) => void;
 }) => (
   <View style={styles.filterDropdown}>
-    <Text style={styles.filterLabel}>Analytics Period</Text>
+    <Text allowFontScaling={false} style={styles.filterLabel}>Analytics Period</Text>
     <View style={styles.filterButton}>
-      <Text style={styles.filterText}>{selectedFilter.label}</Text>
-      <Text style={styles.filterArrow}>▼</Text>
+      <Text allowFontScaling={false} style={styles.filterText}>{selectedFilter.label}</Text>
+      <Text allowFontScaling={false} style={styles.filterArrow}>▼</Text>
     </View>
     {/* Note: In real implementation, this would be a proper dropdown */}
   </View>
@@ -94,7 +95,7 @@ export default function TDDashboardScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
@@ -117,11 +118,11 @@ export default function TDDashboardScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>TD DASHBOARD</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>TD DASHBOARD</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             Manage your tournaments and venues
           </Text>
         </View>
@@ -149,7 +150,7 @@ export default function TDDashboardScreen() {
           onPress={() => router.push(vm.navigateToVenues() as any)}
         />
         <StatsCard
-          icon="❤ï¸"
+          icon="❤️"
           title="Favorites"
           value={vm.performanceMetrics.totalFavorites}
         />
@@ -167,7 +168,7 @@ export default function TDDashboardScreen() {
         <View style={styles.analyticsRow}>
           {/* Event Types */}
           <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsTitle}>Event Types</Text>
+            <Text allowFontScaling={false} style={styles.analyticsTitle}>Event Types</Text>
             <View style={styles.eventTypesList}>
               {vm.eventTypeStats.slice(0, 6).map(
                 (
@@ -186,23 +187,23 @@ export default function TDDashboardScreen() {
 
           {/* Performance */}
           <View style={styles.analyticsCard}>
-            <Text style={styles.analyticsTitle}>Performance</Text>
+            <Text allowFontScaling={false} style={styles.analyticsTitle}>Performance</Text>
             <View style={styles.performanceStats}>
               <View style={styles.performanceRow}>
-                <Text style={styles.performanceLabel}>Total Views</Text>
-                <Text style={styles.performanceValue}>
+                <Text allowFontScaling={false} style={styles.performanceLabel}>Total Views</Text>
+                <Text allowFontScaling={false} style={styles.performanceValue}>
                   {vm.performanceMetrics.totalViews}
                 </Text>
               </View>
               <View style={styles.performanceRow}>
-                <Text style={styles.performanceLabel}>Total Favorites</Text>
-                <Text style={styles.performanceValue}>
+                <Text allowFontScaling={false} style={styles.performanceLabel}>Total Favorites</Text>
+                <Text allowFontScaling={false} style={styles.performanceValue}>
                   {vm.performanceMetrics.totalFavorites}
                 </Text>
               </View>
               <View style={styles.performanceRow}>
-                <Text style={styles.performanceLabel}>Active Events</Text>
-                <Text style={[styles.performanceValue, styles.activeValue]}>
+                <Text allowFontScaling={false} style={styles.performanceLabel}>Active Events</Text>
+                <Text allowFontScaling={false} style={[styles.performanceValue, styles.activeValue]}>
                   {vm.performanceMetrics.activeEvents}
                 </Text>
               </View>
@@ -213,38 +214,38 @@ export default function TDDashboardScreen() {
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
-        <Text style={styles.quickActionsTitle}>Quick Actions</Text>
+        <Text allowFontScaling={false} style={styles.quickActionsTitle}>Quick Actions</Text>
         <View style={styles.quickActionsGrid}>
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push("/(tabs)/submit")}
           >
-            <Text style={styles.quickActionIcon}>➕</Text>
-            <Text style={styles.quickActionText}>Create Tournament</Text>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>➕</Text>
+            <Text allowFontScaling={false} style={styles.quickActionText}>Create Tournament</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push(vm.navigateToTournaments() as any)}
           >
-            <Text style={styles.quickActionIcon}>📊</Text>
-            <Text style={styles.quickActionText}>Manage Tournaments</Text>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>📊</Text>
+            <Text allowFontScaling={false} style={styles.quickActionText}>Manage Tournaments</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push(vm.navigateToVenues() as any)}
           >
-            <Text style={styles.quickActionIcon}>🏢</Text>
-            <Text style={styles.quickActionText}>View Venues</Text>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>🏢</Text>
+            <Text allowFontScaling={false} style={styles.quickActionText}>View Venues</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push("/(tabs)/profile")}
           >
-            <Text style={styles.quickActionIcon}>👤</Text>
-            <Text style={styles.quickActionText}>Profile</Text>
+            <Text allowFontScaling={false} style={styles.quickActionIcon}>👤</Text>
+            <Text allowFontScaling={false} style={styles.quickActionText}>Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -272,7 +273,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -292,7 +293,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -300,18 +301,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   statsGrid: {
     flexDirection: "row",
@@ -321,7 +322,7 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     alignItems: "center",
     width: "47%",
@@ -329,23 +330,23 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   statsIcon: {
-    fontSize: 32,
+    fontSize: moderateScale(32),
     marginBottom: SPACING.xs,
   },
   statsValue: {
-    fontSize: FONT_SIZES.xl * 1.5,
+    fontSize: moderateScale(FONT_SIZES.xl * 1.5),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   statsTitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
     textAlign: "center",
   },
   statsSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginTop: SPACING.xs,
@@ -355,7 +356,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   filterLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "600",
     marginBottom: SPACING.xs,
@@ -367,17 +368,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
   },
   filterText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     fontWeight: "600",
   },
   filterArrow: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   analyticsSection: {
@@ -391,13 +392,13 @@ const styles = StyleSheet.create({
   analyticsCard: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   analyticsTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.md,
@@ -414,30 +415,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    minWidth: 80,
+    minWidth: scale(80),
     marginRight: SPACING.sm,
   },
   eventTypeName: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     textTransform: "capitalize",
   },
   eventTypeCount: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
   },
   progressBarContainer: {
     flex: 1,
-    height: 8,
+    height: scale(8),
     backgroundColor: COLORS.border,
-    borderRadius: 4,
+    borderRadius: scale(4),
     overflow: "hidden",
   },
   progressBar: {
     height: "100%",
     backgroundColor: COLORS.primary,
-    borderRadius: 4,
+    borderRadius: scale(4),
   },
   performanceStats: {
     gap: SPACING.md,
@@ -448,11 +449,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   performanceLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   performanceValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -464,7 +465,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl * 2,
   },
   quickActionsTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.md,
@@ -476,7 +477,7 @@ const styles = StyleSheet.create({
   },
   quickActionButton: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     alignItems: "center",
     width: "47%",
@@ -484,11 +485,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   quickActionIcon: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     marginBottom: SPACING.xs,
   },
   quickActionText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
     textAlign: "center",

@@ -1,9 +1,7 @@
-// app/(tabs)/admin/bar-requests.tsx
-// ═══════════════════════════════════════════════════════════
+﻿// app/(tabs)/admin/bar-requests.tsx
 // Bar Requests Management Screen (Super Admin only)
-// View layer: displays bar requests with status management
-// ═══════════════════════════════════════════════════════════
 
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
   Alert,
@@ -46,7 +44,7 @@ export default function BarRequestsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.center}>
-        <Text style={styles.loadingText}>Loading requests...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading requests...</Text>
       </View>
     );
   }
@@ -65,37 +63,37 @@ export default function BarRequestsScreen() {
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>BAR REQUESTS</Text>
-        <Text style={styles.headerSubtitle}>Venue recommendations from users</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>BAR REQUESTS</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>Venue recommendations from users</Text>
       </View>
 
       {/* Stats Row */}
       <View style={styles.statsRow}>
         <View style={[styles.statBadge, { backgroundColor: STATUS_COLORS.pending + "20" }]}>
-          <Text style={[styles.statNumber, { color: STATUS_COLORS.pending }]}>
+          <Text allowFontScaling={false} style={[styles.statNumber, { color: STATUS_COLORS.pending }]}>
             {vm.pendingCount}
           </Text>
-          <Text style={styles.statLabel}>Pending</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Pending</Text>
         </View>
         <View style={[styles.statBadge, { backgroundColor: STATUS_COLORS.contacted + "20" }]}>
-          <Text style={[styles.statNumber, { color: STATUS_COLORS.contacted }]}>
+          <Text allowFontScaling={false} style={[styles.statNumber, { color: STATUS_COLORS.contacted }]}>
             {vm.contactedCount}
           </Text>
-          <Text style={styles.statLabel}>Contacted</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Contacted</Text>
         </View>
         <View style={[styles.statBadge, { backgroundColor: STATUS_COLORS.approved + "20" }]}>
-          <Text style={[styles.statNumber, { color: STATUS_COLORS.approved }]}>
+          <Text allowFontScaling={false} style={[styles.statNumber, { color: STATUS_COLORS.approved }]}>
             {vm.approvedCount}
           </Text>
-          <Text style={styles.statLabel}>Approved</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Approved</Text>
         </View>
         <View style={[styles.statBadge, { backgroundColor: STATUS_COLORS.rejected + "20" }]}>
-          <Text style={[styles.statNumber, { color: STATUS_COLORS.rejected }]}>
+          <Text allowFontScaling={false} style={[styles.statNumber, { color: STATUS_COLORS.rejected }]}>
             {vm.rejectedCount}
           </Text>
-          <Text style={styles.statLabel}>Rejected</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Rejected</Text>
         </View>
       </View>
 
@@ -116,6 +114,7 @@ export default function BarRequestsScreen() {
             onPress={() => vm.setStatusFilter(f.value)}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.filterTabText,
                 vm.statusFilter === f.value && styles.filterTabTextActive,
@@ -130,8 +129,8 @@ export default function BarRequestsScreen() {
       {/* Request Cards */}
       {vm.requests.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyText}>No requests found</Text>
+          <Text allowFontScaling={false} style={styles.emptyIcon}>{"\uD83D\uDCCB"}</Text>
+          <Text allowFontScaling={false} style={styles.emptyText}>No requests found</Text>
         </View>
       ) : (
         vm.requests.map((request) => (
@@ -147,10 +146,6 @@ export default function BarRequestsScreen() {
     </ScrollView>
   );
 }
-
-// ——————————————————————————————————————————
-// REQUEST CARD COMPONENT
-// ——————————————————————————————————————————
 
 const RequestCard = ({
   request,
@@ -209,6 +204,7 @@ const RequestCard = ({
           ]}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.statusText,
               { color: STATUS_COLORS[request.status] },
@@ -217,25 +213,25 @@ const RequestCard = ({
             {STATUS_LABELS[request.status]}
           </Text>
         </View>
-        <Text style={styles.timeAgo}>{timeAgo(request.created_at)}</Text>
+        <Text allowFontScaling={false} style={styles.timeAgo}>{timeAgo(request.created_at)}</Text>
       </View>
 
       {/* Venue Info */}
-      <Text style={styles.venueName}>{request.venue_name}</Text>
+      <Text allowFontScaling={false} style={styles.venueName}>{request.venue_name}</Text>
       {request.address && (
         <TouchableOpacity onPress={openMaps}>
-          <Text style={styles.venueDetail}>📍 {request.address}</Text>
+          <Text allowFontScaling={false} style={styles.venueDetail}>{"\uD83D\uDCCD"} {request.address}</Text>
         </TouchableOpacity>
       )}
       {request.city && request.state && (
-        <Text style={styles.venueDetail}>
+        <Text allowFontScaling={false} style={styles.venueDetail}>
           {request.city}, {request.state} {request.zip_code}
         </Text>
       )}
       {request.phone && (
         <TouchableOpacity onPress={callVenue}>
-          <Text style={[styles.venueDetail, { color: COLORS.primary }]}>
-            📞 {request.phone}
+          <Text allowFontScaling={false} style={[styles.venueDetail, { color: COLORS.primary }]}>
+            {"\uD83D\uDCDE"} {request.phone}
           </Text>
         </TouchableOpacity>
       )}
@@ -243,8 +239,8 @@ const RequestCard = ({
       {/* Submitter Notes */}
       {request.submitter_notes && (
         <View style={styles.notesBox}>
-          <Text style={styles.notesLabel}>User notes:</Text>
-          <Text style={styles.notesText}>{request.submitter_notes}</Text>
+          <Text allowFontScaling={false} style={styles.notesLabel}>User notes:</Text>
+          <Text allowFontScaling={false} style={styles.notesText}>{request.submitter_notes}</Text>
         </View>
       )}
 
@@ -253,8 +249,8 @@ const RequestCard = ({
         style={styles.adminNotesToggle}
         onPress={() => setShowNotes(!showNotes)}
       >
-        <Text style={styles.adminNotesToggleText}>
-          {showNotes ? "Hide Admin Notes ▲" : "Admin Notes ▼"}
+        <Text allowFontScaling={false} style={styles.adminNotesToggleText}>
+          {showNotes ? "\Hide Admin Notes \u25B2" : "Admin Notes \u25BC"}
         </Text>
       </TouchableOpacity>
 
@@ -279,13 +275,13 @@ const RequestCard = ({
               style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.contacted }]}
               onPress={() => handleStatusChange("contacted")}
             >
-              <Text style={styles.actionBtnText}>Contacted</Text>
+              <Text allowFontScaling={false} style={styles.actionBtnText}>Contacted</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.rejected }]}
               onPress={() => handleStatusChange("rejected")}
             >
-              <Text style={styles.actionBtnText}>Reject</Text>
+              <Text allowFontScaling={false} style={styles.actionBtnText}>Reject</Text>
             </TouchableOpacity>
           </>
         )}
@@ -295,13 +291,13 @@ const RequestCard = ({
               style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.approved }]}
               onPress={() => handleStatusChange("approved")}
             >
-              <Text style={styles.actionBtnText}>Approve</Text>
+              <Text allowFontScaling={false} style={styles.actionBtnText}>Approve</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.rejected }]}
               onPress={() => handleStatusChange("rejected")}
             >
-              <Text style={styles.actionBtnText}>Reject</Text>
+              <Text allowFontScaling={false} style={styles.actionBtnText}>Reject</Text>
             </TouchableOpacity>
           </>
         )}
@@ -310,7 +306,7 @@ const RequestCard = ({
             style={[styles.actionBtn, { backgroundColor: STATUS_COLORS.pending }]}
             onPress={() => handleStatusChange("pending")}
           >
-            <Text style={styles.actionBtnText}>Reopen</Text>
+            <Text allowFontScaling={false} style={styles.actionBtnText}>Reopen</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -318,12 +314,7 @@ const RequestCard = ({
   );
 };
 
-// ——————————————————————————————————————————
-// STYLES
-// ——————————————————————————————————————————
-
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -341,7 +332,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
   },
   header: {
     paddingHorizontal: SPACING.lg,
@@ -355,18 +346,18 @@ const styles = StyleSheet.create({
   },
   backText: {
     color: COLORS.primary,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     marginBottom: SPACING.sm,
   },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -377,21 +368,21 @@ const styles = StyleSheet.create({
   },
   statBadge: {
     flex: 1,
-    borderRadius: 10,
+    borderRadius: scale(10),
     padding: SPACING.sm,
     alignItems: "center",
   },
   statNumber: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: moderateScale(10),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   filtersScroll: {
-    maxHeight: 50,
+    maxHeight: scale(50),
   },
   filtersContainer: {
     paddingHorizontal: SPACING.md,
@@ -400,7 +391,7 @@ const styles = StyleSheet.create({
   filterTab: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    borderRadius: 20,
+    borderRadius: scale(20),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -410,7 +401,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   filterTabText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
@@ -422,18 +413,18 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xl * 2,
   },
   emptyIcon: {
-    fontSize: 40,
+    fontSize: moderateScale(40),
     marginBottom: SPACING.sm,
   },
   emptyText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textMuted,
   },
   card: {
     backgroundColor: COLORS.surface,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.sm,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -446,63 +437,63 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingVertical: scale(4),
+    borderRadius: scale(6),
   },
   statusText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     textTransform: "uppercase",
   },
   timeAgo: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
   },
   venueName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   venueDetail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   notesBox: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
     marginTop: SPACING.sm,
   },
   notesLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   notesText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
   },
   adminNotesToggle: {
     marginTop: SPACING.sm,
   },
   adminNotesToggleText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "600",
   },
   adminNotesInput: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     padding: SPACING.sm,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
     marginTop: SPACING.xs,
-    minHeight: 50,
+    minHeight: scale(50),
   },
   actions: {
     flexDirection: "row",
@@ -512,12 +503,14 @@ const styles = StyleSheet.create({
   actionBtn: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: scale(8),
     alignItems: "center",
   },
   actionBtnText: {
     color: "#fff",
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
   },
 });
+
+

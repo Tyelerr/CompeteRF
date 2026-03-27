@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,13 +15,14 @@ import {
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
+import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useTournamentDirectorManager } from "../../../../src/viewmodels/useTournamentDirectorManager";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { TournamentCard } from "../../../../src/views/components/tournament";
 
 const isWeb = Platform.OS === "web";
 
-const PAGE_SIZE = 10; // 10 tournaments per page
+const PAGE_SIZE = 10;
 
 const StatusTab = ({
   label,
@@ -38,14 +39,10 @@ const StatusTab = ({
     style={[styles.statusTab, isActive && styles.statusTabActive]}
     onPress={onPress}
   >
-    <Text
-      style={[styles.statusTabText, isActive && styles.statusTabTextActive]}
-    >
+    <Text allowFontScaling={false} style={[styles.statusTabText, isActive && styles.statusTabTextActive]}>
       {label}
     </Text>
-    <Text
-      style={[styles.statusTabCount, isActive && styles.statusTabCountActive]}
-    >
+    <Text allowFontScaling={false} style={[styles.statusTabCount, isActive && styles.statusTabCountActive]}>
       {count}
     </Text>
   </TouchableOpacity>
@@ -55,53 +52,32 @@ export default function TDTournamentsScreen() {
   const router = useRouter();
   const vm = useTournamentDirectorManager();
 
-  // Page-based pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [paginatedTournaments, setPaginatedTournaments] = useState<any[]>([]);
   const [totalPages, setTotalPages] = useState(1);
-  const [processingTournamentId, setProcessingTournamentId] = useState<
-    number | null
-  >(null);
+  const [processingTournamentId, setProcessingTournamentId] = useState<number | null>(null);
 
-  // Update pagination when tournaments change
   useEffect(() => {
-    // Reset to page 1 when filters change
     const newCurrentPage = 1;
     setCurrentPage(newCurrentPage);
-
-    // Calculate total pages
     const newTotalPages = Math.ceil(vm.tournaments.length / PAGE_SIZE);
     setTotalPages(newTotalPages);
-
-    // Get current page data
     const startIndex = (newCurrentPage - 1) * PAGE_SIZE;
     const endIndex = startIndex + PAGE_SIZE;
-    const pageData = vm.tournaments.slice(startIndex, endIndex);
+    setPaginatedTournaments(vm.tournaments.slice(startIndex, endIndex));
+  }, [vm.tournaments, vm.statusFilter, vm.searchQuery, vm.sortOption, vm.sortDirection]);
 
-    setPaginatedTournaments(pageData);
-  }, [
-    vm.tournaments,
-    vm.statusFilter,
-    vm.searchQuery,
-    vm.sortOption,
-    vm.sortDirection,
-  ]);
-
-  // Handle page navigation
   const goToPage = (page: number) => {
     if (page < 1 || page > totalPages) return;
-
     setCurrentPage(page);
     const startIndex = (page - 1) * PAGE_SIZE;
     const endIndex = startIndex + PAGE_SIZE;
-    const pageData = vm.tournaments.slice(startIndex, endIndex);
-    setPaginatedTournaments(pageData);
+    setPaginatedTournaments(vm.tournaments.slice(startIndex, endIndex));
   };
 
   const goToNextPage = () => goToPage(currentPage + 1);
   const goToPreviousPage = () => goToPage(currentPage - 1);
 
-  // Enhanced action handlers
   const handleEdit = (tournament: any) => {
     router.push(`/(tabs)/admin/edit-tournament/${tournament.id}` as any);
   };
@@ -118,10 +94,7 @@ export default function TDTournamentsScreen() {
           onPress: async () => {
             setProcessingTournamentId(tournament.id);
             try {
-              const success = await vm.cancelTournament(
-                tournament.id,
-                "Cancelled by director",
-              );
+              const success = await vm.cancelTournament(tournament.id, "Cancelled by director");
               if (success) {
                 Alert.alert("Success", "Tournament cancelled.");
               } else {
@@ -172,16 +145,11 @@ export default function TDTournamentsScreen() {
     }
   };
 
-  // Handle tournament card tap - show full tournament details
   const handleTournamentPress = (tournament: any) => {
-    // Show alert with full tournament info (like billiards page detail view)
     const formatDate = (dateStr: string) => {
       const date = new Date(dateStr);
       return date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
+        weekday: "short", month: "short", day: "numeric", year: "numeric",
       });
     };
 
@@ -196,42 +164,20 @@ export default function TDTournamentsScreen() {
 
     const getStatusEmoji = (status: string) => {
       switch (status) {
-        case "active":
-          return "▶️";
-        case "completed":
-          return "✅";
-        case "cancelled":
-          return "❌";
-        case "archived":
-          return "📁";
-        default:
-          return "🏆";
+        case "active": return "\u25B6\uFE0F";
+        case "completed": return "\u2705";
+        case "cancelled": return "\u274C";
+        case "archived": return "\uD83D\uDCC1";
+        default: return "\uD83C\uDFC6";
       }
     };
 
     Alert.alert(
       `${getStatusEmoji(tournament.status)} ${tournament.name}`,
-      `ID: ${tournament.id}
-
-📅 Date: ${formatDate(tournament.tournament_date)}
-🕐 Time: ${formatTime(tournament.start_time)}
-🎱 Game: ${tournament.game_type}
-🏆 Format: ${tournament.tournament_format}
-🏢 Venue: ${tournament.venue_name}
-👤 Director: ${tournament.director_name}
-
-📊 Stats:
-• Views: ${tournament.views_count}
-• Favorites: ${tournament.favorites_count}
-• Status: ${tournament.status.charAt(0).toUpperCase() + tournament.status.slice(1)}
-
-${tournament.description || "No additional details available."}`,
+      `ID: ${tournament.id}\n\n\uD83D\uDCC5 Date: ${formatDate(tournament.tournament_date)}\n\uD83D\uDD55 Time: ${formatTime(tournament.start_time)}\n\uD83C\uDFB1 Game: ${tournament.game_type}\n\uD83C\uDFC6 Format: ${tournament.tournament_format}\n\uD83C\uDFE2 Venue: ${tournament.venue_name}\n\uD83D\uDC64 Director: ${tournament.director_name}\n\n\uD83D\uDCCA Stats:\n\u2022 Views: ${tournament.views_count}\n\u2022 Favorites: ${tournament.favorites_count}\n\u2022 Status: ${tournament.status.charAt(0).toUpperCase() + tournament.status.slice(1)}\n\n${tournament.description || "No additional details available."}`,
       [
         { text: "Close", style: "cancel" },
-        {
-          text: "Edit",
-          onPress: () => handleEdit(tournament),
-        },
+        { text: "Edit", onPress: () => handleEdit(tournament) },
       ],
     );
   };
@@ -240,7 +186,7 @@ ${tournament.description || "No additional details available."}`,
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading tournaments...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading tournaments...</Text>
       </View>
     );
   }
@@ -262,64 +208,38 @@ ${tournament.description || "No additional details available."}`,
 
   const getEmptyStateMessage = () => {
     if (vm.searchQuery) {
-      return {
-        message: "No tournaments match your search",
-        submessage: `Try adjusting your search terms.`,
-      };
+      return { message: "No tournaments match your search", submessage: "Try adjusting your search terms." };
     }
-
     switch (vm.statusFilter) {
-      case "active":
-        return {
-          message: "No active tournaments",
-          submessage: "Your active tournaments will appear here.",
-        };
-      case "completed":
-        return {
-          message: "No completed tournaments",
-          submessage: "Finished tournaments will appear here.",
-        };
-      case "archived":
-        return {
-          message: "No archived tournaments",
-          submessage: "Archived tournaments will appear here.",
-        };
-      default:
-        return {
-          message: "No tournaments found",
-          submessage: "Your tournaments will appear here.",
-        };
+      case "active": return { message: "No active tournaments", submessage: "Your active tournaments will appear here." };
+      case "completed": return { message: "No completed tournaments", submessage: "Finished tournaments will appear here." };
+      case "archived": return { message: "No archived tournaments", submessage: "Archived tournaments will appear here." };
+      default: return { message: "No tournaments found", submessage: "Your tournaments will appear here." };
     }
   };
 
   const emptyState = getEmptyStateMessage();
-
-  // Calculate display range
   const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
   const endIndex = Math.min(currentPage * PAGE_SIZE, vm.tournaments.length);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>My Tournaments</Text>
-          <Text style={styles.headerSubtitle}>Tap cards for full details</Text>
+          <Text allowFontScaling={false} style={styles.headerTitle}>My Tournaments</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap cards for full details</Text>
         </View>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
           <TextInput
+            allowFontScaling={false}
             style={styles.searchInput}
             placeholder="Search tournaments..."
             placeholderTextColor={COLORS.textMuted}
@@ -327,134 +247,71 @@ ${tournament.description || "No additional details available."}`,
             onChangeText={vm.setSearchQuery}
           />
           {vm.searchQuery.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearSearchButton}
-              onPress={() => vm.setSearchQuery("")}
-            >
-              <Text style={styles.clearSearchText}>✕</Text>
+            <TouchableOpacity style={styles.clearSearchButton} onPress={() => vm.setSearchQuery("")}>
+              <Text allowFontScaling={false} style={styles.clearSearchText}>{"\u2715"}</Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Filters Row */}
       <View style={styles.filtersRow}>
-        {/* Status Tabs */}
         <View style={styles.statusTabs}>
-          <StatusTab
-            label="Active"
-            count={vm.statusCounts.active}
-            isActive={vm.statusFilter === "active"}
-            onPress={() => vm.setStatusFilter("active")}
-          />
-          <StatusTab
-            label="Done"
-            count={vm.statusCounts.completed}
-            isActive={vm.statusFilter === "completed"}
-            onPress={() => vm.setStatusFilter("completed")}
-          />
-          <StatusTab
-            label="Archived"
-            count={vm.statusCounts.archived}
-            isActive={vm.statusFilter === "archived"}
-            onPress={() => vm.setStatusFilter("archived")}
-          />
-          <StatusTab
-            label="All"
-            count={vm.statusCounts.all}
-            isActive={vm.statusFilter === "all"}
-            onPress={() => vm.setStatusFilter("all")}
-          />
+          <StatusTab label="Active" count={vm.statusCounts.active} isActive={vm.statusFilter === "active"} onPress={() => vm.setStatusFilter("active")} />
+          <StatusTab label="Done" count={vm.statusCounts.completed} isActive={vm.statusFilter === "completed"} onPress={() => vm.setStatusFilter("completed")} />
+          <StatusTab label="Archived" count={vm.statusCounts.archived} isActive={vm.statusFilter === "archived"} onPress={() => vm.setStatusFilter("archived")} />
+          <StatusTab label="All" count={vm.statusCounts.all} isActive={vm.statusFilter === "all"} onPress={() => vm.setStatusFilter("all")} />
         </View>
-
-        {/* Toggle Sort Options */}
         <View style={styles.sortContainer}>
           <TouchableOpacity
-            style={[
-              styles.sortButton,
-              vm.sortOption === "date" && styles.sortButtonActive,
-            ]}
+            style={[styles.sortButton, vm.sortOption === "date" && styles.sortButtonActive]}
             onPress={() => vm.handleSortOptionChange("date")}
           >
-            <Text
-              style={[
-                styles.sortButtonText,
-                vm.sortOption === "date" && styles.sortButtonTextActive,
-              ]}
-            >
+            <Text allowFontScaling={false} style={[styles.sortButtonText, vm.sortOption === "date" && styles.sortButtonTextActive]}>
               {vm.getSortLabel("date")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.sortButton,
-              vm.sortOption === "name" && styles.sortButtonActive,
-            ]}
+            style={[styles.sortButton, vm.sortOption === "name" && styles.sortButtonActive]}
             onPress={() => vm.handleSortOptionChange("name")}
           >
-            <Text
-              style={[
-                styles.sortButtonText,
-                vm.sortOption === "name" && styles.sortButtonTextActive,
-              ]}
-            >
+            <Text allowFontScaling={false} style={[styles.sortButtonText, vm.sortOption === "name" && styles.sortButtonTextActive]}>
               {vm.getSortLabel("name")}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Pagination Info - Like Billiards Page */}
       {vm.tournaments.length > 0 && (
         <View style={styles.paginationInfo}>
-          <Text style={styles.paginationInfoText}>
-            Total count: {vm.tournaments.length} Displaying {startIndex}-
-            {endIndex}
+          <Text allowFontScaling={false} style={styles.paginationInfoText}>
+            Total count: {vm.tournaments.length} Displaying {startIndex}-{endIndex}
           </Text>
           <View style={styles.paginationControls}>
             <TouchableOpacity
-              style={[
-                styles.paginationButton,
-                currentPage === 1 && styles.paginationButtonDisabled,
-              ]}
+              style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
               onPress={goToPreviousPage}
               disabled={currentPage === 1}
             >
-              <Text
-                style={[
-                  styles.paginationButtonText,
-                  currentPage === 1 && styles.paginationButtonTextDisabled,
-                ]}
-              >
-                &lt;
+              <Text allowFontScaling={false} style={[styles.paginationButtonText, currentPage === 1 && styles.paginationButtonTextDisabled]}>
+                {"<"}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.paginationPageText}>
+            <Text allowFontScaling={false} style={styles.paginationPageText}>
               Page {currentPage} / {totalPages}
             </Text>
             <TouchableOpacity
-              style={[
-                styles.paginationButton,
-                currentPage === totalPages && styles.paginationButtonDisabled,
-              ]}
+              style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
               onPress={goToNextPage}
               disabled={currentPage === totalPages}
             >
-              <Text
-                style={[
-                  styles.paginationButtonText,
-                  currentPage === totalPages &&
-                    styles.paginationButtonTextDisabled,
-                ]}
-              >
-                &gt;
+              <Text allowFontScaling={false} style={[styles.paginationButtonText, currentPage === totalPages && styles.paginationButtonTextDisabled]}>
+                {">"}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* Tournaments List */}
       <FlatList
         data={paginatedTournaments}
         renderItem={renderTournament}
@@ -462,17 +319,10 @@ ${tournament.description || "No additional details available."}`,
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}/>
+            <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
           )
         }
-        ListEmptyComponent={
-          <EmptyState
-            message={emptyState.message}
-            submessage={emptyState.submessage}
-          />
-        }
+        ListEmptyComponent={<EmptyState message={emptyState.message} submessage={emptyState.submessage} />}
         showsVerticalScrollIndicator={false}
         scrollEnabled={paginatedTournaments.length > 0}
       />
@@ -481,216 +331,71 @@ ${tournament.description || "No additional details available."}`,
 }
 
 const styles = StyleSheet.create({
-  // Web centering
-  scrollContentWeb: {
-    alignItems: "center",
-    paddingBottom: SPACING.xl,
-  },
+  scrollContentWeb: { alignItems: "center", paddingBottom: scale(SPACING.xl) },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  centerContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.md,
-  },
+  centerContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
+  loadingText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary, marginTop: scale(SPACING.md) },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingHorizontal: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl + SPACING.lg),
+    paddingBottom: scale(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.xs,
-    borderRadius: 6,
-    backgroundColor: COLORS.background,
-  },
-  backText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  headerCenter: {
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  headerSubtitle: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  placeholder: {
-    width: 50,
-  },
-  searchContainer: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  searchInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-  },
-  searchIcon: {
-    fontSize: FONT_SIZES.sm,
-    marginRight: SPACING.xs,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: SPACING.xs,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-  },
-  clearSearchButton: {
-    padding: SPACING.xs,
-  },
-  clearSearchText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textMuted,
-  },
-  filtersRow: {
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.sm,
-  },
+  headerWeb: { paddingTop: scale(SPACING.lg) },
+  backButton: { padding: scale(SPACING.xs), borderRadius: scale(6), backgroundColor: COLORS.background },
+  backText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
+  headerCenter: { alignItems: "center" },
+  headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2) },
+  placeholder: { width: scale(50) },
+  searchContainer: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), backgroundColor: COLORS.background },
+  searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(8), paddingHorizontal: scale(SPACING.sm) },
+  searchIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs) },
+  searchInput: { flex: 1, paddingVertical: scale(SPACING.xs), fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text },
+  clearSearchButton: { padding: scale(SPACING.xs) },
+  clearSearchText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
+  filtersRow: { paddingHorizontal: scale(SPACING.md), paddingBottom: scale(SPACING.sm) },
   statusTabs: {
     flexDirection: "row",
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: SPACING.xs,
-    marginBottom: SPACING.sm,
-    gap: SPACING.xs,
+    borderRadius: scale(8),
+    padding: scale(SPACING.xs),
+    marginBottom: scale(SPACING.sm),
+    gap: scale(SPACING.xs),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 1,
   },
-  statusTab: {
-    flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.xs,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  statusTabActive: {
-    backgroundColor: COLORS.primary,
-  },
-  statusTabText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  statusTabTextActive: {
-    color: COLORS.white,
-  },
-  statusTabCount: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    marginTop: 1,
-  },
-  statusTabCountActive: {
-    color: COLORS.white,
-    opacity: 0.9,
-  },
-  sortContainer: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-    justifyContent: "center",
-  },
-  sortButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 6,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sortButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  sortButtonText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-  },
-  sortButtonTextActive: {
-    color: COLORS.white,
-  },
-  paginationInfo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    backgroundColor: COLORS.background,
-  },
-  paginationInfoText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    fontWeight: "500",
-  },
-  paginationControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SPACING.sm,
-  },
-  paginationButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  paginationButtonDisabled: {
-    opacity: 0.5,
-  },
-  paginationButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  paginationButtonTextDisabled: {
-    color: COLORS.textMuted,
-  },
-  paginationPageText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  listContent: {
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.xl,
-  },
-  cardContainer: {
-    marginBottom: SPACING.sm,
-  },
+  statusTab: { flex: 1, paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.xs), borderRadius: scale(6), alignItems: "center" },
+  statusTabActive: { backgroundColor: COLORS.primary },
+  statusTabText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.textSecondary },
+  statusTabTextActive: { color: COLORS.white },
+  statusTabCount: { fontSize: moderateScale(10), color: COLORS.textMuted, marginTop: scale(1) },
+  statusTabCountActive: { color: COLORS.white, opacity: 0.9 },
+  sortContainer: { flexDirection: "row", gap: scale(SPACING.sm), justifyContent: "center" },
+  sortButton: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), borderRadius: scale(6), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  sortButtonActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  sortButtonText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.textSecondary },
+  sortButtonTextActive: { color: COLORS.white },
+  paginationInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), backgroundColor: COLORS.background },
+  paginationInfoText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "500" },
+  paginationControls: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.sm) },
+  paginationButton: { width: scale(32), height: scale(32), borderRadius: scale(4), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, justifyContent: "center", alignItems: "center" },
+  paginationButtonDisabled: { opacity: 0.5 },
+  paginationButtonText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text },
+  paginationButtonTextDisabled: { color: COLORS.textMuted },
+  paginationPageText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, fontWeight: "500" },
+  listContent: { paddingHorizontal: scale(SPACING.md), paddingBottom: scale(SPACING.xl) },
+  cardContainer: { marginBottom: scale(SPACING.sm) },
 });

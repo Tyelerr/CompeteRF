@@ -21,6 +21,7 @@ import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { moderateScale, scale } from "../../src/utils/scaling";
 import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
@@ -139,8 +140,8 @@ const LoggedOutView = ({ router }: { router: any }) => {
   return (
     <View style={styles.container}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <Text style={styles.headerTitle} allowFontScaling={false}>PROFILE</Text>
-        <Text style={styles.headerSubtitle} allowFontScaling={false}>
+        <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>
           View and manage your tournament history
         </Text>
       </View>
@@ -212,7 +213,7 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
-  
+
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
 
@@ -429,8 +430,8 @@ export default function ProfileScreen() {
       >
         <View style={isWeb ? styles.webInner : styles.mobileInner}>
           <View style={[styles.header, isWeb && styles.headerWeb]}>
-            <Text style={styles.headerTitle} allowFontScaling={false}>PROFILE</Text>
-            <Text style={styles.headerSubtitle} allowFontScaling={false}>
+            <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
+            <Text allowFontScaling={false} style={styles.headerSubtitle}>
               View and manage your tournament history
             </Text>
           </View>
@@ -440,11 +441,11 @@ export default function ProfileScreen() {
               style={styles.messagesFloatingButton}
               onPress={() => setInboxVisible(true)}
             >
-              <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
-              <Text style={styles.messagesFloatingText} allowFontScaling={false}>Messages</Text>
+              <Text allowFontScaling={false} style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
+              <Text allowFontScaling={false} style={styles.messagesFloatingText}>Messages</Text>
               {unreadCount > 0 && (
                 <View style={styles.messagesUnreadBadge}>
-                  <Text style={styles.messagesUnreadText} allowFontScaling={false}>{unreadCount}</Text>
+                  <Text allowFontScaling={false} style={styles.messagesUnreadText}>{unreadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -478,15 +479,15 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.name} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.name}>
                   {profile?.user_name
                     ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
                     : user.email?.split("@")[0] || "Player"}
                 </Text>
-                <Text style={styles.playerID} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.playerID}>
                   {profile?.id_auto ? generatePlayerID(profile.id_auto) : "Loading..."}
                 </Text>
-                <Text style={styles.memberSince} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.memberSince}>
                   Member since {formatMemberSince(profile?.created_at || user.created_at)}
                 </Text>
               </View>
@@ -498,7 +499,7 @@ export default function ProfileScreen() {
                 style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setEditProfileVisible(true)}
               >
-                <Text style={styles.editButtonText} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.editButtonText}>
                   {"\u2699\uFE0F"} Edit Profile
                 </Text>
               </TouchableOpacity>
@@ -506,7 +507,7 @@ export default function ProfileScreen() {
                 style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setInboxVisible(true)}
               >
-                <Text style={styles.notificationButtonText} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.notificationButtonText}>
                   {"\uD83D\uDD14"} Notifications
                 </Text>
               </TouchableOpacity>
@@ -514,7 +515,7 @@ export default function ProfileScreen() {
                 style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]}
                 onPress={handleLogout}
               >
-                <Text style={styles.signOutButtonText} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.signOutButtonText}>
                   {"\uD83D\uDEAA"} Sign Out
                 </Text>
               </TouchableOpacity>
@@ -524,20 +525,20 @@ export default function ProfileScreen() {
               <View style={styles.userDetails}>
                 {profile.home_state && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel} allowFontScaling={false}>Home State</Text>
-                    <Text style={styles.detailValue} allowFontScaling={false}>{profile.home_state}</Text>
+                    <Text allowFontScaling={false} style={styles.detailLabel}>Home State</Text>
+                    <Text allowFontScaling={false} style={styles.detailValue}>{profile.home_state}</Text>
                   </View>
                 )}
                 {profile.favorite_player && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel} allowFontScaling={false}>Favorite Player</Text>
-                    <Text style={styles.detailValue} allowFontScaling={false}>{profile.favorite_player}</Text>
+                    <Text allowFontScaling={false} style={styles.detailLabel}>Favorite Player</Text>
+                    <Text allowFontScaling={false} style={styles.detailValue}>{profile.favorite_player}</Text>
                   </View>
                 )}
                 {profile.preferred_game && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel} allowFontScaling={false}>Favorite Game</Text>
-                    <Text style={styles.detailValue} allowFontScaling={false}>{formatGameName(profile.preferred_game)}</Text>
+                    <Text allowFontScaling={false} style={styles.detailLabel}>Favorite Game</Text>
+                    <Text allowFontScaling={false} style={styles.detailValue}>{formatGameName(profile.preferred_game)}</Text>
                   </View>
                 )}
               </View>
@@ -549,7 +550,7 @@ export default function ProfileScreen() {
               style={[styles.navButton, styles.favoritesButton]}
               onPress={() => {}}
             >
-              <Text style={styles.navButtonText} allowFontScaling={false}>
+              <Text allowFontScaling={false} style={styles.navButtonText}>
                 {"\u2764\uFE0F"} Favorite Tournaments
               </Text>
             </TouchableOpacity>
@@ -557,7 +558,7 @@ export default function ProfileScreen() {
               style={[styles.navButton, styles.alertsButton]}
               onPress={() => setSearchAlertsVisible(true)}
             >
-              <Text style={styles.alertsButtonText} allowFontScaling={false}>
+              <Text allowFontScaling={false} style={styles.alertsButtonText}>
                 {"\uD83D\uDD0D"} Search Alerts
               </Text>
             </TouchableOpacity>
@@ -566,8 +567,8 @@ export default function ProfileScreen() {
           <View style={styles.favoritesSection}>
             {favorites.length === 0 ? (
               <View style={styles.emptyFavorites}>
-                <Text style={styles.emptyText} allowFontScaling={false}>No favorites yet</Text>
-                <Text style={styles.emptySubtext} allowFontScaling={false}>
+                <Text allowFontScaling={false} style={styles.emptyText}>No favorites yet</Text>
+                <Text allowFontScaling={false} style={styles.emptySubtext}>
                   Tap the heart on tournaments to save them here!
                 </Text>
               </View>
@@ -687,130 +688,130 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollView: { flex: 1 },
-  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  scrollContentWeb: { alignItems: "center", paddingBottom: scale(SPACING.xl) },
   webInner: { width: "100%" as any, maxWidth: 860 },
   mobileInner: { flex: 1 },
   header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.sm,
+    padding: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl + SPACING.lg),
+    paddingBottom: scale(SPACING.sm),
     alignItems: "center",
   },
-  headerWeb: { paddingTop: SPACING.lg },
+  headerWeb: { paddingTop: scale(SPACING.lg) },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "center",
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
-    marginTop: SPACING.xs,
+    marginTop: scale(SPACING.xs),
   },
   notLoggedIn: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
   },
   welcomeText: {
-    fontSize: 36,
+    fontSize: moderateScale(36),
     fontWeight: "700",
     color: "#4A90D9",
-    marginBottom: SPACING.xl,
+    marginBottom: scale(SPACING.xl),
     letterSpacing: 1,
   },
   message: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     color: COLORS.textMuted,
-    marginBottom: SPACING.xl,
+    marginBottom: scale(SPACING.xl),
     textAlign: "center",
   },
   buttonGroup: { width: "100%" },
-  appleButtonWrapper: { alignItems: "center", marginBottom: SPACING.sm },
-  appleButton: { width: "100%", height: 50 },
+  appleButtonWrapper: { alignItems: "center", marginBottom: scale(SPACING.sm) },
+  appleButton: { width: "100%", height: scale(50) },
   loadingHint: {
     color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    marginTop: SPACING.xs,
+    fontSize: moderateScale(FONT_SIZES.sm),
+    marginTop: scale(SPACING.xs),
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: SPACING.md,
+    marginVertical: scale(SPACING.md),
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
   dividerText: {
     color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    marginHorizontal: SPACING.md,
+    fontSize: moderateScale(FONT_SIZES.sm),
+    marginHorizontal: scale(SPACING.md),
   },
   errorText: {
     color: COLORS.error,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     textAlign: "center",
-    marginTop: SPACING.md,
+    marginTop: scale(SPACING.md),
   },
   profileCard: {
-    margin: SPACING.md,
+    margin: scale(SPACING.md),
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
   },
   messagesFloatingButton: {
     position: "absolute",
-    top: SPACING.md,
-    right: SPACING.md,
+    top: scale(SPACING.md),
+    right: scale(SPACING.md),
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    borderRadius: scale(12),
+    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: scale(SPACING.xs),
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: scale(4),
     zIndex: 1,
   },
-  messagesFloatingIcon: { fontSize: 14 },
+  messagesFloatingIcon: { fontSize: moderateScale(14) },
   messagesFloatingText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "700",
     color: COLORS.white,
   },
   messagesUnreadBadge: {
     backgroundColor: COLORS.error,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
+    borderRadius: scale(10),
+    minWidth: scale(18),
+    height: scale(18),
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
-    marginLeft: 2,
+    paddingHorizontal: scale(4),
+    marginLeft: scale(2),
   },
-  messagesUnreadText: { fontSize: 10, fontWeight: "700", color: COLORS.white },
+  messagesUnreadText: { fontSize: moderateScale(10), fontWeight: "700", color: COLORS.white },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: SPACING.lg,
+    marginBottom: scale(SPACING.lg),
   },
-  avatarContainer: { width: 80, height: 80, marginRight: SPACING.md },
+  avatarContainer: { width: scale(80), height: scale(80), marginRight: scale(SPACING.md) },
   profileImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scale(80),
+    height: scale(80),
+    borderRadius: scale(40),
     borderWidth: 2,
     borderColor: COLORS.border,
   },
-  avatar: { width: 80, height: 80 },
+  avatar: { width: scale(80), height: scale(80) },
   ballRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
-  ball: { width: 24, height: 24, borderRadius: 12, marginHorizontal: 1 },
+  ball: { width: scale(24), height: scale(24), borderRadius: scale(12), marginHorizontal: scale(1) },
   ball1: { backgroundColor: "#FFD700" },
   ball2: { backgroundColor: "#0066FF" },
   ball3: { backgroundColor: "#FF0000" },
@@ -822,76 +823,76 @@ const styles = StyleSheet.create({
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
   profileInfo: { flex: 1 },
   name: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   playerID: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
-  memberSince: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted },
+  memberSince: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
   actionButtons: {
     flexDirection: "row",
-    gap: SPACING.xs,
-    marginBottom: SPACING.sm,
+    gap: scale(SPACING.xs),
+    marginBottom: scale(SPACING.sm),
   },
   actionButtonsWeb: { flexDirection: "row" },
   actionButton: {
     flex: 1,
-    paddingVertical: SPACING.sm,
+    paddingVertical: scale(SPACING.sm),
     borderRadius: RADIUS.md,
     alignItems: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: scale(4),
   },
-  actionButtonWeb: { paddingVertical: SPACING.md + 2 },
+  actionButtonWeb: { paddingVertical: scale(SPACING.md + 2) },
   editButton: { backgroundColor: COLORS.secondary },
   editButtonText: {
     color: COLORS.white,
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "600",
     textAlign: "center",
   },
   notificationButton: { backgroundColor: COLORS.primary },
   notificationButtonText: {
     color: COLORS.white,
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "600",
     textAlign: "center",
   },
   signOutButton: { backgroundColor: COLORS.error },
   signOutButtonText: {
     color: COLORS.white,
-    fontSize: 11,
+    fontSize: moderateScale(11),
     fontWeight: "600",
     textAlign: "center",
   },
-  userDetails: { gap: SPACING.md },
+  userDetails: { gap: scale(SPACING.md) },
   detailItem: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    paddingBottom: SPACING.sm,
+    paddingBottom: scale(SPACING.sm),
   },
   detailLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   detailValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     color: COLORS.text,
     fontWeight: "500",
   },
   bottomNavigation: {
     flexDirection: "row",
-    margin: SPACING.md,
-    gap: SPACING.sm,
+    margin: scale(SPACING.md),
+    gap: scale(SPACING.sm),
   },
   navButton: {
     flex: 1,
-    paddingVertical: SPACING.md,
+    paddingVertical: scale(SPACING.md),
     borderRadius: RADIUS.md,
     alignItems: "center",
   },
@@ -902,30 +903,27 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   navButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.white,
     textAlign: "center",
   },
   alertsButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
   },
-  favoritesSection: { padding: SPACING.md },
-  emptyFavorites: { alignItems: "center", padding: SPACING.lg },
+  favoritesSection: { padding: scale(SPACING.md) },
+  emptyFavorites: { alignItems: "center", padding: scale(SPACING.lg) },
   emptyText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textMuted,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   emptySubtext: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     textAlign: "center",
   },
-  spacerSm: { height: SPACING.sm },
+  spacerSm: { height: scale(SPACING.sm) },
 });
-
-
-

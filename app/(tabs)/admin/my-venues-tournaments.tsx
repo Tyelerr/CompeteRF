@@ -1,4 +1,5 @@
-﻿import { useRouter } from "expo-router";
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
+import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import {
   FlatList,
@@ -73,58 +74,52 @@ const TournamentCard = ({
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      {/* Header: Name and Status */}
       <View style={styles.cardHeader}>
-        <Text style={styles.tournamentName} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.tournamentName} numberOfLines={1}>
           {tournament.name}
         </Text>
         <View
           style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}
         >
-          <Text style={[styles.statusText, { color: statusColor }]}>
+          <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>
             {tournament.status}
           </Text>
         </View>
       </View>
 
-      {/* Game Type & Format */}
-      <Text style={styles.gameType}>
+      <Text allowFontScaling={false} style={styles.gameType}>
         {tournament.game_type} •{" "}
         {tournament.tournament_format.replace("_", " ")}
       </Text>
 
-      {/* Date & Time */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📅</Text>
-        <Text style={styles.infoText}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>📅</Text>
+        <Text allowFontScaling={false} style={styles.infoText}>
           {formatDate(tournament.tournament_date)}
           {tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
         </Text>
       </View>
 
-      {/* Venue */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📍</Text>
-        <Text style={styles.infoText} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>📍</Text>
+        <Text allowFontScaling={false} style={styles.infoText} numberOfLines={1}>
           {tournament.venue_name}
         </Text>
       </View>
 
-      {/* Director */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>👤</Text>
-        <Text style={styles.infoText}>TD: {tournament.director_name}</Text>
+        <Text allowFontScaling={false} style={styles.infoIcon}>👤</Text>
+        <Text allowFontScaling={false} style={styles.infoText}>TD: {tournament.director_name}</Text>
       </View>
 
-      {/* Stats Row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{tournament.views_count}</Text>
-          <Text style={styles.statLabel}>Views</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{tournament.views_count}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Views</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{tournament.favorites_count}</Text>
-          <Text style={styles.statLabel}>Favorites</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{tournament.favorites_count}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -135,18 +130,15 @@ export default function MyVenuesTournamentsScreen() {
   const router = useRouter();
   const vm = useBarOwnerTournaments();
 
-  // Pagination on filtered results
   const pagination = usePagination(vm.filteredTournaments, {
     itemsPerPage: 10,
   });
   const listRef = useRef<any>(null);
 
-  // Scroll to top on page change
   useEffect(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [pagination.currentPage]);
 
-  // Reset pagination when filters change
   const handleStatusFilter = (filter: TournamentStatusFilter) => {
     vm.setStatusFilter(filter);
     pagination.resetPage();
@@ -163,7 +155,6 @@ export default function MyVenuesTournamentsScreen() {
   };
 
   const handleTournamentPress = (tournamentId: number) => {
-    // Navigate to admin tournament detail
     router.push({
       pathname: "/(tabs)/admin/tournament-detail",
       params: { id: tournamentId.toString() },
@@ -173,26 +164,24 @@ export default function MyVenuesTournamentsScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading tournaments...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading tournaments...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tournament Manager</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>Tournament Manager</Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
@@ -203,7 +192,6 @@ export default function MyVenuesTournamentsScreen() {
         />
       </View>
 
-      {/* Status Tabs with Counts */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -215,6 +203,7 @@ export default function MyVenuesTournamentsScreen() {
           onPress={() => handleStatusFilter("active")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               vm.statusFilter === "active" && styles.tabTextActive,
@@ -233,6 +222,7 @@ export default function MyVenuesTournamentsScreen() {
           onPress={() => handleStatusFilter("completed")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               vm.statusFilter === "completed" && styles.tabTextActive,
@@ -250,6 +240,7 @@ export default function MyVenuesTournamentsScreen() {
           onPress={() => handleStatusFilter("all")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               vm.statusFilter === "all" && styles.tabTextActive,
@@ -260,9 +251,8 @@ export default function MyVenuesTournamentsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Sort Options */}
       <View style={styles.sortContainer}>
-        <Text style={styles.sortLabel}>Sort:</Text>
+        <Text allowFontScaling={false} style={styles.sortLabel}>Sort:</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -278,6 +268,7 @@ export default function MyVenuesTournamentsScreen() {
               onPress={() => handleSortOption(option.key)}
             >
               <Text
+                allowFontScaling={false}
                 style={[
                   styles.sortPillText,
                   vm.sortOption === option.key && styles.sortPillTextActive,
@@ -291,7 +282,6 @@ export default function MyVenuesTournamentsScreen() {
         </ScrollView>
       </View>
 
-      {/* Pagination Info */}
       <Pagination
         totalCount={pagination.totalCount}
         displayStart={pagination.displayRange.start}
@@ -304,7 +294,6 @@ export default function MyVenuesTournamentsScreen() {
         canGoNext={pagination.canGoNext}
       />
 
-      {/* Tournament List */}
       <FlatList
         ref={listRef}
         data={pagination.paginatedItems}
@@ -347,7 +336,6 @@ export default function MyVenuesTournamentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -364,7 +352,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -384,17 +372,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -403,16 +391,16 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   tabsScroll: {
-    maxHeight: 48,
+    maxHeight: scale(48),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -430,7 +418,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -447,7 +435,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   sortLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginRight: SPACING.sm,
   },
@@ -458,7 +446,7 @@ const styles = StyleSheet.create({
   sortPill: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: 16,
+    borderRadius: scale(16),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -468,7 +456,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   sortPillText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   sortPillTextActive: {
@@ -481,7 +469,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -494,7 +482,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   tournamentName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
@@ -502,16 +490,16 @@ const styles = StyleSheet.create({
   },
   statusBadge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: scale(2),
+    borderRadius: scale(12),
   },
   statusText: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textTransform: "capitalize",
   },
   gameType: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     marginBottom: SPACING.sm,
     textTransform: "capitalize",
@@ -519,15 +507,15 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   infoIcon: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     marginRight: SPACING.xs,
-    width: 20,
+    width: scale(20),
   },
   infoText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     flex: 1,
   },
@@ -543,12 +531,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statValue: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   statLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
 });

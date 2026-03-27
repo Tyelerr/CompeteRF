@@ -1,4 +1,4 @@
-// app/(tabs)/admin/index.tsx
+﻿// app/(tabs)/admin/index.tsx
 
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -15,6 +15,7 @@ import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useBarOwnerDashboard } from "../../../src/viewmodels/useBarOwnerDashboard";
 import { useCompeteAdminDashboard } from "../../../src/viewmodels/useCompeteAdminDashboard";
 import { useSuperAdminDashboard } from "../../../src/viewmodels/useSuperAdminDashboard";
@@ -29,7 +30,7 @@ import {
 
 const isWeb = Platform.OS === "web";
 
-// ─── Root router ─────────────────────────────────────────────────────────────
+// --- Root router -----------------------------------------------------------
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function AdminScreen() {
   if (authLoading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -46,9 +47,9 @@ export default function AdminScreen() {
   if (!user) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emoji}>🔒</Text>
-        <Text style={styles.title}>Login Required</Text>
-        <Text style={styles.subtitle}>
+        <Text allowFontScaling={false} style={styles.emoji}>🔒</Text>
+        <Text allowFontScaling={false} style={styles.title}>Login Required</Text>
+        <Text allowFontScaling={false} style={styles.subtitle}>
           Please log in to access your dashboard.
         </Text>
         <Button title="Log In" onPress={() => router.push("/auth/login")} />
@@ -59,9 +60,9 @@ export default function AdminScreen() {
   if (profile?.role === "basic_user") {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emoji}>🎱</Text>
-        <Text style={styles.title}>No Dashboard Access</Text>
-        <Text style={styles.subtitle}>
+        <Text allowFontScaling={false} style={styles.emoji}>🎱</Text>
+        <Text allowFontScaling={false} style={styles.title}>No Dashboard Access</Text>
+        <Text allowFontScaling={false} style={styles.subtitle}>
           Dashboards are available for Tournament Directors, Bar Owners, and
           Admins.
         </Text>
@@ -87,7 +88,7 @@ export default function AdminScreen() {
   }
 }
 
-// ─── Management Card ──────────────────────────────────────────────────────────
+// --- Management Card -------------------------------------------------------
 
 interface ManagementCardProps {
   icon: string;
@@ -110,31 +111,32 @@ const ManagementCard = ({
       style={[
         styles.managementCard,
         isWeb ? styles.managementCardWeb : styles.managementCardMobile,
-        // @ts-ignore — web only
+        // @ts-ignore – web only
         isWeb && {
-          // @ts-ignore — web only
+          // @ts-ignore – web only
           transition:
             "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
-          // @ts-ignore — web only
+          // @ts-ignore – web only
           cursor: "pointer",
         },
         isWeb &&
           hovered && {
             borderColor: COLORS.primary,
             transform: [{ scale: 1.02 }],
-            // @ts-ignore — web only
+            // @ts-ignore – web only
             boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
           },
       ]}
       onPress={onPress}
-      // @ts-ignore — web only
+      // @ts-ignore – web only
       onMouseEnter={() => isWeb && setHovered(true)}
-      // @ts-ignore — web only
+      // @ts-ignore – web only
       onMouseLeave={() => isWeb && setHovered(false)}
     >
-      <Text style={styles.managementIcon}>{icon}</Text>
+      <Text allowFontScaling={false} style={styles.managementIcon}>{icon}</Text>
       {value !== undefined && (
         <Text
+          allowFontScaling={false}
           style={[
             styles.managementValue,
             isWeb && hovered && { color: COLORS.primary },
@@ -144,6 +146,7 @@ const ManagementCard = ({
         </Text>
       )}
       <Text
+        allowFontScaling={false}
         style={[
           styles.managementLabel,
           isWeb && hovered && { color: COLORS.primary },
@@ -151,17 +154,17 @@ const ManagementCard = ({
       >
         {label}
       </Text>
-      {subtitle && <Text style={styles.managementSubtitle}>{subtitle}</Text>}
+      {subtitle && <Text allowFontScaling={false} style={styles.managementSubtitle}>{subtitle}</Text>}
     </TouchableOpacity>
   );
 };
 
-// ─── Shared inner wrapper ─────────────────────────────────────────────────────
+// --- Shared inner wrapper --------------------------------------------------
 
 const DashboardInner = ({ children }: { children: React.ReactNode }) =>
   isWeb ? <View style={styles.webInner}>{children}</View> : <>{children}</>;
 
-// ─── TD Dashboard ─────────────────────────────────────────────────────────────
+// --- TD Dashboard ----------------------------------------------------------
 
 const TDDashboard = () => {
   const router = useRouter();
@@ -170,7 +173,7 @@ const TDDashboard = () => {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
@@ -191,8 +194,8 @@ const TDDashboard = () => {
     >
       <DashboardInner>
         <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text style={styles.headerTitle}>TD DASHBOARD</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>TD DASHBOARD</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             Manage your tournaments and venues
           </Text>
         </View>
@@ -239,8 +242,8 @@ const TDDashboard = () => {
         </View>
 
         <View style={styles.quickStatsSection}>
-          <Text style={styles.quickStatsTitle}>Quick Stats</Text>
-          <Text style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
+          <Text allowFontScaling={false} style={styles.quickStatsTitle}>Quick Stats</Text>
+          <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
           <View style={styles.quickStatsCard}>
             <View style={styles.quickStatRow}>
               <View
@@ -249,10 +252,10 @@ const TDDashboard = () => {
                   { backgroundColor: "#1E3A5F" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>👁</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>👁</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Views</Text>
-              <Text style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
                 {vm.stats.todayViews}
               </Text>
             </View>
@@ -263,10 +266,10 @@ const TDDashboard = () => {
                   { backgroundColor: "#5F1E1E" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>❤️</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>❤️</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Favorites</Text>
-              <Text style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
                 {vm.stats.todayFavorites}
               </Text>
             </View>
@@ -277,10 +280,10 @@ const TDDashboard = () => {
                   { backgroundColor: "#1E4D2B" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>🎯</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>🎯</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Active Events</Text>
-              <Text style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
                 {vm.stats.activeEvents}
               </Text>
             </View>
@@ -293,7 +296,7 @@ const TDDashboard = () => {
   );
 };
 
-// ─── Bar Owner Dashboard ──────────────────────────────────────────────────────
+// --- Bar Owner Dashboard ---------------------------------------------------
 
 const BarOwnerDashboard = () => {
   const router = useRouter();
@@ -302,7 +305,7 @@ const BarOwnerDashboard = () => {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
@@ -323,8 +326,8 @@ const BarOwnerDashboard = () => {
     >
       <DashboardInner>
         <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text style={styles.headerTitle}>BAR OWNER DASHBOARD</Text>
-          <Text style={styles.headerSubtitle}>
+          <Text allowFontScaling={false} style={styles.headerTitle}>BAR OWNER DASHBOARD</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>
             Manage your venues and directors
           </Text>
         </View>
@@ -367,8 +370,8 @@ const BarOwnerDashboard = () => {
         </View>
 
         <View style={styles.quickStatsSection}>
-          <Text style={styles.quickStatsTitle}>Quick Stats</Text>
-          <Text style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
+          <Text allowFontScaling={false} style={styles.quickStatsTitle}>Quick Stats</Text>
+          <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
           <View style={styles.quickStatsCard}>
             <View style={styles.quickStatRow}>
               <View
@@ -377,10 +380,10 @@ const BarOwnerDashboard = () => {
                   { backgroundColor: "#1E3A5F" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>👁</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>👁</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Views</Text>
-              <Text style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
                 {vm.stats.todayViews}
               </Text>
             </View>
@@ -391,10 +394,10 @@ const BarOwnerDashboard = () => {
                   { backgroundColor: "#5F1E1E" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>❤️</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>❤️</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Favorites</Text>
-              <Text style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
                 {vm.stats.todayFavorites}
               </Text>
             </View>
@@ -405,10 +408,10 @@ const BarOwnerDashboard = () => {
                   { backgroundColor: "#1E4D2B" },
                 ]}
               >
-                <Text style={styles.quickStatIcon}>🎯</Text>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>🎯</Text>
               </View>
-              <Text style={styles.quickStatLabel}>Active Events</Text>
-              <Text style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
+              <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
+              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
                 {vm.stats.activeTournaments}
               </Text>
             </View>
@@ -421,7 +424,7 @@ const BarOwnerDashboard = () => {
   );
 };
 
-// ─── Compete Admin Dashboard ──────────────────────────────────────────────────
+// --- Compete Admin Dashboard -----------------------------------------------
 
 const CompeteAdminDashboard = () => {
   const router = useRouter();
@@ -430,7 +433,7 @@ const CompeteAdminDashboard = () => {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
@@ -451,8 +454,8 @@ const CompeteAdminDashboard = () => {
     >
       <DashboardInner>
         <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text style={styles.headerTitle}>COMPETE ADMIN</Text>
-          <Text style={styles.headerSubtitle}>Platform management</Text>
+          <Text allowFontScaling={false} style={styles.headerTitle}>COMPETE ADMIN</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Platform management</Text>
         </View>
 
         <View style={styles.managementGrid}>
@@ -512,7 +515,7 @@ const CompeteAdminDashboard = () => {
 
         <View style={styles.section}>
           <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Analytics Period</Text>
+            <Text allowFontScaling={false} style={styles.filterLabel}>Analytics Period</Text>
             <View style={styles.filterDropdown}>
               <Dropdown
                 options={vm.timePeriodOptions}
@@ -539,7 +542,7 @@ const CompeteAdminDashboard = () => {
   );
 };
 
-// ─── Super Admin Dashboard ────────────────────────────────────────────────────
+// --- Super Admin Dashboard -------------------------------------------------
 
 const SuperAdminDashboard = () => {
   const router = useRouter();
@@ -548,7 +551,7 @@ const SuperAdminDashboard = () => {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading dashboard...</Text>
       </View>
     );
   }
@@ -569,8 +572,8 @@ const SuperAdminDashboard = () => {
     >
       <DashboardInner>
         <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text style={styles.headerTitle}>SUPER ADMIN</Text>
-          <Text style={styles.headerSubtitle}>Full system access</Text>
+          <Text allowFontScaling={false} style={styles.headerTitle}>SUPER ADMIN</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Full system access</Text>
         </View>
 
         <View style={styles.managementGrid}>
@@ -652,7 +655,7 @@ const SuperAdminDashboard = () => {
 
         <View style={styles.section}>
           <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Analytics Period</Text>
+            <Text allowFontScaling={false} style={styles.filterLabel}>Analytics Period</Text>
             <View style={styles.filterDropdown}>
               <Dropdown
                 options={vm.timePeriodOptions}
@@ -679,7 +682,7 @@ const SuperAdminDashboard = () => {
   );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// --- Styles ----------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -706,22 +709,22 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   emoji: {
-    fontSize: 60,
+    fontSize: moderateScale(60),
     marginBottom: SPACING.md,
   },
   title: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.sm,
     textAlign: "center",
   },
   subtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.lg,
@@ -738,13 +741,13 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.lg,
   },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -774,7 +777,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: 54,
+    minHeight: scale(54),
   },
   // Mobile: 2 columns (~40% smaller)
   managementCardMobile: {
@@ -785,25 +788,25 @@ const styles = StyleSheet.create({
     width: "31.5%" as any,
   },
   managementIcon: {
-    fontSize: 18,
-    marginBottom: 2,
+    fontSize: moderateScale(18),
+    marginBottom: scale(2),
   },
   managementValue: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   managementLabel: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.text,
-    marginTop: 2,
+    marginTop: scale(2),
     textAlign: "center",
   },
   managementSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
     textAlign: "center",
   },
 
@@ -818,13 +821,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   filterLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   filterDropdown: {
     flex: 1,
-    maxWidth: 160,
+    maxWidth: scale(160),
     marginLeft: SPACING.md,
   },
   analyticsRow: {
@@ -839,13 +842,13 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.sm,
   },
   quickStatsTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   quickStatsSubtitle: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
@@ -864,24 +867,24 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   quickStatIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: scale(38),
+    height: scale(38),
+    borderRadius: scale(10),
     alignItems: "center",
     justifyContent: "center",
   },
   quickStatIcon: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
   },
   quickStatNumber: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: "800",
     marginLeft: "auto",
-    minWidth: 44,
+    minWidth: scale(44),
     textAlign: "right",
   },
   quickStatLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
     flex: 1,

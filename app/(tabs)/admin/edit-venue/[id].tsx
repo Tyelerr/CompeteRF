@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -32,7 +33,6 @@ export default function EditVenueScreen() {
     (tab as TabType) || "details",
   );
 
-  // ViewModels
   const venueVM = useEditVenue(venueId);
   const tablesVM = useVenueTables(venueId);
 
@@ -45,7 +45,7 @@ export default function EditVenueScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading venue...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading venue...</Text>
       </View>
     );
   }
@@ -53,9 +53,9 @@ export default function EditVenueScreen() {
   if (!venueVM.venue) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Venue not found</Text>
+        <Text allowFontScaling={false} style={styles.errorText}>Venue not found</Text>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.linkText}>Go Back</Text>
+          <Text allowFontScaling={false} style={styles.linkText}>Go Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -69,9 +69,9 @@ export default function EditVenueScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.headerTitle} numberOfLines={1}>
           {venueVM.venue.venue}
         </Text>
         <View style={styles.placeholder} />
@@ -84,6 +84,7 @@ export default function EditVenueScreen() {
           onPress={() => setActiveTab("details")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "details" && styles.activeTabText,
@@ -97,6 +98,7 @@ export default function EditVenueScreen() {
           onPress={() => setActiveTab("tables")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "tables" && styles.activeTabText,
@@ -110,6 +112,7 @@ export default function EditVenueScreen() {
           onPress={() => setActiveTab("directors")}
         >
           <Text
+            allowFontScaling={false}
             style={[
               styles.tabText,
               activeTab === "directors" && styles.activeTabText,
@@ -174,7 +177,6 @@ export default function EditVenueScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -193,16 +195,16 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: SPACING.md,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   errorText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     color: COLORS.error,
     marginBottom: SPACING.md,
   },
   linkText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -223,12 +225,12 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
@@ -236,7 +238,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.sm,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   tabs: {
     flexDirection: "row",
@@ -253,7 +255,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },

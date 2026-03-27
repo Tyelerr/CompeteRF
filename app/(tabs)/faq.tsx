@@ -1,4 +1,4 @@
-// app/(tabs)/faq.tsx
+﻿// app/(tabs)/faq.tsx
 
 import { useEffect, useState } from "react";
 import {
@@ -15,6 +15,7 @@ import { supabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
+import { moderateScale, scale } from "../../src/utils/scaling";
 import { FAQ_DATA } from "../../src/utils/faq-data";
 import { ContactModal } from "../../src/views/components/faq/ContactModal";
 import { PrivacyModal } from "../../src/views/components/faq/PrivacyModal";
@@ -81,8 +82,8 @@ export default function FaqScreen() {
         <View style={isWeb ? styles.webInner : styles.mobileInner}>
           {/* Header */}
           <View style={[styles.header, isWeb && styles.headerWeb]}>
-            <Text style={styles.headerTitle}>FAQ</Text>
-            <Text style={styles.headerSubtitle}>
+            <Text allowFontScaling={false} style={styles.headerTitle}>FAQ</Text>
+            <Text allowFontScaling={false} style={styles.headerSubtitle}>
               Frequently Asked Questions
             </Text>
           </View>
@@ -98,13 +99,13 @@ export default function FaqScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.faqHeader}>
-                    <Text style={styles.faqQuestion}>{item.question}</Text>
-                    <Text style={styles.faqIcon}>
-                      {expandedIndex === index ? "−" : "+"}
+                    <Text allowFontScaling={false} style={styles.faqQuestion}>{item.question}</Text>
+                    <Text allowFontScaling={false} style={styles.faqIcon}>
+                      {expandedIndex === index ? "\u2212" : "+"}
                     </Text>
                   </View>
                   {expandedIndex === index && (
-                    <Text style={styles.faqAnswer}>{item.answer}</Text>
+                    <Text allowFontScaling={false} style={styles.faqAnswer}>{item.answer}</Text>
                   )}
                 </TouchableOpacity>
               ),
@@ -115,9 +116,9 @@ export default function FaqScreen() {
                 style={styles.moreQuestionsButton}
                 onPress={() => setShowAllQuestions(!showAllQuestions)}
               >
-                <Text style={styles.moreQuestionsText}>
+                <Text allowFontScaling={false} style={styles.moreQuestionsText}>
                   {showAllQuestions
-                    ? "− Show Less"
+                    ? "\u2212 Show Less"
                     : `+ More Questions (${FAQ_DATA.length - 4})`}
                 </Text>
               </TouchableOpacity>
@@ -126,28 +127,24 @@ export default function FaqScreen() {
 
           {/* Contact Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📬 CONTACT US</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>📬 CONTACT US</Text>
             <View style={styles.contactCard}>
-              <Text style={styles.contactText}>
-                {
-                  "Can't find what you're looking for? Have feedback or questions?"
-                }
+              <Text allowFontScaling={false} style={styles.contactText}>
+                {"Can't find what you're looking for? Have feedback or questions?"}
               </Text>
               <TouchableOpacity
                 style={styles.sendButton}
                 onPress={() => setContactVisible(true)}
               >
-                <Text style={styles.sendButtonText}>Send Us a Message</Text>
+                <Text allowFontScaling={false} style={styles.sendButtonText}>Send Us a Message</Text>
               </TouchableOpacity>
               <View style={styles.emailDivider} />
-              <Text style={styles.emailLabel}>Or email us directly:</Text>
+              <Text allowFontScaling={false} style={styles.emailLabel}>Or email us directly:</Text>
               <TouchableOpacity
-                onPress={() =>
-                  Linking.openURL("mailto:support@thecompeteapp.com")
-                }
+                onPress={() => Linking.openURL("mailto:support@thecompeteapp.com")}
                 style={styles.emailLink}
               >
-                <Text style={styles.contactEmail}>
+                <Text allowFontScaling={false} style={styles.contactEmail}>
                   support@thecompeteapp.com
                 </Text>
               </TouchableOpacity>
@@ -156,15 +153,15 @@ export default function FaqScreen() {
 
           {/* Legal Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📄 LEGAL</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>📄 LEGAL</Text>
             <View style={styles.legalCard}>
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => setTermsVisible(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.legalRowText}>Terms of Service</Text>
-                <Text style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowText}>Terms of Service</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
               </TouchableOpacity>
               <View style={styles.legalDivider} />
               <TouchableOpacity
@@ -172,8 +169,8 @@ export default function FaqScreen() {
                 onPress={() => setPrivacyVisible(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.legalRowText}>Privacy Policy</Text>
-                <Text style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowText}>Privacy Policy</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
               </TouchableOpacity>
               <View style={styles.legalDivider} />
               <TouchableOpacity
@@ -181,20 +178,20 @@ export default function FaqScreen() {
                 onPress={() => setTermsVisible(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.legalRowText}>
+                <Text allowFontScaling={false} style={styles.legalRowText}>
                   Acceptable Use & Content Policy
                 </Text>
-                <Text style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* App Info */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📱 APP INFO</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>📱 APP INFO</Text>
             <View style={styles.infoCard}>
-              <Text style={styles.infoText}>Compete v1.0.0</Text>
-              <Text style={styles.infoText}>© 2026 Compete</Text>
+              <Text allowFontScaling={false} style={styles.infoText}>Compete v1.0.0</Text>
+              <Text allowFontScaling={false} style={styles.infoText}>© 2026 Compete</Text>
             </View>
           </View>
 
@@ -224,40 +221,41 @@ export default function FaqScreen() {
 
 const styles = StyleSheet.create({
   scrollView: { flex: 1, backgroundColor: COLORS.background },
-  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  scrollContentWeb: { alignItems: "center", paddingBottom: scale(SPACING.xl) },
   webInner: { width: "100%" as any, maxWidth: 860 },
   mobileInner: { flex: 1 },
 
   header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.sm,
+    padding: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl + SPACING.lg),
+    paddingBottom: scale(SPACING.sm),
+    alignItems: "center",
   },
-  headerWeb: { paddingTop: SPACING.lg },
+  headerWeb: { paddingTop: scale(SPACING.lg) },
   headerTitle: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
   },
   headerSubtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    marginTop: scale(SPACING.xs),
   },
 
-  section: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.md },
+  section: { paddingHorizontal: scale(SPACING.md), paddingBottom: scale(SPACING.md) },
   sectionTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.md),
   },
 
   faqItem: {
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -267,34 +265,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   faqQuestion: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
     flex: 1,
-    paddingRight: SPACING.sm,
+    paddingRight: scale(SPACING.sm),
   },
   faqIcon: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     color: COLORS.primary,
     fontWeight: "600",
   },
   faqAnswer: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
-    marginTop: SPACING.md,
-    lineHeight: 22,
+    marginTop: scale(SPACING.md),
+    lineHeight: moderateScale(22),
   },
   moreQuestionsButton: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
+    padding: scale(SPACING.md),
     alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: "dashed",
   },
   moreQuestionsText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -302,47 +300,47 @@ const styles = StyleSheet.create({
   contactCard: {
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: "center",
   },
   contactText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
+    marginBottom: scale(SPACING.lg),
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: moderateScale(22),
   },
   sendButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xl,
+    paddingVertical: scale(SPACING.md),
+    paddingHorizontal: scale(SPACING.xl),
     alignItems: "center",
     width: "100%" as any,
   },
   sendButtonText: {
     color: "#FFFFFF",
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
   },
   emailDivider: {
     height: 1,
     backgroundColor: COLORS.border,
     width: "100%" as any,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginTop: scale(SPACING.lg),
+    marginBottom: scale(SPACING.md),
   },
   emailLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
     textAlign: "center",
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   emailLink: { alignItems: "center" },
   contactEmail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     textDecorationLine: "underline",
   },
@@ -358,37 +356,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: scale(SPACING.md),
+    paddingHorizontal: scale(SPACING.lg),
   },
   legalRowText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     fontWeight: "500",
   },
   legalRowChevron: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   legalDivider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: scale(SPACING.lg),
   },
 
   infoCard: {
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: "center",
-    gap: SPACING.xs,
+    gap: scale(SPACING.xs),
   },
   infoText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
   },
-  bottomSpacer: { height: SPACING.xl },
+  bottomSpacer: { height: scale(SPACING.xl) },
 });
+

@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
 import {
   FeaturedBar,
   FeaturedPlayer,
@@ -59,9 +60,9 @@ export default function FeaturedManagement() {
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleSection}>
             <View>
-              <Text style={styles.cardTitle}>{displayName}</Text>
+              <Text allowFontScaling={false} style={styles.cardTitle}>{displayName}</Text>
               {player.profiles?.user_name && (
-                <Text style={styles.cardUsername}>
+                <Text allowFontScaling={false} style={styles.cardUsername}>
                   @{player.profiles.user_name}
                 </Text>
               )}
@@ -72,7 +73,7 @@ export default function FeaturedManagement() {
                 { backgroundColor: player.is_active ? "#10B981" : "#EF4444" },
               ]}
             >
-              <Text style={styles.statusText}>
+              <Text allowFontScaling={false} style={styles.statusText}>
                 {player.is_active ? "Active" : "Inactive"}
               </Text>
             </View>
@@ -91,42 +92,42 @@ export default function FeaturedManagement() {
 
         {player.nickname && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Nickname</Text>
-            <Text style={styles.detailValue}>{player.nickname}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Nickname</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{player.nickname}</Text>
           </View>
         )}
 
         {player.location && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Location</Text>
-            <Text style={styles.detailValue}>{player.location}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Location</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{player.location}</Text>
           </View>
         )}
 
         {player.bio && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Bio</Text>
-            <Text style={styles.detailValue}>{player.bio}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Bio</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{player.bio}</Text>
           </View>
         )}
 
         {player.achievements && player.achievements.length > 0 && (
           <View style={styles.achievementsSection}>
-            <Text style={styles.sectionTitle}>Achievements</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Achievements</Text>
             {player.achievements.map((achievement: string, index: number) => (
               <View key={index} style={styles.achievementItem}>
                 <View style={styles.achievementDot} />
-                <Text style={styles.achievementText}>{achievement}</Text>
+                <Text allowFontScaling={false} style={styles.achievementText}>{achievement}</Text>
               </View>
             ))}
           </View>
         )}
 
         <View style={styles.cardFooter}>
-          <Text style={styles.cardDate}>
+          <Text allowFontScaling={false} style={styles.cardDate}>
             Priority: {player.featured_priority || 0}
           </Text>
-          <Text style={styles.cardDate}>
+          <Text allowFontScaling={false} style={styles.cardDate}>
             Added{" "}
             {player.created_at
               ? new Date(player.created_at).toLocaleDateString()
@@ -148,9 +149,9 @@ export default function FeaturedManagement() {
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleSection}>
             <View>
-              <Text style={styles.cardTitle}>{venueName}</Text>
+              <Text allowFontScaling={false} style={styles.cardTitle}>{venueName}</Text>
               {venueLocation && (
-                <Text style={styles.cardLocation}>{venueLocation}</Text>
+                <Text allowFontScaling={false} style={styles.cardLocation}>{venueLocation}</Text>
               )}
             </View>
             <View
@@ -159,7 +160,7 @@ export default function FeaturedManagement() {
                 { backgroundColor: bar.is_active ? "#10B981" : "#EF4444" },
               ]}
             >
-              <Text style={styles.statusText}>
+              <Text allowFontScaling={false} style={styles.statusText}>
                 {bar.is_active ? "Active" : "Inactive"}
               </Text>
             </View>
@@ -178,42 +179,42 @@ export default function FeaturedManagement() {
 
         {bar.description && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Description</Text>
-            <Text style={styles.detailValue}>{bar.description}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Description</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{bar.description}</Text>
           </View>
         )}
 
         {bar.hours_of_operation && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Hours of Operation</Text>
-            <Text style={styles.detailValue}>{bar.hours_of_operation}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Hours of Operation</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{bar.hours_of_operation}</Text>
           </View>
         )}
 
         {bar.special_features && (
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Special Features</Text>
-            <Text style={styles.detailValue}>{bar.special_features}</Text>
+            <Text allowFontScaling={false} style={styles.detailLabel}>Special Features</Text>
+            <Text allowFontScaling={false} style={styles.detailValue}>{bar.special_features}</Text>
           </View>
         )}
 
         {bar.highlights && bar.highlights.length > 0 && (
           <View style={styles.highlightsSection}>
-            <Text style={styles.sectionTitle}>Highlights</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Highlights</Text>
             {bar.highlights.map((highlight: string, index: number) => (
               <View key={index} style={styles.highlightItem}>
                 <View style={styles.highlightDot} />
-                <Text style={styles.highlightText}>{highlight}</Text>
+                <Text allowFontScaling={false} style={styles.highlightText}>{highlight}</Text>
               </View>
             ))}
           </View>
         )}
 
         <View style={styles.cardFooter}>
-          <Text style={styles.cardDate}>
+          <Text allowFontScaling={false} style={styles.cardDate}>
             Priority: {bar.featured_priority || 0}
           </Text>
-          <Text style={styles.cardDate}>
+          <Text allowFontScaling={false} style={styles.cardDate}>
             Added{" "}
             {bar.created_at
               ? new Date(bar.created_at).toLocaleDateString()
@@ -234,27 +235,27 @@ export default function FeaturedManagement() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={scale(24)} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Featured Content</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>Featured Content</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{playerStats.active}</Text>
-          <Text style={styles.statLabel}>Active Players</Text>
+          <Text allowFontScaling={false} style={styles.statNumber}>{playerStats.active}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Active Players</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{barStats.active}</Text>
-          <Text style={styles.statLabel}>Active Bars</Text>
+          <Text allowFontScaling={false} style={styles.statNumber}>{barStats.active}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Active Bars</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>
+          <Text allowFontScaling={false} style={styles.statNumber}>
             {playerStats.total + barStats.total}
           </Text>
-          <Text style={styles.statLabel}>Total Featured</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Total Featured</Text>
         </View>
       </View>
 
@@ -266,6 +267,7 @@ export default function FeaturedManagement() {
             onPress={() => setActiveTab("players")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 activeTab === "players" && styles.activeTabText,
@@ -279,6 +281,7 @@ export default function FeaturedManagement() {
             onPress={() => setActiveTab("bars")}
           >
             <Text
+              allowFontScaling={false}
               style={[
                 styles.tabText,
                 activeTab === "bars" && styles.activeTabText,
@@ -298,9 +301,9 @@ export default function FeaturedManagement() {
               setShowCreateBarModal(true);
             }
           }}
-      >
-          <Ionicons name="add" size={20} color="#FFFFFF" />
-          <Text style={styles.createButtonText}>
+        >
+          <Ionicons name="add" size={scale(20)} color="#FFFFFF" />
+          <Text allowFontScaling={false} style={styles.createButtonText}>
             Create {activeTab === "players" ? "Player" : "Bar"}
           </Text>
         </TouchableOpacity>
@@ -318,7 +321,7 @@ export default function FeaturedManagement() {
         <View style={styles.content}>
           {error && (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+              <Text allowFontScaling={false} style={styles.errorText}>{error}</Text>
             </View>
           )}
 
@@ -329,13 +332,13 @@ export default function FeaturedManagement() {
               ))
             ) : (
               <View style={styles.emptyContainer}>
-                <Ionicons name="people-outline" size={48} color="#666666" />
-                <Text style={styles.emptyText}>No featured players yet</Text>
+                <Ionicons name="people-outline" size={scale(48)} color="#666666" />
+                <Text allowFontScaling={false} style={styles.emptyText}>No featured players yet</Text>
                 <TouchableOpacity
                   style={styles.emptyCreateButton}
                   onPress={() => setShowCreatePlayerModal(true)}
                 >
-                  <Text style={styles.emptyCreateText}>
+                  <Text allowFontScaling={false} style={styles.emptyCreateText}>
                     Create your first player
                   </Text>
                 </TouchableOpacity>
@@ -347,13 +350,13 @@ export default function FeaturedManagement() {
             ))
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="business-outline" size={48} color="#666666" />
-              <Text style={styles.emptyText}>No featured bars yet</Text>
+              <Ionicons name="business-outline" size={scale(48)} color="#666666" />
+              <Text allowFontScaling={false} style={styles.emptyText}>No featured bars yet</Text>
               <TouchableOpacity
                 style={styles.emptyCreateButton}
                 onPress={() => setShowCreateBarModal(true)}
               >
-                <Text style={styles.emptyCreateText}>
+                <Text allowFontScaling={false} style={styles.emptyCreateText}>
                   Create your first bar
                 </Text>
               </TouchableOpacity>
@@ -362,7 +365,6 @@ export default function FeaturedManagement() {
         </View>
       </ScrollView>
 
-      {/* Modals */}
       <CreatePlayerModal
         visible={showCreatePlayerModal}
         onClose={() => setShowCreatePlayerModal(false)}
@@ -379,7 +381,6 @@ export default function FeaturedManagement() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -393,68 +394,68 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: scale(20),
+    paddingVertical: scale(16),
     backgroundColor: "#000000",
   },
   backButton: {
-    padding: 8,
+    padding: scale(8),
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: "600",
     color: "#FFFFFF",
   },
   headerSpacer: {
-    width: 40,
+    width: scale(40),
   },
   statsContainer: {
     flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 12,
+    paddingHorizontal: scale(20),
+    paddingVertical: scale(16),
+    gap: scale(12),
   },
   statCard: {
     flex: 1,
     backgroundColor: "#1A1A1A",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: scale(12),
+    padding: scale(16),
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#333333",
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     fontWeight: "700",
     color: "#3B82F6",
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: "#999999",
-    marginTop: 4,
+    marginTop: scale(4),
   },
   tabSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: scale(20),
+    marginBottom: scale(20),
   },
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "#1A1A1A",
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 12,
+    borderRadius: scale(12),
+    padding: scale(4),
+    marginBottom: scale(12),
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: scale(12),
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: scale(8),
   },
   activeTab: {
     backgroundColor: "#3B82F6",
   },
   tabText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
     color: "#999999",
   },
@@ -466,13 +467,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#10B981",
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 8,
+    borderRadius: scale(8),
+    paddingVertical: scale(12),
+    paddingHorizontal: scale(16),
+    gap: scale(8),
   },
   createButtonText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
     color: "#FFFFFF",
   },
@@ -480,47 +481,47 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: scale(20),
+    paddingBottom: scale(30),
   },
   errorContainer: {
     backgroundColor: "#DC2626",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: scale(8),
+    padding: scale(12),
+    marginBottom: scale(16),
   },
   errorText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: moderateScale(14),
     textAlign: "center",
   },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 60,
+    paddingVertical: scale(60),
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     color: "#666666",
-    marginTop: 12,
-    marginBottom: 16,
+    marginTop: scale(12),
+    marginBottom: scale(16),
   },
   emptyCreateButton: {
     backgroundColor: "#3B82F6",
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    borderRadius: scale(8),
+    paddingVertical: scale(12),
+    paddingHorizontal: scale(24),
   },
   emptyCreateText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
     color: "#FFFFFF",
   },
   contentCard: {
     backgroundColor: "#1A1A1A",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: scale(12),
+    padding: scale(20),
+    marginBottom: scale(16),
     borderWidth: 1,
     borderColor: "#333333",
   },
@@ -528,37 +529,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 16,
+    marginBottom: scale(16),
   },
   cardTitleSection: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginRight: 12,
+    marginRight: scale(12),
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: "600",
     color: "#FFFFFF",
   },
   cardUsername: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: "#999999",
-    marginTop: 2,
+    marginTop: scale(2),
   },
   cardLocation: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: "#999999",
-    marginTop: 2,
+    marginTop: scale(2),
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: scale(8),
+    paddingVertical: scale(4),
+    borderRadius: scale(6),
   },
   statusText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: "600",
     color: "#FFFFFF",
   },
@@ -570,77 +571,77 @@ const styles = StyleSheet.create({
     transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
   },
   detailItem: {
-    marginBottom: 12,
+    marginBottom: scale(12),
   },
   detailLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: "600",
     color: "#999999",
-    marginBottom: 4,
+    marginBottom: scale(4),
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: "#CCCCCC",
-    lineHeight: 20,
+    lineHeight: moderateScale(20),
   },
   achievementsSection: {
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: scale(8),
+    marginBottom: scale(8),
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: scale(8),
   },
   achievementItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: scale(6),
   },
   achievementDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
     backgroundColor: "#10B981",
-    marginRight: 12,
+    marginRight: scale(12),
   },
   achievementText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: "#CCCCCC",
     flex: 1,
   },
   highlightsSection: {
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: scale(8),
+    marginBottom: scale(8),
   },
   highlightItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: scale(6),
   },
   highlightDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
     backgroundColor: "#F59E0B",
-    marginRight: 12,
+    marginRight: scale(12),
   },
   highlightText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     color: "#CCCCCC",
     flex: 1,
   },
   cardFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: scale(12),
+    paddingTop: scale(12),
     borderTopWidth: 1,
     borderTopColor: "#333333",
   },
   cardDate: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     color: "#666666",
   },
 });

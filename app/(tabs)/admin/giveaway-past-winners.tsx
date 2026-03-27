@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useGiveawayPastWinners } from "../../../src/viewmodels/useGiveawayPastWinners";
+import { moderateScale, scale } from "../../../src/utils/scaling";
 
 const isWeb = Platform.OS === "web";
 
@@ -60,18 +61,18 @@ export default function GiveawayPastWinnersScreen() {
       {/* Rank + Giveaway name */}
       <View style={styles.cardHeader}>
         <View style={styles.rankBadge}>
-          <Text style={styles.rankText}>#{index + 1}</Text>
+          <Text allowFontScaling={false} style={styles.rankText}>#{index + 1}</Text>
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.giveawayName} numberOfLines={1}>
+          <Text allowFontScaling={false} style={styles.giveawayName} numberOfLines={1}>
             {item.giveaway_name}
           </Text>
-          <Text style={styles.drawnDate}>
+          <Text allowFontScaling={false} style={styles.drawnDate}>
             Drawn {vm.formatDateTime(item.drawn_at)}
           </Text>
         </View>
         <View style={styles.prizeBadge}>
-          <Text style={styles.prizeText}>
+          <Text allowFontScaling={false} style={styles.prizeText}>
             ${item.prize_value?.toLocaleString()}
           </Text>
         </View>
@@ -80,8 +81,8 @@ export default function GiveawayPastWinnersScreen() {
       {/* Winner info */}
       <View style={styles.winnerSection}>
         <View style={styles.trophyRow}>
-          <Text style={styles.trophyEmoji}>🏆</Text>
-          <Text style={styles.winnerName}>{item.winner_name}</Text>
+          <Text allowFontScaling={false} style={styles.trophyEmoji}>🏆</Text>
+          <Text allowFontScaling={false} style={styles.winnerName}>{item.winner_name}</Text>
         </View>
 
         {item.winner_email ? (
@@ -90,12 +91,12 @@ export default function GiveawayPastWinnersScreen() {
             onPress={() => handleEmail(item.winner_email)}
           >
             <Ionicons name="mail-outline" size={14} color={COLORS.gray} />
-            <Text style={styles.contactText}>{item.winner_email}</Text>
+            <Text allowFontScaling={false} style={styles.contactText}>{item.winner_email}</Text>
             <Ionicons
               name="open-outline"
               size={12}
               color={COLORS.blue}
-              style={{ marginLeft: 4 }}
+              style={{ marginLeft: scale(4) }}
             />
           </Pressable>
         ) : null}
@@ -105,13 +106,13 @@ export default function GiveawayPastWinnersScreen() {
       <View style={styles.cardFooter}>
         <View style={styles.footerStat}>
           <Ionicons name="people-outline" size={14} color={COLORS.gray} />
-          <Text style={styles.footerText}>
+          <Text allowFontScaling={false} style={styles.footerText}>
             {item.entry_count} {item.entry_count === 1 ? "entry" : "entries"}
           </Text>
         </View>
         <View style={styles.footerStat}>
           <Ionicons name="trophy-outline" size={14} color={COLORS.gray} />
-          <Text style={styles.footerText}>1 in {item.entry_count} odds</Text>
+          <Text allowFontScaling={false} style={styles.footerText}>1 in {item.entry_count} odds</Text>
         </View>
       </View>
     </View>
@@ -121,9 +122,9 @@ export default function GiveawayPastWinnersScreen() {
     if (vm.loading) return null;
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyEmoji}>🏆</Text>
-        <Text style={styles.emptyTitle}>No Winners Yet</Text>
-        <Text style={styles.emptySubtitle}>
+        <Text allowFontScaling={false} style={styles.emptyEmoji}>🏆</Text>
+        <Text allowFontScaling={false} style={styles.emptyTitle}>No Winners Yet</Text>
+        <Text allowFontScaling={false} style={styles.emptySubtitle}>
           Winners will appear here after you draw them from ended giveaways
         </Text>
       </View>
@@ -136,24 +137,24 @@ export default function GiveawayPastWinnersScreen() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={COLORS.blue} />
-          <Text style={styles.backText}>Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>Back</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>PAST WINNERS</Text>
-        <View style={{ width: 70 }} />
+        <Text allowFontScaling={false} style={styles.headerTitle}>PAST WINNERS</Text>
+        <View style={{ width: scale(70) }} />
       </View>
 
       {/* Summary stats */}
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{vm.totalWinners}</Text>
-          <Text style={styles.statLabel}>Winners</Text>
+          <Text allowFontScaling={false} style={styles.statValue}>{vm.totalWinners}</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Winners</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: COLORS.green }]}>
+          <Text allowFontScaling={false} style={[styles.statValue, { color: COLORS.green }]}>
             ${vm.totalAwarded.toLocaleString()}
           </Text>
-          <Text style={styles.statLabel}>Total Awarded</Text>
+          <Text allowFontScaling={false} style={styles.statLabel}>Total Awarded</Text>
         </View>
       </View>
 
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
   // Web centering
   scrollContentWeb: {
     alignItems: "center",
-    paddingBottom: SPACING.xl,
+    paddingBottom: scale(SPACING.xl),
   },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
@@ -197,22 +198,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 60,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.md,
+    paddingTop: scale(60),
+    paddingHorizontal: scale(SPACING.lg),
+    paddingBottom: scale(SPACING.md),
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    width: 70,
+    width: scale(70),
   },
   backText: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
   },
   headerTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     textAlign: "center",
   },
@@ -221,10 +222,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: COLORS.card,
-    marginHorizontal: SPACING.lg,
-    borderRadius: 12,
-    paddingVertical: SPACING.lg,
-    marginBottom: SPACING.lg,
+    marginHorizontal: scale(SPACING.lg),
+    borderRadius: scale(12),
+    paddingVertical: scale(SPACING.lg),
+    marginBottom: scale(SPACING.lg),
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
@@ -234,48 +235,48 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: COLORS.blue,
-    fontSize: FONT_SIZES.xxl,
+    fontSize: moderateScale(FONT_SIZES.xxl),
     fontWeight: "700",
   },
   statLabel: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.xs,
-    marginTop: 2,
+    fontSize: moderateScale(FONT_SIZES.xs),
+    marginTop: scale(2),
   },
   statDivider: {
-    width: 1,
-    height: 36,
+    width: scale(1),
+    height: scale(36),
     backgroundColor: COLORS.cardBorder,
   },
   listContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 100,
+    paddingHorizontal: scale(SPACING.lg),
+    paddingBottom: scale(100),
   },
   winnerCard: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
+    borderRadius: scale(12),
+    padding: scale(SPACING.lg),
+    marginBottom: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: SPACING.md,
-    gap: SPACING.md,
+    marginBottom: scale(SPACING.md),
+    gap: scale(SPACING.md),
   },
   rankBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     backgroundColor: COLORS.darkGray,
     justifyContent: "center",
     alignItems: "center",
   },
   rankText: {
     color: COLORS.gold,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "700",
   },
   headerInfo: {
@@ -283,54 +284,54 @@ const styles = StyleSheet.create({
   },
   giveawayName: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
   },
   drawnDate: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.xs,
-    marginTop: 2,
+    fontSize: moderateScale(FONT_SIZES.xs),
+    marginTop: scale(2),
   },
   prizeBadge: {
     backgroundColor: COLORS.darkGray,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    borderRadius: scale(8),
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.xs),
   },
   prizeText: {
     color: COLORS.green,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
   },
   winnerSection: {
     backgroundColor: COLORS.darkGray,
-    borderRadius: 10,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    borderRadius: scale(10),
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.md),
   },
   trophyRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    marginBottom: SPACING.xs,
+    gap: scale(SPACING.sm),
+    marginBottom: scale(SPACING.xs),
   },
   trophyEmoji: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
   },
   winnerName: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
   },
   contactRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
+    gap: scale(SPACING.sm),
+    marginTop: scale(SPACING.sm),
   },
   contactText: {
     color: COLORS.lightGray,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     flex: 1,
   },
   cardFooter: {
@@ -340,11 +341,11 @@ const styles = StyleSheet.create({
   footerStat: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.xs,
+    gap: scale(SPACING.xs),
   },
   footerText: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
   },
   loadingContainer: {
     flex: 1,
@@ -354,22 +355,22 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 80,
-    gap: SPACING.sm,
+    paddingTop: scale(80),
+    gap: scale(SPACING.sm),
   },
   emptyEmoji: {
-    fontSize: 48,
+    fontSize: moderateScale(48),
   },
   emptyTitle: {
     color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
-    marginTop: SPACING.md,
+    marginTop: scale(SPACING.md),
   },
   emptySubtitle: {
     color: COLORS.gray,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     textAlign: "center",
-    paddingHorizontal: SPACING.xxl,
+    paddingHorizontal: scale(SPACING.xxl),
   },
 });

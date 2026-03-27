@@ -1,3 +1,4 @@
+﻿import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -40,9 +41,9 @@ export default function CreateVenueScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backText}>← Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>â† Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Venue</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>Add Venue</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -54,7 +55,7 @@ export default function CreateVenueScreen() {
         {/* Google Places Search */}
         {!vm.venueSelected && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Search for venue</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>Search for venue</Text>
             <TextInput
               style={styles.input}
               value={vm.searchQuery}
@@ -78,10 +79,10 @@ export default function CreateVenueScreen() {
                     style={styles.prediction}
                     onPress={() => vm.selectPlace(prediction.place_id)}
                   >
-                    <Text style={styles.predictionMain}>
+                    <Text allowFontScaling={false} style={styles.predictionMain}>
                       {prediction.structured_formatting.main_text}
                     </Text>
-                    <Text style={styles.predictionSecondary}>
+                    <Text allowFontScaling={false} style={styles.predictionSecondary}>
                       {prediction.structured_formatting.secondary_text}
                     </Text>
                   </TouchableOpacity>
@@ -91,7 +92,7 @@ export default function CreateVenueScreen() {
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
+              <Text allowFontScaling={false} style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -99,7 +100,7 @@ export default function CreateVenueScreen() {
               style={styles.manualButton}
               onPress={() => vm.setVenueSelected(true)}
             >
-              <Text style={styles.manualButtonText}>
+              <Text allowFontScaling={false} style={styles.manualButtonText}>
                 Enter address manually
               </Text>
             </TouchableOpacity>
@@ -112,27 +113,27 @@ export default function CreateVenueScreen() {
             {/* Selected Venue Banner */}
             <View style={styles.selectedBanner}>
               <View style={styles.selectedInfo}>
-                <Text style={styles.selectedName}>
+                <Text allowFontScaling={false} style={styles.selectedName}>
                   {vm.form.venue || "New Venue"}
                 </Text>
                 {vm.form.address && (
-                  <Text style={styles.selectedAddress}>
+                  <Text allowFontScaling={false} style={styles.selectedAddress}>
                     {vm.form.address}, {vm.form.city}, {vm.form.state}{" "}
                     {vm.form.zip_code}
                   </Text>
                 )}
               </View>
               <TouchableOpacity onPress={vm.clearSelection}>
-                <Text style={styles.changeText}>Change</Text>
+                <Text allowFontScaling={false} style={styles.changeText}>Change</Text>
               </TouchableOpacity>
             </View>
 
             {/* Editable Fields */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Venue Details</Text>
+              <Text allowFontScaling={false} style={styles.sectionTitle}>Venue Details</Text>
 
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Venue Name</Text>
+                <Text allowFontScaling={false} style={styles.label}>Venue Name</Text>
                 <TextInput
                   style={styles.input}
                   value={vm.form.venue}
@@ -143,7 +144,7 @@ export default function CreateVenueScreen() {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Address</Text>
+                <Text allowFontScaling={false} style={styles.label}>Address</Text>
                 <TextInput
                   style={styles.input}
                   value={vm.form.address}
@@ -155,7 +156,7 @@ export default function CreateVenueScreen() {
 
               <View style={styles.row}>
                 <View style={[styles.formGroup, { flex: 2 }]}>
-                  <Text style={styles.label}>City</Text>
+                  <Text allowFontScaling={false} style={styles.label}>City</Text>
                   <TextInput
                     style={styles.input}
                     value={vm.form.city}
@@ -170,7 +171,7 @@ export default function CreateVenueScreen() {
                     { flex: 1, marginLeft: SPACING.sm },
                   ]}
                 >
-                  <Text style={styles.label}>State</Text>
+                  <Text allowFontScaling={false} style={styles.label}>State</Text>
                   <TextInput
                     style={styles.input}
                     value={vm.form.state}
@@ -185,7 +186,7 @@ export default function CreateVenueScreen() {
 
               <View style={styles.row}>
                 <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.label}>ZIP Code</Text>
+                  <Text allowFontScaling={false} style={styles.label}>ZIP Code</Text>
                   <TextInput
                     style={styles.input}
                     value={vm.form.zip_code}
@@ -202,7 +203,7 @@ export default function CreateVenueScreen() {
                     { flex: 1, marginLeft: SPACING.sm },
                   ]}
                 >
-                  <Text style={styles.label}>Phone</Text>
+                  <Text allowFontScaling={false} style={styles.label}>Phone</Text>
                   <TextInput
                     style={styles.input}
                     value={vm.form.phone}
@@ -217,13 +218,13 @@ export default function CreateVenueScreen() {
 
             {/* Tables Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tables</Text>
+              <Text allowFontScaling={false} style={styles.sectionTitle}>Tables</Text>
 
               {/* Add Table Form */}
               <View style={styles.addTableCard}>
                 <View style={styles.row}>
                   <View style={[styles.formGroup, { flex: 1, marginTop: 0 }]}>
-                    <Text style={styles.label}>Size</Text>
+                    <Text allowFontScaling={false} style={styles.label}>Size</Text>
                     <Dropdown
                       options={vm.tableSizeOptions}
                       value={vm.newTable.table_size}
@@ -239,7 +240,7 @@ export default function CreateVenueScreen() {
                       { flex: 1, marginLeft: SPACING.sm, marginTop: 0 },
                     ]}
                   >
-                    <Text style={styles.label}>Brand</Text>
+                    <Text allowFontScaling={false} style={styles.label}>Brand</Text>
                     <Dropdown
                       options={vm.brandOptions}
                       value={vm.newTable.brand}
@@ -251,7 +252,7 @@ export default function CreateVenueScreen() {
 
                 <View style={styles.tableBottomRow}>
                   <View style={styles.quantitySection}>
-                    <Text style={styles.label}>Qty</Text>
+                    <Text allowFontScaling={false} style={styles.label}>Qty</Text>
                     <View style={styles.stepper}>
                       <TouchableOpacity
                         style={styles.stepperButton}
@@ -262,9 +263,9 @@ export default function CreateVenueScreen() {
                           )
                         }
                       >
-                        <Text style={styles.stepperText}>−</Text>
+                        <Text allowFontScaling={false} style={styles.stepperText}>âˆ'</Text>
                       </TouchableOpacity>
-                      <Text style={styles.quantityText}>
+                      <Text allowFontScaling={false} style={styles.quantityText}>
                         {vm.newTable.quantity}
                       </Text>
                       <TouchableOpacity
@@ -276,7 +277,7 @@ export default function CreateVenueScreen() {
                           )
                         }
                       >
-                        <Text style={styles.stepperText}>+</Text>
+                        <Text allowFontScaling={false} style={styles.stepperText}>+</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -285,7 +286,7 @@ export default function CreateVenueScreen() {
                     style={styles.addTableButton}
                     onPress={vm.addTable}
                   >
-                    <Text style={styles.addTableButtonText}>+ Add Table</Text>
+                    <Text allowFontScaling={false} style={styles.addTableButtonText}>+ Add Table</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -294,24 +295,24 @@ export default function CreateVenueScreen() {
               {vm.tables.map((table, index) => (
                 <View key={index} style={styles.tableItem}>
                   <View style={styles.tableInfo}>
-                    <Text style={styles.tableText}>
+                    <Text allowFontScaling={false} style={styles.tableText}>
                       {table.quantity}x {table.table_size} {table.brand}
                     </Text>
                   </View>
                   <TouchableOpacity onPress={() => vm.removeTable(index)}>
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text allowFontScaling={false} style={styles.removeText}>Remove</Text>
                   </TouchableOpacity>
                 </View>
               ))}
 
               {vm.tables.length === 0 && (
-                <Text style={styles.emptyText}>No tables added yet</Text>
+                <Text allowFontScaling={false} style={styles.emptyText}>No tables added yet</Text>
               )}
             </View>
 
             {/* Directors Section */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Directors</Text>
+              <Text allowFontScaling={false} style={styles.sectionTitle}>Directors</Text>
 
               <TextInput
                 style={styles.input}
@@ -337,15 +338,15 @@ export default function CreateVenueScreen() {
                       onPress={() => vm.confirmAddDirector(result)}
                     >
                       <View>
-                        <Text style={styles.resultName}>{result.name}</Text>
-                        <Text style={styles.resultEmail}>{result.email}</Text>
+                        <Text allowFontScaling={false} style={styles.resultName}>{result.name}</Text>
+                        <Text allowFontScaling={false} style={styles.resultEmail}>{result.email}</Text>
                         {result.role === "basic_user" && (
-                          <Text style={styles.roleWarning}>
+                          <Text allowFontScaling={false} style={styles.roleWarning}>
                             Will be upgraded to TD
                           </Text>
                         )}
                       </View>
-                      <Text style={styles.addText}>+ Add</Text>
+                      <Text allowFontScaling={false} style={styles.addText}>+ Add</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -355,19 +356,19 @@ export default function CreateVenueScreen() {
               {vm.directors.map((director) => (
                 <View key={director.id_auto} style={styles.directorItem}>
                   <View style={styles.directorInfo}>
-                    <Text style={styles.directorName}>{director.name}</Text>
-                    <Text style={styles.directorEmail}>{director.email}</Text>
+                    <Text allowFontScaling={false} style={styles.directorName}>{director.name}</Text>
+                    <Text allowFontScaling={false} style={styles.directorEmail}>{director.email}</Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => vm.removeDirector(director.id_auto)}
                   >
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text allowFontScaling={false} style={styles.removeText}>Remove</Text>
                   </TouchableOpacity>
                 </View>
               ))}
 
               {vm.directors.length === 0 && (
-                <Text style={styles.emptyText}>No directors added yet</Text>
+                <Text allowFontScaling={false} style={styles.emptyText}>No directors added yet</Text>
               )}
             </View>
 
@@ -383,7 +384,7 @@ export default function CreateVenueScreen() {
               {vm.loading ? (
                 <ActivityIndicator color={COLORS.surface} />
               ) : (
-                <Text style={styles.createButtonText}>Create Venue</Text>
+                <Text allowFontScaling={false} style={styles.createButtonText}>Create Venue</Text>
               )}
             </TouchableOpacity>
           </>
@@ -396,7 +397,6 @@ export default function CreateVenueScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -423,17 +423,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: 50,
+    width: scale(50),
   },
   content: {
     flex: 1,
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.sm,
@@ -454,17 +454,17 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   label: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: 6,
+    marginBottom: scale(6),
     fontWeight: "600",
   },
   input: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   },
   predictions: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -485,14 +485,14 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   predictionMain: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   predictionSecondary: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   dividerRow: {
     flexDirection: "row",
@@ -501,12 +501,12 @@ const styles = StyleSheet.create({
   },
   dividerLine: {
     flex: 1,
-    height: 1,
+    height: scale(1),
     backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: SPACING.md,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   manualButton: {
@@ -514,13 +514,13 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   manualButtonText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   selectedBanner: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     marginBottom: SPACING.lg,
     flexDirection: "row",
@@ -533,23 +533,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   selectedAddress: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   changeText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   addTableCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: scale(12),
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -565,43 +565,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.background,
-    borderRadius: 8,
+    borderRadius: scale(8),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   stepperButton: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     justifyContent: "center",
     alignItems: "center",
   },
   stepperText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     color: COLORS.primary,
     fontWeight: "600",
   },
   quantityText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
     paddingHorizontal: SPACING.sm,
-    minWidth: 30,
+    minWidth: scale(30),
     textAlign: "center",
   },
   addTableButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
   addTableButtonText: {
     color: COLORS.surface,
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },
   tableItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: 10,
+    borderRadius: scale(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -614,12 +614,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tableText: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
   },
   searchResults: {
     backgroundColor: COLORS.surface,
-    borderRadius: 8,
+    borderRadius: scale(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -633,27 +633,27 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   resultName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   resultEmail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   roleWarning: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.warning,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   addText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   directorItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: 10,
+    borderRadius: scale(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -666,29 +666,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   directorName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   directorEmail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: 2,
+    marginTop: scale(2),
   },
   removeText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.error,
     fontWeight: "600",
   },
   emptyText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontStyle: "italic",
     marginTop: SPACING.sm,
   },
   createButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
+    borderRadius: scale(8),
     paddingVertical: SPACING.md,
     alignItems: "center",
     marginTop: SPACING.lg,
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: COLORS.surface,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
   },
   bottomSpacer: {
