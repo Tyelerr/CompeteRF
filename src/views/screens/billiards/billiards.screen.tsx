@@ -1,8 +1,9 @@
 ﻿import { getActiveFilterCount } from "../../../models/types/filter.types";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   FlatList,
   Keyboard,
   Platform,
@@ -44,6 +45,10 @@ const isWeb = Platform.OS === "web";
 const NUM_COLUMNS = isWeb ? 4 : 2;
 const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 
+// How many px the user must scroll up before filter reappears.
+// Prevents rubber-band bounce and accidental micro-flicks from triggering it.
+const SCROLL_UP_THRESHOLD = 50;
+
 export const BilliardsScreen = () => {
   const [webDetailId, setWebDetailId] = useState<string | null>(null);
   const [mobileDetailId, setMobileDetailId] = useState<string | null>(null);
@@ -59,6 +64,7 @@ export const BilliardsScreen = () => {
       }, 500);
     }
   }, [deepLinkId]);
+
   const router = useRouter();
   const vm = useBilliards();
   const recommend = useRecommendVenue();
@@ -67,6 +73,68 @@ export const BilliardsScreen = () => {
 
   const { width: screenWidth } = useWindowDimensions();
   const { cardWidth, imageHeight } = computeMobileCardLayout(screenWidth);
+
+  // ── Collapsing filter header (mobile only) ─────────────────────────────────
+  const filterAnim = useRef(new Animated.Value(0)).current;
+  const filterHeightRef = useRef(0);
+  const filterMeasured = useRef(false);
+  const filterVisibleRef = useRef(true);
+  const lastScrollYRef = useRef(0);
+  // Accumulates upward scroll distance since direction last changed to up.
+  // Reset to 0 whenever user scrolls down. Filter only re-shows once this
+  // exceeds SCROLL_UP_THRESHOLD — prevents rubber-band/bounce false triggers.
+  const scrollUpAccRef = useRef(0);
+  const [filterReady, setFilterReady] = useState(false);
+
+  const onFilterLayout = useCallback(
+    (e: any) => {
+      if (isWeb) return;
+      const h = e.nativeEvent.layout.height;
+      if (h > 0 && !filterMeasured.current) {
+        filterMeasured.current = true;
+        filterHeightRef.current = h;
+        filterAnim.setValue(h);
+        setFilterReady(true);
+      }
+    },
+    [filterAnim]
+  );
+
+  const handleScroll = useCallback(
+    (e: any) => {
+      if (isWeb) return;
+      const y = e.nativeEvent.contentOffset.y;
+      const dy = y - lastScrollYRef.current;
+      lastScrollYRef.current = y;
+
+      if (dy > 2) {
+        // Scrolling down — reset upward accumulator, collapse filter
+        scrollUpAccRef.current = 0;
+        if (y > 40 && filterVisibleRef.current) {
+          filterVisibleRef.current = false;
+          Animated.timing(filterAnim, {
+            toValue: 0,
+            duration: 220,
+            useNativeDriver: false,
+          }).start();
+        }
+      } else if (dy < -2) {
+        // Scrolling up — accumulate distance, only re-show after threshold
+        scrollUpAccRef.current += Math.abs(dy);
+        if (!filterVisibleRef.current && scrollUpAccRef.current >= SCROLL_UP_THRESHOLD) {
+          filterVisibleRef.current = true;
+          scrollUpAccRef.current = 0;
+          Animated.timing(filterAnim, {
+            toValue: filterHeightRef.current,
+            duration: 220,
+            useNativeDriver: false,
+          }).start();
+        }
+      }
+    },
+    [filterAnim]
+  );
+  // ──────────────────────────────────────────────────────────────────────────
 
   const {
     isModalVisible: isReportVisible,
@@ -106,7 +174,6 @@ export const BilliardsScreen = () => {
   const cityOptions =
     vm.cities.length > 0 ? vm.cities : [{ label: "City", value: "" }];
 
-  // Always callable - prompts login if not authenticated, opens modal if logged in
   const handleSearchAlertsPress = () => {
     if (!user) {
       Alert.alert(
@@ -122,7 +189,6 @@ export const BilliardsScreen = () => {
     setSearchAlertsVisible(true);
   };
 
-  // Always callable - prompts login if not authenticated, opens modal if logged in
   const handleRecommendPress = () => {
     if (!user) {
       Alert.alert(
@@ -281,7 +347,6 @@ export const BilliardsScreen = () => {
     );
   };
 
-  // Always rendered - no user gate. handleRecommendPress handles auth check.
   const renderRecommendCard = () => (
     <View
       style={{
@@ -314,7 +379,6 @@ export const BilliardsScreen = () => {
     </View>
   );
 
-  // Always rendered - no user gate. handleSearchAlertsPress handles auth check.
   const renderEmptyState = () => (
     <ScrollView
       style={{ flex: 1 }}
@@ -370,7 +434,10 @@ export const BilliardsScreen = () => {
                 {renderRadiusSlider()}
               </>
             ) : (
-              <>
+              <Animated.View
+                onLayout={onFilterLayout}
+                style={filterReady ? { height: filterAnim, overflow: "hidden" } : undefined}
+              >
                 {vm.isHomeStateEmpty && (
                   <View style={{
                     backgroundColor: COLORS.primary + "15",
@@ -459,7 +526,7 @@ export const BilliardsScreen = () => {
                     <Text style={styles.resetButtonText}>🗑️ Reset Filters</Text>
                   </TouchableOpacity>
                 </View>
-              </>
+              </Animated.View>
             )}
 
             {renderPagination()}
@@ -488,6 +555,9 @@ export const BilliardsScreen = () => {
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            bounces={false}
             refreshControl={
               !isWeb ? (
                 <RefreshControl
@@ -621,5 +691,3 @@ const webS = StyleSheet.create({
 });
 
 export default BilliardsScreen;
-
-
