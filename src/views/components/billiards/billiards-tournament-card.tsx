@@ -118,11 +118,6 @@ export const BilliardsTournamentCard = ({
               {venue.city}, {venue.state}
             </Text>
           )}
-          {venue?.address && (
-            <Text style={styles.venueAddress} numberOfLines={2}>
-              {venue.address}
-            </Text>
-          )}
           <View style={styles.feeSection}>
             <Text style={styles.feeLabel}>Tournament Fee</Text>
             <Text style={styles.feeAmount}>

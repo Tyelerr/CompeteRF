@@ -34,7 +34,7 @@ export const styles = StyleSheet.create({
   // ── Search ──────────────────────────────────────────────────────────────────
   searchContainer: {
     paddingHorizontal: SPACING.md,
-    marginBottom: isWeb ? 6 : SPACING.md,
+    marginBottom: isWeb ? 6 : SPACING.sm,
   },
   searchBar: {
     flexDirection: "row",
@@ -73,6 +73,7 @@ export const styles = StyleSheet.create({
   // ── Filter row ──────────────────────────────────────────────────────────────
   filterRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: SPACING.md,
     gap: isWeb ? 6 : SPACING.sm,
     marginBottom: isWeb ? 6 : SPACING.sm,
@@ -81,13 +82,13 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   filterItemState: {
-    flex: 3,
+    flex: 1,
   },
   filterItemCity: {
-    flex: 3,
+    flex: 1,
   },
   filterItemZip: {
-    flex: 2,
+    width: 110,
   },
   filterLabel: {
     fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.sm,
@@ -106,7 +107,7 @@ export const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.text,
     height: 52,
-    marginTop: SPACING.xs,
+    marginTop: 4,
     textAlignVertical: "center",
     includeFontPadding: false,
   },
@@ -151,7 +152,7 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: SPACING.md,
     gap: isWeb ? 6 : SPACING.md,
-    marginBottom: isWeb ? SPACING.sm : SPACING.md,
+    marginBottom: isWeb ? SPACING.sm : SPACING.sm,
   },
   filtersButton: {
     flex: 1,
@@ -177,6 +178,11 @@ export const styles = StyleSheet.create({
     fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
     color: COLORS.white,
     fontWeight: "600",
+  },
+
+  // ── Pagination wrapper ───────────────────────────────────────────────────────
+  paginationWrap: {
+    marginVertical: isWeb ? SPACING.xs : 2,
   },
 
   // ── Search Alerts button (empty state only) ──────────────────────────────────
@@ -219,8 +225,6 @@ export const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     textAlign: "center",
   },
-  // paddingVertical instead of justifyContent:center so content is never
-  // clipped on smaller screens — the ScrollView wrapper handles overflow.
   emptyContainer: {
     alignItems: "center",
     paddingTop: SPACING.xl,

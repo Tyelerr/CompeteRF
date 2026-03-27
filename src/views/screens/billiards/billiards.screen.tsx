@@ -479,7 +479,6 @@ export const BilliardsScreen = () => {
                 </View>
                 <View style={styles.filterRow}>
                   <View style={styles.filterItemState}>
-                    <Text style={styles.filterLabel}>State</Text>
                     <Dropdown
                       placeholder="All States"
                       options={stateOptions}
@@ -488,7 +487,6 @@ export const BilliardsScreen = () => {
                     />
                   </View>
                   <View style={styles.filterItemCity}>
-                    <Text style={styles.filterLabel}>City</Text>
                     <Dropdown
                       placeholder="City"
                       compact={isWeb}
@@ -498,7 +496,6 @@ export const BilliardsScreen = () => {
                     />
                   </View>
                   <View style={styles.filterItemZip}>
-                    <Text style={styles.filterLabel}>Zip Code</Text>
                     <TextInput
                       style={styles.zipInput}
                       placeholder="Zip"
