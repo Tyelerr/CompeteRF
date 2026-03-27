@@ -1,4 +1,4 @@
-import { supabase } from "@/src/lib/supabase";
+﻿import { supabase } from "@/src/lib/supabase";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -90,9 +90,9 @@ export interface CreateFeaturedBarData {
   featured_priority?: number;
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Featured Content Service (CRUD)
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class FeaturedContentService {
   async getFeaturedPlayers(): Promise<FeaturedPlayer[]> {
@@ -349,9 +349,9 @@ class FeaturedContentService {
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Featured Image Service (Upload / Delete)
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class FeaturedImageService {
   async ensureBucketExists(): Promise<void> {
@@ -363,10 +363,10 @@ class FeaturedImageService {
       });
 
       if (error && !error.message.includes("already exists")) {
-        console.error("❌ Error creating bucket:", error.message);
+        console.error("âŒ Error creating bucket:", error.message);
       }
     } catch (err) {
-      console.error("❌ Bucket creation error:", err);
+      console.error("âŒ Bucket creation error:", err);
     }
   }
 
@@ -399,7 +399,7 @@ class FeaturedImageService {
         });
 
       if (error) {
-        console.error("❌ Upload error:", error.message);
+        console.error("âŒ Upload error:", error.message);
         return null;
       }
 
@@ -407,10 +407,10 @@ class FeaturedImageService {
         data: { publicUrl },
       } = supabase.storage.from(BUCKET_NAME).getPublicUrl(data.path);
 
-      console.log("✅ Image uploaded:", publicUrl);
+      console.log("âœ… Image uploaded:", publicUrl);
       return publicUrl;
     } catch (err) {
-      console.error("❌ Upload failed:", err);
+      console.error("âŒ Upload failed:", err);
       return null;
     }
   }
@@ -431,7 +431,7 @@ class FeaturedImageService {
         .eq("id", playerId);
 
       if (error) {
-        console.error("❌ Failed to update player photo_url:", error.message);
+        console.error("âŒ Failed to update player photo_url:", error.message);
         return null;
       }
     }
@@ -452,7 +452,7 @@ class FeaturedImageService {
         .eq("id", barId);
 
       if (error) {
-        console.error("❌ Failed to update bar photo_url:", error.message);
+        console.error("âŒ Failed to update bar photo_url:", error.message);
         return null;
       }
     }
@@ -472,22 +472,22 @@ class FeaturedImageService {
         .remove([filePath]);
 
       if (error) {
-        console.error("❌ Delete error:", error.message);
+        console.error("âŒ Delete error:", error.message);
         return false;
       }
 
-      console.log("✅ Image deleted:", filePath);
+      console.log("âœ… Image deleted:", filePath);
       return true;
     } catch (err) {
-      console.error("❌ Delete failed:", err);
+      console.error("âŒ Delete failed:", err);
       return false;
     }
   }
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Google Places Helper (for Featured Bars)
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const GOOGLE_PLACES_API_KEY = "AIzaSyC8ih2uZXpyubGDgVGJ1D32NLRS9LSs0gw";
 
@@ -610,3 +610,5 @@ export async function getGooglePlaceDetails(
 
 export const featuredContentService = new FeaturedContentService();
 export const featuredImageService = new FeaturedImageService();
+
+

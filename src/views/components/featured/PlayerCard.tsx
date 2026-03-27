@@ -19,7 +19,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
 
   const handleEdit = () => {
     setEditing(true); setSelectedImageUri(null);
-    setEditData({ name: player.name, nickname: player.nickname, photo_url: player.photo_url, location: player.location, bio: player.bio, fargo_rating: player.fargo_rating, preferred_game: player.preferred_game, featured_priority: player.featured_priority });
+    setEditData({ name: player.name, nickname: player.nickname, photo_url: player.photo_url, location: player.location, bio: player.bio, fargo_rating: player.fargo_rating, preferred_game: player.preferred_game, years_playing: player.years_playing, featured_priority: player.featured_priority });
   };
 
   const handleSave = async () => {
@@ -71,6 +71,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
           <View style={styles.statItem}><Text allowFontScaling={false} style={styles.statLabel}>Location</Text><Text allowFontScaling={false} style={styles.statValue}>{player.location || "—"}</Text></View>
           <View style={styles.statItem}><Text allowFontScaling={false} style={styles.statLabel}>Fargo Rating</Text><Text allowFontScaling={false} style={styles.statValue}>{player.fargo_rating || "—"}</Text></View>
           <View style={styles.statItem}><Text allowFontScaling={false} style={styles.statLabel}>Favorite Game</Text><Text allowFontScaling={false} style={styles.statValue}>{player.preferred_game || "—"}</Text></View>
+          <View style={styles.statItem}><Text allowFontScaling={false} style={styles.statLabel}>Years Playing</Text><Text allowFontScaling={false} style={styles.statValue}>{player.years_playing || "—"}</Text></View>
           <View style={styles.statItem}><Text allowFontScaling={false} style={styles.statLabel}>Priority</Text><Text allowFontScaling={false} style={styles.statValue}>{player.featured_priority || 0}</Text></View>
         </View>
         {player.bio ? <View style={styles.bioDisplay}><Text allowFontScaling={false} style={styles.bioLabel}>Bio</Text><Text allowFontScaling={false} style={styles.bioText} numberOfLines={3}>{player.bio}</Text></View> : null}
@@ -131,6 +132,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
             <View style={styles.halfField}><Text allowFontScaling={false} style={styles.fieldLabel}>Fargo Rating</Text><TextInput allowFontScaling={false} style={styles.fieldInput} value={editData.fargo_rating ? String(editData.fargo_rating) : ""} onChangeText={(t) => setEditData({ ...editData, fargo_rating: parseInt(t) || undefined })} placeholder="e.g. 625" placeholderTextColor="#555" keyboardType="numeric" /></View>
             <View style={styles.halfField}><Text allowFontScaling={false} style={styles.fieldLabel}>Favorite Game</Text><TextInput allowFontScaling={false} style={styles.fieldInput} value={editData.preferred_game || ""} onChangeText={(t) => setEditData({ ...editData, preferred_game: t })} placeholder="e.g. 9-Ball" placeholderTextColor="#555" /></View>
           </View>
+          <View style={styles.field}><Text allowFontScaling={false} style={styles.fieldLabel}>Years Playing</Text><TextInput allowFontScaling={false} style={styles.fieldInput} value={editData.years_playing ? String(editData.years_playing) : ""} onChangeText={(t) => setEditData({ ...editData, years_playing: parseInt(t) || undefined })} placeholder="e.g. 8" placeholderTextColor="#555" keyboardType="numeric" /></View>
           <View style={styles.field}><Text allowFontScaling={false} style={styles.fieldLabel}>Priority</Text><TextInput allowFontScaling={false} style={styles.fieldInput} value={String(editData.featured_priority || 0)} onChangeText={(t) => setEditData({ ...editData, featured_priority: parseInt(t) || 0 })} placeholder="0" placeholderTextColor="#555" keyboardType="numeric" /></View>
         </View>
         <View style={styles.divider} />
@@ -202,3 +204,6 @@ const styles = StyleSheet.create({
   cancelBtn: { alignItems: "center", justifyContent: "center", paddingVertical: scale(12), borderRadius: scale(10), borderWidth: 1, borderColor: "#333", backgroundColor: "#111" },
   cancelBtnText: { fontSize: moderateScale(14), fontWeight: "600", color: "#999" },
 });
+
+
+

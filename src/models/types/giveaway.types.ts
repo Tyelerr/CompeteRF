@@ -1,4 +1,4 @@
-﻿export interface Giveaway {
+export interface Giveaway {
   id: number;
   name: string;
   description: string | null;
@@ -11,6 +11,7 @@
   max_entries: number | null;
   status: "active" | "ended" | "awarded" | "archived";
   winner_id: number | null;
+  winner_display_name?: string | null;
   winner_drawn_at: string | null;
   winner_drawn_by: number | null;
   created_by: number;
@@ -85,7 +86,7 @@ export const INITIAL_ENTRY_FORM: GiveawayEntryForm = {
 };
 
 // Persisted personal info reused across giveaway entries.
-// Sourced from the user most recent giveaway_entries row — no extra table needed.
+// Sourced from the user most recent giveaway_entries row � no extra table needed.
 export interface GiveawaySavedInfo {
   name_as_on_id: string;
   birthday: string; // ISO date: YYYY-MM-DD

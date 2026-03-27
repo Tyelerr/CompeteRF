@@ -1,4 +1,4 @@
-﻿import { supabase } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import {
   Giveaway,
   GiveawayEntry,
@@ -55,7 +55,7 @@ export const giveawayService = {
         .order("end_date", { ascending: true }),
       supabase
         .from("giveaways")
-        .select("*")
+        .select("*, winner:profiles!giveaways_winner_id_fkey(name)")
         .in("status", ["ended", "awarded"])
         .order("ended_at", { ascending: false })
         .limit(10),
@@ -77,7 +77,22 @@ export const giveawayService = {
           .from("giveaway_entries")
           .select("*", { count: "exact", head: true })
           .eq("giveaway_id", g.id);
-        return { ...g, entry_count: count || 0 };
+
+        // Parse "Tyler Brown" ? "Tyler B." for public display.
+        // Only ended/awarded rows carry the winner join; active rows have no winner field.
+        const rawName: string | null = (g as any).winner?.name ?? null;
+        let winner_display_name: string | null = null;
+        if (rawName) {
+          const parts = rawName.trim().split(/\s+/);
+          winner_display_name =
+            parts.length >= 2
+              ? `${parts[0]} ${parts[parts.length - 1][0]}.`
+              : parts[0];
+        }
+
+        // Strip the raw join object before returning so the shape matches Giveaway.
+        const { winner: _winner, ...rest } = g as any;
+        return { ...rest, entry_count: count || 0, winner_display_name };
       }),
     );
 
@@ -183,11 +198,11 @@ export const giveawayService = {
     return !!data;
   },
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // Returns the personal fields from the user most recent entry so the
   // entry sheet can skip the full form on repeat visits.
-  // Uses maybeSingle() — returns null cleanly when no prior entry exists.
-  // ─────────────────────────────────────────────────────────────────────
+  // Uses maybeSingle() � returns null cleanly when no prior entry exists.
+  // ---------------------------------------------------------------------
   async getSavedEntryInfo(userId: number): Promise<GiveawaySavedInfo | null> {
     const { data, error } = await supabase
       .from("giveaway_entries")

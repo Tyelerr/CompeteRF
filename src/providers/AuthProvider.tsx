@@ -2,9 +2,12 @@
 // ═══════════════════════════════════════════════════════════
 // UPDATED: Single auth session hydration via RPC
 // UPDATED: App foreground tracking writes last_active_at to profiles
+// UPDATED: First-time onboarding — navigates to billiards on Get Started
 // ═══════════════════════════════════════════════════════════
 
-import { Session, User } from "@supabase/supabase-js";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session, User } from '@supabase/supabase-js';
+import { router } from 'expo-router';
 import {
   createContext,
   ReactNode,
@@ -12,13 +15,15 @@ import {
   useEffect,
   useRef,
   useState,
-} from "react";
-import { Alert, AppState, AppStateStatus, Platform } from "react-native";
-import { supabase } from "../lib/supabase";
-import { profileService } from "../models/services/profile.service";
-import { Profile, ProfileInsert } from "../models/types/profile.types";
-import { useNotifications } from "../viewmodels/hooks/use.notifications";
-import { useAuthStore } from "../viewmodels/stores/auth.store";
+} from 'react';
+import { Alert, AppState, AppStateStatus, Platform } from 'react-native';
+import { supabase } from '../lib/supabase';
+import { profileService } from '../models/services/profile.service';
+import { Profile, ProfileInsert } from '../models/types/profile.types';
+import { useNotifications } from '../viewmodels/hooks/use.notifications';
+import { useOnboarding } from '../viewmodels/hooks/useOnboarding';
+import { useAuthStore } from '../viewmodels/stores/auth.store';
+import { OnboardingModal } from '../views/components/onboarding/OnboardingModal';
 
 // ── Context type ───────────────────────────────────────────
 interface AuthContextType {
@@ -34,16 +39,17 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
+  replayOnboarding: () => Promise<void>;
 }
 
 const SUBMIT_ALLOWED_ROLES = [
-  "tournament_director",
-  "bar_owner",
-  "compete_admin",
-  "super_admin",
+  'tournament_director',
+  'bar_owner',
+  'compete_admin',
+  'super_admin',
 ];
 
-const ADMIN_ROLES = ["compete_admin", "super_admin"];
+const ADMIN_ROLES = ['compete_admin', 'super_admin'];
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
@@ -58,6 +64,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
   signOut: async () => {},
   createProfile: async () => {},
+  replayOnboarding: async () => {},
 });
 
 interface AuthProviderProps {
@@ -69,59 +76,80 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const onboardingCheckedRef = useRef(false);
+  const { checkHasSeenOnboarding, markOnboardingComplete, resetOnboarding } =
+    useOnboarding();
+
+  // Called by both Skip (future use) and Get Started
+  // Get Started navigates to billiards; skip just closes
+  const dismissOnboarding = async (navigateToBilliards = false) => {
+    await markOnboardingComplete();
+    setShowOnboarding(false);
+    if (navigateToBilliards) {
+      // Small delay so modal fade-out completes before navigation
+      setTimeout(() => {
+        router.replace('/(tabs)/billiards' as any);
+      }, 300);
+    }
+  };
+
+  const replayOnboarding = async () => {
+    await resetOnboarding();
+    setShowOnboarding(true);
+  };
+
   // Zustand store — single source of truth
   const { profile, hydrateSession, reset: resetStore } = useAuthStore();
 
   // ── Generation counter ─────────────────────────────────────────────────────
   const hydrationGenRef = useRef(0);
 
-  // Keep a ref to the current user id so the AppState handler can read it
-  // without closing over a stale value.
   const userIdRef = useRef<string | null>(null);
   useEffect(() => {
     userIdRef.current = user?.id ?? null;
   }, [user?.id]);
 
+  // Check onboarding once when profile is first available after login
+  useEffect(() => {
+    if (!loading && profile && !onboardingCheckedRef.current) {
+      onboardingCheckedRef.current = true;
+      checkHasSeenOnboarding().then((seen) => {
+        if (!seen) setShowOnboarding(true);
+      });
+    }
+  }, [loading, profile, checkHasSeenOnboarding]);
+
   // 🔔 Push notification registration
   const { pushToken } = useNotifications(profile ? user?.id : undefined);
 
   // ── Last-active tracking ───────────────────────────────────────────────────
-  // Write last_active_at on every app foreground event and on initial mount.
-  // Uses a simple debounce so rapid foreground/background cycles don't spam
-  // the database — at most one write per 60 seconds per session.
   const lastActivePingRef = useRef<number>(0);
 
   const pingLastActive = async () => {
     const uid = userIdRef.current;
     if (!uid) return;
-
     const now = Date.now();
-    if (now - lastActivePingRef.current < 60_000) return; // 60 s debounce
+    if (now - lastActivePingRef.current < 60_000) return;
     lastActivePingRef.current = now;
-
     try {
       await supabase
-        .from("profiles")
+        .from('profiles')
         .update({ last_active_at: new Date().toISOString() })
-        .eq("id", uid);
+        .eq('id', uid);
     } catch {
-      // Non-critical — silently ignore
+      // Non-critical
     }
   };
 
   useEffect(() => {
-    // Write on mount (first foreground)
     pingLastActive();
-
-    if (Platform.OS === "web") return; // AppState not meaningful on web
-
+    if (Platform.OS === 'web') return;
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === "active") {
-        pingLastActive();
-      }
+      if (nextState === 'active') pingLastActive();
     };
-
-    const sub = AppState.addEventListener("change", handleAppStateChange);
+    const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
   }, []);
 
@@ -131,11 +159,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       hydrateSession(null, [], []);
       setLoading(false);
       Alert.alert(
-        "Account Disabled",
-        "Your account has been disabled. Contact support at support@competerf.com.",
+        'Account Disabled',
+        'Your account has been disabled. Contact support at support@competerf.com.',
         [
           {
-            text: "OK",
+            text: 'OK',
             onPress: async () => {
               await supabase.auth.signOut();
               setSession(null);
@@ -154,72 +182,55 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // ── Session hydration via RPC ─────────────────────────────────────────────
   const hydrateAuthSession = async (userId: string) => {
     const myGen = ++hydrationGenRef.current;
-
     try {
-      const { data, error } = await supabase.rpc("get_auth_session");
-
+      const { data, error } = await supabase.rpc('get_auth_session');
       if (myGen !== hydrationGenRef.current) return;
-
       if (error) {
-        console.error("Auth session RPC error:", error);
+        console.error('Auth session RPC error:', error);
         await fallbackFetchProfile(userId, myGen);
         return;
       }
-
       if (!data || !data.profile) {
         hydrateSession(null, [], []);
         return;
       }
-
       const wasDisabled = await checkDisabledAndEject(data.profile);
       if (wasDisabled) return;
-
       if (myGen !== hydrationGenRef.current) return;
-
       hydrateSession(
         data.profile as Profile,
         data.owned_venue_ids || [],
         data.directed_venue_ids || [],
       );
-
-      // Ping last active after successful hydration
       pingLastActive();
     } catch (error) {
-      console.error("Auth session hydration error:", error);
+      console.error('Auth session hydration error:', error);
       if (myGen !== hydrationGenRef.current) return;
       await fallbackFetchProfile(userId, myGen);
     } finally {
-      if (myGen === hydrationGenRef.current) {
-        setLoading(false);
-      }
+      if (myGen === hydrationGenRef.current) setLoading(false);
     }
   };
 
   const fallbackFetchProfile = async (userId: string, gen: number) => {
     try {
       const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
         .maybeSingle();
-
       if (gen !== hydrationGenRef.current) return;
       if (error) throw error;
-
       const wasDisabled = await checkDisabledAndEject(data);
       if (wasDisabled) return;
-
       if (gen !== hydrationGenRef.current) return;
-
       hydrateSession(data as Profile | null, [], []);
     } catch (error) {
-      console.error("Fallback profile fetch error:", error);
+      console.error('Fallback profile fetch error:', error);
       if (gen !== hydrationGenRef.current) return;
       hydrateSession(null, [], []);
     } finally {
-      if (gen === hydrationGenRef.current) {
-        setLoading(false);
-      }
+      if (gen === hydrationGenRef.current) setLoading(false);
     }
   };
 
@@ -264,7 +275,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       await profileService.createProfile(profileData);
       if (user?.id) await hydrateAuthSession(user.id);
     } catch (error) {
-      console.error("Create profile error:", error);
+      console.error('Create profile error:', error);
       throw error;
     }
   };
@@ -274,12 +285,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (user?.id) {
       try {
         const { notificationService } =
-          await import("../models/services/notification.service");
+          await import('../models/services/notification.service');
         await notificationService.removeUserTokens(user.id);
       } catch (err) {
-        console.error("Error removing push tokens on sign out:", err);
+        console.error('Error removing push tokens on sign out:', err);
       }
     }
+    onboardingCheckedRef.current = false;
+    setShowOnboarding(false);
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
@@ -302,9 +315,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     refreshProfile: refreshSession,
     signOut,
     createProfile,
+    replayOnboarding,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <OnboardingModal
+        visible={showOnboarding}
+        onComplete={() => dismissOnboarding(true)}
+        onSkip={() => dismissOnboarding(false)}
+      />
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuthContext = () => useContext(AuthContext);

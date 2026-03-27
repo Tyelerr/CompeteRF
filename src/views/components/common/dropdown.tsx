@@ -118,9 +118,9 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
 };
 
 const styles = StyleSheet.create({
-  container: { marginTop: scale(SPACING.xs) },
+  container: { marginTop: 0 },
   label: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: scale(SPACING.xs), transition: "color 0.18s ease" as any },
-  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, height: scale(52), paddingHorizontal: scale(SPACING.md), paddingVertical: 0, flexDirection: "row", alignItems: "center", overflow: "hidden" },
+  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, height: scale(44), paddingHorizontal: scale(SPACING.md), paddingVertical: 0, flexDirection: "row", alignItems: "center", overflow: "hidden" },
   selectorError: { borderColor: COLORS.error },
   selectorDisabled: { backgroundColor: COLORS.background, opacity: 0.6 },
   selectorText: { fontSize: moderateScale(FONT_SIZES.md), lineHeight: moderateScale(FONT_SIZES.md + 2), color: COLORS.text, flex: 1, minWidth: 0, width: "100%" as any },
@@ -158,3 +158,5 @@ const wStyles = StyleSheet.create({
   arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4, transition: "color 0.18s ease, transform 0.18s ease" as any },
   arrowOpen: { color: COLORS.primary },
 });
+
+

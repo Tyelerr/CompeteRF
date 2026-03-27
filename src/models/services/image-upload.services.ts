@@ -6,33 +6,21 @@ export const imageUploadService = {
   /**
    * Pick an image from the device library.
    * Returns null if the user cancels or permission is unavailable.
-   * Shows an actionable alert guiding the user to Settings if access was previously denied.
+   *
+   * IMPORTANT: Do NOT call getMediaLibraryPermissionsAsync() first and
+   * early-exit on "denied". On iOS, the OS can grant access in Settings
+   * after a prior denial, but the get() call may return a stale "denied"
+   * within the same app session. requestMediaLibraryPermissionsAsync()
+   * always reflects the true current OS state and never re-prompts the
+   * user if they previously denied — it just returns the live status.
    */
   async pickImage(): Promise<string | null> {
-    // Check existing status before requesting — iOS silently ignores
-    // requestMediaLibraryPermissionsAsync() once status is "denied"
-    const { status: existingStatus } =
-      await ImagePicker.getMediaLibraryPermissionsAsync();
-
-    if (existingStatus === "denied") {
-      Alert.alert(
-        "Photo Access Disabled",
-        "Compete needs access to your photo library to upload images. Please enable it in Settings.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Open Settings", onPress: () => Linking.openSettings() },
-        ],
-      );
-      return null;
-    }
-
-    // Either undetermined or already granted — request/confirm
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== "granted") {
       Alert.alert(
-        "Permission Required",
-        "Please allow access to your photo library to upload images.",
+        "Photo Access Required",
+        "Compete needs access to your photo library. Please enable it in Settings.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Open Settings", onPress: () => Linking.openSettings() },
@@ -55,7 +43,7 @@ export const imageUploadService = {
   },
 
   /**
-   * Upload an image to Supabase storage
+   * Upload an image to Supabase storage.
    */
   async uploadImage(
     uri: string,
@@ -100,7 +88,7 @@ export const imageUploadService = {
   },
 
   /**
-   * Delete an image from Supabase storage
+   * Delete an image from Supabase storage.
    */
   async deleteImage(
     url: string,

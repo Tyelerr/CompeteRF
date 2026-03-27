@@ -17,6 +17,7 @@ import { useWindowDimensions, Animated,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
 import { authService } from "../../src/models/services/auth.service";
+import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -138,13 +139,14 @@ const LoggedOutView = ({ router }: { router: any }) => {
   return (
     <View style={styles.container}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <Text style={styles.headerTitle}>PROFILE</Text>
-        <Text style={styles.headerSubtitle}>
+        <Text style={styles.headerTitle} allowFontScaling={false}>PROFILE</Text>
+        <Text style={styles.headerSubtitle} allowFontScaling={false}>
           View and manage your tournament history
         </Text>
       </View>
       <View style={styles.notLoggedIn}>
         <Animated.Text
+          allowFontScaling={false}
           style={[
             styles.welcomeText,
             { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] },
@@ -152,7 +154,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
         >
           Welcome!
         </Animated.Text>
-        <Animated.Text style={[styles.message, { opacity: messageFade }]}>
+        <Animated.Text allowFontScaling={false} style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
         <Animated.View
@@ -176,12 +178,12 @@ const LoggedOutView = ({ router }: { router: any }) => {
                   onPress={handleAppleSignIn}
                 />
                 {appleLoading && (
-                  <Text style={styles.loadingHint}>Signing in...</Text>
+                  <Text allowFontScaling={false} style={styles.loadingHint}>Signing in...</Text>
                 )}
               </View>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text allowFontScaling={false} style={styles.dividerText}>or</Text>
                 <View style={styles.dividerLine} />
               </View>
             </>
@@ -198,7 +200,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
             variant="outline"
             fullWidth
           />
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? <Text allowFontScaling={false} style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
       </View>
     </View>
@@ -208,45 +210,24 @@ const LoggedOutView = ({ router }: { router: any }) => {
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const { width } = useWindowDimensions();
-  const isSmall = width < 390;
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
-
-  // Scroll to top whenever the favorites page changes
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  }, [currentPage]);
-
-  // ── Seed profile from Zustand store immediately ───────────────────────────
-  // This is the key fix: instead of starting with null and waiting for a
-  // fresh DB fetch, we initialise directly from the auth store which is
-  // already populated by the time we navigate here. This eliminates the
-  // "No ID" flash that occurred because the screen rendered before its own
-  // independent loadProfile() fetch completed.
+  
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
-
-  // Initialise from the store so the screen is never blank on first render
   const [profile, setProfile] = useState<any>(storeProfile ?? null);
-
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // Modals
   const [inboxVisible, setInboxVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
-
-  // Tournament detail modal
-  const [detailTournamentId, setDetailTournamentId] = useState<string | null>(
-    null,
-  );
+  const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
@@ -263,11 +244,12 @@ export default function ProfileScreen() {
     canGoPrev,
   } = usePagination(favorites, { itemsPerPage: 5 });
 
-  // ── Keep local profile in sync if the store updates (e.g. after edit) ─────
   useEffect(() => {
-    if (storeProfile) {
-      setProfile(storeProfile);
-    }
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentPage]);
+
+  useEffect(() => {
+    if (storeProfile) setProfile(storeProfile);
   }, [storeProfile]);
 
   useEffect(() => {
@@ -290,16 +272,11 @@ export default function ProfileScreen() {
   }, []);
 
   const checkUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     setUser(session?.user || null);
     if (session?.user) {
-      // If the store already gave us a profile, we can skip showing a loader
-      // and just refresh in the background for favourites etc.
       if (storeProfile) {
         setLoading(false);
-        // Still fetch fresh data for favorites / unread count
         loadFavorites(storeProfile.id_auto);
         loadUnreadCount(session.user.id);
       } else {
@@ -312,8 +289,6 @@ export default function ProfileScreen() {
   };
 
   const loadProfile = async (userId: string) => {
-    // maybeSingle() never throws on zero rows — .single() did, which caused
-    // silent failures during the brief post-signup window.
     const { data } = await supabase
       .from("profiles")
       .select("*")
@@ -329,9 +304,7 @@ export default function ProfileScreen() {
   const loadFavorites = async (userIdAuto: number) => {
     const { data } = await supabase
       .from("favorites")
-      .select(
-        "id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))",
-      )
+      .select("id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))")
       .eq("user_id", userIdAuto)
       .not("tournament_id", "is", null);
     if (data) setFavorites(data as unknown as Favorite[]);
@@ -392,15 +365,11 @@ export default function ProfileScreen() {
         return tournament.thumbnail.replace("custom:", "");
       const f = map[tournament.thumbnail];
       if (f)
-        return (
-          "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
-          f
-        );
+        return "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f;
     }
     const f = map[tournament.game_type];
     return f
-      ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" +
-          f
+      ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f
       : null;
   };
 
@@ -427,24 +396,18 @@ export default function ProfileScreen() {
     const run = async () => {
       const fav = favorites.find((f) => f.id === favId);
       if (fav?.tournament_id) {
-        // Use the shared hook so React Query cache is invalidated
-        // and billiards + tournament detail modal update instantly
         await toggleFav(fav.tournament_id);
       } else {
         await supabase.from("favorites").delete().eq("id", favId);
       }
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
-      if (
-        currentPage > Math.ceil(updated.length / 5) &&
-        Math.ceil(updated.length / 5) > 0
-      )
+      if (currentPage > Math.ceil(updated.length / 5) && Math.ceil(updated.length / 5) > 0)
         prevPage();
     };
     run();
   };
 
-  // Show loading only when we have no profile data at all to display
   if (loading && !profile) return <Loading fullScreen message="Loading..." />;
   if (!user) return <LoggedOutView router={router} />;
 
@@ -466,23 +429,22 @@ export default function ProfileScreen() {
       >
         <View style={isWeb ? styles.webInner : styles.mobileInner}>
           <View style={[styles.header, isWeb && styles.headerWeb]}>
-            <Text style={styles.headerTitle}>PROFILE</Text>
-            <Text style={styles.headerSubtitle}>
+            <Text style={styles.headerTitle} allowFontScaling={false}>PROFILE</Text>
+            <Text style={styles.headerSubtitle} allowFontScaling={false}>
               View and manage your tournament history
             </Text>
           </View>
 
           <View style={styles.profileCard}>
-            {/* Messages floating button */}
             <TouchableOpacity
               style={styles.messagesFloatingButton}
               onPress={() => setInboxVisible(true)}
             >
               <Text style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
-              <Text style={styles.messagesFloatingText}>Messages</Text>
+              <Text style={styles.messagesFloatingText} allowFontScaling={false}>Messages</Text>
               {unreadCount > 0 && (
                 <View style={styles.messagesUnreadBadge}>
-                  <Text style={styles.messagesUnreadText}>{unreadCount}</Text>
+                  <Text style={styles.messagesUnreadText} allowFontScaling={false}>{unreadCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -516,59 +478,43 @@ export default function ProfileScreen() {
                 )}
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.name}>
+                <Text style={styles.name} allowFontScaling={false}>
                   {profile?.user_name
                     ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
                     : user.email?.split("@")[0] || "Player"}
                 </Text>
-                <Text style={styles.playerID}>
-                  {profile?.id_auto
-                    ? generatePlayerID(profile.id_auto)
-                    : "Loading..."}
+                <Text style={styles.playerID} allowFontScaling={false}>
+                  {profile?.id_auto ? generatePlayerID(profile.id_auto) : "Loading..."}
                 </Text>
-                <Text style={styles.memberSince}>
-                  Member since{" "}
-                  {formatMemberSince(profile?.created_at || user.created_at)}
+                <Text style={styles.memberSince} allowFontScaling={false}>
+                  Member since {formatMemberSince(profile?.created_at || user.created_at)}
                 </Text>
               </View>
             </View>
 
-            <View
-              style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}
-            >
+            {/* Action buttons row */}
+            <View style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.editButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setEditProfileVisible(true)}
               >
-                <Text style={styles.editButtonText}>
+                <Text style={styles.editButtonText} allowFontScaling={false}>
                   {"\u2699\uFE0F"} Edit Profile
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.notificationButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]}
                 onPress={() => setInboxVisible(true)}
               >
-                <Text style={styles.notificationButtonText}>
+                <Text style={styles.notificationButtonText} allowFontScaling={false}>
                   {"\uD83D\uDD14"} Notifications
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.signOutButton,
-                  isWeb && styles.actionButtonWeb,
-                ]}
+                style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]}
                 onPress={handleLogout}
               >
-                <Text style={styles.signOutButtonText}>
+                <Text style={styles.signOutButtonText} allowFontScaling={false}>
                   {"\uD83D\uDEAA"} Sign Out
                 </Text>
               </TouchableOpacity>
@@ -578,24 +524,20 @@ export default function ProfileScreen() {
               <View style={styles.userDetails}>
                 {profile.home_state && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Home State</Text>
-                    <Text style={styles.detailValue}>{profile.home_state}</Text>
+                    <Text style={styles.detailLabel} allowFontScaling={false}>Home State</Text>
+                    <Text style={styles.detailValue} allowFontScaling={false}>{profile.home_state}</Text>
                   </View>
                 )}
                 {profile.favorite_player && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Favorite Player</Text>
-                    <Text style={styles.detailValue}>
-                      {profile.favorite_player}
-                    </Text>
+                    <Text style={styles.detailLabel} allowFontScaling={false}>Favorite Player</Text>
+                    <Text style={styles.detailValue} allowFontScaling={false}>{profile.favorite_player}</Text>
                   </View>
                 )}
                 {profile.preferred_game && (
                   <View style={styles.detailItem}>
-                    <Text style={styles.detailLabel}>Favorite Game</Text>
-                    <Text style={styles.detailValue}>
-                      {formatGameName(profile.preferred_game)}
-                    </Text>
+                    <Text style={styles.detailLabel} allowFontScaling={false}>Favorite Game</Text>
+                    <Text style={styles.detailValue} allowFontScaling={false}>{formatGameName(profile.preferred_game)}</Text>
                   </View>
                 )}
               </View>
@@ -607,7 +549,7 @@ export default function ProfileScreen() {
               style={[styles.navButton, styles.favoritesButton]}
               onPress={() => {}}
             >
-              <Text style={styles.navButtonText}>
+              <Text style={styles.navButtonText} allowFontScaling={false}>
                 {"\u2764\uFE0F"} Favorite Tournaments
               </Text>
             </TouchableOpacity>
@@ -615,7 +557,7 @@ export default function ProfileScreen() {
               style={[styles.navButton, styles.alertsButton]}
               onPress={() => setSearchAlertsVisible(true)}
             >
-              <Text style={styles.alertsButtonText}>
+              <Text style={styles.alertsButtonText} allowFontScaling={false}>
                 {"\uD83D\uDD0D"} Search Alerts
               </Text>
             </TouchableOpacity>
@@ -624,8 +566,8 @@ export default function ProfileScreen() {
           <View style={styles.favoritesSection}>
             {favorites.length === 0 ? (
               <View style={styles.emptyFavorites}>
-                <Text style={styles.emptyText}>No favorites yet</Text>
-                <Text style={styles.emptySubtext}>
+                <Text style={styles.emptyText} allowFontScaling={false}>No favorites yet</Text>
+                <Text style={styles.emptySubtext} allowFontScaling={false}>
                   Tap the heart on tournaments to save them here!
                 </Text>
               </View>
@@ -665,12 +607,12 @@ export default function ProfileScreen() {
                         try {
                           const t = fav.tournaments;
                           if (!t) return;
-                          const deepLink = `competerf://tournament/${t.id}`;
+                          const deepLink = "competerf://tournament/" + t.id;
                           const date = new Date(t.tournament_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                           const message =
-                            `\uD83C\uDFB1 ${t.name}\n` +
-                            `\uD83D\uDCC5 ${date}\n` +
-                            `\uD83D\uDCCD ${t.venues?.venue || ""}, ${t.venues?.city || ""}, ${t.venues?.state || ""}\n\n` +
+                            "\uD83C\uDFB1 " + t.name + "\n" +
+                            "\uD83D\uDCC5 " + date + "\n" +
+                            "\uD83D\uDCCD " + (t.venues?.venue || "") + ", " + (t.venues?.city || "") + ", " + (t.venues?.state || "") + "\n\n" +
                             deepLink;
                           await Share.share({ message });
                         } catch (e) {
@@ -836,10 +778,10 @@ const styles = StyleSheet.create({
   messagesFloatingText: {
     fontSize: FONT_SIZES.xs,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: COLORS.white,
   },
   messagesUnreadBadge: {
-    backgroundColor: "#E74C3C",
+    backgroundColor: COLORS.error,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
@@ -848,7 +790,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginLeft: 2,
   },
-  messagesUnreadText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  messagesUnreadText: { fontSize: 10, fontWeight: "700", color: COLORS.white },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -984,9 +926,6 @@ const styles = StyleSheet.create({
   },
   spacerSm: { height: SPACING.sm },
 });
-
-
-
 
 
 
