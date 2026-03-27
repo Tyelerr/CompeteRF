@@ -1,4 +1,5 @@
 ﻿import { Platform, StyleSheet } from "react-native";
+import { scale, moderateScale } from "../../../utils/scaling";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -103,11 +104,11 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingVertical: 0,
-    paddingHorizontal: SPACING.md,
-    fontSize: FONT_SIZES.md,
+    paddingHorizontal: scale(SPACING.md),
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
-    height: 52,
-    marginTop: 4,
+    height: scale(44),
+    marginTop: 0,
     textAlignVertical: "center",
     includeFontPadding: false,
   },
@@ -255,3 +256,12 @@ export const webStyles = StyleSheet.create({
   headerTitle: {},
   list: {},
 });
+
+
+
+
+
+
+
+
+
