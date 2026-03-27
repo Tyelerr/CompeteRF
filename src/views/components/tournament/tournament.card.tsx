@@ -1,29 +1,17 @@
-import React from "react";
+﻿import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { moderateScale, scale } from "../../../utils/scaling";
 
 export interface TournamentCardData {
-  id: number;
-  name: string;
-  game_type: string;
-  tournament_format: string;
-  tournament_date: string;
-  start_time: string;
-  status: string;
-  venue_name: string;
-  director_name: string;
-  views_count: number;
-  favorites_count: number;
-  thumbnail?: string;
-  can_edit: boolean;
-  can_delete: boolean;
-  cancelled_at?: string;
-  cancelled_by_name?: string;
-  cancellation_reason?: string;
-  archived_at?: string;
-  archived_by_name?: string;
+  id: number; name: string; game_type: string; tournament_format: string;
+  tournament_date: string; start_time: string; status: string;
+  venue_name: string; director_name: string; views_count: number;
+  favorites_count: number; thumbnail?: string; can_edit: boolean;
+  can_delete: boolean; cancelled_at?: string; cancelled_by_name?: string;
+  cancellation_reason?: string; archived_at?: string; archived_by_name?: string;
 }
 
 interface TournamentCardProps {
@@ -38,14 +26,7 @@ interface TournamentCardProps {
   showActions?: boolean;
 }
 
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
+const formatDate = (dateString: string): string => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 const formatTime = (timeString: string): string => {
   if (!timeString) return "";
@@ -58,42 +39,20 @@ const formatTime = (timeString: string): string => {
 
 const formatDateTime = (dateString: string | null): string => {
   if (!dateString) return "";
-  const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
 const getStatusColor = (status: string): string => {
   switch (status) {
-    case "active":
-      return COLORS.success;
-    case "completed":
-      return COLORS.primary;
-    case "cancelled":
-      return COLORS.error;
-    case "archived":
-      return COLORS.textSecondary;
-    default:
-      return COLORS.textSecondary;
+    case "active": return COLORS.success;
+    case "completed": return COLORS.primary;
+    case "cancelled": return COLORS.error;
+    case "archived": return COLORS.textSecondary;
+    default: return COLORS.textSecondary;
   }
 };
 
-export const TournamentCard = ({
-  tournament,
-  onPress,
-  onEdit,
-  onDelete,
-  onArchive,
-  onCancel,
-  onRestore,
-  isProcessing = false,
-  showActions = true,
-}: TournamentCardProps) => {
+export const TournamentCard = ({ tournament, onPress, onEdit, onDelete, onArchive, onCancel, onRestore, isProcessing = false, showActions = true }: TournamentCardProps) => {
   const statusColor = getStatusColor(tournament.status);
   const isArchived = tournament.status === "archived";
   const isCancelled = tournament.status === "cancelled";
@@ -101,196 +60,88 @@ export const TournamentCard = ({
   const isCompleted = tournament.status === "completed";
 
   return (
-    <TouchableOpacity
-      style={[styles.card, isArchived && styles.cardArchived]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      {/* Header: Name, Status, and ID */}
+    <TouchableOpacity style={[styles.card, isArchived && styles.cardArchived]} onPress={onPress} activeOpacity={0.8}>
       <View style={styles.cardHeader}>
-        <Text
-          style={[styles.tournamentName, isArchived && styles.textArchived]}
-          numberOfLines={1}
-        >
-          {tournament.name}
-        </Text>
-
+        <Text allowFontScaling={false} style={[styles.tournamentName, isArchived && styles.textArchived]} numberOfLines={1}>{tournament.name}</Text>
         <View style={styles.headerRight}>
-          {/* Status Badge - No icon, just text */}
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: statusColor + "20" },
-            ]}
-          >
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {tournament.status}
-            </Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
+            <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>{tournament.status}</Text>
           </View>
-
-          {/* Tournament ID Badge - Below status */}
           <View style={styles.idBadge}>
-            <Text style={styles.idText}>ID: {tournament.id}</Text>
+            <Text allowFontScaling={false} style={styles.idText}>ID: {tournament.id}</Text>
           </View>
         </View>
       </View>
 
-      {/* Game Type & Format */}
-      <Text style={[styles.gameType, isArchived && styles.textArchived]}>
-        {tournament.game_type} •{" "}
-        {tournament.tournament_format.replace("_", " ")}
+      <Text allowFontScaling={false} style={[styles.gameType, isArchived && styles.textArchived]}>
+        {tournament.game_type} • {tournament.tournament_format.replace("_", " ")}
       </Text>
 
-      {/* Date & Time */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📅</Text>
-        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
-          {formatDate(tournament.tournament_date)}
-          {tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
+        <Text allowFontScaling={false} style={styles.infoIcon}>📅</Text>
+        <Text allowFontScaling={false} style={[styles.infoText, isArchived && styles.textArchived]}>
+          {formatDate(tournament.tournament_date)}{tournament.start_time && ` at ${formatTime(tournament.start_time)}`}
         </Text>
       </View>
-
-      {/* Venue */}
       <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>📍</Text>
-        <Text
-          style={[styles.infoText, isArchived && styles.textArchived]}
-          numberOfLines={1}
-        >
-          {tournament.venue_name}
-        </Text>
+        <Text allowFontScaling={false} style={styles.infoIcon}>📍</Text>
+        <Text allowFontScaling={false} style={[styles.infoText, isArchived && styles.textArchived]} numberOfLines={1}>{tournament.venue_name}</Text>
+      </View>
+      <View style={styles.infoRow}>
+        <Text allowFontScaling={false} style={styles.infoIcon}>👤</Text>
+        <Text allowFontScaling={false} style={[styles.infoText, isArchived && styles.textArchived]}>TD: {tournament.director_name}</Text>
       </View>
 
-      {/* Director */}
-      <View style={styles.infoRow}>
-        <Text style={styles.infoIcon}>👤</Text>
-        <Text style={[styles.infoText, isArchived && styles.textArchived]}>
-          TD: {tournament.director_name}
-        </Text>
-      </View>
-
-      {/* Cancellation Info */}
       {isCancelled && tournament.cancelled_at && (
         <View style={styles.statusInfoBox}>
-          <Text style={styles.statusInfoTitle}>❌ Cancelled</Text>
-          <Text style={styles.statusInfoText}>
-            By: {tournament.cancelled_by_name || "Unknown"}
-          </Text>
-          <Text style={styles.statusInfoText}>
-            On: {formatDateTime(tournament.cancelled_at)}
-          </Text>
-          {tournament.cancellation_reason && (
-            <Text style={styles.statusInfoReason}>
-              Reason: {tournament.cancellation_reason}
-            </Text>
-          )}
+          <Text allowFontScaling={false} style={styles.statusInfoTitle}>❌ Cancelled</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>By: {tournament.cancelled_by_name || "Unknown"}</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>On: {formatDateTime(tournament.cancelled_at)}</Text>
+          {tournament.cancellation_reason && <Text allowFontScaling={false} style={styles.statusInfoReason}>Reason: {tournament.cancellation_reason}</Text>}
         </View>
       )}
 
-      {/* Archived Info */}
       {isArchived && tournament.archived_at && (
         <View style={[styles.statusInfoBox, styles.statusInfoBoxArchived]}>
-          <Text style={styles.statusInfoTitle}>📦 Archived</Text>
-          <Text style={styles.statusInfoText}>
-            By: {tournament.archived_by_name || "Unknown"}
-          </Text>
-          <Text style={styles.statusInfoText}>
-            On: {formatDateTime(tournament.archived_at)}
-          </Text>
+          <Text allowFontScaling={false} style={styles.statusInfoTitle}>📦 Archived</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>By: {tournament.archived_by_name || "Unknown"}</Text>
+          <Text allowFontScaling={false} style={styles.statusInfoText}>On: {formatDateTime(tournament.archived_at)}</Text>
         </View>
       )}
 
-      {/* Stats Row with Action Buttons */}
       <View style={styles.bottomRow}>
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, isArchived && styles.textArchived]}>
-              {tournament.views_count}
-            </Text>
-            <Text style={styles.statLabel}>Views</Text>
+            <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>{tournament.views_count}</Text>
+            <Text allowFontScaling={false} style={styles.statLabel}>Views</Text>
           </View>
           <View style={styles.stat}>
-            <Text style={[styles.statValue, isArchived && styles.textArchived]}>
-              {tournament.favorites_count}
-            </Text>
-            <Text style={styles.statLabel}>Favorites</Text>
+            <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>{tournament.favorites_count}</Text>
+            <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
           </View>
         </View>
-
-        {/* Action Icons - Bottom Right */}
         {showActions && (
           <View style={styles.bottomActionIcons}>
             {tournament.can_edit && onEdit && (
-              <TouchableOpacity
-                style={[styles.bottomActionIcon, styles.editButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                disabled={isProcessing}
-              >
-                <Text style={[styles.actionButtonText, styles.editButtonText]}>
-                  Edit
-                </Text>
+              <TouchableOpacity style={[styles.bottomActionIcon, styles.editButton]} onPress={(e) => { e.stopPropagation(); onEdit(); }} disabled={isProcessing}>
+                <Text allowFontScaling={false} style={[styles.actionButtonText, styles.editButtonText]}>Edit</Text>
               </TouchableOpacity>
             )}
-
             {tournament.can_delete && (
               <>
                 {isActive && onCancel && (
-                  <TouchableOpacity
-                    style={[styles.bottomActionIcon, styles.deleteButton]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onCancel();
-                    }}
-                    disabled={isProcessing}
-                  >
-                    <Text
-                      style={[styles.actionButtonText, styles.deleteButtonText]}
-                    >
-                      Delete
-                    </Text>
+                  <TouchableOpacity style={[styles.bottomActionIcon, styles.deleteButton]} onPress={(e) => { e.stopPropagation(); onCancel(); }} disabled={isProcessing}>
+                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
                   </TouchableOpacity>
                 )}
-
                 {(isActive || isCompleted) && onArchive && (
-                  <TouchableOpacity
-                    style={[styles.bottomActionIcon, styles.archiveButton]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onArchive();
-                    }}
-                    disabled={isProcessing}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        styles.archiveButtonText,
-                      ]}
-                    >
-                      Archive
-                    </Text>
+                  <TouchableOpacity style={[styles.bottomActionIcon, styles.archiveButton]} onPress={(e) => { e.stopPropagation(); onArchive(); }} disabled={isProcessing}>
+                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.archiveButtonText]}>Archive</Text>
                   </TouchableOpacity>
                 )}
-
                 {(isCancelled || isArchived) && onRestore && (
-                  <TouchableOpacity
-                    style={[styles.bottomActionIcon, styles.restoreButton]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      onRestore();
-                    }}
-                    disabled={isProcessing}
-                  >
-                    <Text
-                      style={[
-                        styles.actionButtonText,
-                        styles.restoreButtonText,
-                      ]}
-                    >
-                      Restore
-                    </Text>
+                  <TouchableOpacity style={[styles.bottomActionIcon, styles.restoreButton]} onPress={(e) => { e.stopPropagation(); onRestore(); }} disabled={isProcessing}>
+                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.restoreButtonText]}>Restore</Text>
                   </TouchableOpacity>
                 )}
               </>
@@ -303,207 +154,39 @@ export const TournamentCard = ({
 };
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardArchived: {
-    opacity: 0.7,
-    borderColor: COLORS.textSecondary,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: SPACING.xs,
-  },
-  headerRight: {
-    alignItems: "flex-end",
-    flexDirection: "column",
-    gap: SPACING.xs,
-  },
-  tournamentName: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: "700",
-    color: COLORS.text,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  textArchived: {
-    color: COLORS.textSecondary,
-  },
-  statusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  idBadge: {
-    backgroundColor: "#000000",
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  idText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    color: COLORS.white,
-  },
-  actionIcons: {
-    flexDirection: "row",
-    gap: SPACING.xs,
-  },
-  actionIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  editIcon: {
-    fontSize: 12,
-  },
-  deleteIcon: {
-    fontSize: 12,
-  },
-  archiveIcon: {
-    fontSize: 12,
-  },
-  restoreIcon: {
-    fontSize: 12,
-  },
-  gameType: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.primary,
-    marginBottom: SPACING.sm,
-    textTransform: "capitalize",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  infoIcon: {
-    fontSize: FONT_SIZES.sm,
-    marginRight: SPACING.xs,
-    width: 20,
-  },
-  infoText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    flex: 1,
-  },
-  statusInfoBox: {
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
-    padding: SPACING.sm,
-    marginTop: SPACING.sm,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.error,
-  },
-  statusInfoBoxArchived: {
-    borderLeftColor: COLORS.textSecondary,
-  },
-  statusInfoTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  statusInfoText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-  },
-  statusInfoReason: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.text,
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  statsRow: {
-    flexDirection: "row",
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    gap: SPACING.lg,
-  },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  bottomActionIcons: {
-    flexDirection: "row",
-    gap: SPACING.md,
-    alignItems: "center",
-  },
-  bottomActionIcon: {
-    padding: SPACING.sm,
-    borderRadius: 8,
-    borderWidth: 1,
-    minWidth: 60,
-    minHeight: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionButtonText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  editButton: {
-    backgroundColor: "#22c55e", // Green
-    borderColor: "#16a34a",
-  },
-  editButtonText: {
-    color: "#ffffff",
-  },
-  deleteButton: {
-    backgroundColor: "#ef4444", // Red
-    borderColor: "#dc2626",
-  },
-  deleteButtonText: {
-    color: "#ffffff",
-  },
-  archiveButton: {
-    backgroundColor: "#3b82f6", // Blue
-    borderColor: "#2563eb",
-  },
-  archiveButtonText: {
-    color: "#ffffff",
-  },
-  restoreButton: {
-    backgroundColor: "#10b981", // Teal/Green
-    borderColor: "#059669",
-  },
-  restoreButtonText: {
-    color: "#ffffff",
-  },
-  stat: {
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  statLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-  },
+  card: { backgroundColor: COLORS.surface, borderRadius: scale(12), padding: scale(SPACING.md), marginBottom: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
+  cardArchived: { opacity: 0.7, borderColor: COLORS.textSecondary },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: scale(SPACING.xs) },
+  headerRight: { alignItems: "flex-end", flexDirection: "column", gap: scale(SPACING.xs) },
+  tournamentName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: scale(SPACING.sm) },
+  textArchived: { color: COLORS.textSecondary },
+  statusBadge: { paddingHorizontal: scale(SPACING.sm), paddingVertical: 2, borderRadius: scale(12) },
+  statusText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", textTransform: "capitalize" },
+  idBadge: { backgroundColor: "#000000", paddingHorizontal: scale(SPACING.sm), paddingVertical: 4, borderRadius: scale(12) },
+  idText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.white },
+  gameType: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, marginBottom: scale(SPACING.sm), textTransform: "capitalize" },
+  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  infoIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs), width: scale(20) },
+  infoText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, flex: 1 },
+  statusInfoBox: { backgroundColor: COLORS.background, borderRadius: scale(8), padding: scale(SPACING.sm), marginTop: scale(SPACING.sm), borderLeftWidth: 3, borderLeftColor: COLORS.error },
+  statusInfoBoxArchived: { borderLeftColor: COLORS.textSecondary },
+  statusInfoTitle: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
+  statusInfoText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
+  statusInfoReason: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
+  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: scale(SPACING.sm), paddingTop: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  statsRow: { flexDirection: "row", gap: scale(SPACING.lg) },
+  bottomActionIcons: { flexDirection: "row", gap: scale(SPACING.md), alignItems: "center" },
+  bottomActionIcon: { padding: scale(SPACING.sm), borderRadius: scale(8), borderWidth: 1, minWidth: scale(60), minHeight: scale(36), alignItems: "center", justifyContent: "center" },
+  actionButtonText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600" },
+  editButton: { backgroundColor: "#22c55e", borderColor: "#16a34a" },
+  editButtonText: { color: "#ffffff" },
+  deleteButton: { backgroundColor: "#ef4444", borderColor: "#dc2626" },
+  deleteButtonText: { color: "#ffffff" },
+  archiveButton: { backgroundColor: "#3b82f6", borderColor: "#2563eb" },
+  archiveButtonText: { color: "#ffffff" },
+  restoreButton: { backgroundColor: "#10b981", borderColor: "#059669" },
+  restoreButtonText: { color: "#ffffff" },
+  stat: { alignItems: "center" },
+  statValue: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  statLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
 });

@@ -7,6 +7,7 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { formatCurrency } from "../../../utils/helpers";
+import { moderateScale, scale } from "../../../utils/scaling";
 import { useAuthStore } from "../../../viewmodels/stores/auth.store";
 import { Button } from "../../components/common/button";
 import { Card } from "../../components/common/card";
@@ -17,8 +18,6 @@ import { GiveawayEntryModal } from "../../components/shop/giveaway-entry-modal";
 const isWeb = Platform.OS === "web";
 
 export const GiveawayScreen = () => {
-  // Read directly from Zustand store so userId is always the live value â€”
-  // not a snapshot captured inside a stale React context render.
   const profile = useAuthStore((s) => s.profile);
 
   const [selectedGiveaway, setSelectedGiveaway] = useState<Giveaway | null>(null);
@@ -40,7 +39,6 @@ export const GiveawayScreen = () => {
   };
 
   const handleEntrySuccess = (_giveawayId: number) => {
-    // Refetch so the card can reflect entered state if needed
     refetch();
     handleModalClose();
   };
@@ -55,55 +53,54 @@ export const GiveawayScreen = () => {
         style={styles.container}
         contentContainerStyle={isWeb ? styles.contentContainerWeb : undefined}
       >
-        {/* Header â€” web skips extra paddingTop since nav handles safe area */}
         <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text style={styles.title}>GIVEAWAYS</Text>
-          <Text style={styles.subtitle}>Enter to win free gear!</Text>
+          <Text allowFontScaling={false} style={styles.title}>GIVEAWAYS</Text>
+          <Text allowFontScaling={false} style={styles.subtitle}>Enter to win free gear!</Text>
         </View>
 
         {giveaways?.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>🎁</Text>
-            <Text style={styles.emptyText}>No active giveaways right now</Text>
-            <Text style={styles.emptySubtext}>Check back soon!</Text>
+            <Text allowFontScaling={false} style={styles.emptyIcon}>🎁</Text>
+            <Text allowFontScaling={false} style={styles.emptyText}>No active giveaways right now</Text>
+            <Text allowFontScaling={false} style={styles.emptySubtext}>Check back soon!</Text>
           </View>
         ) : (
           <View style={[styles.list, isWeb && styles.listWeb]}>
             {giveaways?.map((giveaway) => (
-              <View key={giveaway.id} style={isWeb ? styles.cardWeb : undefined}><Card>
-                {giveaway.image_url && (
-                  <Image
-                    source={{ uri: giveaway.image_url }}
-                    style={[styles.image, isWeb && styles.imageWeb]}
+              <View key={giveaway.id} style={isWeb ? styles.cardWeb : undefined}>
+                <Card>
+                  {giveaway.image_url && (
+                    <Image
+                      source={{ uri: giveaway.image_url }}
+                      style={[styles.image, isWeb && styles.imageWeb]}
+                    />
+                  )}
+                  <Text allowFontScaling={false} style={styles.giveawayName}>{giveaway.name}</Text>
+                  {giveaway.prize_value && (
+                    <Text allowFontScaling={false} style={styles.prizeValue}>
+                      {formatCurrency(giveaway.prize_value)} Value
+                    </Text>
+                  )}
+                  {giveaway.description && (
+                    <Text allowFontScaling={false} style={styles.description}>{giveaway.description}</Text>
+                  )}
+                  {giveaway.end_date && (
+                    <Text allowFontScaling={false} style={styles.endDate}>
+                      Ends: {new Date(giveaway.end_date).toLocaleDateString()}
+                    </Text>
+                  )}
+                  <Button
+                    title="Enter Now"
+                    onPress={() => handleEnterNow(giveaway)}
+                    fullWidth
                   />
-                )}
-                <Text style={styles.giveawayName}>{giveaway.name}</Text>
-                {giveaway.prize_value && (
-                  <Text style={styles.prizeValue}>
-                    {formatCurrency(giveaway.prize_value)} Value
-                  </Text>
-                )}
-                {giveaway.description && (
-                  <Text style={styles.description}>{giveaway.description}</Text>
-                )}
-                {giveaway.end_date && (
-                  <Text style={styles.endDate}>
-                    Ends: {new Date(giveaway.end_date).toLocaleDateString()}
-                  </Text>
-                )}
-                <Button
-                  title="Enter Now"
-                  onPress={() => handleEnterNow(giveaway)}
-                  fullWidth
-                />
-              </Card></View>
+                </Card>
+              </View>
             ))}
           </View>
         )}
       </ScrollView>
 
-      {/* Entry modal â€” rendered once at screen level so it always has
-          the live profile in scope, not a per-card stale closure */}
       <GiveawayEntryModal
         visible={entryModalVisible}
         giveaway={selectedGiveaway}
@@ -123,57 +120,57 @@ const styles = StyleSheet.create({
     maxWidth: 860,
     alignSelf: "center",
     width: "100%",
-    paddingBottom: SPACING.xl,
+    paddingBottom: scale(SPACING.xl),
   },
   header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl,
+    padding: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl),
   },
   headerWeb: {
-    paddingTop: SPACING.lg,
-    paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.sm,
+    paddingTop: scale(SPACING.lg),
+    paddingHorizontal: scale(SPACING.md),
+    paddingBottom: scale(SPACING.sm),
   },
   title: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
   },
   subtitle: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+    marginTop: scale(SPACING.xs),
   },
   empty: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: SPACING.xl,
-    marginTop: SPACING.xxl,
+    padding: scale(SPACING.xl),
+    marginTop: scale(SPACING.xxl),
   },
   emptyIcon: {
-    fontSize: 60,
-    marginBottom: SPACING.md,
+    fontSize: moderateScale(60),
+    marginBottom: scale(SPACING.md),
   },
   emptyText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: SPACING.sm,
+    marginBottom: scale(SPACING.sm),
   },
   emptySubtext: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textMuted,
   },
   list: {
-    padding: SPACING.md,
-    gap: SPACING.md,
+    padding: scale(SPACING.md),
+    gap: scale(SPACING.md),
   },
   listWeb: {
     flexDirection: "row",
     flexWrap: "wrap",
-    paddingHorizontal: SPACING.md,
-    gap: SPACING.md,
+    paddingHorizontal: scale(SPACING.md),
+    gap: scale(SPACING.md),
   },
   cardWeb: {
     flex: 1,
@@ -181,39 +178,34 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 150,
+    height: scale(150),
     borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.md),
     backgroundColor: COLORS.surface,
   },
   imageWeb: {
-    height: 180,
+    height: scale(180),
   },
   giveawayName: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   prizeValue: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
-    marginBottom: SPACING.sm,
+    marginBottom: scale(SPACING.sm),
   },
   description: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
+    marginBottom: scale(SPACING.sm),
   },
   endDate: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.md),
   },
 });
-
-
-
-
-

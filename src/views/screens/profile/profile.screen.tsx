@@ -1,9 +1,10 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { getInitials } from "../../../utils/helpers";
+import { moderateScale, scale } from "../../../utils/scaling";
 import { useAuth } from "../../../viewmodels/hooks/use.auth";
 import { Button } from "../../components/common/button";
 import { Card } from "../../components/common/card";
@@ -14,9 +15,9 @@ export const ProfileScreen = () => {
   const { width } = useWindowDimensions();
 
   const isSmallScreen = width < 375;
-  const avatarSize = isSmallScreen ? 64 : 80;
+  const avatarSize = isSmallScreen ? scale(64) : scale(80);
   const avatarRadius = avatarSize / 2;
-  const avatarFontSize = isSmallScreen ? FONT_SIZES.xl : FONT_SIZES.xxl;
+  const avatarFontSize = isSmallScreen ? moderateScale(FONT_SIZES.xl) : moderateScale(FONT_SIZES.xxl);
 
   const handleSignOut = async () => {
     await signOut();
@@ -25,7 +26,7 @@ export const ProfileScreen = () => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <Text style={[styles.title, isSmallScreen && styles.titleSmall]}>PROFILE</Text>
+        <Text allowFontScaling={false} style={[styles.title, isSmallScreen && styles.titleSmall]}>PROFILE</Text>
       </View>
 
       <View style={[styles.profileSection, isSmallScreen && styles.profileSectionSmall]}>
@@ -36,16 +37,17 @@ export const ProfileScreen = () => {
               width: avatarSize,
               height: avatarSize,
               borderRadius: avatarRadius,
-              marginBottom: isSmallScreen ? SPACING.sm : SPACING.md,
+              marginBottom: isSmallScreen ? scale(SPACING.sm) : scale(SPACING.md),
             },
           ]}
         >
-          <Text style={[styles.avatarText, { fontSize: avatarFontSize }]}>
+          <Text allowFontScaling={false} style={[styles.avatarText, { fontSize: avatarFontSize }]}>
             {getInitials(profile?.name || "")}
           </Text>
         </View>
 
         <Text
+          allowFontScaling={false}
           style={[styles.name, isSmallScreen && styles.nameSmall]}
           numberOfLines={1}
           adjustsFontSizeToFit
@@ -53,24 +55,24 @@ export const ProfileScreen = () => {
           {profile?.name}
         </Text>
 
-        <Text style={styles.username} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.username} numberOfLines={1}>
           @{profile?.user_name?.toUpperCase()}
         </Text>
 
-        <Text style={styles.userId}>User ID: {profile?.id_auto}</Text>
+        <Text allowFontScaling={false} style={styles.userId}>User ID: {profile?.id_auto}</Text>
 
         <View style={styles.badgeRow}>
           <View style={styles.badge}>
-            <Text style={styles.badgeText} numberOfLines={1}>
+            <Text allowFontScaling={false} style={styles.badgeText} numberOfLines={1}>
               🎱 {profile?.role?.replace("_", " ")}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.location} numberOfLines={1}>
+        <Text allowFontScaling={false} style={styles.location} numberOfLines={1}>
           📍 {profile?.home_city || ""} {profile?.home_state}
         </Text>
-        <Text style={styles.memberSince}>
+        <Text allowFontScaling={false} style={styles.memberSince}>
           📅 Member since{" "}
           {new Date(profile?.created_at || "").toLocaleDateString("en-US", {
             month: "short",
@@ -86,51 +88,49 @@ export const ProfileScreen = () => {
       <View style={styles.menu}>
         <Card onPress={() => {}}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>❤️</Text>
-            <Text style={styles.menuText} numberOfLines={1}>My Favorites</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>❤️</Text>
+            <Text allowFontScaling={false} style={styles.menuText} numberOfLines={1}>My Favorites</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
 
         <Card onPress={() => {}}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>🔍</Text>
-            <Text style={styles.menuText} numberOfLines={1}>Search Alerts</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>🔔</Text>
+            <Text allowFontScaling={false} style={styles.menuText} numberOfLines={1}>Search Alerts</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
 
         <Card onPress={() => {}}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>✉️</Text>
-            <Text style={styles.menuText} numberOfLines={1}>Messages</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>✉️</Text>
+            <Text allowFontScaling={false} style={styles.menuText} numberOfLines={1}>Messages</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
 
-        <Card
-          onPress={() => router.push("/(tabs)/notification-preferences" as any)}
-        >
+        <Card onPress={() => router.push("/(tabs)/notification-preferences" as any)}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>🔔</Text>
-            <Text style={styles.menuText} numberOfLines={1}>Notification Preferences</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>🔔</Text>
+            <Text allowFontScaling={false} style={styles.menuText} numberOfLines={1}>Notification Preferences</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
 
         <Card onPress={() => {}}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>⚙️</Text>
-            <Text style={styles.menuText} numberOfLines={1}>Settings</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>⚙️</Text>
+            <Text allowFontScaling={false} style={styles.menuText} numberOfLines={1}>Settings</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
 
         <Card onPress={handleSignOut}>
           <View style={styles.menuItem}>
-            <Text style={styles.menuIcon}>🚪</Text>
-            <Text style={[styles.menuText, styles.logoutText]} numberOfLines={1}>Log Out</Text>
-            <Text style={styles.menuArrow}>→</Text>
+            <Text allowFontScaling={false} style={styles.menuIcon}>🚪</Text>
+            <Text allowFontScaling={false} style={[styles.menuText, styles.logoutText]} numberOfLines={1}>Log Out</Text>
+            <Text allowFontScaling={false} style={styles.menuArrow}>→</Text>
           </View>
         </Card>
       </View>
@@ -147,27 +147,27 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    padding: SPACING.md,
-    paddingTop: SPACING.xl,
+    padding: scale(SPACING.md),
+    paddingTop: scale(SPACING.xl),
   },
   title: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
   },
   titleSmall: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
   },
   profileSection: {
     alignItems: "center",
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.lg,
+    paddingHorizontal: scale(SPACING.lg),
+    paddingVertical: scale(SPACING.lg),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   profileSectionSmall: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.md),
   },
   avatar: {
     backgroundColor: COLORS.primary,
@@ -179,54 +179,54 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   name: {
-    fontSize: FONT_SIZES.xl,
+    fontSize: moderateScale(FONT_SIZES.xl),
     fontWeight: "600",
     color: COLORS.text,
     maxWidth: "90%",
   },
   nameSmall: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
   },
   username: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.primary,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
     textTransform: "uppercase",
   },
   userId: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textMuted,
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.md),
   },
   badgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    marginBottom: SPACING.md,
-    gap: SPACING.xs,
+    marginBottom: scale(SPACING.md),
+    gap: scale(SPACING.xs),
   },
   badge: {
     backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: scale(SPACING.xs),
+    paddingHorizontal: scale(SPACING.md),
     borderRadius: RADIUS.full,
     maxWidth: "90%",
   },
   badgeText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
   },
   location: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
     maxWidth: "90%",
     textAlign: "center",
   },
   memberSince: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
+    marginBottom: scale(SPACING.lg),
     textAlign: "center",
   },
   editButtonWrapper: {
@@ -234,8 +234,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   menu: {
-    padding: SPACING.md,
-    gap: SPACING.sm,
+    padding: scale(SPACING.md),
+    gap: scale(SPACING.sm),
   },
   menuItem: {
     flexDirection: "row",
@@ -243,20 +243,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuIcon: {
-    fontSize: FONT_SIZES.lg,
-    marginRight: SPACING.md,
-    width: 28,
+    fontSize: moderateScale(FONT_SIZES.lg),
+    marginRight: scale(SPACING.md),
+    width: scale(28),
     textAlign: "center",
   },
   menuText: {
     flex: 1,
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.text,
   },
   menuArrow: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     color: COLORS.textMuted,
-    marginLeft: SPACING.sm,
+    marginLeft: scale(SPACING.sm),
   },
   logoutText: {
     color: COLORS.error,
