@@ -68,7 +68,7 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const handleShare = async () => {
     if (!vm.tournament) return;
     try {
-      const deepLink = `competerf://tournament/${vm.tournament.id}`;
+      const deepLink = `competerf:///tournament-detail?id=${vm.tournament.id}`;
       const message = `🎱 ${vm.tournament.name}\n📅 ${vm.formattedDate} • ${vm.formattedTime}\n💰 ${vm.formattedEntryFee}\n\n${deepLink}`;
       await Share.share({ message });
       analyticsService.trackTournamentShared(vm.tournament.id);

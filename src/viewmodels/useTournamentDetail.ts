@@ -258,7 +258,7 @@ export const useTournamentDetail = (
           profile.id_auto,
           "Tournament Cancelled",
           `${tournament.name} has been cancelled`,
-          { deep_link: `/tournament-detail?id=${tournament.id}` },
+          { deep_link: `competerf:///tournament-detail?id=${tournament.id}` },
         )
         .catch((err) => console.error("Error sending cancellation notifications:", err));
 
