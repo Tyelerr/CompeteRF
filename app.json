@@ -1,73 +1,77 @@
 ﻿{
-  "expo": {
-    "name": "Compete",
-    "slug": "competerf",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "competerf",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.thecompeteapp.competerf",
-      "buildNumber": "1",
-      "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:thecompeteapp.com"],
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Compete uses your photo library so you can upload images to your profile or tournament listings. For example, you can choose a photo for your profile picture or select an image to attach to a tournament.",
-        "NSCameraUsageDescription": "Compete uses your camera so you can take a photo for your profile or tournament listings, such as capturing a new profile picture or event image."
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.thecompeteapp.competerf"
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "single-page",
-      "favicon": "./assets/images/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-apple-authentication",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "color": "#2E86C1"
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "8387f5f4-466c-444e-b562-0979b6ce001e"
-      }
-    },
-    "owner": "tyelerr"
-  }
+    "expo":  {
+                 "name":  "Compete",
+                 "slug":  "competerf",
+                 "version":  "1.0.2",
+                 "orientation":  "portrait",
+                 "icon":  "./assets/images/icon.png",
+                 "scheme":  "competerf",
+                 "userInterfaceStyle":  "automatic",
+                 "newArchEnabled":  true,
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "com.thecompeteapp.competerf",
+                             "buildNumber":  "39",
+                             "usesAppleSignIn":  true,
+                             "associatedDomains":  [
+                                                       "applinks:thecompeteapp.com"
+                                                   ],
+                             "infoPlist":  {
+                                               "ITSAppUsesNonExemptEncryption":  false,
+                                               "NSPhotoLibraryUsageDescription":  "Compete uses your photo library so you can upload images to your profile or tournament listings. For example, you can choose a photo for your profile picture or select an image to attach to a tournament.",
+                                               "NSCameraUsageDescription":  "Compete uses your camera so you can take a photo for your profile or tournament listings, such as capturing a new profile picture or event image."
+                                           }
+                         },
+                 "android":  {
+                                 "adaptiveIcon":  {
+                                                      "backgroundColor":  "#E6F4FE",
+                                                      "foregroundImage":  "./assets/images/android-icon-foreground.png",
+                                                      "backgroundImage":  "./assets/images/android-icon-background.png",
+                                                      "monochromeImage":  "./assets/images/android-icon-monochrome.png"
+                                                  },
+                                 "edgeToEdgeEnabled":  true,
+                                 "predictiveBackGestureEnabled":  false,
+                                 "package":  "com.thecompeteapp.competerf"
+                             },
+                 "web":  {
+                             "bundler":  "metro",
+                             "output":  "single-page",
+                             "favicon":  "./assets/images/favicon.png"
+                         },
+                 "plugins":  [
+                                 "expo-router",
+                                 "expo-apple-authentication",
+                                 [
+                                     "expo-splash-screen",
+                                     {
+                                         "image":  "./assets/images/icon.png",
+                                         "imageWidth":  200,
+                                         "resizeMode":  "contain",
+                                         "backgroundColor":  "#ffffff",
+                                         "dark":  {
+                                                      "backgroundColor":  "#000000"
+                                                  }
+                                     }
+                                 ],
+                                 [
+                                     "expo-notifications",
+                                     {
+                                         "color":  "#2E86C1"
+                                     }
+                                 ]
+                             ],
+                 "experiments":  {
+                                     "typedRoutes":  true,
+                                     "reactCompiler":  true
+                                 },
+                 "extra":  {
+                               "router":  {
+
+                                          },
+                               "eas":  {
+                                           "projectId":  "8387f5f4-466c-444e-b562-0979b6ce001e"
+                                       }
+                           },
+                 "owner":  "tyelerr"
+             }
 }
