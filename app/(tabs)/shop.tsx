@@ -1,6 +1,7 @@
 ﻿import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   Platform,
   RefreshControl,
   ScrollView,
@@ -29,9 +30,9 @@ import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/comm
 const isWeb = Platform.OS === "web";
 const { width: SW, height: SH } = require("react-native").Dimensions.get("window");
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Design tokens
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 const T = {
   gold:        "#F5A623",
   goldDim:     "#F5A62325",
@@ -53,9 +54,9 @@ const T = {
   bg:          "#000000",
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // SectionHeader
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 function SectionHeader({ label, accent }: { label: string; accent: string }) {
   return (
     <View style={shS.row}>
@@ -85,9 +86,9 @@ const shS = StyleSheet.create({
   line: { flex: 1, height: 1 },
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// ActiveGiveawayWrapper â€” glowing border around active cards
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// ActiveGiveawayWrapper
+// ─────────────────────────────────────────────────────────────────────────────
 function ActiveGiveawayWrapper({ children }: { children: React.ReactNode }) {
   return (
     <View style={awS.outer}>
@@ -116,38 +117,58 @@ const awS = StyleSheet.create({
   },
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function formatDrawnDate(dateStr: string | null): string | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return `Drawn ${d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EndedGiveawayCard
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 function EndedGiveawayCard({ giveaway }: { giveaway: Giveaway }) {
   const isAwarded   = giveaway.status === "awarded";
-  const cardBg      = isAwarded ? "#1A1710" : "#171510";
-  const accent      = isAwarded ? T.gold : T.amber;
-  const accentDim   = isAwarded ? T.goldDim : T.amberDim;
-  const accentBorder= isAwarded ? T.goldBorder : T.amberBorder;
+  const cardBg      = isAwarded ? "#0D1A12" : "#131313";
   const badgeLabel  = isAwarded ? "\uD83C\uDFC6  Winner Drawn" : "\uD83C\uDFB2  Drawing Soon";
   const statusLabel = isAwarded ? "Giveaway Complete" : "Entry Period Closed";
+  const drawnDate   = isAwarded ? formatDrawnDate(giveaway.winner_drawn_at) : null;
 
   return (
-    <View style={[ecS.card, { backgroundColor: cardBg, borderColor: accentBorder,
-      shadowColor: accent }]}>
-      <View style={[ecS.badge, { backgroundColor: accentDim, borderColor: accentBorder }]}>
-        <Text style={[ecS.badgeText, { color: accent }]}>{badgeLabel}</Text>
+    <View style={[ecS.card, { backgroundColor: cardBg, borderColor: T.greenBorder, shadowColor: T.green }]}>
+      <View style={ecS.row}>
+        <View style={ecS.left}>
+          <View style={[ecS.badge, { backgroundColor: T.greenDim, borderColor: T.greenBorder }]}>
+            <Text style={[ecS.badgeText, { color: T.green }]}>{badgeLabel}</Text>
+          </View>
+          <Text style={ecS.name} numberOfLines={2}>{giveaway.name}</Text>
+          {giveaway.prize_value ? (
+            <Text style={[ecS.prize, { color: T.green }]}>
+              ${giveaway.prize_value.toLocaleString()} Value
+            </Text>
+          ) : null}
+          {isAwarded && giveaway.winner_display_name ? (
+            <Text style={ecS.winner}>{"\uD83C\uDFC5"} {giveaway.winner_display_name}</Text>
+          ) : null}
+          {drawnDate ? (
+            <Text style={ecS.drawnDate}>{drawnDate}</Text>
+          ) : null}
+          <Text style={ecS.entries}>
+            {giveaway.entry_count || 0} {giveaway.entry_count === 1 ? "entry" : "entries"}
+          </Text>
+        </View>
+        {giveaway.image_url ? (
+          <Image source={{ uri: giveaway.image_url }} style={ecS.image} resizeMode="cover" />
+        ) : (
+          <View style={ecS.imagePlaceholder}>
+            <Text style={ecS.imagePlaceholderText}>{"\uD83C\uDF81"}</Text>
+          </View>
+        )}
       </View>
-      <Text style={ecS.name}>{giveaway.name}</Text>
-      {giveaway.prize_value ? (
-        <Text style={[ecS.prize, { color: accent }]}>
-          ${giveaway.prize_value.toLocaleString()} Value
-        </Text>
-      ) : null}
-      {giveaway.description ? (
-        <Text style={ecS.desc} numberOfLines={2}>{giveaway.description}</Text>
-      ) : null}
-      <Text style={ecS.entries}>
-        {giveaway.entry_count || 0} {giveaway.entry_count === 1 ? "entry" : "entries"}
-      </Text>
-      <View style={[ecS.statusBar, { borderTopColor: accentBorder }]}>
-        <Text style={[ecS.statusText, { color: accent }]}>{statusLabel}</Text>
+      <View style={[ecS.statusBar, { borderTopColor: T.greenBorder }]}>
+        <Text style={[ecS.statusText, { color: T.green }]}>{statusLabel}</Text>
       </View>
     </View>
   );
@@ -160,9 +181,32 @@ const ecS = StyleSheet.create({
     marginBottom: SPACING.sm,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.12,
     shadowRadius: 10,
   },
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: SPACING.sm,
+  },
+  left: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  image: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+  },
+  imagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    backgroundColor: T.card,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imagePlaceholderText: { fontSize: 32 },
   badge: {
     alignSelf: "flex-start",
     borderRadius: RADIUS.sm,
@@ -174,15 +218,16 @@ const ecS = StyleSheet.create({
   badgeText: { fontSize: FONT_SIZES.sm, fontWeight: "700" },
   name: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: T.white, marginBottom: SPACING.xs },
   prize: { fontSize: FONT_SIZES.md, fontWeight: "600", marginBottom: SPACING.xs },
-  desc: { fontSize: FONT_SIZES.sm, color: T.lightGray, lineHeight: 18, marginBottom: SPACING.sm },
-  entries: { fontSize: FONT_SIZES.xs, color: T.gray, marginBottom: SPACING.sm },
+  winner: { fontSize: FONT_SIZES.sm, color: T.lightGray, marginBottom: 4 },
+  drawnDate: { fontSize: FONT_SIZES.xs, color: T.gray, marginBottom: SPACING.sm },
+  entries: { fontSize: FONT_SIZES.xs, color: T.gray },
   statusBar: { borderTopWidth: 1, paddingTop: SPACING.sm, alignItems: "center" },
   statusText: { fontSize: FONT_SIZES.sm, fontWeight: "600", letterSpacing: 0.3 },
 });
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ShopScreen() {
   const router = useRouter();
   const giveawaysVm = useGiveaways();
@@ -240,7 +285,6 @@ export default function ShopScreen() {
 
   const pageContent = (
     <>
-      {/* Header */}
       {isWeb ? (
         <View style={s.headerWeb}>
           <Text style={s.title}>GIVEAWAYS</Text>
@@ -253,15 +297,13 @@ export default function ShopScreen() {
         </View>
       )}
 
-      {/* Stats */}
       <View style={s.statsWrapper}>
         <GiveawayStatsCard stats={giveawaysVm.stats} />
       </View>
 
-      {/* Login banner */}
       {!authLoading && !profile && (
         <View style={s.loginBanner}>
-          <Text style={s.loginText}>🎁  Log in to enter giveaways!</Text>
+          <Text style={s.loginText}>{"\uD83C\uDF81"}  Log in to enter giveaways!</Text>
           <View style={s.loginButtons}>
             <Button title="Log In" onPress={() => router.push("/(tabs)/profile")} size="sm" />
             <Button title="Sign Up" onPress={() => router.push("/auth/register")} variant="outline" size="sm" />
@@ -269,7 +311,6 @@ export default function ShopScreen() {
         </View>
       )}
 
-      {/* Error */}
       {giveawaysVm.error && (
         <View style={s.errorBox}>
           <Text style={s.errorText}>{giveawaysVm.error}</Text>
@@ -277,16 +318,15 @@ export default function ShopScreen() {
         </View>
       )}
 
-      {/* Empty */}
       {!giveawaysVm.error && !hasActive && !hasEnded && (
         <View style={s.empty}>
-          <Text style={s.emptyIcon}>{"🎁"}</Text>
+          <Text style={s.emptyIcon}>{"\uD83C\uDF81"}</Text>
           <Text style={s.emptyTitle}>No Active Giveaways</Text>
           <Text style={s.emptySubtitle}>Check back soon for new giveaways!</Text>
         </View>
       )}
 
-      {/* â”€â”€ Active â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Active */}
       {hasActive && (
         <>
           <SectionHeader label="Active Now" accent={T.green} />
@@ -321,10 +361,10 @@ export default function ShopScreen() {
         </>
       )}
 
-      {/* â”€â”€ Latest Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Latest Results */}
       {hasEnded && (
         <>
-          <SectionHeader label="Latest Results" accent={T.gold} />
+          <SectionHeader label="Latest Results" accent={T.green} />
           {isWeb ? (
             <View style={s.webGrid}>
               {giveawaysVm.endedGiveaways.map((g) => (
@@ -426,8 +466,3 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: T.white, marginBottom: SPACING.sm },
   emptySubtitle: { fontSize: FONT_SIZES.md, color: T.gray, textAlign: "center" },
 });
-
-
-
-
-
