@@ -1,4 +1,4 @@
-import { supabase } from "../../lib/supabase";
+﻿import { supabase } from "../../lib/supabase";
 import {
   Tournament,
   TournamentFilters,
@@ -6,7 +6,7 @@ import {
 } from "../types/tournament.types";
 import { searchAlertService } from "./search-alert.service";
 
-// ─── Game Type Normalizer ────────────────────────────────────────────────────
+// â”€â”€â”€ Game Type Normalizer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Normalizes any slug or display value to the canonical display format.
 // This is the single source of truth for game_type display across the entire app.
 const GAME_TYPE_MAP: Record<string, string> = {
@@ -21,7 +21,7 @@ const GAME_TYPE_MAP: Record<string, string> = {
   "10-ball-scotch-doubles":   "10 Ball Scotch Doubles",
 };
 
-function normalizeGameType(value: string | null | undefined): string {
+export function normalizeGameType(value: string | null | undefined): string {
   if (!value) return "";
   return GAME_TYPE_MAP[value.toLowerCase()] ?? value;
 }
@@ -30,7 +30,7 @@ function normalizeTournament<T extends { game_type?: any }>(t: T): T {
   return { ...t, game_type: normalizeGameType(t.game_type) };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const tournamentService = {
   async getTournaments(
@@ -130,15 +130,15 @@ export const tournamentService = {
 
     if (error) throw error;
 
-    console.log("🏆 Created tournament:", data?.name, data?.game_type);
+    console.log("ðŸ† Created tournament:", data?.name, data?.game_type);
 
     if (data) {
-      console.log("🔍 Starting alert check for tournament:", data.name);
+      console.log("ðŸ” Starting alert check for tournament:", data.name);
       try {
         await searchAlertService.checkTournamentAgainstAlerts(data);
-        console.log("✅ Alert checking completed");
+        console.log("âœ… Alert checking completed");
       } catch (err) {
-        console.error("❌ Error checking tournament against alerts:", err);
+        console.error("âŒ Error checking tournament against alerts:", err);
       }
     }
 
@@ -171,12 +171,12 @@ export const tournamentService = {
     );
 
     if (hasSignificantChanges && data) {
-      console.log("🔄 Tournament updated, re-checking alerts for:", data.name);
+      console.log("ðŸ”„ Tournament updated, re-checking alerts for:", data.name);
       try {
         await searchAlertService.checkTournamentAgainstAlerts(data);
-        console.log("✅ Alert re-check completed");
+        console.log("âœ… Alert re-check completed");
       } catch (err) {
-        console.error("❌ Error re-checking tournament against alerts:", err);
+        console.error("âŒ Error re-checking tournament against alerts:", err);
       }
     }
 
@@ -265,7 +265,7 @@ export const tournamentService = {
       .single();
 
     if (error) throw error;
-    if (!data) throw new Error("Hide failed — no rows modified (possible RLS block).");
+    if (!data) throw new Error("Hide failed â€” no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
@@ -281,7 +281,7 @@ export const tournamentService = {
       .single();
 
     if (error) throw error;
-    if (!data) throw new Error("Unhide failed — no rows modified (possible RLS block).");
+    if (!data) throw new Error("Unhide failed â€” no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
@@ -305,3 +305,4 @@ export const tournamentService = {
     return data;
   },
 };
+

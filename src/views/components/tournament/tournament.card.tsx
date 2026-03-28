@@ -26,7 +26,7 @@ interface TournamentCardProps {
   showActions?: boolean;
 }
 
-const formatDate = (dateString: string): string => new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const formatDate = (dateString: string): string => { const [y,m,d] = dateString.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
 
 const formatTime = (timeString: string): string => {
   if (!timeString) return "";
@@ -190,4 +190,6 @@ const styles = StyleSheet.create({
   statValue: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   statLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
 });
+
+
 

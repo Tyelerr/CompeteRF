@@ -24,10 +24,10 @@ const isWeb = Platform.OS === "web";
 const GAME_TYPES = [
   { label: "All Game Types", value: "" },
   { label: "8 Ball", value: "8-ball" },
-  { label: "9 Ball", value: "9-ball" },
-  { label: "10 Ball", value: "10-ball" },
   { label: "8 Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "9 Ball", value: "9-ball" },
   { label: "9 Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "10 Ball", value: "10-ball" },
   { label: "10 Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
   { label: "One Pocket", value: "one-pocket" },
   { label: "Straight Pool", value: "straight-pool" },
@@ -80,8 +80,15 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
   }, [visible]);
 
   const handleGameTypeChange = (value: string) => {
+    const prevFargoMax = getFargoMax(localFilters.gameType);
     const newFargoMax = getFargoMax(value);
-    setLocalFilters({ ...localFilters, gameType: value, maxFargo: Math.min(localFilters.maxFargo, newFargoMax) });
+    // If maxFargo was at the old ceiling (user never adjusted it),
+    // reset it to the new ceiling so switching to scotch doubles (2000)
+    // does not accidentally activate the Fargo filter.
+    const newMaxFargo = localFilters.maxFargo >= prevFargoMax
+      ? newFargoMax
+      : Math.min(localFilters.maxFargo, newFargoMax);
+    setLocalFilters({ ...localFilters, gameType: value, maxFargo: newMaxFargo });
   };
 
   const handleApply = () => {
@@ -252,3 +259,4 @@ const wStyles = StyleSheet.create({
   twoCol: { flexDirection: "row", gap: scale(SPACING.xl), overflow: "visible" as any },
   col: { flex: 1, overflow: "visible" as any },
 });
+

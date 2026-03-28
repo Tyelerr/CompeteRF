@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { searchAlertService } from "../../../../src/models/services/search-alert.service";
+import { normalizeGameType } from "../../../../src/models/services/tournament.service";
 import { AlertMatch } from "../../../../src/models/types/search-alert.types";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
@@ -33,14 +34,16 @@ const SUPABASE_STORAGE_URL =
   "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images";
 
 function getTournamentImageUrl(tournament: any): string | null {
+  const rawGameType: string = tournament.game_type ?? "";
+  // Strip scotch doubles suffix so "9-ball-scotch-doubles" maps to the "9-ball" image
+  const baseSlug = rawGameType.toLowerCase().replace("-scotch-doubles", "").replace(" scotch doubles", "").replace(" ", "-").trim();
   if (tournament.thumbnail) {
-    if (tournament.thumbnail.startsWith("custom:")) {
-      return tournament.thumbnail.replace("custom:", "");
-    }
-    const imageFile = gameTypeImageMap[tournament.thumbnail];
+    if (tournament.thumbnail.startsWith("custom:")) return tournament.thumbnail.replace("custom:", "");
+    const thumbSlug = tournament.thumbnail.toLowerCase().replace("-scotch-doubles", "").replace(" scotch doubles", "").replace(" ", "-").trim();
+    const imageFile = gameTypeImageMap[thumbSlug] || gameTypeImageMap[baseSlug];
     if (imageFile) return `${SUPABASE_STORAGE_URL}/${imageFile}`;
   }
-  const imageFile = gameTypeImageMap[tournament.game_type];
+  const imageFile = gameTypeImageMap[baseSlug] || gameTypeImageMap[rawGameType.toLowerCase()];
   if (imageFile) return `${SUPABASE_STORAGE_URL}/${imageFile}`;
   return null;
 }
@@ -92,7 +95,7 @@ function TournamentCard({ match }: { match: AlertMatch }) {
         <View style={styles.mainContent}>
           <View style={styles.headerRow}>
             <View style={styles.gameTypeBadge}>
-              <Text allowFontScaling={false} style={styles.gameTypeText}>{tournament.game_type}</Text>
+              <Text allowFontScaling={false} style={styles.gameTypeText}>{normalizeGameType(tournament.game_type)}</Text>
             </View>
           </View>
           <Text allowFontScaling={false} style={styles.tournamentName} numberOfLines={2}>

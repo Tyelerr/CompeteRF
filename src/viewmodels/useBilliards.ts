@@ -1,8 +1,8 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
-import { tournamentService } from "../models/services/tournament.service";
+import { normalizeGameType, tournamentService } from "../models/services/tournament.service";
 import { defaultFilters, Filters, getFargoMax } from "../models/types/filter.types";
 import { Tournament } from "../models/types/tournament.types";
 import {
@@ -120,21 +120,17 @@ export function useBilliards(): UseBilliardsReturn {
     }
   };
 
-  // ── Helper: normalize game_type slug → readable label ──────────────────
-  const gameTypeLabel = (gameType: string) =>
-    (gameType ?? "").replace(/-/g, " ").toLowerCase();
-
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
 
-    // ── Text search: name, venue, AND game type ──────────────────────────
+    // ── Text search: name, venue, AND game type ──────────────────────────────
     if (searchQuery) {
       const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(
         (t) =>
           t.name?.toLowerCase().includes(q) ||
           t.venues?.venue?.toLowerCase().includes(q) ||
-          gameTypeLabel(t.game_type).includes(q)
+          (t.game_type ?? "").toLowerCase().includes(q)
       );
     }
 
@@ -164,15 +160,33 @@ export function useBilliards(): UseBilliardsReturn {
       }
     }
 
+    // ── Game type: normalize the slug from FilterModal to the display label ──
+    // normalizeTournament() in tournament.service converts slugs → display labels
+    // ("8-ball" → "8 Ball") on every fetched record, so we must normalize the
+    // filter value to the same format before comparing.
     if (filters.gameType) {
-      filtered = filtered.filter((t) => t.game_type === filters.gameType);
+      const normalizedFilterGameType = normalizeGameType(filters.gameType);
+      filtered = filtered.filter((t) => t.game_type === normalizedFilterGameType);
     }
+
     if (filters.tournamentFormat) {
       filtered = filtered.filter((t) => t.tournament_format === filters.tournamentFormat);
     }
+
+    if (filters.tableSize) {
+      filtered = filtered.filter((t) => (t as any).table_size === filters.tableSize);
+    }
+
+    if (filters.equipment) {
+      const eq = filters.equipment.toLowerCase().trim();
+      filtered = filtered.filter((t) =>
+        (t as any).equipment?.toLowerCase().includes(eq)
+      );
+    }
+
     if (filters.daysOfWeek.length > 0) {
       filtered = filtered.filter((t) => {
-        const day = new Date(t.tournament_date).getDay();
+        const day = new Date(t.tournament_date).getUTCDay();
         return filters.daysOfWeek.includes(day);
       });
     }
@@ -286,3 +300,4 @@ export function useBilliards(): UseBilliardsReturn {
     getTournamentImageUrl,
   };
 }
+

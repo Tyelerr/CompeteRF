@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -38,14 +39,10 @@ export interface SearchAlertsModalProps {
 const GAME_TYPE_OPTIONS = [
   { label: "Any Game Type", value: "" },
   { label: "8-Ball", value: "8-ball" },
-  { label: "9-Ball", value: "9-ball" },
-  { label: "10-Ball", value: "10-ball" },
-  { label: "One Pocket", value: "one-pocket" },
-  { label: "Straight Pool", value: "straight-pool" },
-  { label: "Bank Pool", value: "bank-pool" },
-  { label: "Rotation", value: "rotation" },
   { label: "8-Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "9-Ball", value: "9-ball" },
   { label: "9-Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "10-Ball", value: "10-ball" },
   { label: "10-Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
 ];
 
@@ -174,7 +171,7 @@ function ToggleRow({ label, description, value, onToggle, disabled }: { label: s
   );
 }
 
-function AlertCard({ alert, onEdit, onDelete, onToggleActive }: { alert: SearchAlert; onEdit: () => void; onDelete: () => void; onToggleActive: () => void }) {
+function AlertCard({ alert, onEdit, onDelete, onToggleActive, onViewMatches }: { alert: SearchAlert; onEdit: () => void; onDelete: () => void; onToggleActive: () => void; onViewMatches: () => void }) {
   const description = alert.description || searchAlertService.generateAlertDescription(alert.filter_criteria);
   return (
     <View style={s.alertCard}>
@@ -187,6 +184,9 @@ function AlertCard({ alert, onEdit, onDelete, onToggleActive }: { alert: SearchA
       <Text allowFontScaling={false} style={s.alertDescription} numberOfLines={2}>{description}</Text>
       <Text allowFontScaling={false} style={s.matchInfo}>{alert.match_count} {alert.match_count === 1 ? "match" : "matches"}{alert.last_match_date ? ` · Last: ${formatDate(alert.last_match_date)}` : ""}</Text>
       <View style={s.actionRow}>
+        <TouchableOpacity style={[s.actionButton, s.actionOutline]} onPress={onViewMatches}>
+          <Text allowFontScaling={false} style={s.actionOutlineText}>View Matches</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[s.actionButton, s.actionOutline]} onPress={onEdit}>
           <Text allowFontScaling={false} style={s.actionOutlineText}>Edit</Text>
         </TouchableOpacity>
@@ -405,7 +405,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
   );
 }
 
-function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onClose }: { userId: number; refreshKey: number; onOpenCreate: () => void; onOpenEdit: (id: number) => void; onClose: () => void }) {
+function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onOpenMatches, onClose }: { userId: number; refreshKey: number; onOpenCreate: () => void; onOpenEdit: (id: number) => void; onOpenMatches: (id: number) => void; onClose: () => void }) {
   const [alerts, setAlerts] = useState<SearchAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -523,7 +523,7 @@ function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onClose }: { 
         </View>
       )}
       renderItem={({ item }) => (
-        <AlertCard alert={item} onEdit={() => onOpenEdit(item.id)} onDelete={() => handleDelete(item)} onToggleActive={() => handleToggleActive(item)} />
+        <AlertCard alert={item} onEdit={() => onOpenEdit(item.id)} onDelete={() => handleDelete(item)} onToggleActive={() => handleToggleActive(item)} onViewMatches={() => onOpenMatches(item.id)} />
       )}
       refreshControl={isWeb ? undefined : <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadAlerts(); }} tintColor={COLORS.primary} />}
       showsVerticalScrollIndicator={false}
@@ -533,6 +533,7 @@ function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onClose }: { 
 
 export function SearchAlertsModal({ visible, onClose }: SearchAlertsModalProps) {
   const { profile } = useAuthContext();
+  const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingAlertId, setEditingAlertId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -564,7 +565,7 @@ export function SearchAlertsModal({ visible, onClose }: SearchAlertsModalProps) 
 
   const innerContent = (
     <View style={{ flex: 1 }}>
-      <AlertList userId={userId} refreshKey={refreshKey} onOpenCreate={() => openSheet(null)} onOpenEdit={(id) => openSheet(id)} onClose={onClose} />
+      <AlertList userId={userId} refreshKey={refreshKey} onOpenCreate={() => openSheet(null)} onOpenEdit={(id) => openSheet(id)} onOpenMatches={(id) => { onClose(); router.push(("/(tabs)/search-alerts/matches/" + id) as any); }} onClose={onClose} />
       {sheetOpen && (
         <>
           <TouchableOpacity style={s.sheetBackdrop} activeOpacity={1} onPress={closeSheet} />
@@ -689,4 +690,12 @@ const s = StyleSheet.create({
   cancelButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.error, fontWeight: "600" },
   buttonDisabled: { opacity: 0.5 },
 });
+
+
+
+
+
+
+
+
 

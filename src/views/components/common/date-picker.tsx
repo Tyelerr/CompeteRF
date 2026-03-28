@@ -9,11 +9,11 @@ const isWeb = Platform.OS === "web";
 
 interface DatePickerProps { value: string; onChange: (date: string) => void; placeholder?: string; }
 
-const toLocalDateString = (date: Date): string => {
-  const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, "0"); const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+const parseLocalDate = (dateString: string): Date => {
+  const [y, m, d] = dateString.split("-").map(Number);
+  return new Date(y, m - 1, d);
 };
-const parseLocalDate = (dateString: string): Date => { const [y, m, d] = dateString.split("-").map(Number); return new Date(y, m - 1, d); };
+
 const formatDisplay = (dateString: string, placeholder: string) => {
   if (!dateString) return placeholder;
   return parseLocalDate(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -28,13 +28,21 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
     if (showModal) { setTempDate(value ? parseLocalDate(value) : new Date()); setHasSelected(!!value); }
   }, [showModal]);
 
-  const handleConfirm = () => { onChange(toLocalDateString(tempDate)); setShowModal(false); };
+  const handleConfirm = () => {
+    // DateTimePicker returns UTC midnight — extract using UTC methods to avoid
+    // local timezone shifting the date back by one day in US timezones.
+    const y = tempDate.getUTCFullYear();
+    const m = String(tempDate.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(tempDate.getUTCDate()).padStart(2, "0");
+    onChange(y + "-" + m + "-" + d);
+    setShowModal(false);
+  };
 
   if (isWeb) {
     return (
       <View style={wStyles.wrap}>
         <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, width: "100%", backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: value ? COLORS.text : COLORS.textMuted, outline: "none", cursor: "pointer", colorScheme: "dark" } as React.CSSProperties}
+          style={{ flex: 1, width: "100%", backgroundColor: COLORS.surface, border: "1px solid " + COLORS.border, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: value ? COLORS.text : COLORS.textMuted, outline: "none", cursor: "pointer", colorScheme: "dark" } as React.CSSProperties}
         />
       </View>
     );

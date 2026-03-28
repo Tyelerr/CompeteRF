@@ -10,17 +10,20 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Loading } from "../../components/common/loading";
 
-function AlertCard({ alert, onViewMatches, onEdit, onDelete }: { alert: SearchAlert; onViewMatches: () => void; onEdit: () => void; onDelete: () => void }) {
+function AlertCard({ alert, onViewMatches, onEdit, onDelete, onToggleActive }: { alert: SearchAlert; onViewMatches: () => void; onEdit: () => void; onDelete: () => void; onToggleActive: () => void }) {
   const description = alert.description || searchAlertService.generateAlertDescription(alert.filter_criteria);
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+  const formatDate = (dateString: string) => {
+    const [y, m, d] = dateString.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+  };
 
   return (
     <View style={styles.alertCard}>
       <View style={styles.cardTopRow}>
         <Text allowFontScaling={false} style={styles.alertName} numberOfLines={1}>{alert.name}</Text>
-        <View style={[styles.onOffBadge, alert.is_active ? styles.onBadge : styles.offBadge]}>
+        <TouchableOpacity style={[styles.onOffBadge, alert.is_active ? styles.onBadge : styles.offBadge]} onPress={onToggleActive}>
           <Text allowFontScaling={false} style={[styles.onOffText, alert.is_active ? styles.onText : styles.offText]}>{alert.is_active ? "ON" : "OFF"}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
       <Text allowFontScaling={false} style={styles.alertDescription} numberOfLines={2}>{description}</Text>
       <Text allowFontScaling={false} style={styles.matchInfo}>
@@ -71,6 +74,28 @@ export default function SearchAlertsScreen() {
   const handleEdit = (alertId: number) => router.push(`/(tabs)/search-alerts/edit/${alertId}` as any);
   const handleViewMatches = (alertId: number) => router.push(`/(tabs)/search-alerts/matches/${alertId}` as any);
 
+  const handleToggleActive = (alert: SearchAlert) => {
+    const title = alert.is_active ? "Disable Alert?" : "Enable Alert?";
+    const message = alert.is_active
+      ? `"${alert.name}" will stop matching new tournaments until re-enabled.`
+      : `"${alert.name}" will start matching new tournaments again.`;
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: alert.is_active ? "Disable" : "Enable",
+        style: alert.is_active ? "destructive" : "default",
+        onPress: async () => {
+          try {
+            await searchAlertService.updateAlert(alert.id, { is_active: !alert.is_active });
+            setAlerts((prev) => prev.map((a) => a.id === alert.id ? { ...a, is_active: !a.is_active } : a));
+          } catch {
+            Alert.alert("Error", `Failed to ${alert.is_active ? "disable" : "enable"} alert.`);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleDelete = (alert: SearchAlert) => {
     Alert.alert("Delete Alert", `Are you sure you want to delete "${alert.name}"? This will also remove all match history.`, [
       { text: "Cancel", style: "cancel" },
@@ -93,7 +118,13 @@ export default function SearchAlertsScreen() {
   if (loading) return <Loading fullScreen message="Loading search alerts..." />;
 
   const renderAlert = ({ item }: { item: SearchAlert }) => (
-    <AlertCard alert={item} onViewMatches={() => handleViewMatches(item.id)} onEdit={() => handleEdit(item.id)} onDelete={() => handleDelete(item)} />
+    <AlertCard
+      alert={item}
+      onViewMatches={() => handleViewMatches(item.id)}
+      onEdit={() => handleEdit(item.id)}
+      onDelete={() => handleDelete(item)}
+      onToggleActive={() => handleToggleActive(item)}
+    />
   );
 
   const renderEmptyState = () => (
@@ -168,7 +199,7 @@ const styles = StyleSheet.create({
   statsBar: { flexDirection: "row", justifyContent: "space-around", paddingVertical: scale(SPACING.lg), borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.backgroundCard },
   statItem: { alignItems: "center" },
   statValue: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: COLORS.primary },
-  statLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: 2 },
+  statLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(2) },
   createButtonWrapper: { padding: scale(SPACING.md) },
   createButton: { backgroundColor: COLORS.primary, paddingVertical: scale(SPACING.md), borderRadius: RADIUS.md, alignItems: "center" },
   createButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },

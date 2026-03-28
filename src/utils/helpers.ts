@@ -1,4 +1,4 @@
-export const toTitleCase = (str: string): string => {
+﻿export const toTitleCase = (str: string): string => {
   if (!str) return '';
   return str
     .toLowerCase()
@@ -15,7 +15,8 @@ export const formatCurrency = (amount: number): string => {
 };
 
 export const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
+  const [y, m, d] = dateString.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',

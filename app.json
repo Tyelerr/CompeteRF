@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "Compete",
                  "slug":  "competerf",
-                 "version":  "1.0.2",
+                 "version":  "1.0.3",
                  "orientation":  "portrait",
                  "icon":  "./assets/images/icon.png",
                  "scheme":  "competerf",
@@ -11,7 +11,7 @@
                  "ios":  {
                              "supportsTablet":  true,
                              "bundleIdentifier":  "com.thecompeteapp.competerf",
-                             "buildNumber":  "39",
+                             "buildNumber":  "40",
                              "usesAppleSignIn":  true,
                              "associatedDomains":  [
                                                        "applinks:thecompeteapp.com"

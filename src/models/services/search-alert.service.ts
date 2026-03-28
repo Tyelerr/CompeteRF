@@ -321,7 +321,7 @@ export const searchAlertService = {
     }
 
     if (criteria.daysOfWeek && criteria.daysOfWeek.length > 0) {
-      const tournamentDay = new Date(tournament.tournament_date).getDay();
+      const tournamentDay = new Date(tournament.tournament_date).getUTCDay();
       const allowedDays = criteria.daysOfWeek.map((day) => parseInt(day));
       if (!allowedDays.includes(tournamentDay)) {
         return false;
@@ -359,7 +359,7 @@ export const searchAlertService = {
     tournamentGameType: string,
   ): boolean {
     const normalizedAlert = normalizeGameType(alertGameType);
-    const normalizedTournament = tournamentGameType; // already normalized by normalizeTournament()
+    const normalizedTournament = normalizeGameType(tournamentGameType); // normalize regardless of call source
 
     // Exact match
     if (normalizedAlert === normalizedTournament) return true;
@@ -381,7 +381,7 @@ export const searchAlertService = {
   generateAlertDescription(criteria: any): string {
     const parts: string[] = [];
     if (criteria.gameType && criteria.gameType.trim() !== "") {
-      parts.push(criteria.gameType);
+      parts.push(normalizeGameType(criteria.gameType));
     }
     if (criteria.state && criteria.state.trim() !== "") {
       parts.push(`in ${criteria.state}`);
@@ -398,3 +398,6 @@ export const searchAlertService = {
     return parts.join(" • ") || "All tournaments";
   },
 };
+
+
+

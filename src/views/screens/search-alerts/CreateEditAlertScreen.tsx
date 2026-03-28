@@ -16,10 +16,11 @@ import { Loading } from "../../components/common/loading";
 const isWeb = Platform.OS === "web";
 
 const GAME_TYPE_OPTIONS = [
-  { label: "Any Game Type", value: "" }, { label: "8-Ball", value: "8-ball" }, { label: "9-Ball", value: "9-ball" },
-  { label: "10-Ball", value: "10-ball" }, { label: "One Pocket", value: "one-pocket" }, { label: "Straight Pool", value: "straight-pool" },
-  { label: "Bank Pool", value: "bank-pool" }, { label: "Rotation", value: "rotation" },
-  { label: "8-Ball Scotch Doubles", value: "8-ball-scotch-doubles" }, { label: "9-Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "Any Game Type", value: "" }, { label: "8-Ball", value: "8-ball" },
+  { label: "8-Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "9-Ball", value: "9-ball" },
+  { label: "9-Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "10-Ball", value: "10-ball" },
   { label: "10-Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
 ];
 const FORMAT_OPTIONS = [
@@ -377,4 +378,5 @@ const styles = StyleSheet.create({
   saveButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.white, fontWeight: "600" },
   buttonDisabled: { opacity: 0.5 },
 });
+
 
