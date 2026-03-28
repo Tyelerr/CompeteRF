@@ -1,4 +1,4 @@
-// ─── Modal-level filter state ─────────────────────────────────────────────────
+﻿// --- Modal-level filter state -------------------------------------------
 // Used by FilterModal and the billiards viewmodel for client-side filtering.
 // Distinct from TournamentFilters in tournament.types.ts which drives the
 // service-layer / Supabase queries.
@@ -7,7 +7,7 @@ export interface Filters {
   gameType: string;
   tournamentFormat: string;
   tableSize: string;
-  equipment: string;
+  brand: string;
   daysOfWeek: number[];
   fromDate: string;
   toDate: string;
@@ -27,8 +27,6 @@ const SCOTCH_DOUBLES_TYPES = [
   "10-ball-scotch-doubles",
 ];
 
-// Returns the max Fargo value based on selected game type
-// Scotch doubles uses combined team Fargo so the ceiling is much higher
 export const getFargoMax = (gameType: string): number => {
   return SCOTCH_DOUBLES_TYPES.includes(gameType) ? 2000 : 1000;
 };
@@ -41,7 +39,7 @@ export const defaultFilters: Filters = {
   gameType: "",
   tournamentFormat: "",
   tableSize: "",
-  equipment: "",
+  brand: "",
   daysOfWeek: [],
   fromDate: "",
   toDate: "",
@@ -55,16 +53,12 @@ export const defaultFilters: Filters = {
   openTournament: false,
 };
 
-/**
- * Returns the number of non-default filters currently active.
- * Used to drive the "Filters Applied" label in the UI.
- */
 export const getActiveFilterCount = (filters: Filters): number => {
   let count = 0;
   if (filters.gameType) count++;
   if (filters.tournamentFormat) count++;
   if (filters.tableSize) count++;
-  if (filters.equipment) count++;
+  if (filters.brand) count++;
   if (filters.daysOfWeek.length > 0) count++;
   if (filters.fromDate) count++;
   if (filters.toDate) count++;
@@ -78,4 +72,3 @@ export const getActiveFilterCount = (filters: Filters): number => {
   if (filters.openTournament) count++;
   return count;
 };
-

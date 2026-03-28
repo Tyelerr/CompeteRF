@@ -1,4 +1,4 @@
-import { supabase } from "../../lib/supabase";
+﻿import { supabase } from "../../lib/supabase";
 import { Venue, VenueDirector, VenueOwner } from "../types/venue.types";
 
 export const venueService = {
@@ -110,5 +110,35 @@ export const venueService = {
       .eq("venue_id", venueId)
       .eq("director_id", directorId);
     if (error) throw error;
+  },
+
+  // Returns distinct table brands present in venue_tables,
+  // excluding generic catch-all values.
+  async getDistinctBrands(): Promise<string[]> {
+    const { data, error } = await supabase
+      .from("venue_tables")
+      .select("brand")
+      .not("brand", "is", null)
+      .order("brand");
+    if (error) throw error;
+    const excluded = ["Other", "Unknown"];
+    const brands = [
+      ...new Set(data?.map((d) => d.brand).filter(Boolean) as string[]),
+    ];
+    return brands.filter((b) => !excluded.includes(b));
+  },
+
+  // Returns venue IDs that have at least one table matching any of the
+  // given brands. Used for client-side brand filtering in useBilliards.
+  async getVenueIdsByBrands(brands: string[]): Promise<number[]> {
+    if (brands.length === 0) return [];
+    const { data, error } = await supabase
+      .from("venue_tables")
+      .select("venue_id")
+      .in("brand", brands);
+    if (error) throw error;
+    return [
+      ...new Set(data?.map((d) => d.venue_id).filter(Boolean) as number[]),
+    ];
   },
 };

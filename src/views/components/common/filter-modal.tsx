@@ -5,11 +5,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
+import { venueService } from "../../../models/services/venue.service";
 import { Filters, defaultFilters, getFargoMax, isScotchDoubles } from "../../../models/types/filter.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -69,11 +69,27 @@ interface FilterModalProps {
 
 export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalProps) => {
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
+  const [brandOptions, setBrandOptions] = useState<{ label: string; value: string }[]>([
+    { label: "All Brands", value: "" },
+  ]);
 
   const fargoMax = getFargoMax(localFilters.gameType);
   const scotchSelected = isScotchDoubles(localFilters.gameType);
   const fargoMaxLabel = scotchSelected ? "2000+" : "1000+";
   const fargoMaxDisplay = scotchSelected ? 2000 : 1000;
+
+  // Load distinct brands once on mount
+  useEffect(() => {
+    venueService
+      .getDistinctBrands()
+      .then((brands) => {
+        setBrandOptions([
+          { label: "All Brands", value: "" },
+          ...brands.map((b) => ({ label: b, value: b })),
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (visible) setLocalFilters(filters);
@@ -82,12 +98,10 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
   const handleGameTypeChange = (value: string) => {
     const prevFargoMax = getFargoMax(localFilters.gameType);
     const newFargoMax = getFargoMax(value);
-    // If maxFargo was at the old ceiling (user never adjusted it),
-    // reset it to the new ceiling so switching to scotch doubles (2000)
-    // does not accidentally activate the Fargo filter.
-    const newMaxFargo = localFilters.maxFargo >= prevFargoMax
-      ? newFargoMax
-      : Math.min(localFilters.maxFargo, newFargoMax);
+    const newMaxFargo =
+      localFilters.maxFargo >= prevFargoMax
+        ? newFargoMax
+        : Math.min(localFilters.maxFargo, newFargoMax);
     setLocalFilters({ ...localFilters, gameType: value, maxFargo: newMaxFargo });
   };
 
@@ -97,7 +111,7 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
     if (localFilters.gameType) activeFilters.gameType = localFilters.gameType;
     if (localFilters.tournamentFormat) activeFilters.tournamentFormat = localFilters.tournamentFormat;
     if (localFilters.tableSize) activeFilters.tableSize = localFilters.tableSize;
-    if (localFilters.equipment) activeFilters.equipment = localFilters.equipment;
+    if (localFilters.brand) activeFilters.brand = localFilters.brand;
     if (localFilters.daysOfWeek.length > 0) activeFilters.daysOfWeek = localFilters.daysOfWeek;
     if (localFilters.fromDate) activeFilters.fromDate = localFilters.fromDate;
     if (localFilters.toDate) activeFilters.toDate = localFilters.toDate;
@@ -121,10 +135,15 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
 
   const toggleDay = (day: number) => {
     const days = localFilters.daysOfWeek;
-    setLocalFilters({ ...localFilters, daysOfWeek: days.includes(day) ? days.filter((d) => d !== day) : [...days, day] });
+    setLocalFilters({
+      ...localFilters,
+      daysOfWeek: days.includes(day) ? days.filter((d) => d !== day) : [...days, day],
+    });
   };
 
-  const toggleCheckbox = (field: "requiresFargoGames" | "reportsToFargo" | "calcutta" | "openTournament") => {
+  const toggleCheckbox = (
+    field: "requiresFargoGames" | "reportsToFargo" | "calcutta" | "openTournament"
+  ) => {
     setLocalFilters({ ...localFilters, [field]: !localFilters[field] });
   };
 
@@ -133,13 +152,21 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
       <Dropdown label="Game Type" placeholder="All Game Types" options={GAME_TYPES} value={localFilters.gameType} onSelect={handleGameTypeChange} />
       <Dropdown label="Tournament Format" placeholder="Select The Format" options={TOURNAMENT_FORMATS} value={localFilters.tournamentFormat} onSelect={(v) => setLocalFilters({ ...localFilters, tournamentFormat: v })} />
       <Dropdown label="Table Size" placeholder="All Table Sizes" options={TABLE_SIZES} value={localFilters.tableSize} onSelect={(v) => setLocalFilters({ ...localFilters, tableSize: v })} />
-      <Text allowFontScaling={false} style={mStyles.label}>Equipment / Brand</Text>
-      <TextInput allowFontScaling={false} style={mStyles.textInput} placeholder="e.g. Diamond, Brunswick, Olhausen" placeholderTextColor={COLORS.textMuted} value={localFilters.equipment} onChangeText={(t) => setLocalFilters({ ...localFilters, equipment: t })} />
+      <Dropdown label="Table Brand" placeholder="All Brands" options={brandOptions} value={localFilters.brand} onSelect={(v) => setLocalFilters({ ...localFilters, brand: v })} />
       <Text allowFontScaling={false} style={mStyles.label}>Days of Week</Text>
       <View style={mStyles.daysRow}>
         {DAYS_OF_WEEK.map((day) => (
-          <TouchableOpacity key={day.value} style={[mStyles.dayButton, localFilters.daysOfWeek.includes(day.value) && mStyles.dayButtonActive]} onPress={() => toggleDay(day.value)}>
-            <Text allowFontScaling={false} style={[mStyles.dayButtonText, localFilters.daysOfWeek.includes(day.value) && mStyles.dayButtonTextActive]}>{day.label}</Text>
+          <TouchableOpacity
+            key={day.value}
+            style={[mStyles.dayButton, localFilters.daysOfWeek.includes(day.value) && mStyles.dayButtonActive]}
+            onPress={() => toggleDay(day.value)}
+          >
+            <Text
+              allowFontScaling={false}
+              style={[mStyles.dayButtonText, localFilters.daysOfWeek.includes(day.value) && mStyles.dayButtonTextActive]}
+            >
+              {day.label}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -155,7 +182,7 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
     <>
       <RangeSlider label="Entry Fee Range" minValue={localFilters.minEntryFee} maxValue={localFilters.maxEntryFee} min={0} max={1000} step={10} onValueChange={(mn, mx) => setLocalFilters({ ...localFilters, minEntryFee: mn, maxEntryFee: mx })} formatValue={(v) => (v >= 1000 ? "$1000+" : `$${v}`)} minLabel="$0" maxLabel="$1000+" />
       {scotchSelected && <Text allowFontScaling={false} style={mStyles.fargoNote}>Combined team Fargo for Scotch Doubles</Text>}
-      <RangeSlider label="Fargo Rating Range" minValue={localFilters.minFargo} maxValue={Math.min(localFilters.maxFargo, fargoMaxDisplay)} min={0} max={fargoMaxDisplay} step={10} onValueChange={(mn, mx) => setLocalFilters({ ...localFilters, minFargo: mn, maxFargo: mx })} formatValue={(v) => v >= fargoMaxDisplay ? `${fargoMaxDisplay}+` : v.toString()} minLabel="0" maxLabel={fargoMaxLabel} />
+      <RangeSlider label="Fargo Rating Range" minValue={localFilters.minFargo} maxValue={Math.min(localFilters.maxFargo, fargoMaxDisplay)} min={0} max={fargoMaxDisplay} step={10} onValueChange={(mn, mx) => setLocalFilters({ ...localFilters, minFargo: mn, maxFargo: mx })} formatValue={(v) => (v >= fargoMaxDisplay ? `${fargoMaxDisplay}+` : v.toString())} minLabel="0" maxLabel={fargoMaxLabel} />
     </>
   );
 
@@ -170,7 +197,7 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
         return (
           <TouchableOpacity key={field} style={mStyles.checkboxRow} onPress={() => toggleCheckbox(field)}>
             <View style={[mStyles.checkbox, localFilters[field] && mStyles.checkboxActive]}>
-              {localFilters[field] && <Text allowFontScaling={false} style={mStyles.checkmark}>✓</Text>}
+              {localFilters[field] && <Text allowFontScaling={false} style={mStyles.checkmark}>{"\u2713"}</Text>}
             </View>
             <Text allowFontScaling={false} style={mStyles.checkboxLabel}>{labels[field]}</Text>
           </TouchableOpacity>
@@ -197,7 +224,7 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
           <View style={mStyles.header}>
             <Text allowFontScaling={false} style={mStyles.title}>Tournament Filters</Text>
             <TouchableOpacity onPress={onClose} style={mStyles.closeButton}>
-              <Text allowFontScaling={false} style={mStyles.closeButtonText}>✕</Text>
+              <Text allowFontScaling={false} style={mStyles.closeButtonText}>{"\u2715"}</Text>
             </TouchableOpacity>
           </View>
           {isWeb ? (
@@ -233,7 +260,6 @@ const mStyles = StyleSheet.create({
   label: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: scale(SPACING.sm), marginTop: scale(SPACING.md) },
   sectionTitle: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, marginTop: scale(SPACING.lg), marginBottom: scale(SPACING.sm) },
   fargoNote: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.primary, marginTop: scale(SPACING.sm), marginBottom: -scale(SPACING.xs), fontStyle: "italic" },
-  textInput: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.md), paddingHorizontal: scale(SPACING.md), fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
   daysRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: scale(SPACING.md) },
   dayButton: { width: scale(40), height: scale(40), borderRadius: scale(20), borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
   dayButtonActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
@@ -259,4 +285,3 @@ const wStyles = StyleSheet.create({
   twoCol: { flexDirection: "row", gap: scale(SPACING.xl), overflow: "visible" as any },
   col: { flex: 1, overflow: "visible" as any },
 });
-

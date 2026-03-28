@@ -101,10 +101,26 @@ export const searchAlertService = {
     return data || [];
   },
 
+  // Fetches the distinct table brands for a given venue.
+  async getVenueBrands(venueId: number): Promise<string[]> {
+    if (!venueId) return [];
+    try {
+      const { data, error } = await supabase
+        .from("venue_tables")
+        .select("brand")
+        .eq("venue_id", venueId)
+        .not("brand", "is", null);
+      if (error) return [];
+      return [...new Set(data?.map((d) => d.brand).filter(Boolean) as string[])];
+    } catch {
+      return [];
+    }
+  },
+
   async checkTournamentAgainstAlerts(tournament: Tournament): Promise<void> {
     try {
       console.log(
-        "🔍 Checking tournament against alerts:",
+        "\uD83D\uDD0D Checking tournament against alerts:",
         tournament.name,
         tournament.game_type,
       );
@@ -115,16 +131,26 @@ export const searchAlertService = {
         .eq("is_active", true);
 
       if (error) throw error;
-      console.log(`📋 Found ${alerts?.length || 0} active alerts`);
+      console.log(`\uD83D\uDCCB Found ${alerts?.length || 0} active alerts`);
       if (!alerts || alerts.length === 0) return;
 
+      // Pre-fetch venue brands once if any active alert uses brand filtering.
+      const anyAlertHasBrand = alerts.some(
+        (a) => a.filter_criteria?.brand && a.filter_criteria.brand.trim() !== "",
+      );
+      const venueId = (tournament as any).venue_id as number | undefined;
+      const venueBrands: string[] =
+        anyAlertHasBrand && venueId
+          ? await this.getVenueBrands(venueId)
+          : [];
+
       const matchingAlerts = alerts.filter((alert) => {
-        const matches = this.doesTournamentMatchAlert(tournament, alert);
-        console.log(`🎯 Alert "${alert.name}" matches: ${matches}`);
+        const matches = this.doesTournamentMatchAlert(tournament, alert, venueBrands);
+        console.log(`\uD83C\uDFAF Alert "${alert.name}" matches: ${matches}`);
         return matches;
       });
 
-      console.log(`✅ Found ${matchingAlerts.length} matching alerts`);
+      console.log(`\u2705 Found ${matchingAlerts.length} matching alerts`);
       if (matchingAlerts.length === 0) return;
 
       const matchingAlertIds = matchingAlerts.map((a) => a.id);
@@ -135,7 +161,7 @@ export const searchAlertService = {
         .in("alert_id", matchingAlertIds);
 
       if (existingError) {
-        console.error("⚠️ Error checking existing matches:", existingError);
+        console.error("\u26A0\uFE0F Error checking existing matches:", existingError);
       }
 
       const existingAlertIds = new Set(
@@ -146,7 +172,7 @@ export const searchAlertService = {
       );
 
       console.log(
-        `🆕 ${newMatchingAlerts.length} new matches (${existingAlertIds.size} already existed)`,
+        `\uD83D\uDD06 ${newMatchingAlerts.length} new matches (${existingAlertIds.size} already existed)`,
       );
 
       if (newMatchingAlerts.length > 0) {
@@ -159,7 +185,6 @@ export const searchAlertService = {
           .from("alert_matches")
           .insert(matches);
         if (insertError) throw insertError;
-        console.log(`📝 Created ${matches.length} alert matches`);
 
         const updatePromises = newMatchingAlerts.map((alert) =>
           supabase
@@ -171,12 +196,11 @@ export const searchAlertService = {
             .eq("id", alert.id),
         );
         await Promise.all(updatePromises);
-        console.log(`📊 Updated match counts for ${newMatchingAlerts.length} alerts`);
 
         await this.notifyMatchingUsers(newMatchingAlerts, tournament);
       }
     } catch (error) {
-      console.error("❌ Error checking tournament against alerts:", error);
+      console.error("\u274C Error checking tournament against alerts:", error);
     }
   },
 
@@ -198,13 +222,13 @@ export const searchAlertService = {
         locationParts.length > 0 ? ` in ${locationParts.join(", ")}` : "";
       const feeStr =
         tournament.entry_fee && tournament.entry_fee > 0
-          ? ` — $${tournament.entry_fee} entry`
+          ? ` \u2014 $${tournament.entry_fee} entry`
           : "";
 
       const result = await notificationDispatcher.send({
         category: "search_alert_match",
         recipientIdAutos: uniqueUserIds,
-        title: "🔔 Tournament Matches Your Alert!",
+        title: "\uD83D\uDD14 Tournament Matches Your Alert!",
         body: `${tournament.name}${locationStr}${feeStr}`,
         data: {
           tournament_id: tournament.id,
@@ -214,27 +238,22 @@ export const searchAlertService = {
       });
 
       console.log(
-        `🔔 Search alert notifications: ${result.sentCount} sent, ${result.filteredCount} filtered, ${result.eligibleCount} eligible`,
+        `\uD83D\uDD14 Search alert notifications: ${result.sentCount} sent, ${result.filteredCount} filtered, ${result.eligibleCount} eligible`,
       );
     } catch (error) {
-      console.error("⚠️ Error sending search alert notifications:", error);
+      console.error("\u26A0\uFE0F Error sending search alert notifications:", error);
     }
   },
 
-  doesTournamentMatchAlert(tournament: Tournament, alert: SearchAlert): boolean {
+  doesTournamentMatchAlert(
+    tournament: Tournament,
+    alert: SearchAlert,
+    venueBrands: string[] = [],
+  ): boolean {
     const criteria = alert.filter_criteria;
 
-    // ── Game type: normalize the alert slug to a display label before comparing.
-    // tournament.game_type is already normalized by normalizeTournament() in
-    // tournament.service ("8-ball" → "8 Ball"), so we must normalize the
-    // alert criteria to the same format before calling gameTypesMatch.
     if (criteria.gameType && criteria.gameType.trim() !== "") {
-      if (!this.gameTypesMatch(criteria.gameType, tournament.game_type)) {
-        console.log(
-          `🎮 Game type mismatch: alert wants "${criteria.gameType}", tournament is "${tournament.game_type}"`,
-        );
-        return false;
-      }
+      if (!this.gameTypesMatch(criteria.gameType, tournament.game_type)) return false;
     }
 
     if (
@@ -242,9 +261,6 @@ export const searchAlertService = {
       criteria.tournamentFormat.trim() !== "" &&
       tournament.tournament_format !== criteria.tournamentFormat
     ) {
-      console.log(
-        `🏆 Format mismatch: alert wants "${criteria.tournamentFormat}", tournament is "${tournament.tournament_format}"`,
-      );
       return false;
     }
 
@@ -253,22 +269,23 @@ export const searchAlertService = {
       criteria.tableSize.trim() !== "" &&
       tournament.table_size !== criteria.tableSize
     ) {
-      console.log(
-        `📐 Table size mismatch: alert wants "${criteria.tableSize}", tournament is "${tournament.table_size}"`,
-      );
       return false;
     }
 
-    if (
-      criteria.equipment &&
-      criteria.equipment.trim() !== "" &&
-      tournament.equipment &&
-      !tournament.equipment.toLowerCase().includes(criteria.equipment.toLowerCase())
-    ) {
-      console.log(
-        `🎱 Equipment mismatch: alert wants "${criteria.equipment}", tournament has "${tournament.equipment}"`,
-      );
-      return false;
+    // Brand filter (single string): venue must have at least one table of this brand.
+    if (criteria.brand && criteria.brand.trim() !== "") {
+      if (!venueBrands.includes(criteria.brand)) {
+        console.log(
+          `\uD83C\uDFB1 Brand mismatch: alert wants "${criteria.brand}", venue has [${venueBrands.join(", ")}]`,
+        );
+        return false;
+      }
+    }
+
+    // Legacy brands array — backward compat for any old alerts.
+    if (Array.isArray(criteria.brands) && criteria.brands.length > 0) {
+      const hasMatchingBrand = criteria.brands.some((b: string) => venueBrands.includes(b));
+      if (!hasMatchingBrand) return false;
     }
 
     if (
@@ -300,73 +317,31 @@ export const searchAlertService = {
     ) {
       return false;
     }
-    if (
-      criteria.calcutta !== undefined &&
-      tournament.calcutta !== criteria.calcutta
-    ) {
-      return false;
-    }
-    if (
-      criteria.openTournament !== undefined &&
-      tournament.open_tournament !== criteria.openTournament
-    ) {
-      return false;
-    }
+    if (criteria.calcutta !== undefined && tournament.calcutta !== criteria.calcutta) return false;
+    if (criteria.openTournament !== undefined && tournament.open_tournament !== criteria.openTournament) return false;
 
-    if (criteria.dateFrom && tournament.tournament_date < criteria.dateFrom) {
-      return false;
-    }
-    if (criteria.dateTo && tournament.tournament_date > criteria.dateTo) {
-      return false;
-    }
+    if (criteria.dateFrom && tournament.tournament_date < criteria.dateFrom) return false;
+    if (criteria.dateTo && tournament.tournament_date > criteria.dateTo) return false;
 
     if (criteria.daysOfWeek && criteria.daysOfWeek.length > 0) {
       const tournamentDay = new Date(tournament.tournament_date).getUTCDay();
-      const allowedDays = criteria.daysOfWeek.map((day) => parseInt(day));
-      if (!allowedDays.includes(tournamentDay)) {
-        return false;
-      }
+      const allowedDays = criteria.daysOfWeek.map((day: string) => parseInt(day));
+      if (!allowedDays.includes(tournamentDay)) return false;
     }
 
     if (tournament.venues) {
-      if (
-        criteria.state &&
-        criteria.state.trim() !== "" &&
-        tournament.venues.state !== criteria.state
-      ) {
-        return false;
-      }
-      if (
-        criteria.city &&
-        criteria.city.trim() !== "" &&
-        tournament.venues.city !== criteria.city
-      ) {
-        return false;
-      }
+      if (criteria.state && criteria.state.trim() !== "" && tournament.venues.state !== criteria.state) return false;
+      if (criteria.city && criteria.city.trim() !== "" && tournament.venues.city !== criteria.city) return false;
     }
 
-    console.log("✅ All criteria match!");
+    console.log("\u2705 All criteria match!");
     return true;
   },
 
-  // ── Smart game type matching using normalized display labels ──────────────
-  // Both sides are normalized to display labels ("8 Ball", "8 Ball Scotch Doubles")
-  // before comparing, so slug vs label mismatches are eliminated.
-  // A general alert ("8 Ball") matches its scotch doubles variant
-  // ("8 Ball Scotch Doubles"), but not vice versa.
-  gameTypesMatch(
-    alertGameType: string,
-    tournamentGameType: string,
-  ): boolean {
+  gameTypesMatch(alertGameType: string, tournamentGameType: string): boolean {
     const normalizedAlert = normalizeGameType(alertGameType);
-    const normalizedTournament = normalizeGameType(tournamentGameType); // normalize regardless of call source
-
-    // Exact match
+    const normalizedTournament = normalizeGameType(tournamentGameType);
     if (normalizedAlert === normalizedTournament) return true;
-
-    // One-way: general alert matches scotch doubles variant of the same game
-    // e.g. "8 Ball" alert matches "8 Ball Scotch Doubles" tournament
-    // but "8 Ball Scotch Doubles" alert does NOT match "8 Ball" tournament
     if (
       !normalizedAlert.includes("Scotch Doubles") &&
       normalizedTournament.includes("Scotch Doubles")
@@ -374,7 +349,6 @@ export const searchAlertService = {
       const baseTournamentType = normalizedTournament.replace(" Scotch Doubles", "").trim();
       return normalizedAlert === baseTournamentType;
     }
-
     return false;
   },
 
@@ -382,6 +356,9 @@ export const searchAlertService = {
     const parts: string[] = [];
     if (criteria.gameType && criteria.gameType.trim() !== "") {
       parts.push(normalizeGameType(criteria.gameType));
+    }
+    if (criteria.brand && criteria.brand.trim() !== "") {
+      parts.push(`${criteria.brand} tables`);
     }
     if (criteria.state && criteria.state.trim() !== "") {
       parts.push(`in ${criteria.state}`);
@@ -395,9 +372,6 @@ export const searchAlertService = {
         parts.push(`up to $${criteria.entryFeeMax}`);
       }
     }
-    return parts.join(" • ") || "All tournaments";
+    return parts.join(" \u2022 ") || "All tournaments";
   },
 };
-
-
-

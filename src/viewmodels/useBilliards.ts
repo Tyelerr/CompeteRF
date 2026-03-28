@@ -3,12 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
 import { normalizeGameType, tournamentService } from "../models/services/tournament.service";
+import { venueService } from "../models/services/venue.service";
 import { defaultFilters, Filters, getFargoMax } from "../models/types/filter.types";
 import { Tournament } from "../models/types/tournament.types";
-import {
-  getDistanceMiles,
-  getTournamentImageUrl,
-} from "../utils/tournament-helpers";
+import { getDistanceMiles, getTournamentImageUrl } from "../utils/tournament-helpers";
 import { useAuth } from "./hooks/use.auth";
 import { useFavorites } from "./hooks/use.favorites";
 
@@ -71,7 +69,22 @@ export function useBilliards(): UseBilliardsReturn {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
+  // Resolved venue IDs for the active brand filter. null = no brand filter active.
+  const [brandVenueIds, setBrandVenueIds] = useState<number[] | null>(null);
+
   useEffect(() => { loadTournaments(); }, []);
+
+  // Resolve venue IDs whenever the brand filter changes
+  useEffect(() => {
+    if (!filters.brand) {
+      setBrandVenueIds(null);
+      return;
+    }
+    venueService
+      .getVenueIdsByBrands([filters.brand])
+      .then(setBrandVenueIds)
+      .catch(() => setBrandVenueIds(null));
+  }, [filters.brand]);
 
   useEffect(() => {
     if (!hasSetHomeState && !loading && tournaments.length > 0 && profile?.home_state) {
@@ -123,7 +136,6 @@ export function useBilliards(): UseBilliardsReturn {
   const filteredTournaments = useMemo(() => {
     let filtered = [...tournaments];
 
-    // ── Text search: name, venue, AND game type ──────────────────────────────
     if (searchQuery) {
       const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(
@@ -160,10 +172,6 @@ export function useBilliards(): UseBilliardsReturn {
       }
     }
 
-    // ── Game type: normalize the slug from FilterModal to the display label ──
-    // normalizeTournament() in tournament.service converts slugs → display labels
-    // ("8-ball" → "8 Ball") on every fetched record, so we must normalize the
-    // filter value to the same format before comparing.
     if (filters.gameType) {
       const normalizedFilterGameType = normalizeGameType(filters.gameType);
       filtered = filtered.filter((t) => t.game_type === normalizedFilterGameType);
@@ -177,10 +185,10 @@ export function useBilliards(): UseBilliardsReturn {
       filtered = filtered.filter((t) => (t as any).table_size === filters.tableSize);
     }
 
-    if (filters.equipment) {
-      const eq = filters.equipment.toLowerCase().trim();
+    // Brand filter: restrict to tournaments at venues that have tables of this brand
+    if (brandVenueIds !== null) {
       filtered = filtered.filter((t) =>
-        (t as any).equipment?.toLowerCase().includes(eq)
+        brandVenueIds.includes((t as any).venue_id as number)
       );
     }
 
@@ -219,7 +227,17 @@ export function useBilliards(): UseBilliardsReturn {
     if (filters.openTournament) filtered = filtered.filter((t) => t.open_tournament === true);
 
     return filtered;
-  }, [tournaments, searchQuery, selectedState, selectedCity, activeZip, searchRadius, zipCoords, filters]);
+  }, [
+    tournaments,
+    searchQuery,
+    selectedState,
+    selectedCity,
+    activeZip,
+    searchRadius,
+    zipCoords,
+    filters,
+    brandVenueIds,
+  ]);
 
   const isStateFilterEmpty = useMemo(() => {
     if (!selectedState) return false;
@@ -260,6 +278,7 @@ export function useBilliards(): UseBilliardsReturn {
     setSearchRadius(25);
     setZipCoords(null);
     setFilters(defaultFilters);
+    setBrandVenueIds(null);
     setHasSetHomeState(false);
   }, []);
 
@@ -300,4 +319,3 @@ export function useBilliards(): UseBilliardsReturn {
     getTournamentImageUrl,
   };
 }
-

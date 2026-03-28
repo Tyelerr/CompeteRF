@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { searchAlertService } from "../../../models/services/search-alert.service";
+import { venueService } from "../../../models/services/venue.service";
 import { SearchAlert, SearchAlertFilters } from "../../../models/types/search-alert.types";
 import { useAuthContext } from "../../../providers/AuthProvider";
 import { COLORS } from "../../../theme/colors";
@@ -79,7 +80,7 @@ interface FormState {
   gameType: string;
   tournamentFormat: string;
   tableSize: string;
-  equipment: string;
+  brand: string;
   state: string;
   city: string;
   entryFeeMin: string;
@@ -94,7 +95,7 @@ interface FormState {
 
 const initialFormState: FormState = {
   name: "", description: "", gameType: "", tournamentFormat: "", tableSize: "",
-  equipment: "", state: "", city: "", entryFeeMin: "", entryFeeMax: "",
+  brand: "", state: "", city: "", entryFeeMin: "", entryFeeMax: "",
   fargoMax: "", reportsToFargo: undefined, calcutta: undefined,
   openTournament: undefined, daysOfWeek: [], isActive: true,
 };
@@ -104,7 +105,7 @@ function formToCriteria(form: FormState): SearchAlertFilters {
   if (form.gameType) criteria.gameType = form.gameType;
   if (form.tournamentFormat) criteria.tournamentFormat = form.tournamentFormat;
   if (form.tableSize) criteria.tableSize = form.tableSize;
-  if (form.equipment.trim()) criteria.equipment = form.equipment.trim();
+  if (form.brand.trim()) criteria.brand = form.brand.trim();
   if (form.state.trim()) criteria.state = form.state.trim();
   if (form.city.trim()) criteria.city = form.city.trim();
   if (form.entryFeeMin.trim()) criteria.entryFeeMin = parseFloat(form.entryFeeMin);
@@ -122,7 +123,9 @@ function criteriaToForm(alert: SearchAlert): FormState {
   return {
     name: alert.name || "", description: alert.description || "",
     gameType: c.gameType || "", tournamentFormat: c.tournamentFormat || "",
-    tableSize: c.tableSize || "", equipment: c.equipment || "",
+    tableSize: c.tableSize || "",
+    // support legacy alerts that stored brands as array or equipment as string
+    brand: c.brand || (Array.isArray(c.brands) && c.brands.length > 0 ? c.brands[0] : ""),
     state: c.state || "", city: c.city || "",
     entryFeeMin: c.entryFeeMin !== undefined ? c.entryFeeMin.toString() : "",
     entryFeeMax: c.entryFeeMax !== undefined ? c.entryFeeMax.toString() : "",
@@ -182,7 +185,7 @@ function AlertCard({ alert, onEdit, onDelete, onToggleActive, onViewMatches }: {
         </TouchableOpacity>
       </View>
       <Text allowFontScaling={false} style={s.alertDescription} numberOfLines={2}>{description}</Text>
-      <Text allowFontScaling={false} style={s.matchInfo}>{alert.match_count} {alert.match_count === 1 ? "match" : "matches"}{alert.last_match_date ? ` · Last: ${formatDate(alert.last_match_date)}` : ""}</Text>
+      <Text allowFontScaling={false} style={s.matchInfo}>{alert.match_count} {alert.match_count === 1 ? "match" : "matches"}{alert.last_match_date ? ` \u00b7 Last: ${formatDate(alert.last_match_date)}` : ""}</Text>
       <View style={s.actionRow}>
         <TouchableOpacity style={[s.actionButton, s.actionOutline]} onPress={onViewMatches}>
           <Text allowFontScaling={false} style={s.actionOutlineText}>View Matches</Text>
@@ -204,6 +207,9 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [brandOptions, setBrandOptions] = useState<{ label: string; value: string }[]>([
+    { label: "Any Brand", value: "" },
+  ]);
   const scrollRef = useRef<ScrollView>(null);
   const fieldOffsets = useRef<Record<string, number>>({});
 
@@ -217,6 +223,16 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
   const stateOptions = [{ label: "Any State", value: "" }, ...US_STATES];
   const cityList = form.state ? US_CITIES_BY_STATE[form.state] || [] : [];
   const cityOptions = [{ label: "Any City", value: "" }, ...cityList.map((city: string) => ({ label: city, value: city }))];
+
+  // Load distinct brands once on mount
+  useEffect(() => {
+    venueService.getDistinctBrands().then((brands) => {
+      setBrandOptions([
+        { label: "Any Brand", value: "" },
+        ...brands.map((b) => ({ label: b, value: b })),
+      ]);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isEditMode && alertId) {
@@ -271,7 +287,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
     if (!form.name.trim()) { Alert.alert("Error", "Please enter an alert name."); return; }
     const criteria = formToCriteria(form);
     if (Object.keys(criteria).length === 0) {
-      Alert.alert("No Filters", "No filters set — this alert will match every tournament.", [
+      Alert.alert("No Filters", "No filters set \u2014 this alert will match every tournament.", [
         { text: "Add Filters", style: "cancel" },
         { text: "Save Anyway", onPress: doSave },
       ]);
@@ -294,7 +310,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
       <View style={s.sheetHeader}>
         <Text allowFontScaling={false} style={s.sheetHeaderTitle}>{isEditMode ? "EDIT ALERT" : "CREATE ALERT"}</Text>
         <TouchableOpacity style={s.closeButton} onPress={onClose}>
-          <Text allowFontScaling={false} style={s.closeButtonText}>&#x2715;</Text>
+          <Text allowFontScaling={false} style={s.closeButtonText}>{"\u2715"}</Text>
         </TouchableOpacity>
       </View>
       <View style={s.divider} />
@@ -306,7 +322,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
           <Text allowFontScaling={false} style={s.sectionTitle}>Alert Info</Text>
           <View style={s.fieldContainer} onLayout={(e) => { fieldOffsets.current["name"] = e.nativeEvent.layout.y; }}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Alert Name <Text style={s.required}>*</Text></Text>
-            <TextInput allowFontScaling={false} style={s.textInput} placeholder='e.g. "9-Ball in Arizona"' placeholderTextColor={COLORS.textMuted} value={form.name} onChangeText={(v) => updateField("name", v)} onFocus={() => scrollToField("name")} editable={!saving} autoCapitalize="words" maxLength={100} />
+            <TextInput allowFontScaling={false} style={s.textInput} placeholder={'"9-Ball in Arizona"'} placeholderTextColor={COLORS.textMuted} value={form.name} onChangeText={(v) => updateField("name", v)} onFocus={() => scrollToField("name")} editable={!saving} autoCapitalize="words" maxLength={100} />
           </View>
           <View style={s.fieldContainer} onLayout={(e) => { fieldOffsets.current["description"] = e.nativeEvent.layout.y; }}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Description (optional)</Text>
@@ -326,7 +342,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
           <View style={s.fieldContainer}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Game Type</Text>
             <Dropdown placeholder="Any Game Type" options={GAME_TYPE_OPTIONS} value={form.gameType} onSelect={(v: string) => updateField("gameType", v)} disabled={saving} />
-            {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={s.fieldHint}>💡 This will also match scotch doubles versions</Text>}
+            {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={s.fieldHint}>{"\uD83D\uDCA1"} This will also match scotch doubles versions</Text>}
           </View>
           <View style={s.fieldContainer}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Tournament Format</Text>
@@ -336,9 +352,9 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
             <Text allowFontScaling={false} style={s.fieldLabel}>Table Size</Text>
             <Dropdown placeholder="Any Table Size" options={TABLE_SIZE_OPTIONS} value={form.tableSize} onSelect={(v: string) => updateField("tableSize", v)} disabled={saving} />
           </View>
-          <View style={s.fieldContainer} onLayout={(e) => { fieldOffsets.current["equipment"] = e.nativeEvent.layout.y; }}>
-            <Text allowFontScaling={false} style={s.fieldLabel}>Equipment</Text>
-            <TextInput allowFontScaling={false} style={s.textInput} placeholder='"Diamond", "Brunswick"' placeholderTextColor={COLORS.textMuted} value={form.equipment} onChangeText={(v) => updateField("equipment", v)} onFocus={() => scrollToField("equipment")} editable={!saving} autoCapitalize="words" />
+          <View style={s.fieldContainer}>
+            <Text allowFontScaling={false} style={s.fieldLabel}>Table Brand</Text>
+            <Dropdown placeholder="Any Brand" options={brandOptions} value={form.brand} onSelect={(v: string) => updateField("brand", v)} disabled={saving} />
           </View>
         </View>
 
@@ -355,7 +371,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
         </View>
 
         <View style={s.section}>
-          <Text allowFontScaling={false} style={s.sectionTitle}>Entry Fee & Skill Level</Text>
+          <Text allowFontScaling={false} style={s.sectionTitle}>{"Entry Fee & Skill Level"}</Text>
           <View style={s.rowFields}>
             <View style={[s.fieldContainer, s.fieldHalf]} onLayout={(e) => { fieldOffsets.current["entryFeeMin"] = e.nativeEvent.layout.y; }}>
               <Text allowFontScaling={false} style={s.fieldLabel}>Min Entry Fee ($)</Text>
@@ -374,7 +390,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
 
         <View style={s.section}>
           <Text allowFontScaling={false} style={s.sectionTitle}>Additional Filters</Text>
-          <Text allowFontScaling={false} style={s.sectionHint}>Tap to cycle: Any → Yes → No → Any</Text>
+          <Text allowFontScaling={false} style={s.sectionHint}>{"Tap to cycle: Any \u2192 Yes \u2192 No \u2192 Any"}</Text>
           <ToggleRow label="Reports to Fargo" description="Tournament results reported to FargoRate" value={form.reportsToFargo} onToggle={() => cycleTriState("reportsToFargo")} disabled={saving} />
           <ToggleRow label="Calcutta" description="Tournament includes a Calcutta auction" value={form.calcutta} onToggle={() => cycleTriState("calcutta")} disabled={saving} />
           <ToggleRow label="Open Tournament" description="No skill cap restriction" value={form.openTournament} onToggle={() => cycleTriState("openTournament")} disabled={saving} />
@@ -388,7 +404,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
 
         <View style={s.previewContainer}>
           <Text allowFontScaling={false} style={s.previewLabel}>Alert Preview</Text>
-          <Text allowFontScaling={false} style={s.previewText}>{form.name.trim() || "Untitled Alert"} — {searchAlertService.generateAlertDescription(formToCriteria(form))}</Text>
+          <Text allowFontScaling={false} style={s.previewText}>{form.name.trim() || "Untitled Alert"} {"\u2014"} {searchAlertService.generateAlertDescription(formToCriteria(form))}</Text>
         </View>
       </ScrollView>
 
@@ -465,7 +481,7 @@ function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onOpenMatches
         <View style={{ width: 40 }} />
         <Text allowFontScaling={false} style={s.headerTitle}>SEARCH ALERTS</Text>
         <TouchableOpacity style={s.closeButton} onPress={onClose}>
-          <Text allowFontScaling={false} style={s.closeButtonText}>&#x2715;</Text>
+          <Text allowFontScaling={false} style={s.closeButtonText}>{"\u2715"}</Text>
         </TouchableOpacity>
       </View>
       <View style={s.divider} />
@@ -517,7 +533,7 @@ function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onOpenMatches
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={() => (
         <View style={s.emptyState}>
-          <Text allowFontScaling={false} style={s.emptyIcon}>🔔</Text>
+          <Text allowFontScaling={false} style={s.emptyIcon}>{"\uD83D\uDD14"}</Text>
           <Text allowFontScaling={false} style={s.emptyTitle}>No Search Alerts Yet</Text>
           <Text allowFontScaling={false} style={s.emptySubtitle}>Create an alert to get notified when tournaments match your criteria.</Text>
         </View>
@@ -690,12 +706,3 @@ const s = StyleSheet.create({
   cancelButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.error, fontWeight: "600" },
   buttonDisabled: { opacity: 0.5 },
 });
-
-
-
-
-
-
-
-
-
