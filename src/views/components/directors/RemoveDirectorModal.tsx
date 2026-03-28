@@ -1,20 +1,16 @@
-import React from "react";
+﻿import React from "react";
 import {
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  Modal, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
-import { Director } from "../../../models/types/director.types";
+import { GroupedDirector } from "../../../models/types/director.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { moderateScale, scale } from "../../../utils/scaling";
 
 interface RemoveDirectorModalProps {
   visible: boolean;
-  director: Director | null;
+  director: GroupedDirector | null;
   reason: string;
   onReasonChange: (reason: string) => void;
   onCancel: () => void;
@@ -23,84 +19,68 @@ interface RemoveDirectorModalProps {
 }
 
 export const RemoveDirectorModal: React.FC<RemoveDirectorModalProps> = ({
-  visible,
-  director,
-  reason,
-  onReasonChange,
-  onCancel,
-  onConfirm,
-  isProcessing = false,
+  visible, director, reason, onReasonChange, onCancel, onConfirm, isProcessing = false,
 }) => {
   if (!director) return null;
 
-  const handleConfirm = () => {
-    if (!reason.trim()) {
-      // You could add validation here or make reason optional
-    }
-    onConfirm();
-  };
-
-  const handleCancel = () => {
-    onReasonChange("");
-    onCancel();
-  };
+  const activeVenues = director.assignments.filter((a) => a.status === "active");
 
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.modal}>
-          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Remove Director</Text>
-            <Text style={styles.subtitle}>
-              Are you sure you want to remove this director?
+            <Text allowFontScaling={false} style={styles.title}>Remove Director</Text>
+            <Text allowFontScaling={false} style={styles.subtitle}>
+              This will remove them from all {activeVenues.length} venue{activeVenues.length !== 1 ? "s" : ""}.
             </Text>
           </View>
 
-          {/* Director Info */}
           <View style={styles.directorInfo}>
-            <View style={styles.directorRow}>
-              <Text style={styles.directorLabel}>Director:</Text>
-              <Text style={styles.directorValue}>
-                {director.profiles?.name || director.profiles?.user_name}
+            <View style={styles.row}>
+              <Text allowFontScaling={false} style={styles.rowLabel}>Director</Text>
+              <Text allowFontScaling={false} style={styles.rowValue}>
+                {director.profile.name || director.profile.user_name}
               </Text>
             </View>
-            <View style={styles.directorRow}>
-              <Text style={styles.directorLabel}>Email:</Text>
-              <Text style={styles.directorValue}>
-                {director.profiles?.email}
-              </Text>
+            <View style={styles.row}>
+              <Text allowFontScaling={false} style={styles.rowLabel}>Email</Text>
+              <Text allowFontScaling={false} style={styles.rowValue}>{director.profile.email}</Text>
             </View>
-            <View style={styles.directorRow}>
-              <Text style={styles.directorLabel}>Venue:</Text>
-              <Text style={styles.directorValue}>{director.venues?.venue}</Text>
+            <View style={styles.row}>
+              <Text allowFontScaling={false} style={styles.rowLabel}>Venues</Text>
+              <View style={styles.venuesList}>
+                {activeVenues.map((a) => (
+                  <Text allowFontScaling={false} key={a.id} style={styles.venueItem}>
+                    🏢 {a.venue_name}
+                  </Text>
+                ))}
+              </View>
             </View>
-            <View style={styles.directorRow}>
-              <Text style={styles.directorLabel}>Tournaments:</Text>
-              <Text style={styles.directorValue}>
-                {director.tournament_count || 0} tournaments
+            <View style={[styles.row, { borderBottomWidth: 0 }]}>
+              <Text allowFontScaling={false} style={styles.rowLabel}>Tournaments</Text>
+              <Text allowFontScaling={false} style={styles.rowValue}>
+                {director.total_tournaments} total
               </Text>
             </View>
           </View>
 
-          {/* Warning */}
           <View style={styles.warning}>
-            <Text style={styles.warningIcon}>⚠️</Text>
-            <View style={styles.warningContent}>
-              <Text style={styles.warningTitle}>Important</Text>
-              <Text style={styles.warningText}>
-                The director will no longer be able to create tournaments at
-                this venue. This action can be reversed later if needed.
+            <Text allowFontScaling={false} style={styles.warningIcon}>⚠️</Text>
+            <View style={{ flex: 1 }}>
+              <Text allowFontScaling={false} style={styles.warningTitle}>Important</Text>
+              <Text allowFontScaling={false} style={styles.warningText}>
+                This director will no longer be able to create tournaments at any of your venues. This can be reversed later.
               </Text>
             </View>
           </View>
 
-          {/* Reason Input (Optional) */}
           <View style={styles.inputSection}>
-            <Text style={styles.inputLabel}>
-              Removal Reason <Text style={styles.optional}>(Optional)</Text>
+            <Text allowFontScaling={false} style={styles.inputLabel}>
+              Reason <Text style={styles.optional}>(optional)</Text>
             </Text>
             <TextInput
+              allowFontScaling={false}
               style={styles.textInput}
               placeholder="Why are you removing this director?"
               placeholderTextColor={COLORS.textMuted}
@@ -112,25 +92,16 @@ export const RemoveDirectorModal: React.FC<RemoveDirectorModalProps> = ({
             />
           </View>
 
-          {/* Action Buttons */}
           <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={handleCancel}
-              disabled={isProcessing}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancel} disabled={isProcessing}>
+              <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
-              style={[
-                styles.confirmButton,
-                isProcessing && styles.buttonDisabled,
-              ]}
-              onPress={handleConfirm}
+              style={[styles.confirmButton, isProcessing && styles.buttonDisabled]}
+              onPress={onConfirm}
               disabled={isProcessing}
             >
-              <Text style={styles.confirmButtonText}>
+              <Text allowFontScaling={false} style={styles.confirmButtonText}>
                 {isProcessing ? "Removing..." : "Remove Director"}
               </Text>
             </TouchableOpacity>
@@ -144,144 +115,132 @@ export const RemoveDirectorModal: React.FC<RemoveDirectorModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
-    padding: SPACING.lg,
+    padding: scale(SPACING.lg),
   },
   modal: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+    borderRadius: scale(RADIUS.lg),
+    padding: scale(SPACING.lg),
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 420,
   },
-  header: {
-    alignItems: "center",
-    marginBottom: SPACING.lg,
-  },
+  header: { alignItems: "center", marginBottom: scale(SPACING.md) },
   title: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: scale(SPACING.xs),
   },
   subtitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
   },
   directorInfo: {
     backgroundColor: COLORS.background,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    borderRadius: scale(RADIUS.md),
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.md),
   },
-  directorRow: {
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: SPACING.xs,
+    paddingVertical: scale(SPACING.xs),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: scale(SPACING.sm),
   },
-  directorLabel: {
-    fontSize: FONT_SIZES.sm,
+  rowLabel: {
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
-    flex: 1,
+    flexShrink: 0,
   },
-  directorValue: {
-    fontSize: FONT_SIZES.sm,
+  rowValue: {
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "600",
-    flex: 2,
+    flex: 1,
     textAlign: "right",
+  },
+  venuesList: { flex: 1, alignItems: "flex-end", gap: scale(2) },
+  venueItem: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "500",
   },
   warning: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#fef3c7", // Yellow background
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: "#f59e0b", // Orange border
+    backgroundColor: "#fef3c7",
+    borderRadius: scale(RADIUS.md),
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.md),
+    borderLeftWidth: scale(4),
+    borderLeftColor: "#f59e0b",
+    gap: scale(SPACING.sm),
   },
-  warningIcon: {
-    fontSize: 20,
-    marginRight: SPACING.sm,
-  },
-  warningContent: {
-    flex: 1,
-  },
+  warningIcon: { fontSize: moderateScale(18) },
   warningTitle: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
-    color: "#92400e", // Dark orange text
-    marginBottom: SPACING.xs,
+    color: "#92400e",
+    marginBottom: scale(2),
   },
   warningText: {
-    fontSize: FONT_SIZES.xs,
-    color: "#92400e", // Dark orange text
-    lineHeight: 16,
+    fontSize: moderateScale(FONT_SIZES.xs),
+    color: "#92400e",
+    lineHeight: moderateScale(16),
   },
-  inputSection: {
-    marginBottom: SPACING.lg,
-  },
+  inputSection: { marginBottom: scale(SPACING.md) },
   inputLabel: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
     fontWeight: "500",
+    marginBottom: scale(SPACING.xs),
   },
-  optional: {
-    color: COLORS.textMuted,
-    fontWeight: "400",
-  },
+  optional: { color: COLORS.textMuted, fontWeight: "400" },
   textInput: {
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    fontSize: FONT_SIZES.sm,
+    borderRadius: scale(RADIUS.md),
+    padding: scale(SPACING.md),
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.text,
-    minHeight: 80,
+    minHeight: scale(80),
   },
-  buttonRow: {
-    flexDirection: "row",
-    gap: SPACING.md,
-  },
+  buttonRow: { flexDirection: "row", gap: scale(SPACING.sm) },
   cancelButton: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: RADIUS.md,
+    paddingVertical: scale(SPACING.md),
+    borderRadius: scale(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
   },
   cancelButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
   },
   confirmButton: {
     flex: 1,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: RADIUS.md,
-    backgroundColor: "#ef4444", // Red
+    paddingVertical: scale(SPACING.md),
+    borderRadius: scale(RADIUS.md),
+    backgroundColor: "#ef4444",
     alignItems: "center",
     justifyContent: "center",
   },
   confirmButtonText: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: "#ffffff",
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+  buttonDisabled: { opacity: 0.55 },
 });

@@ -1,15 +1,11 @@
-// Director-related type definitions shared across all roles
-
-export interface Director {
+﻿export interface Director {
   id: number;
-  director_id: number; // References profiles.id_auto
+  director_id: number;
   venue_id: number;
   assigned_by: number | null;
   assigned_at: string;
   archived_at: string | null;
   archived_by: number | null;
-
-  // Joined data from profiles
   profiles?: {
     id_auto: number;
     name: string;
@@ -17,8 +13,6 @@ export interface Director {
     email: string;
     role: string;
   };
-
-  // Joined data from venues
   venues?: {
     id: number;
     venue: string;
@@ -26,11 +20,36 @@ export interface Director {
     city: string;
     state: string;
   };
-
-  // Computed fields
   tournament_count?: number;
   last_tournament_date?: string;
   status?: "active" | "archived";
+}
+
+export interface DirectorAssignment {
+  id: number;
+  venue_id: number;
+  venue_name: string;
+  venue_city: string;
+  venue_state: string;
+  assigned_at: string;
+  tournament_count: number;
+  last_tournament_date: string | null;
+  status: "active" | "archived";
+}
+
+export interface GroupedDirector {
+  director_id: number;
+  profile: {
+    id_auto: number;
+    name: string;
+    user_name: string;
+    email: string;
+    role: string;
+  };
+  assignments: DirectorAssignment[];
+  active_venue_count: number;
+  total_tournaments: number;
+  earliest_assigned_at: string;
 }
 
 export interface DirectorStats {
@@ -58,7 +77,6 @@ export interface DirectorFilters {
   status: "all" | "active" | "archived";
 }
 
-// For dropdowns/selects
 export interface DirectorOption {
   label: string;
   value: string;

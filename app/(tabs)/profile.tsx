@@ -500,7 +500,7 @@ export default function ProfileScreen() {
                 onPress={() => setEditProfileVisible(true)}
               >
                 <Text allowFontScaling={false} style={styles.editButtonText}>
-                  {"\u2699\uFE0F"} Edit Profile
+                  Edit Profile
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -508,7 +508,7 @@ export default function ProfileScreen() {
                 onPress={() => setInboxVisible(true)}
               >
                 <Text allowFontScaling={false} style={styles.notificationButtonText}>
-                  {"\uD83D\uDD14"} Notifications
+                  Notifications
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -516,7 +516,7 @@ export default function ProfileScreen() {
                 onPress={handleLogout}
               >
                 <Text allowFontScaling={false} style={styles.signOutButtonText}>
-                  {"\uD83D\uDEAA"} Sign Out
+                  Sign Out
                 </Text>
               </TouchableOpacity>
             </View>
@@ -843,31 +843,36 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     paddingVertical: scale(SPACING.sm),
+    paddingHorizontal: scale(SPACING.xs),
     borderRadius: RADIUS.md,
     alignItems: "center",
-    paddingHorizontal: scale(4),
+    justifyContent: "center",
+    minHeight: scale(44),
   },
   actionButtonWeb: { paddingVertical: scale(SPACING.md + 2) },
   editButton: { backgroundColor: COLORS.secondary },
   editButtonText: {
     color: COLORS.white,
-    fontSize: moderateScale(11),
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textAlign: "center",
+    flexShrink: 1,
   },
   notificationButton: { backgroundColor: COLORS.primary },
   notificationButtonText: {
     color: COLORS.white,
-    fontSize: moderateScale(11),
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textAlign: "center",
+    flexShrink: 1,
   },
   signOutButton: { backgroundColor: COLORS.error },
   signOutButtonText: {
     color: COLORS.white,
-    fontSize: moderateScale(11),
+    fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
     textAlign: "center",
+    flexShrink: 1,
   },
   userDetails: { gap: scale(SPACING.md) },
   detailItem: {
@@ -893,8 +898,11 @@ const styles = StyleSheet.create({
   navButton: {
     flex: 1,
     paddingVertical: scale(SPACING.md),
+    paddingHorizontal: scale(SPACING.sm),
     borderRadius: RADIUS.md,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: scale(52),
   },
   favoritesButton: { backgroundColor: COLORS.primary },
   alertsButton: {
@@ -907,11 +915,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.white,
     textAlign: "center",
+    flexShrink: 1,
   },
   alertsButtonText: {
     fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
+    textAlign: "center",
+    flexShrink: 1,
   },
   favoritesSection: { padding: scale(SPACING.md) },
   emptyFavorites: { alignItems: "center", padding: scale(SPACING.lg) },
@@ -927,3 +938,6 @@ const styles = StyleSheet.create({
   },
   spacerSm: { height: scale(SPACING.sm) },
 });
+
+
+

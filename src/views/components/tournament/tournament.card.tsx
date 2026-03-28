@@ -190,3 +190,4 @@ const styles = StyleSheet.create({
   statValue: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   statLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
 });
+

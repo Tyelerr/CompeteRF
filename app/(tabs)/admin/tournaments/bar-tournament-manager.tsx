@@ -144,7 +144,12 @@ export default function BarTournamentManagerScreen() {
   };
 
   const handleSortOption = (sort: SortOption) => {
-    vm.setSortOption(sort);
+    if (vm.sortOption === sort) {
+      vm.setSortDirection(vm.sortDirection === "desc" ? "asc" : "desc");
+    } else {
+      vm.setSortOption(sort);
+      vm.setSortDirection(sort === "date" ? "desc" : "asc");
+    }
     pagination.resetPage();
   };
 
@@ -473,8 +478,12 @@ export default function BarTournamentManagerScreen() {
                   vm.sortOption === option.key && styles.sortPillTextActive,
                 ]}
               >
-                {option.label}
-                {vm.sortOption === option.key && " \u25BC"}
+                {vm.sortOption === option.key && option.key === "name"
+                  ? (vm.sortDirection === "asc" ? "A-Z" : "Z-A")
+                  : option.label}
+                {vm.sortOption === option.key && option.key === "date"
+                  ? (vm.sortDirection === "desc" ? " ▼" : " ▲")
+                  : ""}
               </Text>
             </TouchableOpacity>
           ))}
@@ -804,4 +813,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+
+
+
 

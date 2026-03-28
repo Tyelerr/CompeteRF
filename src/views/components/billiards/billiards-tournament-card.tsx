@@ -100,7 +100,7 @@ export const BilliardsTournamentCard = ({
             {tournament.name}
           </Text>
           <View style={styles.gameTypeBadge}>
-            <Text allowFontScaling={false} style={styles.gameTypeText}>{tournament.game_type}</Text>
+            <Text allowFontScaling={false} style={styles.gameTypeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{tournament.game_type}</Text>
           </View>
           <Text allowFontScaling={false} style={styles.dateTime}>
             {formatDate(tournament.tournament_date)}
@@ -332,11 +332,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(SPACING.sm),
     borderRadius: RADIUS.sm,
     marginBottom: scale(SPACING.sm),
+    maxWidth: "100%",
+    alignSelf: "center",
   },
   gameTypeText: {
     color: COLORS.white,
     fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "600",
+    textAlign: "center",
   },
   dateTime: {
     fontSize: moderateScale(FONT_SIZES.xs),
@@ -559,3 +562,4 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 });
+

@@ -1,4 +1,4 @@
-// src/viewmodels/hooks/use.message.center.ts
+﻿// src/viewmodels/hooks/use.message.center.ts
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -13,8 +13,6 @@ import {
   TargetType,
 } from "../../models/types/notification.types";
 import { useAuthContext } from "../../providers/AuthProvider";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface MessageTarget {
   id: number | string;
@@ -47,17 +45,14 @@ interface UseMessageCenterReturn {
   updateSubject: (subject: string) => void;
   updateBody: (body: string) => void;
   isFormValid: boolean;
-  // TD + admin flat list
   targets: MessageTarget[];
   selectedTargetId: number | string | null;
   selectTarget: (type: TargetType, id: number | string | null, name: string) => void;
-  // Bar owner two-level selection
   venues: BarOwnerVenue[];
   selectedVenueId: number | null;
   selectVenue: (venueId: number | null) => void;
   venueTournaments: VenueTournament[];
   venueTournamentsLoading: boolean;
-  //
   recipientCount: number;
   rateLimit: RateLimitStatus | null;
   handleSend: () => Promise<void>;
@@ -77,11 +72,9 @@ export function useMessageCenter(): UseMessageCenterReturn {
   const [activeTab, setActiveTab] = useState<"send" | "sent">("send");
   const [form, setForm] = useState<ComposeMessageForm>(INITIAL_COMPOSE_FORM);
 
-  // TD + admin
   const [targets, setTargets] = useState<MessageTarget[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<number | string | null>(null);
 
-  // Bar owner
   const [venues, setVenues] = useState<BarOwnerVenue[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<number | null>(null);
   const [venueTournaments, setVenueTournaments] = useState<VenueTournament[]>([]);
@@ -91,10 +84,9 @@ export function useMessageCenter(): UseMessageCenterReturn {
   const [rateLimit, setRateLimit] = useState<RateLimitStatus | null>(null);
   const [sentMessages, setSentMessages] = useState<MessageStats[]>([]);
 
-  // ── Load Targets (TD + admin) ──────────────────────────────────────────────
+  // ── Load Targets (TD + admin) ─────────────────────────────────────────────
   const loadTargets = useCallback(async () => {
     if (!userId || !userIdAuto) return;
-
     try {
       const loadedTargets: MessageTarget[] = [];
 
@@ -102,7 +94,6 @@ export function useMessageCenter(): UseMessageCenterReturn {
         const { count } = await supabase
           .from("profiles")
           .select("id", { count: "exact", head: true });
-
         loadedTargets.push({
           id: "all_users",
           name: "All Users",
@@ -110,31 +101,40 @@ export function useMessageCenter(): UseMessageCenterReturn {
           favoriteCount: count || 0,
         });
       } else if (role === "tournament_director") {
+        // Single query for all tournaments
         const { data: tournaments } = await supabase
           .from("tournaments")
           .select("id, name, tournament_date")
           .eq("director_id", userIdAuto)
           .in("status", ["active"]);
 
-        if (tournaments) {
-          for (const t of tournaments) {
-            const { count } = await supabase
-              .from("favorites")
-              .select("id", { count: "exact", head: true })
-              .eq("tournament_id", t.id);
+        if (tournaments && tournaments.length > 0) {
+          const tournamentIds = tournaments.map((t) => t.id);
 
+          // Single query for all favorite counts at once
+          const { data: favData } = await supabase
+            .from("favorites")
+            .select("tournament_id")
+            .in("tournament_id", tournamentIds);
+
+          // Count per tournament in JS
+          const countMap: Record<number, number> = {};
+          for (const f of favData || []) {
+            countMap[f.tournament_id] = (countMap[f.tournament_id] || 0) + 1;
+          }
+
+          for (const t of tournaments) {
             const formattedDate = t.tournament_date
               ? new Date(t.tournament_date + "T00:00:00").toLocaleDateString(
                   "en-US",
                   { weekday: "short", month: "short", day: "numeric" },
                 )
               : undefined;
-
             loadedTargets.push({
               id: t.id,
               name: t.name,
               type: "tournament",
-              favoriteCount: count || 0,
+              favoriteCount: countMap[t.id] || 0,
               date: formattedDate,
             });
           }
@@ -154,47 +154,54 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, userIdAuto, role]);
 
-  // ── Load Venues (bar owner) ────────────────────────────────────────────────
+  // ── Load Venues (bar owner) — BATCHED ────────────────────────────────────
   const loadVenues = useCallback(async () => {
     if (!userId || role !== "bar_owner") return;
-
     try {
+      // Step 1: get all venue IDs for this owner
       const { data: venueLinks } = await supabase
         .from("venue_owners")
         .select("venue_id, venues(id, venue)")
         .eq("owner_id", userIdAuto);
 
-      if (!venueLinks) return;
+      if (!venueLinks || venueLinks.length === 0) return;
 
-      const loadedVenues: BarOwnerVenue[] = [];
+      const venueInfos = venueLinks
+        .map((vl) => vl.venues as unknown as { id: number; venue: string } | null)
+        .filter(Boolean) as { id: number; venue: string }[];
 
-      for (const vl of venueLinks) {
-        const venue = vl.venues as unknown as { id: number; venue: string } | null;
-        if (!venue) continue;
+      if (venueInfos.length === 0) return;
 
-        const { data: favData } = await supabase
-          .from("favorites")
-          .select("user_id, tournaments!inner(venue_id)")
-          .eq("tournaments.venue_id", venue.id);
+      const venueIds = venueInfos.map((v) => v.id);
 
-        const uniqueUsers = new Set(
-          favData?.map((f: { user_id: number }) => f.user_id) || [],
-        );
+      // Step 2: single query — get all favorites for tournaments at these venues
+      const { data: favData } = await supabase
+        .from("favorites")
+        .select("user_id, tournaments!inner(venue_id)")
+        .in("tournaments.venue_id", venueIds);
 
-        loadedVenues.push({
-          id: venue.id,
-          name: venue.venue,
-          totalFollowers: uniqueUsers.size,
-        });
+      // Step 3: compute unique users per venue in JS
+      const venueUserMap: Record<number, Set<number>> = {};
+      for (const f of favData || []) {
+        const venueId = (f.tournaments as unknown as { venue_id: number })?.venue_id;
+        if (!venueId) continue;
+        if (!venueUserMap[venueId]) venueUserMap[venueId] = new Set();
+        venueUserMap[venueId].add(f.user_id);
       }
+
+      const loadedVenues: BarOwnerVenue[] = venueInfos.map((v) => ({
+        id: v.id,
+        name: v.venue,
+        totalFollowers: venueUserMap[v.id]?.size || 0,
+      }));
 
       setVenues(loadedVenues);
     } catch (err) {
       console.error("Error loading venues:", err);
     }
-  }, [userId, role]);
+  }, [userId, userIdAuto, role]);
 
-  // ── Select Venue → loads tournaments for that venue ────────────────────────
+  // ── Select Venue → loads tournaments BATCHED ──────────────────────────────
   const selectVenue = useCallback(async (venueId: number | null) => {
     if (venueId === null) {
       setSelectedVenueId(null);
@@ -211,34 +218,43 @@ export function useMessageCenter(): UseMessageCenterReturn {
     setVenueTournamentsLoading(true);
 
     try {
+      // Step 1: all active tournaments for this venue
       const { data: tournaments } = await supabase
         .from("tournaments")
         .select("id, name, tournament_date")
         .eq("venue_id", venueId)
         .in("status", ["active"]);
 
-      const loaded: VenueTournament[] = [];
+      if (!tournaments || tournaments.length === 0) {
+        setVenueTournaments([]);
+        return;
+      }
 
-      for (const t of tournaments || []) {
-        const { count } = await supabase
-          .from("favorites")
-          .select("id", { count: "exact", head: true })
-          .eq("tournament_id", t.id);
+      const tournamentIds = tournaments.map((t) => t.id);
 
-        const formattedDate = t.tournament_date
+      // Step 2: single query for all favorites at once
+      const { data: favData } = await supabase
+        .from("favorites")
+        .select("tournament_id")
+        .in("tournament_id", tournamentIds);
+
+      // Step 3: count per tournament in JS
+      const countMap: Record<number, number> = {};
+      for (const f of favData || []) {
+        countMap[f.tournament_id] = (countMap[f.tournament_id] || 0) + 1;
+      }
+
+      const loaded: VenueTournament[] = tournaments.map((t) => ({
+        id: t.id,
+        name: t.name,
+        date: t.tournament_date
           ? new Date(t.tournament_date + "T00:00:00").toLocaleDateString(
               "en-US",
               { weekday: "short", month: "short", day: "numeric" },
             )
-          : undefined;
-
-        loaded.push({
-          id: t.id,
-          name: t.name,
-          date: formattedDate,
-          followerCount: count || 0,
-        });
-      }
+          : undefined,
+        followerCount: countMap[t.id] || 0,
+      }));
 
       setVenueTournaments(loaded);
     } catch (err) {
@@ -248,7 +264,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, []);
 
-  // ── Load Rate Limit ────────────────────────────────────────────────────────
+  // ── Load Rate Limit ───────────────────────────────────────────────────────
   const loadRateLimit = useCallback(async () => {
     if (!userId) return;
     try {
@@ -259,7 +275,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId, role]);
 
-  // ── Load Sent Messages ─────────────────────────────────────────────────────
+  // ── Load Sent Messages — BATCHED ─────────────────────────────────────────
   const loadSentMessages = useCallback(async () => {
     if (!userId) return;
     try {
@@ -271,31 +287,41 @@ export function useMessageCenter(): UseMessageCenterReturn {
         .limit(50);
 
       if (error) throw error;
+      if (!data || data.length === 0) { setSentMessages([]); return; }
 
-      const stats: MessageStats[] = [];
-      for (const msg of data || []) {
-        const { count: readCount } = await supabase
-          .from("notification_message_recipients")
-          .select("id", { count: "exact", head: true })
-          .eq("message_id", msg.id)
-          .not("read_at", "is", null);
+      const messageIds = data.map((m) => m.id);
 
-        stats.push({
+      // Single query for all read counts at once
+      const { data: readData } = await supabase
+        .from("notification_message_recipients")
+        .select("message_id")
+        .in("message_id", messageIds)
+        .not("read_at", "is", null);
+
+      // Count per message in JS
+      const readMap: Record<number, number> = {};
+      for (const r of readData || []) {
+        readMap[r.message_id] = (readMap[r.message_id] || 0) + 1;
+      }
+
+      const stats: MessageStats[] = data.map((msg) => {
+        const readCount = readMap[msg.id] || 0;
+        return {
           message_id: msg.id,
           subject: msg.subject,
           body: msg.body,
           message_type: msg.message_type,
           sent_at: msg.created_at,
           recipient_count: msg.recipient_count || 0,
-          read_count: readCount || 0,
+          read_count: readCount,
           read_rate:
             msg.recipient_count > 0
-              ? Math.round(((readCount || 0) / msg.recipient_count) * 100)
+              ? Math.round((readCount / msg.recipient_count) * 100)
               : 0,
           tournament_id: msg.tournament_id,
           venue_id: msg.venue_id,
-        });
-      }
+        };
+      });
 
       setSentMessages(stats);
     } catch (err) {
@@ -303,7 +329,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }, [userId]);
 
-  // ── Load All ───────────────────────────────────────────────────────────────
+  // ── Load All ──────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -319,12 +345,10 @@ export function useMessageCenter(): UseMessageCenterReturn {
   }, [loadTargets, loadVenues, loadRateLimit, loadSentMessages]);
 
   useEffect(() => {
-    if (userId) {
-      loadAll();
-    }
+    if (userId) loadAll();
   }, [userId, loadAll]);
 
-  // ── Recipient Count ────────────────────────────────────────────────────────
+  // ── Recipient Count ───────────────────────────────────────────────────────
   const updateRecipientCount = useCallback(
     async (type: TargetType, id: number | string | null) => {
       try {
@@ -391,7 +415,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
       form.target_type === "state") &&
     recipientCount > 0;
 
-  // ── Resolve Recipients → always returns UUIDs ──────────────────────────────
+  // ── Resolve Recipients ────────────────────────────────────────────────────
   async function resolveRecipients(
     targetType: TargetType,
     tournamentId: number | null,
@@ -418,18 +442,15 @@ export function useMessageCenter(): UseMessageCenterReturn {
       } else if (targetType === "all_users") {
         const { data } = await supabase.from("profiles").select("id, id_auto");
         if (!data) return [];
-
         const allUuids = data.map((p: { id: string }) => p.id);
         const { data: optedOut } = await supabase
           .from("notification_preferences")
           .select("user_id")
           .in("user_id", allUuids)
           .eq("app_announcements", false);
-
         const optedOutSet = new Set(
           optedOut?.map((p: { user_id: string }) => p.user_id) || [],
         );
-
         return allUuids.filter(
           (uuid: string) => uuid !== userId && !optedOutSet.has(uuid),
         );
@@ -445,7 +466,6 @@ export function useMessageCenter(): UseMessageCenterReturn {
       if (!profileRows) return [];
 
       const allUuids = profileRows.map((p: { id: string }) => p.id);
-
       const preferenceKey =
         targetType === "tournament" ? "tournament_updates" : "venue_promotions";
 
@@ -468,7 +488,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     }
   }
 
-  // ── Send Message ───────────────────────────────────────────────────────────
+  // ── Send Message ──────────────────────────────────────────────────────────
   async function handleSend(): Promise<void> {
     if (!userId || !isFormValid || !rateLimit?.allowed) return;
 
@@ -576,7 +596,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
     );
   }
 
-  // ── Refresh ────────────────────────────────────────────────────────────────
+  // ── Refresh ───────────────────────────────────────────────────────────────
   const refresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadAll();

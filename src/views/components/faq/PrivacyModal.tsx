@@ -61,9 +61,6 @@ export function PrivacyModal({ visible, onClose }: PrivacyModalProps) {
       <View style={s.mobileOverlay}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
         <View style={s.mobileContainer}>{innerContent}</View>
-        <TouchableOpacity style={s.mobileCloseButton} onPress={onClose}>
-          <Text allowFontScaling={false} style={s.mobileCloseButtonText}>Accept & Close</Text>
-        </TouchableOpacity>
       </View>
     </Modal>
   );
@@ -73,10 +70,8 @@ const s = StyleSheet.create({
   backdrop: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", zIndex: 2000 },
   dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24 },
   dialog: { width: 700, maxWidth: "92%" as any, height: "82vh" as any, backgroundColor: "#000000", borderRadius: RADIUS.xl, borderWidth: 1, borderColor: "#2C2C2E", overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24, display: "flex" as any, flexDirection: "column" },
-  mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end", alignItems: "center", paddingHorizontal: scale(20), paddingBottom: 110 },
-  mobileContainer: { backgroundColor: COLORS.background, borderRadius: scale(20), width: "100%" as any, maxWidth: 500, height: "85%" as any, overflow: "hidden" },
-  mobileCloseButton: { backgroundColor: "#E74C3C", borderRadius: scale(12), margin: scale(12), width: "100%" as any, maxWidth: 500, paddingVertical: scale(SPACING.md), alignItems: "center" },
-  mobileCloseButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: moderateScale(FONT_SIZES.md) },
+  mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", alignItems: "center", paddingHorizontal: scale(20) },
+  mobileContainer: { backgroundColor: COLORS.background, borderRadius: scale(20), width: "100%", maxWidth: 500, height: "85%" as any, flexDirection: "column" as any },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.md) },
   headerTitle: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", letterSpacing: 1 },
   closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },

@@ -10,8 +10,10 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -864,11 +866,14 @@ export default function AdminMessagesScreen() {
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onScrollBeginDrag={() => { setVenueDropdownOpen(false); Keyboard.dismiss(); }}
           contentContainerStyle={[
             styles.broadcastScrollContent,
             isWeb && styles.scrollContentWeb,
           ]}
         >
+          <Pressable onPress={() => { setVenueDropdownOpen(false); Keyboard.dismiss(); }} style={{ flex: 1 }}>
           {mc.rateLimit && (
             <View
               style={[
@@ -948,6 +953,7 @@ export default function AdminMessagesScreen() {
           </TouchableOpacity>
 
           <View style={styles.bottomSpacer} />
+          </Pressable>
         </ScrollView>
       )}
 
@@ -1575,3 +1581,4 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: SPACING.xl * 2 },
 });
+

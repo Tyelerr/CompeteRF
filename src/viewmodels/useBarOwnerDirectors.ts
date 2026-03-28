@@ -1,80 +1,51 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { directorService } from "../models/services/director.service";
 import {
-  Director,
   DirectorFilters,
   DirectorOption,
-  DirectorStats,
+  GroupedDirector,
   VenueOption,
 } from "../models/types/director.types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { usePagination } from "./hooks/use.pagination";
+
+const ITEMS_PER_PAGE = 5;
 
 export const useBarOwnerDirectors = () => {
   const { profile } = useAuthContext();
 
-  // State
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<number | null>(null);
-  const [directors, setDirectors] = useState<Director[]>([]);
-  const [stats, setStats] = useState<DirectorStats>({
-    totalDirectors: 0,
-    activeDirectors: 0,
-    archivedDirectors: 0,
-    venuesWithDirectors: 0,
-  });
-
-  // Filters
-  const [filters, setFilters] = useState<DirectorFilters>({
-    search: "",
-    venue_id: undefined,
-    status: "active",
-  });
-
-  // Options for dropdowns
+  const [allGroupedDirectors, setAllGroupedDirectors] = useState<GroupedDirector[]>([]);
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([]);
-  const [availableDirectors, setAvailableDirectors] = useState<
-    DirectorOption[]
-  >([]);
+  const [availableDirectors, setAvailableDirectors] = useState<DirectorOption[]>([]);
+
+  const [filters, setFilters] = useState<DirectorFilters>({ search: "", status: "active" });
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRemoveModal, setShowRemoveModal] = useState(false);
-  const [selectedDirector, setSelectedDirector] = useState<Director | null>(
-    null,
-  );
+  const [showEditVenuesModal, setShowEditVenuesModal] = useState(false);
+  const [selectedDirector, setSelectedDirector] = useState<GroupedDirector | null>(null);
+  const [editingDirector, setEditingDirector] = useState<GroupedDirector | null>(null);
   const [removeReason, setRemoveReason] = useState("");
 
   useEffect(() => {
-    if (profile?.id_auto) {
-      loadData();
-    }
-  }, [profile?.id_auto, filters]);
+    if (profile?.id_auto) loadData();
+  }, [profile?.id_auto]);
 
   const loadData = async () => {
     if (!profile?.id_auto) return;
-
     try {
       setLoading(true);
-
-      // Load directors with bar owner specific filtering
-      const directorsData = await directorService.getDirectors({
-        ...filters,
-        owner_id: profile.id_auto, // Bar owner can only see directors at venues they own
-      });
-
-      // Load stats
-      const statsData = await directorService.getDirectorStats({
-        owner_id: profile.id_auto,
-      });
-
-      setDirectors(directorsData);
-      setStats(statsData);
-
-      // Load venue options (only venues owned by this bar owner)
-      await loadVenueOptions();
+      const [grouped] = await Promise.all([
+        directorService.getGroupedDirectors(profile.id_auto),
+        loadVenueOptions(),
+      ]);
+      setAllGroupedDirectors(grouped);
     } catch (error) {
       console.error("Error loading directors:", error);
       Alert.alert("Error", "Failed to load directors");
@@ -85,33 +56,19 @@ export const useBarOwnerDirectors = () => {
 
   const loadVenueOptions = async () => {
     if (!profile?.id_auto) return;
-
     try {
-      // Get venues owned by this bar owner
       const { data: venueOwnerships } = await supabase
         .from("venue_owners")
-        .select(
-          `
-          venues (
-            id,
-            venue,
-            city,
-            state
-          )
-        `,
-        )
+        .select("venues (id, venue, city, state)")
         .eq("owner_id", profile.id_auto)
         .is("archived_at", null);
-
-      const venues =
-        venueOwnerships?.map((vo) => (vo as any).venues).filter(Boolean) || [];
-
+      const venues = venueOwnerships?.map((vo) => (vo as any).venues).filter(Boolean) || [];
       setVenueOptions(
-        venues.map((venue) => ({
-          label: `${venue.venue} - ${venue.city}, ${venue.state}`,
-          value: venue.id.toString(),
-          id: venue.id,
-        })),
+        venues.map((v: any) => ({
+          label: `${v.venue} - ${v.city}, ${v.state}`,
+          value: v.id.toString(),
+          id: v.id,
+        }))
       );
     } catch (error) {
       console.error("Error loading venue options:", error);
@@ -121,46 +78,71 @@ export const useBarOwnerDirectors = () => {
   const loadAvailableDirectors = async (venueId: number) => {
     try {
       const directors = await directorService.getAvailableDirectors(venueId);
-
       setAvailableDirectors(
-        directors.map((director) => ({
-          label: `${director.name} (${director.user_name})`,
-          value: director.id_auto.toString(),
-          email: director.email,
-          role: director.role,
-        })),
+        directors.map((d) => ({ label: `${d.name} (${d.user_name})`, value: d.id_auto.toString(), email: d.email, role: d.role }))
       );
     } catch (error) {
       console.error("Error loading available directors:", error);
-      Alert.alert("Error", "Failed to load available directors");
     }
   };
 
-  // Actions
+  // ── Client-side filter ────────────────────────────────────────────────────
+  const filteredDirectors = useMemo(() => {
+    let result = allGroupedDirectors;
+
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      result = result.filter(
+        (d) =>
+          d.profile.name?.toLowerCase().includes(q) ||
+          d.profile.user_name?.toLowerCase().includes(q) ||
+          d.profile.email?.toLowerCase().includes(q) ||
+          d.profile.id_auto?.toString().includes(q) ||
+          d.assignments.some((a) => a.venue_name?.toLowerCase().includes(q))
+      );
+    }
+
+    return result;
+  }, [allGroupedDirectors, filters]);
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const pagination = usePagination(filteredDirectors, { itemsPerPage: ITEMS_PER_PAGE });
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => ({
+    totalDirectors: allGroupedDirectors.length,
+    activeDirectors: allGroupedDirectors.filter((d) => d.active_venue_count > 0).length,
+    archivedDirectors: allGroupedDirectors.filter((d) => d.active_venue_count === 0).length,
+    venuesWithDirectors: new Set(
+      allGroupedDirectors.flatMap((d) =>
+        d.assignments.filter((a) => a.status === "active").map((a) => a.venue_id)
+      )
+    ).size,
+  }), [allGroupedDirectors]);
+
+  const statusCounts = useMemo(() => ({
+    all: allGroupedDirectors.length,
+    active: allGroupedDirectors.filter((d) => d.active_venue_count > 0).length,
+    archived: allGroupedDirectors.filter((d) => d.active_venue_count === 0).length,
+  }), [allGroupedDirectors]);
+
+  // ── Actions ───────────────────────────────────────────────────────────────
   const handleAddDirector = async (venueId: number, directorId: number) => {
     if (!profile?.id_auto) return;
-
     try {
       setProcessing(directorId);
-
-      await directorService.addDirector({
-        venue_id: venueId,
-        director_id: directorId,
-        assigned_by: profile.id_auto,
-      });
-
+      await directorService.addDirector({ venue_id: venueId, director_id: directorId, assigned_by: profile.id_auto });
       Alert.alert("Success", "Director added successfully");
       setShowAddModal(false);
       await loadData();
     } catch (error: any) {
-      console.error("Error adding director:", error);
       Alert.alert("Error", error.message || "Failed to add director");
     } finally {
       setProcessing(null);
     }
   };
 
-  const handleRemoveDirector = (director: Director) => {
+  const handleRemoveDirector = (director: GroupedDirector) => {
     setSelectedDirector(director);
     setRemoveReason("");
     setShowRemoveModal(true);
@@ -168,119 +150,97 @@ export const useBarOwnerDirectors = () => {
 
   const confirmRemoveDirector = async () => {
     if (!selectedDirector || !profile?.id_auto) return;
-
     try {
-      setProcessing(selectedDirector.id);
-
-      await directorService.removeDirector({
-        id: selectedDirector.id,
-        reason: removeReason,
-        archived_by: profile.id_auto,
-      });
-
-      Alert.alert("Success", "Director removed successfully");
+      setProcessing(selectedDirector.director_id);
+      const ownerVenueIds = venueOptions.map((v) => v.id);
+      await directorService.removeDirectorFromAllVenues(
+        selectedDirector.director_id, ownerVenueIds, profile.id_auto
+      );
+      Alert.alert("Success", "Director removed from all venues");
       setShowRemoveModal(false);
       setSelectedDirector(null);
       await loadData();
     } catch (error) {
-      console.error("Error removing director:", error);
       Alert.alert("Error", "Failed to remove director");
     } finally {
       setProcessing(null);
     }
   };
 
-  const handleRestoreDirector = async (director: Director) => {
+  const handleEditVenues = (director: GroupedDirector) => {
+    setEditingDirector(director);
+    setShowEditVenuesModal(true);
+  };
+
+  const confirmEditVenues = async (selectedVenueIds: number[]) => {
+    if (!editingDirector || !profile?.id_auto) return;
     try {
-      setProcessing(director.id);
-
-      await directorService.restoreDirector(director.id);
-
-      Alert.alert("Success", "Director restored successfully");
+      setProcessing(editingDirector.director_id);
+      await directorService.updateDirectorVenues(
+        editingDirector.director_id,
+        profile.id_auto,
+        selectedVenueIds,
+        editingDirector.assignments.map((a) => ({ id: a.id, venue_id: a.venue_id, status: a.status }))
+      );
+      Alert.alert("Success", "Venues updated successfully");
+      setShowEditVenuesModal(false);
+      setEditingDirector(null);
       await loadData();
     } catch (error) {
-      console.error("Error restoring director:", error);
+      Alert.alert("Error", "Failed to update venues");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleRestoreDirector = async (director: GroupedDirector) => {
+    if (!profile?.id_auto) return;
+    try {
+      setProcessing(director.director_id);
+      const archivedIds = director.assignments.filter((a) => a.status === "archived").map((a) => a.id);
+      for (const id of archivedIds) {
+        await directorService.restoreDirector(id);
+      }
+      Alert.alert("Success", "Director restored");
+      await loadData();
+    } catch (error) {
       Alert.alert("Error", "Failed to restore director");
     } finally {
       setProcessing(null);
     }
   };
 
-  // Filter helpers
-  const updateSearch = (search: string) => {
-    setFilters((prev) => ({ ...prev, search }));
-  };
-
+  const updateSearch = (search: string) => setFilters((prev) => ({ ...prev, search }));
   const updateStatusFilter = (status: "all" | "active" | "archived") => {
     setFilters((prev) => ({ ...prev, status }));
-  };
-
-  const updateVenueFilter = (venue_id?: number) => {
-    setFilters((prev) => ({ ...prev, venue_id }));
+    pagination.resetPage();
   };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData().finally(() => setRefreshing(false));
-  }, [profile?.id_auto, filters]);
-
-  // Computed values
-  const filteredDirectors = directors; // Filtering already done in service
-  const statusCounts = {
-    all: stats.totalDirectors,
-    active: stats.activeDirectors,
-    archived: stats.archivedDirectors,
-  };
-
-  // Permissions (bar owner specific)
-  const canAddDirectors = true; // Bar owners can add directors to their venues
-  const canRemoveDirectors = true; // Bar owners can remove directors from their venues
-  const canViewArchivedDirectors = true; // Bar owners can see archived directors
+  }, [profile?.id_auto]);
 
   return {
-    // State
-    loading,
-    refreshing,
-    processing,
-
-    // Data
-    directors: filteredDirectors,
-    stats,
-    venueOptions,
-    availableDirectors,
-
-    // Filters
+    loading, refreshing, processing,
+    directors: pagination.paginatedItems,
+    stats, statusCounts,
+    venueOptions, availableDirectors,
     filters,
-    statusCounts,
-
-    // Modal states
-    showAddModal,
-    setShowAddModal,
-    showRemoveModal,
-    setShowRemoveModal,
-    selectedDirector,
-    removeReason,
-    setRemoveReason,
-
-    // Actions
-    handleAddDirector,
-    handleRemoveDirector,
-    confirmRemoveDirector,
-    handleRestoreDirector,
-    loadAvailableDirectors,
-
-    // Filter actions
-    updateSearch,
-    updateStatusFilter,
-    updateVenueFilter,
-    onRefresh,
-
-    // Permissions
-    canAddDirectors,
-    canRemoveDirectors,
-    canViewArchivedDirectors,
-
-    // User info
+    pagination,
+    showAddModal, setShowAddModal,
+    showRemoveModal, setShowRemoveModal,
+    showEditVenuesModal, setShowEditVenuesModal,
+    selectedDirector, editingDirector,
+    removeReason, setRemoveReason,
+    handleAddDirector, handleRemoveDirector, confirmRemoveDirector,
+    handleEditVenues, confirmEditVenues,
+    handleRestoreDirector, loadAvailableDirectors,
+    updateSearch, updateStatusFilter, onRefresh,
+    canAddDirectors: true,
+    canRemoveDirectors: true,
+    canViewArchivedDirectors: true,
     currentUser: profile,
   };
 };
+

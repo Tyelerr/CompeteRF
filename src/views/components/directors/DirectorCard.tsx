@@ -1,37 +1,102 @@
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Director } from "../../../models/types/director.types";
+﻿import React, { useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { GroupedDirector } from "../../../models/types/director.types";
 import { COLORS } from "../../../theme/colors";
-import { SPACING } from "../../../theme/spacing";
+import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { moderateScale, scale } from "../../../utils/scaling";
 
 interface DirectorCardProps {
-  director: Director;
+  director: GroupedDirector;
   onPress?: () => void;
   onRemove?: () => void;
   onRestore?: () => void;
+  onEditVenues?: () => void;
   isProcessing?: boolean;
   showActions?: boolean;
-  // Role-based permissions
   canRemove?: boolean;
   canRestore?: boolean;
+  canEditVenues?: boolean;
 }
 
-const formatDate = (dateString: string | null): string => {
-  if (!dateString) return "Never";
+const formatDate = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+};
 
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffTime = Math.abs(now.getTime() - date.getTime());
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+const formatTimeAgo = (dateString: string): string => {
+  const diffDays = Math.floor((Date.now() - new Date(dateString).getTime()) / 86400000);
+  if (diffDays === 0) return "today";
+  if (diffDays < 7) return `${diffDays}d`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo`;
+  return `${Math.floor(diffDays / 365)}y`;
+};
 
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+const MAX_VISIBLE = 4;
 
-  return date.toLocaleDateString();
+const VENUE_ROW_HEIGHT = scale(64);
+
+const VenueRow = ({ a, isFullyArchived }: { a: any; isFullyArchived: boolean }) => (
+  <View style={styles.venueRow}>
+    <Text allowFontScaling={false} style={styles.venueIcon}>🏢</Text>
+    <View style={styles.venueInfo}>
+      <Text allowFontScaling={false} style={[styles.venueName, isFullyArchived && styles.textMuted]} numberOfLines={1}>
+        {a.venue_name}
+      </Text>
+      <View style={styles.venueMeta}>
+        <Text allowFontScaling={false} style={styles.venueMetaText}>
+          📅 {formatDate(a.assigned_at)} ({formatTimeAgo(a.assigned_at)})
+        </Text>
+        <Text allowFontScaling={false} style={styles.venueMetaText}>
+          🏆 {a.tournament_count} tournament{a.tournament_count !== 1 ? "s" : ""}
+        </Text>
+      </View>
+    </View>
+  </View>
+);
+
+const PAGE_SIZE = 5;
+
+const VenueList = ({ assignments, isFullyArchived }: { assignments: any[]; isFullyArchived: boolean }) => {
+  const [visibleCount, setVisibleCount] = useState(MAX_VISIBLE);
+  if (!assignments || assignments.length === 0) return null;
+  const visible = assignments.slice(0, visibleCount);
+  const remaining = assignments.length - visibleCount;
+  const canShowLess = visibleCount > MAX_VISIBLE;
+  const showFooter = remaining > 0 || canShowLess;
+
+  return (
+    <View style={styles.venuesBox}>
+      {visible.map((a) => (
+        <VenueRow key={a.id} a={a} isFullyArchived={isFullyArchived} />
+      ))}
+      {showFooter && (
+        <View style={styles.venueFooterRow}>
+          {remaining > 0 && (
+            <TouchableOpacity
+              style={styles.viewMoreButton}
+              onPress={(e) => { e.stopPropagation(); setVisibleCount((v) => v + PAGE_SIZE); }}
+            >
+              <Text allowFontScaling={false} style={styles.viewMoreText}>
+                + View {Math.min(remaining, PAGE_SIZE)} more
+                {remaining > PAGE_SIZE ? ` (${remaining} left)` : ""}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {canShowLess && (
+            <TouchableOpacity
+              style={styles.viewLessButton}
+              onPress={(e) => { e.stopPropagation(); setVisibleCount(MAX_VISIBLE); }}
+            >
+              <Text allowFontScaling={false} style={styles.viewLessText}>Show less</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
 };
 
 export const DirectorCard: React.FC<DirectorCardProps> = ({
@@ -39,137 +104,76 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
   onPress,
   onRemove,
   onRestore,
+  onEditVenues,
   isProcessing = false,
   showActions = true,
   canRemove = false,
   canRestore = false,
+  canEditVenues = false,
 }) => {
-  const isArchived = director.status === "archived";
-  const profile = director.profiles;
-  const venue = director.venues;
-
-  if (!profile || !venue) return null;
+  const activeAssignments = director.assignments.filter((a) => a.status === "active");
+  const isFullyArchived = director.active_venue_count === 0;
 
   return (
     <TouchableOpacity
-      style={[styles.card, isArchived && styles.cardArchived]}
+      style={[styles.card, isFullyArchived && styles.cardArchived]}
       onPress={onPress}
       activeOpacity={0.8}
       disabled={isProcessing}
     >
-      {/* Director Info Header */}
+      {/* ── Header: avatar + info + edit button ── */}
       <View style={styles.header}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {profile.name?.charAt(0)?.toUpperCase() ||
-              profile.user_name?.charAt(0)?.toUpperCase() ||
-              "?"}
+          <Text allowFontScaling={false} style={styles.avatarText}>
+            {(director.profile.name || director.profile.user_name || "?").charAt(0).toUpperCase()}
           </Text>
         </View>
-
         <View style={styles.directorInfo}>
-          <Text
-            style={[styles.directorName, isArchived && styles.textArchived]}
-          >
-            {profile.name || profile.user_name}
+          <Text allowFontScaling={false} style={[styles.directorName, isFullyArchived && styles.textMuted]}>
+            {director.profile.name || director.profile.user_name}
           </Text>
-          <Text
-            style={[styles.directorEmail, isArchived && styles.textArchived]}
+          <Text allowFontScaling={false} style={styles.directorEmail}>{director.profile.email}</Text>
+          <Text allowFontScaling={false} style={styles.directorId}>ID: {director.profile.id_auto}</Text>
+        </View>
+        {showActions && canEditVenues && onEditVenues && !isFullyArchived && (
+          <TouchableOpacity
+            style={styles.editVenuesButton}
+            onPress={(e) => { e.stopPropagation(); onEditVenues(); }}
+            disabled={isProcessing}
           >
-            {profile.email}
-          </Text>
-          <Text style={styles.directorId}>ID: {profile.id_auto}</Text>
-        </View>
-
-        {/* Role Badge */}
-        <View style={styles.roleBadge}>
-          <Text style={styles.roleText}>{profile.role?.replace("_", " ")}</Text>
-        </View>
+            <Text allowFontScaling={false} style={styles.editVenuesButtonText}>Edit Venues</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* Venue Info */}
-      <View style={styles.venueSection}>
-        <View style={styles.venueHeader}>
-          <Text style={styles.venueIcon}>🏢</Text>
-          <Text style={[styles.venueName, isArchived && styles.textArchived]}>
-            {venue.venue}
-          </Text>
-        </View>
+      {/* ── Venue assignments ── */}
+      <VenueList assignments={isFullyArchived ? director.assignments : activeAssignments} isFullyArchived={isFullyArchived} />
 
-        <View style={styles.venueDetails}>
-          <View style={styles.venueDetailRow}>
-            <Text style={styles.venueDetailIcon}>📅</Text>
-            <Text style={styles.venueDetailText}>
-              {formatDate(director.assigned_at)} (
-              {formatDate(director.assigned_at)})
-            </Text>
-          </View>
-
-          <View style={styles.venueDetailRow}>
-            <Text style={styles.venueDetailIcon}>🏆</Text>
-            <Text style={styles.venueDetailText}>
-              {director.tournament_count || 0} tournaments
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Archived Info */}
-      {isArchived && director.archived_at && (
-        <View style={styles.archivedInfo}>
-          <Text style={styles.archivedTitle}>📦 Archived</Text>
-          <Text style={styles.archivedText}>
-            On: {formatDate(director.archived_at)}
-          </Text>
-        </View>
-      )}
-
-      {/* Action Buttons - Bottom Right */}
+      {/* ── Action buttons ── */}
       {showActions && (
-        <View style={styles.bottomRow}>
-          <View style={styles.statsSection}>
-            <Text style={styles.lastTournament}>
-              Last: {formatDate(director.last_tournament_date || null)}
-            </Text>
-          </View>
-
-          <View style={styles.actionButtons}>
-            {/* Remove Director Button (Red) */}
-            {canRemove && !isArchived && onRemove && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.removeButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-                disabled={isProcessing}
-              >
-                <Text
-                  style={[styles.actionButtonText, styles.removeButtonText]}
-                >
-                  Remove Director
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Restore Director Button (Green) */}
-            {canRestore && isArchived && onRestore && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.restoreButton]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onRestore();
-                }}
-                disabled={isProcessing}
-              >
-                <Text
-                  style={[styles.actionButtonText, styles.restoreButtonText]}
-                >
-                  Restore
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        <View style={styles.actionsRow}>
+          {canRemove && !isFullyArchived && onRemove && (
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={(e) => { e.stopPropagation(); onRemove(); }}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.removeButtonText}>
+                {isProcessing ? "Removing..." : "Remove Director"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {canRestore && isFullyArchived && onRestore && (
+            <TouchableOpacity
+              style={styles.restoreButton}
+              onPress={(e) => { e.stopPropagation(); onRestore(); }}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.restoreButtonText}>
+                {isProcessing ? "Restoring..." : "Restore Director"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </TouchableOpacity>
@@ -179,168 +183,156 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
+    borderRadius: scale(12),
+    padding: scale(SPACING.md),
+    marginBottom: scale(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  cardArchived: {
-    opacity: 0.7,
-    borderColor: COLORS.textSecondary,
-  },
+  cardArchived: { opacity: 0.65, borderColor: COLORS.textSecondary },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: SPACING.md,
+    marginBottom: scale(SPACING.sm),
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     backgroundColor: COLORS.primary,
-    alignItems: "center",
     justifyContent: "center",
-    marginRight: SPACING.md,
+    alignItems: "center",
+    marginRight: scale(SPACING.sm),
+    flexShrink: 0,
   },
   avatarText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
+    fontSize: moderateScale(FONT_SIZES.lg),
     fontWeight: "700",
+    color: COLORS.white,
   },
-  directorInfo: {
-    flex: 1,
-  },
+  directorInfo: { flex: 1 },
   directorName: {
-    fontSize: FONT_SIZES.md,
+    fontSize: moderateScale(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   directorEmail: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: 2,
+    marginBottom: scale(2),
   },
   directorId: {
-    fontSize: FONT_SIZES.xs,
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textMuted,
   },
-  roleBadge: {
+  textMuted: { color: COLORS.textSecondary },
+  editVenuesButton: {
     backgroundColor: COLORS.primary + "20",
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary + "60",
+    borderRadius: scale(8),
+    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: scale(SPACING.xs),
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
-  roleText: {
-    fontSize: FONT_SIZES.xs,
+  editVenuesButtonText: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    fontWeight: "600",
     color: COLORS.primary,
-    fontWeight: "600",
-    textTransform: "capitalize",
   },
-  textArchived: {
-    color: COLORS.textSecondary,
-  },
-  venueSection: {
+  venuesBox: {
     backgroundColor: COLORS.background,
-    borderRadius: 8,
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
+    borderRadius: scale(8),
+    padding: scale(SPACING.sm),
+    marginBottom: scale(SPACING.sm),
+    gap: scale(SPACING.sm),
   },
-  venueHeader: {
+  venueRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.xs,
+    alignItems: "flex-start",
+    gap: scale(SPACING.xs),
   },
-  venueIcon: {
-    fontSize: 16,
-    marginRight: SPACING.xs,
-  },
+  venueIcon: { fontSize: moderateScale(FONT_SIZES.md), marginTop: scale(1) },
+  venueInfo: { flex: 1 },
   venueName: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
-    flex: 1,
+    marginBottom: scale(2),
   },
-  venueDetails: {
-    gap: SPACING.xs,
-  },
-  venueDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  venueDetailIcon: {
-    fontSize: 12,
-    marginRight: SPACING.xs,
-    width: 16,
-  },
-  venueDetailText: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    flex: 1,
-  },
-  archivedInfo: {
-    backgroundColor: COLORS.textSecondary + "10",
-    borderRadius: 6,
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.textSecondary,
-  },
-  archivedTitle: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 2,
-  },
-  archivedText: {
-    fontSize: FONT_SIZES.xs,
+  venueMeta: { gap: scale(2) },
+  venueMetaText: {
+    fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    paddingTop: SPACING.sm,
+  actionsRow: {
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    paddingTop: scale(SPACING.sm),
   },
-  statsSection: {
-    flex: 1,
-  },
-  lastTournament: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textMuted,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  actionButton: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    borderWidth: 1,
-    minWidth: 80,
+  removeButton: {
+    backgroundColor: "#ef4444",
+    borderRadius: scale(8),
+    paddingVertical: scale(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
-  actionButtonText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-  },
-  removeButton: {
-    backgroundColor: "#ef4444", // Red
-    borderColor: "#dc2626",
-  },
   removeButtonText: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    fontWeight: "600",
     color: "#ffffff",
   },
   restoreButton: {
-    backgroundColor: "#10b981", // Green
-    borderColor: "#059669",
+    backgroundColor: "#10b981",
+    borderRadius: scale(8),
+    paddingVertical: scale(SPACING.sm),
+    alignItems: "center",
+    justifyContent: "center",
   },
   restoreButtonText: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    fontWeight: "600",
     color: "#ffffff",
   },
+  venueFooterRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: scale(SPACING.xs),
+    gap: scale(SPACING.sm),
+  },
+  viewMoreButton: {
+    flex: 1,
+    paddingVertical: scale(SPACING.xs),
+    paddingHorizontal: scale(SPACING.sm),
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: scale(6),
+    borderWidth: 1,
+    borderColor: COLORS.primary + "40",
+    alignItems: "center",
+  },
+  viewMoreText: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+  viewLessButton: {
+    paddingVertical: scale(SPACING.xs),
+    paddingHorizontal: scale(SPACING.sm),
+    alignItems: "center",
+  },
+  viewLessText: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontWeight: "500",
+  },
 });
+
+
+
+
+
+

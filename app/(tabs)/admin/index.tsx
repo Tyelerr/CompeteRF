@@ -343,7 +343,7 @@ const BarOwnerDashboard = () => {
             icon="👤"
             value={vm.stats.totalDirectors}
             label="Directors"
-            onPress={() => router.push("/(tabs)/admin/my-directors" as any)}
+            onPress={() => router.push("/(tabs)/admin/directors/bar-owner-directors" as any)}
           />
           <StatCard
             icon="🏆"
@@ -893,3 +893,4 @@ const styles = StyleSheet.create({
     height: SPACING.xl * 2,
   },
 });
+

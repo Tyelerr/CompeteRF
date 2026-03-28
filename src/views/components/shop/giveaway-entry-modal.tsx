@@ -40,59 +40,45 @@ const PRIVACY_SECTIONS = [
 ];
 
 function LegalViewerModal({ visible, title, sections, customRulesText, onClose }: { visible: boolean; title: string; sections: { heading: string; body: string }[]; customRulesText?: string | null; onClose: () => void }) {
-  if (!visible) return null;
-  const content = (
-    <>
-      <View style={legalStyles.header}>
-        <Pressable onPress={onClose} style={legalStyles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
-        <Text allowFontScaling={false} style={legalStyles.headerTitle}>{title}</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={legalStyles.divider} />
-      <ScrollView style={legalStyles.scrollView} contentContainerStyle={legalStyles.scrollContent} showsVerticalScrollIndicator onScrollBeginDrag={Keyboard.dismiss}>
-        {sections.map((section, index) => (
-          <View key={index} style={legalStyles.section}>
-            {section.heading ? <Text allowFontScaling={false} style={legalStyles.heading}>{section.heading}</Text> : null}
-            <Text allowFontScaling={false} style={legalStyles.body}>{section.body}</Text>
-          </View>
-        ))}
-        {customRulesText ? (
-          <View style={legalStyles.customSection}>
-            <Text allowFontScaling={false} style={legalStyles.customHeading}>Additional Rules</Text>
-            <Text allowFontScaling={false} style={legalStyles.body}>{customRulesText}</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-      <View style={legalStyles.bottomBar}>
-        <Pressable style={legalStyles.acceptButton} onPress={onClose}>
-          <Text allowFontScaling={false} style={legalStyles.acceptButtonText}>Accept & Close</Text>
-        </Pressable>
-      </View>
-    </>
-  );
-  if (isWeb) {
-    return (
-      <>
-        <TouchableOpacity style={legalStyles.backdrop} activeOpacity={1} onPress={onClose} />
-        <View style={legalStyles.dialogWrap} pointerEvents="box-none"><View style={legalStyles.dialog}>{content}</View></View>
-      </>
-    );
-  }
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <Pressable style={legalStyles.mobileBackdrop} onPress={onClose} />
-      <View style={legalStyles.mobileCardWrapper} pointerEvents="box-none"><View style={legalStyles.mobileCard}>{content}</View></View>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={legalStyles.mobileModalOuter}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={legalStyles.mobileCard}>
+          <View style={legalStyles.header}>
+            <Pressable onPress={onClose} style={legalStyles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
+            <Text allowFontScaling={false} style={legalStyles.headerTitle}>{title}</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <View style={legalStyles.divider} />
+          <ScrollView style={legalStyles.scrollView} contentContainerStyle={legalStyles.scrollContent} showsVerticalScrollIndicator onScrollBeginDrag={Keyboard.dismiss}>
+            {sections.map((section, index) => (
+              <View key={index} style={legalStyles.section}>
+                {section.heading ? <Text allowFontScaling={false} style={legalStyles.heading}>{section.heading}</Text> : null}
+                <Text allowFontScaling={false} style={legalStyles.body}>{section.body}</Text>
+              </View>
+            ))}
+            {customRulesText ? (
+              <View style={legalStyles.customSection}>
+                <Text allowFontScaling={false} style={legalStyles.customHeading}>Additional Rules</Text>
+                <Text allowFontScaling={false} style={legalStyles.body}>{customRulesText}</Text>
+              </View>
+            ) : null}
+          </ScrollView>
+          <View style={legalStyles.bottomBar}>
+            <Pressable style={legalStyles.acceptButton} onPress={onClose}>
+              <Text allowFontScaling={false} style={legalStyles.acceptButtonText}>Accept & Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const legalStyles = StyleSheet.create({
-  backdrop: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", zIndex: 3000 },
-  dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 3001, alignItems: "center", justifyContent: "center", padding: 24 },
-  dialog: { width: 640, maxWidth: "92%" as any, maxHeight: "88vh" as any, backgroundColor: "#0F1117", borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24 },
-  mobileBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.7)" },
-  mobileCardWrapper: { flex: 1, justifyContent: "center", alignItems: "center", padding: scale(24) },
-  mobileCard: { backgroundColor: "#0F1117", borderRadius: scale(20), width: "100%", maxWidth: 480, height: "82%" as any, borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden" },
+  mobileModalOuter: { flex: 1, justifyContent: "center", alignItems: "center", padding: scale(24), backgroundColor: "rgba(0,0,0,0.7)" },
+  mobileCard: { backgroundColor: "#0F1117", borderRadius: scale(20), width: "100%", maxWidth: 480, height: "82%" as any, borderWidth: 1, borderColor: COLORS.cardBorder, flexDirection: "column" as any },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.md) },
   closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
   headerTitle: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700" },
@@ -132,14 +118,14 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
   };
 
   const handleClose = () => { onClose(); vm.resetForm(); };
-
   const handleRulesLinkPress = () => { Keyboard.dismiss(); setShowRulesModal(true); };
+  const handlePrivacyLinkPress = () => { Keyboard.dismiss(); setShowPrivacyModal(true); };
   const handleRulesModalClose = () => { setShowRulesModal(false); if (!vm.form.agreed_to_rules) vm.toggleCheckbox("agreed_to_rules"); };
 
   if (!visible) return null;
 
   if (vm.mode === "loading") {
-    const loadingContent = (
+    return renderShell(
       <>
         <View style={styles.header}>
           <Pressable onPress={handleClose} style={styles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
@@ -148,13 +134,29 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         </View>
         <View style={styles.divider} />
         <View style={styles.centeredLoader}><ActivityIndicator color={COLORS.blue} /></View>
-      </>
+      </>,
+      handleClose, isWeb
     );
-    return renderShell(loadingContent, handleClose, isWeb);
   }
 
+  const checkboxes = (
+    <View style={styles.checkboxSection}>
+      <CheckboxRowWithLink prefix="I agree to the " linkText="official rules" checked={vm.form.agreed_to_rules} onToggle={() => vm.toggleCheckbox("agreed_to_rules")} onLinkPress={handleRulesLinkPress} />
+      <CheckboxRowWithLink prefix="I agree to the " linkText="privacy policy" checked={vm.form.agreed_to_privacy} onToggle={() => vm.toggleCheckbox("agreed_to_privacy")} onLinkPress={handlePrivacyLinkPress} />
+      <CheckboxRow label="I understand this is one entry per person" checked={vm.form.understood_one_entry} onToggle={() => vm.toggleCheckbox("understood_one_entry")} />
+      <CheckboxRow label="I confirm I am 18+ years old and meet eligibility requirements" checked={vm.form.confirmed_age} onToggle={() => vm.toggleCheckbox("confirmed_age")} />
+    </View>
+  );
+
+  const legalModals = (
+    <>
+      <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={DEFAULT_RULES_SECTIONS} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
+      <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" sections={PRIVACY_SECTIONS} onClose={() => setShowPrivacyModal(false)} />
+    </>
+  );
+
   if (vm.mode === "quick-confirm") {
-    const quickContent = (
+    return renderShell(
       <>
         <View style={styles.header}>
           <Pressable onPress={handleClose} style={styles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
@@ -176,12 +178,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
             </TouchableOpacity>
           </View>
           <Text allowFontScaling={false} style={styles.savedDisclosure}>Your saved information will be used for this entry.</Text>
-          <View style={styles.checkboxSection}>
-            <CheckboxRowWithLink prefix="I agree to the " linkText="official rules" checked={vm.form.agreed_to_rules} onToggle={() => vm.toggleCheckbox("agreed_to_rules")} onLinkPress={handleRulesLinkPress} />
-            <CheckboxRow label="I confirm I am 18+ years old and meet eligibility requirements" checked={vm.form.confirmed_age} onToggle={() => vm.toggleCheckbox("confirmed_age")} />
-            <CheckboxRowWithLink prefix="I agree to the " linkText="privacy policy" checked={vm.form.agreed_to_privacy} onToggle={() => vm.toggleCheckbox("agreed_to_privacy")} onLinkPress={() => { Keyboard.dismiss(); setShowPrivacyModal(true); }} />
-            <CheckboxRow label="I understand this is one entry per person" checked={vm.form.understood_one_entry} onToggle={() => vm.toggleCheckbox("understood_one_entry")} />
-          </View>
+          {checkboxes}
           {vm.errors.checkboxes && <Text allowFontScaling={false} style={styles.errorField}>{vm.errors.checkboxes}</Text>}
           {vm.submitError && <Text allowFontScaling={false} style={styles.errorText}>{vm.submitError}</Text>}
         </ScrollView>
@@ -193,18 +190,13 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
             <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
           </Pressable>
         </View>
-      </>
-    );
-    return (
-      <>
-        {renderShell(quickContent, handleClose, isWeb)}
-        <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={DEFAULT_RULES_SECTIONS} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
-        <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" sections={PRIVACY_SECTIONS} onClose={() => setShowPrivacyModal(false)} />
-      </>
+        {legalModals}
+      </>,
+      handleClose, isWeb
     );
   }
 
-  const formContent = (
+  return renderShell(
     <>
       <View style={styles.header}>
         <Pressable onPress={handleClose} style={styles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
@@ -236,12 +228,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         <Text allowFontScaling={false} style={styles.label}>Phone Number *</Text>
         <TextInput allowFontScaling={false} style={styles.input} placeholder="Enter your phone number" placeholderTextColor={COLORS.gray} value={vm.form.phone} onChangeText={(text) => vm.updateField("phone", text)} keyboardType="phone-pad" />
         {vm.errors.phone && <Text allowFontScaling={false} style={styles.errorField}>{vm.errors.phone}</Text>}
-        <View style={styles.checkboxSection}>
-          <CheckboxRow label="I confirm I am 18+ years old" checked={vm.form.confirmed_age} onToggle={() => vm.toggleCheckbox("confirmed_age")} />
-          <CheckboxRowWithLink prefix="I agree to the " linkText="official rules" checked={vm.form.agreed_to_rules} onToggle={() => vm.toggleCheckbox("agreed_to_rules")} onLinkPress={handleRulesLinkPress} />
-          <CheckboxRowWithLink prefix="I agree to the " linkText="privacy policy" checked={vm.form.agreed_to_privacy} onToggle={() => vm.toggleCheckbox("agreed_to_privacy")} onLinkPress={() => { Keyboard.dismiss(); setShowPrivacyModal(true); }} />
-          <CheckboxRow label="I understand this is one entry per person" checked={vm.form.understood_one_entry} onToggle={() => vm.toggleCheckbox("understood_one_entry")} />
-        </View>
+        {checkboxes}
         {vm.errors.checkboxes && <Text allowFontScaling={false} style={styles.errorField}>{vm.errors.checkboxes}</Text>}
         {vm.submitError && <Text allowFontScaling={false} style={styles.errorText}>{vm.submitError}</Text>}
       </ScrollView>
@@ -253,15 +240,9 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
           <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
         </Pressable>
       </View>
-    </>
-  );
-
-  return (
-    <>
-      {renderShell(formContent, handleClose, isWeb)}
-      <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={DEFAULT_RULES_SECTIONS} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
-      <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" sections={PRIVACY_SECTIONS} onClose={() => setShowPrivacyModal(false)} />
-    </>
+      {legalModals}
+    </>,
+    handleClose, isWeb
   );
 }
 
@@ -275,9 +256,13 @@ function renderShell(content: React.ReactNode, onClose: () => void, web: boolean
     );
   }
   return (
-    <Modal visible animationType="fade" transparent>
-      <Pressable style={styles.mobileBackdrop} onPress={onClose} />
-      <View style={styles.mobileCardWrapper} pointerEvents="box-none"><View style={styles.mobileCard}>{content}</View></View>
+    <Modal visible animationType="fade" transparent onRequestClose={onClose}>
+      <View style={styles.mobileModalOuter}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={styles.mobileCard} onStartShouldSetResponder={() => true}>
+          {content}
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -341,9 +326,12 @@ function CheckboxRowWithLink({ prefix, linkText, checked, onToggle, onLinkPress 
           {checked && <Ionicons name="checkmark" size={14} color={COLORS.white} />}
         </View>
       </Pressable>
-      <Text allowFontScaling={false} style={styles.checkboxLabel}>
-        {prefix}<Text style={styles.linkText} onPress={onLinkPress}>{linkText}</Text>
-      </Text>
+      <View style={styles.checkboxLabelRow}>
+        <Text allowFontScaling={false} style={styles.checkboxLabel}>{prefix}</Text>
+        <Pressable onPress={() => { Keyboard.dismiss(); onLinkPress(); }} hitSlop={{ top: 10, bottom: 10, left: 4, right: 10 }}>
+          <Text allowFontScaling={false} style={styles.linkText}>{linkText}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -352,8 +340,7 @@ const styles = StyleSheet.create({
   backdrop: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", zIndex: 2000 },
   dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24 },
   dialog: { width: 640, maxWidth: "92%" as any, maxHeight: "90vh" as any, backgroundColor: COLORS.background, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24 },
-  mobileBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)" },
-  mobileCardWrapper: { flex: 1, justifyContent: "center", alignItems: "center", padding: scale(20) },
+  mobileModalOuter: { flex: 1, justifyContent: "center", alignItems: "center", padding: scale(20), backgroundColor: "rgba(0,0,0,0.6)" },
   mobileCard: { width: "100%", maxWidth: 480, height: "78%" as any, backgroundColor: COLORS.background, borderRadius: scale(20), borderWidth: 1, borderColor: COLORS.cardBorder, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24 },
   centeredLoader: { flex: 1, alignItems: "center", justifyContent: "center" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.md) },
@@ -386,9 +373,10 @@ const styles = StyleSheet.create({
   dropdownOptionTextActive: { fontWeight: "700" },
   checkboxSection: { marginTop: scale(SPACING.xl), gap: scale(SPACING.md) },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.md) },
+  checkboxLabelRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   checkbox: { width: scale(24), height: scale(24), borderRadius: scale(6), borderWidth: 2, borderColor: COLORS.gray, justifyContent: "center", alignItems: "center" },
   checkboxChecked: { backgroundColor: COLORS.blue, borderColor: COLORS.blue },
-  checkboxLabel: { color: COLORS.lightGray, fontSize: moderateScale(FONT_SIZES.sm), flex: 1 },
+  checkboxLabel: { color: COLORS.lightGray, fontSize: moderateScale(FONT_SIZES.sm) },
   linkText: { color: COLORS.blue, textDecorationLine: "underline", fontSize: moderateScale(FONT_SIZES.sm) },
   errorField: { color: COLORS.red, fontSize: moderateScale(FONT_SIZES.xs), marginTop: scale(SPACING.xs) },
   errorText: { color: COLORS.red, fontSize: moderateScale(FONT_SIZES.sm), marginTop: scale(SPACING.md), textAlign: "center" },
@@ -399,3 +387,7 @@ const styles = StyleSheet.create({
   cancelButton: { flex: 1, backgroundColor: COLORS.card, borderRadius: scale(12), paddingVertical: scale(SPACING.lg), alignItems: "center", borderWidth: 1, borderColor: COLORS.cardBorder },
   cancelButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
 });
+
+
+
+

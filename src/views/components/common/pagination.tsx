@@ -21,14 +21,14 @@ export function Pagination({ totalCount, displayStart, displayEnd, currentPage, 
   if (totalCount === 0) return null;
   return (
     <View style={styles.container}>
-      <Text allowFontScaling={false} style={styles.countText}>
+      <Text allowFontScaling={false} style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
         Total count: {totalCount} Displaying {displayStart}-{displayEnd}
       </Text>
       <View style={styles.pagination}>
         <TouchableOpacity onPress={onPrevPage} disabled={!canGoPrev} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text allowFontScaling={false} style={[styles.pageArrow, !canGoPrev && styles.pageArrowDisabled]}>{"<"}</Text>
         </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.pageText}>Page {currentPage} / {totalPages || 1}</Text>
+        <Text allowFontScaling={false} style={styles.pageText} numberOfLines={1}>Page {currentPage} / {totalPages || 1}</Text>
         <TouchableOpacity onPress={onNextPage} disabled={!canGoNext} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text allowFontScaling={false} style={[styles.pageArrow, !canGoNext && styles.pageArrowDisabled]}>{">"}</Text>
         </TouchableOpacity>
@@ -38,10 +38,10 @@ export function Pagination({ totalCount, displayStart, displayEnd, currentPage, 
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.md) },
-  countText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary },
-  pagination: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.sm) },
-  pageArrow: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.primary, paddingHorizontal: scale(SPACING.sm) },
+  container: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), gap: scale(SPACING.sm) },
+  countText: { flex: 1, flexShrink: 1, fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, minWidth: 0 },
+  pagination: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.xs), flexShrink: 0 },
+  pageArrow: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.primary, paddingHorizontal: scale(SPACING.xs) },
   pageArrowDisabled: { color: COLORS.textMuted },
   pageText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
 });
