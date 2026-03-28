@@ -23,13 +23,13 @@ const GAME_TYPE_OPTIONS = [
   { label: "10-Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
 ];
 const FORMAT_OPTIONS = [
-  { label: "Any Format", value: "" }, { label: "Single Elimination", value: "single-elimination" },
-  { label: "Double Elimination", value: "double-elimination" }, { label: "Round Robin", value: "round-robin" },
+  { label: "Any Format", value: "" }, { label: "Single Elimination", value: "single_elimination" },
+  { label: "Double Elimination", value: "double_elimination" }, { label: "Round Robin", value: "round_robin" },
   { label: "Swiss", value: "swiss" }, { label: "Modified", value: "modified" }, { label: "Split Bracket", value: "split-bracket" },
 ];
 const TABLE_SIZE_OPTIONS = [
-  { label: "Any Table Size", value: "" }, { label: "7 Foot (Bar Box)", value: "7-foot" },
-  { label: "8 Foot", value: "8-foot" }, { label: "9 Foot (Pro)", value: "9-foot" },
+  { label: "Any Table Size", value: "" }, { label: "7ft (Bar Box)", value: "7ft" },
+  { label: "8ft", value: "8ft" }, { label: "9ft (Pro)", value: "9ft" },
 ];
 const DAYS_OF_WEEK_OPTIONS = [
   { label: "Sunday", value: "0" }, { label: "Monday", value: "1" }, { label: "Tuesday", value: "2" },
@@ -377,3 +377,4 @@ const styles = StyleSheet.create({
   saveButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.white, fontWeight: "600" },
   buttonDisabled: { opacity: 0.5 },
 });
+
