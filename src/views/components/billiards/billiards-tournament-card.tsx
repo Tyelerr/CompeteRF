@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Tournament } from "../../../models/types/tournament.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -31,6 +32,10 @@ interface BilliardsTournamentCardProps {
 }
 
 const isWeb = Platform.OS === "web";
+
+// Single source of truth for heart icon sizing — both states use these values
+const HEART_ICON_SIZE = moderateScale(34);
+const HEART_CONTAINER_SIZE = moderateScale(55);
 
 export const BilliardsTournamentCard = ({
   tournament,
@@ -62,6 +67,16 @@ export const BilliardsTournamentCard = ({
     );
   };
 
+  // Both states use the same Ionicons family so size/weight are always identical.
+  // Only the icon name and color change — nothing else.
+  const renderHeartIcon = (color: string) => (
+    <Ionicons
+      name={isFavorited ? "heart" : "heart-outline"}
+      size={HEART_ICON_SIZE}
+      color={color}
+    />
+  );
+
   // ── Mobile card ────────────────────────────────────────────────────────────
   if (!isWeb) {
     return (
@@ -90,9 +105,7 @@ export const BilliardsTournamentCard = ({
             }}
             style={styles.heartButton}
           >
-            <Text allowFontScaling={false} style={[styles.heartIcon, isFavorited && styles.heartFilled]}>
-              {isFavorited ? "♥" : "♡"}
-            </Text>
+            {renderHeartIcon(isFavorited ? COLORS.primary : COLORS.white)}
           </TouchableOpacity>
         </View>
         <View style={styles.contentSection}>
@@ -302,18 +315,15 @@ const styles = StyleSheet.create({
     fontSize: moderateScale(FONT_SIZES.xs),
     fontWeight: "500",
   },
+  // Fixed square container — both heart states always occupy identical space
   heartButton: {
     position: "absolute",
-    top: scale(SPACING.sm),
-    right: scale(SPACING.sm),
-    padding: scale(SPACING.xs),
-  },
-  heartIcon: {
-    fontSize: moderateScale(34),
-    color: COLORS.white,
-  },
-  heartFilled: {
-    color: COLORS.primary,
+    top: 0,
+    right: 0,
+    width: HEART_CONTAINER_SIZE,
+    height: HEART_CONTAINER_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
   },
   contentSection: {
     padding: scale(SPACING.sm),
@@ -477,6 +487,9 @@ const styles = StyleSheet.create({
     fontSize: 36,
     color: COLORS.white,
   },
+  heartFilled: {
+    color: COLORS.primary,
+  },
   webContent: {
     padding: 12,
   },
@@ -562,4 +575,5 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 });
+
 

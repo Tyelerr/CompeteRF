@@ -1,16 +1,44 @@
 ﻿import { useRef } from "react";
-import { Animated, Pressable } from "react-native";
+import { Animated, Platform, Pressable } from "react-native";
 
 const AnimatedTabBarButton = (props: any) => {
-  const { children, onPress, onLongPress, style, accessibilityLabel, accessibilityRole, accessibilityState, testID } = props;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const {
+    children, onPress, onLongPress, style,
+    accessibilityLabel, accessibilityRole, accessibilityState, testID,
+  } = props;
 
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const handlePressIn = () => Animated.spring(scaleAnim, { toValue: 1.25, speed: 50, bounciness: 12, useNativeDriver: true }).start();
   const handlePressOut = () => Animated.spring(scaleAnim, { toValue: 1, speed: 50, bounciness: 12, useNativeDriver: true }).start();
 
   return (
-    <Pressable onPress={onPress} onLongPress={onLongPress} onPressIn={handlePressIn} onPressOut={handlePressOut} accessibilityLabel={accessibilityLabel} accessibilityRole={accessibilityRole} accessibilityState={accessibilityState} testID={testID} style={style}>
-      <Animated.View style={{ flex: 1, alignItems: "center", justifyContent: "center", transform: [{ scale: scaleAnim }] }}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={accessibilityState}
+      testID={testID}
+      style={[style, { overflow: "visible" }]}
+    >
+      <Animated.View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          transform: [{ scale: scaleAnim }],
+          // Android: overflow visible so scaled icons are never clipped
+          // by the parent tab bar bounds during the spring animation.
+          overflow: "visible",
+          // Android: small bottom nudge so emoji glyphs clear the
+          // system navigation bar edge.
+          ...Platform.select({
+            android: { marginBottom: -24 },
+          }),
+        }}
+      >
         {children}
       </Animated.View>
     </Pressable>
@@ -18,3 +46,8 @@ const AnimatedTabBarButton = (props: any) => {
 };
 
 export default AnimatedTabBarButton;
+
+
+
+
+

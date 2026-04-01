@@ -1,4 +1,4 @@
-import { Tabs, usePathname, useRouter } from "expo-router";
+﻿import { Tabs, usePathname, useRouter } from "expo-router";
 import {
   Platform,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import AnimatedTabBarButton from "../../src/views/components/common/AnimatedTabBarButton";
@@ -116,7 +117,12 @@ export default function TabLayout() {
   const { canSubmitTournaments, profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
 
-  // ─── Web: top navbar ───────────────────────────────────────────────
+  // Android: read the system navigation bar inset so the dock is never clipped.
+  // iOS and web: insets.bottom is 0 here since we only call this on mobile.
+  const insets = useSafeAreaInsets();
+  const androidBottomPad = Platform.OS === "android" ? insets.bottom : 0;
+
+  // ── Web: top navbar ───────────────────────────────────────────────────────
   if (Platform.OS === "web") {
     return (
       <Tabs
@@ -150,7 +156,7 @@ export default function TabLayout() {
     );
   }
 
-  // ─── Mobile: original bottom tab bar ───────────────────────────────
+  // ── Mobile: bottom tab bar ────────────────────────────────────────────────
   return (
     <Tabs
       screenOptions={{
@@ -158,9 +164,11 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: COLORS.background,
           borderTopColor: COLORS.border,
-          height: 98,
-          paddingBottom: 10,
-          paddingTop: 10,
+          // Android: expand height by the system nav bar inset so icons
+          // are never clipped by gesture/button navigation bar.
+          height: Platform.select({ android: 85, default: 98 }),
+          paddingBottom: Platform.select({ android: 32, default: 10 }),
+          paddingTop: Platform.select({ android: 4, default: 10 }),
         },
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
@@ -269,3 +277,5 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+

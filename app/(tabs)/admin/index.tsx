@@ -47,7 +47,7 @@ export default function AdminScreen() {
   if (!user) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.emoji}>🔒</Text>
+        <Text allowFontScaling={false} style={styles.emoji}>{"\uD83D\uDD12"}</Text>
         <Text allowFontScaling={false} style={styles.title}>Login Required</Text>
         <Text allowFontScaling={false} style={styles.subtitle}>
           Please log in to access your dashboard.
@@ -60,7 +60,7 @@ export default function AdminScreen() {
   if (profile?.role === "basic_user") {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.emoji}>🎱</Text>
+        <Text allowFontScaling={false} style={styles.emoji}>{"\uD83C\uDFB1"}</Text>
         <Text allowFontScaling={false} style={styles.title}>No Dashboard Access</Text>
         <Text allowFontScaling={false} style={styles.subtitle}>
           Dashboards are available for Tournament Directors, Bar Owners, and
@@ -111,26 +111,26 @@ const ManagementCard = ({
       style={[
         styles.managementCard,
         isWeb ? styles.managementCardWeb : styles.managementCardMobile,
-        // @ts-ignore – web only
+        // @ts-ignore - web only
         isWeb && {
-          // @ts-ignore – web only
+          // @ts-ignore - web only
           transition:
             "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
-          // @ts-ignore – web only
+          // @ts-ignore - web only
           cursor: "pointer",
         },
         isWeb &&
           hovered && {
             borderColor: COLORS.primary,
             transform: [{ scale: 1.02 }],
-            // @ts-ignore – web only
+            // @ts-ignore - web only
             boxShadow: `0 8px 32px 0 ${COLORS.primary}55`,
           },
       ]}
       onPress={onPress}
-      // @ts-ignore – web only
+      // @ts-ignore - web only
       onMouseEnter={() => isWeb && setHovered(true)}
-      // @ts-ignore – web only
+      // @ts-ignore - web only
       onMouseLeave={() => isWeb && setHovered(false)}
     >
       <Text allowFontScaling={false} style={styles.managementIcon}>{icon}</Text>
@@ -154,7 +154,11 @@ const ManagementCard = ({
       >
         {label}
       </Text>
-      {subtitle && <Text allowFontScaling={false} style={styles.managementSubtitle}>{subtitle}</Text>}
+      {subtitle && (
+        <Text allowFontScaling={false} style={styles.managementSubtitle}>
+          {subtitle}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 };
@@ -202,7 +206,7 @@ const TDDashboard = () => {
 
         <View style={styles.statsGrid}>
           <StatCard
-            icon="🏆"
+            icon={"\uD83C\uDFC6"}
             value={vm.stats.myTournaments}
             label="My Tournaments"
             onPress={() =>
@@ -212,7 +216,7 @@ const TDDashboard = () => {
             }
           />
           <StatCard
-            icon="✅"
+            icon={"\u2705"}
             value={vm.stats.activeEvents}
             label="Active Events"
             onPress={() =>
@@ -222,20 +226,20 @@ const TDDashboard = () => {
             }
           />
           <StatCard
-            icon="🏢"
+            icon={"\uD83C\uDFE2"}
             value={vm.stats.venues}
             label="My Venues"
             onPress={() => router.push("/(tabs)/admin/venues/td-venues" as any)}
           />
           <StatCard
-            icon="📊"
+            icon={"\uD83D\uDCCA"}
             label="Analytics"
             onPress={() =>
               router.push("/(tabs)/admin/director-analytics" as any)
             }
           />
           <StatCard
-            icon="✉️"
+            icon={"\u2709\uFE0F"}
             label="Messages"
             onPress={() => router.push("/(tabs)/admin/messages" as any)}
           />
@@ -246,13 +250,8 @@ const TDDashboard = () => {
           <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
           <View style={styles.quickStatsCard}>
             <View style={styles.quickStatRow}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#1E3A5F" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>👁</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E3A5F" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83D\uDC41"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
@@ -260,13 +259,8 @@ const TDDashboard = () => {
               </Text>
             </View>
             <View style={styles.quickStatRow}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#5F1E1E" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>❤️</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#5F1E1E" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\u2764\uFE0F"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
@@ -274,13 +268,8 @@ const TDDashboard = () => {
               </Text>
             </View>
             <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#1E4D2B" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>🎯</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E4D2B" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83C\uDFAF"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
@@ -334,19 +323,21 @@ const BarOwnerDashboard = () => {
 
         <View style={styles.statsGrid}>
           <StatCard
-            icon="🏢"
+            icon={"\uD83C\uDFE2"}
             value={vm.stats.totalVenues}
             label="Venue Manager"
             onPress={() => router.push("/(tabs)/admin/bar-owner-venues" as any)}
           />
           <StatCard
-            icon="👤"
+            icon={"\uD83D\uDC64"}
             value={vm.stats.totalDirectors}
             label="Directors"
-            onPress={() => router.push("/(tabs)/admin/directors/bar-owner-directors" as any)}
+            onPress={() =>
+              router.push("/(tabs)/admin/directors/bar-owner-directors" as any)
+            }
           />
           <StatCard
-            icon="🏆"
+            icon={"\uD83C\uDFC6"}
             value={vm.stats.activeTournaments}
             label="Tournament Manager"
             onPress={() =>
@@ -356,16 +347,23 @@ const BarOwnerDashboard = () => {
             }
           />
           <StatCard
-            icon="📊"
+            icon={"\uD83D\uDCCA"}
             label="Analytics"
             onPress={() =>
               router.push("/(tabs)/admin/bar-owner-analytics" as any)
             }
           />
           <StatCard
-            icon="✉️"
+            icon={"\u2709\uFE0F"}
             label="Messages"
             onPress={() => router.push("/(tabs)/admin/messages" as any)}
+          />
+          <StatCard
+            icon={"\uD83D\uDCB3"}
+            label="Billing"
+            onPress={() =>
+              router.push("/(tabs)/admin/bar-owner-billing" as any)
+            }
           />
         </View>
 
@@ -374,13 +372,8 @@ const BarOwnerDashboard = () => {
           <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
           <View style={styles.quickStatsCard}>
             <View style={styles.quickStatRow}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#1E3A5F" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>👁</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E3A5F" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83D\uDC41"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
@@ -388,13 +381,8 @@ const BarOwnerDashboard = () => {
               </Text>
             </View>
             <View style={styles.quickStatRow}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#5F1E1E" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>❤️</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#5F1E1E" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\u2764\uFE0F"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
@@ -402,13 +390,8 @@ const BarOwnerDashboard = () => {
               </Text>
             </View>
             <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
-              <View
-                style={[
-                  styles.quickStatIconWrap,
-                  { backgroundColor: "#1E4D2B" },
-                ]}
-              >
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>🎯</Text>
+              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E4D2B" }]}>
+                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83C\uDFAF"}</Text>
               </View>
               <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
               <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
@@ -460,13 +443,13 @@ const CompeteAdminDashboard = () => {
 
         <View style={styles.managementGrid}>
           <ManagementCard
-            icon="👥"
+            icon={"\uD83D\uDC65"}
             label="Users"
             value={vm.stats.totalUsers}
             onPress={() => router.push("/(tabs)/admin/user-management" as any)}
           />
           <ManagementCard
-            icon="🏆"
+            icon={"\uD83C\uDFC6"}
             label="Tournaments"
             value={vm.stats.totalTournaments}
             subtitle={`${vm.stats.activeTournaments} active`}
@@ -477,13 +460,13 @@ const CompeteAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="🏢"
+            icon={"\uD83C\uDFE2"}
             label="Venues"
             value={vm.stats.totalVenues}
             onPress={() => router.push("/(tabs)/admin/venue-management" as any)}
           />
           <ManagementCard
-            icon="📊"
+            icon={"\uD83D\uDCCA"}
             label="Analytics"
             value={vm.stats.totalViews}
             subtitle="total views"
@@ -492,7 +475,7 @@ const CompeteAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="🚩"
+            icon={"\uD83D\uDEA9"}
             label="Reports"
             subtitle="Content reports"
             onPress={() =>
@@ -500,13 +483,13 @@ const CompeteAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="📋"
+            icon={"\uD83D\uDCCB"}
             label="Activity Log"
             subtitle="Recent changes"
             onPress={() => router.push("/(tabs)/admin/activity-log" as any)}
           />
           <ManagementCard
-            icon="✉️"
+            icon={"\u2709\uFE0F"}
             label="Messages"
             subtitle="Broadcasts"
             onPress={() => router.push("/(tabs)/admin/messages" as any)}
@@ -578,13 +561,13 @@ const SuperAdminDashboard = () => {
 
         <View style={styles.managementGrid}>
           <ManagementCard
-            icon="👥"
+            icon={"\uD83D\uDC65"}
             label="Users"
             value={vm.stats.totalUsers}
             onPress={() => router.push("/(tabs)/admin/user-management" as any)}
           />
           <ManagementCard
-            icon="🏆"
+            icon={"\uD83C\uDFC6"}
             label="Tournaments"
             value={vm.stats.totalTournaments}
             subtitle={`${vm.stats.activeTournaments} active`}
@@ -595,13 +578,13 @@ const SuperAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="🏢"
+            icon={"\uD83C\uDFE2"}
             label="Venues"
             value={vm.stats.totalVenues}
             onPress={() => router.push("/(tabs)/admin/venue-management" as any)}
           />
           <ManagementCard
-            icon="📊"
+            icon={"\uD83D\uDCCA"}
             label="Analytics"
             value={vm.stats.totalViews}
             subtitle="total views"
@@ -610,21 +593,21 @@ const SuperAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="⭐"
+            icon={"\u2B50"}
             label="Featured"
             value={0}
             subtitle="players & bars"
             onPress={() => router.push("/(tabs)/admin/featured-content" as any)}
           />
           <ManagementCard
-            icon="📩"
+            icon={"\uD83D\uDCE9"}
             label="Bar Requests"
             value={vm.stats.pendingBarRequests}
             subtitle="pending reviews"
             onPress={() => router.push("/(tabs)/admin/bar-requests" as any)}
           />
           <ManagementCard
-            icon="🎁"
+            icon={"\uD83C\uDF81"}
             label="Giveaways"
             value={vm.stats.totalGiveaways}
             onPress={() =>
@@ -632,7 +615,7 @@ const SuperAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="🚩"
+            icon={"\uD83D\uDEA9"}
             label="Reports"
             subtitle="Content reports"
             onPress={() =>
@@ -640,13 +623,13 @@ const SuperAdminDashboard = () => {
             }
           />
           <ManagementCard
-            icon="✉️"
+            icon={"\u2709\uFE0F"}
             label="Messages"
             subtitle="Broadcasts & alerts"
             onPress={() => router.push("/(tabs)/admin/messages" as any)}
           />
           <ManagementCard
-            icon="📥"
+            icon={"\uD83D\uDCE5"}
             label="Bulk Import"
             subtitle="CSV tournament upload"
             onPress={() => router.push("/(tabs)/admin/bulk-import" as any)}
@@ -689,8 +672,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-
-  // Web centering
   scrollContentWeb: {
     alignItems: "center",
     paddingBottom: SPACING.xl,
@@ -699,8 +680,6 @@ const styles = StyleSheet.create({
     width: "100%" as any,
     maxWidth: 860,
   },
-
-  // Center screen (login / no access states)
   centerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -729,8 +708,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: SPACING.lg,
   },
-
-  // Header
   header: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl + SPACING.lg,
@@ -751,24 +728,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
-
-  // Stat cards (TD / Bar Owner top row)
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     padding: SPACING.md,
     gap: SPACING.sm,
   },
-
-  // Management cards grid
   managementGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     padding: SPACING.sm,
     gap: SPACING.xs,
   },
-
-  // Management card base
   managementCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
@@ -779,11 +750,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     minHeight: scale(54),
   },
-  // Mobile: 2 columns (~40% smaller)
   managementCardMobile: {
     width: "48%" as any,
   },
-  // Web: 3 columns within 860px container (~20% smaller)
   managementCardWeb: {
     width: "31.5%" as any,
   },
@@ -809,8 +778,6 @@ const styles = StyleSheet.create({
     marginTop: scale(2),
     textAlign: "center",
   },
-
-  // Analytics / filter
   section: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
@@ -835,7 +802,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     gap: SPACING.sm,
   },
-
   quickStatsSection: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
@@ -893,4 +859,3 @@ const styles = StyleSheet.create({
     height: SPACING.xl * 2,
   },
 });
-
