@@ -23,6 +23,11 @@ import { TermsModal } from "../../src/views/components/faq/TermsModal";
 
 const isWeb = Platform.OS === "web";
 
+const ICON_CONTACT = "\uD83D\uDCEC";
+const ICON_LEGAL   = "\uD83D\uDCC4";
+const ICON_APP     = "\uD83D\uDCF1";
+const ICON_CHEVRON = "\u203A";
+
 export default function FaqScreen() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
@@ -127,7 +132,7 @@ export default function FaqScreen() {
 
           {/* Contact Section */}
           <View style={styles.section}>
-            <Text allowFontScaling={false} style={styles.sectionTitle}>📬 CONTACT US</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>{ICON_CONTACT} CONTACT US</Text>
             <View style={styles.contactCard}>
               <Text allowFontScaling={false} style={styles.contactText}>
                 {"Can't find what you're looking for? Have feedback or questions?"}
@@ -153,7 +158,7 @@ export default function FaqScreen() {
 
           {/* Legal Section */}
           <View style={styles.section}>
-            <Text allowFontScaling={false} style={styles.sectionTitle}>📄 LEGAL</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>{ICON_LEGAL} LEGAL</Text>
             <View style={styles.legalCard}>
               <TouchableOpacity
                 style={styles.legalRow}
@@ -161,7 +166,7 @@ export default function FaqScreen() {
                 activeOpacity={0.7}
               >
                 <Text allowFontScaling={false} style={styles.legalRowText}>Terms of Service</Text>
-                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>{ICON_CHEVRON}</Text>
               </TouchableOpacity>
               <View style={styles.legalDivider} />
               <TouchableOpacity
@@ -170,7 +175,7 @@ export default function FaqScreen() {
                 activeOpacity={0.7}
               >
                 <Text allowFontScaling={false} style={styles.legalRowText}>Privacy Policy</Text>
-                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>{ICON_CHEVRON}</Text>
               </TouchableOpacity>
               <View style={styles.legalDivider} />
               <TouchableOpacity
@@ -181,17 +186,17 @@ export default function FaqScreen() {
                 <Text allowFontScaling={false} style={styles.legalRowText}>
                   Acceptable Use & Content Policy
                 </Text>
-                <Text allowFontScaling={false} style={styles.legalRowChevron}>›</Text>
+                <Text allowFontScaling={false} style={styles.legalRowChevron}>{ICON_CHEVRON}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* App Info */}
           <View style={styles.section}>
-            <Text allowFontScaling={false} style={styles.sectionTitle}>📱 APP INFO</Text>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>{ICON_APP} APP INFO</Text>
             <View style={styles.infoCard}>
               <Text allowFontScaling={false} style={styles.infoText}>Compete v1.0.0</Text>
-              <Text allowFontScaling={false} style={styles.infoText}>© 2026 Compete</Text>
+              <Text allowFontScaling={false} style={styles.infoText}>{"© 2026 Compete"}</Text>
             </View>
           </View>
 
@@ -390,4 +395,3 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: scale(SPACING.xl) },
 });
-

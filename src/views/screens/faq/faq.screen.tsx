@@ -1,4 +1,4 @@
-﻿import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -10,9 +10,8 @@ export const FaqScreen = () => {
       <View style={styles.header}>
         <Text allowFontScaling={false} style={styles.title}>FAQ</Text>
       </View>
-
       <View style={styles.content}>
-        <Text allowFontScaling={false} style={styles.icon}>❓</Text>
+        <Text allowFontScaling={false} style={styles.icon}>?</Text>
         <Text allowFontScaling={false} style={styles.message}>Frequently Asked Questions</Text>
         <Text allowFontScaling={false} style={styles.submessage}>Coming Soon!</Text>
       </View>
