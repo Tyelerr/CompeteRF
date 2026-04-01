@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../../../lib/supabase";
+import { sendSupportTicketEmail } from "../../../services/email/sendSupportTicketEmail";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -76,6 +77,12 @@ export function ContactModal({ visible, onClose, user, profile }: ContactModalPr
     return "Unknown";
   };
 
+  const getFirstName = (): string => {
+    if (profile?.first_name) return profile.first_name;
+    if (profile?.name) return profile.name.split(" ")[0];
+    return "there";
+  };
+
   const resetForm = () => {
     setCategory("");
     setSubject("");
@@ -111,10 +118,31 @@ export function ContactModal({ visible, onClose, user, profile }: ContactModalPr
         }
       }
       if (!idAuto) { Alert.alert("Error", "Could not load your profile. Please try again in a moment."); return; }
-      const fullSubject = selectedTournament ? `${subject.trim()} - Tournament: ${selectedTournament.name}` : subject.trim();
-      const { error } = await supabase.from("support_tickets").insert({ user_id: idAuto, subject: fullSubject, description: message.trim(), category, status: "open", priority: "normal" });
+      const fullSubject = selectedTournament
+        ? `${subject.trim()} - Tournament: ${selectedTournament.name}`
+        : subject.trim();
+      const { error } = await supabase.from("support_tickets").insert({
+        user_id: idAuto,
+        subject: fullSubject,
+        description: message.trim(),
+        category,
+        status: "open",
+        priority: "normal",
+      });
       if (error) throw error;
-      Alert.alert("Message Sent!", "We'll get back to you soon.", [{ text: "OK", onPress: handleClose }]);
+
+      // Fire-and-forget confirmation email — never blocks the UI
+      if (user?.email) {
+        sendSupportTicketEmail(
+          user.email,
+          getFirstName(),
+          category,
+          fullSubject,
+          message.trim()
+        ).catch((err) => console.warn("[ContactModal] Support ticket email failed silently:", err));
+      }
+
+      Alert.alert("Message Sent!", "We will get back to you soon.", [{ text: "OK", onPress: handleClose }]);
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to send message.");
     } finally {
@@ -142,7 +170,7 @@ export function ContactModal({ visible, onClose, user, profile }: ContactModalPr
           </View>
         ) : (
           <View style={[s.userInfo, s.userInfoWarningBox]}>
-            <Text allowFontScaling={false} style={s.userInfoWarning}>⚠️ You must be logged in to send a message.</Text>
+            <Text allowFontScaling={false} style={s.userInfoWarning}>&#x26A0;&#xFE0F; You must be logged in to send a message.</Text>
           </View>
         )}
         <View style={s.fieldContainer}>
@@ -177,7 +205,7 @@ export function ContactModal({ visible, onClose, user, profile }: ContactModalPr
                     <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
                       {tournamentResults.map((t) => (
                         <TouchableOpacity key={t.id} style={s.autocompleteItem} onPress={() => { setSelectedTournament({ id: t.id, name: t.name }); setTournamentResults([]); setShowTournamentResults(false); setTournamentSearch(""); }}>
-                          <Text allowFontScaling={false} style={s.autocompleteItemName}>🏆 {t.name}</Text>
+                          <Text allowFontScaling={false} style={s.autocompleteItemName}>&#x1F3C6; {t.name}</Text>
                           <Text allowFontScaling={false} style={s.autocompleteItemVenue}>{t.venue_name}</Text>
                         </TouchableOpacity>
                       ))}
@@ -187,9 +215,9 @@ export function ContactModal({ visible, onClose, user, profile }: ContactModalPr
               </View>
             ) : (
               <View style={s.selectedBadge}>
-                <Text allowFontScaling={false} style={s.selectedBadgeText}>🏆 {selectedTournament.name}</Text>
+                <Text allowFontScaling={false} style={s.selectedBadgeText}>&#x1F3C6; {selectedTournament.name}</Text>
                 <TouchableOpacity onPress={() => setSelectedTournament(null)}>
-                  <Text allowFontScaling={false} style={s.removeBadge}>✕</Text>
+                  <Text allowFontScaling={false} style={s.removeBadge}>&#x2715;</Text>
                 </TouchableOpacity>
               </View>
             )}
