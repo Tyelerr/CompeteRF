@@ -1,6 +1,5 @@
 ﻿// app/(tabs)/admin/bar-owner-billing.tsx
 
-import { useInitPaymentSheet, useStripe } from "@stripe/stripe-react-native";
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
@@ -20,10 +19,29 @@ import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBilling } from "../../../src/viewmodels/useBilling";
 import { stripeService } from "../../../src/features/billing/stripe.service";
 import { Invoice } from "../../../src/features/billing/billing.types";
-import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { useCallback, useState } from "react";
 
 const isWeb = Platform.OS === "web";
+
+// Lazy-load Stripe hooks only in a real native build (not Expo Go)
+let useStripeHooks: () => {
+  presentPaymentSheet: () => Promise<{ error?: { code: string; message: string } }>;
+  initPaymentSheet: (params: any) => Promise<{ error?: { message: string } }>;
+} = () => ({
+  presentPaymentSheet: async () => ({ error: { code: "NotSupported", message: "Payment sheet requires a development build." } }),
+  initPaymentSheet: async () => ({ error: undefined }),
+});
+
+try {
+  const stripe = require("@stripe/stripe-react-native");
+  useStripeHooks = () => {
+    const { presentPaymentSheet } = stripe.useStripe();
+    const { initPaymentSheet } = stripe.useInitPaymentSheet();
+    return { presentPaymentSheet, initPaymentSheet };
+  };
+} catch {
+  // Expo Go — use stubs above
+}
 
 const DEFAULT_PLAN_FEATURES = [
   "Unlimited venue listings",
@@ -41,16 +59,10 @@ const INVOICE_STATUS_COLOR: Record<string, string> = {
   uncollectible: "#FF6B6B",
 };
 
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
-
 export default function BarOwnerBillingScreen() {
   const router = useRouter();
   const vm = useBilling();
-  const { profile } = useAuthContext();
-  const { presentPaymentSheet } = useStripe();
-  const { initPaymentSheet } = useInitPaymentSheet();
+  const { presentPaymentSheet, initPaymentSheet } = useStripeHooks();
   const [paymentSheetLoading, setPaymentSheetLoading] = useState(false);
 
   const handleUpdatePaymentMethod = useCallback(async () => {
@@ -101,9 +113,7 @@ export default function BarOwnerBillingScreen() {
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.loadingText}>
-          Loading billing...
-        </Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>Loading billing...</Text>
       </View>
     );
   }
