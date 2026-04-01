@@ -6,6 +6,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { useCheckUsername } from "../../../../hooks/use-profile";
 import { supabase } from "../../../lib/supabase";
 import { profileService } from "../../../models/services/profile.service";
+import { sendWelcomeEmail } from "../../../services/email/sendWelcomeEmail";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -41,7 +42,7 @@ export const CompleteProfileScreen = () => {
     setError("");
     if (!firstName.trim()) { setError("Please enter your first name"); return false; }
     if (!lastName.trim()) { setError("Please enter your last name"); return false; }
-    if (!isValidUsername(username)) { setError("Username must be 3–20 letters or numbers"); return false; }
+    if (!isValidUsername(username)) { setError("Username must be 3-20 letters or numbers"); return false; }
     if (containsBadWord(username)) { setError("This username is not allowed"); return false; }
     if (!isAvailable) { setError("This username is already taken"); return false; }
     if (!homeState) { setError("Please select your home state"); return false; }
@@ -58,6 +59,12 @@ export const CompleteProfileScreen = () => {
       const trimmedFirst = toTitleCase(firstName.trim());
       const trimmedLast = toTitleCase(lastName.trim());
       await profileService.createProfile({ id: user.id, email: user.email!, name: `${trimmedFirst} ${trimmedLast}`, first_name: trimmedFirst, last_name: trimmedLast, user_name: username, home_state: homeState, preferred_game: preferredGame || undefined, favorite_player: favoritePlayer || undefined });
+
+      // Fire-and-forget welcome email — never awaited, never blocks profile completion
+      sendWelcomeEmail(user.email!, trimmedFirst).catch((err) =>
+        console.warn("[CompleteProfileScreen] Welcome email failed silently:", err)
+      );
+
       let attempts = 0;
       let profileFound = false;
       while (attempts < 10 && !profileFound) {
@@ -82,8 +89,8 @@ export const CompleteProfileScreen = () => {
   const getUsernameHelper = () => {
     if (username.length < 3) return { text: "Username cannot be changed later", color: COLORS.textSecondary };
     if (isChecking) return { text: "Checking availability...", color: COLORS.textSecondary };
-    if (isAvailable) return { text: "✓ Username available", color: "#22C55E" };
-    return { text: "✗ Username taken", color: "#EF4444" };
+    if (isAvailable) return { text: "Username available", color: "#22C55E" };
+    return { text: "Username taken", color: "#EF4444" };
   };
 
   const isFormValid = !!(firstName.trim() && lastName.trim() && username && username.length >= 3 && homeState && agreeTerms && agreeAge && isAvailable && !isChecking);
@@ -93,8 +100,8 @@ export const CompleteProfileScreen = () => {
     return (
       <View style={styles.loadingContainer}>
         <Text allowFontScaling={false} style={styles.loadingTitle}>Setting Up Your Profile</Text>
-        <Text allowFontScaling={false} style={styles.loadingSubtitle}>Almost there…</Text>
-        <Text allowFontScaling={false} style={styles.loadingIcon}>⏳</Text>
+        <Text allowFontScaling={false} style={styles.loadingSubtitle}>Almost there...</Text>
+        <Text allowFontScaling={false} style={styles.loadingIcon}>&#9203;</Text>
       </View>
     );
   }
