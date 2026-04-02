@@ -8,6 +8,11 @@ export const TERMS_OF_SERVICE = {
     'Welcome to Compete. These Terms of Service (\u201CTerms\u201D) govern your access to and use of the Compete mobile application (\u201CApp\u201D), operated by AZ Tech Guys LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). By creating an account or using the App, you agree to be bound by these Terms. If you do not agree, do not use the App.',
   sections: [
     {
+      heading: 'Platform Disclaimer',
+      body:
+        'The Compete app is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. By using this app, you agree to release Apple and Google from any responsibility related to this app or its promotions. Any questions or complaints regarding the app or its content should be directed to Compete, not Apple or Google.',
+    },
+    {
       heading: '1. Account Registration',
       body:
         'To use certain features of Compete, you must create an account. When registering, you agree to:\n\n' +

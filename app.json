@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "Compete",
                  "slug":  "competerf",
-                 "version":  "1.0.4",
+                 "version":  "1.0.5",
                  "orientation":  "portrait",
                  "icon":  "./assets/images/icon.png",
                  "scheme":  "competerf",
@@ -11,7 +11,7 @@
                  "ios":  {
                              "supportsTablet":  true,
                              "bundleIdentifier":  "com.thecompeteapp.competerf",
-                             "buildNumber":  "41",
+                             "buildNumber":  "42",
                              "usesAppleSignIn":  true,
                              "associatedDomains":  [
                                                        "applinks:thecompeteapp.com"
@@ -47,10 +47,7 @@
                                          "image":  "./assets/images/icon.png",
                                          "imageWidth":  200,
                                          "resizeMode":  "contain",
-                                         "backgroundColor":  "#ffffff",
-                                         "dark":  {
-                                                      "backgroundColor":  "#000000"
-                                                  }
+                                         "backgroundColor":  "#000000"
                                      }
                                  ],
                                  [

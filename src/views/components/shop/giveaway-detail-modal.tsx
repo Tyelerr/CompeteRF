@@ -12,6 +12,7 @@ const FS = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
 const DEFAULT_RULES_SECTIONS = [
   { heading: "", body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law." },
+  { heading: "Platform Disclaimer", body: "This promotion is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. By entering, participants agree to release Apple and Google from any responsibility related to this promotion." },
   { heading: "1. Eligibility", body: "Giveaways hosted on the Compete app are open to legal residents of the United States who are 18 years of age or older at the time of entry. Employees, officers, and directors of Compete and its affiliates, and their immediate family members, are not eligible to participate. Void where prohibited or restricted by law." },
   { heading: "2. How to Enter", body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name, date of birth, email address, and phone number. Limit one (1) entry per person per giveaway." },
   { heading: "3. Entry Period", body: "Each giveaway has a specific start and end date displayed on the giveaway listing. Entries must be received before the posted end date and time. Late entries will not be accepted." },
@@ -22,7 +23,6 @@ const DEFAULT_RULES_SECTIONS = [
   { heading: "8. General Conditions", body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason." },
   { heading: "9. Privacy", body: "Information collected during giveaway entry is subject to the Compete Privacy Policy. Your information will be used for giveaway administration, winner notification, and prize fulfillment." },
   { heading: "10. Governing Law", body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates." },
-  { heading: "11. Apple Disclaimer", body: "This giveaway is in no way sponsored, endorsed, administered by, or associated with Apple Inc. Any questions regarding the giveaway should be directed to Compete, not Apple." },
 ];
 
 function FullRulesModal({ visible, customRulesText, onClose }: { visible: boolean; customRulesText: string | null; onClose: () => void }) {
@@ -30,7 +30,7 @@ function FullRulesModal({ visible, customRulesText, onClose }: { visible: boolea
   const content = (
     <>
       <View style={rm.header}>
-        <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text allowFontScaling={false} style={rm.closeBtnText}>✕</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text allowFontScaling={false} style={rm.closeBtnText}>{"\u2715"}</Text></TouchableOpacity>
         <Text allowFontScaling={false} style={rm.headerTitle}>Official Rules</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -127,7 +127,7 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
   const maxEntries = giveaway.max_entries || 0;
   const progressPercent = maxEntries > 0 ? Math.min((entryCount / maxEntries) * 100, 100) : 0;
   const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries);
-  const formatValue = (value: number | null) => value ? `$${value.toLocaleString()}` : "—";
+  const formatValue = (value: number | null) => value ? `$${value.toLocaleString()}` : "\u2014";
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "No end date";
     return new Date(dateString).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
@@ -136,7 +136,7 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
   const innerContent = (
     <>
       <View style={s.header}>
-        <TouchableOpacity onPress={onClose} style={s.closeButton}><Text allowFontScaling={false} style={s.closeButtonText}>✕</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onClose} style={s.closeButton}><Text allowFontScaling={false} style={s.closeButtonText}>{"\u2715"}</Text></TouchableOpacity>
         <Text allowFontScaling={false} style={s.headerTitle}>Giveaway Details</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -146,7 +146,7 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
           {giveaway.image_url ? (
             <Image source={{ uri: giveaway.image_url }} style={s.image} resizeMode="contain" />
           ) : (
-            <View style={s.imagePlaceholder}><Text allowFontScaling={false} style={s.imagePlaceholderText}>🎁</Text></View>
+            <View style={s.imagePlaceholder}><Text allowFontScaling={false} style={s.imagePlaceholderText}>{"\uD83C\uDF81"}</Text></View>
           )}
         </View>
         <View style={s.prizeCard}>
@@ -181,16 +181,16 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
           </View>
         </View>
         <TouchableOpacity style={s.rulesButton} onPress={() => setShowRules(true)} activeOpacity={0.7}>
-          <Text allowFontScaling={false} style={s.rulesButtonIcon}>📜</Text>
+          <Text allowFontScaling={false} style={s.rulesButtonIcon}>{"\uD83D\uDCDC"}</Text>
           <Text allowFontScaling={false} style={s.rulesButtonText}>View Official Rules</Text>
-          <Text allowFontScaling={false} style={s.rulesButtonChevron}>›</Text>
+          <Text allowFontScaling={false} style={s.rulesButtonChevron}>{"\u203A"}</Text>
         </TouchableOpacity>
       </ScrollView>
       <View style={s.bottomBar}>
         {isClosed ? (
           <View style={[s.enterButton, s.closedButton]}><Text allowFontScaling={false} style={s.closedButtonText}>Entry Period Closed</Text></View>
         ) : isEntered ? (
-          <View style={[s.enterButton, s.enteredButton]}><Text allowFontScaling={false} style={s.enteredButtonText}>Already Entered ✓</Text></View>
+          <View style={[s.enterButton, s.enteredButton]}><Text allowFontScaling={false} style={s.enteredButtonText}>{"Already Entered \u2713"}</Text></View>
         ) : (
           <TouchableOpacity style={s.enterButton} onPress={onEnter}><Text allowFontScaling={false} style={s.enterButtonText}>Enter Giveaway</Text></TouchableOpacity>
         )}

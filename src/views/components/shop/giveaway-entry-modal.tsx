@@ -17,6 +17,7 @@ const FONT_SIZES = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
 const DEFAULT_RULES_SECTIONS = [
   { heading: "", body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law." },
+  { heading: "Platform Disclaimer", body: "This promotion is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. By entering, participants agree to release Apple and Google from any responsibility related to this promotion." },
   { heading: "1. Eligibility", body: "Giveaways hosted on the Compete app are open to legal residents of the United States who are 18 years of age or older at the time of entry. Employees, officers, and directors of Compete and its affiliates, and their immediate family members, are not eligible to participate. Void where prohibited or restricted by law." },
   { heading: "2. How to Enter", body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name (as it appears on your government-issued ID), date of birth, email address, and phone number. All information must be accurate and truthful. Limit one (1) entry per person per giveaway. Multiple entries, duplicate accounts, or fraudulent information will result in disqualification." },
   { heading: "3. Entry Period", body: "Each giveaway has a specific start and end date displayed on the giveaway listing. Entries must be received before the posted end date and time. Late entries will not be accepted." },
@@ -27,7 +28,6 @@ const DEFAULT_RULES_SECTIONS = [
   { heading: "8. General Conditions", body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason." },
   { heading: "9. Privacy", body: "Information collected during giveaway entry is subject to the Compete Privacy Policy. Your information will be used for giveaway administration, winner notification, and prize fulfillment. Your information will not be sold to third parties." },
   { heading: "10. Governing Law", body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates, without regard to conflict of law provisions." },
-  { heading: "11. Apple Disclaimer", body: "This giveaway is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or any of its subsidiaries or affiliates. Any questions, comments, or complaints regarding the giveaway should be directed to Compete, not Apple." },
 ];
 
 const PRIVACY_SECTIONS = [
@@ -387,7 +387,3 @@ const styles = StyleSheet.create({
   cancelButton: { flex: 1, backgroundColor: COLORS.card, borderRadius: scale(12), paddingVertical: scale(SPACING.lg), alignItems: "center", borderWidth: 1, borderColor: COLORS.cardBorder },
   cancelButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
 });
-
-
-
-
