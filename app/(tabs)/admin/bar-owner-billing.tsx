@@ -17,31 +17,9 @@ import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBilling } from "../../../src/viewmodels/useBilling";
-import { stripeService } from "../../../src/features/billing/stripe.service";
 import { Invoice } from "../../../src/features/billing/billing.types";
-import { useCallback, useState } from "react";
 
 const isWeb = Platform.OS === "web";
-
-// Lazy-load Stripe hooks only in a real native build (not Expo Go)
-let useStripeHooks: () => {
-  presentPaymentSheet: () => Promise<{ error?: { code: string; message: string } }>;
-  initPaymentSheet: (params: any) => Promise<{ error?: { message: string } }>;
-} = () => ({
-  presentPaymentSheet: async () => ({ error: { code: "NotSupported", message: "Payment sheet requires a development build." } }),
-  initPaymentSheet: async () => ({ error: undefined }),
-});
-
-try {
-  const stripe = require("@stripe/stripe-react-native");
-  useStripeHooks = () => {
-    const { presentPaymentSheet } = stripe.useStripe();
-    const { initPaymentSheet } = stripe.useInitPaymentSheet();
-    return { presentPaymentSheet, initPaymentSheet };
-  };
-} catch {
-  // Expo Go — use stubs above
-}
 
 const DEFAULT_PLAN_FEATURES = [
   "Unlimited venue listings",
@@ -62,53 +40,14 @@ const INVOICE_STATUS_COLOR: Record<string, string> = {
 export default function BarOwnerBillingScreen() {
   const router = useRouter();
   const vm = useBilling();
-  const { presentPaymentSheet, initPaymentSheet } = useStripeHooks();
-  const [paymentSheetLoading, setPaymentSheetLoading] = useState(false);
 
-  const handleUpdatePaymentMethod = useCallback(async () => {
-    if (isWeb) {
-      Alert.alert("Update Payment Method", "Please use the mobile app to update your payment method.");
-      return;
-    }
-
-    const customerId = vm.subscription?.provider_customer_id;
-    if (!customerId || customerId === "cus_test_placeholder") {
-      Alert.alert("Not Ready", "Your billing account is not fully set up yet. Please contact support.");
-      return;
-    }
-
-    setPaymentSheetLoading(true);
-    try {
-      const clientSecret = await stripeService.createSetupIntent(customerId);
-      if (!clientSecret) {
-        Alert.alert("Error", "Could not initialize payment setup. Please try again.");
-        return;
-      }
-
-      const { error: initError } = await initPaymentSheet({
-        setupIntentClientSecret: clientSecret,
-        merchantDisplayName: "CompeteRF",
-        style: "alwaysDark",
-      });
-
-      if (initError) {
-        Alert.alert("Error", initError.message);
-        return;
-      }
-
-      const { error: presentError } = await presentPaymentSheet();
-      if (presentError) {
-        if (presentError.code !== "Canceled") {
-          Alert.alert("Error", presentError.message);
-        }
-      } else {
-        Alert.alert("Success", "Your payment method has been updated.");
-        vm.onRefresh();
-      }
-    } finally {
-      setPaymentSheetLoading(false);
-    }
-  }, [vm, initPaymentSheet, presentPaymentSheet]);
+  const handleUpdatePaymentMethod = () => {
+    Alert.alert(
+      "Update Payment Method",
+      "To update your payment method, please contact support at support@thecompeteapp.com.",
+      [{ text: "OK" }]
+    );
+  };
 
   if (vm.loading) {
     return (
@@ -157,6 +96,7 @@ export default function BarOwnerBillingScreen() {
         </View>
         <View style={styles.divider} />
         <CardRow label="Price" value={vm.formattedPrice} />
+
         {vm.isTrialing && (
           <>
             <View style={styles.divider} />
@@ -168,6 +108,7 @@ export default function BarOwnerBillingScreen() {
             </View>
           </>
         )}
+
         {vm.hasSubscription && !vm.isCanceled && (
           <>
             <View style={styles.divider} />
@@ -177,13 +118,34 @@ export default function BarOwnerBillingScreen() {
             />
           </>
         )}
+
+        {/* Cancel at period end warning */}
         {vm.isCancelAtPeriodEnd && (
-          <View style={styles.warningBanner}>
-            <Text allowFontScaling={false} style={styles.warningText}>
-              {"\u26A0\uFE0F"} Subscription set to cancel at end of period
+          <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
+            <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
+              {"\u26A0\uFE0F"} Your subscription will not renew at the end of the current billing cycle ({vm.nextBillingDate}). You will have full access until then.
             </Text>
           </View>
         )}
+
+        {/* Past due warning */}
+        {vm.subscription?.status === "past_due" && (
+          <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
+            <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
+              {"\u26A0\uFE0F"} Your last payment failed. Please update your payment method to avoid losing access.
+            </Text>
+          </View>
+        )}
+
+        {/* Unpaid warning */}
+        {vm.subscription?.status === "unpaid" && (
+          <View style={[styles.warningBanner, { backgroundColor: "#5F1E1E" }]}>
+            <Text allowFontScaling={false} style={[styles.warningText, { color: "#FF6B6B" }]}>
+              {"\uD83D\uDEA8"} Your account has an unpaid balance. Update your payment method immediately to restore full access.
+            </Text>
+          </View>
+        )}
+
         {!vm.hasSubscription && (
           <View style={styles.emptyState}>
             <Text allowFontScaling={false} style={styles.emptyText}>No active subscription</Text>
@@ -214,13 +176,9 @@ export default function BarOwnerBillingScreen() {
               </View>
             </View>
             <View style={styles.divider} />
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleUpdatePaymentMethod}
-              disabled={paymentSheetLoading}
-            >
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleUpdatePaymentMethod}>
               <Text allowFontScaling={false} style={styles.secondaryButtonText}>
-                {paymentSheetLoading ? "Loading..." : "Update Payment Method"}
+                Update Payment Method
               </Text>
             </TouchableOpacity>
           </>
@@ -230,13 +188,9 @@ export default function BarOwnerBillingScreen() {
             <Text allowFontScaling={false} style={styles.emptySubtext}>
               A payment method is required to activate your subscription.
             </Text>
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleUpdatePaymentMethod}
-              disabled={paymentSheetLoading}
-            >
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleUpdatePaymentMethod}>
               <Text allowFontScaling={false} style={styles.secondaryButtonText}>
-                {paymentSheetLoading ? "Loading..." : "Add Payment Method"}
+                Add Payment Method
               </Text>
             </TouchableOpacity>
           </View>
@@ -271,7 +225,7 @@ export default function BarOwnerBillingScreen() {
             )}
             <Text allowFontScaling={false} style={styles.actionNote}>
               {vm.isCancelAtPeriodEnd
-                ? "Reactivating will resume billing at the next renewal date."
+                ? `Reactivating will resume billing on ${vm.nextBillingDate}.`
                 : "Canceling keeps your access active through the current billing period."}
             </Text>
           </View>
@@ -319,10 +273,6 @@ export default function BarOwnerBillingScreen() {
     </ScrollView>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 const SectionHeader = ({ title }: { title: string }) => (
   <View style={styles.sectionHeader}>
@@ -374,10 +324,6 @@ const InvoiceRow = ({ invoice, amount, date, isLast }: InvoiceRowProps) => {
     </TouchableOpacity>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -481,16 +427,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   warningBanner: {
-    backgroundColor: "#3D2A00",
     borderRadius: scale(8),
     padding: SPACING.sm,
     marginTop: SPACING.sm,
   },
   warningText: {
     fontSize: moderateScale(FONT_SIZES.xs),
-    color: "#F59E0B",
     fontWeight: "600",
     textAlign: "center",
+    lineHeight: moderateScale(FONT_SIZES.xs) * 1.6,
   },
   emptyState: {
     alignItems: "center",
@@ -609,3 +554,4 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: SPACING.xl * 2 },
 });
+
