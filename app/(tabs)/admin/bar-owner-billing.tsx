@@ -3,7 +3,6 @@
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter } from "expo-router";
 import {
-  Alert,
   Linking,
   Platform,
   RefreshControl,
@@ -21,7 +20,7 @@ import { Invoice } from "../../../src/features/billing/billing.types";
 
 const isWeb = Platform.OS === "web";
 
-const DEFAULT_PLAN_FEATURES = [
+const PLAN_FEATURES = [
   "Unlimited venue listings",
   "Tournament management",
   "Analytics dashboard",
@@ -41,23 +40,17 @@ export default function BarOwnerBillingScreen() {
   const router = useRouter();
   const vm = useBilling();
 
-  const handleUpdatePaymentMethod = () => {
-    Alert.alert(
-      "Update Payment Method",
-      "To update your payment method, please contact support at support@thecompeteapp.com.",
-      [{ text: "OK" }]
-    );
-  };
-
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.loadingText}>Loading billing...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>
+          Loading billing...
+        </Text>
       </View>
     );
   }
 
-  const features = vm.planFeatures.length > 0 ? vm.planFeatures : DEFAULT_PLAN_FEATURES;
+  const isFounding = vm.subscription?.status === "founding";
 
   return (
     <ScrollView
@@ -74,205 +67,335 @@ export default function BarOwnerBillingScreen() {
     >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, isWeb && styles.backBtnWeb]}>
-          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backBtn, isWeb && styles.backBtnWeb]}
+        >
+          <Text allowFontScaling={false} style={styles.backText}>
+            {"\u2190"} Back
+          </Text>
         </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCB3"} BILLING</Text>
-        <Text allowFontScaling={false} style={styles.headerSubtitle}>Manage your subscription</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>
+          {"\uD83D\uDCB3"} BILLING
+        </Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>
+          Manage your subscription
+        </Text>
       </View>
 
-      {/* Subscription Summary */}
-      <SectionHeader title="Subscription" />
-      <View style={styles.card}>
-        <CardRow label="Plan" value={vm.planName} />
-        <View style={styles.divider} />
-        <View style={styles.cardRow}>
-          <Text allowFontScaling={false} style={styles.cardLabel}>Status</Text>
-          <View style={[styles.badge, { backgroundColor: vm.statusBgColor }]}>
-            <Text allowFontScaling={false} style={[styles.badgeText, { color: vm.statusColor }]}>
-              {vm.statusLabel}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.divider} />
-        <CardRow label="Price" value={vm.formattedPrice} />
-
-        {vm.isTrialing && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.cardRow}>
-              <Text allowFontScaling={false} style={styles.cardLabel}>Trial Ends</Text>
-              <Text allowFontScaling={false} style={[styles.cardValue, { color: "#4A9EFF" }]}>
-                {vm.trialEndDate}
-              </Text>
-            </View>
-          </>
-        )}
-
-        {vm.hasSubscription && !vm.isCanceled && (
-          <>
-            <View style={styles.divider} />
-            <CardRow
-              label={vm.isCancelAtPeriodEnd ? "Access Until" : "Next Billing"}
-              value={vm.nextBillingDate}
-            />
-          </>
-        )}
-
-        {/* Cancel at period end warning */}
-        {vm.isCancelAtPeriodEnd && (
-          <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
-            <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
-              {"\u26A0\uFE0F"} Your subscription will not renew at the end of the current billing cycle ({vm.nextBillingDate}). You will have full access until then.
-            </Text>
-          </View>
-        )}
-
-        {/* Past due warning */}
-        {vm.subscription?.status === "past_due" && (
-          <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
-            <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
-              {"\u26A0\uFE0F"} Your last payment failed. Please update your payment method to avoid losing access.
-            </Text>
-          </View>
-        )}
-
-        {/* Unpaid warning */}
-        {vm.subscription?.status === "unpaid" && (
-          <View style={[styles.warningBanner, { backgroundColor: "#5F1E1E" }]}>
-            <Text allowFontScaling={false} style={[styles.warningText, { color: "#FF6B6B" }]}>
-              {"\uD83D\uDEA8"} Your account has an unpaid balance. Update your payment method immediately to restore full access.
-            </Text>
-          </View>
-        )}
-
-        {!vm.hasSubscription && (
-          <View style={styles.emptyState}>
-            <Text allowFontScaling={false} style={styles.emptyText}>No active subscription</Text>
-            <Text allowFontScaling={false} style={styles.emptySubtext}>
-              Contact support to get started with a plan.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Payment Method */}
-      <SectionHeader title="Payment Method" />
-      <View style={styles.card}>
-        {vm.paymentMethod ? (
-          <>
-            <View style={styles.paymentRow}>
-              <View style={styles.cardIconWrap}>
-                <Text allowFontScaling={false} style={styles.cardIconText}>{"\uD83D\uDCB3"}</Text>
-              </View>
-              <View style={styles.paymentInfo}>
-                <Text allowFontScaling={false} style={styles.cardValue}>
-                  {vm.paymentMethod.brand.charAt(0).toUpperCase() + vm.paymentMethod.brand.slice(1)}{" "}
-                  {"\u2022\u2022\u2022\u2022"} {vm.paymentMethod.last4}
-                </Text>
-                <Text allowFontScaling={false} style={styles.cardLabel}>
-                  Expires {vm.paymentMethod.exp_month}/{vm.paymentMethod.exp_year}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.divider} />
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleUpdatePaymentMethod}>
-              <Text allowFontScaling={false} style={styles.secondaryButtonText}>
-                Update Payment Method
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text allowFontScaling={false} style={styles.emptyText}>No payment method on file</Text>
-            <Text allowFontScaling={false} style={styles.emptySubtext}>
-              A payment method is required to activate your subscription.
-            </Text>
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleUpdatePaymentMethod}>
-              <Text allowFontScaling={false} style={styles.secondaryButtonText}>
-                Add Payment Method
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/* Subscription Actions */}
-      {vm.hasSubscription && (
-        <>
-          <SectionHeader title="Manage Subscription" />
-          <View style={styles.card}>
-            {vm.isCanceled || vm.isCancelAtPeriodEnd ? (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#1E4D2B" }]}
-                onPress={vm.handleReactivateSubscription}
-                disabled={vm.actionLoading}
-              >
-                <Text allowFontScaling={false} style={[styles.actionButtonText, { color: "#4ADE80" }]}>
-                  {vm.actionLoading ? "Processing..." : "\u21BA Reactivate Subscription"}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: "#3D1010" }]}
-                onPress={vm.handleCancelSubscription}
-                disabled={vm.actionLoading}
-              >
-                <Text allowFontScaling={false} style={[styles.actionButtonText, { color: "#FF6B6B" }]}>
-                  {vm.actionLoading ? "Processing..." : "Cancel Subscription"}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <Text allowFontScaling={false} style={styles.actionNote}>
-              {vm.isCancelAtPeriodEnd
-                ? `Reactivating will resume billing on ${vm.nextBillingDate}.`
-                : "Canceling keeps your access active through the current billing period."}
-            </Text>
-          </View>
-        </>
+      {isFounding ? (
+        <FoundingVenueView />
+      ) : (
+        <StandardBillingView vm={vm} />
       )}
-
-      {/* Billing History */}
-      <SectionHeader title="Billing History" />
-      <View style={styles.card}>
-        {vm.invoices.length > 0 ? (
-          vm.invoices.map((invoice, index) => (
-            <InvoiceRow
-              key={invoice.id}
-              invoice={invoice}
-              amount={vm.formatInvoiceAmount(invoice)}
-              date={vm.formatInvoiceDate(invoice)}
-              isLast={index === vm.invoices.length - 1}
-            />
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text allowFontScaling={false} style={styles.emptyText}>No invoices yet</Text>
-            <Text allowFontScaling={false} style={styles.emptySubtext}>
-              Charges will appear here after your first billing cycle.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Plan Features */}
-      <SectionHeader title={"What\u2019s Included"} />
-      <View style={styles.card}>
-        {features.map((feature, index) => (
-          <View
-            key={index}
-            style={[styles.featureRow, index < features.length - 1 && styles.featureRowBorder]}
-          >
-            <Text allowFontScaling={false} style={styles.featureCheck}>{"\u2713"}</Text>
-            <Text allowFontScaling={false} style={styles.featureText}>{feature}</Text>
-          </View>
-        ))}
-      </View>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Founding Venue View
+// ---------------------------------------------------------------------------
+
+const FoundingVenueView = () => (
+  <>
+    {/* Founding badge card */}
+    <View style={styles.foundingCard}>
+      <Text allowFontScaling={false} style={styles.foundingEmoji}>
+        {"\uD83C\uDF89"}
+      </Text>
+      <Text allowFontScaling={false} style={styles.foundingTitle}>
+        Founding Venue
+      </Text>
+      <Text allowFontScaling={false} style={styles.foundingSubtitle}>
+        Thank you for being an early partner
+      </Text>
+    </View>
+
+    {/* Free access card */}
+    <SectionHeader title="Your Access" />
+    <View style={styles.card}>
+      <View style={styles.cardRow}>
+        <Text allowFontScaling={false} style={styles.cardLabel}>Plan</Text>
+        <Text allowFontScaling={false} style={styles.cardValue}>Venue Pro</Text>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.cardRow}>
+        <Text allowFontScaling={false} style={styles.cardLabel}>Status</Text>
+        <View style={[styles.badge, { backgroundColor: "#3D2A00" }]}>
+          <Text allowFontScaling={false} style={[styles.badgeText, { color: "#F59E0B" }]}>
+            Founding Venue
+          </Text>
+        </View>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.cardRow}>
+        <Text allowFontScaling={false} style={styles.cardLabel}>Billing</Text>
+        <Text allowFontScaling={false} style={[styles.cardValue, { color: "#4ADE80" }]}>
+          Free until further notice
+        </Text>
+      </View>
+    </View>
+
+    {/* Promise card */}
+    <SectionHeader title="Our Commitment to You" />
+    <View style={styles.card}>
+      <View style={styles.promiseRow}>
+        <Text allowFontScaling={false} style={styles.promiseIcon}>
+          {"\uD83D\uDCEC"}
+        </Text>
+        <Text allowFontScaling={false} style={styles.promiseText}>
+          When we are ready to begin billing, we will notify you at least{" "}
+          <Text style={styles.promiseBold}>30 days in advance</Text> — so
+          you are never surprised.
+        </Text>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.promiseRow}>
+        <Text allowFontScaling={false} style={styles.promiseIcon}>
+          {"\u2705"}
+        </Text>
+        <Text allowFontScaling={false} style={styles.promiseText}>
+          You will always have the opportunity to{" "}
+          <Text style={styles.promiseBold}>review your plan</Text> before
+          any charges begin.
+        </Text>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.promiseRow}>
+        <Text allowFontScaling={false} style={styles.promiseIcon}>
+          {"\uD83D\uDD12"}
+        </Text>
+        <Text allowFontScaling={false} style={styles.promiseText}>
+          No credit card is required right now. We will reach out when the
+          time comes.
+        </Text>
+      </View>
+    </View>
+
+    {/* Plan features */}
+    <SectionHeader title={"What\u2019s Included"} />
+    <View style={styles.card}>
+      {PLAN_FEATURES.map((feature, index) => (
+        <View
+          key={index}
+          style={[
+            styles.featureRow,
+            index < PLAN_FEATURES.length - 1 && styles.featureRowBorder,
+          ]}
+        >
+          <Text allowFontScaling={false} style={styles.featureCheck}>
+            {"\u2713"}
+          </Text>
+          <Text allowFontScaling={false} style={styles.featureText}>
+            {feature}
+          </Text>
+        </View>
+      ))}
+    </View>
+
+    {/* Support */}
+    <SectionHeader title="Questions?" />
+    <View style={styles.card}>
+      <Text allowFontScaling={false} style={styles.supportText}>
+        Have questions about your account or billing? We are happy to help.
+      </Text>
+      <TouchableOpacity
+        style={styles.supportButton}
+        onPress={() => Linking.openURL("mailto:support@thecompeteapp.com")}
+      >
+        <Text allowFontScaling={false} style={styles.supportButtonText}>
+          Contact Support
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </>
+);
+
+// ---------------------------------------------------------------------------
+// Standard Billing View (active, trialing, past_due, etc.)
+// ---------------------------------------------------------------------------
+
+const StandardBillingView = ({ vm }: { vm: ReturnType<typeof import("../../../src/viewmodels/useBilling").useBilling> }) => (
+  <>
+    <SectionHeader title="Subscription" />
+    <View style={styles.card}>
+      <CardRow label="Plan" value={vm.planName} />
+      <View style={styles.divider} />
+      <View style={styles.cardRow}>
+        <Text allowFontScaling={false} style={styles.cardLabel}>Status</Text>
+        <View style={[styles.badge, { backgroundColor: vm.statusBgColor }]}>
+          <Text allowFontScaling={false} style={[styles.badgeText, { color: vm.statusColor }]}>
+            {vm.statusLabel}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.divider} />
+      <CardRow label="Price" value={vm.formattedPrice} />
+      {vm.isTrialing && (
+        <>
+          <View style={styles.divider} />
+          <View style={styles.cardRow}>
+            <Text allowFontScaling={false} style={styles.cardLabel}>Trial Ends</Text>
+            <Text allowFontScaling={false} style={[styles.cardValue, { color: "#4A9EFF" }]}>
+              {vm.trialEndDate}
+            </Text>
+          </View>
+        </>
+      )}
+      {vm.hasSubscription && !vm.isCanceled && (
+        <>
+          <View style={styles.divider} />
+          <CardRow
+            label={vm.isCancelAtPeriodEnd ? "Access Until" : "Next Billing"}
+            value={vm.nextBillingDate}
+          />
+        </>
+      )}
+      {vm.isCancelAtPeriodEnd && (
+        <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
+          <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
+            {"\u26A0\uFE0F"} Your subscription will not renew at the end of this billing cycle. You will have full access until then.
+          </Text>
+        </View>
+      )}
+      {vm.subscription?.status === "past_due" && (
+        <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
+          <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
+            {"\u26A0\uFE0F"} Your last payment failed. Please update your payment method to avoid losing access.
+          </Text>
+        </View>
+      )}
+      {vm.subscription?.status === "unpaid" && (
+        <View style={[styles.warningBanner, { backgroundColor: "#5F1E1E" }]}>
+          <Text allowFontScaling={false} style={[styles.warningText, { color: "#FF6B6B" }]}>
+            {"\uD83D\uDEA8"} Your account has an unpaid balance. Update your payment method immediately to restore full access.
+          </Text>
+        </View>
+      )}
+      {!vm.hasSubscription && (
+        <View style={styles.emptyState}>
+          <Text allowFontScaling={false} style={styles.emptyText}>No active subscription</Text>
+          <Text allowFontScaling={false} style={styles.emptySubtext}>
+            Contact support to get started with a plan.
+          </Text>
+        </View>
+      )}
+    </View>
+
+    <SectionHeader title="Payment Method" />
+    <View style={styles.card}>
+      {vm.paymentMethod ? (
+        <>
+          <View style={styles.paymentRow}>
+            <View style={styles.cardIconWrap}>
+              <Text allowFontScaling={false} style={styles.cardIconText}>{"\uD83D\uDCB3"}</Text>
+            </View>
+            <View style={styles.paymentInfo}>
+              <Text allowFontScaling={false} style={styles.cardValue}>
+                {vm.paymentMethod.brand.charAt(0).toUpperCase() + vm.paymentMethod.brand.slice(1)}{" "}
+                {"\u2022\u2022\u2022\u2022"} {vm.paymentMethod.last4}
+              </Text>
+              <Text allowFontScaling={false} style={styles.cardLabel}>
+                Expires {vm.paymentMethod.exp_month}/{vm.paymentMethod.exp_year}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => Linking.openURL("mailto:support@thecompeteapp.com?subject=Update Payment Method")}
+          >
+            <Text allowFontScaling={false} style={styles.secondaryButtonText}>
+              Update Payment Method
+            </Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.emptyState}>
+          <Text allowFontScaling={false} style={styles.emptyText}>No payment method on file</Text>
+          <Text allowFontScaling={false} style={styles.emptySubtext}>
+            Contact support to add a payment method.
+          </Text>
+        </View>
+      )}
+    </View>
+
+    {vm.hasSubscription && (
+      <>
+        <SectionHeader title="Manage Subscription" />
+        <View style={styles.card}>
+          {vm.isCanceled || vm.isCancelAtPeriodEnd ? (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: "#1E4D2B" }]}
+              onPress={vm.handleReactivateSubscription}
+              disabled={vm.actionLoading}
+            >
+              <Text allowFontScaling={false} style={[styles.actionButtonText, { color: "#4ADE80" }]}>
+                {vm.actionLoading ? "Processing..." : "\u21BA Reactivate Subscription"}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: "#3D1010" }]}
+              onPress={vm.handleCancelSubscription}
+              disabled={vm.actionLoading}
+            >
+              <Text allowFontScaling={false} style={[styles.actionButtonText, { color: "#FF6B6B" }]}>
+                {vm.actionLoading ? "Processing..." : "Cancel Subscription"}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <Text allowFontScaling={false} style={styles.actionNote}>
+            {vm.isCancelAtPeriodEnd
+              ? "Reactivating will resume billing at the next renewal date."
+              : "Canceling keeps your access active through the current billing period."}
+          </Text>
+        </View>
+      </>
+    )}
+
+    <SectionHeader title="Billing History" />
+    <View style={styles.card}>
+      {vm.invoices.length > 0 ? (
+        vm.invoices.map((invoice, index) => (
+          <InvoiceRow
+            key={invoice.id}
+            invoice={invoice}
+            amount={vm.formatInvoiceAmount(invoice)}
+            date={vm.formatInvoiceDate(invoice)}
+            isLast={index === vm.invoices.length - 1}
+          />
+        ))
+      ) : (
+        <View style={styles.emptyState}>
+          <Text allowFontScaling={false} style={styles.emptyText}>No invoices yet</Text>
+          <Text allowFontScaling={false} style={styles.emptySubtext}>
+            Charges will appear here after your first billing cycle.
+          </Text>
+        </View>
+      )}
+    </View>
+
+    <SectionHeader title={"What\u2019s Included"} />
+    <View style={styles.card}>
+      {PLAN_FEATURES.map((feature, index) => (
+        <View
+          key={index}
+          style={[styles.featureRow, index < PLAN_FEATURES.length - 1 && styles.featureRowBorder]}
+        >
+          <Text allowFontScaling={false} style={styles.featureCheck}>{"\u2713"}</Text>
+          <Text allowFontScaling={false} style={styles.featureText}>{feature}</Text>
+        </View>
+      ))}
+    </View>
+  </>
+);
+
+// ---------------------------------------------------------------------------
+// Shared sub-components
+// ---------------------------------------------------------------------------
 
 const SectionHeader = ({ title }: { title: string }) => (
   <View style={styles.sectionHeader}>
@@ -325,6 +448,10 @@ const InvoiceRow = ({ invoice, amount, date, isLast }: InvoiceRowProps) => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   container: {
     ...Platform.select({
@@ -376,6 +503,81 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
+
+  // Founding venue
+  foundingCard: {
+    margin: SPACING.md,
+    marginTop: SPACING.lg,
+    backgroundColor: "#3D2A00",
+    borderRadius: scale(16),
+    padding: SPACING.lg,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#F59E0B44",
+  },
+  foundingEmoji: {
+    fontSize: moderateScale(40),
+    marginBottom: SPACING.sm,
+  },
+  foundingTitle: {
+    fontSize: moderateScale(FONT_SIZES.xl),
+    fontWeight: "800",
+    color: "#F59E0B",
+    letterSpacing: 0.5,
+  },
+  foundingSubtitle: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    color: "#F59E0B99",
+    marginTop: SPACING.xs,
+    textAlign: "center",
+  },
+
+  // Promise rows
+  promiseRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  promiseIcon: {
+    fontSize: moderateScale(FONT_SIZES.md),
+    width: scale(24),
+    textAlign: "center",
+    marginTop: scale(1),
+  },
+  promiseText: {
+    flex: 1,
+    fontSize: moderateScale(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    lineHeight: moderateScale(FONT_SIZES.sm) * 1.6,
+  },
+  promiseBold: {
+    color: COLORS.text,
+    fontWeight: "700",
+  },
+
+  // Support
+  supportText: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginBottom: SPACING.sm,
+    lineHeight: moderateScale(FONT_SIZES.sm) * 1.5,
+  },
+  supportButton: {
+    borderRadius: scale(10),
+    padding: SPACING.sm,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  supportButtonText: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+
+  // Section header
   sectionHeader: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
@@ -386,6 +588,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
   },
+
+  // Card
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: scale(12),
@@ -554,4 +758,3 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: { height: SPACING.xl * 2 },
 });
-
