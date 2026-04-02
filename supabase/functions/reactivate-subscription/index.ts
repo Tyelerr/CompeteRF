@@ -44,8 +44,11 @@ serve(async (req: Request) => {
 
   if (subError || !sub) return jsonResponse({ error: "Subscription not found." }, 404);
 
-  // If real Stripe subscription exists, reactivate in Stripe
-  if (sub.provider_subscription_id && sub.provider_subscription_id !== "sub_test_placeholder") {
+  const isRealSubscription =
+    sub.provider_subscription_id &&
+    sub.provider_subscription_id !== "sub_test_placeholder";
+
+  if (isRealSubscription) {
     const stripeRes = await fetch(
       `https://api.stripe.com/v1/subscriptions/${sub.provider_subscription_id}`,
       {
@@ -64,6 +67,8 @@ serve(async (req: Request) => {
       return jsonResponse({ error: result.error?.message ?? "Stripe error." }, 500);
     }
     console.log(`[reactivate-subscription] Stripe subscription ${sub.provider_subscription_id} reactivated`);
+  } else {
+    console.log("[reactivate-subscription] Placeholder subscription — skipping Stripe call, updating DB only");
   }
 
   const { error: updateError } = await supabase

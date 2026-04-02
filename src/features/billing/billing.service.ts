@@ -82,16 +82,26 @@ export const billingService = {
   },
 
   async cancelSubscription(subscriptionId: string): Promise<{ error: string | null }> {
+    const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.functions.invoke('cancel-subscription', {
       body: { subscription_id: subscriptionId },
+      headers: session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : undefined,
     });
+    if (error) console.warn('[billingService] cancelSubscription:', error.message);
     return { error: error?.message ?? null };
   },
 
   async reactivateSubscription(subscriptionId: string): Promise<{ error: string | null }> {
+    const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.functions.invoke('reactivate-subscription', {
       body: { subscription_id: subscriptionId },
+      headers: session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : undefined,
     });
+    if (error) console.warn('[billingService] reactivateSubscription:', error.message);
     return { error: error?.message ?? null };
   },
 };

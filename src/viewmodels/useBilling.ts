@@ -54,10 +54,7 @@ export function useBilling() {
 
   const load = useCallback(
     async (isRefresh = false) => {
-      console.log('[useBilling] load called - user:', user?.id ?? 'NULL');
-
       if (!user) {
-        console.log('[useBilling] no user, aborting');
         setLoading(false);
         return;
       }
@@ -65,12 +62,8 @@ export function useBilling() {
       setError(null);
 
       try {
-        console.log('[useBilling] resolving venueId, cached:', venueId);
         const vid = venueId ?? (await billingService.getOwnerPrimaryVenueId(user.id));
-        console.log('[useBilling] resolved venueId:', vid);
-
         if (!vid) {
-          console.log('[useBilling] no venueId found, aborting');
           setLoading(false);
           setRefreshing(false);
           return;
@@ -83,15 +76,10 @@ export function useBilling() {
           billingService.getInvoices(vid),
         ]);
 
-        console.log('[useBilling] sub:', JSON.stringify(sub));
-        console.log('[useBilling] pm:', JSON.stringify(pm));
-        console.log('[useBilling] invoices count:', inv.length);
-
         setSubscription(sub);
         setPaymentMethod(pm);
         setInvoices(inv);
       } catch (e: any) {
-        console.log('[useBilling] caught error:', e?.message);
         setError(e?.message ?? 'Failed to load billing info.');
       } finally {
         setLoading(false);
