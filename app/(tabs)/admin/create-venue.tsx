@@ -18,6 +18,8 @@ import { useCreateVenue } from "../../../src/viewmodels/useCreateVenue";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : ms(v);
+const sc = (v: number) => isWeb ? v : sc(v);
 
 export default function CreateVenueScreen() {
   const router = useRouter();
@@ -41,7 +43,7 @@ export default function CreateVenueScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text allowFontScaling={false} style={styles.backText}>â† Back</Text>
+          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>Add Venue</Text>
         <View style={styles.placeholder} />
@@ -423,17 +425,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: ms(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: scale(50),
+    width: sc(50),
   },
   content: {
     flex: 1,
@@ -445,7 +447,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.sm,
@@ -454,17 +456,17 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   label: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: scale(6),
+    marginBottom: sc(6),
     fontWeight: "600",
   },
   input: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -474,7 +476,7 @@ const styles = StyleSheet.create({
   },
   predictions: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -485,14 +487,14 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   predictionMain: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   predictionSecondary: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: scale(2),
+    marginTop: sc(2),
   },
   dividerRow: {
     flexDirection: "row",
@@ -501,12 +503,12 @@ const styles = StyleSheet.create({
   },
   dividerLine: {
     flex: 1,
-    height: scale(1),
+    height: sc(1),
     backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: SPACING.md,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   manualButton: {
@@ -514,13 +516,13 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   manualButtonText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   selectedBanner: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: sc(12),
     padding: SPACING.md,
     marginBottom: SPACING.lg,
     flexDirection: "row",
@@ -533,23 +535,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedName: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   selectedAddress: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: scale(2),
+    marginTop: sc(2),
   },
   changeText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   addTableCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: sc(12),
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -565,43 +567,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.background,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   stepperButton: {
-    width: scale(40),
-    height: scale(40),
+    width: sc(40),
+    height: sc(40),
     justifyContent: "center",
     alignItems: "center",
   },
   stepperText: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: ms(FONT_SIZES.lg),
     color: COLORS.primary,
     fontWeight: "600",
   },
   quantityText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
     paddingHorizontal: SPACING.sm,
-    minWidth: scale(30),
+    minWidth: sc(30),
     textAlign: "center",
   },
   addTableButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
   addTableButtonText: {
     color: COLORS.surface,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     fontWeight: "600",
   },
   tableItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(10),
+    borderRadius: sc(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -614,12 +616,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tableText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     color: COLORS.text,
   },
   searchResults: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -633,27 +635,27 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   resultName: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   resultEmail: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   roleWarning: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     color: COLORS.warning,
-    marginTop: scale(2),
+    marginTop: sc(2),
   },
   addText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   directorItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(10),
+    borderRadius: sc(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -666,29 +668,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   directorName: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   directorEmail: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: scale(2),
+    marginTop: sc(2),
   },
   removeText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.error,
     fontWeight: "600",
   },
   emptyText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontStyle: "italic",
     marginTop: SPACING.sm,
   },
   createButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: scale(8),
+    borderRadius: sc(8),
     paddingVertical: SPACING.md,
     alignItems: "center",
     marginTop: SPACING.lg,
@@ -698,7 +700,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: COLORS.surface,
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
   },
   bottomSpacer: {

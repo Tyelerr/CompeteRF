@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import {
   FlatList,
   RefreshControl,
@@ -107,10 +107,7 @@ export default function BarOwnerVenuesScreen() {
 
 const styles = StyleSheet.create({
   // Web centering
-  scrollContentWeb: {
-    alignItems: "center",
-    paddingBottom: SPACING.xl,
-  },
+  scrollContentWeb: { paddingBottom: SPACING.xl },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
@@ -160,7 +157,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: SPACING.md,
-    marginTop: SPACING.xl * 3,
+    marginTop: isWeb ? SPACING.md : SPACING.xl * 3,
     marginBottom: SPACING.lg,
   },
   searchInput: {
