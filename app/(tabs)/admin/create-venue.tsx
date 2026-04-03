@@ -265,7 +265,7 @@ export default function CreateVenueScreen() {
                           )
                         }
                       >
-                        <Text allowFontScaling={false} style={styles.stepperText}>âˆ'</Text>
+                        <Text allowFontScaling={false} style={styles.stepperText}>-</Text>
                       </TouchableOpacity>
                       <Text allowFontScaling={false} style={styles.quantityText}>
                         {vm.newTable.quantity}
