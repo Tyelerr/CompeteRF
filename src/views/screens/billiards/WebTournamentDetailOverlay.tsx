@@ -45,7 +45,7 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             {profile?.id_auto && t && (
               <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
-                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={28} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
+                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={36} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
@@ -76,7 +76,7 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             {profile?.id_auto && t && (
               <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
-                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={28} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
+                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={36} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
