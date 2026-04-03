@@ -19,24 +19,24 @@ function WebNavBar() {
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
 
   const tabs = [
-    { name: "index", label: "🏠 Home", path: "/" },
-    { name: "billiards", label: "🎱 Tournaments", path: "/billiards" },
+    { name: "index", label: "\uD83C\uDFE0 Home", path: "/" },
+    { name: "billiards", label: "\uD83C\uDFB1 Tournaments", path: "/billiards" },
     ...(canSubmitTournaments
-      ? [{ name: "submit", label: "➕ Submit", path: "/submit" }]
+      ? [{ name: "submit", label: "\u2795 Submit", path: "/submit" }]
       : []),
     ...(hasAdminAccess
-      ? [{ name: "admin", label: "⚙️ Admin", path: "/admin" }]
+      ? [{ name: "admin", label: "\u2699\uFE0F Admin", path: "/admin" }]
       : []),
-    { name: "shop", label: "🎁 Giveaways", path: "/shop" },
-    { name: "profile", label: "👤 Profile", path: "/profile" },
-    { name: "faq", label: "❓ FAQ", path: "/faq" },
+    { name: "shop", label: "\uD83C\uDF81 Giveaways", path: "/shop" },
+    { name: "profile", label: "\uD83D\uDC64 Profile", path: "/profile" },
+    { name: "faq", label: "\u2753 FAQ", path: "/faq" },
   ];
 
   return (
     <View style={styles.navbar}>
       <View style={styles.navInner}>
         <TouchableOpacity onPress={() => router.push("/")}>
-          <Text style={styles.logo}>⚫ Compete</Text>
+          <Text style={styles.logo}>{"\u26AB"} Compete</Text>
         </TouchableOpacity>
 
         <View style={styles.navLinks}>
@@ -69,9 +69,9 @@ function WebNavBar() {
 
 const styles = StyleSheet.create({
   navbar: {
-    backgroundColor: "#000000",
+    backgroundColor: COLORS.background,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    borderBottomColor: COLORS.border,
     height: 60,
     justifyContent: "center",
     paddingHorizontal: 24,
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   logo: {
-    color: "#ffffff",
+    color: COLORS.text,
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -103,12 +103,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   navLinkText: {
-    color: "#888888",
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: "500",
   },
   navLinkTextActive: {
-    color: "#ffffff",
+    color: COLORS.text,
     fontWeight: "600",
   },
 });
@@ -117,8 +117,6 @@ export default function TabLayout() {
   const { canSubmitTournaments, profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
 
-  // Android: read the system navigation bar inset so the dock is never clipped.
-  // iOS and web: insets.bottom is 0 here since we only call this on mobile.
   const insets = useSafeAreaInsets();
   const androidBottomPad = Platform.OS === "android" ? insets.bottom : 0;
 
@@ -164,8 +162,6 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: COLORS.background,
           borderTopColor: COLORS.border,
-          // Android: expand height by the system nav bar inset so icons
-          // are never clipped by gesture/button navigation bar.
           height: Platform.select({ android: 85, default: 98 }),
           paddingBottom: Platform.select({ android: 32, default: 10 }),
           paddingTop: Platform.select({ android: 4, default: 10 }),
@@ -187,11 +183,7 @@ export default function TabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              emoji={"\uD83C\uDFE0"}
-              color={color}
-              focused={focused}
-            />
+            <TabBarIcon emoji={"\uD83C\uDFE0"} color={color} focused={focused} />
           ),
         }}
       />
@@ -200,11 +192,7 @@ export default function TabLayout() {
         options={{
           title: "Billiards",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              emoji={"\uD83C\uDFB1"}
-              color={color}
-              focused={focused}
-            />
+            <TabBarIcon emoji={"\uD83C\uDFB1"} color={color} focused={focused} />
           ),
         }}
       />
@@ -223,11 +211,7 @@ export default function TabLayout() {
         options={{
           title: "Admin",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              emoji={"\u2699\uFE0F"}
-              color={color}
-              focused={focused}
-            />
+            <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />
           ),
           href: hasAdminAccess ? undefined : null,
         }}
@@ -237,11 +221,7 @@ export default function TabLayout() {
         options={{
           title: "Giveaways",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              emoji={"\uD83C\uDF81"}
-              color={color}
-              focused={focused}
-            />
+            <TabBarIcon emoji={"\uD83C\uDF81"} color={color} focused={focused} />
           ),
         }}
       />
@@ -250,11 +230,7 @@ export default function TabLayout() {
         options={{
           title: "Profile",
           tabBarIcon: ({ color, focused }) => (
-            <TabBarIcon
-              emoji={"\uD83D\uDC64"}
-              color={color}
-              focused={focused}
-            />
+            <TabBarIcon emoji={"\uD83D\uDC64"} color={color} focused={focused} />
           ),
         }}
       />
@@ -277,5 +253,3 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
-

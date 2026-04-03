@@ -5,14 +5,15 @@ import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
 import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS } from "../../../theme/spacing";
-// Web-only component - no scaling needed
-const moderateScale = (v: number) => v;
-const scale = (v: number) => v;
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
 import { Button } from "../../components/common/button";
 import { FullScreenImageViewer } from "../../components/common/FullScreenImageViewer";
 import ReportModal from "../../components/common/ReportModal";
+
+// Web-only component - no scaling needed
+const moderateScale = (v: number) => v;
+const scale = (v: number) => v;
 
 interface Props { id: string; onClose: () => void; }
 
@@ -41,8 +42,8 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
         <View style={s.dialogWrap}>
           <View style={s.dialog}>
             <View style={s.header}>
-              <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
-              <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>{"\u2190"} Back</Text></TouchableOpacity>
+              <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>{"\u2715"}</Text></TouchableOpacity>
             </View>
             <View style={{ padding: 40, alignItems: "center" }}>
               <Text allowFontScaling={false} style={{ color: COLORS.textSecondary }}>Loading...</Text>
@@ -65,8 +66,8 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
       <View style={s.dialogWrap}>
         <View style={s.dialog}>
           <View style={s.header}>
-            <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>{"\u2190"} Back</Text></TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>{"\u2715"}</Text></TouchableOpacity>
           </View>
 
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -77,37 +78,38 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                     <View style={s.idBadge}><Text allowFontScaling={false} style={s.idText}>ID: {t.id}</Text></View>
                     <View style={s.gameBadge}><Text allowFontScaling={false} style={s.gameText}>{t.game_type?.toUpperCase()}</Text></View>
                     <View style={s.fmtBadge}><Text allowFontScaling={false} style={s.fmtText}>{t.tournament_format?.replace("_", " ")}</Text></View>
-                    {t.is_recurring && <View style={s.fmtBadge}><Text allowFontScaling={false} style={s.fmtText}>🔄 Weekly</Text></View>}
+                    {t.is_recurring && <View style={s.fmtBadge}><Text allowFontScaling={false} style={s.fmtText}>{"\uD83D\uDD04"} Weekly</Text></View>}
                   </View>
                   <Text allowFontScaling={false} style={s.title}>{t.name}</Text>
                   {t.description && <Text allowFontScaling={false} style={s.desc}>{t.description}</Text>}
                 </View>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {profile?.id_auto && (
-                  <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 8, justifyContent: "center", marginRight: 4 }}>
-                    <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={48} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
-                  </TouchableOpacity>
-                )}
-                <View style={{ alignItems: "center" }}>
-                  {imageUrl ? (
-                    <Image source={{ uri: imageUrl }} style={s.img} resizeMode="cover" />
-                  ) : (
-                    <View style={s.imgPlaceholder}><Text allowFontScaling={false} style={{ fontSize: moderateScale(32) }}>🎱</Text></View>
-                  )}
-                  {imageUrl && (
-                    <TouchableOpacity style={s.viewImgBtn} onPress={() => setShowImg(true)}>
-                      <Text allowFontScaling={false} style={s.viewImgText}>🔍 View Image</Text>
+                <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                  {profile?.id_auto && (
+                    <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 8, justifyContent: "center", marginRight: 4 }}>
+                      <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={48} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
                     </TouchableOpacity>
                   )}
+                  <View style={{ alignItems: "center" }}>
+                    {imageUrl ? (
+                      <Image source={{ uri: imageUrl }} style={s.img} resizeMode="cover" />
+                    ) : (
+                      <View style={s.imgPlaceholder}><Text allowFontScaling={false} style={{ fontSize: 32 }}>{"\uD83C\uDFB1"}</Text></View>
+                    )}
+                    {imageUrl && (
+                      <TouchableOpacity style={s.viewImgBtn} onPress={() => setShowImg(true)}>
+                        <Text allowFontScaling={false} style={s.viewImgText}>{"\uD83D\uDD0D"} View Image</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
 
               {chipRanges && (
                 <View style={s.section}>
-                  <Text allowFontScaling={false} style={s.sectionTitle}>🎰 CHIP CHART</Text>
+                  <Text allowFontScaling={false} style={s.sectionTitle}>{"\uD83C\uDFA0"} CHIP CHART</Text>
                   {chipRanges.map((r: any, i: number) => (
                     <Text allowFontScaling={false} key={i} style={{ color: COLORS.text, textAlign: "center", paddingVertical: 2 }}>
-                      {r.label || `${r.minRating}–${r.maxRating}`}:{" "}
+                      {r.label || (r.minRating + "\u2013" + r.maxRating)}:{" "}
                       <Text style={{ color: COLORS.primary, fontWeight: "700" }}>{r.chips} Chip{r.chips !== 1 ? "s" : ""}</Text>
                     </Text>
                   ))}
@@ -115,13 +117,13 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
               )}
 
               <View style={s.section}>
-                <Text allowFontScaling={false} style={s.sectionTitle}>📅 Date & Time</Text>
+                <Text allowFontScaling={false} style={s.sectionTitle}>{"\uD83D\uDCC5"} Date & Time</Text>
                 <Text allowFontScaling={false} style={s.sectionText}>{vm.formattedDate}</Text>
                 <Text allowFontScaling={false} style={s.sectionText}>{vm.formattedTime}</Text>
               </View>
 
               <View style={s.section}>
-                <Text allowFontScaling={false} style={s.sectionTitle}>💰 Entry & Prizes</Text>
+                <Text allowFontScaling={false} style={s.sectionTitle}>{"\uD83D\uDCB0"} Entry & Prizes</Text>
                 <View style={s.row}>
                   <Text allowFontScaling={false} style={s.label}>Entry Fee:</Text>
                   <Text allowFontScaling={false} style={s.val}>{vm.formattedEntryFee}</Text>
@@ -135,7 +137,7 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
               </View>
 
               <View style={s.section}>
-                <Text allowFontScaling={false} style={s.sectionTitle}>🎱 Details</Text>
+                <Text allowFontScaling={false} style={s.sectionTitle}>{"\uD83C\uDFB1"} Details</Text>
                 {t.table_size && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Table Size:</Text><Text allowFontScaling={false} style={s.val}>{t.table_size}</Text></View>}
                 <View style={s.row}><Text allowFontScaling={false} style={s.label}>Reports to Fargo:</Text><Text allowFontScaling={false} style={s.val}>{t.reports_to_fargo ? "Yes" : "No"}</Text></View>
                 <View style={s.row}><Text allowFontScaling={false} style={s.label}>Calcutta:</Text><Text allowFontScaling={false} style={s.val}>{t.calcutta ? "Yes" : "No"}</Text></View>
@@ -145,27 +147,27 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
               </View>
 
               <View style={s.section}>
-                <Text allowFontScaling={false} style={s.sectionTitle}>📍 Location</Text>
+                <Text allowFontScaling={false} style={s.sectionTitle}>{"\uD83D\uDCCD"} Location</Text>
                 <Text allowFontScaling={false} style={{ color: COLORS.text, fontWeight: "600", marginBottom: 4 }}>{t.venues?.venue}</Text>
                 <Text allowFontScaling={false} style={s.sectionText}>{t.venues?.address}</Text>
                 <Text allowFontScaling={false} style={s.sectionText}>{t.venues?.city}, {t.venues?.state} {t.venues?.zip_code}</Text>
-                {t.venues?.phone && <Text allowFontScaling={false} style={{ color: COLORS.textSecondary, fontSize: moderateScale(13), marginTop: 6 }}>📞 {t.venues.phone}</Text>}
+                {t.venues?.phone && <Text allowFontScaling={false} style={{ color: COLORS.textSecondary, fontSize: 13, marginTop: 6 }}>{"\uD83D\uDCDE"} {t.venues.phone}</Text>}
                 <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-                  <Button title="📍 Open in Maps" onPress={vm.openMaps} variant="outline" size="sm" />
+                  <Button title="Open in Maps" onPress={vm.openMaps} variant="outline" size="sm" />
                 </View>
               </View>
 
               <View style={{ flexDirection: "row", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
                 <TouchableOpacity style={s.reportBtn} onPress={() => report.openReportModal("tournament", t.id.toString())}>
                   <Ionicons name="flag-outline" size={14} color="#E53935" />
-                  <Text allowFontScaling={false} style={{ color: "#E53935", fontSize: moderateScale(13), fontWeight: "600", marginLeft: 4 }}>Report</Text>
+                  <Text allowFontScaling={false} style={{ color: "#E53935", fontSize: 13, fontWeight: "600", marginLeft: 4 }}>Report</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.closeActionBtn} onPress={onClose}>
-                  <Text allowFontScaling={false} style={{ color: "#fff", fontSize: moderateScale(13), fontWeight: "600" }}>✕ Close</Text>
+                  <Text allowFontScaling={false} style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>{"\u2715"} Close</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: COLORS.textMuted, textAlign: "center", marginTop: 16, opacity: 0.6 }}>
+              <Text allowFontScaling={false} style={{ fontSize: 11, color: COLORS.textMuted, textAlign: "center", marginTop: 16, opacity: 0.6 }}>
                 This tournament is organized by {t.venues?.venue || "an independent venue"}. Compete is not the organizer.
               </Text>
               <View style={{ height: 24 }} />
@@ -184,33 +186,33 @@ const s = StyleSheet.create({
   backdrop: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", zIndex: 2000 },
   dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24, pointerEvents: "box-none" as any },
   dialog: { width: 720, maxWidth: "92%" as any, maxHeight: "88vh" as any, backgroundColor: COLORS.background, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: scale(16), paddingVertical: scale(14), backgroundColor: COLORS.background },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.background },
   backBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  backBtnText: { color: COLORS.primary, fontSize: moderateScale(14) },
-  closeBtn: { backgroundColor: COLORS.error, width: scale(28), height: scale(28), borderRadius: 6, alignItems: "center", justifyContent: "center" },
-  closeBtnText: { color: "#fff", fontSize: moderateScale(14), fontWeight: "700" },
+  backBtnText: { color: COLORS.primary, fontSize: 14 },
+  closeBtn: { backgroundColor: COLORS.error, width: 28, height: 28, borderRadius: 6, alignItems: "center", justifyContent: "center" },
+  closeBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
   scroll: { maxHeight: "calc(88vh - 56px)" as any },
-  content: { padding: scale(20) },
-  topRow: { flexDirection: "row", marginBottom: scale(16) },
-  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: scale(10) },
+  content: { padding: 20 },
+  topRow: { flexDirection: "row", marginBottom: 16 },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   idBadge: { backgroundColor: "#000", paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4, borderWidth: 1, borderColor: COLORS.border },
-  idText: { color: "#fff", fontSize: moderateScale(11), fontWeight: "700" },
+  idText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   gameBadge: { backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4 },
-  gameText: { color: "#fff", fontSize: moderateScale(11), fontWeight: "600" },
+  gameText: { color: "#fff", fontSize: 11, fontWeight: "600" },
   fmtBadge: { backgroundColor: COLORS.surface, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4 },
-  fmtText: { color: COLORS.text, fontSize: moderateScale(11) },
-  title: { fontSize: moderateScale(22), fontWeight: "700", color: COLORS.text, marginBottom: 8 },
-  desc: { fontSize: moderateScale(14), color: COLORS.textSecondary, lineHeight: moderateScale(20) },
-  img: { width: scale(140), height: scale(140), borderRadius: 8 },
-  imgPlaceholder: { width: scale(140), height: scale(140), borderRadius: 8, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
+  fmtText: { color: COLORS.text, fontSize: 11 },
+  title: { fontSize: 22, fontWeight: "700", color: COLORS.text, marginBottom: 8 },
+  desc: { fontSize: 14, color: COLORS.textSecondary, lineHeight: 20 },
+  img: { width: 140, height: 140, borderRadius: 8 },
+  imgPlaceholder: { width: 140, height: 140, borderRadius: 8, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
   viewImgBtn: { marginTop: 8, borderWidth: 1, borderColor: COLORS.primary, borderRadius: 4, paddingVertical: 4, paddingHorizontal: 10 },
-  viewImgText: { color: COLORS.primary, fontSize: moderateScale(11), fontWeight: "600" },
-  section: { backgroundColor: COLORS.surface, borderRadius: scale(10), padding: scale(14), marginBottom: scale(12), borderWidth: 1, borderColor: COLORS.border },
-  sectionTitle: { fontSize: moderateScale(14), fontWeight: "600", color: COLORS.text, marginBottom: 8 },
-  sectionText: { fontSize: moderateScale(14), color: COLORS.textSecondary },
+  viewImgText: { color: COLORS.primary, fontSize: 11, fontWeight: "600" },
+  section: { backgroundColor: COLORS.surface, borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border },
+  sectionTitle: { fontSize: 14, fontWeight: "600", color: COLORS.text, marginBottom: 8 },
+  sectionText: { fontSize: 14, color: COLORS.textSecondary },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  label: { fontSize: moderateScale(14), color: COLORS.textSecondary },
-  val: { fontSize: moderateScale(14), color: COLORS.text },
+  label: { fontSize: 14, color: COLORS.textSecondary },
+  val: { fontSize: 14, color: COLORS.text },
   reportBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: "#E53935", backgroundColor: "rgba(229,57,53,0.1)" },
   closeActionBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 6, backgroundColor: COLORS.error, alignItems: "center" },
 });

@@ -20,6 +20,8 @@ import { Dropdown } from "./dropdown";
 import { RangeSlider } from "./range-slider";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 const GAME_TYPES = [
   { label: "All Game Types", value: "" },
@@ -239,7 +241,7 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
               {renderDropdowns()}
               {renderSliders()}
               {renderCheckboxes()}
-              <View style={{ height: scale(SPACING.xl) }} />
+              <View style={{ height: wxSc(SPACING.xl) }} />
             </ScrollView>
           )}
           {renderFooter()}
@@ -250,38 +252,38 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
 };
 
 const mStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center", padding: scale(SPACING.lg) },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center", padding: wxSc(SPACING.lg) },
   container: { backgroundColor: COLORS.background, borderRadius: RADIUS.xl, width: "100%", maxHeight: "90%" },
-  header: { flexDirection: "row", justifyContent: "center", alignItems: "center", padding: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  title: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "600", color: COLORS.text },
-  closeButton: { position: "absolute", right: scale(SPACING.md), backgroundColor: "#E53935", width: scale(36), height: scale(36), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
-  closeButtonText: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.white, fontWeight: "600" },
-  content: { padding: scale(SPACING.md) },
-  label: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: scale(SPACING.sm), marginTop: scale(SPACING.md) },
-  sectionTitle: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, marginTop: scale(SPACING.lg), marginBottom: scale(SPACING.sm) },
-  fargoNote: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.primary, marginTop: scale(SPACING.sm), marginBottom: -scale(SPACING.xs), fontStyle: "italic" },
-  daysRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: scale(SPACING.md) },
-  dayButton: { width: scale(40), height: scale(40), borderRadius: scale(20), borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
+  header: { flexDirection: "row", justifyContent: "center", alignItems: "center", padding: wxSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  title: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "600", color: COLORS.text },
+  closeButton: { position: "absolute", right: wxSc(SPACING.md), backgroundColor: "#E53935", width: wxSc(36), height: wxSc(36), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
+  closeButtonText: { fontSize: wxMs(FONT_SIZES.lg), color: COLORS.white, fontWeight: "600" },
+  content: { padding: wxSc(SPACING.md) },
+  label: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.sm), marginTop: wxSc(SPACING.md) },
+  sectionTitle: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, marginTop: wxSc(SPACING.lg), marginBottom: wxSc(SPACING.sm) },
+  fargoNote: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, marginTop: wxSc(SPACING.sm), marginBottom: -wxSc(SPACING.xs), fontStyle: "italic" },
+  daysRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: wxSc(SPACING.md) },
+  dayButton: { width: wxSc(40), height: wxSc(40), borderRadius: wxSc(20), borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
   dayButtonActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  dayButtonText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
+  dayButtonText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary },
   dayButtonTextActive: { color: COLORS.white, fontWeight: "600" },
-  dateRow: { flexDirection: "row", gap: scale(SPACING.md) },
-  checkboxRow: { flexDirection: "row", alignItems: "center", marginTop: scale(SPACING.md) },
-  checkbox: { width: scale(24), height: scale(24), borderRadius: RADIUS.sm, borderWidth: 2, borderColor: COLORS.border, marginRight: scale(SPACING.md), alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
+  dateRow: { flexDirection: "row", gap: wxSc(SPACING.md) },
+  checkboxRow: { flexDirection: "row", alignItems: "center", marginTop: wxSc(SPACING.md) },
+  checkbox: { width: wxSc(24), height: wxSc(24), borderRadius: RADIUS.sm, borderWidth: 2, borderColor: COLORS.border, marginRight: wxSc(SPACING.md), alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
   checkboxActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  checkmark: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
-  checkboxLabel: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
-  footer: { flexDirection: "row", padding: scale(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border, gap: scale(SPACING.md) },
-  applyButton: { flex: 1, backgroundColor: "#4CAF50", borderRadius: RADIUS.md, padding: scale(SPACING.md), alignItems: "center" },
-  applyButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.white, fontWeight: "600" },
-  resetButton: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), alignItems: "center" },
-  resetButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
+  checkmark: { color: COLORS.white, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600" },
+  checkboxLabel: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
+  footer: { flexDirection: "row", padding: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border, gap: wxSc(SPACING.md) },
+  applyButton: { flex: 1, backgroundColor: "#4CAF50", borderRadius: RADIUS.md, padding: wxSc(SPACING.md), alignItems: "center" },
+  applyButtonText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.white, fontWeight: "600" },
+  resetButton: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), alignItems: "center" },
+  resetButtonText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
 });
 
 const wStyles = StyleSheet.create({
   overlay: { justifyContent: "center", alignItems: "center", padding: 40 },
   container: { width: 780, maxWidth: "90%" as any, borderRadius: RADIUS.lg, overflow: "visible" as any },
-  body: { padding: scale(SPACING.md), overflow: "visible" as any },
-  twoCol: { flexDirection: "row", gap: scale(SPACING.xl), overflow: "visible" as any },
+  body: { padding: wxSc(SPACING.md), overflow: "visible" as any },
+  twoCol: { flexDirection: "row", gap: wxSc(SPACING.xl), overflow: "visible" as any },
   col: { flex: 1, overflow: "visible" as any },
 });

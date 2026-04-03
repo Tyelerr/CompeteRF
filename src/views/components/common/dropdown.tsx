@@ -5,14 +5,16 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 
+const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
+
 interface DropdownOption { label: string; value: string; }
 interface DropdownProps {
   label?: string; placeholder?: string; options: DropdownOption[]; value?: string;
   onSelect: (value: string) => void; error?: string; disabled?: boolean;
   searchable?: boolean; searchPlaceholder?: string; compact?: boolean;
 }
-
-const isWeb = Platform.OS === "web";
 
 const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, compact, onSelect, onClose }: { anchorRef: React.RefObject<any>; options: DropdownOption[]; value?: string; searchable?: boolean; searchPlaceholder?: string; compact?: boolean; onSelect: (v: string) => void; onClose: () => void }) => {
   const [searchText, setSearchText] = useState("");
@@ -67,7 +69,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
         {/* @ts-ignore */}
         <TouchableOpacity ref={anchorRef} style={[wStyles.selector, compact && wStyles.selectorCompact, isOpen && wStyles.selectorOpen, !isOpen && hovered && !disabled && wStyles.selectorHovered, error && wStyles.selectorError, disabled && wStyles.selectorDisabled, { transition: "border-color 0.18s ease, box-shadow 0.18s ease", cursor: disabled ? "not-allowed" : "pointer" } as any]} onPress={handlePress} activeOpacity={disabled ? 1 : 0.7} onMouseEnter={() => !disabled && setHovered(true)} onMouseLeave={() => setHovered(false)}>
           <Text allowFontScaling={false} style={[wStyles.selectorText, compact && wStyles.selectorTextCompact, !selectedOption && wStyles.placeholder, disabled && wStyles.textDisabled, isOpen && wStyles.selectorTextOpen]} numberOfLines={1}>{selectedOption?.label || placeholder}</Text>
-          <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "▲" : "▼"}</Text>
+          <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "\u25B2" : "\u25BC"}</Text>
         </TouchableOpacity>
         {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
         {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={onSelect} onClose={() => setIsOpen(false)} />}
@@ -89,7 +91,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
       {label && <Text allowFontScaling={false} style={styles.label}>{label}</Text>}
       <TouchableOpacity ref={selectorRef as any} style={[styles.selector, error && styles.selectorError, disabled && styles.selectorDisabled]} onPress={handleMobilePress} activeOpacity={disabled ? 1 : 0.7}>
         <Text allowFontScaling={false} style={[styles.selectorText, !selectedOption && styles.placeholder, disabled && styles.textDisabled]} numberOfLines={1} ellipsizeMode="tail">{selectedOption?.label || placeholder}</Text>
-        <Text allowFontScaling={false} style={[styles.arrow, disabled && styles.textDisabled]}>▼</Text>
+        <Text allowFontScaling={false} style={[styles.arrow, disabled && styles.textDisabled]}>{"\u25BC"}</Text>
       </TouchableOpacity>
       {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
       <Modal visible={isOpen} transparent animationType="fade">
@@ -119,25 +121,25 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
 
 const styles = StyleSheet.create({
   container: { marginTop: 0 },
-  label: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: scale(SPACING.xs), transition: "color 0.18s ease" as any },
-  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, height: scale(44), paddingHorizontal: scale(SPACING.md), paddingVertical: 0, flexDirection: "row", alignItems: "center", overflow: "hidden" },
+  label: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.xs), transition: "color 0.18s ease" as any },
+  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, height: wxSc(44), paddingHorizontal: wxSc(SPACING.md), paddingVertical: 0, flexDirection: "row", alignItems: "center", overflow: "hidden" },
   selectorError: { borderColor: COLORS.error },
   selectorDisabled: { backgroundColor: COLORS.background, opacity: 0.6 },
-  selectorText: { fontSize: moderateScale(FONT_SIZES.md), lineHeight: moderateScale(FONT_SIZES.md + 2), color: COLORS.text, flex: 1, minWidth: 0, width: "100%" as any },
+  selectorText: { fontSize: wxMs(FONT_SIZES.md), lineHeight: wxMs(FONT_SIZES.md + 2), color: COLORS.text, flex: 1, minWidth: 0, width: "100%" as any },
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
-  arrow: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: 4 },
-  error: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.error, marginTop: scale(SPACING.xs) },
+  arrow: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: 4 },
+  error: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, marginTop: wxSc(SPACING.xs) },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
   dropdownWrapper: {},
   dropdown: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, maxHeight: 280, borderWidth: 1, borderColor: COLORS.border },
-  searchContainer: { padding: scale(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  searchInput: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.md), fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
-  emptyContainer: { paddingVertical: scale(SPACING.lg), alignItems: "center" },
-  emptyText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
-  option: { paddingVertical: scale(10), paddingHorizontal: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  searchContainer: { padding: wxSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  searchInput: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: wxSc(SPACING.sm), paddingHorizontal: wxSc(SPACING.md), fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
+  emptyContainer: { paddingVertical: wxSc(SPACING.lg), alignItems: "center" },
+  emptyText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted },
+  option: { paddingVertical: wxSc(10), paddingHorizontal: wxSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   optionSelected: { backgroundColor: COLORS.primaryDark },
-  optionText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
+  optionText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
   optionTextSelected: { color: COLORS.white, fontWeight: "600" },
 });
 
@@ -146,17 +148,15 @@ const wStyles = StyleSheet.create({
   labelActive: { color: COLORS.primary },
   selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, height: 38, paddingHorizontal: 10, paddingVertical: 0, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   selectorCompact: { height: 32, paddingHorizontal: 8, borderRadius: 4 },
-  selectorHovered: { borderColor: COLORS.primary + "80", boxShadow: `0 0 0 2px ${COLORS.primary}22` } as any,
-  selectorOpen: { borderColor: COLORS.primary, boxShadow: `0 0 0 3px ${COLORS.primary}33` } as any,
+  selectorHovered: { borderColor: COLORS.primary + "80" } as any,
+  selectorOpen: { borderColor: COLORS.primary } as any,
   selectorError: { borderColor: COLORS.error },
   selectorDisabled: { backgroundColor: COLORS.background, opacity: 0.6 },
-  selectorText: { fontSize: 13, color: COLORS.text, flex: 1, transition: "color 0.18s ease" as any },
+  selectorText: { fontSize: 13, color: COLORS.text, flex: 1 },
   selectorTextOpen: { color: COLORS.primary },
   selectorTextCompact: { fontSize: 12 },
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
-  arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4, transition: "color 0.18s ease, transform 0.18s ease" as any },
+  arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4 },
   arrowOpen: { color: COLORS.primary },
 });
-
-

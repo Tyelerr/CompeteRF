@@ -7,6 +7,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 interface GiveawayCardProps {
   giveaway: Giveaway;
@@ -80,38 +82,38 @@ export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onVi
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: COLORS.surface, borderRadius: scale(12), padding: scale(SPACING.md), marginBottom: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
-  containerWeb: { padding: scale(SPACING.lg), marginBottom: 0 },
-  content: { flexDirection: "row", marginBottom: scale(SPACING.md) },
-  contentWeb: { marginBottom: scale(SPACING.lg) },
-  imageContainer: { width: scale(100), height: scale(100), borderRadius: scale(8), overflow: "hidden", backgroundColor: COLORS.surfaceLight, marginRight: scale(SPACING.md), flexShrink: 0, position: "relative" },
-  imageContainerWeb: { width: scale(140), height: scale(140) },
+  container: { backgroundColor: COLORS.surface, borderRadius: wxSc(12), padding: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
+  containerWeb: { padding: wxSc(SPACING.lg), marginBottom: 0 },
+  content: { flexDirection: "row", marginBottom: wxSc(SPACING.md) },
+  contentWeb: { marginBottom: wxSc(SPACING.lg) },
+  imageContainer: { width: wxSc(100), height: wxSc(100), borderRadius: wxSc(8), overflow: "hidden", backgroundColor: COLORS.surfaceLight, marginRight: wxSc(SPACING.md), flexShrink: 0, position: "relative" },
+  imageContainerWeb: { width: wxSc(140), height: wxSc(140) },
   image: { width: "100%", height: "100%" },
   imagePlaceholder: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center", backgroundColor: COLORS.surfaceLight },
-  imagePlaceholderText: { fontSize: moderateScale(40) },
+  imagePlaceholderText: { fontSize: wxMs(40) },
   imageClosedOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.40)" },
   info: { flex: 1 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: scale(SPACING.xs) },
-  name: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: scale(SPACING.sm) },
-  value: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.primary, flexShrink: 0 },
-  description: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: scale(SPACING.xs), lineHeight: moderateScale(18) },
-  entries: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted, marginBottom: 6 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: wxSc(SPACING.xs) },
+  name: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: wxSc(SPACING.sm) },
+  value: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.primary, flexShrink: 0 },
+  description: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.xs), lineHeight: wxMs(18) },
+  entries: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, marginBottom: 6 },
   progressContainer: { marginBottom: 6 },
   progressBackground: { height: 6, backgroundColor: COLORS.surfaceLight, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: COLORS.primary, borderRadius: 3 },
   progressFillClosed: { backgroundColor: COLORS.textMuted },
-  daysRemaining: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
+  daysRemaining: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted },
   textMuted: { color: COLORS.textMuted, opacity: 0.7 },
-  buttons: { flexDirection: "row", gap: scale(SPACING.sm) },
-  buttonsWeb: { gap: scale(SPACING.md) },
-  enterButton: { flex: 1, backgroundColor: COLORS.primary, paddingVertical: scale(SPACING.sm + 2), borderRadius: scale(8), alignItems: "center" },
-  enterButtonWeb: { paddingVertical: scale(SPACING.md) },
-  enterButtonText: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
+  buttons: { flexDirection: "row", gap: wxSc(SPACING.sm) },
+  buttonsWeb: { gap: wxSc(SPACING.md) },
+  enterButton: { flex: 1, backgroundColor: COLORS.primary, paddingVertical: wxSc(SPACING.sm + 2), borderRadius: wxSc(8), alignItems: "center" },
+  enterButtonWeb: { paddingVertical: wxSc(SPACING.md) },
+  enterButtonText: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
   enteredButton: { backgroundColor: COLORS.surfaceLight },
-  enteredButtonText: { color: COLORS.textMuted, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
+  enteredButtonText: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
   endedButton: { backgroundColor: COLORS.surfaceLight, borderWidth: 1, borderColor: COLORS.border },
-  endedButtonText: { color: COLORS.textMuted, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
-  viewButton: { flex: 1, backgroundColor: COLORS.surfaceLight, paddingVertical: scale(SPACING.sm + 2), borderRadius: scale(8), alignItems: "center" },
-  viewButtonWeb: { paddingVertical: scale(SPACING.md) },
-  viewButtonText: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600" },
+  endedButtonText: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
+  viewButton: { flex: 1, backgroundColor: COLORS.surfaceLight, paddingVertical: wxSc(SPACING.sm + 2), borderRadius: wxSc(8), alignItems: "center" },
+  viewButtonWeb: { paddingVertical: wxSc(SPACING.md) },
+  viewButtonText: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
 });

@@ -4,7 +4,7 @@ import { Dimensions, Platform, StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { moderateScale, scale } from "../../../utils/scaling";
+import { webMs, webSc } from "../../../utils/scaling";
 
 const isWeb = Platform.OS === "web";
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -36,7 +36,7 @@ export const RangeSlider = ({ label, minValue, maxValue, min, max, step = 1, onV
       <View style={styles.container}>
         <View style={styles.header}>
           <Text allowFontScaling={false} style={styles.label}>{label}</Text>
-          <Text allowFontScaling={false} style={styles.value}>{formatValue(values[0])} – {formatValue(values[1])}</Text>
+          <Text allowFontScaling={false} style={styles.value}>{formatValue(values[0])} {"\u2013"} {formatValue(values[1])}</Text>
         </View>
         <View style={{ height: 36, justifyContent: "center", position: "relative" as any }}>
           <View style={{ position: "absolute" as any, left: 0, right: 0, height: 6, backgroundColor: COLORS.border, borderRadius: 3 }} />
@@ -59,7 +59,7 @@ export const RangeSlider = ({ label, minValue, maxValue, min, max, step = 1, onV
     <View style={styles.container}>
       <View style={styles.header}>
         <Text allowFontScaling={false} style={styles.label}>{label}</Text>
-        <Text allowFontScaling={false} style={styles.value}>{formatValue(values[0])} – {formatValue(values[1])}</Text>
+        <Text allowFontScaling={false} style={styles.value}>{formatValue(values[0])} {"\u2013"} {formatValue(values[1])}</Text>
       </View>
       <View style={styles.sliderWrapper}>
         <MultiSlider values={values} min={min} max={max} step={step} sliderLength={SLIDER_LENGTH} onValuesChange={handleValuesChange} onValuesChangeFinish={handleValuesChangeFinish} selectedStyle={styles.selectedTrack} unselectedStyle={styles.unselectedTrack} trackStyle={styles.track} markerStyle={styles.marker} pressedMarkerStyle={styles.markerPressed} containerStyle={styles.sliderContainer} minMarkerOverlapDistance={20} snapped allowOverlap={false} markerOffsetY={2} />
@@ -73,17 +73,17 @@ export const RangeSlider = ({ label, minValue, maxValue, min, max, step = 1, onV
 };
 
 const styles = StyleSheet.create({
-  container: { marginVertical: scale(SPACING.md) },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: scale(SPACING.sm) },
-  label: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
-  value: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
-  sliderWrapper: { alignItems: "center", justifyContent: "center", paddingVertical: scale(SPACING.sm) },
+  container: { marginVertical: webSc(SPACING.md) },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: webSc(SPACING.sm) },
+  label: { fontSize: webMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  value: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text },
+  sliderWrapper: { alignItems: "center", justifyContent: "center", paddingVertical: webSc(SPACING.sm) },
   sliderContainer: { height: 40, justifyContent: "center" },
   track: { height: 6, borderRadius: 3, backgroundColor: COLORS.border },
   selectedTrack: { backgroundColor: COLORS.primary },
   unselectedTrack: { backgroundColor: COLORS.border },
-  marker: { width: scale(24), height: scale(24), borderRadius: scale(12), backgroundColor: COLORS.primary, borderWidth: 3, borderColor: COLORS.white, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3, elevation: 5 },
-  markerPressed: { width: scale(28), height: scale(28), borderRadius: scale(14), backgroundColor: COLORS.primary, borderWidth: 3, borderColor: COLORS.white },
-  labelsRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: scale(SPACING.xs) },
-  sliderLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
+  marker: { width: webSc(24), height: webSc(24), borderRadius: webSc(12), backgroundColor: COLORS.primary, borderWidth: 3, borderColor: COLORS.white, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3, elevation: 5 },
+  markerPressed: { width: webSc(28), height: webSc(28), borderRadius: webSc(14), backgroundColor: COLORS.primary, borderWidth: 3, borderColor: COLORS.white },
+  labelsRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.xs) },
+  sliderLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
 });

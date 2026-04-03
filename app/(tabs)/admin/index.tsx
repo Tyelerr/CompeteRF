@@ -29,6 +29,8 @@ import {
 } from "../../../src/views/components/dashboard";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 // --- Root router -----------------------------------------------------------
 
@@ -688,22 +690,22 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   emoji: {
-    fontSize: moderateScale(60),
+    fontSize: wxMs(60),
     marginBottom: SPACING.md,
   },
   title: {
-    fontSize: moderateScale(FONT_SIZES.xl),
+    fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.sm,
     textAlign: "center",
   },
   subtitle: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.lg,
@@ -718,13 +720,13 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.lg,
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.xl),
+    fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -748,7 +750,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: scale(54),
+    minHeight: wxSc(54),
   },
   managementCardMobile: {
     width: "48%" as any,
@@ -757,25 +759,25 @@ const styles = StyleSheet.create({
     width: "31.5%" as any,
   },
   managementIcon: {
-    fontSize: moderateScale(18),
-    marginBottom: scale(2),
+    fontSize: wxMs(18),
+    marginBottom: wxSc(2),
   },
   managementValue: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   managementLabel: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.text,
-    marginTop: scale(2),
+    marginTop: wxSc(2),
     textAlign: "center",
   },
   managementSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    marginTop: scale(2),
+    marginTop: wxSc(2),
     textAlign: "center",
   },
   section: {
@@ -788,13 +790,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   filterLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   filterDropdown: {
     flex: 1,
-    maxWidth: scale(160),
+    maxWidth: wxSc(160),
     marginLeft: SPACING.md,
   },
   analyticsRow: {
@@ -808,13 +810,13 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.sm,
   },
   quickStatsTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: scale(2),
+    marginBottom: wxSc(2),
   },
   quickStatsSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginBottom: SPACING.sm,
   },
@@ -833,24 +835,24 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   quickStatIconWrap: {
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(10),
+    width: wxSc(38),
+    height: wxSc(38),
+    borderRadius: wxSc(10),
     alignItems: "center",
     justifyContent: "center",
   },
   quickStatIcon: {
-    fontSize: moderateScale(18),
+    fontSize: wxMs(18),
   },
   quickStatNumber: {
-    fontSize: moderateScale(28),
+    fontSize: wxMs(28),
     fontWeight: "800",
     marginLeft: "auto",
-    minWidth: scale(44),
+    minWidth: wxSc(44),
     textAlign: "right",
   },
   quickStatLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
     flex: 1,

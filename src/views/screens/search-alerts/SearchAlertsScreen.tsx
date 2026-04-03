@@ -1,6 +1,6 @@
 ﻿import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { searchAlertService } from "../../../models/services/search-alert.service";
 import { SearchAlert } from "../../../models/types/search-alert.types";
 import { useAuthContext } from "../../../providers/AuthProvider";
@@ -10,12 +10,16 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Loading } from "../../components/common/loading";
 
+const isWeb = Platform.OS === "web";
+
 function AlertCard({ alert, onViewMatches, onEdit, onDelete, onToggleActive }: { alert: SearchAlert; onViewMatches: () => void; onEdit: () => void; onDelete: () => void; onToggleActive: () => void }) {
   const description = alert.description || searchAlertService.generateAlertDescription(alert.filter_criteria);
   const formatDate = (dateString: string) => {
     const [y, m, d] = dateString.split("-").map(Number);
     return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
   };
+
+  const matchText = alert.match_count + (alert.match_count === 1 ? " match" : " matches") + (alert.last_match_date ? " \u00B7 Last: " + formatDate(alert.last_match_date) : "");
 
   return (
     <View style={styles.alertCard}>
@@ -26,9 +30,7 @@ function AlertCard({ alert, onViewMatches, onEdit, onDelete, onToggleActive }: {
         </TouchableOpacity>
       </View>
       <Text allowFontScaling={false} style={styles.alertDescription} numberOfLines={2}>{description}</Text>
-      <Text allowFontScaling={false} style={styles.matchInfo}>
-        {alert.match_count} {alert.match_count === 1 ? "match" : "matches"}{alert.last_match_date ? ` · Last: ${formatDate(alert.last_match_date)}` : ""}
-      </Text>
+      <Text allowFontScaling={false} style={styles.matchInfo}>{matchText}</Text>
       <View style={styles.actionRow}>
         <TouchableOpacity style={[styles.actionButton, styles.actionOutline]} onPress={onViewMatches}>
           <Text allowFontScaling={false} style={styles.actionOutlineText}>View Matches</Text>
@@ -71,25 +73,26 @@ export default function SearchAlertsScreen() {
 
   const handleRefresh = async () => { setRefreshing(true); await loadAlerts(); };
   const handleCreate = () => router.push("/(tabs)/search-alerts/create" as any);
-  const handleEdit = (alertId: number) => router.push(`/(tabs)/search-alerts/edit/${alertId}` as any);
-  const handleViewMatches = (alertId: number) => router.push(`/(tabs)/search-alerts/matches/${alertId}` as any);
+  const handleEdit = (alertId: number) => router.push(("/(tabs)/search-alerts/edit/" + alertId) as any);
+  const handleViewMatches = (alertId: number) => router.push(("/(tabs)/search-alerts/matches/" + alertId) as any);
 
   const handleToggleActive = (alert: SearchAlert) => {
-    const title = alert.is_active ? "Disable Alert?" : "Enable Alert?";
-    const message = alert.is_active
-      ? `"${alert.name}" will stop matching new tournaments until re-enabled.`
-      : `"${alert.name}" will start matching new tournaments again.`;
+    const isActive = alert.is_active;
+    const title = isActive ? "Disable Alert?" : "Enable Alert?";
+    const message = isActive
+      ? '"' + alert.name + '" will stop matching new tournaments until re-enabled.'
+      : '"' + alert.name + '" will start matching new tournaments again.';
     Alert.alert(title, message, [
       { text: "Cancel", style: "cancel" },
       {
-        text: alert.is_active ? "Disable" : "Enable",
-        style: alert.is_active ? "destructive" : "default",
+        text: isActive ? "Disable" : "Enable",
+        style: isActive ? "destructive" : "default",
         onPress: async () => {
           try {
-            await searchAlertService.updateAlert(alert.id, { is_active: !alert.is_active });
-            setAlerts((prev) => prev.map((a) => a.id === alert.id ? { ...a, is_active: !a.is_active } : a));
+            await searchAlertService.updateAlert(alert.id, { is_active: !isActive });
+            setAlerts((prev) => prev.map((a) => a.id === alert.id ? { ...a, is_active: !isActive } : a));
           } catch {
-            Alert.alert("Error", `Failed to ${alert.is_active ? "disable" : "enable"} alert.`);
+            Alert.alert("Error", "Failed to " + (isActive ? "disable" : "enable") + " alert.");
           }
         },
       },
@@ -97,7 +100,8 @@ export default function SearchAlertsScreen() {
   };
 
   const handleDelete = (alert: SearchAlert) => {
-    Alert.alert("Delete Alert", `Are you sure you want to delete "${alert.name}"? This will also remove all match history.`, [
+    const msg = 'Are you sure you want to delete "' + alert.name + '"? This will also remove all match history.';
+    Alert.alert("Delete Alert", msg, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
         try {
@@ -129,7 +133,7 @@ export default function SearchAlertsScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text allowFontScaling={false} style={styles.emptyIcon}>🔔</Text>
+      <Text allowFontScaling={false} style={styles.emptyIcon}>{"\uD83D\uDD14"}</Text>
       <Text allowFontScaling={false} style={styles.emptyTitle}>No Search Alerts Yet</Text>
       <Text allowFontScaling={false} style={styles.emptySubtitle}>Create an alert to get notified when tournaments match your criteria.</Text>
     </View>
@@ -169,30 +173,39 @@ export default function SearchAlertsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(tabs)/profile" as any)}>
-          <Text allowFontScaling={false} style={styles.backButtonText}>‹ Back</Text>
-        </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.headerTitle}>Search Alerts</Text>
+      <View style={[styles.pageWrapper, isWeb && styles.pageWrapperWeb]}>
+        <View style={[styles.header, isWeb && styles.headerWeb]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(tabs)/profile" as any)}>
+            <Text allowFontScaling={false} style={styles.backButtonText}>{"\u2039"} Back</Text>
+          </TouchableOpacity>
+          <Text allowFontScaling={false} style={styles.headerTitle}>Search Alerts</Text>
+        </View>
+        <FlatList
+          data={alerts}
+          renderItem={renderAlert}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.list}
+          contentContainerStyle={[styles.listContent, alerts.length === 0 && styles.listContentEmpty]}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmptyState}
+          refreshControl={
+            isWeb ? undefined : (
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+            )
+          }
+          showsVerticalScrollIndicator={false}
+        />
       </View>
-      <FlatList
-        data={alerts}
-        renderItem={renderAlert}
-        keyExtractor={(item) => item.id.toString()}
-        style={styles.list}
-        contentContainerStyle={[styles.listContent, alerts.length === 0 && styles.listContentEmpty]}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmptyState}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
-        showsVerticalScrollIndicator={false}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  pageWrapper: { flex: 1 },
+  pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.xl + SPACING.lg), paddingBottom: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.backgroundCard },
+  headerWeb: { paddingTop: scale(SPACING.lg) },
   backButton: { marginRight: scale(SPACING.md) },
   backButtonText: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.primary, fontWeight: "600" },
   headerTitle: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text },

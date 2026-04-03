@@ -19,6 +19,8 @@ import { useBilling } from "../../../src/viewmodels/useBilling";
 import { Invoice } from "../../../src/features/billing/billing.types";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 const PLAN_FEATURES = [
   "Unlimited venue listings",
@@ -468,7 +470,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -488,18 +490,18 @@ const styles = StyleSheet.create({
   },
   backBtnWeb: { top: SPACING.lg },
   backText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.xl),
+    fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -509,24 +511,24 @@ const styles = StyleSheet.create({
     margin: SPACING.md,
     marginTop: SPACING.lg,
     backgroundColor: "#3D2A00",
-    borderRadius: scale(16),
+    borderRadius: wxSc(16),
     padding: SPACING.lg,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#F59E0B44",
   },
   foundingEmoji: {
-    fontSize: moderateScale(40),
+    fontSize: wxMs(40),
     marginBottom: SPACING.sm,
   },
   foundingTitle: {
-    fontSize: moderateScale(FONT_SIZES.xl),
+    fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "800",
     color: "#F59E0B",
     letterSpacing: 0.5,
   },
   foundingSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: "#F59E0B99",
     marginTop: SPACING.xs,
     textAlign: "center",
@@ -540,16 +542,16 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   promiseIcon: {
-    fontSize: moderateScale(FONT_SIZES.md),
-    width: scale(24),
+    fontSize: wxMs(FONT_SIZES.md),
+    width: wxSc(24),
     textAlign: "center",
-    marginTop: scale(1),
+    marginTop: wxSc(1),
   },
   promiseText: {
     flex: 1,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    lineHeight: moderateScale(FONT_SIZES.sm) * 1.6,
+    lineHeight: wxMs(FONT_SIZES.sm) * 1.6,
   },
   promiseBold: {
     color: COLORS.text,
@@ -558,21 +560,21 @@ const styles = StyleSheet.create({
 
   // Support
   supportText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: SPACING.sm,
-    lineHeight: moderateScale(FONT_SIZES.sm) * 1.5,
+    lineHeight: wxMs(FONT_SIZES.sm) * 1.5,
   },
   supportButton: {
-    borderRadius: scale(10),
+    borderRadius: wxSc(10),
     padding: SPACING.sm,
     alignItems: "center",
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
   supportButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -584,7 +586,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   sectionTitle: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -592,7 +594,7 @@ const styles = StyleSheet.create({
   // Card
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: wxSc(12),
     marginHorizontal: SPACING.md,
     marginTop: SPACING.xs,
     padding: SPACING.md,
@@ -606,12 +608,12 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
   cardLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
   cardValue: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "600",
   },
@@ -622,24 +624,24 @@ const styles = StyleSheet.create({
   },
   badge: {
     paddingHorizontal: SPACING.sm,
-    paddingVertical: scale(3),
-    borderRadius: scale(20),
+    paddingVertical: wxSc(3),
+    borderRadius: wxSc(20),
   },
   badgeText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "700",
     letterSpacing: 0.5,
   },
   warningBanner: {
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     padding: SPACING.sm,
     marginTop: SPACING.sm,
   },
   warningText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "600",
     textAlign: "center",
-    lineHeight: moderateScale(FONT_SIZES.xs) * 1.6,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.6,
   },
   emptyState: {
     alignItems: "center",
@@ -647,15 +649,15 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   emptyText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   emptySubtext: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
-    lineHeight: moderateScale(FONT_SIZES.xs) * 1.5,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
   },
   paymentRow: {
     flexDirection: "row",
@@ -664,28 +666,28 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
   cardIconWrap: {
-    width: scale(40),
-    height: scale(40),
+    width: wxSc(40),
+    height: wxSc(40),
     backgroundColor: COLORS.background,
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  cardIconText: { fontSize: moderateScale(20) },
-  paymentInfo: { flex: 1, gap: scale(2) },
+  cardIconText: { fontSize: wxMs(20) },
+  paymentInfo: { flex: 1, gap: wxSc(2) },
   actionButton: {
-    borderRadius: scale(10),
+    borderRadius: wxSc(10),
     padding: SPACING.md,
     alignItems: "center",
   },
   actionButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "700",
   },
   secondaryButton: {
-    borderRadius: scale(10),
+    borderRadius: wxSc(10),
     padding: SPACING.sm,
     alignItems: "center",
     borderWidth: 1,
@@ -693,16 +695,16 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   secondaryButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   actionNote: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     textAlign: "center",
     marginTop: SPACING.sm,
-    lineHeight: moderateScale(FONT_SIZES.xs) * 1.5,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
   },
   invoiceRow: {
     flexDirection: "row",
@@ -714,13 +716,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  invoiceLeft: { gap: scale(2) },
+  invoiceLeft: { gap: wxSc(2) },
   invoiceDate: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   invoiceAmount: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "700",
   },
@@ -730,10 +732,10 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   invoiceStatus: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "700",
   },
-  invoiceIcon: { fontSize: moderateScale(FONT_SIZES.md) },
+  invoiceIcon: { fontSize: wxMs(FONT_SIZES.md) },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -745,14 +747,14 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   featureCheck: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: "#4ADE80",
     fontWeight: "700",
-    width: scale(20),
+    width: wxSc(20),
     textAlign: "center",
   },
   featureText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     flex: 1,
   },

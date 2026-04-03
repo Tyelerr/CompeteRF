@@ -21,6 +21,8 @@ import { DirectorsTab } from "../../../../src/views/components/venues/DirectorsT
 import { TablesTab } from "../../../../src/views/components/venues/TablesTab";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 type TabType = "details" | "tables" | "directors";
 
@@ -195,16 +197,16 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: SPACING.md,
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   errorText: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     color: COLORS.error,
     marginBottom: SPACING.md,
   },
   linkText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
@@ -225,12 +227,12 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     flex: 1,
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.sm,
   },
   placeholder: {
-    width: scale(50),
+    width: wxSc(50),
   },
   tabs: {
     flexDirection: "row",
@@ -255,7 +257,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },

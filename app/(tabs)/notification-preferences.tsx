@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import {
   ActivityIndicator,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,10 @@ import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
 import { useNotificationPreferences } from "../../src/viewmodels/hooks/use.notification.preferences";
+
+const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
@@ -46,189 +51,200 @@ export default function NotificationPreferencesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(tabs)/profile" as any)}>
-          <Text allowFontScaling={false} style={styles.backButtonText}>‹ Back</Text>
-        </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.headerTitle}>NOTIFICATIONS</Text>
-        <View style={styles.backButton} />
-      </View>
-
-      <ScrollView
-        style={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={COLORS.primary} />}
-      >
-        {devicePermission !== "granted" && (
-          <TouchableOpacity style={styles.permissionBanner} onPress={openDeviceSettings} activeOpacity={0.7}>
-            <View style={styles.permissionContent}>
-              <Text allowFontScaling={false} style={styles.permissionIcon}>⚠️</Text>
-              <View style={styles.permissionTextContainer}>
-                <Text allowFontScaling={false} style={styles.permissionTitle}>Notifications are disabled</Text>
-                <Text allowFontScaling={false} style={styles.permissionSubtitle}>Tap here to enable notifications in your device settings</Text>
-              </View>
-              <Text allowFontScaling={false} style={styles.permissionArrow}>→</Text>
-            </View>
+      <View style={[styles.pageWrapper, isWeb && styles.pageWrapperWeb]}>
+        <View style={[styles.header, isWeb && styles.headerWeb]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(tabs)/profile" as any)}>
+            <Text allowFontScaling={false} style={styles.backButtonText}>{"\u2039"} Back</Text>
           </TouchableOpacity>
-        )}
+          <Text allowFontScaling={false} style={styles.headerTitle}>NOTIFICATIONS</Text>
+          <View style={styles.backButton} />
+        </View>
 
-        {error && (
-          <View style={styles.errorBanner}>
-            <Text allowFontScaling={false} style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={refresh}>
-              <Text allowFontScaling={false} style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <Text allowFontScaling={false} style={styles.sectionDescription}>
-          {"Choose which notifications you'd like to receive. You can change these at any time."}
-        </Text>
-
-        <View style={styles.section}>
-          <Text allowFontScaling={false} style={styles.sectionTitle}>NOTIFICATION CATEGORIES</Text>
-          {categories.map((category, index) => {
-            const isEnabled = preferences?.[category.key] ?? true;
-            const isLast = index === categories.length - 1;
-            return (
-              <View key={category.key} style={[styles.preferenceRow, !isLast && styles.preferenceRowBorder]}>
-                <View style={styles.preferenceInfo}>
-                  <View style={styles.preferenceHeader}>
-                    <Text allowFontScaling={false} style={styles.preferenceIcon}>{category.icon}</Text>
-                    <Text allowFontScaling={false} style={styles.preferenceLabel}>{category.label}</Text>
-                  </View>
-                  <Text allowFontScaling={false} style={styles.preferenceDescription}>{category.description}</Text>
+        <ScrollView
+          style={styles.scrollContent}
+          refreshControl={
+            isWeb ? undefined : (
+              <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={COLORS.primary} />
+            )
+          }
+        >
+          {!isWeb && devicePermission !== "granted" && (
+            <TouchableOpacity style={styles.permissionBanner} onPress={openDeviceSettings} activeOpacity={0.7}>
+              <View style={styles.permissionContent}>
+                <Text allowFontScaling={false} style={styles.permissionIcon}>{"\u26A0\uFE0F"}</Text>
+                <View style={styles.permissionTextContainer}>
+                  <Text allowFontScaling={false} style={styles.permissionTitle}>Notifications are disabled</Text>
+                  <Text allowFontScaling={false} style={styles.permissionSubtitle}>Tap here to enable notifications in your device settings</Text>
                 </View>
-                <Switch
-                  value={isEnabled}
-                  onValueChange={(value) => togglePreference(category.key, value)}
-                  trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
-                  thumbColor={isEnabled ? COLORS.primary : COLORS.textMuted}
-                  disabled={isSaving}
-                />
+                <Text allowFontScaling={false} style={styles.permissionArrow}>{"\u2192"}</Text>
               </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.section}>
-          <Text allowFontScaling={false} style={styles.sectionTitle}>QUICK ACTIONS</Text>
-          <TouchableOpacity style={styles.quickActionRow} onPress={() => categories.forEach((cat) => togglePreference(cat.key, true))} activeOpacity={0.7}>
-            <Text allowFontScaling={false} style={styles.quickActionIcon}>✅</Text>
-            <Text allowFontScaling={false} style={styles.quickActionText}>Enable all notifications</Text>
-          </TouchableOpacity>
-          <View style={styles.quickActionDivider} />
-          <TouchableOpacity style={styles.quickActionRow} onPress={() => categories.forEach((cat) => togglePreference(cat.key, false))} activeOpacity={0.7}>
-            <Text allowFontScaling={false} style={styles.quickActionIcon}>🔇</Text>
-            <Text allowFontScaling={false} style={[styles.quickActionText, { color: COLORS.error }]}>Disable all notifications</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.footer}>
-          <Text allowFontScaling={false} style={styles.footerText}>
-            Even with notifications disabled, you can still view updates in the app. Push notifications require device permissions to be enabled.
-          </Text>
-          {devicePermission === "granted" && (
-            <TouchableOpacity style={styles.deviceSettingsLink} onPress={openDeviceSettings}>
-              <Text allowFontScaling={false} style={styles.deviceSettingsText}>Open Device Settings →</Text>
             </TouchableOpacity>
           )}
-        </View>
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text allowFontScaling={false} style={styles.errorText}>{error}</Text>
+              <TouchableOpacity onPress={refresh}>
+                <Text allowFontScaling={false} style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <Text allowFontScaling={false} style={styles.sectionDescription}>
+            {"Choose which notifications you'd like to receive. You can change these at any time."}
+          </Text>
+
+          <View style={styles.section}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>NOTIFICATION CATEGORIES</Text>
+            {categories.map((category, index) => {
+              const isEnabled = preferences?.[category.key] ?? true;
+              const isLast = index === categories.length - 1;
+              return (
+                <View key={category.key} style={[styles.preferenceRow, !isLast && styles.preferenceRowBorder]}>
+                  <View style={styles.preferenceInfo}>
+                    <View style={styles.preferenceHeader}>
+                      <Text allowFontScaling={false} style={styles.preferenceIcon}>{category.icon}</Text>
+                      <Text allowFontScaling={false} style={styles.preferenceLabel}>{category.label}</Text>
+                    </View>
+                    <Text allowFontScaling={false} style={styles.preferenceDescription}>{category.description}</Text>
+                  </View>
+                  <Switch
+                    value={isEnabled}
+                    onValueChange={(value) => togglePreference(category.key, value)}
+                    trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
+                    thumbColor={isEnabled ? COLORS.primary : COLORS.textMuted}
+                    disabled={isSaving}
+                  />
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.section}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>QUICK ACTIONS</Text>
+            <TouchableOpacity style={styles.quickActionRow} onPress={() => categories.forEach((cat) => togglePreference(cat.key, true))} activeOpacity={0.7}>
+              <Text allowFontScaling={false} style={styles.quickActionIcon}>{"\u2705"}</Text>
+              <Text allowFontScaling={false} style={styles.quickActionText}>Enable all notifications</Text>
+            </TouchableOpacity>
+            <View style={styles.quickActionDivider} />
+            <TouchableOpacity style={styles.quickActionRow} onPress={() => categories.forEach((cat) => togglePreference(cat.key, false))} activeOpacity={0.7}>
+              <Text allowFontScaling={false} style={styles.quickActionIcon}>{"\uD83D\uDD07"}</Text>
+              <Text allowFontScaling={false} style={[styles.quickActionText, { color: COLORS.error }]}>Disable all notifications</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.footer}>
+            <Text allowFontScaling={false} style={styles.footerText}>
+              {isWeb
+                ? "Manage your in-app notification preferences below."
+                : "Even with notifications disabled, you can still view updates in the app. Push notifications require device permissions to be enabled."}
+            </Text>
+            {!isWeb && devicePermission === "granted" && (
+              <TouchableOpacity style={styles.deviceSettingsLink} onPress={openDeviceSettings}>
+                <Text allowFontScaling={false} style={styles.deviceSettingsText}>Open Device Settings {"\u2192"}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  pageWrapper: { flex: 1 },
+  pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
   centerContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
-  loadingText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary, marginTop: scale(SPACING.md) },
+  loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary, marginTop: wxSc(SPACING.md) },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.xl + SPACING.lg),
-    paddingBottom: scale(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.xl + SPACING.lg),
+    paddingBottom: wxSc(SPACING.sm),
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
     backgroundColor: COLORS.backgroundCard,
   },
-  backButton: { width: scale(70) },
-  backButtonText: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.primary, fontWeight: "600" },
-  headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, letterSpacing: 1 },
+  headerWeb: { paddingTop: wxSc(SPACING.lg) },
+  backButton: { width: wxSc(70) },
+  backButtonText: { fontSize: wxMs(FONT_SIZES.lg), color: COLORS.primary, fontWeight: "600" },
+  headerTitle: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, letterSpacing: 1 },
   permissionBanner: {
-    marginHorizontal: scale(SPACING.md), marginTop: scale(SPACING.md),
+    marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.md),
     backgroundColor: "#FEF3C7", borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: "#F59E0B", overflow: "hidden",
   },
-  permissionContent: { flexDirection: "row", alignItems: "center", padding: scale(SPACING.md), gap: scale(SPACING.sm) },
-  permissionIcon: { fontSize: moderateScale(24) },
+  permissionContent: { flexDirection: "row", alignItems: "center", padding: wxSc(SPACING.md), gap: wxSc(SPACING.sm) },
+  permissionIcon: { fontSize: wxMs(24) },
   permissionTextContainer: { flex: 1 },
-  permissionTitle: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: "#92400E" },
-  permissionSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: "#A16207", marginTop: scale(2) },
-  permissionArrow: { fontSize: moderateScale(FONT_SIZES.lg), color: "#A16207" },
+  permissionTitle: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: "#92400E" },
+  permissionSubtitle: { fontSize: wxMs(FONT_SIZES.xs), color: "#A16207", marginTop: wxSc(2) },
+  permissionArrow: { fontSize: wxMs(FONT_SIZES.lg), color: "#A16207" },
   errorBanner: {
-    marginHorizontal: scale(SPACING.md), marginTop: scale(SPACING.md),
+    marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.md),
     backgroundColor: COLORS.error + "15", borderRadius: RADIUS.md,
-    padding: scale(SPACING.md), flexDirection: "row",
+    padding: wxSc(SPACING.md), flexDirection: "row",
     justifyContent: "space-between", alignItems: "center",
   },
-  errorText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.error, flex: 1 },
-  retryText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
+  errorText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.error, flex: 1 },
+  retryText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
   scrollContent: { flex: 1 },
   sectionDescription: {
-    fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary,
-    lineHeight: moderateScale(FONT_SIZES.sm) * 1.5,
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.md),
-    paddingBottom: scale(SPACING.sm),
+    fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary,
+    lineHeight: wxMs(FONT_SIZES.sm) * 1.5,
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.md),
+    paddingBottom: wxSc(SPACING.sm),
   },
   section: {
-    marginHorizontal: scale(SPACING.md), marginTop: scale(SPACING.md),
+    marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.md),
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: COLORS.border, overflow: "hidden",
   },
   sectionTitle: {
-    fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700",
+    fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700",
     color: COLORS.textMuted, letterSpacing: 1,
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.md),
-    paddingBottom: scale(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.md),
+    paddingBottom: wxSc(SPACING.sm),
   },
   preferenceRow: {
     flexDirection: "row", alignItems: "center",
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.md),
-    gap: scale(SPACING.md),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.md),
+    gap: wxSc(SPACING.md),
   },
   preferenceRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
   preferenceInfo: { flex: 1 },
-  preferenceHeader: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.sm), marginBottom: scale(4) },
-  preferenceIcon: { fontSize: moderateScale(18) },
-  preferenceLabel: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  preferenceHeader: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginBottom: wxSc(4) },
+  preferenceIcon: { fontSize: wxMs(18) },
+  preferenceLabel: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
   preferenceDescription: {
-    fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary,
-    lineHeight: moderateScale(FONT_SIZES.xs) * 1.5,
-    paddingLeft: scale(26),
+    fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
+    paddingLeft: wxSc(26),
   },
   quickActionRow: {
     flexDirection: "row", alignItems: "center",
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.md),
-    gap: scale(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.md),
+    gap: wxSc(SPACING.sm),
   },
-  quickActionDivider: { height: 1, backgroundColor: COLORS.border, marginHorizontal: scale(SPACING.md) },
-  quickActionIcon: { fontSize: moderateScale(18) },
-  quickActionText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "500", color: COLORS.primary },
+  quickActionDivider: { height: 1, backgroundColor: COLORS.border, marginHorizontal: wxSc(SPACING.md) },
+  quickActionIcon: { fontSize: wxMs(18) },
+  quickActionText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "500", color: COLORS.primary },
   footer: {
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.lg),
-    paddingBottom: scale(SPACING.md),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.lg),
+    paddingBottom: wxSc(SPACING.md),
   },
   footerText: {
-    fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted,
-    lineHeight: moderateScale(FONT_SIZES.xs) * 1.6, textAlign: "center",
+    fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.6, textAlign: "center",
   },
-  deviceSettingsLink: { alignItems: "center", marginTop: scale(SPACING.sm) },
-  deviceSettingsText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "600" },
-  bottomSpacer: { height: scale(SPACING.xl * 2) },
+  deviceSettingsLink: { alignItems: "center", marginTop: wxSc(SPACING.sm) },
+  deviceSettingsText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "600" },
+  bottomSpacer: { height: wxSc(SPACING.xl * 2) },
 });

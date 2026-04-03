@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { moderateScale, scale } from "../../../utils/scaling";
+import { webMs, webSc } from "../../../utils/scaling";
 
 interface PaginationProps {
   totalCount: number;
@@ -38,10 +38,10 @@ export function Pagination({ totalCount, displayStart, displayEnd, currentPage, 
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), gap: scale(SPACING.sm) },
-  countText: { flex: 1, flexShrink: 1, fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, minWidth: 0 },
-  pagination: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.xs), flexShrink: 0 },
-  pageArrow: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.primary, paddingHorizontal: scale(SPACING.xs) },
+  container: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), gap: webSc(SPACING.sm) },
+  countText: { flex: 1, flexShrink: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, minWidth: 0 },
+  pagination: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), flexShrink: 0 },
+  pageArrow: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.primary, paddingHorizontal: webSc(SPACING.xs) },
   pageArrowDisabled: { color: COLORS.textMuted },
-  pageText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary },
+  pageText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
 });

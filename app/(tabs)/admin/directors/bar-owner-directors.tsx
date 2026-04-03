@@ -1,7 +1,7 @@
 ﻿import { moderateScale, scale } from "../../../../src/utils/scaling";
 const isWeb = Platform.OS === "web";
-const ms = (v: number) => isWeb ? v : moderateScale(v);
-const sc = (v: number) => isWeb ? v : scale(v);
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -154,55 +154,55 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   centerContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
-  loadingText: { fontSize: ms(FONT_SIZES.md), color: COLORS.textSecondary },
+  loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: sc(SPACING.md),
-    paddingTop: sc(SPACING.xl + SPACING.lg),
-    paddingBottom: sc(SPACING.md),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.xl + SPACING.lg),
+    paddingBottom: wxSc(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: { paddingTop: sc(SPACING.lg) },
-  backButton: { padding: sc(SPACING.xs) },
-  backText: { fontSize: ms(FONT_SIZES.md), color: COLORS.primary, fontWeight: "600" },
-  headerTitle: { fontSize: ms(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  placeholder: { width: sc(50) },
+  headerWeb: { paddingTop: wxSc(SPACING.lg) },
+  backButton: { padding: wxSc(SPACING.xs) },
+  backText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.primary, fontWeight: "600" },
+  headerTitle: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  placeholder: { width: wxSc(50) },
   statsContainer: {
-    paddingHorizontal: sc(SPACING.md),
-    paddingVertical: sc(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.sm),
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  statsText: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
+  statsText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
   searchContainer: {
-    paddingHorizontal: sc(SPACING.md),
-    paddingTop: sc(SPACING.md),
-    paddingBottom: sc(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.md),
+    paddingBottom: wxSc(SPACING.sm),
   },
   searchInput: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: sc(8),
-    paddingHorizontal: sc(SPACING.md),
-    paddingVertical: sc(SPACING.sm),
-    fontSize: ms(FONT_SIZES.md),
+    borderRadius: wxSc(8),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.sm),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.text,
   },
   addButton: {
-    marginHorizontal: sc(SPACING.md),
-    marginBottom: sc(SPACING.sm),
+    marginHorizontal: wxSc(SPACING.md),
+    marginBottom: wxSc(SPACING.sm),
     backgroundColor: COLORS.primary,
-    paddingVertical: sc(SPACING.sm),
-    borderRadius: sc(8),
+    paddingVertical: wxSc(SPACING.sm),
+    borderRadius: wxSc(8),
     alignItems: "center",
   },
-  addButtonText: { fontSize: ms(FONT_SIZES.md), fontWeight: "600", color: COLORS.white },
+  addButtonText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.white },
 
-  listContent: { padding: sc(SPACING.md), paddingBottom: sc(SPACING.xl) },
+  listContent: { padding: wxSc(SPACING.md), paddingBottom: wxSc(SPACING.xl) },
 });
 

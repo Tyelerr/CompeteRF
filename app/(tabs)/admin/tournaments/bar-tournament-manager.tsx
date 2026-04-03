@@ -36,6 +36,8 @@ import { EmptyState } from "../../../../src/views/components/dashboard/empty-sta
 import { TournamentCard } from "../../../../src/views/components/tournament";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "date", label: "Date" },
@@ -565,10 +567,7 @@ export default function BarTournamentManagerScreen() {
 
 const styles = StyleSheet.create({
   // Web centering
-  scrollContentWeb: {
-    alignItems: "center",
-    paddingBottom: SPACING.xl,
-  },
+  scrollContentWeb: { paddingBottom: SPACING.xl },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
@@ -581,7 +580,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -601,7 +600,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
@@ -609,19 +608,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "600",
     color: COLORS.text,
     letterSpacing: 0.5,
   },
   headerSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     opacity: 0.7,
-    marginTop: scale(2),
+    marginTop: wxSc(2),
   },
   placeholder: {
-    width: scale(50),
+    width: wxSc(50),
   },
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -632,22 +631,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     paddingHorizontal: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
-    height: scale(40),
+    height: wxSc(40),
   },
   searchIcon: {
-    fontSize: moderateScale(14),
+    fontSize: wxMs(14),
     marginRight: SPACING.sm,
     opacity: 0.6,
   },
   searchInput: {
     flex: 1,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
-    height: scale(40),
+    height: wxSc(40),
   },
   tabsContainer: {
     backgroundColor: COLORS.background,
@@ -658,7 +657,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     flexDirection: "row",
     alignItems: "center",
-    minHeight: scale(48),
+    minHeight: wxSc(48),
   },
   tab: {
     paddingHorizontal: SPACING.md,
@@ -671,7 +670,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
@@ -689,7 +688,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   sortLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginRight: SPACING.sm,
   },
@@ -700,7 +699,7 @@ const styles = StyleSheet.create({
   sortPill: {
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
-    borderRadius: scale(16),
+    borderRadius: wxSc(16),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -710,7 +709,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   sortPillText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   sortPillTextActive: {
@@ -726,7 +725,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF980020",
     borderWidth: 1,
     borderColor: "#FF9800",
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     paddingVertical: SPACING.sm,
     alignItems: "center",
     marginTop: -SPACING.sm,
@@ -735,7 +734,7 @@ const styles = StyleSheet.create({
   },
   reassignBtnText: {
     color: "#FF9800",
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
   // Modal styles
@@ -748,37 +747,37 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: wxSc(12),
     padding: SPACING.lg,
     width: "100%",
-    maxWidth: scale(400),
+    maxWidth: wxSc(400),
   },
   modalTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.xs,
   },
   modalSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
     marginBottom: SPACING.lg,
   },
   modalLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     marginBottom: SPACING.xs,
     fontWeight: "500",
   },
   modalInput: {
     backgroundColor: COLORS.background,
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     padding: SPACING.sm,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: scale(80),
+    minHeight: wxSc(80),
     textAlignVertical: "top",
   },
   modalButtons: {
@@ -789,7 +788,7 @@ const styles = StyleSheet.create({
   modalButtonCancel: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     alignItems: "center",
     backgroundColor: COLORS.background,
     borderWidth: 1,
@@ -797,19 +796,19 @@ const styles = StyleSheet.create({
   },
   modalButtonCancelText: {
     color: COLORS.text,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
   modalButtonConfirm: {
     flex: 1,
     paddingVertical: SPACING.sm,
-    borderRadius: scale(8),
+    borderRadius: wxSc(8),
     alignItems: "center",
     backgroundColor: COLORS.error,
   },
   modalButtonConfirmText: {
     color: "#FFFFFF",
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
 });

@@ -74,7 +74,6 @@ function criteriaToForm(alert: SearchAlert): FormState {
   return {
     name: alert.name || "", description: alert.description || "", gameType: c.gameType || "",
     tournamentFormat: c.tournamentFormat || "", tableSize: c.tableSize || "",
-    // support legacy alerts that stored brands as array
     brand: c.brand || (Array.isArray(c.brands) && c.brands.length > 0 ? c.brands[0] : ""),
     state: c.state || "", city: c.city || "",
     entryFeeMin: c.entryFeeMin !== undefined ? c.entryFeeMin.toString() : "",
@@ -225,116 +224,118 @@ export default function CreateEditAlertScreen() {
   return (
     <View style={styles.container}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"} enabled={!isWeb}>
-        <ScrollView ref={scrollRef} style={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.scrollContentContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
+        <View style={[styles.webWrapper, isWeb && styles.webWrapperWeb]}>
+          <ScrollView ref={scrollRef} style={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" contentContainerStyle={styles.scrollContentContainer}>
+            <View style={[styles.header, isWeb && styles.headerWeb]}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
+              </TouchableOpacity>
+              <Text allowFontScaling={false} style={styles.headerTitle}>{isEditMode ? "EDIT ALERT" : "CREATE ALERT"}</Text>
+              <Text allowFontScaling={false} style={styles.headerSubtitle}>{isEditMode ? "Update your search alert criteria" : "Get notified when matching tournaments are posted"}</Text>
+            </View>
+
+            <View style={styles.content}>
+              {error && <View style={styles.errorContainer}><Text allowFontScaling={false} style={styles.errorText}>{error}</Text></View>}
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Alert Info</Text>
+                <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["name"] = e.nativeEvent.layout.y; }}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Alert Name <Text style={styles.required}>*</Text></Text>
+                  <TextInput allowFontScaling={false} style={styles.textInput} placeholder={'"9-Ball in Arizona"'} placeholderTextColor={COLORS.textMuted} value={form.name} onChangeText={(v) => updateField("name", v)} onFocus={() => scrollToField("name")} editable={!saving} autoCapitalize="words" maxLength={100} />
+                </View>
+                <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["description"] = e.nativeEvent.layout.y; }}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Description (optional)</Text>
+                  <TextInput allowFontScaling={false} style={[styles.textInput, styles.textInputMultiline]} placeholder="Auto-generated from your filters if left blank" placeholderTextColor={COLORS.textMuted} value={form.description} onChangeText={(v) => updateField("description", v)} onFocus={() => scrollToField("description")} editable={!saving} multiline numberOfLines={2} maxLength={250} />
+                </View>
+                <View style={styles.switchRow}>
+                  <View style={styles.switchInfo}>
+                    <Text allowFontScaling={false} style={styles.fieldLabel}>Alert Active</Text>
+                    <Text allowFontScaling={false} style={styles.switchDescription}>{"Inactive alerts won't match new tournaments"}</Text>
+                  </View>
+                  <Switch value={form.isActive} onValueChange={(v) => updateField("isActive", v)} trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }} thumbColor={form.isActive ? COLORS.primary : COLORS.textMuted} disabled={saving} />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Game Filters</Text>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Game Type</Text>
+                  <Dropdown placeholder="Any Game Type" options={GAME_TYPE_OPTIONS} value={form.gameType} onSelect={(v: string) => updateField("gameType", v)} disabled={saving} />
+                  {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={styles.fieldHint}>{"\uD83D\uDCA1"} This will also match scotch doubles versions</Text>}
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Tournament Format</Text>
+                  <Dropdown placeholder="Any Format" options={FORMAT_OPTIONS} value={form.tournamentFormat} onSelect={(v: string) => updateField("tournamentFormat", v)} disabled={saving} />
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Table Size</Text>
+                  <Dropdown placeholder="Any Table Size" options={TABLE_SIZE_OPTIONS} value={form.tableSize} onSelect={(v: string) => updateField("tableSize", v)} disabled={saving} />
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Table Brand</Text>
+                  <Dropdown placeholder="Any Brand" options={brandOptions} value={form.brand} onSelect={(v: string) => updateField("brand", v)} disabled={saving} />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Location</Text>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>State</Text>
+                  <Dropdown placeholder="Any State" options={stateOptions} value={form.state} onSelect={(v: string) => updateField("state", v)} disabled={saving} searchable searchPlaceholder="Search states..." />
+                </View>
+                <View style={styles.fieldContainer}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>City</Text>
+                  <Dropdown placeholder={!form.state ? "Select a state first" : "Any City"} options={cityOptions} value={form.city} onSelect={(v: string) => updateField("city", v)} disabled={saving || !form.state} searchable searchPlaceholder="Search cities..." />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Entry Fee {"&"} Skill Level</Text>
+                <View style={styles.rowFields}>
+                  <View style={[styles.fieldContainer, styles.fieldHalf]} onLayout={(e) => { fieldOffsets.current["entryFeeMin"] = e.nativeEvent.layout.y; }}>
+                    <Text allowFontScaling={false} style={styles.fieldLabel}>Min Entry Fee ($)</Text>
+                    <TextInput allowFontScaling={false} style={styles.textInput} placeholder="0" placeholderTextColor={COLORS.textMuted} value={form.entryFeeMin} onChangeText={(v) => updateField("entryFeeMin", v)} onFocus={() => scrollToField("entryFeeMin")} editable={!saving} keyboardType="numeric" />
+                  </View>
+                  <View style={[styles.fieldContainer, styles.fieldHalf]} onLayout={(e) => { fieldOffsets.current["entryFeeMax"] = e.nativeEvent.layout.y; }}>
+                    <Text allowFontScaling={false} style={styles.fieldLabel}>Max Entry Fee ($)</Text>
+                    <TextInput allowFontScaling={false} style={styles.textInput} placeholder="Any" placeholderTextColor={COLORS.textMuted} value={form.entryFeeMax} onChangeText={(v) => updateField("entryFeeMax", v)} onFocus={() => scrollToField("entryFeeMax")} editable={!saving} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["fargoMax"] = e.nativeEvent.layout.y; }}>
+                  <Text allowFontScaling={false} style={styles.fieldLabel}>Max Fargo Rating</Text>
+                  <TextInput allowFontScaling={false} style={styles.textInput} placeholder="e.g. 600 (leave blank for any)" placeholderTextColor={COLORS.textMuted} value={form.fargoMax} onChangeText={(v) => updateField("fargoMax", v)} onFocus={() => scrollToField("fargoMax")} editable={!saving} keyboardType="numeric" />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Additional Filters</Text>
+                <Text allowFontScaling={false} style={styles.sectionHint}>Tap to cycle: Any {"\u2192"} Yes {"\u2192"} No {"\u2192"} Any</Text>
+                <ToggleRow label="Reports to Fargo" description="Tournament results reported to FargoRate" value={form.reportsToFargo} onToggle={() => cycleTriState("reportsToFargo")} disabled={saving} />
+                <ToggleRow label="Calcutta" description="Tournament includes a Calcutta auction" value={form.calcutta} onToggle={() => cycleTriState("calcutta")} disabled={saving} />
+                <ToggleRow label="Open Tournament" description="No skill cap restriction" value={form.openTournament} onToggle={() => cycleTriState("openTournament")} disabled={saving} />
+              </View>
+
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Days of Week</Text>
+                <Text allowFontScaling={false} style={styles.sectionHint}>Only match tournaments on these days (leave empty for any day)</Text>
+                <DayPicker selected={form.daysOfWeek} onChange={(days) => updateField("daysOfWeek", days)} disabled={saving} />
+              </View>
+
+              <View style={styles.previewContainer}>
+                <Text allowFontScaling={false} style={styles.previewLabel}>Alert Preview</Text>
+                <Text allowFontScaling={false} style={styles.previewText}>{form.name.trim() || "Untitled Alert"} {"\u2014"} {generatePreview()}</Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.bottomBar, isWeb && styles.bottomBarWeb]}>
+            <TouchableOpacity style={[styles.saveButton, (!form.name.trim() || saving) && styles.buttonDisabled]} onPress={handleSave} disabled={!form.name.trim() || saving}>
+              {saving ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text allowFontScaling={false} style={styles.saveButtonText}>{isEditMode ? "Save Changes" : "Create Alert"}</Text>}
             </TouchableOpacity>
-            <Text allowFontScaling={false} style={styles.headerTitle}>{isEditMode ? "EDIT ALERT" : "CREATE ALERT"}</Text>
-            <Text allowFontScaling={false} style={styles.headerSubtitle}>{isEditMode ? "Update your search alert criteria" : "Get notified when matching tournaments are posted"}</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()} disabled={saving}>
+              <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.content}>
-            {error && <View style={styles.errorContainer}><Text allowFontScaling={false} style={styles.errorText}>{error}</Text></View>}
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Alert Info</Text>
-              <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["name"] = e.nativeEvent.layout.y; }}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Alert Name <Text style={styles.required}>*</Text></Text>
-                <TextInput allowFontScaling={false} style={styles.textInput} placeholder={'"9-Ball in Arizona"'} placeholderTextColor={COLORS.textMuted} value={form.name} onChangeText={(v) => updateField("name", v)} onFocus={() => scrollToField("name")} editable={!saving} autoCapitalize="words" maxLength={100} />
-              </View>
-              <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["description"] = e.nativeEvent.layout.y; }}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Description (optional)</Text>
-                <TextInput allowFontScaling={false} style={[styles.textInput, styles.textInputMultiline]} placeholder="Auto-generated from your filters if left blank" placeholderTextColor={COLORS.textMuted} value={form.description} onChangeText={(v) => updateField("description", v)} onFocus={() => scrollToField("description")} editable={!saving} multiline numberOfLines={2} maxLength={250} />
-              </View>
-              <View style={styles.switchRow}>
-                <View style={styles.switchInfo}>
-                  <Text allowFontScaling={false} style={styles.fieldLabel}>Alert Active</Text>
-                  <Text allowFontScaling={false} style={styles.switchDescription}>{"Inactive alerts won't match new tournaments"}</Text>
-                </View>
-                <Switch value={form.isActive} onValueChange={(v) => updateField("isActive", v)} trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }} thumbColor={form.isActive ? COLORS.primary : COLORS.textMuted} disabled={saving} />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Game Filters</Text>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Game Type</Text>
-                <Dropdown placeholder="Any Game Type" options={GAME_TYPE_OPTIONS} value={form.gameType} onSelect={(v: string) => updateField("gameType", v)} disabled={saving} />
-                {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={styles.fieldHint}>{"\uD83D\uDCA1"} This will also match scotch doubles versions</Text>}
-              </View>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Tournament Format</Text>
-                <Dropdown placeholder="Any Format" options={FORMAT_OPTIONS} value={form.tournamentFormat} onSelect={(v: string) => updateField("tournamentFormat", v)} disabled={saving} />
-              </View>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Table Size</Text>
-                <Dropdown placeholder="Any Table Size" options={TABLE_SIZE_OPTIONS} value={form.tableSize} onSelect={(v: string) => updateField("tableSize", v)} disabled={saving} />
-              </View>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Table Brand</Text>
-                <Dropdown placeholder="Any Brand" options={brandOptions} value={form.brand} onSelect={(v: string) => updateField("brand", v)} disabled={saving} />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Location</Text>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>State</Text>
-                <Dropdown placeholder="Any State" options={stateOptions} value={form.state} onSelect={(v: string) => updateField("state", v)} disabled={saving} searchable searchPlaceholder="Search states..." />
-              </View>
-              <View style={styles.fieldContainer}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>City</Text>
-                <Dropdown placeholder={!form.state ? "Select a state first" : "Any City"} options={cityOptions} value={form.city} onSelect={(v: string) => updateField("city", v)} disabled={saving || !form.state} searchable searchPlaceholder="Search cities..." />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Entry Fee {"&"} Skill Level</Text>
-              <View style={styles.rowFields}>
-                <View style={[styles.fieldContainer, styles.fieldHalf]} onLayout={(e) => { fieldOffsets.current["entryFeeMin"] = e.nativeEvent.layout.y; }}>
-                  <Text allowFontScaling={false} style={styles.fieldLabel}>Min Entry Fee ($)</Text>
-                  <TextInput allowFontScaling={false} style={styles.textInput} placeholder="0" placeholderTextColor={COLORS.textMuted} value={form.entryFeeMin} onChangeText={(v) => updateField("entryFeeMin", v)} onFocus={() => scrollToField("entryFeeMin")} editable={!saving} keyboardType="numeric" />
-                </View>
-                <View style={[styles.fieldContainer, styles.fieldHalf]} onLayout={(e) => { fieldOffsets.current["entryFeeMax"] = e.nativeEvent.layout.y; }}>
-                  <Text allowFontScaling={false} style={styles.fieldLabel}>Max Entry Fee ($)</Text>
-                  <TextInput allowFontScaling={false} style={styles.textInput} placeholder="Any" placeholderTextColor={COLORS.textMuted} value={form.entryFeeMax} onChangeText={(v) => updateField("entryFeeMax", v)} onFocus={() => scrollToField("entryFeeMax")} editable={!saving} keyboardType="numeric" />
-                </View>
-              </View>
-              <View style={styles.fieldContainer} onLayout={(e) => { fieldOffsets.current["fargoMax"] = e.nativeEvent.layout.y; }}>
-                <Text allowFontScaling={false} style={styles.fieldLabel}>Max Fargo Rating</Text>
-                <TextInput allowFontScaling={false} style={styles.textInput} placeholder="e.g. 600 (leave blank for any)" placeholderTextColor={COLORS.textMuted} value={form.fargoMax} onChangeText={(v) => updateField("fargoMax", v)} onFocus={() => scrollToField("fargoMax")} editable={!saving} keyboardType="numeric" />
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Additional Filters</Text>
-              <Text allowFontScaling={false} style={styles.sectionHint}>Tap to cycle: Any {"\u2192"} Yes {"\u2192"} No {"\u2192"} Any</Text>
-              <ToggleRow label="Reports to Fargo" description="Tournament results reported to FargoRate" value={form.reportsToFargo} onToggle={() => cycleTriState("reportsToFargo")} disabled={saving} />
-              <ToggleRow label="Calcutta" description="Tournament includes a Calcutta auction" value={form.calcutta} onToggle={() => cycleTriState("calcutta")} disabled={saving} />
-              <ToggleRow label="Open Tournament" description="No skill cap restriction" value={form.openTournament} onToggle={() => cycleTriState("openTournament")} disabled={saving} />
-            </View>
-
-            <View style={styles.section}>
-              <Text allowFontScaling={false} style={styles.sectionTitle}>Days of Week</Text>
-              <Text allowFontScaling={false} style={styles.sectionHint}>Only match tournaments on these days (leave empty for any day)</Text>
-              <DayPicker selected={form.daysOfWeek} onChange={(days) => updateField("daysOfWeek", days)} disabled={saving} />
-            </View>
-
-            <View style={styles.previewContainer}>
-              <Text allowFontScaling={false} style={styles.previewLabel}>Alert Preview</Text>
-              <Text allowFontScaling={false} style={styles.previewText}>{form.name.trim() || "Untitled Alert"} {"\u2014"} {generatePreview()}</Text>
-            </View>
-          </View>
-        </ScrollView>
-
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={[styles.saveButton, (!form.name.trim() || saving) && styles.buttonDisabled]} onPress={handleSave} disabled={!form.name.trim() || saving}>
-            {saving ? <ActivityIndicator size="small" color={COLORS.white} /> : <Text allowFontScaling={false} style={styles.saveButtonText}>{isEditMode ? "Save Changes" : "Create Alert"}</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()} disabled={saving}>
-            <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -344,9 +345,12 @@ export default function CreateEditAlertScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   flex: { flex: 1 },
+  webWrapper: { flex: 1 },
+  webWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
   scrollContent: { flex: 1 },
   scrollContentContainer: { paddingBottom: scale(SPACING.xl) },
   header: { padding: scale(SPACING.md), paddingTop: scale(SPACING.xl + SPACING.lg), alignItems: "center" },
+  headerWeb: { paddingTop: scale(SPACING.lg) },
   backButton: { alignSelf: "flex-start", paddingVertical: scale(SPACING.sm), marginBottom: scale(SPACING.md) },
   backText: { color: COLORS.primary, fontSize: moderateScale(FONT_SIZES.md) },
   headerTitle: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, textAlign: "center", marginBottom: scale(SPACING.xs) },
@@ -387,6 +391,7 @@ const styles = StyleSheet.create({
   previewLabel: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.textMuted, textTransform: "uppercase", marginBottom: scale(SPACING.xs) },
   previewText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, lineHeight: moderateScale(20) },
   bottomBar: { flexDirection: "row", gap: scale(SPACING.sm), paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.md), paddingBottom: scale(SPACING.xl + SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.background },
+  bottomBarWeb: { paddingBottom: scale(SPACING.md) },
   cancelButton: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   cancelButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, fontWeight: "600" },
   saveButton: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.primary },

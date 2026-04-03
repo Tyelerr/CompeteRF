@@ -29,6 +29,8 @@ import {
 import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/common/ConfettiBurst";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 const { width: SW, height: SH } = require("react-native").Dimensions.get("window");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,18 +74,18 @@ const shS = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: scale(SPACING.md),
-    marginTop: scale(SPACING.lg),
-    marginBottom: scale(SPACING.md),
-    gap: scale(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.lg),
+    marginBottom: wxSc(SPACING.md),
+    gap: wxSc(SPACING.sm),
   },
   pill: {
     borderWidth: 1,
     borderRadius: RADIUS.full,
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.xs),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.xs),
   },
-  text: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 },
+  text: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 },
   line: { flex: 1, height: 1 },
 });
 
@@ -100,9 +102,9 @@ function ActiveGiveawayWrapper({ children }: { children: React.ReactNode }) {
 }
 const awS = StyleSheet.create({
   outer: {
-    marginHorizontal: scale(SPACING.md),
-    marginBottom: scale(SPACING.sm),
-    borderRadius: scale(16),
+    marginHorizontal: wxSc(SPACING.md),
+    marginBottom: wxSc(SPACING.sm),
+    borderRadius: wxSc(16),
     shadowColor: T.blue,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.30,
@@ -111,7 +113,7 @@ const awS = StyleSheet.create({
   },
   ring: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: scale(16),
+    borderRadius: wxSc(16),
     borderWidth: 1.5,
     borderColor: T.blueBorder,
     zIndex: 1,
@@ -176,10 +178,10 @@ function EndedGiveawayCard({ giveaway }: { giveaway: Giveaway }) {
 }
 const ecS = StyleSheet.create({
   card: {
-    borderRadius: scale(16),
-    padding: scale(SPACING.md),
-    marginHorizontal: scale(SPACING.md),
-    marginBottom: scale(SPACING.sm),
+    borderRadius: wxSc(16),
+    padding: wxSc(SPACING.md),
+    marginHorizontal: wxSc(SPACING.md),
+    marginBottom: wxSc(SPACING.sm),
     borderWidth: 1,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.12,
@@ -188,42 +190,42 @@ const ecS = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: scale(SPACING.sm),
+    marginBottom: wxSc(SPACING.sm),
   },
   left: {
     flex: 1,
-    marginRight: scale(SPACING.md),
+    marginRight: wxSc(SPACING.md),
   },
   image: {
-    width: scale(80),
-    height: scale(80),
-    borderRadius: scale(10),
+    width: wxSc(80),
+    height: wxSc(80),
+    borderRadius: wxSc(10),
   },
   imagePlaceholder: {
-    width: scale(80),
-    height: scale(80),
-    borderRadius: scale(10),
+    width: wxSc(80),
+    height: wxSc(80),
+    borderRadius: wxSc(10),
     backgroundColor: T.card,
     justifyContent: "center",
     alignItems: "center",
   },
-  imagePlaceholderText: { fontSize: moderateScale(32) },
+  imagePlaceholderText: { fontSize: wxMs(32) },
   badge: {
     alignSelf: "flex-start",
     borderRadius: RADIUS.sm,
-    paddingHorizontal: scale(SPACING.sm),
-    paddingVertical: scale(SPACING.xs),
-    marginBottom: scale(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.xs),
+    marginBottom: wxSc(SPACING.sm),
     borderWidth: 1,
   },
-  badgeText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
-  name: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: T.white, marginBottom: scale(SPACING.xs) },
-  prize: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", marginBottom: scale(SPACING.xs) },
-  winner: { fontSize: moderateScale(FONT_SIZES.sm), color: T.lightGray, marginBottom: scale(4) },
-  drawnDate: { fontSize: moderateScale(FONT_SIZES.xs), color: T.gray, marginBottom: scale(SPACING.sm) },
-  entries: { fontSize: moderateScale(FONT_SIZES.xs), color: T.gray },
-  statusBar: { borderTopWidth: 1, paddingTop: scale(SPACING.sm), alignItems: "center" },
-  statusText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", letterSpacing: 0.3 },
+  badgeText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  name: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: T.white, marginBottom: wxSc(SPACING.xs) },
+  prize: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", marginBottom: wxSc(SPACING.xs) },
+  winner: { fontSize: wxMs(FONT_SIZES.sm), color: T.lightGray, marginBottom: wxSc(4) },
+  drawnDate: { fontSize: wxMs(FONT_SIZES.xs), color: T.gray, marginBottom: wxSc(SPACING.sm) },
+  entries: { fontSize: wxMs(FONT_SIZES.xs), color: T.gray },
+  statusBar: { borderTopWidth: 1, paddingTop: wxSc(SPACING.sm), alignItems: "center" },
+  statusText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", letterSpacing: 0.3 },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -383,7 +385,7 @@ export default function ShopScreen() {
         </>
       )}
 
-      <View style={{ height: scale(SPACING.xxl) }} />
+      <View style={{ height: wxSc(SPACING.xxl) }} />
     </>
   );
 
@@ -432,38 +434,38 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scroll: { flex: 1 },
   scrollContent: { paddingTop: 0 },
-  scrollContentWeb: { alignItems: "center", paddingHorizontal: scale(SPACING.md), paddingBottom: scale(SPACING.xl) },
+  scrollContentWeb: { alignItems: "center", paddingHorizontal: wxSc(SPACING.md), paddingBottom: wxSc(SPACING.xl) },
   webInner: { width: "100%", maxWidth: 900 },
 
-  headerWeb: { alignItems: "center", paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.sm) },
-  title: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: T.white, letterSpacing: 1 },
-  subtitle: { fontSize: moderateScale(FONT_SIZES.sm), color: T.gray, marginTop: scale(4) },
+  headerWeb: { alignItems: "center", paddingTop: wxSc(SPACING.lg), paddingBottom: wxSc(SPACING.sm) },
+  title: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "700", color: T.white, letterSpacing: 1 },
+  subtitle: { fontSize: wxMs(FONT_SIZES.sm), color: T.gray, marginTop: wxSc(4) },
 
-  headerMobile: { alignItems: "center", paddingTop: scale(56), paddingBottom: scale(14) },
-  titleMobile: { fontSize: moderateScale(22), fontWeight: "700", color: T.white, letterSpacing: 1.5 },
-  subtitleMobile: { fontSize: moderateScale(FONT_SIZES.sm), color: T.gray, marginTop: scale(4) },
+  headerMobile: { alignItems: "center", paddingTop: wxSc(56), paddingBottom: wxSc(14) },
+  titleMobile: { fontSize: wxMs(22), fontWeight: "700", color: T.white, letterSpacing: 1.5 },
+  subtitleMobile: { fontSize: wxMs(FONT_SIZES.sm), color: T.gray, marginTop: wxSc(4) },
 
-  statsWrapper: { marginHorizontal: scale(SPACING.md), marginTop: scale(SPACING.sm), marginBottom: scale(SPACING.xs) },
+  statsWrapper: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.xs) },
 
-  webGrid: { flexDirection: "row", flexWrap: "wrap", gap: scale(SPACING.md), paddingHorizontal: scale(SPACING.md) },
+  webGrid: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.md), paddingHorizontal: wxSc(SPACING.md) },
   webGridItem: { flex: 1, minWidth: 300 },
 
   loginBanner: {
-    backgroundColor: T.blueDim, borderRadius: scale(14), padding: scale(SPACING.md),
-    marginHorizontal: scale(SPACING.md), marginBottom: scale(SPACING.md),
+    backgroundColor: T.blueDim, borderRadius: wxSc(14), padding: wxSc(SPACING.md),
+    marginHorizontal: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md),
     borderWidth: 1, borderColor: T.blueBorder,
   },
-  loginText: { fontSize: moderateScale(FONT_SIZES.md), color: T.white, textAlign: "center", marginBottom: scale(SPACING.sm), fontWeight: "500" },
-  loginButtons: { flexDirection: "row", justifyContent: "center", gap: scale(SPACING.sm) },
+  loginText: { fontSize: wxMs(FONT_SIZES.md), color: T.white, textAlign: "center", marginBottom: wxSc(SPACING.sm), fontWeight: "500" },
+  loginButtons: { flexDirection: "row", justifyContent: "center", gap: wxSc(SPACING.sm) },
 
   errorBox: {
-    backgroundColor: COLORS.surface, borderRadius: scale(12), padding: scale(SPACING.lg),
-    alignItems: "center", marginBottom: scale(SPACING.md), marginHorizontal: scale(SPACING.md),
+    backgroundColor: COLORS.surface, borderRadius: wxSc(12), padding: wxSc(SPACING.lg),
+    alignItems: "center", marginBottom: wxSc(SPACING.md), marginHorizontal: wxSc(SPACING.md),
   },
-  errorText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.error, textAlign: "center", marginBottom: scale(SPACING.md) },
+  errorText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.error, textAlign: "center", marginBottom: wxSc(SPACING.md) },
 
-  empty: { alignItems: "center", padding: scale(SPACING.xl), marginTop: scale(SPACING.xl) },
-  emptyIcon: { fontSize: moderateScale(64), marginBottom: scale(SPACING.md) },
-  emptyTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: T.white, marginBottom: scale(SPACING.sm) },
-  emptySubtitle: { fontSize: moderateScale(FONT_SIZES.md), color: T.gray, textAlign: "center" },
+  empty: { alignItems: "center", padding: wxSc(SPACING.xl), marginTop: wxSc(SPACING.xl) },
+  emptyIcon: { fontSize: wxMs(64), marginBottom: wxSc(SPACING.md) },
+  emptyTitle: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: T.white, marginBottom: wxSc(SPACING.sm) },
+  emptySubtitle: { fontSize: wxMs(FONT_SIZES.md), color: T.gray, textAlign: "center" },
 });

@@ -2,7 +2,8 @@
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useHome } from "../../../viewmodels/useHome";
 import { COLORS } from "../../../theme/colors";
-import { FONT_SIZES, SPACING } from "../../../theme/typography";
+import { FONT_SIZES } from "../../../theme/typography";
+import { SPACING } from "../../../theme/spacing";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Loading } from "../../components/common/loading";
 import { WebContainer } from "../../components/common/WebContainer";
@@ -157,3 +158,4 @@ export default function HomeScreen() {
     </WebContainer>
   );
 }
+

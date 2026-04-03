@@ -18,8 +18,8 @@ import { useCreateVenue } from "../../../src/viewmodels/useCreateVenue";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
-const ms = (v: number) => isWeb ? v : ms(v);
-const sc = (v: number) => isWeb ? v : sc(v);
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export default function CreateVenueScreen() {
   const router = useRouter();
@@ -425,17 +425,17 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   backText: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: ms(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   placeholder: {
-    width: sc(50),
+    width: wxSc(50),
   },
   content: {
     flex: 1,
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: SPACING.sm,
@@ -456,17 +456,17 @@ const styles = StyleSheet.create({
     marginTop: SPACING.md,
   },
   label: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: sc(6),
+    marginBottom: wxSc(6),
     fontWeight: "600",
   },
   input: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.text,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   },
   predictions: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -487,14 +487,14 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   predictionMain: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   predictionSecondary: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: sc(2),
+    marginTop: wxSc(2),
   },
   dividerRow: {
     flexDirection: "row",
@@ -503,12 +503,12 @@ const styles = StyleSheet.create({
   },
   dividerLine: {
     flex: 1,
-    height: sc(1),
+    height: wxSc(1),
     backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: SPACING.md,
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   manualButton: {
@@ -516,13 +516,13 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   manualButtonText: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.primary,
     fontWeight: "600",
   },
   selectedBanner: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(12),
+    borderRadius: wxSc(12),
     padding: SPACING.md,
     marginBottom: SPACING.lg,
     flexDirection: "row",
@@ -535,23 +535,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedName: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   selectedAddress: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: sc(2),
+    marginTop: wxSc(2),
   },
   changeText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   addTableCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(12),
+    borderRadius: wxSc(12),
     padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -567,43 +567,43 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.background,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   stepperButton: {
-    width: sc(40),
-    height: sc(40),
+    width: wxSc(40),
+    height: wxSc(40),
     justifyContent: "center",
     alignItems: "center",
   },
   stepperText: {
-    fontSize: ms(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     color: COLORS.primary,
     fontWeight: "600",
   },
   quantityText: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
     paddingHorizontal: SPACING.sm,
-    minWidth: sc(30),
+    minWidth: wxSc(30),
     textAlign: "center",
   },
   addTableButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     paddingVertical: SPACING.sm,
     paddingHorizontal: SPACING.lg,
   },
   addTableButtonText: {
     color: COLORS.surface,
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
   tableItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(10),
+    borderRadius: wxSc(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -616,12 +616,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tableText: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.text,
   },
   searchResults: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     marginTop: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -635,27 +635,27 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   resultName: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   resultEmail: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   roleWarning: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.warning,
-    marginTop: sc(2),
+    marginTop: wxSc(2),
   },
   addText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   directorItem: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(10),
+    borderRadius: wxSc(10),
     padding: SPACING.md,
     marginTop: SPACING.sm,
     flexDirection: "row",
@@ -668,29 +668,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   directorName: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
   directorEmail: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginTop: sc(2),
+    marginTop: wxSc(2),
   },
   removeText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.error,
     fontWeight: "600",
   },
   emptyText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontStyle: "italic",
     marginTop: SPACING.sm,
   },
   createButton: {
     backgroundColor: COLORS.primary,
-    borderRadius: sc(8),
+    borderRadius: wxSc(8),
     paddingVertical: SPACING.md,
     alignItems: "center",
     marginTop: SPACING.lg,
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   },
   createButtonText: {
     color: COLORS.surface,
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
   },
   bottomSpacer: {

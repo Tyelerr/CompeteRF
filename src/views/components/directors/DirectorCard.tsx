@@ -7,8 +7,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
 const isWeb = Platform.OS === "web";
-const ms = (v: number) => isWeb ? v : ms(v);
-const sc = (v: number) => isWeb ? v : sc(v);
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 interface DirectorCardProps {
   director: GroupedDirector;
@@ -40,7 +40,7 @@ const formatTimeAgo = (dateString: string): string => {
 
 const MAX_VISIBLE = 4;
 
-const VENUE_ROW_HEIGHT = sc(64);
+const VENUE_ROW_HEIGHT = wxSc(64);
 
 const VenueRow = ({ a, isFullyArchived }: { a: any; isFullyArchived: boolean }) => (
   <View style={styles.venueRow}>
@@ -187,9 +187,9 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: sc(12),
-    padding: sc(SPACING.md),
-    marginBottom: sc(SPACING.md),
+    borderRadius: wxSc(12),
+    padding: wxSc(SPACING.md),
+    marginBottom: wxSc(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -197,37 +197,37 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: sc(SPACING.sm),
+    marginBottom: wxSc(SPACING.sm),
   },
   avatar: {
-    width: sc(48),
-    height: sc(48),
-    borderRadius: sc(24),
+    width: wxSc(48),
+    height: wxSc(48),
+    borderRadius: wxSc(24),
     backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: sc(SPACING.sm),
+    marginRight: wxSc(SPACING.sm),
     flexShrink: 0,
   },
   avatarText: {
-    fontSize: ms(FONT_SIZES.lg),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.white,
   },
   directorInfo: { flex: 1 },
   directorName: {
-    fontSize: ms(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: sc(2),
+    marginBottom: wxSc(2),
   },
   directorEmail: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: sc(2),
+    marginBottom: wxSc(2),
   },
   directorId: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
   },
   textMuted: { color: COLORS.textSecondary },
@@ -235,69 +235,69 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + "20",
     borderWidth: 1,
     borderColor: COLORS.primary + "60",
-    borderRadius: sc(8),
-    paddingHorizontal: sc(SPACING.sm),
-    paddingVertical: sc(SPACING.xs),
+    borderRadius: wxSc(8),
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.xs),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   editVenuesButtonText: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.primary,
   },
   venuesBox: {
     backgroundColor: COLORS.background,
-    borderRadius: sc(8),
-    padding: sc(SPACING.sm),
-    marginBottom: sc(SPACING.sm),
-    gap: sc(SPACING.sm),
+    borderRadius: wxSc(8),
+    padding: wxSc(SPACING.sm),
+    marginBottom: wxSc(SPACING.sm),
+    gap: wxSc(SPACING.sm),
   },
   venueRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: sc(SPACING.xs),
+    gap: wxSc(SPACING.xs),
   },
-  venueIcon: { fontSize: ms(FONT_SIZES.md), marginTop: sc(1) },
+  venueIcon: { fontSize: wxMs(FONT_SIZES.md), marginTop: wxSc(1) },
   venueInfo: { flex: 1 },
   venueName: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: sc(2),
+    marginBottom: wxSc(2),
   },
-  venueMeta: { gap: sc(2) },
+  venueMeta: { gap: wxSc(2) },
   venueMetaText: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   actionsRow: {
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingTop: sc(SPACING.sm),
+    paddingTop: wxSc(SPACING.sm),
   },
   removeButton: {
     backgroundColor: "#ef4444",
-    borderRadius: sc(8),
-    paddingVertical: sc(SPACING.sm),
+    borderRadius: wxSc(8),
+    paddingVertical: wxSc(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
   removeButtonText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
     color: "#ffffff",
   },
   restoreButton: {
     backgroundColor: "#10b981",
-    borderRadius: sc(8),
-    paddingVertical: sc(SPACING.sm),
+    borderRadius: wxSc(8),
+    paddingVertical: wxSc(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
   restoreButtonText: {
-    fontSize: ms(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
     color: "#ffffff",
   },
@@ -305,31 +305,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: sc(SPACING.xs),
-    gap: sc(SPACING.sm),
+    paddingTop: wxSc(SPACING.xs),
+    gap: wxSc(SPACING.sm),
   },
   viewMoreButton: {
     flex: 1,
-    paddingVertical: sc(SPACING.xs),
-    paddingHorizontal: sc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.xs),
+    paddingHorizontal: wxSc(SPACING.sm),
     backgroundColor: COLORS.primary + "15",
-    borderRadius: sc(6),
+    borderRadius: wxSc(6),
     borderWidth: 1,
     borderColor: COLORS.primary + "40",
     alignItems: "center",
   },
   viewMoreText: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "600",
   },
   viewLessButton: {
-    paddingVertical: sc(SPACING.xs),
-    paddingHorizontal: sc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.xs),
+    paddingHorizontal: wxSc(SPACING.sm),
     alignItems: "center",
   },
   viewLessText: {
-    fontSize: ms(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
     fontWeight: "500",
   },

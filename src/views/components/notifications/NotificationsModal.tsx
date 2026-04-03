@@ -9,6 +9,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 interface BroadcastNotification {
   id: string; message_id: string; read_at: string | null; created_at: string;
@@ -262,6 +264,7 @@ const NotificationCard = ({ item, isExpanded, onPress, onDelete, onTournamentPre
             <Text allowFontScaling={false} style={[s.typeBadgeText, { color: item.badge.color }]}>{item.badge.label}</Text>
           </View>
           <Text allowFontScaling={false} style={s.timeText}>{getTimeAgo(item.created_at)}</Text>
+          {isWeb && <TouchableOpacity onPress={onDelete} style={s.trashButton} hitSlop={{top:8,bottom:8,left:8,right:8}}><Text style={s.trashIcon}>Delete</Text></TouchableOpacity>}
         </View>
         <Text allowFontScaling={false} style={[s.subjectText, isUnread && s.subjectTextUnread]}>{item.title}</Text>
         {isExpanded ? (
@@ -294,6 +297,7 @@ const ConversationCard = ({ convo, onPress, onDelete }: { convo: ConversationPre
           <View style={s.timeRow}>
             {hasUnread && <View style={s.unreadBadge}><Text allowFontScaling={false} style={s.unreadBadgeText}>{convo.unread_count}</Text></View>}
             <Text allowFontScaling={false} style={s.timeText}>{getTimeAgo(convo.last_message_at || convo.updated_at)}</Text>
+          {isWeb && <TouchableOpacity onPress={onDelete} style={s.trashButton} hitSlop={{top:8,bottom:8,left:8,right:8}}><Text style={s.trashIcon}>Delete</Text></TouchableOpacity>}
           </View>
         </View>
         <Text allowFontScaling={false} style={[s.subjectText, hasUnread && s.subjectTextUnread]}>{convo.subject || getCategoryLabel(convo.category) || "Message"}</Text>
@@ -457,7 +461,7 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
                         onDelete={() => deleteNotification(item)} onTournamentPress={handleTournamentPress}
                         onDeepLink={(link) => { onClose(); router.push(link as any); }} />
                     ))}
-                    <Text allowFontScaling={false} style={s.hintText}>Long press to delete</Text>
+                    {!isWeb && <Text allowFontScaling={false} style={s.hintText}>Long press to delete</Text>}
                   </>
                 )}
               </>
@@ -478,14 +482,14 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
                     {conversations.map((convo) => (
                       <ConversationCard key={convo.id} convo={convo} onPress={() => openConversation(convo)} onDelete={() => deleteConversation(convo.id)} />
                     ))}
-                    <Text allowFontScaling={false} style={s.hintText}>Long press to delete</Text>
+                    {!isWeb && <Text allowFontScaling={false} style={s.hintText}>Long press to delete</Text>}
                   </>
                 )}
               </>
             )}
           </>
         )}
-        <View style={{ height: scale(SPACING.xl * 2) }} />
+        <View style={{ height: wxSc(SPACING.xl * 2) }} />
       </ScrollView>
     </>
   );
@@ -522,105 +526,107 @@ const s = StyleSheet.create({
   dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24 },
   dialog: { width: 700, maxWidth: "92%" as any, height: "82vh" as any, backgroundColor: "#000000", borderRadius: RADIUS.xl, borderWidth: 1, borderColor: "#2C2C2E", overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24, display: "flex" as any, flexDirection: "column" },
   mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20, paddingTop: 50, paddingBottom: 110 },
-  externalCloseButton: { margin: 12, paddingVertical: scale(14), alignItems: "center", backgroundColor: "#E74C3C", borderRadius: scale(12) },
-  externalCloseText: { color: "#FFFFFF", fontSize: moderateScale(16), fontWeight: "700" },
-  mobileContainer: { backgroundColor: COLORS.background, borderRadius: scale(20), width: "100%" as any, maxWidth: 500, flex: 1, overflow: "hidden" },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.md) },
+  externalCloseButton: { margin: 12, paddingVertical: wxSc(14), alignItems: "center", backgroundColor: "#E74C3C", borderRadius: wxSc(12) },
+  externalCloseText: { color: "#FFFFFF", fontSize: wxMs(16), fontWeight: "700" },
+  mobileContainer: { backgroundColor: COLORS.background, borderRadius: wxSc(20), width: "100%" as any, maxWidth: 500, flex: 1, overflow: "hidden" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.lg), paddingTop: wxSc(SPACING.lg), paddingBottom: wxSc(SPACING.md) },
   closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
-  closeButtonText: { color: COLORS.text, fontSize: moderateScale(20), fontWeight: "700" },
-  headerTitle: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", letterSpacing: 1 },
+  closeButtonText: { color: COLORS.text, fontSize: wxMs(20), fontWeight: "700" },
+  headerTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", letterSpacing: 1 },
   divider: { height: 1, backgroundColor: "#2C2C2E" },
   scroll: { flex: 1, minHeight: 0 },
-  scrollContent: { padding: scale(SPACING.md) },
-  tabRow: { flexDirection: "row", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: 3, borderWidth: 1, borderColor: COLORS.border, marginBottom: scale(SPACING.sm) },
-  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.md - 2, gap: 4 },
+  scrollContent: { padding: wxSc(SPACING.md) },
+  tabRow: { flexDirection: "row", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: 3, borderWidth: 1, borderColor: COLORS.border, marginBottom: wxSc(SPACING.sm) },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: wxSc(SPACING.sm), borderRadius: RADIUS.md - 2, gap: 4 },
   tabActive: { backgroundColor: COLORS.primary },
-  tabText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.textSecondary },
+  tabText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.textSecondary },
   tabTextActive: { color: "#fff" },
   tabBadge: { backgroundColor: "#E74C3C", borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  tabBadgeText: { fontSize: moderateScale(10), fontWeight: "700", color: "#fff" },
-  newMessageButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.sm), alignItems: "center", marginBottom: scale(SPACING.sm) },
-  newMessageButtonText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
-  actionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: scale(SPACING.sm) },
+  tabBadgeText: { fontSize: wxMs(10), fontWeight: "700", color: "#fff" },
+  newMessageButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: wxSc(SPACING.sm), alignItems: "center", marginBottom: wxSc(SPACING.sm) },
+  newMessageButtonText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
+  actionRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: wxSc(SPACING.sm) },
   settingsLink: { flexDirection: "row", alignItems: "center", gap: 6 },
-  settingsLinkIcon: { fontSize: moderateScale(16) },
-  settingsLinkText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
-  markAllText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "600" },
-  card: { marginTop: scale(SPACING.sm), backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden" },
+  settingsLinkIcon: { fontSize: wxMs(16) },
+  settingsLinkText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
+  markAllText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "600" },
+  card: { marginTop: wxSc(SPACING.sm), backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden" },
   cardUnread: { borderColor: COLORS.primary + "60" },
   accentBar: { height: 3, width: "100%" },
-  cardContent: { padding: scale(SPACING.md) },
+  cardContent: { padding: wxSc(SPACING.md) },
   cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   senderRow: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   senderDot: { width: 8, height: 8, borderRadius: 4 },
-  senderText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
+  senderText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
   typeBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, gap: 4 },
-  typeBadgeIcon: { fontSize: moderateScale(12) },
-  typeBadgeText: { fontSize: moderateScale(11), fontWeight: "700" },
+  typeBadgeIcon: { fontSize: wxMs(12) },
+  typeBadgeText: { fontSize: wxMs(11), fontWeight: "700" },
   timeRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  timeText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
+  timeText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted },
   unreadBadge: { backgroundColor: COLORS.primary, borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  unreadBadgeText: { fontSize: moderateScale(10), fontWeight: "700", color: "#fff" },
-  subjectText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
+  unreadBadgeText: { fontSize: wxMs(10), fontWeight: "700", color: "#fff" },
+  subjectText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
   subjectTextUnread: { fontWeight: "700" },
-  previewText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted, lineHeight: moderateScale(18) },
+  previewText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, lineHeight: wxMs(18) },
   categoryBadgeRow: { flexDirection: "row", marginTop: 6 },
   categoryBadge: { backgroundColor: COLORS.primary + "15", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
-  categoryBadgeText: { fontSize: moderateScale(10), color: COLORS.primary, fontWeight: "600" },
-  expandedBody: { marginTop: scale(SPACING.xs) },
-  bodyText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: moderateScale(22) },
-  linkButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.md), alignItems: "center", marginTop: scale(SPACING.md) },
-  linkButtonText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
-  cardActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: scale(SPACING.md), paddingTop: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  deleteLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: "#E74C3C", fontWeight: "600" },
-  hintText: { textAlign: "center", fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: scale(SPACING.md), fontStyle: "italic" },
-  loadingState: { alignItems: "center", paddingTop: scale(SPACING.xl * 2) },
-  loadingText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary },
-  emptyState: { alignItems: "center", paddingTop: scale(SPACING.xl * 2), paddingHorizontal: scale(SPACING.xl) },
-  emptyIcon: { fontSize: moderateScale(48), marginBottom: scale(SPACING.md) },
-  emptyTitle: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.xs) },
-  emptySubtitle: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", lineHeight: moderateScale(20) },
-  emptyComposeButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.lg), marginTop: scale(SPACING.lg) },
-  emptyComposeText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
+  categoryBadgeText: { fontSize: wxMs(10), color: COLORS.primary, fontWeight: "600" },
+  expandedBody: { marginTop: wxSc(SPACING.xs) },
+  bodyText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: wxMs(22) },
+  linkButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: wxSc(SPACING.sm), paddingHorizontal: wxSc(SPACING.md), alignItems: "center", marginTop: wxSc(SPACING.md) },
+  linkButtonText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
+  cardActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: wxSc(SPACING.md), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  deleteLabel: { fontSize: wxMs(FONT_SIZES.xs), color: "#E74C3C", fontWeight: "600" },
+  hintText: { textAlign: "center", fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: wxSc(SPACING.md), fontStyle: "italic" },
+  loadingState: { alignItems: "center", paddingTop: wxSc(SPACING.xl * 2) },
+  loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary },
+  emptyState: { alignItems: "center", paddingTop: wxSc(SPACING.xl * 2), paddingHorizontal: wxSc(SPACING.xl) },
+  emptyIcon: { fontSize: wxMs(48), marginBottom: wxSc(SPACING.md) },
+  emptyTitle: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, marginBottom: wxSc(SPACING.xs) },
+  emptySubtitle: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", lineHeight: wxMs(20) },
+  emptyComposeButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: wxSc(SPACING.sm), paddingHorizontal: wxSc(SPACING.lg), marginTop: wxSc(SPACING.lg) },
+  emptyComposeText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: "#fff" },
+  trashButton: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: COLORS.error, borderRadius: 6, marginLeft: 8, justifyContent: "center", alignItems: "center" },
+  trashIcon: { fontSize: 12, color: COLORS.white, fontWeight: "700" },
 });
 
 const cs = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.md) },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.lg), paddingTop: wxSc(SPACING.lg), paddingBottom: wxSc(SPACING.md) },
   backButton: { paddingVertical: 6, paddingHorizontal: 4 },
-  backButtonText: { color: COLORS.primary, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
-  headerTitle: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700" },
-  formContent: { padding: scale(SPACING.md) },
-  sectionLabel: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700", color: COLORS.textSecondary, letterSpacing: 1, marginTop: scale(SPACING.lg), marginBottom: scale(SPACING.sm) },
-  optionalText: { fontWeight: "400", color: COLORS.textMuted, letterSpacing: 0, fontSize: moderateScale(FONT_SIZES.xs) },
-  dropdownButton: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
-  dropdownButtonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
+  backButtonText: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600" },
+  headerTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700" },
+  formContent: { padding: wxSc(SPACING.md) },
+  sectionLabel: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.textSecondary, letterSpacing: 1, marginTop: wxSc(SPACING.lg), marginBottom: wxSc(SPACING.sm) },
+  optionalText: { fontWeight: "400", color: COLORS.textMuted, letterSpacing: 0, fontSize: wxMs(FONT_SIZES.xs) },
+  dropdownButton: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
+  dropdownButtonText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
   placeholder: { color: COLORS.textMuted },
-  dropdownArrow: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
+  dropdownArrow: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted },
   dropdown: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, marginTop: 4, zIndex: 100, overflow: "hidden" },
-  dropdownOption: { padding: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  dropdownOption: { padding: wxSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   dropdownOptionActive: { backgroundColor: COLORS.primary + "20" },
-  dropdownOptionText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
+  dropdownOptionText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
   dropdownOptionTextActive: { color: COLORS.primary, fontWeight: "600" },
   searchWrapper: { position: "relative", zIndex: 50 },
-  searchInput: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, borderWidth: 1, borderColor: COLORS.border, marginTop: scale(SPACING.sm) },
+  searchInput: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), fontSize: wxMs(FONT_SIZES.md), color: COLORS.text, borderWidth: 1, borderColor: COLORS.border, marginTop: wxSc(SPACING.sm) },
   autocompleteDropdown: { position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.primary + "60", marginTop: 2, zIndex: 999, overflow: "hidden" },
-  autocompleteItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: scale(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  autocompleteItemName: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, fontWeight: "500", flex: 1 },
-  autocompleteItemRole: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: scale(SPACING.sm) },
-  noResults: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted, textAlign: "center", marginTop: scale(SPACING.md) },
-  selectedBadge: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.primary + "20", borderRadius: RADIUS.md, paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), marginTop: scale(SPACING.sm), borderWidth: 1, borderColor: COLORS.primary + "40" },
-  selectedBadgeText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, fontWeight: "600", flex: 1 },
-  removeBadge: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.textMuted, paddingLeft: scale(SPACING.sm) },
-  supportNote: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), marginTop: scale(SPACING.sm), borderWidth: 1, borderColor: COLORS.border },
-  supportNoteText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
-  input: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, borderWidth: 1, borderColor: COLORS.border },
+  autocompleteItem: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: wxSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  autocompleteItemName: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "500", flex: 1 },
+  autocompleteItemRole: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: wxSc(SPACING.sm) },
+  noResults: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, textAlign: "center", marginTop: wxSc(SPACING.md) },
+  selectedBadge: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.primary + "20", borderRadius: RADIUS.md, paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm), borderWidth: 1, borderColor: COLORS.primary + "40" },
+  selectedBadgeText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "600", flex: 1 },
+  removeBadge: { fontSize: wxMs(FONT_SIZES.lg), color: COLORS.textMuted, paddingLeft: wxSc(SPACING.sm) },
+  supportNote: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), marginTop: wxSc(SPACING.sm), borderWidth: 1, borderColor: COLORS.border },
+  supportNoteText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
+  input: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), fontSize: wxMs(FONT_SIZES.md), color: COLORS.text, borderWidth: 1, borderColor: COLORS.border },
   messageInput: { minHeight: 140 },
-  charCount: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, textAlign: "right", marginTop: 4 },
-  bottomBar: { flexDirection: "row", padding: scale(SPACING.md), paddingBottom: scale(SPACING.lg), backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: COLORS.border, gap: scale(SPACING.sm) },
-  bottomButton: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
+  charCount: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, textAlign: "right", marginTop: 4 },
+  bottomBar: { flexDirection: "row", padding: wxSc(SPACING.md), paddingBottom: wxSc(SPACING.lg), backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: COLORS.border, gap: wxSc(SPACING.sm) },
+  bottomButton: { flex: 1, paddingVertical: wxSc(SPACING.md), borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
   sendButton: { backgroundColor: COLORS.primary },
-  sendButtonText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: "#FFFFFF" },
+  sendButtonText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: "#FFFFFF" },
   cancelButton: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  cancelButtonText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.textSecondary },
+  cancelButtonText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.textSecondary },
   buttonDisabled: { opacity: 0.4 },
 });

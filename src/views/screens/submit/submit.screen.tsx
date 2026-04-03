@@ -15,6 +15,8 @@ import { WebContainer } from "../../components/common/WebContainer";
 import { styles } from "./submit.styles";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 const dateToString = (date: Date | null): string => {
   if (!date) return "";
@@ -50,10 +52,10 @@ const ToggleRow = ({ label, value, onValueChange, disabled, hint }: { label: str
   isWeb ? (
     <View style={{ marginTop: 12, marginBottom: 4 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "flex-start" }}>
-        <Text allowFontScaling={false} style={{ fontSize: moderateScale(13), color: disabled ? COLORS.textMuted : COLORS.text }}>{label}</Text>
+        <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: disabled ? COLORS.textMuted : COLORS.text }}>{label}</Text>
         <ToggleSwitch label="" value={value} onValueChange={onValueChange} disabled={disabled} />
       </View>
-      {hint && <Text allowFontScaling={false} style={{ fontSize: moderateScale(10), color: COLORS.textMuted, marginTop: 3, fontStyle: "italic" }}>{hint}</Text>}
+      {hint && <Text allowFontScaling={false} style={{ fontSize: wxMs(10), color: COLORS.textMuted, marginTop: 3, fontStyle: "italic" }}>{hint}</Text>}
     </View>
   ) : (
     <ToggleSwitch label={label} value={value} onValueChange={onValueChange} disabled={disabled} />
@@ -183,13 +185,13 @@ export const SubmitScreen = () => {
                 <Text allowFontScaling={false} style={[styles.sectionTitle, { marginBottom: 0 }]}>My Templates</Text>
                 {templateMgr.templateCount > 0 && (
                   <View style={{ backgroundColor: COLORS.primary + "20", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
-                    <Text allowFontScaling={false} style={{ fontSize: moderateScale(10), fontWeight: "700", color: COLORS.primary }}>{templateMgr.templateCount} / 5</Text>
+                    <Text allowFontScaling={false} style={{ fontSize: wxMs(10), fontWeight: "700", color: COLORS.primary }}>{templateMgr.templateCount} / 5</Text>
                   </View>
                 )}
               </View>
               {templateMgr.hasTemplates && (
                 <TouchableOpacity onPress={() => { setManageMode(!manageMode); setRenamingId(null); }} style={{ backgroundColor: manageMode ? "#16a34a" : COLORS.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 5 }}>
-                  <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: "#fff", fontWeight: "700" }}>{manageMode ? "Done" : "Manage"}</Text>
+                  <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: "#fff", fontWeight: "700" }}>{manageMode ? "Done" : "Manage"}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -211,26 +213,26 @@ export const SubmitScreen = () => {
                       <FocusTextInput style={[styles.input, { flex: 1, height: 32, marginBottom: 0, paddingVertical: 0 }]} value={renameValue} onChangeText={setRenameValue} autoFocus selectTextOnFocus onSubmitEditing={async () => { if (renameValue.trim()) await templateMgr.renameTemplate(t.id, renameValue.trim()); setRenamingId(null); }} />
                     ) : (
                       <View style={{ flex: 1 }}>
-                        <Text allowFontScaling={false} style={{ fontSize: moderateScale(13), color: COLORS.text, fontWeight: "600" }} numberOfLines={1}>{t.name}</Text>
-                        {t.game_type && <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: COLORS.textSecondary, marginTop: 1 }} numberOfLines={1}>{t.game_type}{t.tournament_format ? ` · ${t.tournament_format}` : ""}</Text>}
+                        <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: COLORS.text, fontWeight: "600" }} numberOfLines={1}>{t.name}</Text>
+                        {t.game_type && <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: COLORS.textSecondary, marginTop: 1 }} numberOfLines={1}>{t.game_type}{t.tournament_format ? ` · ${t.tournament_format}` : ""}</Text>}
                       </View>
                     )}
                     {renamingId === t.id ? (
                       <View style={{ flexDirection: "row", gap: 6 }}>
                         <TouchableOpacity onPress={async () => { if (renameValue.trim()) await templateMgr.renameTemplate(t.id, renameValue.trim()); setRenamingId(null); }} style={{ backgroundColor: COLORS.primary, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 }}>
-                          <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: "#fff", fontWeight: "700" }}>Save</Text>
+                          <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: "#fff", fontWeight: "700" }}>Save</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => setRenamingId(null)} style={{ borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 }}>
-                          <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: COLORS.textSecondary }}>Cancel</Text>
+                          <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: COLORS.textSecondary }}>Cancel</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
                       <View style={{ flexDirection: "row", gap: 6 }}>
                         <TouchableOpacity onPress={() => { setRenamingId(t.id); setRenameValue(t.name); }} style={{ backgroundColor: COLORS.primary, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 }}>
-                          <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: "#fff", fontWeight: "700" }}>Rename</Text>
+                          <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: "#fff", fontWeight: "700" }}>Rename</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => templateMgr.deleteTemplate(t.id)} style={{ backgroundColor: COLORS.error, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 4 }}>
-                          <Text allowFontScaling={false} style={{ fontSize: moderateScale(11), color: "#fff", fontWeight: "700" }}>Delete</Text>
+                          <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: "#fff", fontWeight: "700" }}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -357,7 +359,7 @@ export const SubmitScreen = () => {
                   <FocusTextInput ref={vm.refs.entryFee} style={styles.input} value={vm.formData.entryFee} onChangeText={(v) => vm.updateFormData("entryFee", v)} placeholder="$0.00" placeholderTextColor={COLORS.textMuted} keyboardType="decimal-pad" />
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 16 }}>
-                  <Text allowFontScaling={false} style={{ fontSize: moderateScale(13), color: COLORS.text }}>Calcutta</Text>
+                  <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: COLORS.text }}>Calcutta</Text>
                   <ToggleSwitch label="" value={vm.formData.calcutta} onValueChange={(v) => vm.updateFormData("calcutta", v)} />
                 </View>
               </View>
@@ -398,10 +400,10 @@ export const SubmitScreen = () => {
                   { label: "Open Tournament", value: vm.formData.openTournament, onChange: (v: boolean) => vm.updateFormData("openTournament", v), disabled: vm.isOpenTournamentDisabled || vm.isChipTournament, hint: vm.isChipTournament ? "Uses chip allocation instead" : vm.isOpenTournamentDisabled ? "Disabled when Max Fargo is set" : undefined },
                   { label: "Recurring Tournament", value: vm.formData.isRecurring, onChange: (v: boolean) => vm.updateFormData("isRecurring", v), hint: vm.formData.isRecurring ? "🔄 Creates a series using your selected date/time as the repeating pattern" : "💡 Toggle ON to create a recurring tournament series" },
                 ].map((row, i) => (
-                  <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border + "40", alignSelf: "flex-start" }}>
+                  <View key={i} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border + "40" }}>
                     <View>
-                      <Text allowFontScaling={false} style={{ fontSize: moderateScale(13), color: row.disabled ? COLORS.textMuted : COLORS.text }}>{row.label}</Text>
-                      {row.hint && <Text allowFontScaling={false} style={{ fontSize: moderateScale(10), color: COLORS.textMuted, marginTop: 1, fontStyle: "italic" }}>{row.hint}</Text>}
+                      <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: row.disabled ? COLORS.textMuted : COLORS.text }}>{row.label}</Text>
+                      {row.hint && <Text allowFontScaling={false} style={{ fontSize: wxMs(10), color: COLORS.textMuted, marginTop: 1, fontStyle: "italic" }}>{row.hint}</Text>}
                     </View>
                     <ToggleSwitch label="" value={row.value} onValueChange={row.onChange} disabled={row.disabled} />
                   </View>
@@ -554,12 +556,12 @@ export const SubmitScreen = () => {
         return (
           <View style={styles.submitSection}>
             <View style={{ flexDirection: "row", gap: 10 }}>
-              <View style={{ flex: 1 }}>
+              <View style={isWeb ? { flex: 63 } : { flex: 1 }}>
                 <Button title={vm.submitting ? "Creating..." : vm.formData.isRecurring ? "Create Series" : "Submit Tournament"} onPress={vm.handleSubmit} loading={vm.submitting} disabled={vm.submitting} fullWidth />
               </View>
               {!templateMgr.atLimit && (
-                <TouchableOpacity onPress={() => { setTemplateName(vm.formData.name || ""); setShowTemplateModal(true); }} style={{ borderWidth: 1, borderColor: COLORS.primary, borderRadius: isWeb ? 6 : 8, paddingHorizontal: isWeb ? 14 : 16, justifyContent: "center", alignItems: "center", opacity: canSaveTemplate ? 1 : 0.4 }} disabled={!canSaveTemplate}>
-                  <Text allowFontScaling={false} style={{ fontSize: moderateScale(isWeb ? 12 : 13), color: COLORS.primary, fontWeight: "600" }}>💾 Save Template</Text>
+                <TouchableOpacity onPress={() => { setTemplateName(vm.formData.name || ""); setShowTemplateModal(true); }} style={{ flex: isWeb ? 37 : undefined, borderWidth: 1, borderColor: COLORS.primary, borderRadius: isWeb ? 6 : 8, paddingHorizontal: isWeb ? 14 : 16, justifyContent: "center", alignItems: "center", opacity: canSaveTemplate ? 1 : 0.4 }} disabled={!canSaveTemplate}>
+                  <Text allowFontScaling={false} style={{ fontSize: wxMs(isWeb ? 12 : 13), color: COLORS.primary, fontWeight: "600" }}>💾 Save Template</Text>
                 </TouchableOpacity>
               )}
             </View>

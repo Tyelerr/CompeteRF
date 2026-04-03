@@ -3,7 +3,11 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
+const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export interface TournamentCardData {
   id: number; name: string; game_type: string; tournament_format: string;
@@ -154,30 +158,30 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onDelete, onArchiv
 };
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: COLORS.surface, borderRadius: scale(12), padding: scale(SPACING.md), marginBottom: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
+  card: { backgroundColor: COLORS.surface, borderRadius: wxSc(12), padding: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
   cardArchived: { opacity: 0.7, borderColor: COLORS.textSecondary },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: scale(SPACING.xs) },
-  headerRight: { alignItems: "flex-end", flexDirection: "column", gap: scale(SPACING.xs) },
-  tournamentName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: scale(SPACING.sm) },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: wxSc(SPACING.xs) },
+  headerRight: { alignItems: "flex-end", flexDirection: "column", gap: wxSc(SPACING.xs) },
+  tournamentName: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: wxSc(SPACING.sm) },
   textArchived: { color: COLORS.textSecondary },
-  statusBadge: { paddingHorizontal: scale(SPACING.sm), paddingVertical: 2, borderRadius: scale(12) },
-  statusText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", textTransform: "capitalize" },
-  idBadge: { backgroundColor: "#000000", paddingHorizontal: scale(SPACING.sm), paddingVertical: 4, borderRadius: scale(12) },
-  idText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.white },
-  gameType: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, marginBottom: scale(SPACING.sm), textTransform: "capitalize" },
+  statusBadge: { paddingHorizontal: wxSc(SPACING.sm), paddingVertical: 2, borderRadius: wxSc(12) },
+  statusText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", textTransform: "capitalize" },
+  idBadge: { backgroundColor: "#000000", paddingHorizontal: wxSc(SPACING.sm), paddingVertical: 4, borderRadius: wxSc(12) },
+  idText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", color: COLORS.white },
+  gameType: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.primary, marginBottom: wxSc(SPACING.sm), textTransform: "capitalize" },
   infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  infoIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs), width: scale(20) },
-  infoText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, flex: 1 },
-  statusInfoBox: { backgroundColor: COLORS.background, borderRadius: scale(8), padding: scale(SPACING.sm), marginTop: scale(SPACING.sm), borderLeftWidth: 3, borderLeftColor: COLORS.error },
+  infoIcon: { fontSize: wxMs(FONT_SIZES.sm), marginRight: wxSc(SPACING.xs), width: wxSc(20) },
+  infoText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, flex: 1 },
+  statusInfoBox: { backgroundColor: COLORS.background, borderRadius: wxSc(8), padding: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm), borderLeftWidth: 3, borderLeftColor: COLORS.error },
   statusInfoBoxArchived: { borderLeftColor: COLORS.textSecondary },
-  statusInfoTitle: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
-  statusInfoText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
-  statusInfoReason: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
-  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: scale(SPACING.sm), paddingTop: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  statsRow: { flexDirection: "row", gap: scale(SPACING.lg) },
-  bottomActionIcons: { flexDirection: "row", gap: scale(SPACING.md), alignItems: "center" },
-  bottomActionIcon: { padding: scale(SPACING.sm), borderRadius: scale(8), borderWidth: 1, minWidth: scale(60), minHeight: scale(36), alignItems: "center", justifyContent: "center" },
-  actionButtonText: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600" },
+  statusInfoTitle: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
+  statusInfoText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  statusInfoReason: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
+  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: wxSc(SPACING.sm), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  statsRow: { flexDirection: "row", gap: wxSc(SPACING.lg) },
+  bottomActionIcons: { flexDirection: "row", gap: wxSc(SPACING.md), alignItems: "center" },
+  bottomActionIcon: { padding: wxSc(SPACING.sm), borderRadius: wxSc(8), borderWidth: 1, minWidth: wxSc(60), minHeight: wxSc(36), alignItems: "center", justifyContent: "center" },
+  actionButtonText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
   editButton: { backgroundColor: "#22c55e", borderColor: "#16a34a" },
   editButtonText: { color: "#ffffff" },
   deleteButton: { backgroundColor: "#ef4444", borderColor: "#dc2626" },
@@ -187,8 +191,8 @@ const styles = StyleSheet.create({
   restoreButton: { backgroundColor: "#10b981", borderColor: "#059669" },
   restoreButtonText: { color: "#ffffff" },
   stat: { alignItems: "center" },
-  statValue: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  statLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary },
+  statValue: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  statLabel: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
 });
 
 
