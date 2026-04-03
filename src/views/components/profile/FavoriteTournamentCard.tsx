@@ -4,6 +4,10 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { Platform } from "react-native";
+const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : ms(v);
+const sc = (v: number) => isWeb ? v : sc(v);
 
 interface FavoriteTournamentCardProps {
   tournament: {
@@ -85,27 +89,27 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({ 
 };
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: scale(SPACING.sm), overflow: "hidden" },
-  cardContent: { flexDirection: "row", padding: scale(SPACING.md + 2) },
-  leftContent: { flex: 1, marginRight: scale(SPACING.sm) },
-  rightContent: { alignItems: "center", justifyContent: "flex-start", minWidth: scale(110) },
-  imageContainer: { marginBottom: scale(SPACING.sm) },
-  tournamentImage: { width: scale(110), height: scale(110), borderRadius: RADIUS.md },
-  placeholderImage: { width: scale(110), height: scale(110), borderRadius: RADIUS.md, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
-  placeholderText: { fontSize: moderateScale(FONT_SIZES.xl + 8) },
-  viewImageButton: { backgroundColor: COLORS.primary + "20", borderColor: COLORS.primary, borderWidth: 1, borderRadius: RADIUS.sm, paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.md), flexDirection: "row", alignItems: "center", minWidth: scale(110), justifyContent: "center" },
-  viewImageIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs) },
-  viewImageText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: scale(SPACING.sm) },
-  gameTypeBadge: { flexShrink: 1, maxWidth: "75%", backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: scale(SPACING.sm + 1), borderRadius: RADIUS.sm },
-  gameTypeText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", textTransform: "uppercase" },
-  favoriteButton: { padding: scale(SPACING.xs) },
-  heartIcon: { fontSize: moderateScale(FONT_SIZES.lg), color: COLORS.error },
-  tournamentName: { fontSize: moderateScale(FONT_SIZES.md + 1), fontWeight: "600", color: COLORS.text, marginBottom: scale(SPACING.sm), lineHeight: moderateScale((FONT_SIZES.md + 1) * 1.2) },
-  venueInfo: { fontSize: moderateScale(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: scale(SPACING.sm) },
-  dateTimeInfo: { fontSize: moderateScale(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: scale(SPACING.sm) },
-  shareRow: { alignItems: "flex-start", marginTop: scale(SPACING.xs) },
-  shareButton: { flexDirection: "row", alignItems: "center", paddingVertical: scale(SPACING.xs), paddingHorizontal: scale(SPACING.sm) },
-  shareIcon: { fontSize: moderateScale(FONT_SIZES.md), marginRight: scale(SPACING.xs) },
-  shareText: { fontSize: moderateScale(FONT_SIZES.sm + 1), color: COLORS.primary, fontWeight: "600" },
+  card: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: sc(SPACING.sm), overflow: "hidden" },
+  cardContent: { flexDirection: "row", padding: sc(SPACING.md + 2) },
+  leftContent: { flex: 1, marginRight: sc(SPACING.sm) },
+  rightContent: { alignItems: "center", justifyContent: "flex-start", minWidth: sc(110) },
+  imageContainer: { marginBottom: sc(SPACING.sm) },
+  tournamentImage: { width: sc(110), height: sc(110), borderRadius: RADIUS.md },
+  placeholderImage: { width: sc(110), height: sc(110), borderRadius: RADIUS.md, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" },
+  placeholderText: { fontSize: ms(FONT_SIZES.xl + 8) },
+  viewImageButton: { backgroundColor: COLORS.primary + "20", borderColor: COLORS.primary, borderWidth: 1, borderRadius: RADIUS.sm, paddingVertical: sc(SPACING.sm), paddingHorizontal: sc(SPACING.md), flexDirection: "row", alignItems: "center", minWidth: sc(110), justifyContent: "center" },
+  viewImageIcon: { fontSize: ms(FONT_SIZES.sm), marginRight: sc(SPACING.xs) },
+  viewImageText: { fontSize: ms(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: sc(SPACING.sm) },
+  gameTypeBadge: { flexShrink: 1, maxWidth: "75%", backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: sc(SPACING.sm + 1), borderRadius: RADIUS.sm },
+  gameTypeText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textTransform: "uppercase" },
+  favoriteButton: { padding: sc(SPACING.xs) },
+  heartIcon: { fontSize: ms(28), color: COLORS.error },
+  tournamentName: { fontSize: ms(FONT_SIZES.md + 1), fontWeight: "600", color: COLORS.text, marginBottom: sc(SPACING.sm), lineHeight: ms((FONT_SIZES.md + 1) * 1.2) },
+  venueInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
+  dateTimeInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
+  shareRow: { alignItems: "flex-start", marginTop: sc(SPACING.xs) },
+  shareButton: { flexDirection: "row", alignItems: "center", paddingVertical: sc(SPACING.xs), paddingHorizontal: sc(SPACING.sm) },
+  shareIcon: { fontSize: ms(FONT_SIZES.md), marginRight: sc(SPACING.xs) },
+  shareText: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.primary, fontWeight: "600" },
 });

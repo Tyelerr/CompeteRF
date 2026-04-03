@@ -1,7 +1,8 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useAuth } from "../../../providers/AuthProvider";
+import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
+import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS } from "../../../theme/spacing";
 // Web-only component - no scaling needed
@@ -28,6 +29,8 @@ const getImageUrl = (t: any): string | null => {
 export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   const vm = useTournamentDetail(id);
   const { session } = useAuth() as any;
+  const { profile } = useAuthContext();
+  const { isFavorited, toggleFavorite, isToggling } = useFavorites(profile?.id_auto);
   const [showImg, setShowImg] = useState(false);
   const report = useReport({ userId: session?.user?.id });
 
@@ -39,7 +42,14 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
           <View style={s.dialog}>
             <View style={s.header}>
               <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
-              <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {profile?.id_auto && t && (
+              <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
+                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={28} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
+          </View>
             </View>
             <View style={{ padding: 40, alignItems: "center" }}>
               <Text allowFontScaling={false} style={{ color: COLORS.textSecondary }}>Loading...</Text>
@@ -63,7 +73,14 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
         <View style={s.dialog}>
           <View style={s.header}>
             <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {profile?.id_auto && t && (
+              <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
+                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={28} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
+          </View>
           </View>
 
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
