@@ -1,10 +1,12 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { SUPABASE_URL } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";
 
 const GOOGLE_PLACES_API_KEY = "AIzaSyC8ih2uZXpyubGDgVGJ1D32NLRS9LSs0gw";
+
 
 export interface VenueForm {
   venue: string;
@@ -94,16 +96,9 @@ export const useCreateVenue = () => {
 
     setSearching(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-        query,
-      )}&types=establishment&key=${GOOGLE_PLACES_API_KEY}`;
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.predictions) {
-        setPredictions(data.predictions);
-      }
+      const { data, error: fnErr1 } = await supabase.functions.invoke("google-places", { body: { action: "autocomplete", query } });
+      if (fnErr1) throw fnErr1;
+      if (data?.predictions) setPredictions(data.predictions);
     } catch (error) {
       console.error("Error searching places:", error);
     } finally {
@@ -114,12 +109,10 @@ export const useCreateVenue = () => {
   const selectPlace = async (placeId: string) => {
     setSearching(true);
     try {
-      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,address_components,geometry,formatted_phone_number&key=${GOOGLE_PLACES_API_KEY}`;
+      const { data, error: fnErr2 } = await supabase.functions.invoke("google-places", { body: { action: "details", placeId } });
+      if (fnErr2) throw fnErr2;
 
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.result) {
+      if (data?.result) {
         const result = data.result;
         const components = result.address_components || [];
 
