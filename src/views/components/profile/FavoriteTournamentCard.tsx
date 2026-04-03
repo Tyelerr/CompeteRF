@@ -6,8 +6,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Platform } from "react-native";
 const isWeb = Platform.OS === "web";
-const ms = (v: number) => isWeb ? v : ms(v);
-const sc = (v: number) => isWeb ? v : sc(v);
+const ms = (v: number) => isWeb ? v : moderateScale(v);
+const sc = (v: number) => isWeb ? v : scale(v);
 
 interface FavoriteTournamentCardProps {
   tournament: {
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
   gameTypeBadge: { flexShrink: 1, maxWidth: "75%", backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: sc(SPACING.sm + 1), borderRadius: RADIUS.sm },
   gameTypeText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textTransform: "uppercase" },
   favoriteButton: { padding: sc(SPACING.xs), alignSelf: "flex-start" },
-  heartIcon: { fontSize: ms(66), color: COLORS.error },
+  heartIcon: { fontSize: ms(20), color: COLORS.error },
   tournamentName: { fontSize: ms(FONT_SIZES.md + 1), fontWeight: "600", color: COLORS.text, marginBottom: sc(SPACING.sm), lineHeight: ms((FONT_SIZES.md + 1) * 1.2) },
   venueInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
   dateTimeInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
