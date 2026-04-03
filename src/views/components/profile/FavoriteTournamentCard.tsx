@@ -38,6 +38,7 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({ 
   const imageUrl = getTournamentImageUrl(tournament);
 
   const handleUnfavorite = () => {
+    if (isWeb) { onToggleFavorite(); return; }
     Alert.alert("Remove Favorite", "Are you sure you want to remove this tournament from your favorites?",
       [{ text: "Cancel", style: "cancel" }, { text: "Remove", style: "destructive", onPress: onToggleFavorite }],
       { cancelable: true }
@@ -89,7 +90,7 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({ 
 };
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: sc(SPACING.sm), overflow: "hidden" },
+  card: { backgroundColor: COLORS.backgroundCard, position: "relative", borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: sc(SPACING.sm), overflow: "hidden" },
   cardContent: { flexDirection: "row", padding: sc(SPACING.md + 2) },
   leftContent: { flex: 1, marginRight: sc(SPACING.sm) },
   rightContent: { alignItems: "center", justifyContent: "flex-start", minWidth: sc(110) },
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
   gameTypeBadge: { flexShrink: 1, maxWidth: "75%", backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: sc(SPACING.sm + 1), borderRadius: RADIUS.sm },
   gameTypeText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textTransform: "uppercase" },
   favoriteButton: { padding: sc(SPACING.xs), alignSelf: "flex-start" },
-  heartIcon: { fontSize: isWeb ? 32 : ms(20), color: COLORS.error },
+  heartIcon: { fontSize: isWeb ? 36 : ms(20), color: COLORS.error },
   tournamentName: { fontSize: ms(FONT_SIZES.md + 1), fontWeight: "600", color: COLORS.text, marginBottom: sc(SPACING.sm), lineHeight: ms((FONT_SIZES.md + 1) * 1.2) },
   venueInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
   dateTimeInfo: { fontSize: ms(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: sc(SPACING.sm) },
