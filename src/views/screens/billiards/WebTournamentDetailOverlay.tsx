@@ -42,14 +42,7 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
           <View style={s.dialog}>
             <View style={s.header}>
               <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {profile?.id_auto && t && (
-              <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
-                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={36} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
-          </View>
+              <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
             </View>
             <View style={{ padding: 40, alignItems: "center" }}>
               <Text allowFontScaling={false} style={{ color: COLORS.textSecondary }}>Loading...</Text>
@@ -73,14 +66,7 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
         <View style={s.dialog}>
           <View style={s.header}>
             <TouchableOpacity onPress={onClose} style={s.backBtn}><Text allowFontScaling={false} style={s.backBtnText}>← Back</Text></TouchableOpacity>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {profile?.id_auto && t && (
-              <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 4 }}>
-                <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={36} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
-              </TouchableOpacity>
-            )}
             <TouchableOpacity onPress={onClose} style={s.closeBtn}><Text allowFontScaling={false} style={s.closeBtnText}>✕</Text></TouchableOpacity>
-          </View>
           </View>
 
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
@@ -96,7 +82,12 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                   <Text allowFontScaling={false} style={s.title}>{t.name}</Text>
                   {t.description && <Text allowFontScaling={false} style={s.desc}>{t.description}</Text>}
                 </View>
-                <View style={{ alignItems: "center" }}>
+                <View style={{ alignItems: "center", flexDirection: "row" }}>
+                {profile?.id_auto && (
+                  <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 8, justifyContent: "center" }}>
+                    <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={48} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
+                  </TouchableOpacity>
+                )}
                   {imageUrl ? (
                     <Image source={{ uri: imageUrl }} style={s.img} resizeMode="cover" />
                   ) : (
