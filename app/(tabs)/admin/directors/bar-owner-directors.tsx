@@ -1,4 +1,7 @@
 ﻿import { moderateScale, scale } from "../../../../src/utils/scaling";
+const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : moderateScale(v);
+const sc = (v: number) => isWeb ? v : scale(v);
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -14,8 +17,6 @@ import { DirectorCard } from "../../../../src/views/components/directors/Directo
 import { EditDirectorVenuesModal } from "../../../../src/views/components/directors/EditDirectorVenuesModal";
 import { RemoveDirectorModal } from "../../../../src/views/components/directors/RemoveDirectorModal";
 import { Pagination } from "../../../../src/views/components/common/pagination";
-
-const isWeb = Platform.OS === "web";
 
 export default function BarOwnerDirectorsScreen() {
   const router = useRouter();
@@ -146,62 +147,62 @@ export default function BarOwnerDirectorsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  scrollContentWeb: { paddingBottom: SPACING.xl },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
   centerContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
-  loadingText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary },
+  loadingText: { fontSize: ms(FONT_SIZES.md), color: COLORS.textSecondary },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.xl + SPACING.lg),
-    paddingBottom: scale(SPACING.md),
+    paddingHorizontal: sc(SPACING.md),
+    paddingTop: sc(SPACING.xl + SPACING.lg),
+    paddingBottom: sc(SPACING.md),
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: { paddingTop: scale(SPACING.lg) },
-  backButton: { padding: scale(SPACING.xs) },
-  backText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.primary, fontWeight: "600" },
-  headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  placeholder: { width: scale(50) },
+  headerWeb: { paddingTop: sc(SPACING.lg) },
+  backButton: { padding: sc(SPACING.xs) },
+  backText: { fontSize: ms(FONT_SIZES.md), color: COLORS.primary, fontWeight: "600" },
+  headerTitle: { fontSize: ms(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  placeholder: { width: sc(50) },
   statsContainer: {
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.sm),
+    paddingHorizontal: sc(SPACING.md),
+    paddingVertical: sc(SPACING.sm),
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  statsText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
+  statsText: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
   searchContainer: {
-    paddingHorizontal: scale(SPACING.md),
-    paddingTop: scale(SPACING.md),
-    paddingBottom: scale(SPACING.sm),
+    paddingHorizontal: sc(SPACING.md),
+    paddingTop: sc(SPACING.md),
+    paddingBottom: sc(SPACING.sm),
   },
   searchInput: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: scale(8),
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.sm),
-    fontSize: moderateScale(FONT_SIZES.md),
+    borderRadius: sc(8),
+    paddingHorizontal: sc(SPACING.md),
+    paddingVertical: sc(SPACING.sm),
+    fontSize: ms(FONT_SIZES.md),
     color: COLORS.text,
   },
   addButton: {
-    marginHorizontal: scale(SPACING.md),
-    marginBottom: scale(SPACING.sm),
+    marginHorizontal: sc(SPACING.md),
+    marginBottom: sc(SPACING.sm),
     backgroundColor: COLORS.primary,
-    paddingVertical: scale(SPACING.sm),
-    borderRadius: scale(8),
+    paddingVertical: sc(SPACING.sm),
+    borderRadius: sc(8),
     alignItems: "center",
   },
-  addButtonText: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.white },
+  addButtonText: { fontSize: ms(FONT_SIZES.md), fontWeight: "600", color: COLORS.white },
 
-  listContent: { padding: scale(SPACING.md), paddingBottom: scale(SPACING.xl) },
+  listContent: { padding: sc(SPACING.md), paddingBottom: sc(SPACING.xl) },
 });
 

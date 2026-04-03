@@ -4,7 +4,11 @@ import { GroupedDirector } from "../../../models/types/director.types";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
+const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : ms(v);
+const sc = (v: number) => isWeb ? v : sc(v);
 
 interface DirectorCardProps {
   director: GroupedDirector;
@@ -36,7 +40,7 @@ const formatTimeAgo = (dateString: string): string => {
 
 const MAX_VISIBLE = 4;
 
-const VENUE_ROW_HEIGHT = scale(64);
+const VENUE_ROW_HEIGHT = sc(64);
 
 const VenueRow = ({ a, isFullyArchived }: { a: any; isFullyArchived: boolean }) => (
   <View style={styles.venueRow}>
@@ -183,9 +187,9 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
-    padding: scale(SPACING.md),
-    marginBottom: scale(SPACING.md),
+    borderRadius: sc(12),
+    padding: sc(SPACING.md),
+    marginBottom: sc(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -193,37 +197,37 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: scale(SPACING.sm),
+    marginBottom: sc(SPACING.sm),
   },
   avatar: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
+    width: sc(48),
+    height: sc(48),
+    borderRadius: sc(24),
     backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: scale(SPACING.sm),
+    marginRight: sc(SPACING.sm),
     flexShrink: 0,
   },
   avatarText: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: ms(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.white,
   },
   directorInfo: { flex: 1 },
   directorName: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: scale(2),
+    marginBottom: sc(2),
   },
   directorEmail: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    marginBottom: scale(2),
+    marginBottom: sc(2),
   },
   directorId: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     color: COLORS.textMuted,
   },
   textMuted: { color: COLORS.textSecondary },
@@ -231,69 +235,69 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + "20",
     borderWidth: 1,
     borderColor: COLORS.primary + "60",
-    borderRadius: scale(8),
-    paddingHorizontal: scale(SPACING.sm),
-    paddingVertical: scale(SPACING.xs),
+    borderRadius: sc(8),
+    paddingHorizontal: sc(SPACING.sm),
+    paddingVertical: sc(SPACING.xs),
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   editVenuesButtonText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.primary,
   },
   venuesBox: {
     backgroundColor: COLORS.background,
-    borderRadius: scale(8),
-    padding: scale(SPACING.sm),
-    marginBottom: scale(SPACING.sm),
-    gap: scale(SPACING.sm),
+    borderRadius: sc(8),
+    padding: sc(SPACING.sm),
+    marginBottom: sc(SPACING.sm),
+    gap: sc(SPACING.sm),
   },
   venueRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: scale(SPACING.xs),
+    gap: sc(SPACING.xs),
   },
-  venueIcon: { fontSize: moderateScale(FONT_SIZES.md), marginTop: scale(1) },
+  venueIcon: { fontSize: ms(FONT_SIZES.md), marginTop: sc(1) },
   venueInfo: { flex: 1 },
   venueName: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: scale(2),
+    marginBottom: sc(2),
   },
-  venueMeta: { gap: scale(2) },
+  venueMeta: { gap: sc(2) },
   venueMetaText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     color: COLORS.textSecondary,
   },
   actionsRow: {
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingTop: scale(SPACING.sm),
+    paddingTop: sc(SPACING.sm),
   },
   removeButton: {
     backgroundColor: "#ef4444",
-    borderRadius: scale(8),
-    paddingVertical: scale(SPACING.sm),
+    borderRadius: sc(8),
+    paddingVertical: sc(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
   removeButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     fontWeight: "600",
     color: "#ffffff",
   },
   restoreButton: {
     backgroundColor: "#10b981",
-    borderRadius: scale(8),
-    paddingVertical: scale(SPACING.sm),
+    borderRadius: sc(8),
+    paddingVertical: sc(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
   restoreButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     fontWeight: "600",
     color: "#ffffff",
   },
@@ -301,31 +305,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: scale(SPACING.xs),
-    gap: scale(SPACING.sm),
+    paddingTop: sc(SPACING.xs),
+    gap: sc(SPACING.sm),
   },
   viewMoreButton: {
     flex: 1,
-    paddingVertical: scale(SPACING.xs),
-    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: sc(SPACING.xs),
+    paddingHorizontal: sc(SPACING.sm),
     backgroundColor: COLORS.primary + "15",
-    borderRadius: scale(6),
+    borderRadius: sc(6),
     borderWidth: 1,
     borderColor: COLORS.primary + "40",
     alignItems: "center",
   },
   viewMoreText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "600",
   },
   viewLessButton: {
-    paddingVertical: scale(SPACING.xs),
-    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: sc(SPACING.xs),
+    paddingHorizontal: sc(SPACING.sm),
     alignItems: "center",
   },
   viewLessText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: ms(FONT_SIZES.xs),
     color: COLORS.textMuted,
     fontWeight: "500",
   },
