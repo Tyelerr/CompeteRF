@@ -35,8 +35,11 @@ import { EditProfileModal } from "../../src/views/components/profile/EditProfile
 import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
 import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
+import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
 
 const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : moderateScale(v);
+const sc = (v: number) => isWeb ? v : scale(v);
 
 interface Favorite {
   id: number;
@@ -71,35 +74,13 @@ const LoggedOutView = ({ router }: { router: any }) => {
   useEffect(() => {
     Animated.sequence([
       Animated.parallel([
-        Animated.timing(welcomeFade, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver: true,
-        }),
-        Animated.timing(welcomeSlide, {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.out(Easing.back(1.2)),
-          useNativeDriver: true,
-        }),
+        Animated.timing(welcomeFade, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(welcomeSlide, { toValue: 0, duration: 600, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(messageFade, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonsFade, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonsSlide, {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
+        Animated.timing(messageFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(buttonsFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(buttonsSlide, { toValue: 0, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       ]),
     ]).start();
   }, []);
@@ -109,25 +90,12 @@ const LoggedOutView = ({ router }: { router: any }) => {
     setAppleLoading(true);
     try {
       const result = await authService.signInWithApple();
-      if (!result.user) {
-        setError("Sign in failed. Please try again.");
-        return;
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", result.user.id)
-        .maybeSingle();
+      if (!result.user) { setError("Sign in failed. Please try again."); return; }
+      const { data: profile } = await supabase.from("profiles").select("id").eq("id", result.user.id).maybeSingle();
       if (profile) {
         router.replace("/(tabs)");
       } else {
-        router.replace({
-          pathname: "/auth/complete-profile",
-          params: {
-            firstName: result.fullName?.givenName || "",
-            lastName: result.fullName?.familyName || "",
-          },
-        } as any);
+        router.replace({ pathname: "/auth/complete-profile", params: { firstName: result.fullName?.givenName || "", lastName: result.fullName?.familyName || "" } } as any);
       }
     } catch (err: any) {
       if (err.code === "ERR_REQUEST_CANCELED") return;
@@ -141,46 +109,27 @@ const LoggedOutView = ({ router }: { router: any }) => {
     <View style={styles.container}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
-        <Text allowFontScaling={false} style={styles.headerSubtitle}>
-          View and manage your tournament history
-        </Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>View and manage your tournament history</Text>
       </View>
       <View style={styles.notLoggedIn}>
-        <Animated.Text
-          allowFontScaling={false}
-          style={[
-            styles.welcomeText,
-            { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] },
-          ]}
-        >
+        <Animated.Text allowFontScaling={false} style={[styles.welcomeText, { opacity: welcomeFade, transform: [{ translateY: welcomeSlide }] }]}>
           Welcome!
         </Animated.Text>
         <Animated.Text allowFontScaling={false} style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
-        <Animated.View
-          style={[
-            styles.buttonGroup,
-            { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] },
-          ]}
-        >
+        <Animated.View style={[styles.buttonGroup, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
           {Platform.OS === "ios" && (
             <>
               <View style={styles.appleButtonWrapper}>
                 <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={
-                    AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                  }
-                  buttonStyle={
-                    AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                  }
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
                   cornerRadius={8}
                   style={styles.appleButton}
                   onPress={handleAppleSignIn}
                 />
-                {appleLoading && (
-                  <Text allowFontScaling={false} style={styles.loadingHint}>Signing in...</Text>
-                )}
+                {appleLoading && <Text allowFontScaling={false} style={styles.loadingHint}>Signing in...</Text>}
               </View>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
@@ -189,18 +138,9 @@ const LoggedOutView = ({ router }: { router: any }) => {
               </View>
             </>
           )}
-          <Button
-            title="Log In"
-            onPress={() => router.push("/auth/login" as any)}
-            fullWidth
-          />
+          <Button title="Log In" onPress={() => router.push("/auth/login" as any)} fullWidth />
           <View style={styles.spacerSm} />
-          <Button
-            title="Create Account"
-            onPress={() => router.push("/auth/register" as any)}
-            variant="outline"
-            fullWidth
-          />
+          <Button title="Create Account" onPress={() => router.push("/auth/register" as any)} variant="outline" fullWidth />
           {error ? <Text allowFontScaling={false} style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
       </View>
@@ -213,7 +153,6 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
-
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
 
@@ -223,7 +162,6 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(storeProfile ?? null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-
   const [inboxVisible, setInboxVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
@@ -233,31 +171,14 @@ export default function ProfileScreen() {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
   const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
 
-  const {
-    paginatedItems: paginatedFavorites,
-    currentPage,
-    totalPages,
-    totalCount,
-    displayRange,
-    nextPage,
-    prevPage,
-    canGoNext,
-    canGoPrev,
-  } = usePagination(favorites, { itemsPerPage: 5 });
+  const { paginatedItems: paginatedFavorites, currentPage, totalPages, totalCount, displayRange, nextPage, prevPage, canGoNext, canGoPrev } = usePagination(favorites, { itemsPerPage: 5 });
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  }, [currentPage]);
-
-  useEffect(() => {
-    if (storeProfile) setProfile(storeProfile);
-  }, [storeProfile]);
+  useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: true }); }, [currentPage]);
+  useEffect(() => { if (storeProfile) setProfile(storeProfile); }, [storeProfile]);
 
   useEffect(() => {
     checkUser();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
       if (session?.user) {
         loadProfile(session.user.id);
@@ -290,15 +211,8 @@ export default function ProfileScreen() {
   };
 
   const loadProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
-    if (data) {
-      setProfile(data);
-      await loadFavorites(data.id_auto);
-    }
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    if (data) { setProfile(data); await loadFavorites(data.id_auto); }
     setLoading(false);
   };
 
@@ -319,26 +233,18 @@ export default function ProfileScreen() {
         .eq("user_id", userId)
         .is("read_at", null);
       setUnreadCount(count || 0);
-    } catch (err) {
-      console.error("Error loading unread count:", err);
-    }
+    } catch (err) { console.error("Error loading unread count:", err); }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    if (user) {
-      await loadProfile(user.id);
-      await loadUnreadCount(user.id);
-    }
+    if (user) { await loadProfile(user.id); await loadUnreadCount(user.id); }
     setRefreshing(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    setFavorites([]);
-    setUnreadCount(0);
+    setUser(null); setProfile(null); setFavorites([]); setUnreadCount(0);
     router.replace("/(tabs)" as any);
   };
 
@@ -346,65 +252,41 @@ export default function ProfileScreen() {
     setDetailTournamentId(String(tournamentId));
     setShowDetailModal(true);
   };
-
-  const closeDetailModal = () => {
-    setShowDetailModal(false);
-    setDetailTournamentId(null);
-  };
+  const closeDetailModal = () => { setShowDetailModal(false); setDetailTournamentId(null); };
 
   const getTournamentImageUrl = (tournament: any) => {
     const map: Record<string, string> = {
-      "8-ball": "8-ball.jpeg",
-      "9-ball": "9-ball.jpeg",
-      "10-ball": "10-ball.jpeg",
-      "one-pocket": "One-Pocket.jpeg",
-      "straight-pool": "Straight-Pool.jpeg",
+      "8-ball": "8-ball.jpeg", "9-ball": "9-ball.jpeg", "10-ball": "10-ball.jpeg",
+      "one-pocket": "One-Pocket.jpeg", "straight-pool": "Straight-Pool.jpeg",
       banks: "Banks.jpeg",
     };
     if (tournament.thumbnail) {
-      if (tournament.thumbnail.startsWith("custom:"))
-        return tournament.thumbnail.replace("custom:", "");
+      if (tournament.thumbnail.startsWith("custom:")) return tournament.thumbnail.replace("custom:", "");
       const f = map[tournament.thumbnail];
-      if (f)
-        return "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f;
+      if (f) return "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f;
     }
     const f = map[tournament.game_type];
-    return f
-      ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f
-      : null;
+    return f ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f : null;
   };
 
   const handleViewImage = (tournament: any) => {
     const url = getTournamentImageUrl(tournament);
-    if (url) {
-      setCurrentImageUrl(url);
-      setCurrentImageTitle(tournament.name);
-      setShowImageViewer(true);
-    }
+    if (url) { setCurrentImageUrl(url); setCurrentImageTitle(tournament.name); setShowImageViewer(true); }
   };
 
   const formatMemberSince = (d: string) =>
-    new Date(d).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "2-digit",
-    });
+    new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
-  const generatePlayerID = (idAuto: number) =>
-    "PL-" + String(idAuto).padStart(6, "0");
+  const generatePlayerID = (idAuto: number) => "PL-" + String(idAuto).padStart(6, "0");
 
   const handleRemoveFavorite = (favId: number) => {
     const run = async () => {
       const fav = favorites.find((f) => f.id === favId);
-      if (fav?.tournament_id) {
-        await toggleFav(fav.tournament_id);
-      } else {
-        await supabase.from("favorites").delete().eq("id", favId);
-      }
+      if (fav?.tournament_id) { await toggleFav(fav.tournament_id); }
+      else { await supabase.from("favorites").delete().eq("id", favId); }
       const updated = favorites.filter((f) => f.id !== favId);
       setFavorites(updated);
-      if (currentPage > Math.ceil(updated.length / 5) && Math.ceil(updated.length / 5) > 0)
-        prevPage();
+      if (currentPage > Math.ceil(updated.length / 5) && Math.ceil(updated.length / 5) > 0) prevPage();
     };
     run();
   };
@@ -417,30 +299,20 @@ export default function ProfileScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
-        contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={COLORS.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
           )
         }
       >
-        <View style={isWeb ? styles.webInner : styles.mobileInner}>
+        <View style={[styles.pageWrapper, isWeb && styles.pageWrapperWeb]}>
           <View style={[styles.header, isWeb && styles.headerWeb]}>
             <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
-            <Text allowFontScaling={false} style={styles.headerSubtitle}>
-              View and manage your tournament history
-            </Text>
+            <Text allowFontScaling={false} style={styles.headerSubtitle}>View and manage your tournament history</Text>
           </View>
 
           <View style={styles.profileCard}>
-            <TouchableOpacity
-              style={styles.messagesFloatingButton}
-              onPress={() => setInboxVisible(true)}
-            >
+            <TouchableOpacity style={styles.messagesFloatingButton} onPress={() => setInboxVisible(true)}>
               <Text allowFontScaling={false} style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
               <Text allowFontScaling={false} style={styles.messagesFloatingText}>Messages</Text>
               {unreadCount > 0 && (
@@ -453,11 +325,7 @@ export default function ProfileScreen() {
             <View style={styles.profileHeader}>
               <View style={styles.avatarContainer}>
                 {profile?.avatar_url ? (
-                  <Image
-                    source={{ uri: profile.avatar_url }}
-                    style={styles.profileImage}
-                    resizeMode="cover"
-                  />
+                  <Image source={{ uri: profile.avatar_url }} style={styles.profileImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.avatar}>
                     <View style={styles.ballRow}>
@@ -493,31 +361,15 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Action buttons row */}
             <View style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]}
-                onPress={() => setEditProfileVisible(true)}
-              >
-                <Text allowFontScaling={false} style={styles.editButtonText}>
-                  Edit Profile
-                </Text>
+              <TouchableOpacity style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]} onPress={() => setEditProfileVisible(true)}>
+                <Text allowFontScaling={false} style={styles.editButtonText}>Edit Profile</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]}
-                onPress={() => setInboxVisible(true)}
-              >
-                <Text allowFontScaling={false} style={styles.notificationButtonText}>
-                  Notifications
-                </Text>
+              <TouchableOpacity style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]} onPress={() => setInboxVisible(true)}>
+                <Text allowFontScaling={false} style={styles.notificationButtonText}>Notifications</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]}
-                onPress={handleLogout}
-              >
-                <Text allowFontScaling={false} style={styles.signOutButtonText}>
-                  Sign Out
-                </Text>
+              <TouchableOpacity style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]} onPress={handleLogout}>
+                <Text allowFontScaling={false} style={styles.signOutButtonText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
 
@@ -546,21 +398,11 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.bottomNavigation}>
-            <TouchableOpacity
-              style={[styles.navButton, styles.favoritesButton]}
-              onPress={() => {}}
-            >
-              <Text allowFontScaling={false} style={styles.navButtonText}>
-                {"\u2764\uFE0F"} Favorite Tournaments
-              </Text>
+            <TouchableOpacity style={[styles.navButton, styles.favoritesButton]} onPress={() => {}}>
+              <Text allowFontScaling={false} style={styles.navButtonText}>{"\u2764\uFE0F"} Favorite Tournaments</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navButton, styles.alertsButton]}
-              onPress={() => setSearchAlertsVisible(true)}
-            >
-              <Text allowFontScaling={false} style={styles.alertsButtonText}>
-                {"\uD83D\uDD0D"} Search Alerts
-              </Text>
+            <TouchableOpacity style={[styles.navButton, styles.alertsButton]} onPress={() => setSearchAlertsVisible(true)}>
+              <Text allowFontScaling={false} style={styles.alertsButtonText}>{"\uD83D\uDD0D"} Search Alerts</Text>
             </TouchableOpacity>
           </View>
 
@@ -568,23 +410,11 @@ export default function ProfileScreen() {
             {favorites.length === 0 ? (
               <View style={styles.emptyFavorites}>
                 <Text allowFontScaling={false} style={styles.emptyText}>No favorites yet</Text>
-                <Text allowFontScaling={false} style={styles.emptySubtext}>
-                  Tap the heart on tournaments to save them here!
-                </Text>
+                <Text allowFontScaling={false} style={styles.emptySubtext}>Tap the heart on tournaments to save them here!</Text>
               </View>
             ) : (
               <>
-                <Pagination
-                  totalCount={totalCount}
-                  displayStart={displayRange.start}
-                  displayEnd={displayRange.end}
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPrevPage={prevPage}
-                  onNextPage={nextPage}
-                  canGoPrev={canGoPrev}
-                  canGoNext={canGoNext}
-                />
+                <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />
                 {paginatedFavorites.map((fav) => {
                   const t = {
                     id: fav.tournament_id,
@@ -610,32 +440,16 @@ export default function ProfileScreen() {
                           if (!t) return;
                           const deepLink = "competerf://tournament/" + t.id;
                           const date = new Date(t.tournament_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                          const message =
-                            "\uD83C\uDFB1 " + t.name + "\n" +
-                            "\uD83D\uDCC5 " + date + "\n" +
-                            "\uD83D\uDCCD " + (t.venues?.venue || "") + ", " + (t.venues?.city || "") + ", " + (t.venues?.state || "") + "\n\n" +
-                            deepLink;
+                          const message = "\uD83C\uDFB1 " + t.name + "\n\uD83D\uDCC5 " + date + "\n\uD83D\uDCCD " + (t.venues?.venue || "") + ", " + (t.venues?.city || "") + ", " + (t.venues?.state || "") + "\n\n" + deepLink;
                           await Share.share({ message });
-                        } catch (e) {
-                          console.error("Share error:", e);
-                        }
+                        } catch (e) { console.error("Share error:", e); }
                       }}
                       onViewImage={() => handleViewImage(t)}
                       getTournamentImageUrl={getTournamentImageUrl}
                     />
                   );
                 })}
-                <Pagination
-                  totalCount={totalCount}
-                  displayStart={displayRange.start}
-                  displayEnd={displayRange.end}
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPrevPage={prevPage}
-                  onNextPage={nextPage}
-                  canGoPrev={canGoPrev}
-                  canGoNext={canGoNext}
-                />
+                <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />
               </>
             )}
           </View>
@@ -646,18 +460,11 @@ export default function ProfileScreen() {
         visible={showImageViewer}
         imageUrl={currentImageUrl}
         title={currentImageTitle}
-        onClose={() => {
-          setShowImageViewer(false);
-          setCurrentImageUrl(null);
-          setCurrentImageTitle("");
-        }}
+        onClose={() => { setShowImageViewer(false); setCurrentImageUrl(null); setCurrentImageTitle(""); }}
       />
 
       {editProfileVisible && (
-        <EditProfileModal
-          visible={editProfileVisible}
-          onClose={() => setEditProfileVisible(false)}
-        />
+        <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
       )}
 
       <NotificationsModal
@@ -665,22 +472,12 @@ export default function ProfileScreen() {
         onClose={() => setInboxVisible(false)}
         userId={user?.id}
         userIdAuto={profile?.id_auto}
-        onViewTournament={(id) => {
-          setInboxVisible(false);
-          setTimeout(() => openDetailModal(id), 150);
-        }}
+        onViewTournament={(id) => { setInboxVisible(false); setTimeout(() => openDetailModal(id), 150); }}
       />
 
-      <TournamentDetailModal
-        id={detailTournamentId}
-        visible={showDetailModal}
-        onClose={closeDetailModal}
-      />
-
-      <SearchAlertsModal
-        visible={searchAlertsVisible}
-        onClose={() => setSearchAlertsVisible(false)}
-      />
+      {isWeb && showDetailModal && detailTournamentId && <WebTournamentDetailOverlay id={detailTournamentId} onClose={closeDetailModal} />}
+      {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal} onClose={closeDetailModal} />}
+      <SearchAlertsModal visible={searchAlertsVisible} onClose={() => setSearchAlertsVisible(false)} />
     </View>
   );
 }
@@ -688,130 +485,73 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollView: { flex: 1 },
-  scrollContentWeb: { alignItems: "center", paddingBottom: scale(SPACING.xl) },
-  webInner: { width: "100%" as any, maxWidth: 860 },
-  mobileInner: { flex: 1 },
+  pageWrapper: { flex: 1 },
+  pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+
   header: {
-    padding: scale(SPACING.md),
-    paddingTop: scale(SPACING.xl + SPACING.lg),
-    paddingBottom: scale(SPACING.sm),
+    padding: sc(SPACING.md),
+    paddingTop: sc(SPACING.xl + SPACING.lg),
+    paddingBottom: sc(SPACING.sm),
     alignItems: "center",
   },
-  headerWeb: { paddingTop: scale(SPACING.lg) },
-  headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.xl),
-    fontWeight: "700",
-    color: COLORS.text,
-    textAlign: "center",
-  },
-  headerSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    marginTop: scale(SPACING.xs),
-  },
-  notLoggedIn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: scale(SPACING.lg),
-  },
-  welcomeText: {
-    fontSize: moderateScale(36),
-    fontWeight: "700",
-    color: "#4A90D9",
-    marginBottom: scale(SPACING.xl),
-    letterSpacing: 1,
-  },
-  message: {
-    fontSize: moderateScale(FONT_SIZES.lg),
-    color: COLORS.textMuted,
-    marginBottom: scale(SPACING.xl),
-    textAlign: "center",
-  },
+  headerWeb: { paddingTop: SPACING.lg },
+  headerTitle: { fontSize: ms(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, textAlign: "center" },
+  headerSubtitle: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: sc(SPACING.xs) },
+
+  notLoggedIn: { flex: 1, alignItems: "center", justifyContent: "center", padding: sc(SPACING.lg) },
+  welcomeText: { fontSize: ms(36), fontWeight: "700", color: "#4A90D9", marginBottom: sc(SPACING.xl), letterSpacing: 1 },
+  message: { fontSize: ms(FONT_SIZES.lg), color: COLORS.textMuted, marginBottom: sc(SPACING.xl), textAlign: "center" },
   buttonGroup: { width: "100%" },
-  appleButtonWrapper: { alignItems: "center", marginBottom: scale(SPACING.sm) },
-  appleButton: { width: "100%", height: scale(50) },
-  loadingHint: {
-    color: COLORS.textSecondary,
-    fontSize: moderateScale(FONT_SIZES.sm),
-    marginTop: scale(SPACING.xs),
-  },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: scale(SPACING.md),
-  },
+  appleButtonWrapper: { alignItems: "center", marginBottom: sc(SPACING.sm) },
+  appleButton: { width: "100%", height: sc(50) },
+  loadingHint: { color: COLORS.textSecondary, fontSize: ms(FONT_SIZES.sm), marginTop: sc(SPACING.xs) },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: sc(SPACING.md) },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
-  dividerText: {
-    color: COLORS.textSecondary,
-    fontSize: moderateScale(FONT_SIZES.sm),
-    marginHorizontal: scale(SPACING.md),
-  },
-  errorText: {
-    color: COLORS.error,
-    fontSize: moderateScale(FONT_SIZES.sm),
-    textAlign: "center",
-    marginTop: scale(SPACING.md),
-  },
+  dividerText: { color: COLORS.textSecondary, fontSize: ms(FONT_SIZES.sm), marginHorizontal: sc(SPACING.md) },
+  errorText: { color: COLORS.error, fontSize: ms(FONT_SIZES.sm), textAlign: "center", marginTop: sc(SPACING.md) },
+  spacerSm: { height: sc(SPACING.sm) },
+
   profileCard: {
-    margin: scale(SPACING.md),
+    margin: sc(SPACING.md),
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: scale(SPACING.lg),
+    padding: sc(SPACING.lg),
   },
   messagesFloatingButton: {
     position: "absolute",
-    top: scale(SPACING.md),
-    right: scale(SPACING.md),
+    top: sc(SPACING.md),
+    right: sc(SPACING.md),
     backgroundColor: COLORS.primary,
-    borderRadius: scale(12),
-    paddingHorizontal: scale(SPACING.sm),
-    paddingVertical: scale(SPACING.xs),
+    borderRadius: sc(12),
+    paddingHorizontal: sc(SPACING.sm),
+    paddingVertical: sc(SPACING.xs),
     flexDirection: "row",
     alignItems: "center",
-    gap: scale(4),
+    gap: sc(4),
     zIndex: 1,
   },
-  messagesFloatingIcon: { fontSize: moderateScale(14) },
-  messagesFloatingText: {
-    fontSize: moderateScale(FONT_SIZES.xs),
-    fontWeight: "700",
-    color: COLORS.white,
-  },
+  messagesFloatingIcon: { fontSize: ms(14) },
+  messagesFloatingText: { fontSize: ms(FONT_SIZES.xs), fontWeight: "700", color: COLORS.white },
   messagesUnreadBadge: {
     backgroundColor: COLORS.error,
-    borderRadius: scale(10),
-    minWidth: scale(18),
-    height: scale(18),
+    borderRadius: sc(10),
+    minWidth: sc(18),
+    height: sc(18),
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: scale(4),
-    marginLeft: scale(2),
+    paddingHorizontal: sc(4),
+    marginLeft: sc(2),
   },
-  messagesUnreadText: { fontSize: moderateScale(10), fontWeight: "700", color: COLORS.white },
-  profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: scale(SPACING.lg),
-  },
-  avatarContainer: { width: scale(80), height: scale(80), marginRight: scale(SPACING.md) },
-  profileImage: {
-    width: scale(80),
-    height: scale(80),
-    borderRadius: scale(40),
-    borderWidth: 2,
-    borderColor: COLORS.border,
-  },
-  avatar: { width: scale(80), height: scale(80) },
-  ballRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: scale(2),
-  },
-  ball: { width: scale(24), height: scale(24), borderRadius: scale(12), marginHorizontal: scale(1) },
+  messagesUnreadText: { fontSize: ms(10), fontWeight: "700", color: COLORS.white },
+
+  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: sc(SPACING.lg) },
+  avatarContainer: { width: sc(80), height: sc(80), marginRight: sc(SPACING.md) },
+  profileImage: { width: sc(80), height: sc(80), borderRadius: sc(40), borderWidth: 2, borderColor: COLORS.border },
+  avatar: { width: sc(80), height: sc(80) },
+  ballRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: sc(2) },
+  ball: { width: sc(24), height: sc(24), borderRadius: sc(12), marginHorizontal: sc(1) },
   ball1: { backgroundColor: "#FFD700" },
   ball2: { backgroundColor: "#0066FF" },
   ball3: { backgroundColor: "#FF0000" },
@@ -822,122 +562,51 @@ const styles = StyleSheet.create({
   ball12: { backgroundColor: "#800080" },
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
   profileInfo: { flex: 1 },
-  name: {
-    fontSize: moderateScale(FONT_SIZES.xl),
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: scale(SPACING.xs),
-  },
-  playerID: {
-    fontSize: moderateScale(FONT_SIZES.md),
-    color: COLORS.textSecondary,
-    marginBottom: scale(SPACING.xs),
-  },
-  memberSince: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted },
-  actionButtons: {
-    flexDirection: "row",
-    gap: scale(SPACING.xs),
-    marginBottom: scale(SPACING.sm),
-  },
+  name: { fontSize: ms(FONT_SIZES.xl), fontWeight: "600", color: COLORS.text, marginBottom: sc(SPACING.xs) },
+  playerID: { fontSize: ms(FONT_SIZES.md), color: COLORS.textSecondary, marginBottom: sc(SPACING.xs) },
+  memberSince: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textMuted },
+
+  actionButtons: { flexDirection: "row", gap: sc(SPACING.xs), marginBottom: sc(SPACING.sm) },
   actionButtonsWeb: { flexDirection: "row" },
   actionButton: {
     flex: 1,
-    paddingVertical: scale(SPACING.sm),
-    paddingHorizontal: scale(SPACING.xs),
+    paddingVertical: sc(SPACING.sm),
+    paddingHorizontal: sc(SPACING.xs),
     borderRadius: RADIUS.md,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: scale(44),
+    minHeight: sc(44),
   },
-  actionButtonWeb: { paddingVertical: scale(SPACING.md + 2) },
+  actionButtonWeb: { paddingVertical: SPACING.md + 2 },
   editButton: { backgroundColor: COLORS.secondary },
-  editButtonText: {
-    color: COLORS.white,
-    fontSize: moderateScale(FONT_SIZES.xs),
-    fontWeight: "600",
-    textAlign: "center",
-    flexShrink: 1,
-  },
+  editButtonText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textAlign: "center", flexShrink: 1 },
   notificationButton: { backgroundColor: COLORS.primary },
-  notificationButtonText: {
-    color: COLORS.white,
-    fontSize: moderateScale(FONT_SIZES.xs),
-    fontWeight: "600",
-    textAlign: "center",
-    flexShrink: 1,
-  },
+  notificationButtonText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textAlign: "center", flexShrink: 1 },
   signOutButton: { backgroundColor: COLORS.error },
-  signOutButtonText: {
-    color: COLORS.white,
-    fontSize: moderateScale(FONT_SIZES.xs),
-    fontWeight: "600",
-    textAlign: "center",
-    flexShrink: 1,
-  },
-  userDetails: { gap: scale(SPACING.md) },
-  detailItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingBottom: scale(SPACING.sm),
-  },
-  detailLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    marginBottom: scale(SPACING.xs),
-  },
-  detailValue: {
-    fontSize: moderateScale(FONT_SIZES.lg),
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  bottomNavigation: {
-    flexDirection: "row",
-    margin: scale(SPACING.md),
-    gap: scale(SPACING.sm),
-  },
+  signOutButtonText: { color: COLORS.white, fontSize: ms(FONT_SIZES.xs), fontWeight: "600", textAlign: "center", flexShrink: 1 },
+
+  userDetails: { gap: sc(SPACING.md) },
+  detailItem: { borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingBottom: sc(SPACING.sm) },
+  detailLabel: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: sc(SPACING.xs) },
+  detailValue: { fontSize: ms(FONT_SIZES.lg), color: COLORS.text, fontWeight: "500" },
+
+  bottomNavigation: { flexDirection: "row", margin: sc(SPACING.md), gap: sc(SPACING.sm) },
   navButton: {
     flex: 1,
-    paddingVertical: scale(SPACING.md),
-    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: sc(SPACING.md),
+    paddingHorizontal: sc(SPACING.sm),
     borderRadius: RADIUS.md,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: scale(52),
+    minHeight: sc(52),
   },
   favoritesButton: { backgroundColor: COLORS.primary },
-  alertsButton: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  navButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
-    fontWeight: "600",
-    color: COLORS.white,
-    textAlign: "center",
-    flexShrink: 1,
-  },
-  alertsButtonText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
-    fontWeight: "600",
-    color: COLORS.text,
-    textAlign: "center",
-    flexShrink: 1,
-  },
-  favoritesSection: { padding: scale(SPACING.md) },
-  emptyFavorites: { alignItems: "center", padding: scale(SPACING.lg) },
-  emptyText: {
-    fontSize: moderateScale(FONT_SIZES.md),
-    color: COLORS.textMuted,
-    marginBottom: scale(SPACING.xs),
-  },
-  emptySubtext: {
-    fontSize: moderateScale(FONT_SIZES.sm),
-    color: COLORS.textMuted,
-    textAlign: "center",
-  },
-  spacerSm: { height: scale(SPACING.sm) },
+  alertsButton: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  navButtonText: { fontSize: ms(FONT_SIZES.sm), fontWeight: "600", color: COLORS.white, textAlign: "center", flexShrink: 1 },
+  alertsButtonText: { fontSize: ms(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, textAlign: "center", flexShrink: 1 },
+
+  favoritesSection: { padding: sc(SPACING.md) },
+  emptyFavorites: { alignItems: "center", padding: sc(SPACING.lg) },
+  emptyText: { fontSize: ms(FONT_SIZES.md), color: COLORS.textMuted, marginBottom: sc(SPACING.xs) },
+  emptySubtext: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textMuted, textAlign: "center" },
 });
-
-
-
