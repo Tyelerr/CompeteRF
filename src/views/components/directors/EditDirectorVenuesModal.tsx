@@ -8,6 +8,9 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+const isWeb = Platform.OS === "web";
+const ms = (v: number) => isWeb ? v : moderateScale(v);
+const sc = (v: number) => isWeb ? v : scale(v);
 
 interface EditDirectorVenuesModalProps {
   visible: boolean;
@@ -18,7 +21,7 @@ interface EditDirectorVenuesModalProps {
   isProcessing?: boolean;
 }
 
-const VENUE_ROW_HEIGHT = scale(56);
+const VENUE_ROW_HEIGHT = sc(56);
 const VISIBLE_ROWS = 5;
 
 export const EditDirectorVenuesModal: React.FC<EditDirectorVenuesModalProps> = ({
@@ -53,11 +56,11 @@ export const EditDirectorVenuesModal: React.FC<EditDirectorVenuesModalProps> = (
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
       <Pressable style={styles.overlay} onPress={onCancel}>
-        <Pressable style={styles.modal} onPress={Keyboard.dismiss}>
+        <Pressable style={styles.modal} onPress={() => { if (!isWeb) Keyboard.dismiss(); }}>
 
           {/* Header */}
-          <Pressable onPress={Keyboard.dismiss} style={styles.header}>
-            <View style={{ width: scale(32) }} />
+          <Pressable onPress={() => { if (!isWeb) Keyboard.dismiss(); }} style={styles.header}>
+            <View style={{ width: sc(32) }} />
             <Text allowFontScaling={false} style={styles.headerTitle}>Edit Venues</Text>
             <TouchableOpacity onPress={onCancel} style={styles.closeButton} disabled={isProcessing}>
               <Text allowFontScaling={false} style={styles.closeButtonText}>✕</Text>
@@ -66,7 +69,7 @@ export const EditDirectorVenuesModal: React.FC<EditDirectorVenuesModalProps> = (
           <View style={styles.divider} />
 
           {/* Director chip */}
-          <Pressable onPress={Keyboard.dismiss} style={styles.directorChip}>
+          <Pressable onPress={() => { if (!isWeb) Keyboard.dismiss(); }} style={styles.directorChip}>
             <Text allowFontScaling={false} style={styles.directorChipName}>
               {director.profile.name || director.profile.user_name}
             </Text>
@@ -162,11 +165,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
-    padding: scale(SPACING.lg),
+    padding: sc(SPACING.lg),
   },
   modal: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(20),
+    borderRadius: sc(20),
     width: "100%",
     maxWidth: 480,
     borderWidth: 1,
@@ -181,94 +184,89 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: scale(SPACING.lg),
-    paddingTop: scale(SPACING.lg),
-    paddingBottom: scale(SPACING.md),
+    paddingHorizontal: sc(SPACING.lg),
+    paddingTop: sc(SPACING.lg),
+    paddingBottom: sc(SPACING.md),
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: ms(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
   closeButton: {
-    width: scale(32),
-    height: scale(32),
+    width: sc(32),
+    height: sc(32),
     alignItems: "center",
     justifyContent: "center",
   },
   closeButtonText: {
-    fontSize: moderateScale(FONT_SIZES.lg),
+    fontSize: ms(FONT_SIZES.lg),
     color: COLORS.textSecondary,
   },
   divider: { height: 1, backgroundColor: COLORS.border },
   directorChip: {
-    margin: scale(SPACING.md),
-    marginBottom: scale(SPACING.sm),
+    margin: sc(SPACING.md),
+    marginBottom: sc(SPACING.sm),
     backgroundColor: COLORS.primary + "15",
-    borderRadius: scale(10),
-    padding: scale(SPACING.md),
+    borderRadius: sc(10),
+    padding: sc(SPACING.md),
     borderWidth: 1,
     borderColor: COLORS.primary + "40",
   },
   directorChipName: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: scale(2),
+    marginBottom: sc(2),
   },
   directorChipEmail: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: COLORS.background,
-    borderRadius: scale(10),
+    borderRadius: sc(10),
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginHorizontal: scale(SPACING.md),
-    marginBottom: scale(SPACING.sm),
-    paddingHorizontal: scale(SPACING.sm),
-    height: scale(40),
-    gap: scale(SPACING.xs),
+    marginHorizontal: sc(SPACING.md),
+    marginBottom: sc(SPACING.sm),
+    paddingHorizontal: sc(SPACING.sm),
+    height: sc(40),
+    gap: sc(SPACING.xs),
   },
-  searchIcon: { fontSize: moderateScale(FONT_SIZES.sm) },
-  searchInput: {
-    flex: 1,
-    fontSize: moderateScale(FONT_SIZES.sm),
-    color: COLORS.text,
-    height: scale(40),
-  },
+  searchIcon: { fontSize: ms(FONT_SIZES.sm) },
+  searchInput: { flex: 1, fontSize: ms(FONT_SIZES.sm), color: COLORS.text, height: sc(40), outlineWidth: 0, outlineStyle: "none" } as any,
   searchClear: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textMuted,
-    paddingLeft: scale(SPACING.xs),
+    paddingLeft: sc(SPACING.xs),
   },
   listContent: {
-    paddingHorizontal: scale(SPACING.md),
-    paddingVertical: scale(SPACING.xs),
-    gap: scale(SPACING.xs),
+    paddingHorizontal: sc(SPACING.md),
+    paddingVertical: sc(SPACING.xs),
+    gap: sc(SPACING.xs),
   },
   venueRow: {
     flexDirection: "row",
     alignItems: "center",
     height: VENUE_ROW_HEIGHT,
-    paddingHorizontal: scale(SPACING.md),
-    borderRadius: scale(10),
+    paddingHorizontal: sc(SPACING.md),
+    borderRadius: sc(10),
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.background,
-    gap: scale(SPACING.md),
+    gap: sc(SPACING.md),
   },
   venueRowActive: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary + "10",
   },
   checkbox: {
-    width: scale(24),
-    height: scale(24),
-    borderRadius: scale(6),
+    width: sc(24),
+    height: sc(24),
+    borderRadius: sc(6),
     borderWidth: 2,
     borderColor: COLORS.textMuted,
     alignItems: "center",
@@ -280,13 +278,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   checkmark: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.white,
     fontWeight: "700",
   },
   venueLabel: {
     flex: 1,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textSecondary,
   },
   venueLabelActive: { color: COLORS.text, fontWeight: "600" },
@@ -296,31 +294,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: ms(FONT_SIZES.sm),
     color: COLORS.textMuted,
     fontStyle: "italic",
   },
   footer: {
     flexDirection: "row",
-    gap: scale(SPACING.sm),
-    padding: scale(SPACING.md),
+    gap: sc(SPACING.sm),
+    padding: sc(SPACING.md),
   },
   saveButton: {
     flex: 2,
-    paddingVertical: scale(SPACING.md),
+    paddingVertical: sc(SPACING.md),
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   saveButtonText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.white,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: scale(SPACING.md),
+    paddingVertical: sc(SPACING.md),
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -328,7 +326,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cancelButtonText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: ms(FONT_SIZES.md),
     fontWeight: "600",
     color: COLORS.text,
   },
