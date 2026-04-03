@@ -82,12 +82,13 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                   <Text allowFontScaling={false} style={s.title}>{t.name}</Text>
                   {t.description && <Text allowFontScaling={false} style={s.desc}>{t.description}</Text>}
                 </View>
-                <View style={{ alignItems: "center", flexDirection: "row" }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                 {profile?.id_auto && (
-                  <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 8, justifyContent: "center" }}>
+                  <TouchableOpacity onPress={() => toggleFavorite(t.id)} disabled={isToggling} style={{ padding: 8, justifyContent: "center", marginRight: 4 }}>
                     <Ionicons name={isFavorited(t.id) ? "heart" : "heart-outline"} size={48} color={isFavorited(t.id) ? "#E53935" : COLORS.textSecondary} />
                   </TouchableOpacity>
                 )}
+                <View style={{ alignItems: "center" }}>
                   {imageUrl ? (
                     <Image source={{ uri: imageUrl }} style={s.img} resizeMode="cover" />
                   ) : (
