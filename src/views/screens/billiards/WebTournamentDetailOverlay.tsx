@@ -4,7 +4,9 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { useAuth } from "../../../providers/AuthProvider";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS } from "../../../theme/spacing";
-import { moderateScale, scale } from "../../../utils/scaling";
+// Web-only component - no scaling needed
+const moderateScale = (v: number) => v;
+const scale = (v: number) => v;
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
 import { Button } from "../../components/common/button";
