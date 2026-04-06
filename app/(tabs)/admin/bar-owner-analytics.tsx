@@ -1,7 +1,7 @@
 ﻿// app/(tabs)/admin/bar-owner-analytics.tsx
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   RefreshControl,
   ScrollView,
@@ -26,6 +26,12 @@ export default function BarOwnerAnalyticsScreen() {
   const router = useRouter();
   const vm = useBarOwnerAnalytics();
 
+  useFocusEffect(
+    require("react").useCallback(() => {
+      vm.onRefresh();
+    }, [])
+  );
+
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
@@ -47,7 +53,7 @@ export default function BarOwnerAnalyticsScreen() {
     >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, isWeb && styles.backBtnWeb]}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCCA"} VENUE ANALYTICS</Text>
@@ -232,6 +238,7 @@ const styles = StyleSheet.create({
     top: SPACING.xl + SPACING.lg,
     zIndex: 1,
   },
+  backBtnWeb: { top: SPACING.lg },
   backText: {
     fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,

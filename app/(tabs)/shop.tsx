@@ -264,6 +264,7 @@ export default function ShopScreen() {
   };
 
   const handleEnterGiveaway = (g: Giveaway) => {
+    giveawaysVm.trackGiveawayView(g.id);
     if (!profile) { router.push("/(tabs)/profile"); return; }
     setSelectedGiveaway(g);
     setShowEntryModal(true);
@@ -275,6 +276,7 @@ export default function ShopScreen() {
   };
 
   const handleEnterFromDetail = () => {
+    if (selectedGiveaway) giveawaysVm.trackGiveawayView(selectedGiveaway.id);
     setShowDetailModal(false);
     if (selectedGiveaway && !giveawaysVm.isEntered(selectedGiveaway.id)) {
       setTimeout(() => setShowEntryModal(true), 300);

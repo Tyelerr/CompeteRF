@@ -66,7 +66,7 @@ const TDVenueCard = ({
 
       <View style={styles.roleSection}>
         <Text allowFontScaling={false} style={styles.roleText}>
-          "\uD83C\uDFAF" Tournament Director - Assigned{" "}
+            {"\uD83C\uDFAF"} Tournament Director - Assigned{" "}
           {new Date(venue.assigned_at).toLocaleDateString()}
         </Text>
       </View>

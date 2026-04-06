@@ -1,7 +1,7 @@
 ﻿// app/(tabs)/admin/director-analytics.tsx
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   RefreshControl,
   ScrollView,
@@ -19,10 +19,18 @@ import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
 
 const isWeb = Platform.OS === "web";
+const wxMs = (v: number) => isWeb ? v : moderateScale(v);
+const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export default function DirectorAnalyticsScreen() {
   const router = useRouter();
   const vm = useDirectorAnalytics();
+
+  useFocusEffect(
+    require("react").useCallback(() => {
+      vm.onRefresh();
+    }, [])
+  );
 
   if (vm.loading) {
     return (
@@ -45,7 +53,7 @@ export default function DirectorAnalyticsScreen() {
     >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, isWeb && styles.backBtnWeb]}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCCA"} MY ANALYTICS</Text>
@@ -210,7 +218,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   loadingText: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
   },
   header: {
@@ -230,19 +238,20 @@ const styles = StyleSheet.create({
     top: SPACING.xl + SPACING.lg,
     zIndex: 1,
   },
+  backBtnWeb: { top: SPACING.lg },
   backText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
   },
   headerTitle: {
-    fontSize: moderateScale(FONT_SIZES.xl),
+    fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "700",
     color: COLORS.text,
     letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
   },
@@ -254,13 +263,13 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
   },
   filterLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
   filterDropdown: {
     flex: 1,
-    maxWidth: scale(160),
+    maxWidth: wxSc(160),
     marginLeft: SPACING.md,
   },
   sectionHeader: {
@@ -269,7 +278,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   sectionTitle: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -283,32 +292,32 @@ const styles = StyleSheet.create({
   miniCard: {
     width: "48%",
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: wxSc(12),
     padding: SPACING.sm,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: scale(80),
+    minHeight: wxSc(80),
   },
   miniIcon: {
-    fontSize: moderateScale(20),
-    marginBottom: scale(2),
+    fontSize: wxMs(20),
+    marginBottom: wxSc(2),
   },
   miniValue: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   miniLabel: {
-    fontSize: moderateScale(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "600",
     color: COLORS.textSecondary,
-    marginTop: scale(2),
+    marginTop: wxSc(2),
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: scale(12),
+    borderRadius: wxSc(12),
     marginHorizontal: SPACING.md,
     marginTop: SPACING.xs,
     padding: SPACING.md,
@@ -321,26 +330,26 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   barLabel: {
-    width: scale(80),
-    fontSize: moderateScale(FONT_SIZES.sm),
+    width: wxSc(80),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   barTrack: {
     flex: 1,
-    height: scale(8),
+    height: wxSc(8),
     backgroundColor: COLORS.border,
-    borderRadius: scale(4),
+    borderRadius: wxSc(4),
     marginHorizontal: SPACING.sm,
     overflow: "hidden",
   },
   barFill: {
     height: "100%",
-    borderRadius: scale(4),
+    borderRadius: wxSc(4),
   },
   barValue: {
-    width: scale(40),
-    fontSize: moderateScale(FONT_SIZES.sm),
+    width: wxSc(40),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.text,
     textAlign: "right",
@@ -355,19 +364,19 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   rankNumber: {
-    width: scale(30),
-    fontSize: moderateScale(FONT_SIZES.sm),
+    width: wxSc(30),
+    fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.primary,
   },
   rankName: {
     flex: 1,
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
   },
   rankCount: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
     marginLeft: SPACING.sm,
@@ -383,17 +392,17 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   periodLabel: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "500",
   },
   periodValue: {
-    fontSize: moderateScale(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
   },
   emptyText: {
-    fontSize: moderateScale(FONT_SIZES.sm),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
     paddingVertical: SPACING.md,

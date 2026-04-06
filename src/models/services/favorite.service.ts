@@ -49,7 +49,7 @@ export const favoriteService = {
       .single();
     if (error) throw error;
 
-    // Track analytics (fire-and-forget)
+    // Track analytics -- single tournament only, not series
     analyticsService.trackTournamentFavorited(tournamentId);
 
     return data;
@@ -70,8 +70,9 @@ export const favoriteService = {
       .single();
     if (error) throw error;
 
-    // Track analytics (fire-and-forget)
-    analyticsService.trackTournamentFavorited(templateId);
+    // NOTE: templateId is NOT a tournament ID -- do not pass to
+    // trackTournamentFavorited as it would corrupt analytics entity lookups.
+    // Series-level analytics can be added later with a dedicated event type.
 
     return data;
   },
@@ -87,7 +88,7 @@ export const favoriteService = {
       .eq("tournament_id", tournamentId);
     if (error) throw error;
 
-    // Track analytics (fire-and-forget)
+    // Track analytics -- single tournament only
     analyticsService.trackTournamentUnfavorited(tournamentId);
   },
 
@@ -102,8 +103,7 @@ export const favoriteService = {
       .eq("template_id", templateId);
     if (error) throw error;
 
-    // Track analytics (fire-and-forget)
-    analyticsService.trackTournamentUnfavorited(templateId);
+    // NOTE: templateId is NOT a tournament ID -- skip analytics tracking.
   },
 
   async isFavorited(
@@ -120,8 +120,6 @@ export const favoriteService = {
       query = query.eq("template_id", templateId);
     }
 
-    // FIX: use maybeSingle() per code standards — returns null instead of
-    // throwing PGRST116 when no row is found.
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
     return !!data;

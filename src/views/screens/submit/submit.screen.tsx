@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Keyboard, Platform, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
-import { EQUIPMENT_OPTIONS, GAME_TYPES, RECURRENCE_TYPES, START_TIMES, THUMBNAIL_OPTIONS, TOURNAMENT_FORMATS } from "../../../utils/tournament-form-data";
+import { EQUIPMENT_OPTIONS, GAME_TYPES, RECURRENCE_TYPES, START_TIMES, THUMBNAIL_OPTIONS, TOURNAMENT_FORMATS, getRecurrencePatternLabel } from "../../../utils/tournament-form-data";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { useScrollToTopOnFocus } from "../../../viewmodels/hooks/use.scroll.to.top";
 import { useTournamentTemplates } from "../../../viewmodels/hooks/use.tournament.templates";
@@ -109,6 +109,30 @@ export const SubmitScreen = () => {
     return () => { show?.remove(); hide?.remove(); };
   }, []);
 
+  // Shared save-template action used by both web and mobile modals.
+  const doSaveTemplate = async () => {
+    await templateMgr.saveTemplate({
+      name: templateName.trim() || vm.formData.name,
+      gameType: vm.formData.gameType,
+      tournamentFormat: vm.formData.tournamentFormat,
+      gameSpot: vm.formData.gameSpot,
+      race: vm.formData.race,
+      description: vm.formData.description,
+      maxFargo: vm.formData.maxFargo,
+      entryFee: vm.formData.entryFee,
+      sidePots: vm.sidePots ?? [],
+      reportsToFargo: vm.formData.reportsToFargo,
+      openTournament: vm.formData.openTournament,
+      calcutta: vm.formData.calcutta,
+      tableSize: vm.formData.tableSize,
+      equipment: vm.formData.equipment,
+      thumbnail: vm.formData.thumbnail,
+      chipRanges: vm.formData.chipRanges ?? [],
+      phoneNumber: vm.formData.phoneNumber,
+    });
+    setShowTemplateModal(false);
+  };
+
   if (vm.isLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -120,7 +144,7 @@ export const SubmitScreen = () => {
   if (!vm.user) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.emoji}>🔒</Text>
+        <Text allowFontScaling={false} style={{ fontSize: 60, marginBottom: 16 }}>{"\uD83D\uDD12"}</Text>
         <Text allowFontScaling={false} style={styles.title}>Login Required</Text>
         <Text allowFontScaling={false} style={styles.subtitle}>Please log in to submit tournaments.</Text>
         <Button title="Log In" onPress={vm.navigateToLogin} />
@@ -131,10 +155,40 @@ export const SubmitScreen = () => {
   if (!vm.canSubmitTournaments) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.emoji}>🎱</Text>
+        <Text allowFontScaling={false} style={{ fontSize: 60, marginBottom: 16 }}>{"\uD83C\uDFB1"}</Text>
         <Text allowFontScaling={false} style={styles.title}>Become a Tournament Director</Text>
         <Text allowFontScaling={false} style={styles.subtitle}>Want to submit tournaments? Contact us to become a Tournament Director.</Text>
         <Button title="Contact Us" onPress={vm.navigateToFaq} />
+      </View>
+    );
+  }
+
+  // Tournament director with no venues assigned yet — show locked gate.
+  if (vm.isTDWithNoVenues) {
+    return (
+      <View style={[styles.container]}>
+        {/* Faint ghost form so the user sees there is content behind the lock */}
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0.1 }} pointerEvents="none">
+          <View style={styles.header}>
+            <Text allowFontScaling={false} style={styles.headerTitle}>SUBMIT TOURNAMENT</Text>
+            <Text allowFontScaling={false} style={styles.headerSubtitle}>Submit your tournament for approval</Text>
+          </View>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={[styles.section, { minHeight: 80 }]} />
+          ))}
+        </View>
+
+        {/* Lock overlay card */}
+        <View style={styles.centerContainer}>
+          <Text allowFontScaling={false} style={{ fontSize: isWeb ? 52 : 56, marginBottom: 14 }}>
+            {"\uD83C\uDFDB"}
+          </Text>
+          <Text allowFontScaling={false} style={styles.title}>No Venues Assigned Yet</Text>
+          <Text allowFontScaling={false} style={[styles.subtitle, { marginBottom: 24 }]}>
+            {"Once a venue owner assigns you to one of their venues, you will be able to submit tournaments here.\n\nContact your venue owner to get access."}
+          </Text>
+          <Button title="Go to FAQ / Contact" onPress={vm.navigateToFaq} />
+        </View>
       </View>
     );
   }
@@ -159,7 +213,7 @@ export const SubmitScreen = () => {
           ) : imageUrl ? (
             <Image source={{ uri: imageUrl || undefined }} style={styles.thumbnailImage} resizeMode="cover" />
           ) : (
-            <Text allowFontScaling={false} style={styles.thumbnailEmoji}>🎱</Text>
+            <Text allowFontScaling={false} style={styles.thumbnailEmoji}>{"\uD83C\uDFB1"}</Text>
           )}
           <Text allowFontScaling={false} style={[styles.thumbnailText, isUploadOption && styles.uploadText]}>{thumb.name}</Text>
         </View>
@@ -214,7 +268,7 @@ export const SubmitScreen = () => {
                     ) : (
                       <View style={{ flex: 1 }}>
                         <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: COLORS.text, fontWeight: "600" }} numberOfLines={1}>{t.name}</Text>
-                        {t.game_type && <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: COLORS.textSecondary, marginTop: 1 }} numberOfLines={1}>{t.game_type}{t.tournament_format ? ` · ${t.tournament_format}` : ""}</Text>}
+                        {t.game_type && <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: COLORS.textSecondary, marginTop: 1 }} numberOfLines={1}>{t.game_type}{t.tournament_format ? ` \u00B7 ${t.tournament_format}` : ""}</Text>}
                       </View>
                     )}
                     {renamingId === t.id ? (
@@ -276,14 +330,14 @@ export const SubmitScreen = () => {
             {vm.isChipTournament && (
               <View style={styles.chipSection}>
                 <View style={styles.chipHeader}>
-                  <Text allowFontScaling={false} style={styles.chipTitle}>🎰 Chip Configuration</Text>
+                  <Text allowFontScaling={false} style={styles.chipTitle}>{"\uD83C\uDFB0"} Chip Configuration</Text>
                   <TouchableOpacity style={styles.chipResetButton} onPress={vm.resetChipRangesToDefault}>
                     <Text allowFontScaling={false} style={styles.chipResetText}>Reset Defaults</Text>
                   </TouchableOpacity>
                 </View>
                 <Text allowFontScaling={false} style={styles.chipDescription}>Set Fargo rating ranges and chip allocation.</Text>
                 <View style={styles.chipRowHeader}>
-                  <Text allowFontScaling={false} style={[styles.chipColumnLabel, { flex: 1.4 }]}>Label</Text>
+                  <Text allowFontScaling={false} style={[styles.chipColumnLabel, { flex: 2.2 }]}>Label</Text>
                   <Text allowFontScaling={false} style={[styles.chipColumnLabel, { flex: 0.8 }]}>Min</Text>
                   <Text allowFontScaling={false} style={[styles.chipColumnLabel, { flex: 0.8 }]}>Max</Text>
                   <Text allowFontScaling={false} style={[styles.chipColumnLabel, { flex: 0.6 }]}>Chips</Text>
@@ -291,12 +345,39 @@ export const SubmitScreen = () => {
                 </View>
                 {vm.formData.chipRanges.map((range, index) => (
                   <View key={index} style={styles.chipRow}>
-                    <FocusTextInput style={[styles.chipInput, styles.chipLabelInput, { flex: 1.4 }]} value={range.label} onChangeText={(v) => vm.updateChipRange(index, "label", v)} placeholder="e.g., SL7" placeholderTextColor={COLORS.textMuted} />
-                    <FocusTextInput style={[styles.chipInput, { flex: 0.8 }]} value={range.minRating.toString()} onChangeText={(v) => vm.updateChipRange(index, "minRating", v)} placeholder="0" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
-                    <FocusTextInput style={[styles.chipInput, { flex: 0.8 }]} value={range.maxRating.toString()} onChangeText={(v) => vm.updateChipRange(index, "maxRating", v)} placeholder="299" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
-                    <FocusTextInput style={[styles.chipInput, { flex: 0.6 }]} value={range.chips.toString()} onChangeText={(v) => vm.updateChipRange(index, "chips", v)} placeholder="8" placeholderTextColor={COLORS.textMuted} keyboardType="numeric" />
+                    <FocusTextInput
+                      style={[styles.chipInput, styles.chipLabelInput, { flex: 2.2 }]}
+                      value={range.label}
+                      onChangeText={(v) => vm.updateChipRange(index, "label", v)}
+                      placeholder="e.g., SL7"
+                      placeholderTextColor={COLORS.textMuted}
+                    />
+                    <FocusTextInput
+                      style={[styles.chipInput, { flex: 0.8 }]}
+                      value={vm.chipEditValues[`${index}-minRating`] ?? range.minRating.toString()}
+                      onChangeText={(v) => vm.updateChipRange(index, "minRating", v)}
+                      placeholder="0"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
+                    <FocusTextInput
+                      style={[styles.chipInput, { flex: 0.8 }]}
+                      value={vm.chipEditValues[`${index}-maxRating`] ?? range.maxRating.toString()}
+                      onChangeText={(v) => vm.updateChipRange(index, "maxRating", v)}
+                      placeholder="299"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
+                    <FocusTextInput
+                      style={[styles.chipInput, { flex: 0.6 }]}
+                      value={vm.chipEditValues[`${index}-chips`] ?? range.chips.toString()}
+                      onChangeText={(v) => vm.updateChipRange(index, "chips", v)}
+                      placeholder="8"
+                      placeholderTextColor={COLORS.textMuted}
+                      keyboardType="numeric"
+                    />
                     <TouchableOpacity style={styles.chipRemoveButton} onPress={() => vm.removeChipRange(index)}>
-                      <Text allowFontScaling={false} style={styles.removeButton}>✕</Text>
+                      <Text allowFontScaling={false} style={styles.removeButton}>{"\u2715"}</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -305,9 +386,9 @@ export const SubmitScreen = () => {
                 </TouchableOpacity>
                 {vm.formData.chipRanges.length > 0 && (
                   <View style={styles.chipPreview}>
-                    <Text allowFontScaling={false} style={styles.chipPreviewTitle}>📋 Chip Breakdown</Text>
+                    <Text allowFontScaling={false} style={styles.chipPreviewTitle}>{"\uD83D\uDCCB"} Chip Breakdown</Text>
                     {vm.formData.chipRanges.map((range, i) => (
-                      <Text allowFontScaling={false} key={i} style={styles.chipPreviewRow}>{range.label || `${range.minRating}–${range.maxRating}`} → {range.chips} chip{range.chips !== 1 ? "s" : ""}</Text>
+                      <Text allowFontScaling={false} key={i} style={styles.chipPreviewRow}>{range.label || `${range.minRating}\u2013${range.maxRating}`} {"\u2192"} {range.chips} chip{range.chips !== 1 ? "s" : ""}</Text>
                     ))}
                   </View>
                 )}
@@ -337,7 +418,7 @@ export const SubmitScreen = () => {
             <Text allowFontScaling={false} style={[styles.sectionTitle, vm.isChipTournament && styles.labelDisabled]}>Fargo Requirements</Text>
             {vm.isChipTournament && (
               <View style={styles.chipDisabledBanner}>
-                <Text allowFontScaling={false} style={styles.chipDisabledBannerText}>🎰 Fargo ranges configured in Chip Configuration above</Text>
+                <Text allowFontScaling={false} style={styles.chipDisabledBannerText}>{"\uD83C\uDFB0"} Fargo ranges configured in Chip Configuration above</Text>
               </View>
             )}
             <Field first label="Maximum Fargo" disabled={vm.isChipTournament} hint={!vm.isChipTournament && vm.isMaxFargoDisabled ? "Disabled when Open Tournament is ON" : undefined}>
@@ -382,7 +463,7 @@ export const SubmitScreen = () => {
                 <FocusTextInput style={[styles.input, styles.sidePotName]} value={pot.name} onChangeText={(v) => vm.updateSidePot(index, "name", v)} placeholder="Name" placeholderTextColor={COLORS.textMuted} />
                 <FocusTextInput style={[styles.input, styles.sidePotAmount]} value={pot.amount} onChangeText={(v) => vm.updateSidePot(index, "amount", v)} placeholder="$" placeholderTextColor={COLORS.textMuted} keyboardType="decimal-pad" />
                 <TouchableOpacity style={styles.removeButtonContainer} onPress={() => vm.removeSidePot(index)}>
-                  <Text allowFontScaling={false} style={styles.removeButton}>✕</Text>
+                  <Text allowFontScaling={false} style={styles.removeButton}>{"\u2715"}</Text>
                 </TouchableOpacity>
               </View>
             ))}
@@ -398,7 +479,7 @@ export const SubmitScreen = () => {
                 {[
                   { label: "Reports to Fargo", value: vm.formData.reportsToFargo, onChange: (v: boolean) => vm.updateFormData("reportsToFargo", v) },
                   { label: "Open Tournament", value: vm.formData.openTournament, onChange: (v: boolean) => vm.updateFormData("openTournament", v), disabled: vm.isOpenTournamentDisabled || vm.isChipTournament, hint: vm.isChipTournament ? "Uses chip allocation instead" : vm.isOpenTournamentDisabled ? "Disabled when Max Fargo is set" : undefined },
-                  { label: "Recurring Tournament", value: vm.formData.isRecurring, onChange: (v: boolean) => vm.updateFormData("isRecurring", v), hint: vm.formData.isRecurring ? "🔄 Creates a series using your selected date/time as the repeating pattern" : "💡 Toggle ON to create a recurring tournament series" },
+                  { label: "Recurring Tournament", value: vm.formData.isRecurring, onChange: (v: boolean) => vm.updateFormData("isRecurring", v), hint: vm.formData.isRecurring ? "\uD83D\uDD04 Creates a series using your selected date/time as the repeating pattern" : "\uD83D\uDCA1 Toggle ON to create a recurring tournament series" },
                 ].map((row, i) => (
                   <View key={i} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border + "40" }}>
                     <View>
@@ -469,11 +550,11 @@ export const SubmitScreen = () => {
                 </Row>
                 {vm.formData.tournamentDate && vm.formData.startTime && vm.formData.recurrenceType && (
                   <View style={styles.schedulePreview}>
-                    <Text allowFontScaling={false} style={styles.previewTitle}>📅 Your Schedule</Text>
+                    <Text allowFontScaling={false} style={styles.previewTitle}>{"\uD83D\uDCC5"} Your Schedule</Text>
                     <Text allowFontScaling={false} style={styles.previewStarting}>
                       Starting: {vm.formData.tournamentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {(() => { const [h, m] = vm.formData.startTime.split(":"); const hr = parseInt(h); return `${hr % 12 || 12}:${m} ${hr >= 12 ? "PM" : "AM"}`; })()}
                     </Text>
-                    <Text allowFontScaling={false} style={styles.previewPattern}>🔄 Repeats {vm.formData.recurrenceType}</Text>
+                    <Text allowFontScaling={false} style={styles.previewPattern}>{"\uD83D\uDD04"} {getRecurrencePatternLabel(vm.formData.tournamentDate!, vm.formData.recurrenceType)}</Text>
                     <Text allowFontScaling={false} style={styles.previewNote}>Future tournaments auto-created 30 days ahead</Text>
                   </View>
                 )}
@@ -501,7 +582,7 @@ export const SubmitScreen = () => {
             )}
             {vm.selectedVenue && !vm.loadingVenueTables && !vm.venueHasTables && (
               <View style={styles.noTablesWarning}>
-                <Text allowFontScaling={false} style={styles.noTablesText}>⚠️ No tables configured for this venue</Text>
+                <Text allowFontScaling={false} style={styles.noTablesText}>{"\u26A0\uFE0F"} No tables configured for this venue</Text>
                 <Text allowFontScaling={false} style={styles.noTablesSubtext}>Contact the venue owner to set up table information.</Text>
               </View>
             )}
@@ -514,9 +595,9 @@ export const SubmitScreen = () => {
             {vm.selectedVenue && vm.venueHasTables && (
               <>
                 <View style={styles.venueTablesInfo}>
-                  <Text allowFontScaling={false} style={styles.venueTablesLabel}>🎱 Tables at this venue:</Text>
+                  <Text allowFontScaling={false} style={styles.venueTablesLabel}>{"\uD83C\uDFB1"} Tables at this venue:</Text>
                   {vm.venueTables.map((table, idx) => (
-                    <Text allowFontScaling={false} key={idx} style={styles.venueTableRow}>• {table.custom_size || table.table_size}{table.brand ? ` (${table.brand})` : ""}{table.quantity > 1 ? ` ×${table.quantity}` : ""}</Text>
+                    <Text allowFontScaling={false} key={idx} style={styles.venueTableRow}>{"\u2022"} {table.custom_size || table.table_size}{table.brand ? ` (${table.brand})` : ""}{table.quantity > 1 ? ` \u00D7${table.quantity}` : ""}</Text>
                   ))}
                 </View>
                 <Row>
@@ -560,8 +641,12 @@ export const SubmitScreen = () => {
                 <Button title={vm.submitting ? "Creating..." : vm.formData.isRecurring ? "Create Series" : "Submit Tournament"} onPress={vm.handleSubmit} loading={vm.submitting} disabled={vm.submitting} fullWidth />
               </View>
               {!templateMgr.atLimit && (
-                <TouchableOpacity onPress={() => { setTemplateName(vm.formData.name || ""); setShowTemplateModal(true); }} style={{ flex: isWeb ? 37 : undefined, borderWidth: 1, borderColor: COLORS.primary, borderRadius: isWeb ? 6 : 8, paddingHorizontal: isWeb ? 14 : 16, justifyContent: "center", alignItems: "center", opacity: canSaveTemplate ? 1 : 0.4 }} disabled={!canSaveTemplate}>
-                  <Text allowFontScaling={false} style={{ fontSize: wxMs(isWeb ? 12 : 13), color: COLORS.primary, fontWeight: "600" }}>💾 Save Template</Text>
+                <TouchableOpacity
+                  onPress={() => { setTemplateName(vm.formData.name || ""); setShowTemplateModal(true); }}
+                  style={{ flex: isWeb ? 37 : undefined, borderWidth: 1, borderColor: COLORS.primary, borderRadius: isWeb ? 6 : 8, paddingHorizontal: isWeb ? 14 : 16, justifyContent: "center", alignItems: "center", opacity: canSaveTemplate ? 1 : 0.4 }}
+                  disabled={!canSaveTemplate}
+                >
+                  <Text allowFontScaling={false} style={{ fontSize: wxMs(isWeb ? 12 : 13), color: COLORS.primary, fontWeight: "600" }}>{"\uD83D\uDCBE"} Save Template</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -605,19 +690,93 @@ export const SubmitScreen = () => {
         />
       </View>
 
+      {/* ── Web: Save Template modal (HTML/DOM) ── */}
       {showTemplateModal && isWeb && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.65)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ backgroundColor: "#1C1C1E", borderRadius: 10, padding: 28, width: 380, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", border: "1px solid #333" }}>
             <p style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, color: "#fff" }}>Save as Template</p>
             <p style={{ margin: "0 0 20px", fontSize: 12, color: "#888" }}>Give this template a name so you can reuse it later.</p>
             <label style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.4, display: "block", marginBottom: 5 }}>Template Name</label>
-            <input autoFocus type="text" value={templateName} onChange={(e: any) => setTemplateName(e.target.value)} placeholder="e.g. Friday Night 9-Ball" style={{ width: "100%", boxSizing: "border-box" as any, height: 38, backgroundColor: "#111", border: "1px solid #444", borderRadius: 6, padding: "0 10px", fontSize: 13, color: "#fff", outline: "none", marginBottom: 20, colorScheme: "dark", transition: "border-color 0.18s ease, box-shadow 0.18s ease" }} onFocus={(e) => { e.target.style.borderColor = COLORS.primary; e.target.style.boxShadow = `0 0 0 3px ${COLORS.primary}33`; }} onBlur={(e) => { e.target.style.borderColor = "#444"; e.target.style.boxShadow = "none"; }} />
+            <input
+              autoFocus
+              type="text"
+              value={templateName}
+              onChange={(e: any) => setTemplateName(e.target.value)}
+              onKeyDown={(e: any) => { if (e.key === "Enter" && templateName.trim() && !templateMgr.saving) doSaveTemplate(); }}
+              placeholder="e.g. Friday Night 9-Ball"
+              style={{ width: "100%", boxSizing: "border-box" as any, height: 38, backgroundColor: "#111", border: "1px solid #444", borderRadius: 6, padding: "0 10px", fontSize: 13, color: "#fff", outline: "none", marginBottom: 20, colorScheme: "dark", transition: "border-color 0.18s ease, box-shadow 0.18s ease" }}
+              onFocus={(e) => { e.target.style.borderColor = COLORS.primary; e.target.style.boxShadow = `0 0 0 3px ${COLORS.primary}33`; }}
+              onBlur={(e) => { e.target.style.borderColor = "#444"; e.target.style.boxShadow = "none"; }}
+            />
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setShowTemplateModal(false)} style={{ flex: 1, height: 38, backgroundColor: "transparent", border: "1px solid #444", borderRadius: 6, color: "#aaa", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-              <button onClick={async () => { await templateMgr.saveTemplate({ name: templateName.trim() || vm.formData.name, gameType: vm.formData.gameType, tournamentFormat: vm.formData.tournamentFormat, gameSpot: vm.formData.gameSpot, race: vm.formData.race, description: vm.formData.description, maxFargo: vm.formData.maxFargo, entryFee: vm.formData.entryFee, sidePots: vm.sidePots ?? [], reportsToFargo: vm.formData.reportsToFargo, openTournament: vm.formData.openTournament, calcutta: vm.formData.calcutta, tableSize: vm.formData.tableSize, equipment: vm.formData.equipment, thumbnail: vm.formData.thumbnail, chipRanges: vm.formData.chipRanges ?? [], phoneNumber: vm.formData.phoneNumber }); setShowTemplateModal(false); }} disabled={templateMgr.saving || !templateName.trim()} style={{ flex: 1, height: 38, backgroundColor: templateName.trim() ? "#2563eb" : "#333", border: "none", borderRadius: 6, color: "#fff", fontSize: 13, fontWeight: 700, cursor: templateName.trim() ? "pointer" : "not-allowed" }}>{templateMgr.saving ? "Saving..." : "Save Template"}</button>
+              <button onClick={doSaveTemplate} disabled={templateMgr.saving || !templateName.trim()} style={{ flex: 1, height: 38, backgroundColor: templateName.trim() ? "#2563eb" : "#333", border: "none", borderRadius: 6, color: "#fff", fontSize: 13, fontWeight: 700, cursor: templateName.trim() ? "pointer" : "not-allowed" }}>{templateMgr.saving ? "Saving..." : "Save Template"}</button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Mobile: Save Template modal (React Native) ── */}
+      {!isWeb && (
+        <Modal
+          visible={showTemplateModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowTemplateModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setShowTemplateModal(false)}
+              style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "center", alignItems: "center", padding: 24 }}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={{ backgroundColor: COLORS.surface, borderRadius: 12, padding: 24, width: "100%", borderWidth: 1, borderColor: COLORS.border }}
+              >
+                <Text allowFontScaling={false} style={{ fontSize: wxMs(17), fontWeight: "700", color: COLORS.text, marginBottom: 6 }}>
+                  Save as Template
+                </Text>
+                <Text allowFontScaling={false} style={{ fontSize: wxMs(13), color: COLORS.textSecondary, marginBottom: 20 }}>
+                  Give this template a name so you can reuse it later.
+                </Text>
+                <Text allowFontScaling={false} style={{ fontSize: wxMs(11), color: COLORS.textSecondary, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+                  Template Name
+                </Text>
+                <FocusTextInput
+                  style={[styles.input, { marginBottom: 20 }]}
+                  value={templateName}
+                  onChangeText={setTemplateName}
+                  placeholder="e.g. Friday Night 9-Ball"
+                  placeholderTextColor={COLORS.textMuted}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => { if (templateName.trim() && !templateMgr.saving) doSaveTemplate(); }}
+                />
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowTemplateModal(false)}
+                    style={{ flex: 1, height: 44, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, justifyContent: "center", alignItems: "center" }}
+                  >
+                    <Text allowFontScaling={false} style={{ fontSize: wxMs(14), color: COLORS.textSecondary, fontWeight: "600" }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={doSaveTemplate}
+                    disabled={templateMgr.saving || !templateName.trim()}
+                    style={{ flex: 1, height: 44, backgroundColor: templateName.trim() ? COLORS.primary : COLORS.border, borderRadius: 8, justifyContent: "center", alignItems: "center", opacity: templateMgr.saving ? 0.7 : 1 }}
+                  >
+                    <Text allowFontScaling={false} style={{ fontSize: wxMs(14), color: "#fff", fontWeight: "700" }}>
+                      {templateMgr.saving ? "Saving..." : "Save Template"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </Modal>
       )}
     </WebContainer>
   );

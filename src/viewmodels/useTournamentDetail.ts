@@ -169,7 +169,7 @@ export const useTournamentDetail = (
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return "";
-    const date = new Date(dateString);
+    const [y, m, d] = dateString.split("-").map(Number); const date = new Date(y, m - 1, d);
     return date.toLocaleDateString("en-US", {
       weekday: "long",
       month: "long",
