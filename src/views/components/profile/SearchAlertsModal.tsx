@@ -39,20 +39,21 @@ export interface SearchAlertsModalProps {
   onClose: () => void;
 }
 
-const GAME_TYPE_OPTIONS = [
-  { label: "Any Game Type", value: "" },
+// ── Chip option lists (no "Any" entry — empty selection = match any) ──────────
+const GAME_TYPE_CHIPS = [
   { label: "8-Ball", value: "8-ball" },
-  { label: "8-Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+  { label: "8-Ball Scotch", value: "8-ball-scotch-doubles" },
   { label: "9-Ball", value: "9-ball" },
-  { label: "9-Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "9-Ball Scotch", value: "9-ball-scotch-doubles" },
   { label: "10-Ball", value: "10-ball" },
-  { label: "10-Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
+  { label: "10-Ball Scotch", value: "10-ball-scotch-doubles" },
+  { label: "One Pocket", value: "one-pocket" },
+  { label: "Straight Pool", value: "straight-pool" },
 ];
 
-const FORMAT_OPTIONS = [
-  { label: "Any Format", value: "" },
-  { label: "Single Elimination", value: "single_elimination" },
-  { label: "Double Elimination", value: "double_elimination" },
+const FORMAT_CHIPS = [
+  { label: "Single Elim", value: "single_elimination" },
+  { label: "Double Elim", value: "double_elimination" },
   { label: "Round Robin", value: "round_robin" },
   { label: "Swiss", value: "swiss" },
   { label: "Modified", value: "modified" },
@@ -60,11 +61,12 @@ const FORMAT_OPTIONS = [
   { label: "Chip Tournament", value: "chip-tournament" },
 ];
 
-const TABLE_SIZE_OPTIONS = [
-  { label: "Any Table Size", value: "" },
-  { label: "7ft (Bar Box)", value: "7ft" },
+const TABLE_SIZE_CHIPS = [
+  { label: "7ft", value: "7ft" },
   { label: "8ft", value: "8ft" },
-  { label: "9ft (Pro)", value: "9ft" },
+  { label: "9ft", value: "9ft" },
+  { label: "10ft", value: "10ft" },
+  { label: "12x6 (Snooker)", value: "12x6" },
 ];
 
 const DAYS_OF_WEEK_OPTIONS = [
@@ -77,13 +79,14 @@ const DAYS_OF_WEEK_OPTIONS = [
   { label: "Saturday", value: "6" },
 ];
 
+// ── Form state ────────────────────────────────────────────────────────────────
 interface FormState {
   name: string;
   description: string;
-  gameType: string;
-  tournamentFormat: string;
-  tableSize: string;
-  brand: string;
+  gameTypes: string[];
+  tournamentFormats: string[];
+  tableSizes: string[];
+  brands: string[];
   state: string;
   city: string;
   entryFeeMin: string;
@@ -97,18 +100,18 @@ interface FormState {
 }
 
 const initialFormState: FormState = {
-  name: "", description: "", gameType: "", tournamentFormat: "", tableSize: "",
-  brand: "", state: "", city: "", entryFeeMin: "", entryFeeMax: "",
+  name: "", description: "", gameTypes: [], tournamentFormats: [], tableSizes: [],
+  brands: [], state: "", city: "", entryFeeMin: "", entryFeeMax: "",
   fargoMax: "", reportsToFargo: undefined, calcutta: undefined,
   openTournament: undefined, daysOfWeek: [], isActive: true,
 };
 
 function formToCriteria(form: FormState): SearchAlertFilters {
   const criteria: Record<string, any> = {};
-  if (form.gameType) criteria.gameType = form.gameType;
-  if (form.tournamentFormat) criteria.tournamentFormat = form.tournamentFormat;
-  if (form.tableSize) criteria.tableSize = form.tableSize;
-  if (form.brand.trim()) criteria.brand = form.brand.trim();
+  if (form.gameTypes.length > 0) criteria.gameTypes = form.gameTypes;
+  if (form.tournamentFormats.length > 0) criteria.tournamentFormats = form.tournamentFormats;
+  if (form.tableSizes.length > 0) criteria.tableSizes = form.tableSizes;
+  if (form.brands.length > 0) criteria.brands = form.brands;
   if (form.state.trim()) criteria.state = form.state.trim();
   if (form.city.trim()) criteria.city = form.city.trim();
   if (form.entryFeeMin.trim()) criteria.entryFeeMin = parseFloat(form.entryFeeMin);
@@ -125,10 +128,11 @@ function criteriaToForm(alert: SearchAlert): FormState {
   const c: Record<string, any> = alert.filter_criteria || {};
   return {
     name: alert.name || "", description: alert.description || "",
-    gameType: c.gameType || "", tournamentFormat: c.tournamentFormat || "",
-    tableSize: c.tableSize || "",
-    // support legacy alerts that stored brands as array or equipment as string
-    brand: c.brand || (Array.isArray(c.brands) && c.brands.length > 0 ? c.brands[0] : ""),
+    // Backward compat: wrap legacy single-string fields into arrays
+    gameTypes: Array.isArray(c.gameTypes) ? c.gameTypes : (c.gameType ? [c.gameType] : []),
+    tournamentFormats: Array.isArray(c.tournamentFormats) ? c.tournamentFormats : (c.tournamentFormat ? [c.tournamentFormat] : []),
+    tableSizes: Array.isArray(c.tableSizes) ? c.tableSizes : (c.tableSize ? [c.tableSize] : []),
+    brands: Array.isArray(c.brands) ? c.brands : (c.brand ? [c.brand] : []),
     state: c.state || "", city: c.city || "",
     entryFeeMin: c.entryFeeMin !== undefined ? c.entryFeeMin.toString() : "",
     entryFeeMax: c.entryFeeMax !== undefined ? c.entryFeeMax.toString() : "",
@@ -143,18 +147,24 @@ function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
 }
 
-function DayPicker({ selected, onChange, disabled }: { selected: string[]; onChange: (days: string[]) => void; disabled?: boolean }) {
-  const toggle = (v: string) => {
+// ── ChipPicker ────────────────────────────────────────────────────────────────
+function ChipPicker({ options, selected, onChange, disabled }: {
+  options: { label: string; value: string }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  disabled?: boolean;
+}) {
+  const toggle = (value: string) => {
     if (disabled) return;
-    onChange(selected.includes(v) ? selected.filter((d) => d !== v) : [...selected, v]);
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   };
   return (
-    <View style={s.dayPickerRow}>
-      {DAYS_OF_WEEK_OPTIONS.map((day) => {
-        const sel = selected.includes(day.value);
+    <View style={s.chipPickerRow}>
+      {options.map((opt) => {
+        const sel = selected.includes(opt.value);
         return (
-          <TouchableOpacity key={day.value} style={[s.dayChip, sel && s.dayChipSelected]} onPress={() => toggle(day.value)} disabled={disabled}>
-            <Text allowFontScaling={false} style={[s.dayChipText, sel && s.dayChipTextSelected]}>{day.label.slice(0, 3)}</Text>
+          <TouchableOpacity key={opt.value} style={[s.filterChip, sel && s.filterChipSelected]} onPress={() => toggle(opt.value)} disabled={disabled}>
+            <Text allowFontScaling={false} style={[s.filterChipText, sel && s.filterChipTextSelected]}>{opt.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -162,6 +172,27 @@ function DayPicker({ selected, onChange, disabled }: { selected: string[]; onCha
   );
 }
 
+// ── DayPicker ─────────────────────────────────────────────────────────────────
+function DayPicker({ selected, onChange, disabled }: { selected: string[]; onChange: (days: string[]) => void; disabled?: boolean }) {
+  const toggle = (v: string) => {
+    if (disabled) return;
+    onChange(selected.includes(v) ? selected.filter((d) => d !== v) : [...selected, v]);
+  };
+  return (
+    <View style={s.chipPickerRow}>
+      {DAYS_OF_WEEK_OPTIONS.map((day) => {
+        const sel = selected.includes(day.value);
+        return (
+          <TouchableOpacity key={day.value} style={[s.filterChip, sel && s.filterChipSelected]} onPress={() => toggle(day.value)} disabled={disabled}>
+            <Text allowFontScaling={false} style={[s.filterChipText, sel && s.filterChipTextSelected]}>{day.label.slice(0, 3)}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+// ── ToggleRow ─────────────────────────────────────────────────────────────────
 function ToggleRow({ label, description, value, onToggle, disabled }: { label: string; description?: string; value: boolean | undefined; onToggle: () => void; disabled?: boolean }) {
   const text = value === undefined ? "Any" : value ? "Yes" : "No";
   return (
@@ -177,6 +208,7 @@ function ToggleRow({ label, description, value, onToggle, disabled }: { label: s
   );
 }
 
+// ── AlertCard ─────────────────────────────────────────────────────────────────
 function AlertCard({ alert, onEdit, onDelete, onToggleActive, onViewMatches }: { alert: SearchAlert; onEdit: () => void; onDelete: () => void; onToggleActive: () => void; onViewMatches: () => void }) {
   const description = alert.description || searchAlertService.generateAlertDescription(alert.filter_criteria);
   return (
@@ -204,15 +236,14 @@ function AlertCard({ alert, onEdit, onDelete, onToggleActive, onViewMatches }: {
   );
 }
 
+// ── CreateEditForm ────────────────────────────────────────────────────────────
 function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; alertId: number | null; onDone: () => void; onClose: () => void }) {
   const isEditMode = alertId !== null;
   const [form, setForm] = useState<FormState>(initialFormState);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [brandOptions, setBrandOptions] = useState<{ label: string; value: string }[]>([
-    { label: "Any Brand", value: "" },
-  ]);
+  const [brandChips, setBrandChips] = useState<{ label: string; value: string }[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const fieldOffsets = useRef<Record<string, number>>({});
 
@@ -227,13 +258,9 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
   const cityList = form.state ? US_CITIES_BY_STATE[form.state] || [] : [];
   const cityOptions = [{ label: "Any City", value: "" }, ...cityList.map((city: string) => ({ label: city, value: city }))];
 
-  // Load distinct brands once on mount
   useEffect(() => {
     venueService.getDistinctBrands().then((brands) => {
-      setBrandOptions([
-        { label: "Any Brand", value: "" },
-        ...brands.map((b) => ({ label: b, value: b })),
-      ]);
+      setBrandChips(brands.map((b) => ({ label: b, value: b })));
     }).catch(() => {});
   }, []);
 
@@ -342,23 +369,29 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
 
         <View style={s.section}>
           <Text allowFontScaling={false} style={s.sectionTitle}>Game Filters</Text>
+          <Text allowFontScaling={false} style={s.sectionHint}>Tap to select — leave empty to match any</Text>
+
           <View style={s.fieldContainer}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Game Type</Text>
-            <Dropdown placeholder="Any Game Type" options={GAME_TYPE_OPTIONS} value={form.gameType} onSelect={(v: string) => updateField("gameType", v)} disabled={saving} />
-            {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={s.fieldHint}>{"\uD83D\uDCA1"} This will also match scotch doubles versions</Text>}
+            <ChipPicker options={GAME_TYPE_CHIPS} selected={form.gameTypes} onChange={(v) => updateField("gameTypes", v)} disabled={saving} />
           </View>
+
           <View style={s.fieldContainer}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Tournament Format</Text>
-            <Dropdown placeholder="Any Format" options={FORMAT_OPTIONS} value={form.tournamentFormat} onSelect={(v: string) => updateField("tournamentFormat", v)} disabled={saving} />
+            <ChipPicker options={FORMAT_CHIPS} selected={form.tournamentFormats} onChange={(v) => updateField("tournamentFormats", v)} disabled={saving} />
           </View>
+
           <View style={s.fieldContainer}>
             <Text allowFontScaling={false} style={s.fieldLabel}>Table Size</Text>
-            <Dropdown placeholder="Any Table Size" options={TABLE_SIZE_OPTIONS} value={form.tableSize} onSelect={(v: string) => updateField("tableSize", v)} disabled={saving} />
+            <ChipPicker options={TABLE_SIZE_CHIPS} selected={form.tableSizes} onChange={(v) => updateField("tableSizes", v)} disabled={saving} />
           </View>
-          <View style={s.fieldContainer}>
-            <Text allowFontScaling={false} style={s.fieldLabel}>Table Brand</Text>
-            <Dropdown placeholder="Any Brand" options={brandOptions} value={form.brand} onSelect={(v: string) => updateField("brand", v)} disabled={saving} />
-          </View>
+
+          {brandChips.length > 0 && (
+            <View style={s.fieldContainer}>
+              <Text allowFontScaling={false} style={s.fieldLabel}>Table Brand</Text>
+              <ChipPicker options={brandChips} selected={form.brands} onChange={(v) => updateField("brands", v)} disabled={saving} />
+            </View>
+          )}
         </View>
 
         <View style={s.section}>
@@ -424,6 +457,7 @@ function CreateEditForm({ userId, alertId, onDone, onClose }: { userId: number; 
   );
 }
 
+// ── AlertList ─────────────────────────────────────────────────────────────────
 function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onOpenMatches, onClose }: { userId: number; refreshKey: number; onOpenCreate: () => void; onOpenEdit: (id: number) => void; onOpenMatches: (id: number) => void; onClose: () => void }) {
   const [alerts, setAlerts] = useState<SearchAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -550,6 +584,7 @@ function AlertList({ userId, refreshKey, onOpenCreate, onOpenEdit, onOpenMatches
   );
 }
 
+// ── SearchAlertsModal ─────────────────────────────────────────────────────────
 export function SearchAlertsModal({ visible, onClose }: SearchAlertsModalProps) {
   const { profile } = useAuthContext();
   const router = useRouter();
@@ -694,11 +729,12 @@ const s = StyleSheet.create({
   togglePillText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.textMuted },
   togglePillTextYes: { color: COLORS.primary },
   togglePillTextNo: { color: COLORS.error },
-  dayPickerRow: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.sm) },
-  dayChip: { paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  dayChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  dayChipText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "500", color: COLORS.text },
-  dayChipTextSelected: { color: COLORS.white },
+  // ── Chip picker ──────────────────────────────────────────────────────────────
+  chipPickerRow: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.sm) },
+  filterChip: { paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), borderRadius: wxSc(20), backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border },
+  filterChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "500", color: COLORS.textSecondary },
+  filterChipTextSelected: { color: COLORS.white, fontWeight: "700" },
   previewContainer: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: wxSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border, marginBottom: wxSc(SPACING.lg) },
   previewLabel: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", color: COLORS.textMuted, textTransform: "uppercase", marginBottom: wxSc(SPACING.xs) },
   previewText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.text, lineHeight: wxMs(20) },

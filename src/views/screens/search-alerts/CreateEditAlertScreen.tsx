@@ -16,49 +16,62 @@ import { Loading } from "../../components/common/loading";
 
 const isWeb = Platform.OS === "web";
 
-const GAME_TYPE_OPTIONS = [
-  { label: "Any Game Type", value: "" }, { label: "8-Ball", value: "8-ball" },
-  { label: "8-Ball Scotch Doubles", value: "8-ball-scotch-doubles" },
+// ── Chip option lists ─────────────────────────────────────────────────────────
+const GAME_TYPE_CHIPS = [
+  { label: "8-Ball", value: "8-ball" },
+  { label: "8-Ball Scotch", value: "8-ball-scotch-doubles" },
   { label: "9-Ball", value: "9-ball" },
-  { label: "9-Ball Scotch Doubles", value: "9-ball-scotch-doubles" },
+  { label: "9-Ball Scotch", value: "9-ball-scotch-doubles" },
   { label: "10-Ball", value: "10-ball" },
-  { label: "10-Ball Scotch Doubles", value: "10-ball-scotch-doubles" },
+  { label: "10-Ball Scotch", value: "10-ball-scotch-doubles" },
+  { label: "One Pocket", value: "one-pocket" },
+  { label: "Straight Pool", value: "straight-pool" },
 ];
-const FORMAT_OPTIONS = [
-  { label: "Any Format", value: "" }, { label: "Single Elimination", value: "single_elimination" },
-  { label: "Double Elimination", value: "double_elimination" }, { label: "Round Robin", value: "round_robin" },
-  { label: "Swiss", value: "swiss" }, { label: "Modified", value: "modified" }, { label: "Split Bracket", value: "split-bracket" },
+
+const FORMAT_CHIPS = [
+  { label: "Single Elim", value: "single_elimination" },
+  { label: "Double Elim", value: "double_elimination" },
+  { label: "Round Robin", value: "round_robin" },
+  { label: "Swiss", value: "swiss" },
+  { label: "Modified", value: "modified" },
+  { label: "Split Bracket", value: "split-bracket" },
   { label: "Chip Tournament", value: "chip-tournament" },
 ];
 
-const TABLE_SIZE_OPTIONS = [
-  { label: "Any Table Size", value: "" }, { label: "7ft (Bar Box)", value: "7ft" },
-  { label: "8ft", value: "8ft" }, { label: "9ft (Pro)", value: "9ft" },
+const TABLE_SIZE_CHIPS = [
+  { label: "7ft", value: "7ft" },
+  { label: "8ft", value: "8ft" },
+  { label: "9ft", value: "9ft" },
+  { label: "10ft", value: "10ft" },
+  { label: "12x6 (Snooker)", value: "12x6" },
 ];
+
 const DAYS_OF_WEEK_OPTIONS = [
   { label: "Sunday", value: "0" }, { label: "Monday", value: "1" }, { label: "Tuesday", value: "2" },
   { label: "Wednesday", value: "3" }, { label: "Thursday", value: "4" }, { label: "Friday", value: "5" }, { label: "Saturday", value: "6" },
 ];
 
+// ── Form state ────────────────────────────────────────────────────────────────
 interface FormState {
-  name: string; description: string; gameType: string; tournamentFormat: string; tableSize: string;
-  brand: string; state: string; city: string; entryFeeMin: string; entryFeeMax: string; fargoMax: string;
+  name: string; description: string;
+  gameTypes: string[]; tournamentFormats: string[]; tableSizes: string[]; brands: string[];
+  state: string; city: string; entryFeeMin: string; entryFeeMax: string; fargoMax: string;
   reportsToFargo: boolean | undefined; calcutta: boolean | undefined; openTournament: boolean | undefined;
   daysOfWeek: string[]; isActive: boolean;
 }
 
 const initialFormState: FormState = {
-  name: "", description: "", gameType: "", tournamentFormat: "", tableSize: "", brand: "",
+  name: "", description: "", gameTypes: [], tournamentFormats: [], tableSizes: [], brands: [],
   state: "", city: "", entryFeeMin: "", entryFeeMax: "", fargoMax: "",
   reportsToFargo: undefined, calcutta: undefined, openTournament: undefined, daysOfWeek: [], isActive: true,
 };
 
 function formToCriteria(form: FormState): SearchAlertFilters {
   const criteria: Record<string, any> = {};
-  if (form.gameType) criteria.gameType = form.gameType;
-  if (form.tournamentFormat) criteria.tournamentFormat = form.tournamentFormat;
-  if (form.tableSize) criteria.tableSize = form.tableSize;
-  if (form.brand.trim()) criteria.brand = form.brand.trim();
+  if (form.gameTypes.length > 0) criteria.gameTypes = form.gameTypes;
+  if (form.tournamentFormats.length > 0) criteria.tournamentFormats = form.tournamentFormats;
+  if (form.tableSizes.length > 0) criteria.tableSizes = form.tableSizes;
+  if (form.brands.length > 0) criteria.brands = form.brands;
   if (form.state.trim()) criteria.state = form.state.trim();
   if (form.city.trim()) criteria.city = form.city.trim();
   if (form.entryFeeMin.trim()) criteria.entryFeeMin = parseFloat(form.entryFeeMin);
@@ -74,9 +87,11 @@ function formToCriteria(form: FormState): SearchAlertFilters {
 function criteriaToForm(alert: SearchAlert): FormState {
   const c: Record<string, any> = alert.filter_criteria || {};
   return {
-    name: alert.name || "", description: alert.description || "", gameType: c.gameType || "",
-    tournamentFormat: c.tournamentFormat || "", tableSize: c.tableSize || "",
-    brand: c.brand || (Array.isArray(c.brands) && c.brands.length > 0 ? c.brands[0] : ""),
+    name: alert.name || "", description: alert.description || "",
+    gameTypes: Array.isArray(c.gameTypes) ? c.gameTypes : (c.gameType ? [c.gameType] : []),
+    tournamentFormats: Array.isArray(c.tournamentFormats) ? c.tournamentFormats : (c.tournamentFormat ? [c.tournamentFormat] : []),
+    tableSizes: Array.isArray(c.tableSizes) ? c.tableSizes : (c.tableSize ? [c.tableSize] : []),
+    brands: Array.isArray(c.brands) ? c.brands : (c.brand ? [c.brand] : []),
     state: c.state || "", city: c.city || "",
     entryFeeMin: c.entryFeeMin !== undefined ? c.entryFeeMin.toString() : "",
     entryFeeMax: c.entryFeeMax !== undefined ? c.entryFeeMax.toString() : "",
@@ -86,18 +101,43 @@ function criteriaToForm(alert: SearchAlert): FormState {
   };
 }
 
+// ── ChipPicker ────────────────────────────────────────────────────────────────
+function ChipPicker({ options, selected, onChange, disabled }: {
+  options: { label: string; value: string }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  disabled?: boolean;
+}) {
+  const toggle = (value: string) => {
+    if (disabled) return;
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  };
+  return (
+    <View style={styles.chipPickerRow}>
+      {options.map((opt) => {
+        const sel = selected.includes(opt.value);
+        return (
+          <TouchableOpacity key={opt.value} style={[styles.filterChip, sel && styles.filterChipSelected]} onPress={() => toggle(opt.value)} disabled={disabled}>
+            <Text allowFontScaling={false} style={[styles.filterChipText, sel && styles.filterChipTextSelected]}>{opt.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 function DayPicker({ selected, onChange, disabled }: { selected: string[]; onChange: (days: string[]) => void; disabled?: boolean }) {
   const toggle = (dayValue: string) => {
     if (disabled) return;
     onChange(selected.includes(dayValue) ? selected.filter((d) => d !== dayValue) : [...selected, dayValue]);
   };
   return (
-    <View style={styles.dayPickerRow}>
+    <View style={styles.chipPickerRow}>
       {DAYS_OF_WEEK_OPTIONS.map((day) => {
         const isSelected = selected.includes(day.value);
         return (
-          <TouchableOpacity key={day.value} style={[styles.dayChip, isSelected && styles.dayChipSelected]} onPress={() => toggle(day.value)} disabled={disabled}>
-            <Text allowFontScaling={false} style={[styles.dayChipText, isSelected && styles.dayChipTextSelected]}>{day.label.slice(0, 3)}</Text>
+          <TouchableOpacity key={day.value} style={[styles.filterChip, isSelected && styles.filterChipSelected]} onPress={() => toggle(day.value)} disabled={disabled}>
+            <Text allowFontScaling={false} style={[styles.filterChipText, isSelected && styles.filterChipTextSelected]}>{day.label.slice(0, 3)}</Text>
           </TouchableOpacity>
         );
       })}
@@ -130,9 +170,7 @@ export default function CreateEditAlertScreen() {
   const [loading, setLoading] = useState(isEditMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [brandOptions, setBrandOptions] = useState<{ label: string; value: string }[]>([
-    { label: "Any Brand", value: "" },
-  ]);
+  const [brandChips, setBrandChips] = useState<{ label: string; value: string }[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   const fieldOffsets = useRef<Record<string, number>>({});
 
@@ -149,10 +187,7 @@ export default function CreateEditAlertScreen() {
 
   useEffect(() => {
     venueService.getDistinctBrands().then((brands) => {
-      setBrandOptions([
-        { label: "Any Brand", value: "" },
-        ...brands.map((b) => ({ label: b, value: b })),
-      ]);
+      setBrandChips(brands.map((b) => ({ label: b, value: b })));
     }).catch(() => {});
   }, []);
 
@@ -254,29 +289,37 @@ export default function CreateEditAlertScreen() {
                     <Text allowFontScaling={false} style={styles.fieldLabel}>Alert Active</Text>
                     <Text allowFontScaling={false} style={styles.switchDescription}>{"Inactive alerts won't match new tournaments"}</Text>
                   </View>
-                  <Switch value={form.isActive} onValueChange={(v) => updateField("isActive", v)} trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }} thumbColor={form.isActive ? COLORS.primary : COLORS.textMuted} disabled={saving} />
+                  <TouchableOpacity onPress={() => updateField("isActive", !form.isActive)} disabled={saving} style={[styles.togglePill, form.isActive && styles.togglePillYes, !form.isActive && styles.togglePillNo]}>
+                    <Text allowFontScaling={false} style={[styles.togglePillText, form.isActive && styles.togglePillTextYes, !form.isActive && styles.togglePillTextNo]}>{form.isActive ? "Active" : "Inactive"}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.section}>
                 <Text allowFontScaling={false} style={styles.sectionTitle}>Game Filters</Text>
+                <Text allowFontScaling={false} style={styles.sectionHint}>Tap to select — leave empty to match any</Text>
+
                 <View style={styles.fieldContainer}>
                   <Text allowFontScaling={false} style={styles.fieldLabel}>Game Type</Text>
-                  <Dropdown placeholder="Any Game Type" options={GAME_TYPE_OPTIONS} value={form.gameType} onSelect={(v: string) => updateField("gameType", v)} disabled={saving} />
-                  {form.gameType && !form.gameType.includes("scotch") && <Text allowFontScaling={false} style={styles.fieldHint}>{"\uD83D\uDCA1"} This will also match scotch doubles versions</Text>}
+                  <ChipPicker options={GAME_TYPE_CHIPS} selected={form.gameTypes} onChange={(v) => updateField("gameTypes", v)} disabled={saving} />
                 </View>
+
                 <View style={styles.fieldContainer}>
                   <Text allowFontScaling={false} style={styles.fieldLabel}>Tournament Format</Text>
-                  <Dropdown placeholder="Any Format" options={FORMAT_OPTIONS} value={form.tournamentFormat} onSelect={(v: string) => updateField("tournamentFormat", v)} disabled={saving} />
+                  <ChipPicker options={FORMAT_CHIPS} selected={form.tournamentFormats} onChange={(v) => updateField("tournamentFormats", v)} disabled={saving} />
                 </View>
+
                 <View style={styles.fieldContainer}>
                   <Text allowFontScaling={false} style={styles.fieldLabel}>Table Size</Text>
-                  <Dropdown placeholder="Any Table Size" options={TABLE_SIZE_OPTIONS} value={form.tableSize} onSelect={(v: string) => updateField("tableSize", v)} disabled={saving} />
+                  <ChipPicker options={TABLE_SIZE_CHIPS} selected={form.tableSizes} onChange={(v) => updateField("tableSizes", v)} disabled={saving} />
                 </View>
-                <View style={styles.fieldContainer}>
-                  <Text allowFontScaling={false} style={styles.fieldLabel}>Table Brand</Text>
-                  <Dropdown placeholder="Any Brand" options={brandOptions} value={form.brand} onSelect={(v: string) => updateField("brand", v)} disabled={saving} />
-                </View>
+
+                {brandChips.length > 0 && (
+                  <View style={styles.fieldContainer}>
+                    <Text allowFontScaling={false} style={styles.fieldLabel}>Table Brand</Text>
+                    <ChipPicker options={brandChips} selected={form.brands} onChange={(v) => updateField("brands", v)} disabled={saving} />
+                  </View>
+                )}
               </View>
 
               <View style={styles.section}>
@@ -319,7 +362,7 @@ export default function CreateEditAlertScreen() {
 
               <View style={styles.section}>
                 <Text allowFontScaling={false} style={styles.sectionTitle}>Days of Week</Text>
-                <Text allowFontScaling={false} style={styles.sectionHint}>Only match tournaments on these days (leave empty for any day)</Text>
+                <Text allowFontScaling={false} style={styles.sectionHint}>Leave empty to match any day</Text>
                 <DayPicker selected={form.daysOfWeek} onChange={(days) => updateField("daysOfWeek", days)} disabled={saving} />
               </View>
 
@@ -366,7 +409,6 @@ const styles = StyleSheet.create({
   fieldContainer: { marginBottom: scale(SPACING.md) },
   fieldLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, fontWeight: "500", marginBottom: scale(SPACING.sm) },
   required: { color: COLORS.error },
-  fieldHint: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.primary, marginTop: scale(SPACING.xs) },
   textInput: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, borderRadius: RADIUS.md, paddingVertical: scale(SPACING.md), paddingHorizontal: scale(SPACING.md), fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
   textInputMultiline: { minHeight: 60, textAlignVertical: "top" },
   rowFields: { flexDirection: "row", gap: scale(SPACING.md) },
@@ -384,11 +426,12 @@ const styles = StyleSheet.create({
   togglePillText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.textMuted },
   togglePillTextYes: { color: COLORS.primary },
   togglePillTextNo: { color: COLORS.error },
-  dayPickerRow: { flexDirection: "row", flexWrap: "wrap", gap: scale(SPACING.sm) },
-  dayChip: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  dayChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  dayChipText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "500", color: COLORS.text },
-  dayChipTextSelected: { color: COLORS.white },
+  // ── Chip picker ──────────────────────────────────────────────────────────────
+  chipPickerRow: { flexDirection: "row", flexWrap: "wrap", gap: scale(SPACING.sm) },
+  filterChip: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), borderRadius: scale(20), backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border },
+  filterChipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "500", color: COLORS.textSecondary },
+  filterChipTextSelected: { color: COLORS.white, fontWeight: "700" },
   previewContainer: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border, marginBottom: scale(SPACING.lg) },
   previewLabel: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", color: COLORS.textMuted, textTransform: "uppercase", marginBottom: scale(SPACING.xs) },
   previewText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, lineHeight: moderateScale(20) },
