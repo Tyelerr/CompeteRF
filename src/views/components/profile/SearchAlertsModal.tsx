@@ -57,6 +57,7 @@ const FORMAT_OPTIONS = [
   { label: "Swiss", value: "swiss" },
   { label: "Modified", value: "modified" },
   { label: "Split Bracket", value: "split-bracket" },
+  { label: "Chip", value: "chip" },
 ];
 
 const TABLE_SIZE_OPTIONS = [
