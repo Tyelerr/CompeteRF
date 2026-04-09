@@ -4,10 +4,12 @@ import { RSSItem } from "../types/home.types";
 const RSS_FEED_URL = "https://www.azbilliards.com/feed/";
 const MAX_ITEMS = 10;
 const DESCRIPTION_LIMIT = 200;
-const FETCH_TIMEOUT_MS = 12000;
-const WEB_FETCH_TIMEOUT_MS = 6000;
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 1500;
+// Increased from 12s — Expo Go on device can be slower than simulator
+const FETCH_TIMEOUT_MS = 20000;
+const WEB_FETCH_TIMEOUT_MS = 8000;
+// Single retry only — the feed is either reachable or not
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 2000;
 
 const CORS_PROXIES = [
   "https://corsproxy.io/?" + encodeURIComponent(RSS_FEED_URL),
@@ -34,9 +36,7 @@ class RSSService {
   async getLatestNews(): Promise<RSSItem[]> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        await sleep(RETRY_DELAY_MS);
-      }
+      if (attempt > 0) await sleep(RETRY_DELAY_MS);
       try {
         const items = Platform.OS !== "web"
           ? await this.fetchNative()
@@ -46,10 +46,15 @@ class RSSService {
         lastError = new Error("Feed returned 0 items");
       } catch (err) {
         lastError = err;
-        console.error("[RSS] Attempt " + (attempt + 1) + " failed:", err);
+        // Downgraded to warn — RSS is non-critical content; AbortErrors
+        // from slow networks are expected and should not appear as red
+        // errors in the console.
+        console.warn("[RSS] Attempt " + (attempt + 1) + " failed:", (err as Error)?.message ?? err);
       }
     }
-    throw lastError ?? new Error("RSS fetch failed after all retries");
+    // Silently return empty rather than throwing — the home screen shows
+    // a retry button when newsError is true, but this is non-critical.
+    return [];
   }
 
   private async fetchNative(): Promise<RSSItem[]> {
@@ -69,11 +74,9 @@ class RSSService {
       return items;
     };
     try {
-      const items = await Promise.any(CORS_PROXIES.map(tryProxy));
-      return items;
-    } catch (err) {
-      console.warn("[RSS] All proxies failed:", err);
-      throw new Error("All CORS proxies failed");
+      return await Promise.any(CORS_PROXIES.map(tryProxy));
+    } catch {
+      return [];
     }
   }
 
@@ -130,8 +133,9 @@ class RSSService {
 
   private formatDate(dateString: string): string {
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
+      return new Date(dateString).toLocaleDateString("en-US", {
+        weekday: "short", day: "numeric", month: "short",
+      });
     } catch {
       return "Recent";
     }

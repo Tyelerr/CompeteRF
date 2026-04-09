@@ -1,4 +1,5 @@
 ﻿import { supabase } from "../../lib/supabase";
+import { normalizeGameType } from "../../utils/game-type.utils";
 import {
   Tournament,
   TournamentFilters,
@@ -6,31 +7,11 @@ import {
 } from "../types/tournament.types";
 import { searchAlertService } from "./search-alert.service";
 
-// â”€â”€â”€ Game Type Normalizer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Normalizes any slug or display value to the canonical display format.
-// This is the single source of truth for game_type display across the entire app.
-const GAME_TYPE_MAP: Record<string, string> = {
-  "8-ball":                   "8 Ball",
-  "9-ball":                   "9 Ball",
-  "10-ball":                  "10 Ball",
-  "one-pocket":               "One Pocket",
-  "straight-pool":            "Straight Pool",
-  "banks":                    "Banks",
-  "8-ball-scotch-doubles":    "8 Ball Scotch Doubles",
-  "9-ball-scotch-doubles":    "9 Ball Scotch Doubles",
-  "10-ball-scotch-doubles":   "10 Ball Scotch Doubles",
-};
-
-export function normalizeGameType(value: string | null | undefined): string {
-  if (!value) return "";
-  return GAME_TYPE_MAP[value.toLowerCase()] ?? value;
-}
-
 function normalizeTournament<T extends { game_type?: any }>(t: T): T {
   return { ...t, game_type: normalizeGameType(t.game_type) };
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+export { normalizeGameType };
 
 export const tournamentService = {
   async getTournaments(
@@ -47,43 +28,20 @@ export const tournamentService = {
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);
 
-    if (filters.state) {
-      query = query.eq("venues.state", filters.state);
-    }
-    if (filters.city) {
-      query = query.eq("venues.city", filters.city);
-    }
-    if (filters.gameType) {
-      query = query.eq("game_type", filters.gameType);
-    }
-    if (filters.tournamentFormat) {
-      query = query.eq("tournament_format", filters.tournamentFormat);
-    }
-    if (filters.tableSize) {
-      query = query.eq("table_size", filters.tableSize);
-    }
-    if (filters.entryFeeMin !== undefined) {
-      query = query.gte("entry_fee", filters.entryFeeMin);
-    }
-    if (filters.entryFeeMax !== undefined) {
-      query = query.lte("entry_fee", filters.entryFeeMax);
-    }
-    if (filters.fargoMax !== undefined) {
-      query = query.lte("max_fargo", filters.fargoMax);
-    }
-    if (filters.openTournament !== undefined) {
-      query = query.eq("open_tournament", filters.openTournament);
-    }
-    if (filters.reportsToFargo !== undefined) {
-      query = query.eq("reports_to_fargo", filters.reportsToFargo);
-    }
+    if (filters.state) query = query.eq("venues.state", filters.state);
+    if (filters.city) query = query.eq("venues.city", filters.city);
+    if (filters.gameType) query = query.eq("game_type", filters.gameType);
+    if (filters.tournamentFormat) query = query.eq("tournament_format", filters.tournamentFormat);
+    if (filters.tableSize) query = query.eq("table_size", filters.tableSize);
+    if (filters.entryFeeMin !== undefined) query = query.gte("entry_fee", filters.entryFeeMin);
+    if (filters.entryFeeMax !== undefined) query = query.lte("entry_fee", filters.entryFeeMax);
+    if (filters.fargoMax !== undefined) query = query.lte("max_fargo", filters.fargoMax);
+    if (filters.openTournament !== undefined) query = query.eq("open_tournament", filters.openTournament);
+    if (filters.reportsToFargo !== undefined) query = query.eq("reports_to_fargo", filters.reportsToFargo);
 
     const { data, error, count } = await query;
     if (error) throw error;
-    return {
-      data: (data || []).map(normalizeTournament),
-      count: count || 0,
-    };
+    return { data: (data || []).map(normalizeTournament), count: count || 0 };
   },
 
   async getTournament(id: number): Promise<Tournament | null> {
@@ -127,79 +85,42 @@ export const tournamentService = {
       .insert(tournament)
       .select("*, venues(*)")
       .single();
-
     if (error) throw error;
-
-    console.log("ðŸ† Created tournament:", data?.name, data?.game_type);
-
     if (data) {
-      console.log("ðŸ” Starting alert check for tournament:", data.name);
       try {
         await searchAlertService.checkTournamentAgainstAlerts(data);
-        console.log("âœ… Alert checking completed");
       } catch (err) {
-        console.error("âŒ Error checking tournament against alerts:", err);
+        console.error("[tournament] Error checking alerts on create:", err);
       }
     }
-
     return normalizeTournament(data);
   },
 
-  async updateTournament(
-    id: number,
-    updates: Partial<Tournament>,
-  ): Promise<Tournament> {
+  async updateTournament(id: number, updates: Partial<Tournament>): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select("*, venues(*)")
       .single();
-
     if (error) throw error;
-
-    const significantFields = [
-      "game_type",
-      "tournament_format",
-      "entry_fee",
-      "max_fargo",
-      "tournament_date",
-      "table_size",
-    ];
-    const hasSignificantChanges = Object.keys(updates).some((key) =>
-      significantFields.includes(key),
-    );
-
+    const significantFields = ["game_type", "tournament_format", "entry_fee", "max_fargo", "tournament_date", "table_size"];
+    const hasSignificantChanges = Object.keys(updates).some((key) => significantFields.includes(key));
     if (hasSignificantChanges && data) {
-      console.log("ðŸ”„ Tournament updated, re-checking alerts for:", data.name);
       try {
         await searchAlertService.checkTournamentAgainstAlerts(data);
-        console.log("âœ… Alert re-check completed");
       } catch (err) {
-        console.error("âŒ Error re-checking tournament against alerts:", err);
+        console.error("[tournament] Error re-checking alerts on update:", err);
       }
     }
-
     return normalizeTournament(data);
   },
 
-  async cancelTournament(
-    id: number,
-    reason: string,
-    cancelledBy: number,
-  ): Promise<Tournament> {
+  async cancelTournament(id: number, reason: string, cancelledBy: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        status: "cancelled",
-        cancellation_reason: reason,
-        cancelled_at: new Date().toISOString(),
-        cancelled_by: cancelledBy,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
+      .update({ status: "cancelled", cancellation_reason: reason, cancelled_at: new Date().toISOString(), cancelled_by: cancelledBy, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
@@ -207,15 +128,8 @@ export const tournamentService = {
   async archiveTournament(id: number, archivedBy: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        status: "archived",
-        archived_at: new Date().toISOString(),
-        archived_by: archivedBy,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
+      .update({ status: "archived", archived_at: new Date().toISOString(), archived_by: archivedBy, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
@@ -223,18 +137,8 @@ export const tournamentService = {
   async restoreTournament(id: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        status: "active",
-        archived_at: null,
-        archived_by: null,
-        cancelled_at: null,
-        cancelled_by: null,
-        cancellation_reason: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
+      .update({ status: "active", archived_at: null, archived_by: null, cancelled_at: null, cancelled_by: null, cancellation_reason: null, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
@@ -242,13 +146,8 @@ export const tournamentService = {
   async completeTournament(id: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        status: "completed",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
+      .update({ status: "completed", updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
@@ -256,32 +155,20 @@ export const tournamentService = {
   async hideTournament(id: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        is_hidden: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
-
+      .update({ is_hidden: true, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
-    if (!data) throw new Error("Hide failed â€” no rows modified (possible RLS block).");
+    if (!data) throw new Error("Hide failed - no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
   async unhideTournament(id: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({
-        is_hidden: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .select()
-      .single();
-
+      .update({ is_hidden: false, updated_at: new Date().toISOString() })
+      .eq("id", id).select().single();
     if (error) throw error;
-    if (!data) throw new Error("Unhide failed â€” no rows modified (possible RLS block).");
+    if (!data) throw new Error("Unhide failed - no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
@@ -305,4 +192,3 @@ export const tournamentService = {
     return data;
   },
 };
-
