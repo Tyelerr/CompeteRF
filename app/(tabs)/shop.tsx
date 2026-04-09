@@ -1,5 +1,5 @@
 ﻿import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   Image,
   Platform,
@@ -9,13 +9,13 @@ import {
   Text,
   View,
 } from "react-native";
-import { supabase } from "../../src/lib/supabase";
 import { Giveaway } from "../../src/models/types/giveaway.types";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
+import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
 import { useGiveaways } from "../../src/viewmodels/useGiveaways";
 import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
@@ -237,25 +237,16 @@ export default function ShopScreen() {
   const scrollRef = useScrollToTopOnFocus();
   const confettiRef = React.useRef<ConfettiBurstRef>(null);
 
-  const [profile, setProfile] = useState<any>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [selectedGiveaway, setSelectedGiveaway] = useState<Giveaway | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showEntryModal, setShowEntryModal] = useState(false);
+  // ── Auth state: sourced from the reactive Zustand store so the login
+  // banner and entry gate update immediately after login/logout without
+  // requiring an app restart or manual re-fetch. ──────────────────────
+  const profile = useAuthStore((s) => s.profile);
+  const sessionHydrated = useAuthStore((s) => s.sessionHydrated);
+  const authLoading = !sessionHydrated;
 
-  useEffect(() => { checkUser(); }, []);
-
-  const checkUser = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data } = await supabase
-          .from("profiles").select("*").eq("id", session.user.id).single();
-        setProfile(data);
-      }
-    } catch (e) { console.error(e); }
-    finally { setAuthLoading(false); }
-  };
+  const [selectedGiveaway, setSelectedGiveaway] = React.useState<Giveaway | null>(null);
+  const [showDetailModal, setShowDetailModal] = React.useState(false);
+  const [showEntryModal, setShowEntryModal] = React.useState(false);
 
   const handleViewGiveaway = (g: Giveaway) => {
     setSelectedGiveaway(g);
@@ -308,7 +299,7 @@ export default function ShopScreen() {
 
       {!authLoading && !profile && (
         <View style={s.loginBanner}>
-          <Text allowFontScaling={false} style={s.loginText}>{"\uD83C\uDF81"}  Log in to enter giveaways!</Text>
+          <Text allowFontScaling={false} style={s.loginText}>{"\uD83C\uDF81"}{"  "}Log in to enter giveaways!</Text>
           <View style={s.loginButtons}>
             <Button title="Log In" onPress={() => router.push("/(tabs)/profile")} size="sm" />
             <Button title="Sign Up" onPress={() => router.push("/auth/register")} variant="outline" size="sm" />
