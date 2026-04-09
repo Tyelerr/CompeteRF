@@ -57,7 +57,7 @@ const FORMAT_OPTIONS = [
   { label: "Swiss", value: "swiss" },
   { label: "Modified", value: "modified" },
   { label: "Split Bracket", value: "split-bracket" },
-  { label: "Chip", value: "chip" },
+  { label: "Chip Tournament", value: "chip-tournament" },
 ];
 
 const TABLE_SIZE_OPTIONS = [

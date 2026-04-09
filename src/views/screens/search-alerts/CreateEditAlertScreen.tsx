@@ -28,7 +28,9 @@ const FORMAT_OPTIONS = [
   { label: "Any Format", value: "" }, { label: "Single Elimination", value: "single_elimination" },
   { label: "Double Elimination", value: "double_elimination" }, { label: "Round Robin", value: "round_robin" },
   { label: "Swiss", value: "swiss" }, { label: "Modified", value: "modified" }, { label: "Split Bracket", value: "split-bracket" },
+  { label: "Chip Tournament", value: "chip-tournament" },
 ];
+
 const TABLE_SIZE_OPTIONS = [
   { label: "Any Table Size", value: "" }, { label: "7ft (Bar Box)", value: "7ft" },
   { label: "8ft", value: "8ft" }, { label: "9ft (Pro)", value: "9ft" },

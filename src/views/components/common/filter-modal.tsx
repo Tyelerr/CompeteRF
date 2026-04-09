@@ -43,6 +43,7 @@ const TOURNAMENT_FORMATS = [
   { label: "Round Robin", value: "round_robin" },
   { label: "Swiss", value: "swiss" },
   { label: "Split Bracket", value: "split-bracket" },
+  { label: "Chip Tournament", value: "chip-tournament" },
 ];
 
 const TABLE_SIZES = [
