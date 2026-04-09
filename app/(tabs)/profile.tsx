@@ -511,6 +511,7 @@ const styles = StyleSheet.create({
   spacerSm: { height: wxSc(SPACING.sm) },
 
   profileCard: {
+    paddingTop: wxSc(10),
     margin: wxSc(SPACING.md),
     backgroundColor: COLORS.backgroundCard,
     borderRadius: RADIUS.lg,
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
   },
   messagesFloatingButton: {
     position: "absolute",
-    top: wxSc(SPACING.md),
+    top: wxSc(10),
     right: wxSc(SPACING.md),
     backgroundColor: COLORS.primary,
     borderRadius: wxSc(12),
@@ -545,7 +546,7 @@ const styles = StyleSheet.create({
   },
   messagesUnreadText: { fontSize: wxMs(10), fontWeight: "700", color: COLORS.white },
 
-  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: wxSc(SPACING.lg) },
+  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: wxSc(SPACING.lg), marginTop: wxSc(28) },
   avatarContainer: { width: wxSc(80), height: wxSc(80), marginRight: wxSc(SPACING.md) },
   profileImage: { width: wxSc(80), height: wxSc(80), borderRadius: wxSc(40), borderWidth: 2, borderColor: COLORS.border },
   avatar: { width: wxSc(80), height: wxSc(80) },

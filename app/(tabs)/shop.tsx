@@ -241,8 +241,7 @@ export default function ShopScreen() {
   // banner and entry gate update immediately after login/logout without
   // requiring an app restart or manual re-fetch. ──────────────────────
   const profile = useAuthStore((s) => s.profile);
-  const sessionHydrated = useAuthStore((s) => s.sessionHydrated);
-  const authLoading = !sessionHydrated;
+  const authLoading = useAuthStore((s) => s.isLoading);
 
   const [selectedGiveaway, setSelectedGiveaway] = React.useState<Giveaway | null>(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
