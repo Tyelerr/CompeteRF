@@ -1,4 +1,4 @@
-import * as AppleAuthentication from "expo-apple-authentication";
+﻿import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import { supabase } from "../../lib/supabase";
 
@@ -71,6 +71,15 @@ export const authService = {
     const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
     return data.session;
+  },
+
+  async resolveEmailFromUsername(username: string): Promise<string | null> {
+    const { data } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("user_name", username.toLowerCase().trim())
+      .maybeSingle();
+    return data?.email ?? null;
   },
 
   async getUser() {

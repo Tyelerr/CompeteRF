@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
+import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -15,18 +16,25 @@ const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export const LoginScreen = () => {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setError("");
-    if (!email.includes("@")) { setError("Invalid email or password"); return; }
-    if (!password) { setError("Invalid email or password"); return; }
+    if (!identifier.trim()) { setError("Please enter your email or username"); return; }
+    if (!password) { setError("Please enter your password"); return; }
     setLoading(true);
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const isEmail = identifier.includes("@");
+      let resolvedEmail = identifier.trim();
+      if (!isEmail) {
+        const found = await authService.resolveEmailFromUsername(identifier.trim());
+        if (!found) { setError("No account found with that username"); return; }
+        resolvedEmail = found;
+      }
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
       if (signInError) { setError("Invalid email or password"); return; }
       const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user?.id).maybeSingle();
       if (profile) { router.replace("/(tabs)"); } else { router.replace("/auth/register"); }
@@ -46,7 +54,7 @@ export const LoginScreen = () => {
         <View style={styles.webCenter}>
           <Text allowFontScaling={false} style={styles.title}>LOG IN</Text>
           <View style={styles.cardWeb}>
-            <Input label="Email" value={email} onChangeText={setEmail} placeholder="your.email@example.com" keyboardType="email-address" autoCapitalize="none" />
+            <Input label="Email or Username" value={identifier} onChangeText={setIdentifier} placeholder="email or @username" keyboardType="default" autoCapitalize="none" />
             <Input label="Password" value={password} onChangeText={setPassword} placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"} secureTextEntry showPasswordToggle />
             <TouchableOpacity onPress={() => router.push("/auth/forgot-password" as any)} style={styles.forgotPassword}>
               <Text allowFontScaling={false} style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -65,7 +73,7 @@ export const LoginScreen = () => {
         <View style={styles.mobileCard}>
           <Text allowFontScaling={false} style={styles.title}>LOG IN</Text>
           <View style={styles.spacer} />
-          <Input label="Email" value={email} onChangeText={setEmail} placeholder="your.email@example.com" keyboardType="email-address" autoCapitalize="none" />
+          <Input label="Email or Username" value={identifier} onChangeText={setIdentifier} placeholder="email or @username" keyboardType="default" autoCapitalize="none" />
           <Input label="Password" value={password} onChangeText={setPassword} placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"} secureTextEntry showPasswordToggle />
           <TouchableOpacity onPress={() => router.push("/auth/forgot-password" as any)} style={styles.forgotPassword}>
             <Text allowFontScaling={false} style={styles.forgotPasswordText}>Forgot Password?</Text>
