@@ -190,7 +190,7 @@ export default function FaqScreen() {
             <View style={styles.section}>
               <Text allowFontScaling={false} style={styles.sectionTitle}>{ICON_APP} APP INFO</Text>
               <View style={styles.infoCard}>
-                <Text allowFontScaling={false} style={styles.infoText}>Compete v1.0.0</Text>
+                <Text allowFontScaling={false} style={styles.infoText}>Compete v1.0.3</Text>
                 <Text allowFontScaling={false} style={styles.infoText}>{"© 2026 Compete"}</Text>
               </View>
             </View>

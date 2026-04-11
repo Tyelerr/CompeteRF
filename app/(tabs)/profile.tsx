@@ -118,7 +118,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
         <Animated.Text allowFontScaling={false} style={[styles.message, { opacity: messageFade }]}>
           Log in to see your profile
         </Animated.Text>
-        <Animated.View style={[styles.buttonGroup, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
+        <Animated.View style={[styles.buttonGroup, isWeb && styles.buttonGroupWeb, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
           {Platform.OS === "ios" && (
             <>
               <View style={styles.appleButtonWrapper}>
@@ -501,6 +501,7 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: wxMs(36), fontWeight: "700", color: "#4A90D9", marginBottom: wxSc(SPACING.xl), letterSpacing: 1 },
   message: { fontSize: wxMs(FONT_SIZES.lg), color: COLORS.textMuted, marginBottom: wxSc(SPACING.xl), textAlign: "center" },
   buttonGroup: { width: "100%" },
+  buttonGroupWeb: { maxWidth: 400, alignSelf: "center" as any, width: "100%" as any },
   appleButtonWrapper: { alignItems: "center", marginBottom: wxSc(SPACING.sm) },
   appleButton: { width: "100%", height: wxSc(50) },
   loadingHint: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), marginTop: wxSc(SPACING.xs) },

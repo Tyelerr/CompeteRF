@@ -23,13 +23,13 @@ import { COLORS } from '../../../theme/colors';
 import { RADIUS, SPACING } from '../../../theme/spacing';
 import { FONT_SIZES } from '../../../theme/typography';
 
-// ── Layout constants ──────────────────────────────────────────────────────────
+const isWeb = Platform.OS === 'web';
+const WEB_MAX_W = 480;
+const WEB_MAX_H = 780;
 
 const OVERLAY_COLOR = 'rgba(0,0,0,0.88)';
-const BOTTOM_H = Platform.OS === 'ios' ? 164 : 124;
+const BOTTOM_H = Platform.OS === 'ios' ? 148 : 112;
 const TEXT_BOTTOM = BOTTOM_H + SPACING.lg;
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SpotlightDef {
   topPct: number;
@@ -50,21 +50,13 @@ interface SlideDef {
   pulseLeftPct?: number;
 }
 
-// ── Slide definitions ─────────────────────────────────────────────────────────
-
 const SLIDES: SlideDef[] = [
   {
     id: 'find',
     image: require('../../../../assets/onboarding/slide-billiards.png'),
     title: 'Find Tournaments',
     subtitle: 'Search by state, city, or zip — then filter by game type, format, table size, entry fee, and more',
-    spotlight: {
-      topPct: 0.075,
-      leftPct: 0.03,
-      widthPct: 0.94,
-      heightPct: 0.232,
-      borderRadius: 14,
-    },
+    spotlight: { topPct: 0.075, leftPct: 0.03, widthPct: 0.94, heightPct: 0.232, borderRadius: 14 },
     textTopPct: 0.50,
   },
   {
@@ -72,14 +64,7 @@ const SLIDES: SlideDef[] = [
     image: require('../../../../assets/onboarding/slide-billiards.png'),
     title: 'Favorite Tournaments',
     subtitle: 'Tap the heart icon to save tournaments to your profile and get notified when details change',
-    spotlight: {
-      topPct: 0.368,
-      leftPct: 0.02,
-      widthPct: 0.49,
-      heightPct: 0.29,
-      borderRadius: 14,
-    },
-    // Nudged up from 0.422 → 0.400
+    spotlight: { topPct: 0.368, leftPct: 0.02, widthPct: 0.49, heightPct: 0.29, borderRadius: 14 },
     pulseTopPct: 0.413,
     pulseLeftPct: 0.418,
   },
@@ -88,13 +73,7 @@ const SLIDES: SlideDef[] = [
     image: require('../../../../assets/onboarding/slide-filters.png'),
     title: 'Tournament Filters',
     subtitle: 'Use filters to narrow down the tournaments you want to see',
-    spotlight: {
-      topPct: 0.040,
-      leftPct: 0.02,
-      widthPct: 0.96,
-      heightPct: 0.585,
-      borderRadius: 16,
-    },
+    spotlight: { topPct: 0.040, leftPct: 0.02, widthPct: 0.96, heightPct: 0.585, borderRadius: 16 },
   },
   {
     id: 'details',
@@ -102,45 +81,25 @@ const SLIDES: SlideDef[] = [
     title: 'View Details',
     subtitle: 'Tap any tournament card to see more info like time, fee, format, and rules',
     textTopPct: 0.775,
-    spotlight: {
-      topPct: 0.115,
-      leftPct: 0.02,
-      widthPct: 0.96,
-      heightPct: 0.645,
-      borderRadius: 16,
-    },
+    spotlight: { topPct: 0.115, leftPct: 0.02, widthPct: 0.96, heightPct: 0.645, borderRadius: 16 },
   },
   {
     id: 'giveaways',
     image: require('../../../../assets/onboarding/slide-giveaways.png'),
     title: 'Enter Giveaways',
     subtitle: 'Win gear and prizes by entering giveaways from top brands',
-    spotlight: {
-      topPct: 0.305,
-      leftPct: 0.03,
-      widthPct: 0.94,
-      heightPct: 0.295,
-      borderRadius: 14,
-    },
+    spotlight: { topPct: 0.305, leftPct: 0.03, widthPct: 0.94, heightPct: 0.295, borderRadius: 14 },
   },
   {
     id: 'alerts',
     image: require('../../../../assets/onboarding/slide-alert.png'),
     title: 'Search Alerts',
     subtitle: "Set up search alerts and we'll notify you when matching tournaments are posted",
-    spotlight: {
-      topPct: 0.265,
-      leftPct: 0.03,
-      widthPct: 0.94,
-      heightPct: 0.445,
-      borderRadius: 16,
-    },
+    spotlight: { topPct: 0.265, leftPct: 0.03, widthPct: 0.94, heightPct: 0.445, borderRadius: 16 },
   },
 ];
 
 const TOTAL = SLIDES.length;
-
-// ── Pulse indicator ───────────────────────────────────────────────────────────
 
 interface PulseProps {
   topPct: number;
@@ -149,50 +108,46 @@ interface PulseProps {
   screenH: number;
 }
 
-const PulseIndicator = React.memo(
-  ({ topPct, leftPct, screenW, screenH }: PulseProps) => {
-    const scaleAnim = useRef(new Animated.Value(1)).current;
-    const opacityAnim = useRef(new Animated.Value(0.85)).current;
+const PulseIndicator = React.memo(({ topPct, leftPct, screenW, screenH }: PulseProps) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(0.85)).current;
 
-    useEffect(() => {
-      const loop = Animated.loop(
-        Animated.parallel([
-          Animated.sequence([
-            Animated.timing(scaleAnim, { toValue: 1.65, duration: 750, useNativeDriver: true }),
-            Animated.timing(scaleAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
-          ]),
-          Animated.sequence([
-            Animated.timing(opacityAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
-            Animated.timing(opacityAnim, { toValue: 0.85, duration: 750, useNativeDriver: true }),
-          ]),
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(scaleAnim, { toValue: 1.65, duration: 750, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1, duration: 750, useNativeDriver: true }),
         ]),
-      );
-      loop.start();
-      return () => loop.stop();
-    }, []);
-
-    const SIZE = 40;
-    return (
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: screenH * topPct - SIZE / 2,
-          left: screenW * leftPct - SIZE / 2,
-          width: SIZE,
-          height: SIZE,
-          borderRadius: SIZE / 2,
-          borderWidth: 3,
-          borderColor: COLORS.primary,
-          opacity: opacityAnim,
-          transform: [{ scale: scaleAnim }],
-        }}
-      />
+        Animated.sequence([
+          Animated.timing(opacityAnim, { toValue: 0.15, duration: 750, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0.85, duration: 750, useNativeDriver: true }),
+        ]),
+      ]),
     );
-  },
-);
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
-// ── Spotlight overlay ─────────────────────────────────────────────────────────
+  const SIZE = 40;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: screenH * topPct - SIZE / 2,
+        left: screenW * leftPct - SIZE / 2,
+        width: SIZE,
+        height: SIZE,
+        borderRadius: SIZE / 2,
+        borderWidth: 3,
+        borderColor: COLORS.primary,
+        opacity: opacityAnim,
+        transform: [{ scale: scaleAnim }],
+      }}
+    />
+  );
+});
 
 interface SpotlightProps {
   spot: SpotlightDef;
@@ -228,8 +183,6 @@ const SpotlightOverlay = React.memo(({ spot, w, h }: SpotlightProps) => {
   );
 });
 
-// ── Individual slide ──────────────────────────────────────────────────────────
-
 interface SlideItemProps {
   slide: SlideDef;
   screenW: number;
@@ -249,7 +202,6 @@ const SlideItem = React.memo(({ slide, screenW, screenH }: SlideItemProps) => {
         resizeMode="cover"
       >
         <SpotlightOverlay spot={slide.spotlight} w={screenW} h={screenH} />
-
         {slide.pulseTopPct != null && slide.pulseLeftPct != null && (
           <PulseIndicator
             topPct={slide.pulseTopPct}
@@ -258,21 +210,14 @@ const SlideItem = React.memo(({ slide, screenW, screenH }: SlideItemProps) => {
             screenH={screenH}
           />
         )}
-
         <View style={textStyle}>
-          <Text style={styles.slideTitle} allowFontScaling={false}>
-            {slide.title}
-          </Text>
-          <Text style={styles.slideSubtitle} allowFontScaling={false}>
-            {slide.subtitle}
-          </Text>
+          <Text style={styles.slideTitle} allowFontScaling={false}>{slide.title}</Text>
+          <Text style={styles.slideSubtitle} allowFontScaling={false}>{slide.subtitle}</Text>
         </View>
       </ImageBackground>
     </View>
   );
 });
-
-// ── Main component ────────────────────────────────────────────────────────────
 
 export interface OnboardingModalProps {
   visible: boolean;
@@ -280,12 +225,11 @@ export interface OnboardingModalProps {
   onSkip: () => void;
 }
 
-export const OnboardingModal = ({
-  visible,
-  onComplete,
-  onSkip,
-}: OnboardingModalProps) => {
-  const { width, height } = useWindowDimensions();
+export const OnboardingModal = ({ visible, onComplete, onSkip }: OnboardingModalProps) => {
+  const { width: winW, height: winH } = useWindowDimensions();
+  const width = isWeb ? Math.min(winW, WEB_MAX_W) : winW;
+  const height = isWeb ? Math.min(winH, WEB_MAX_H) : winH;
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const flatListRef = useRef<FlatList<SlideDef>>(null);
   const isLastSlide = currentSlide === TOTAL - 1;
@@ -300,9 +244,7 @@ export const OnboardingModal = ({
     }
   }, [visible]);
 
-  const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 50,
-  }).current;
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: any[] }) => {
@@ -315,6 +257,14 @@ export const OnboardingModal = ({
   const handleSkip = useCallback(() => onSkip(), [onSkip]);
   const handleComplete = useCallback(() => onComplete(), [onComplete]);
 
+  const handleNext = useCallback(() => {
+    const next = currentSlide + 1;
+    if (next < TOTAL) {
+      flatListRef.current?.scrollToIndex({ index: next, animated: true });
+      setCurrentSlide(next);
+    }
+  }, [currentSlide]);
+
   const renderItem = useCallback(
     ({ item }: { item: SlideDef }) => (
       <SlideItem slide={item} screenW={width} screenH={height} />
@@ -325,11 +275,7 @@ export const OnboardingModal = ({
   const keyExtractor = useCallback((item: SlideDef) => item.id, []);
 
   const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: width,
-      offset: width * index,
-      index,
-    }),
+    (_: any, index: number) => ({ length: width, offset: width * index, index }),
     [width],
   );
 
@@ -341,49 +287,48 @@ export const OnboardingModal = ({
       transparent={false}
       onRequestClose={handleSkip}
     >
-      <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-        <FlatList
-          ref={flatListRef}
-          data={SLIDES}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          horizontal
-          pagingEnabled
-          bounces={false}
-          showsHorizontalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          getItemLayout={getItemLayout}
-          initialNumToRender={1}
-          maxToRenderPerBatch={2}
-          windowSize={3}
-          scrollEventThrottle={16}
-        />
+      <View style={[styles.outerContainer, isWeb && styles.outerContainerWeb]}>
+        <View style={isWeb ? { width, height, borderRadius: RADIUS.lg, overflow: 'hidden' as any } : { flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={SLIDES}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            horizontal
+            pagingEnabled
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            getItemLayout={getItemLayout}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            windowSize={3}
+            scrollEventThrottle={16}
+          />
 
-        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-          <View style={styles.bottomControls}>
-            <View style={styles.dotsRow}>
-              {Array.from({ length: TOTAL }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[styles.dot, i === currentSlide && styles.dotActive]}
-                />
-              ))}
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View style={styles.bottomControls}>
+              <View style={styles.dotsRow}>
+                {Array.from({ length: TOTAL }).map((_, i) => (
+                  <View key={i} style={[styles.dot, i === currentSlide && styles.dotActive]} />
+                ))}
+              </View>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.75}>
+                  <Text style={styles.skipText} allowFontScaling={false}>Skip</Text>
+                </TouchableOpacity>
+                {isLastSlide ? (
+                  <TouchableOpacity style={styles.nextBtn} onPress={handleComplete} activeOpacity={0.85}>
+                    <Text style={styles.nextText} allowFontScaling={false}>Get Started</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+                    <Text style={styles.nextText} allowFontScaling={false}>Next</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-
-            {isLastSlide ? (
-              <TouchableOpacity
-                style={styles.getStartedBtn}
-                onPress={handleComplete}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.getStartedText} allowFontScaling={false}>
-                  Get Started
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.ctaPlaceholder} />
-            )}
           </View>
         </View>
       </View>
@@ -391,9 +336,16 @@ export const OnboardingModal = ({
   );
 };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  outerContainerWeb: {
+    backgroundColor: 'rgba(0,0,0,0.85)' as any,
+    alignItems: 'center' as any,
+    justifyContent: 'center' as any,
+  },
   textBlock: {
     position: 'absolute',
     left: SPACING.xl,
@@ -438,34 +390,16 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     alignItems: 'center',
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.border,
-  },
-  dotActive: {
-    width: 24,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  getStartedBtn: {
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.border },
+  dotActive: { width: 24, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  buttonRow: {
+    flexDirection: 'row',
     width: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.md,
+    gap: SPACING.sm,
     alignItems: 'center',
   },
-  getStartedText: {
-    color: COLORS.white,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '700',
-  },
-  ctaPlaceholder: {
-    width: '100%',
-    height: SPACING.md * 2 + FONT_SIZES.lg,
-  },
+  skipBtn: { flex: 1, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  skipText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '600' },
+  nextBtn: { flex: 2, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, alignItems: 'center' },
+  nextText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: '700' },
 });
-
-
