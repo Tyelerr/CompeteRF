@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+﻿import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -18,61 +18,39 @@ interface BarOwnerVenueCardProps {
   };
   onPress: () => void;
   onManageTables?: () => void;
-  onManageDirectors?: () => void;
+  onManageTeam?: () => void;
 }
 
 export const BarOwnerVenueCard = ({
   venue,
   onPress,
   onManageTables,
-  onManageDirectors,
+  onManageTeam,
 }: BarOwnerVenueCardProps) => {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "active":
-        return COLORS.success;
-      case "pending":
-        return COLORS.warning;
-      case "inactive":
-        return COLORS.textSecondary;
-      default:
-        return COLORS.textSecondary;
+      case "active": return COLORS.success;
+      case "pending": return COLORS.warning;
+      case "inactive": return COLORS.textSecondary;
+      default: return COLORS.textSecondary;
     }
   };
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.venueName} numberOfLines={1}>
-            {venue.venue}
-          </Text>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(venue.status) + "20" },
-            ]}
-          >
-            <Text
-              style={[
-                styles.statusText,
-                { color: getStatusColor(venue.status) },
-              ]}
-            >
+          <Text style={styles.venueName} numberOfLines={1}>{venue.venue}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(venue.status) + "20" }]}>
+            <Text style={[styles.statusText, { color: getStatusColor(venue.status) }]}>
               {venue.status}
             </Text>
           </View>
         </View>
-        <Text style={styles.address} numberOfLines={1}>
-          {venue.address}
-        </Text>
-        <Text style={styles.cityState}>
-          {venue.city}, {venue.state} {venue.zip_code}
-        </Text>
+        <Text style={styles.address} numberOfLines={1}>{venue.address}</Text>
+        <Text style={styles.cityState}>{venue.city}, {venue.state} {venue.zip_code}</Text>
       </View>
 
-      {/* Stats Row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
           <Text style={styles.statValue}>{venue.activeTournaments}</Text>
@@ -90,28 +68,21 @@ export const BarOwnerVenueCard = ({
         </View>
       </View>
 
-      {/* Action Buttons */}
       <View style={styles.actions}>
         {onManageTables && (
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onManageTables();
-            }}
+            onPress={(e) => { e.stopPropagation(); onManageTables(); }}
           >
             <Text style={styles.actionText}>Manage Tables</Text>
           </TouchableOpacity>
         )}
-        {onManageDirectors && (
+        {onManageTeam && (
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onManageDirectors();
-            }}
+            onPress={(e) => { e.stopPropagation(); onManageTeam(); }}
           >
-            <Text style={styles.actionText}>Manage Directors</Text>
+            <Text style={styles.actionText}>{"\uD83D\uDC65"} Manage Team</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -128,9 +99,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  header: {
-    marginBottom: SPACING.md,
-  },
+  header: { marginBottom: SPACING.md },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -144,24 +113,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: SPACING.sm,
   },
-  statusBadge: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs / 2,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  address: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  cityState: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
+  statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs / 2, borderRadius: 12 },
+  statusText: { fontSize: FONT_SIZES.xs, fontWeight: "600", textTransform: "capitalize" },
+  address: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
+  cityState: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -170,29 +125,11 @@ const styles = StyleSheet.create({
     padding: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  stat: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  statLabel: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: COLORS.border,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
+  stat: { flex: 1, alignItems: "center" },
+  statValue: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: COLORS.primary },
+  statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
+  statDivider: { width: 1, height: 30, backgroundColor: COLORS.border },
+  actions: { flexDirection: "row", gap: SPACING.sm },
   actionButton: {
     flex: 1,
     backgroundColor: COLORS.primary + "15",
@@ -200,9 +137,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  actionText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.primary,
-  },
+  actionText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.primary },
 });

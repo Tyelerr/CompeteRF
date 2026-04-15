@@ -1,4 +1,5 @@
 ﻿import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -12,15 +13,21 @@ import {
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
+import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { useBarOwnerVenues } from "../../../src/viewmodels/useBarOwnerVenues";
 import { EmptyState } from "../../../src/views/components/dashboard";
 import { BarOwnerVenueCard } from "../../../src/views/components/venues";
+import { VenueTeamModal } from "../../../src/views/components/venues/VenueTeamModal";
 
 const isWeb = Platform.OS === "web";
 
 export default function BarOwnerVenuesScreen() {
   const router = useRouter();
   const vm = useBarOwnerVenues();
+  const { profile } = useAuthContext();
+
+  const [teamModalVenueId, setTeamModalVenueId] = useState<number | null>(null);
+  const [teamModalVenueName, setTeamModalVenueName] = useState("");
 
   const handleVenuePress = (venueId: number) => {
     router.push(`/(tabs)/admin/edit-venue/${venueId}` as any);
@@ -30,8 +37,9 @@ export default function BarOwnerVenuesScreen() {
     router.push(`/(tabs)/admin/edit-venue/${venueId}?tab=tables` as any);
   };
 
-  const handleManageDirectors = (venueId: number) => {
-    router.push(`/(tabs)/admin/edit-venue/${venueId}?tab=directors` as any);
+  const handleManageTeam = (venueId: number, venueName: string) => {
+    setTeamModalVenueName(venueName);
+    setTeamModalVenueId(venueId);
   };
 
   const handleCreateVenue = () => {
@@ -48,13 +56,18 @@ export default function BarOwnerVenuesScreen() {
 
   return (
     <View style={styles.container}>
+      <VenueTeamModal
+        visible={teamModalVenueId !== null}
+        venueId={teamModalVenueId}
+        venueName={teamModalVenueName}
+        currentUserId={profile?.id_auto ?? 0}
+        onClose={() => { setTeamModalVenueId(null); vm.onRefresh(); }}
+      />
+
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Venues</Text>
         <View style={styles.placeholder} />
@@ -81,9 +94,7 @@ export default function BarOwnerVenuesScreen() {
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}/>
+            <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
           )
         }
         renderItem={({ item }) => (
@@ -91,7 +102,7 @@ export default function BarOwnerVenuesScreen() {
             venue={item}
             onPress={() => handleVenuePress(item.id)}
             onManageTables={() => handleManageTables(item.id)}
-            onManageDirectors={() => handleManageDirectors(item.id)}
+            onManageTeam={() => handleManageTeam(item.id, item.venue)}
           />
         )}
         ListEmptyComponent={
@@ -106,7 +117,6 @@ export default function BarOwnerVenuesScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: { paddingBottom: SPACING.xl },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
@@ -119,10 +129,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-  },
+  loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -133,25 +140,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
-  backText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  placeholder: {
-    width: 50,
-  },
+  headerWeb: { paddingTop: SPACING.lg },
+  backButton: { padding: SPACING.xs },
+  backText: { fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: "600" },
+  headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: COLORS.text },
+  placeholder: { width: 50 },
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -177,13 +170,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     borderRadius: 8,
   },
-  addButtonText: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: "600",
-    color: COLORS.surface,
-  },
-  listContent: {
-    padding: SPACING.md,
-    paddingBottom: SPACING.xl * 2,
-  },
+  addButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.surface },
+  listContent: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
 });

@@ -119,7 +119,7 @@ export const RegisterScreen = () => {
       if (!authData.user) { setError("Account creation failed"); return; }
       const trimmedFirst = toTitleCase(firstName.trim());
       const trimmedLast = toTitleCase(lastName.trim());
-      await profileService.createProfile({ id: authData.user.id, email: authData.user.email!, name: `${trimmedFirst} ${trimmedLast}`, first_name: trimmedFirst, last_name: trimmedLast, user_name: username, home_state: homeState, preferred_game: preferredGame || undefined, favorite_player: favoritePlayer || undefined });
+      await profileService.createProfile({ id: authData.user.id, email: authData.user.email!, name: `${trimmedFirst} ${trimmedLast}`, first_name: trimmedFirst, last_name: trimmedLast, user_name: username, home_state: homeState, preferred_game: preferredGame || undefined, favorite_player: favoritePlayer || undefined, status: "active" });
 
       // Fire-and-forget welcome email — never awaited, never blocks registration
       sendWelcomeEmail(authData.user.email!, trimmedFirst).catch((err) =>
