@@ -1,4 +1,4 @@
-﻿import { supabase } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import { normalizeGameType } from "../../utils/game-type.utils";
 import {
   Tournament,
@@ -24,7 +24,7 @@ export const tournamentService = {
       .select("*, venues(*), profiles!director_id(*)", { count: "exact" })
       .eq("status", "active")
       .eq("is_hidden", false)
-      .gte("tournament_date", new Date().toISOString().split("T")[0])
+      .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);
 
@@ -61,7 +61,7 @@ export const tournamentService = {
       .eq("venue_id", venueId)
       .eq("status", "active")
       .eq("is_hidden", false)
-      .gte("tournament_date", new Date().toISOString().split("T")[0])
+      .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
       .order("tournament_date", { ascending: true });
     if (error) throw error;
     return (data || []).map(normalizeTournament);
@@ -73,7 +73,7 @@ export const tournamentService = {
       .select("*, venues(*)")
       .eq("director_id", directorId)
       .eq("status", "active")
-      .gte("tournament_date", new Date().toISOString().split("T")[0])
+      .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
       .order("tournament_date", { ascending: true });
     if (error) throw error;
     return (data || []).map(normalizeTournament);
