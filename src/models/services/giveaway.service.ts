@@ -1,4 +1,4 @@
-import { supabase } from "../../lib/supabase";
+﻿import { supabase } from "../../lib/supabase";
 import {
   Giveaway,
   GiveawayEntry,
@@ -15,6 +15,10 @@ export const giveawayService = {
   // PUBLIC METHODS (for shop page)
   // ============================================
 
+  /**
+   * Get only truly active giveaways (not expired).
+   * Used for entry eligibility checks.
+   */
   async getActiveGiveaways(): Promise<Giveaway[]> {
     const now = new Date().toISOString();
 
@@ -43,15 +47,18 @@ export const giveawayService = {
     return giveawaysWithCounts;
   },
 
+  /**
+   * Get all giveaways visible on the shop page:
+   * - ALL with status "active" (including expired ones so they gray out
+   *   instead of vanishing — the card UI handles the "Ended" label)
+   * - Recent ended/awarded (last 10) with winner name for results display
+   */
   async getVisibleGiveaways(): Promise<Giveaway[]> {
-    const now = new Date().toISOString();
-
     const [activeResult, endedResult] = await Promise.all([
       supabase
         .from("giveaways")
         .select("*")
         .eq("status", "active")
-        .or(`end_date.is.null,end_date.gt.${now}`)
         .order("end_date", { ascending: true }),
       supabase
         .from("giveaways")
@@ -78,7 +85,7 @@ export const giveawayService = {
           .select("*", { count: "exact", head: true })
           .eq("giveaway_id", g.id);
 
-        // Parse "Tyler Brown" ? "Tyler B." for public display.
+        // Parse "Tyler Brown" -> "Tyler B." for public display.
         // Only ended/awarded rows carry the winner join; active rows have no winner field.
         const rawName: string | null = (g as any).winner?.name ?? null;
         let winner_display_name: string | null = null;
@@ -201,7 +208,7 @@ export const giveawayService = {
   // ---------------------------------------------------------------------
   // Returns the personal fields from the user most recent entry so the
   // entry sheet can skip the full form on repeat visits.
-  // Uses maybeSingle() � returns null cleanly when no prior entry exists.
+  // Uses maybeSingle() — returns null cleanly when no prior entry exists.
   // ---------------------------------------------------------------------
   async getSavedEntryInfo(userId: number): Promise<GiveawaySavedInfo | null> {
     const { data, error } = await supabase

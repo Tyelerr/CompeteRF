@@ -270,7 +270,19 @@ export const useEditTournament = () => {
     if (thumbnailId.startsWith("custom:")) {
       return thumbnailId.replace("custom:", "");
     }
-    return `https://your-cdn-url.com/thumbnails/${thumbnailId}.jpg`; // Update with your actual CDN
+    const gameTypeImageMap: Record<string, string> = {
+      "8-ball": "8-ball.jpeg",
+      "9-ball": "9-ball.jpeg",
+      "10-ball": "10-ball.jpeg",
+      "one-pocket": "One-Pocket.jpeg",
+      "straight-pool": "Straight-Pool.jpeg",
+      "banks": "Banks.jpeg",
+    };
+    const imageFile = gameTypeImageMap[thumbnailId];
+    if (imageFile) {
+      return `https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/${imageFile}`;
+    }
+    return null;
   };
 
   const handleSubmit = async () => {

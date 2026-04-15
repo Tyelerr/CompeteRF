@@ -1,9 +1,18 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+﻿import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { TABLE_BRANDS, TABLE_SIZES } from "../../../utils/constants";
 import { Dropdown } from "../common/dropdown";
+
+const ACCENT_COLORS = [
+  COLORS.primary,
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+  "#06B6D4",
+];
 
 interface TableCardProps {
   table: {
@@ -20,6 +29,7 @@ interface TableCardProps {
   }) => void;
   onDelete: () => void;
   disabled?: boolean;
+  index?: number;
 }
 
 export const TableCard = ({
@@ -27,13 +37,9 @@ export const TableCard = ({
   onUpdate,
   onDelete,
   disabled = false,
+  index = 0,
 }: TableCardProps) => {
-  const getDisplaySize = () => {
-    if (table.table_size === "custom" && table.custom_size) {
-      return table.custom_size;
-    }
-    return table.table_size;
-  };
+  const accent = ACCENT_COLORS[index % ACCENT_COLORS.length];
 
   const handleQuantityChange = (delta: number) => {
     const newQuantity = Math.max(1, table.quantity + delta);
@@ -41,9 +47,8 @@ export const TableCard = ({
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { borderLeftColor: accent, borderLeftWidth: 4 }]}>
       <View style={styles.row}>
-        {/* Size Dropdown */}
         <View style={styles.dropdownContainer}>
           <Text style={styles.label}>Size</Text>
           <Dropdown
@@ -54,8 +59,6 @@ export const TableCard = ({
             disabled={disabled}
           />
         </View>
-
-        {/* Brand Dropdown */}
         <View style={styles.dropdownContainer}>
           <Text style={styles.label}>Brand</Text>
           <Dropdown
@@ -69,7 +72,6 @@ export const TableCard = ({
       </View>
 
       <View style={styles.bottomRow}>
-        {/* Quantity Stepper */}
         <View style={styles.quantityContainer}>
           <Text style={styles.label}>Qty</Text>
           <View style={styles.stepper}>
@@ -78,7 +80,7 @@ export const TableCard = ({
               onPress={() => handleQuantityChange(-1)}
               disabled={disabled || table.quantity <= 1}
             >
-              <Text style={styles.stepperText}>−</Text>
+              <Text style={[styles.stepperText, { color: accent }]}>{"\u2212"}</Text>
             </TouchableOpacity>
             <Text style={styles.quantityText}>{table.quantity}</Text>
             <TouchableOpacity
@@ -86,18 +88,12 @@ export const TableCard = ({
               onPress={() => handleQuantityChange(1)}
               disabled={disabled}
             >
-              <Text style={styles.stepperText}>+</Text>
+              <Text style={[styles.stepperText, { color: accent }]}>+</Text>
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Delete Button */}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={onDelete}
-          disabled={disabled}
-        >
-          <Text style={styles.deleteText}>🗑️ Remove</Text>
+        <TouchableOpacity style={styles.deleteButton} onPress={onDelete} disabled={disabled}>
+          <Text style={styles.deleteText}>{"\uD83D\uDDD1\uFE0F"} Remove</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -123,18 +119,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-end",
   },
-  dropdownContainer: {
-    flex: 1,
-  },
+  dropdownContainer: { flex: 1 },
   label: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     marginBottom: 4,
     fontWeight: "600",
   },
-  quantityContainer: {
-    alignItems: "flex-start",
-  },
+  quantityContainer: { alignItems: "flex-start" },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
@@ -151,7 +143,6 @@ const styles = StyleSheet.create({
   },
   stepperText: {
     fontSize: FONT_SIZES.lg,
-    color: COLORS.primary,
     fontWeight: "600",
   },
   quantityText: {

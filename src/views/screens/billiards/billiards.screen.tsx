@@ -79,19 +79,35 @@ export const BilliardsScreen = () => {
   const scrollUpAccRef = useRef(0);
   const [filterReady, setFilterReady] = useState(false);
 
+  // Prevents handleScroll from fighting the OS keyboard scroll when zip is focused
+  const isZipFocusedRef = useRef(false);
+
+  // onLayout is placed on an inner wrapper View so it always measures the
+  // natural content height regardless of the Animated.View height constraint.
   const onFilterLayout = useCallback((e: any) => {
     if (isWeb) return;
     const h = e.nativeEvent.layout.height;
-    if (h > 0 && !filterMeasured.current) {
+    if (h <= 0) return;
+    if (!filterMeasured.current) {
+      // First measurement — initialise the animation value
       filterMeasured.current = true;
       filterHeightRef.current = h;
       filterAnim.setValue(h);
       setFilterReady(true);
+    } else if (filterVisibleRef.current && h !== filterHeightRef.current) {
+      // Content height changed while filter is visible (e.g. radius slider
+      // appeared/disappeared after zip entry) — snap to new height instantly
+      // so the buttons are never clipped.
+      filterHeightRef.current = h;
+      filterAnim.setValue(h);
     }
   }, [filterAnim]);
 
   const handleScroll = useCallback((e: any) => {
-    if (isWeb) return;
+    // Don't run collapse logic while the zip keyboard is open — the OS
+    // scrolls the viewport to keep the input visible and that scroll event
+    // would fight the animation, causing the visible jump.
+    if (isWeb || isZipFocusedRef.current) return;
     const y = e.nativeEvent.contentOffset.y;
     const dy = y - lastScrollYRef.current;
     lastScrollYRef.current = y;
@@ -161,11 +177,11 @@ export const BilliardsScreen = () => {
   const renderWebFilters = () => (
     <View style={webS.filterBar}>
       <View style={webS.searchWrap}>
-        <Text allowFontScaling={false} style={webS.searchIcon}>🔍</Text>
-        <TextInput allowFontScaling={false} style={webS.searchInput} placeholder="Search tournaments..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} />
+        <Text allowFontScaling={false} style={webS.searchIcon}>{"\uD83D\uDD0D"}</Text>
+        <TextInput allowFontScaling={false} style={webS.searchInput} placeholder="Search by name, venue, director..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} />
         {vm.searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={webS.clearBtn}>
-            <Text allowFontScaling={false} style={webS.clearBtnText}>✕</Text>
+            <Text allowFontScaling={false} style={webS.clearBtnText}>{"\u2715"}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -173,7 +189,7 @@ export const BilliardsScreen = () => {
       <View style={webS.dropWrap}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
       <TextInput allowFontScaling={false} style={webS.zipInput} placeholder="Zip" placeholderTextColor={COLORS.textMuted} value={vm.zipCode} onChangeText={vm.setZipCode} keyboardType="numeric" maxLength={5} />
       <TouchableOpacity style={webS.filterBtn} onPress={() => vm.setFilterModalVisible(true)}>
-        <Text allowFontScaling={false} style={webS.filterBtnText}>☰ Filters</Text>
+        <Text allowFontScaling={false} style={webS.filterBtnText}>{"\u2630 Filters"}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={webS.resetBtn} onPress={vm.resetAllFilters}>
         <Text allowFontScaling={false} style={webS.resetBtnText}>Reset</Text>
@@ -236,7 +252,7 @@ export const BilliardsScreen = () => {
 
   const renderRecommendCard = () => (
     <View style={{ backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), marginHorizontal: scale(SPACING.xs), marginTop: scale(SPACING.md), marginBottom: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.primary + "30", alignItems: "center" }}>
-      <Text allowFontScaling={false} style={{ fontSize: moderateScale(24), marginBottom: scale(SPACING.sm) }}>🎱</Text>
+      <Text allowFontScaling={false} style={{ fontSize: moderateScale(24), marginBottom: scale(SPACING.sm) }}>{"\uD83C\uDFB1"}</Text>
       <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.text, textAlign: "center" }}>Know a spot that hosts pool tournaments?</Text>
       <Text allowFontScaling={false} style={{ fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.xs), marginBottom: scale(SPACING.md) }}>Help us grow the community - recommend a venue!</Text>
       <TouchableOpacity style={{ backgroundColor: COLORS.primary, paddingHorizontal: scale(SPACING.lg), paddingVertical: scale(SPACING.sm), borderRadius: RADIUS.sm }} onPress={handleRecommendPress}>
@@ -247,11 +263,11 @@ export const BilliardsScreen = () => {
 
   const renderEmptyState = () => (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.emptyContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      <Text allowFontScaling={false} style={styles.emptyIcon}>🎱</Text>
+      <Text allowFontScaling={false} style={styles.emptyIcon}>{"\uD83C\uDFB1"}</Text>
       <Text allowFontScaling={false} style={styles.emptyText}>{vm.isStateFilterEmpty && vm.selectedState ? "No tournaments available in this area yet" : "No tournaments found"}</Text>
       <Text allowFontScaling={false} style={styles.emptySubtext}>Try adjusting your filters</Text>
       <TouchableOpacity style={styles.alertsButton} onPress={handleSearchAlertsPress}>
-        <Text allowFontScaling={false} style={styles.alertsButtonText}>🔔 Create Search Alert</Text>
+        <Text allowFontScaling={false} style={styles.alertsButtonText}>{"\uD83D\uDD14"} Create Search Alert</Text>
       </TouchableOpacity>
       {renderRecommendCard()}
     </ScrollView>
@@ -280,43 +296,60 @@ export const BilliardsScreen = () => {
                 {renderPagination()}
               </>
             ) : (
-              <Animated.View
-                onLayout={onFilterLayout}
-                style={filterReady ? { height: filterAnim, overflow: "hidden" } : undefined}
-              >
-                {vm.isHomeStateEmpty && (
-                  <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), marginHorizontal: scale(SPACING.md), marginBottom: scale(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
-                    <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>No tournaments in your state yet - showing all tournaments</Text>
+              // Animated.View controls the visible height for the collapse animation.
+              // The inner View carries onLayout so it always reports the natural
+              // content height — not the constrained animated height. This means
+              // onFilterLayout fires correctly when dynamic content (radius slider)
+              // appears or disappears, preventing the clipping bug.
+              <Animated.View style={filterReady ? { height: filterAnim, overflow: "hidden" } : undefined}>
+                <View onLayout={onFilterLayout}>
+                  {vm.isHomeStateEmpty && (
+                    <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), marginHorizontal: scale(SPACING.md), marginBottom: scale(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
+                      <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>No tournaments in your state yet - showing all tournaments</Text>
+                    </View>
+                  )}
+                  <View style={styles.searchContainer}>
+                    <View style={styles.searchBar}>
+                      <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
+                      <TextInput allowFontScaling={false} style={styles.searchInput} placeholder="Search by name, venue, director..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} returnKeyType="search" onSubmitEditing={Keyboard.dismiss} />
+                      {vm.searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.clearBtn}>
+                          <Text allowFontScaling={false} style={styles.clearBtnText}>{"\u2715"}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
-                )}
-                <View style={styles.searchContainer}>
-                  <View style={styles.searchBar}>
-                    <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
-                    <TextInput allowFontScaling={false} style={styles.searchInput} placeholder="Search tournaments..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} returnKeyType="search" onSubmitEditing={Keyboard.dismiss} />
-                    {vm.searchQuery.length > 0 && (
-                      <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.clearBtn}>
-                        <Text allowFontScaling={false} style={styles.clearBtnText}>✕</Text>
-                      </TouchableOpacity>
-                    )}
+                  <View style={styles.filterRow}>
+                    <View style={styles.filterItemState}><Dropdown placeholder="All States" options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
+                    <View style={styles.filterItemCity}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
+                    <View style={styles.filterItemZip}>
+                      <TextInput
+                        allowFontScaling={false}
+                        style={styles.zipInput}
+                        placeholder="Zip"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={vm.zipCode}
+                        onChangeText={vm.setZipCode}
+                        keyboardType="numeric"
+                        maxLength={5}
+                        returnKeyType="done"
+                        onSubmitEditing={Keyboard.dismiss}
+                        onFocus={() => { isZipFocusedRef.current = true; }}
+                        onBlur={() => { isZipFocusedRef.current = false; }}
+                      />
+                    </View>
                   </View>
-                </View>
-                <View style={styles.filterRow}>
-                  <View style={styles.filterItemState}><Dropdown placeholder="All States" options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
-                  <View style={styles.filterItemCity}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
-                  <View style={styles.filterItemZip}>
-                    <TextInput allowFontScaling={false} style={styles.zipInput} placeholder="Zip" placeholderTextColor={COLORS.textMuted} value={vm.zipCode} onChangeText={vm.setZipCode} keyboardType="numeric" maxLength={5} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
+                  {renderRadiusSlider()}
+                  <View style={styles.filterButtonsRow}>
+                    <TouchableOpacity style={styles.filtersButton} onPress={() => vm.setFilterModalVisible(true)}>
+                      <Text allowFontScaling={false} style={styles.filtersButtonText}>{hasActiveFilters ? "\u2713 Filters Applied" : "\u2630 Filters"}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
+                      <Text allowFontScaling={false} style={styles.resetButtonText}>{"\uD83D\uDDD1\uFE0F"} Reset Filters</Text>
+                    </TouchableOpacity>
                   </View>
+                  {renderPagination()}
                 </View>
-                {renderRadiusSlider()}
-                <View style={styles.filterButtonsRow}>
-                  <TouchableOpacity style={styles.filtersButton} onPress={() => vm.setFilterModalVisible(true)}>
-                    <Text allowFontScaling={false} style={styles.filtersButtonText}>{hasActiveFilters ? "✓ Filters Applied" : "☰ Filters"}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.resetButton} onPress={vm.resetAllFilters}>
-                    <Text allowFontScaling={false} style={styles.resetButtonText}>🗑️ Reset Filters</Text>
-                  </TouchableOpacity>
-                </View>
-                {renderPagination()}
               </Animated.View>
             )}
           </View>

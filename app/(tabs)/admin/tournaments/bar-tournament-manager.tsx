@@ -1,6 +1,4 @@
 ﻿// app/(tabs)/admin/tournaments/bar-tournament-manager.tsx
-// UPDATED: Added Reassign Director button + modal with confirmation
-
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -34,6 +32,7 @@ import { Pagination } from "../../../../src/views/components/common/pagination";
 import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+import { TournamentDetailModal } from "../../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -44,7 +43,6 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "name", label: "A-Z" },
 ];
 
-// Delete Reason Modal Component
 const DeleteModal = ({
   visible,
   tournamentName,
@@ -78,7 +76,6 @@ const DeleteModal = ({
         <View style={styles.modalContent}>
           <Text allowFontScaling={false} style={styles.modalTitle}>Delete Tournament</Text>
           <Text allowFontScaling={false} style={styles.modalSubtitle}>{`"${tournamentName}"`}</Text>
-
           <Text allowFontScaling={false} style={styles.modalLabel}>Deletion Reason *</Text>
           <TextInput
             style={styles.modalInput}
@@ -89,21 +86,12 @@ const DeleteModal = ({
             multiline
             numberOfLines={3}
           />
-
           <View style={styles.modalButtons}>
-            <TouchableOpacity
-              style={styles.modalButtonCancel}
-              onPress={handleCancel}
-            >
+            <TouchableOpacity style={styles.modalButtonCancel} onPress={handleCancel}>
               <Text allowFontScaling={false} style={styles.modalButtonCancelText}>Back</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalButtonConfirm}
-              onPress={handleConfirm}
-            >
-              <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>
-                Delete Tournament
-              </Text>
+            <TouchableOpacity style={styles.modalButtonConfirm} onPress={handleConfirm}>
+              <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>Delete Tournament</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -117,25 +105,23 @@ export default function BarTournamentManagerScreen() {
   const vm = useBarTournamentManager();
   const { profile } = useAuthContext();
 
+  // Tournament detail modal
+  const [detailId, setDetailId] = useState<string | null>(null);
+
   // Cancel modal state
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [tournamentToCancel, setTournamentToCancel] =
-    useState<BarTournamentWithStats | null>(null);
+  const [tournamentToCancel, setTournamentToCancel] = useState<BarTournamentWithStats | null>(null);
 
   // Reassign modal state
   const [reassignModalVisible, setReassignModalVisible] = useState(false);
-  const [tournamentToReassign, setTournamentToReassign] =
-    useState<BarTournamentWithStats | null>(null);
+  const [tournamentToReassign, setTournamentToReassign] = useState<BarTournamentWithStats | null>(null);
   const [directorResults, setDirectorResults] = useState<DirectorSearchResult[]>([]);
   const [searchingDirectors, setSearchingDirectors] = useState(false);
 
   // Pagination
-  const pagination = usePagination(vm.tournaments, {
-    itemsPerPage: 10,
-  });
+  const pagination = usePagination(vm.tournaments, { itemsPerPage: 10 });
   const listRef = useRef<any>(null);
 
-  // Scroll to top on page change
   useEffect(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, [pagination.currentPage]);
@@ -158,13 +144,6 @@ export default function BarTournamentManagerScreen() {
   const handleSearch = (query: string) => {
     vm.setSearchQuery(query);
     pagination.resetPage();
-  };
-
-  const handleTournamentPress = (tournamentId: number) => {
-    router.push({
-      pathname: "/(tabs)/admin/tournament-detail",
-      params: { id: tournamentId.toString() },
-    } as any);
   };
 
   const handleEditTournament = (tournamentId: number) => {
@@ -203,11 +182,9 @@ export default function BarTournamentManagerScreen() {
 
   const handleConfirmDelete = async (reason: string) => {
     if (!tournamentToCancel) return;
-
     const success = await vm.cancelTournament(tournamentToCancel.id, reason);
     setCancelModalVisible(false);
     setTournamentToCancel(null);
-
     if (success) {
       Alert.alert("Success", "Tournament deleted successfully.");
     } else {
@@ -236,12 +213,8 @@ export default function BarTournamentManagerScreen() {
     );
   };
 
-  // ── Reassign Director ─────────────────────────────────────────────
   const handleSearchDirectors = useCallback(async (query: string) => {
-    if (query.length < 2) {
-      setDirectorResults([]);
-      return;
-    }
+    if (query.length < 2) { setDirectorResults([]); return; }
     setSearchingDirectors(true);
     try {
       const { data, error } = await supabase
@@ -249,17 +222,9 @@ export default function BarTournamentManagerScreen() {
         .select("id_auto, name, email")
         .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(10);
-
-      if (error) {
-        setDirectorResults([]);
-        return;
-      }
+      if (error) { setDirectorResults([]); return; }
       setDirectorResults(
-        (data || []).map((u: any) => ({
-          id: u.id_auto,
-          name: u.name || u.email,
-          email: u.email,
-        })),
+        (data || []).map((u: any) => ({ id: u.id_auto, name: u.name || u.email, email: u.email })),
       );
     } catch {
       setDirectorResults([]);
@@ -271,17 +236,13 @@ export default function BarTournamentManagerScreen() {
   const handleConfirmReassign = useCallback(
     async (newDirectorId: number, newDirectorName: string, reason: string) => {
       if (!tournamentToReassign || !profile?.id_auto) return;
-
       try {
-        // 1. Update tournament director_id
         const { error: updateError } = await supabase
           .from("tournaments")
           .update({ director_id: newDirectorId })
           .eq("id", tournamentToReassign.id);
-
         if (updateError) throw updateError;
 
-        // 2. Log the reassignment
         await supabase.from("reassignment_logs").insert({
           entity_type: "tournament_director",
           entity_id: tournamentToReassign.id,
@@ -295,37 +256,24 @@ export default function BarTournamentManagerScreen() {
           reassigned_by_name: profile.name || null,
         });
 
-        // 3. Ensure new director is in venue_directors
         await supabase.from("venue_directors").upsert(
-          {
-            venue_id: tournamentToReassign.venue_id,
-            director_id: newDirectorId,
-            assigned_by: profile.id_auto,
-          },
+          { venue_id: tournamentToReassign.venue_id, director_id: newDirectorId, assigned_by: profile.id_auto },
           { onConflict: "venue_id,director_id" },
         );
 
-        // 4. Promote to tournament_director if currently basic_user
         const { data: newDirProfile } = await supabase
           .from("profiles")
           .select("role")
           .eq("id_auto", newDirectorId)
           .single();
-
         if (newDirProfile && newDirProfile.role === "basic_user") {
-          await supabase
-            .from("profiles")
-            .update({ role: "tournament_director" })
-            .eq("id_auto", newDirectorId);
+          await supabase.from("profiles").update({ role: "tournament_director" }).eq("id_auto", newDirectorId);
         }
 
         setReassignModalVisible(false);
         setTournamentToReassign(null);
         setDirectorResults([]);
-        Alert.alert(
-          "Reassignment Complete",
-          `"${tournamentToReassign.name}" has been reassigned to ${newDirectorName}.`,
-        );
+        Alert.alert("Reassignment Complete", `"${tournamentToReassign.name}" has been reassigned to ${newDirectorName}.`);
         vm.onRefresh();
       } catch (error) {
         console.error("Error reassigning director:", error);
@@ -345,14 +293,18 @@ export default function BarTournamentManagerScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Tournament Detail Modal */}
+      <TournamentDetailModal
+        id={detailId}
+        visible={detailId !== null}
+        onClose={() => setDetailId(null)}
+      />
+
       {/* Delete Modal */}
       <DeleteModal
         visible={cancelModalVisible}
         tournamentName={tournamentToCancel?.name || ""}
-        onCancel={() => {
-          setCancelModalVisible(false);
-          setTournamentToCancel(null);
-        }}
+        onCancel={() => { setCancelModalVisible(false); setTournamentToCancel(null); }}
         onConfirm={handleConfirmDelete}
       />
 
@@ -364,27 +316,18 @@ export default function BarTournamentManagerScreen() {
         directors={directorResults}
         loadingDirectors={searchingDirectors}
         onSearch={handleSearchDirectors}
-        onCancel={() => {
-          setReassignModalVisible(false);
-          setTournamentToReassign(null);
-          setDirectorResults([]);
-        }}
+        onCancel={() => { setReassignModalVisible(false); setTournamentToReassign(null); setDirectorResults([]); }}
         onConfirm={handleConfirmReassign}
       />
 
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text allowFontScaling={false} style={styles.headerTitle}>Tournament Manager</Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>
-            Managing tournaments at your venues
-          </Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Managing tournaments at your venues</Text>
         </View>
         <View style={styles.placeholder} />
       </View>
@@ -405,51 +348,24 @@ export default function BarTournamentManagerScreen() {
 
       {/* Status Tabs */}
       <View style={styles.tabsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContent}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContent}>
           {[
-            {
-              key: "active" as const,
-              label: "Active",
-              count: vm.statusCounts.active,
-            },
-            {
-              key: "completed" as const,
-              label: "Completed",
-              count: vm.statusCounts.completed,
-            },
-            {
-              key: "cancelled" as const,
-              label: "Cancelled",
-              count: vm.statusCounts.cancelled,
-            },
-            {
-              key: "archived" as const,
-              label: "Archived",
-              count: vm.statusCounts.archived,
-            },
+            { key: "active" as const, label: "Active", count: vm.statusCounts.active },
+            { key: "completed" as const, label: "Completed", count: vm.statusCounts.completed },
+            { key: "cancelled" as const, label: "Cancelled", count: vm.statusCounts.cancelled },
+            { key: "archived" as const, label: "Archived", count: vm.statusCounts.archived },
             { key: "all" as const, label: "All", count: vm.statusCounts.all },
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.tab,
-                vm.statusFilter === tab.key && styles.tabActive,
-              ]}
+              style={[styles.tab, vm.statusFilter === tab.key && styles.tabActive]}
               onPress={() => handleStatusFilter(tab.key)}
             >
               <Text
                 allowFontScaling={false}
-                style={[
-                  styles.tabText,
-                  vm.statusFilter === tab.key && styles.tabTextActive,
-                ]}
+                style={[styles.tabText, vm.statusFilter === tab.key && styles.tabTextActive]}
               >
-                {tab.label}
-                {tab.count > 0 ? ` (${tab.count})` : ""}
+                {tab.label}{tab.count > 0 ? ` (${tab.count})` : ""}
               </Text>
             </TouchableOpacity>
           ))}
@@ -459,32 +375,22 @@ export default function BarTournamentManagerScreen() {
       {/* Sort Options */}
       <View style={styles.sortContainer}>
         <Text allowFontScaling={false} style={styles.sortLabel}>Sort:</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortOptions}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortOptions}>
           {SORT_OPTIONS.map((option) => (
             <TouchableOpacity
               key={option.key}
-              style={[
-                styles.sortPill,
-                vm.sortOption === option.key && styles.sortPillActive,
-              ]}
+              style={[styles.sortPill, vm.sortOption === option.key && styles.sortPillActive]}
               onPress={() => handleSortOption(option.key)}
             >
               <Text
                 allowFontScaling={false}
-                style={[
-                  styles.sortPillText,
-                  vm.sortOption === option.key && styles.sortPillTextActive,
-                ]}
+                style={[styles.sortPillText, vm.sortOption === option.key && styles.sortPillTextActive]}
               >
                 {vm.sortOption === option.key && option.key === "name"
                   ? (vm.sortDirection === "asc" ? "A-Z" : "Z-A")
                   : option.label}
                 {vm.sortOption === option.key && option.key === "date"
-                  ? (vm.sortDirection === "desc" ? " ▼" : " ▲")
+                  ? (vm.sortDirection === "desc" ? " \u25BC" : " \u25B2")
                   : ""}
               </Text>
             </TouchableOpacity>
@@ -513,16 +419,14 @@ export default function BarTournamentManagerScreen() {
         contentContainerStyle={[styles.listContent, isWeb && styles.scrollContentWeb]}
         refreshControl={
           isWeb ? undefined : (
-            <RefreshControl refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}/>
+            <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
           )
         }
         renderItem={({ item }) => (
           <View>
             <TournamentCard
               tournament={item}
-              onPress={() => handleTournamentPress(item.id)}
+              onPress={() => setDetailId(String(item.id))}
               onEdit={() => handleEditTournament(item.id)}
               onArchive={() => handleArchiveTournament(item)}
               onCancel={() => handleDeleteTournament(item)}
@@ -530,13 +434,9 @@ export default function BarTournamentManagerScreen() {
               isProcessing={vm.processing === item.id}
               showActions={true}
             />
-            {/* Reassign Director button */}
             <TouchableOpacity
               style={styles.reassignBtn}
-              onPress={() => {
-                setTournamentToReassign(item);
-                setReassignModalVisible(true);
-              }}
+              onPress={() => { setTournamentToReassign(item); setReassignModalVisible(true); }}
             >
               <Text allowFontScaling={false} style={styles.reassignBtnText}>
                 {"\uD83D\uDD04"} Reassign Director
@@ -547,15 +447,11 @@ export default function BarTournamentManagerScreen() {
         ListEmptyComponent={
           <EmptyState
             message={
-              vm.statusFilter === "active"
-                ? "No active tournaments at your venues"
-                : vm.statusFilter === "completed"
-                  ? "No completed tournaments"
-                  : vm.statusFilter === "cancelled"
-                    ? "No cancelled tournaments"
-                    : vm.statusFilter === "archived"
-                      ? "No archived tournaments"
-                      : "No tournaments found"
+              vm.statusFilter === "active" ? "No active tournaments at your venues"
+              : vm.statusFilter === "completed" ? "No completed tournaments"
+              : vm.statusFilter === "cancelled" ? "No cancelled tournaments"
+              : vm.statusFilter === "archived" ? "No archived tournaments"
+              : "No tournaments found"
             }
             submessage="Try adjusting your search or filters"
           />
@@ -566,7 +462,6 @@ export default function BarTournamentManagerScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Web centering
   scrollContentWeb: { paddingBottom: SPACING.xl },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
@@ -593,20 +488,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
+  headerWeb: { paddingTop: SPACING.lg },
+  backButton: { padding: SPACING.xs },
   backText: {
     fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "500",
   },
-  headerCenter: {
-    alignItems: "center",
-  },
+  headerCenter: { alignItems: "center" },
   headerTitle: {
     fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "600",
@@ -619,9 +508,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginTop: wxSc(2),
   },
-  placeholder: {
-    width: wxSc(50),
-  },
+  placeholder: { width: wxSc(50) },
   searchContainer: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
@@ -666,9 +553,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
     marginRight: SPACING.xs,
   },
-  tabActive: {
-    borderBottomColor: COLORS.primary,
-  },
+  tabActive: { borderBottomColor: COLORS.primary },
   tabText: {
     fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
@@ -720,7 +605,6 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     paddingBottom: SPACING.xl * 2,
   },
-  // Reassign button
   reassignBtn: {
     backgroundColor: "#FF980020",
     borderWidth: 1,
@@ -737,7 +621,6 @@ const styles = StyleSheet.create({
     fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -812,7 +695,3 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
-
-
-
-

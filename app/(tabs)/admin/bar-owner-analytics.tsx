@@ -2,6 +2,7 @@
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter, useFocusEffect } from "expo-router";
+import { useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -17,6 +18,7 @@ import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBarOwnerAnalytics } from "../../../src/viewmodels/useBarOwnerAnalytics";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
+import { TournamentDetailModal } from "../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -25,6 +27,7 @@ const wxSc = (v: number) => isWeb ? v : scale(v);
 export default function BarOwnerAnalyticsScreen() {
   const router = useRouter();
   const vm = useBarOwnerAnalytics();
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   useFocusEffect(
     require("react").useCallback(() => {
@@ -44,22 +47,25 @@ export default function BarOwnerAnalyticsScreen() {
     <ScrollView
       style={styles.container}
       refreshControl={
-          isWeb ? undefined : (
-            <RefreshControl refreshing={vm.refreshing}
-          onRefresh={vm.onRefresh}
-          tintColor={COLORS.primary}/>
-          )
-        }
+        isWeb ? undefined : (
+          <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
+        )
+      }
     >
+      {/* Tournament Detail Modal */}
+      <TournamentDetailModal
+        id={detailId}
+        visible={detailId !== null}
+        onClose={() => setDetailId(null)}
+      />
+
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, isWeb && styles.backBtnWeb]}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCCA"} VENUE ANALYTICS</Text>
-        <Text allowFontScaling={false} style={styles.headerSubtitle}>
-          Performance across your venues
-        </Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>Performance across your venues</Text>
       </View>
 
       {/* Time Period Filter */}
@@ -108,23 +114,27 @@ export default function BarOwnerAnalyticsScreen() {
         </>
       )}
 
+      {/* Top Viewed Tournaments */}
       <View style={styles.sectionHeader}>
         <Text allowFontScaling={false} style={styles.sectionTitle}>Top Viewed Tournaments</Text>
       </View>
       {vm.topViewedTournaments.length > 0 ? (
         <View style={styles.card}>
           {vm.topViewedTournaments.map((item, index) => (
-            <View
+            <TouchableOpacity
               key={item.entity_id}
               style={[
                 styles.rankRow,
                 index < vm.topViewedTournaments.length - 1 && styles.rankRowBorder,
               ]}
+              onPress={() => setDetailId(String(item.entity_id))}
+              activeOpacity={0.7}
             >
               <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
               <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
               <Text allowFontScaling={false} style={styles.rankCount}>{item.count} views</Text>
-            </View>
+              <Text allowFontScaling={false} style={styles.rankChevron}>{"\u203A"}</Text>
+            </TouchableOpacity>
           ))}
         </View>
       ) : (
@@ -133,23 +143,27 @@ export default function BarOwnerAnalyticsScreen() {
         </View>
       )}
 
+      {/* Top Favorited Tournaments */}
       <View style={styles.sectionHeader}>
         <Text allowFontScaling={false} style={styles.sectionTitle}>Top Favorited Tournaments</Text>
       </View>
       {vm.topFavoritedTournaments.length > 0 ? (
         <View style={styles.card}>
           {vm.topFavoritedTournaments.map((item, index) => (
-            <View
+            <TouchableOpacity
               key={item.entity_id}
               style={[
                 styles.rankRow,
                 index < vm.topFavoritedTournaments.length - 1 && styles.rankRowBorder,
               ]}
+              onPress={() => setDetailId(String(item.entity_id))}
+              activeOpacity={0.7}
             >
               <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
               <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
               <Text allowFontScaling={false} style={styles.rankCount}>{item.count} {"\u2764\uFE0F"}</Text>
-            </View>
+              <Text allowFontScaling={false} style={styles.rankChevron}>{"\u203A"}</Text>
+            </TouchableOpacity>
           ))}
         </View>
       ) : (
@@ -158,6 +172,7 @@ export default function BarOwnerAnalyticsScreen() {
         </View>
       )}
 
+      {/* Views by Period */}
       <View style={styles.sectionHeader}>
         <Text allowFontScaling={false} style={styles.sectionTitle}>Views by Period</Text>
       </View>
@@ -381,6 +396,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: SPACING.sm,
   },
+  rankChevron: {
+    fontSize: wxMs(FONT_SIZES.lg),
+    color: COLORS.textMuted,
+    marginLeft: SPACING.xs,
+  },
   periodRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -411,5 +431,3 @@ const styles = StyleSheet.create({
     height: SPACING.xl * 2,
   },
 });
-
-

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+﻿import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { giveawayService } from "../models/services/giveaway.service";
@@ -161,7 +161,10 @@ export const useCreateGiveaway = () => {
     setIsSubmitting(true);
 
     try {
-      // Format end date if provided and end_type includes date
+      // Format end date if provided and end_type includes date.
+      // Append end-of-day in Arizona time (UTC-7, no DST) so that
+      // "April 13" means April 13 at 11:59:59 PM Phoenix time,
+      // not midnight UTC (which is the previous evening in AZ).
       let endDate: string | undefined;
       if (
         (formData.end_type === "date" || formData.end_type === "both") &&
@@ -169,7 +172,10 @@ export const useCreateGiveaway = () => {
         formData.end_date.day &&
         formData.end_date.year
       ) {
-        endDate = `${formData.end_date.year}-${formData.end_date.month.padStart(2, "0")}-${formData.end_date.day.padStart(2, "0")}`;
+        const yyyy = formData.end_date.year;
+        const mm = formData.end_date.month.padStart(2, "0");
+        const dd = formData.end_date.day.padStart(2, "0");
+        endDate = `${yyyy}-${mm}-${dd}T23:59:59-07:00`;
       }
 
       // Only include max_entries if end_type includes entries

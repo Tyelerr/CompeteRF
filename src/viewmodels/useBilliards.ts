@@ -1,4 +1,4 @@
-﻿import { useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
@@ -142,7 +142,9 @@ export function useBilliards(): UseBilliardsReturn {
         (t) =>
           t.name?.toLowerCase().includes(q) ||
           t.venues?.venue?.toLowerCase().includes(q) ||
-          (t.game_type ?? "").toLowerCase().includes(q)
+          (t.game_type ?? "").toLowerCase().includes(q) ||
+          ((t as any).profiles?.name ?? "").toLowerCase().includes(q) ||
+          ((t as any).profiles?.user_name ?? "").toLowerCase().includes(q)
       );
     }
 

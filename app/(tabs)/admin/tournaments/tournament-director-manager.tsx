@@ -1,5 +1,5 @@
 ﻿import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useTournamentDirectorManager } from "../../../../src/viewmodels/useTournamentDirectorManager";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+import { TournamentDetailModal } from "../../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 
@@ -56,6 +57,7 @@ export default function TDTournamentsScreen() {
   const [paginatedTournaments, setPaginatedTournaments] = useState<any[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [processingTournamentId, setProcessingTournamentId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     const newCurrentPage = 1;
@@ -146,40 +148,7 @@ export default function TDTournamentsScreen() {
   };
 
   const handleTournamentPress = (tournament: any) => {
-    const formatDate = (dateStr: string) => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString("en-US", {
-        weekday: "short", month: "short", day: "numeric", year: "numeric",
-      });
-    };
-
-    const formatTime = (timeStr: string) => {
-      if (!timeStr) return "Time TBD";
-      const [hours, minutes] = timeStr.split(":");
-      const hour = parseInt(hours);
-      const ampm = hour >= 12 ? "PM" : "AM";
-      const displayHour = hour % 12 || 12;
-      return `${displayHour}:${minutes} ${ampm}`;
-    };
-
-    const getStatusEmoji = (status: string) => {
-      switch (status) {
-        case "active": return "\u25B6\uFE0F";
-        case "completed": return "\u2705";
-        case "cancelled": return "\u274C";
-        case "archived": return "\uD83D\uDCC1";
-        default: return "\uD83C\uDFC6";
-      }
-    };
-
-    Alert.alert(
-      `${getStatusEmoji(tournament.status)} ${tournament.name}`,
-      `ID: ${tournament.id}\n\n\uD83D\uDCC5 Date: ${formatDate(tournament.tournament_date)}\n\uD83D\uDD55 Time: ${formatTime(tournament.start_time)}\n\uD83C\uDFB1 Game: ${tournament.game_type}\n\uD83C\uDFC6 Format: ${tournament.tournament_format}\n\uD83C\uDFE2 Venue: ${tournament.venue_name}\n\uD83D\uDC64 Director: ${tournament.director_name}\n\n\uD83D\uDCCA Stats:\n\u2022 Views: ${tournament.views_count}\n\u2022 Favorites: ${tournament.favorites_count}\n\u2022 Status: ${tournament.status.charAt(0).toUpperCase() + tournament.status.slice(1)}\n\n${tournament.description || "No additional details available."}`,
-      [
-        { text: "Close", style: "cancel" },
-        { text: "Edit", onPress: () => handleEdit(tournament) },
-      ],
-    );
+    setDetailId(String(tournament.id));
   };
 
   if (vm.loading) {
@@ -224,6 +193,11 @@ export default function TDTournamentsScreen() {
 
   return (
     <View style={styles.container}>
+      <TournamentDetailModal
+        id={detailId}
+        visible={detailId !== null}
+        onClose={() => setDetailId(null)}
+      />
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>

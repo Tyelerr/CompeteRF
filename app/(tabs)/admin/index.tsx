@@ -1,7 +1,7 @@
 ﻿// app/(tabs)/admin/index.tsx
 
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Platform,
   RefreshControl,
@@ -29,8 +29,8 @@ import {
 } from "../../../src/views/components/dashboard";
 
 const isWeb = Platform.OS === "web";
-const wxMs = (v: number) => isWeb ? v : moderateScale(v);
-const wxSc = (v: number) => isWeb ? v : scale(v);
+const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
+const wxSc = (v: number) => (isWeb ? v : scale(v));
 
 // --- Root router -----------------------------------------------------------
 
@@ -115,10 +115,7 @@ const ManagementCard = ({
         isWeb ? styles.managementCardWeb : styles.managementCardMobile,
         // @ts-ignore - web only
         isWeb && {
-          // @ts-ignore - web only
-          transition:
-            "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
-          // @ts-ignore - web only
+          transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
           cursor: "pointer",
         },
         isWeb &&
@@ -293,6 +290,11 @@ const BarOwnerDashboard = () => {
   const router = useRouter();
   const vm = useBarOwnerDashboard();
 
+
+  // Only check once per app session — useFocusEffect fires on every
+  // navigation back to this tab which caused the modal to re-open
+
+
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
@@ -302,110 +304,114 @@ const BarOwnerDashboard = () => {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
-      refreshControl={
-        isWeb ? undefined : (
-          <RefreshControl
-            refreshing={vm.refreshing}
-            onRefresh={vm.onRefresh}
-            tintColor={COLORS.primary}
-          />
-        )
-      }
-    >
-      <DashboardInner>
-        <View style={[styles.header, isWeb && styles.headerWeb]}>
-          <Text allowFontScaling={false} style={styles.headerTitle}>BAR OWNER DASHBOARD</Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>
-            Manage your venues and directors
-          </Text>
-        </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
+        refreshControl={
+          isWeb ? undefined : (
+            <RefreshControl
+              refreshing={vm.refreshing}
+              onRefresh={vm.onRefresh}
+              tintColor={COLORS.primary}
+            />
+          )
+        }
+      >
+        <DashboardInner>
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
+            <Text allowFontScaling={false} style={styles.headerTitle}>BAR OWNER DASHBOARD</Text>
+            <Text allowFontScaling={false} style={styles.headerSubtitle}>
+              Manage your venues and directors
+            </Text>
+          </View>
 
-        <View style={styles.statsGrid}>
-          <StatCard
-            icon={"\uD83C\uDFE2"}
-            value={vm.stats.totalVenues}
-            label="Venue Manager"
-            onPress={() => router.push("/(tabs)/admin/bar-owner-venues" as any)}
-          />
-          <StatCard
-            icon={"\uD83D\uDC64"}
-            value={vm.stats.totalDirectors}
-            label="Directors"
-            onPress={() =>
-              router.push("/(tabs)/admin/directors/bar-owner-directors" as any)
-            }
-          />
-          <StatCard
-            icon={"\uD83C\uDFC6"}
-            value={vm.stats.activeTournaments}
-            label="Tournament Manager"
-            onPress={() =>
-              router.push(
-                "/(tabs)/admin/tournaments/bar-tournament-manager" as any,
-              )
-            }
-          />
-          <StatCard
-            icon={"\uD83D\uDCCA"}
-            label="Analytics"
-            onPress={() =>
-              router.push("/(tabs)/admin/bar-owner-analytics" as any)
-            }
-          />
-          <StatCard
-            icon={"\u2709\uFE0F"}
-            label="Messages"
-            onPress={() => router.push("/(tabs)/admin/messages" as any)}
-          />
-          <StatCard
-            icon={"\uD83D\uDCB3"}
-            label="Billing"
-            onPress={() =>
-              router.push("/(tabs)/admin/bar-owner-billing" as any)
-            }
-          />
-        </View>
+          <View style={styles.statsGrid}>
+            <StatCard
+              icon={"\uD83C\uDFE2"}
+              value={vm.stats.totalVenues}
+              label="Venue Manager"
+              onPress={() =>
+                router.push("/(tabs)/admin/bar-owner-venues" as any)
+              }
+            />
+            <StatCard
+              icon={"\uD83D\uDC64"}
+              value={vm.stats.totalDirectors}
+              label="Directors"
+              onPress={() =>
+                router.push(
+                  "/(tabs)/admin/directors/bar-owner-directors" as any,
+                )
+              }
+            />
+            <StatCard
+              icon={"\uD83C\uDFC6"}
+              value={vm.stats.activeTournaments}
+              label="Tournament Manager"
+              onPress={() =>
+                router.push(
+                  "/(tabs)/admin/tournaments/bar-tournament-manager" as any,
+                )
+              }
+            />
+            <StatCard
+              icon={"\uD83D\uDCCA"}
+              label="Analytics"
+              onPress={() =>
+                router.push("/(tabs)/admin/bar-owner-analytics" as any)
+              }
+            />
+            <StatCard
+              icon={"\u2709\uFE0F"}
+              label="Messages"
+              onPress={() => router.push("/(tabs)/admin/messages" as any)}
+            />
+            <StatCard
+              icon={"\uD83D\uDCB3"}
+              label="Billing"
+              onPress={() =>
+                router.push("/(tabs)/admin/bar-owner-billing" as any)
+              }
+            />
+          </View>
 
-        <View style={styles.quickStatsSection}>
-          <Text allowFontScaling={false} style={styles.quickStatsTitle}>Quick Stats</Text>
-          <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
-          <View style={styles.quickStatsCard}>
-            <View style={styles.quickStatRow}>
-              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E3A5F" }]}>
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83D\uDC41"}</Text>
+          <View style={styles.quickStatsSection}>
+            <Text allowFontScaling={false} style={styles.quickStatsTitle}>Quick Stats</Text>
+            <Text allowFontScaling={false} style={styles.quickStatsSubtitle}>{"Today's performance"}</Text>
+            <View style={styles.quickStatsCard}>
+              <View style={styles.quickStatRow}>
+                <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E3A5F" }]}>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83D\uDC41"}</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
+                <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
+                  {vm.stats.todayViews}
+                </Text>
               </View>
-              <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
-              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
-                {vm.stats.todayViews}
-              </Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <View style={[styles.quickStatIconWrap, { backgroundColor: "#5F1E1E" }]}>
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\u2764\uFE0F"}</Text>
+              <View style={styles.quickStatRow}>
+                <View style={[styles.quickStatIconWrap, { backgroundColor: "#5F1E1E" }]}>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\u2764\uFE0F"}</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
+                <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
+                  {vm.stats.todayFavorites}
+                </Text>
               </View>
-              <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
-              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
-                {vm.stats.todayFavorites}
-              </Text>
-            </View>
-            <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
-              <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E4D2B" }]}>
-                <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83C\uDFAF"}</Text>
+              <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
+                <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E4D2B" }]}>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83C\uDFAF"}</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
+                <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
+                  {vm.stats.activeTournaments}
+                </Text>
               </View>
-              <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
-              <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
-                {vm.stats.activeTournaments}
-              </Text>
             </View>
           </View>
-        </View>
 
-        <View style={styles.bottomSpacer} />
-      </DashboardInner>
-    </ScrollView>
+          <View style={styles.bottomSpacer} />
+        </DashboardInner>
+      </ScrollView>
   );
 };
 
