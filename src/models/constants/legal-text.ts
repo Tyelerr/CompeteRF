@@ -312,6 +312,59 @@ export const PRIVACY_POLICY = {
     },
   ],
 } as const;
+export const ACCEPTABLE_USE_POLICY = {
+  title: 'Acceptable Use and Content Policy',
+  lastUpdated: 'February 11, 2026',
+  preamble:
+    'This Acceptable Use and Content Policy (\u201CPolicy\u201D) governs your conduct and the content you submit through the Compete mobile application (\u201CApp\u201D). This Policy is part of and incorporated into our Terms of Service. By using the App, you agree to follow this Policy.',
+  sections: [
+    {
+      heading: '1. Prohibited Content',
+      body:
+        'You may not upload, submit, post, or otherwise share content that:\n\n' +
+        '\u2022 Is unlawful, threatening, abusive, harassing, defamatory, libelous, or invasive of another person\u2019s privacy.\n' +
+        '\u2022 Is obscene, pornographic, sexually explicit, or contains nudity.\n' +
+        '\u2022 Promotes or glorifies violence, self-harm, or illegal drug use.\n' +
+        '\u2022 Contains hate speech or discriminates against individuals or groups based on race, ethnicity, national origin, religion, gender, gender identity, sexual orientation, disability, or age.\n' +
+        '\u2022 Is fraudulent, deceptive, or misleading, including fake tournament listings or impersonation of other users or organizations.\n' +
+        '\u2022 Contains spam, unsolicited advertising, or promotional material unrelated to billiards or pool events.\n' +
+        '\u2022 Infringes on copyrights, trademarks, trade secrets, or other intellectual property rights of any third party.\n' +
+        '\u2022 Contains viruses, malware, or any code designed to disrupt or harm the App or its users.\n' +
+        '\u2022 Collects or harvests personal information of other users without their consent.',
+    },
+    {
+      heading: '2. Prohibited Conduct',
+      body:
+        'You agree not to:\n\n' +
+        '\u2022 Use the App for any illegal purpose or in violation of any applicable local, state, national, or international law.\n' +
+        '\u2022 Attempt to gain unauthorized access to other user accounts, the App\u2019s systems, or related networks.\n' +
+        '\u2022 Interfere with or disrupt the App or the servers and networks connected to the App.\n' +
+        '\u2022 Use automated scripts, bots, or other means to access the App or extract data from it.\n' +
+        '\u2022 Create multiple accounts to evade bans, manipulate giveaways, or circumvent enforcement actions.',
+    },
+    {
+      heading: '3. Reporting',
+      body:
+        'If you encounter content or behavior that you believe violates this policy, please report it through the in-app reporting features or by contacting us at support@thecompeteapp.com. We take reports seriously and will review them in a timely manner.',
+    },
+    {
+      heading: '4. Enforcement Actions',
+      body:
+        'If we determine that you have violated this policy, we may take one or more of the following actions at our sole discretion:\n\n' +
+        '\u2022 Issue a warning to your account.\n' +
+        '\u2022 Remove or disable the offending content.\n' +
+        '\u2022 Temporarily suspend your account.\n' +
+        '\u2022 Permanently disable or terminate your account.\n' +
+        '\u2022 Report the violation to law enforcement if we believe it involves illegal activity.\n\n' +
+        'The severity of the enforcement action will depend on the nature and severity of the violation, your history of violations, and any other factors we deem relevant.',
+    },
+    {
+      heading: '5. Appeals',
+      body:
+        'If you believe an enforcement action was taken against your account or content in error, you may submit an appeal by contacting us at support@thecompeteapp.com within 30 days of the action. Please include your username, a description of the action taken, and an explanation of why you believe it was made in error. We will review your appeal and respond within a reasonable timeframe. Our decision on appeal is final.',
+    },
+  ],
+} as const;
 
 // Helper type for consumers that iterate over sections.
-export type LegalDocument = typeof TERMS_OF_SERVICE | typeof PRIVACY_POLICY;
+export type LegalDocument = typeof TERMS_OF_SERVICE | typeof PRIVACY_POLICY | typeof ACCEPTABLE_USE_POLICY;

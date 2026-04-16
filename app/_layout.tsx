@@ -69,6 +69,12 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="auth" />
+            <Stack.Screen name="legal" />
+            <Stack.Screen name="privacy" />
+            <Stack.Screen name="terms" />
+            <Stack.Screen name="community-guidelines" />
+            <Stack.Screen name="support" />
+            <Stack.Screen name="account-deletion" />
           </Stack>
         </AuthProvider>
       </QueryProvider>

@@ -15,12 +15,10 @@ import {
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { moderateScale, scale } from "../../../utils/scaling";
+import { webMs, webSc } from "../../../utils/scaling";
 import { TeamMember, UserSearchResult, useVenueTeam } from "../../../viewmodels/useVenueTeam";
 
 const isWeb = Platform.OS === "web";
-const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
-const wxSc = (v: number) => (isWeb ? v : scale(v));
 
 // ── User Search Modal ────────────────────────────────────────────────────────
 const AddMemberSheet = ({
@@ -50,14 +48,14 @@ const AddMemberSheet = ({
 
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={ss.overlay}>
-        <View style={ss.card}>
-          <Text allowFontScaling={false} style={ss.title}>{title}</Text>
-          <Text allowFontScaling={false} style={ss.subtitle}>{subtitle}</Text>
+      <View style={searchStyles.overlay}>
+        <View style={searchStyles.card}>
+          <Text allowFontScaling={false} style={searchStyles.title}>{title}</Text>
+          <Text allowFontScaling={false} style={searchStyles.subtitle}>{subtitle}</Text>
 
           <TextInput
             allowFontScaling={false}
-            style={ss.input}
+            style={searchStyles.input}
             value={query}
             onChangeText={(t) => { setQuery(t); onSearch(t); }}
             placeholder="Search by name or email..."
@@ -67,40 +65,40 @@ const AddMemberSheet = ({
           />
 
           {searching && (
-            <Text allowFontScaling={false} style={ss.hint}>Searching...</Text>
+            <Text allowFontScaling={false} style={searchStyles.hint}>Searching...</Text>
           )}
           {!searching && query.length > 0 && query.length < 2 && (
-            <Text allowFontScaling={false} style={ss.hint}>Type at least 2 characters</Text>
+            <Text allowFontScaling={false} style={searchStyles.hint}>Type at least 2 characters</Text>
           )}
           {!searching && query.length >= 2 && results.length === 0 && (
-            <Text allowFontScaling={false} style={ss.hint}>No users found</Text>
+            <Text allowFontScaling={false} style={searchStyles.hint}>No users found</Text>
           )}
 
-          <ScrollView style={ss.results} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView style={searchStyles.results} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {results.map((user) => (
               <TouchableOpacity
                 key={user.id}
-                style={ss.resultRow}
+                style={searchStyles.resultRow}
                 onPress={() => onSelect(user)}
               >
-                <View style={ss.avatar}>
-                  <Text allowFontScaling={false} style={ss.avatarText}>
+                <View style={searchStyles.avatar}>
+                  <Text allowFontScaling={false} style={searchStyles.avatarText}>
                     {(user.name || user.email).charAt(0).toUpperCase()}
                   </Text>
                 </View>
-                <View style={ss.resultInfo}>
-                  <Text allowFontScaling={false} style={ss.resultName}>{user.name}</Text>
-                  <Text allowFontScaling={false} style={ss.resultEmail}>{user.email}</Text>
+                <View style={searchStyles.resultInfo}>
+                  <Text allowFontScaling={false} style={searchStyles.resultName}>{user.name}</Text>
+                  <Text allowFontScaling={false} style={searchStyles.resultEmail}>{user.email}</Text>
                 </View>
-                <View style={ss.addChip}>
-                  <Text allowFontScaling={false} style={ss.addChipText}>Add</Text>
+                <View style={searchStyles.addChip}>
+                  <Text allowFontScaling={false} style={searchStyles.addChipText}>Add</Text>
                 </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          <TouchableOpacity style={ss.cancelBtn} onPress={onCancel}>
-            <Text allowFontScaling={false} style={ss.cancelBtnText}>Cancel</Text>
+          <TouchableOpacity style={searchStyles.cancelBtn} onPress={onCancel}>
+            <Text allowFontScaling={false} style={searchStyles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -118,24 +116,24 @@ const MemberRow = ({
   canRemove: boolean;
   onRemove: () => void;
 }) => (
-  <View style={ms.row}>
-    <View style={ms.avatar}>
-      <Text allowFontScaling={false} style={ms.avatarText}>
+  <View style={memberStyles.row}>
+    <View style={memberStyles.avatar}>
+      <Text allowFontScaling={false} style={memberStyles.avatarText}>
         {(member.name || member.email).charAt(0).toUpperCase()}
       </Text>
     </View>
-    <View style={ms.info}>
-      <Text allowFontScaling={false} style={ms.name}>{member.name}</Text>
-      <Text allowFontScaling={false} style={ms.email}>{member.email}</Text>
+    <View style={memberStyles.info}>
+      <Text allowFontScaling={false} style={memberStyles.name}>{member.name}</Text>
+      <Text allowFontScaling={false} style={memberStyles.email}>{member.email}</Text>
     </View>
     {member.isPrimary && (
-      <View style={ms.primaryBadge}>
-        <Text allowFontScaling={false} style={ms.primaryBadgeText}>Primary</Text>
+      <View style={memberStyles.primaryBadge}>
+        <Text allowFontScaling={false} style={memberStyles.primaryBadgeText}>Primary</Text>
       </View>
     )}
     {canRemove && (
-      <TouchableOpacity style={ms.removeBtn} onPress={onRemove}>
-        <Text allowFontScaling={false} style={ms.removeBtnText}>{"\u2715"}</Text>
+      <TouchableOpacity style={memberStyles.removeBtn} onPress={onRemove}>
+        <Text allowFontScaling={false} style={memberStyles.removeBtnText}>{"\u2715"}</Text>
       </TouchableOpacity>
     )}
   </View>
@@ -155,13 +153,13 @@ const SectionHeader = ({
   onAdd: () => void;
   addLabel: string;
 }) => (
-  <View style={sh.wrap}>
-    <View style={sh.left}>
-      <Text allowFontScaling={false} style={sh.title}>{icon} {title}</Text>
-      <Text allowFontScaling={false} style={sh.subtitle}>{subtitle}</Text>
+  <View style={sectionStyles.wrap}>
+    <View style={sectionStyles.left}>
+      <Text allowFontScaling={false} style={sectionStyles.title}>{icon} {title}</Text>
+      <Text allowFontScaling={false} style={sectionStyles.subtitle}>{subtitle}</Text>
     </View>
-    <TouchableOpacity style={sh.addBtn} onPress={onAdd}>
-      <Text allowFontScaling={false} style={sh.addBtnText}>{"\u002B"} {addLabel}</Text>
+    <TouchableOpacity style={sectionStyles.addBtn} onPress={onAdd}>
+      <Text allowFontScaling={false} style={sectionStyles.addBtnText}>{"\u002B"} {addLabel}</Text>
     </TouchableOpacity>
   </View>
 );
@@ -251,15 +249,17 @@ export const VenueTeamModal = ({ visible, venueId, venueName, currentUserId, onC
     <Modal visible={visible} animationType="slide" transparent={false} statusBarTranslucent>
       <View style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-            <Text allowFontScaling={false} style={styles.closeBtnText}>{"\u2190"} Back</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text allowFontScaling={false} style={styles.headerTitle}>Manage Team</Text>
-            <Text allowFontScaling={false} style={styles.headerSubtitle}>{venueName}</Text>
+        <View style={styles.headerOuter}>
+          <View style={styles.headerInner}>
+            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+              <Text allowFontScaling={false} style={styles.closeBtnText}>{"\u2190"} Back</Text>
+            </TouchableOpacity>
+            <View style={styles.headerCenter}>
+              <Text allowFontScaling={false} style={styles.headerTitle}>Manage Team</Text>
+              <Text allowFontScaling={false} style={styles.headerSubtitle}>{venueName}</Text>
+            </View>
+            <View style={styles.placeholder} />
           </View>
-          <View style={styles.placeholder} />
         </View>
 
         {vm.loading ? (
@@ -272,75 +272,77 @@ export const VenueTeamModal = ({ visible, venueId, venueName, currentUserId, onC
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* ── Owner Section ──────────────────────────────────────────── */}
-            <View style={styles.section}>
-              <View style={styles.sectionLabelRow}>
-                <Text allowFontScaling={false} style={styles.sectionTitle}>
-                  {"\uD83D\uDC51"} Owner
-                </Text>
-                <Text allowFontScaling={false} style={styles.sectionHint}>
-                  Primary — cannot be changed here
-                </Text>
+            <View style={styles.contentContainer}>
+              {/* ── Owner Section ──────────────────────────────────────────── */}
+              <View style={styles.section}>
+                <View style={styles.sectionLabelRow}>
+                  <Text allowFontScaling={false} style={styles.sectionTitle}>
+                    {"\uD83D\uDC51"} Owner
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.sectionHint}>
+                    Primary — cannot be changed here
+                  </Text>
+                </View>
+                {vm.primaryOwner ? (
+                  <MemberRow
+                    member={vm.primaryOwner}
+                    canRemove={false}
+                    onRemove={() => {}}
+                  />
+                ) : (
+                  <Text allowFontScaling={false} style={styles.emptyText}>No primary owner found</Text>
+                )}
               </View>
-              {vm.primaryOwner ? (
-                <MemberRow
-                  member={vm.primaryOwner}
-                  canRemove={false}
-                  onRemove={() => {}}
+
+              {/* ── Co-Owners Section ──────────────────────────────────────── */}
+              <View style={styles.section}>
+                <SectionHeader
+                  icon={"\uD83E\uDD1D"}
+                  title="Co-Owners"
+                  subtitle="Can manage this venue alongside the owner"
+                  onAdd={() => { vm.clearSearch(); setAddingRole("co_owner"); }}
+                  addLabel="Add Co-Owner"
                 />
-              ) : (
-                <Text allowFontScaling={false} style={styles.emptyText}>No primary owner found</Text>
-              )}
-            </View>
+                {vm.coOwners.length === 0 ? (
+                  <Text allowFontScaling={false} style={styles.emptyText}>
+                    No co-owners yet — add a spouse, business partner, or manager
+                  </Text>
+                ) : (
+                  vm.coOwners.map((m) => (
+                    <MemberRow
+                      key={m.id}
+                      member={m}
+                      canRemove={m.userId !== currentUserId}
+                      onRemove={() => handleRemoveCoOwner(m)}
+                    />
+                  ))
+                )}
+              </View>
 
-            {/* ── Co-Owners Section ──────────────────────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader
-                icon={"\uD83E\uDD1D"}
-                title="Co-Owners"
-                subtitle="Can manage this venue alongside the owner"
-                onAdd={() => { vm.clearSearch(); setAddingRole("co_owner"); }}
-                addLabel="Add Co-Owner"
-              />
-              {vm.coOwners.length === 0 ? (
-                <Text allowFontScaling={false} style={styles.emptyText}>
-                  No co-owners yet — add a spouse, business partner, or manager
-                </Text>
-              ) : (
-                vm.coOwners.map((m) => (
-                  <MemberRow
-                    key={m.id}
-                    member={m}
-                    canRemove={m.userId !== currentUserId}
-                    onRemove={() => handleRemoveCoOwner(m)}
-                  />
-                ))
-              )}
-            </View>
-
-            {/* ── Directors Section ──────────────────────────────────────── */}
-            <View style={styles.section}>
-              <SectionHeader
-                icon={"\uD83C\uDFC6"}
-                title="Tournament Directors"
-                subtitle="Can submit and manage tournaments at this venue"
-                onAdd={() => { vm.clearSearch(); setAddingRole("director"); }}
-                addLabel="Add Director"
-              />
-              {vm.directors.length === 0 ? (
-                <Text allowFontScaling={false} style={styles.emptyText}>
-                  No directors yet — add someone to manage tournaments here
-                </Text>
-              ) : (
-                vm.directors.map((m) => (
-                  <MemberRow
-                    key={m.id}
-                    member={m}
-                    canRemove={true}
-                    onRemove={() => handleRemoveDirector(m)}
-                  />
-                ))
-              )}
+              {/* ── Directors Section ──────────────────────────────────────── */}
+              <View style={styles.section}>
+                <SectionHeader
+                  icon={"\uD83C\uDFC6"}
+                  title="Tournament Directors"
+                  subtitle="Can submit and manage tournaments at this venue"
+                  onAdd={() => { vm.clearSearch(); setAddingRole("director"); }}
+                  addLabel="Add Director"
+                />
+                {vm.directors.length === 0 ? (
+                  <Text allowFontScaling={false} style={styles.emptyText}>
+                    No directors yet — add someone to manage tournaments here
+                  </Text>
+                ) : (
+                  vm.directors.map((m) => (
+                    <MemberRow
+                      key={m.id}
+                      member={m}
+                      canRemove={true}
+                      onRemove={() => handleRemoveDirector(m)}
+                    />
+                  ))
+                )}
+              </View>
             </View>
           </ScrollView>
         )}
@@ -366,28 +368,44 @@ export const VenueTeamModal = ({ visible, venueId, venueName, currentUserId, onC
 };
 
 // ── Styles ────────────────────────────────────────────────────────────────────
+const WEB_MAX_WIDTH = 680;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: {
+  headerOuter: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+  },
+  headerInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    width: "100%",
+    maxWidth: isWeb ? WEB_MAX_WIDTH : undefined,
     paddingHorizontal: SPACING.md,
-    paddingTop: Platform.OS === "ios" ? wxSc(56) : wxSc(40),
+    paddingTop: Platform.OS === "ios" ? webSc(56) : webSc(40),
     paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   closeBtn: { padding: SPACING.xs },
-  closeBtnText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
+  closeBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "600" },
   headerCenter: { alignItems: "center" },
-  headerTitle: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  headerSubtitle: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: wxSc(2) },
-  placeholder: { width: wxSc(60) },
+  headerTitle: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
+  headerSubtitle: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(2) },
+  placeholder: { width: webSc(60) },
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
-  loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary },
+  loadingText: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary },
   scroll: { flex: 1 },
-  scrollContent: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
+  scrollContent: {
+    alignItems: isWeb ? "center" : undefined,
+    padding: SPACING.md,
+    paddingBottom: SPACING.xl * 2,
+  },
+  contentContainer: {
+    width: "100%",
+    maxWidth: isWeb ? WEB_MAX_WIDTH : undefined,
+  },
   section: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.md,
@@ -397,17 +415,17 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   sectionLabelRow: { marginBottom: SPACING.sm },
-  sectionTitle: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
-  sectionHint: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: wxSc(2) },
+  sectionTitle: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  sectionHint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: webSc(2) },
   emptyText: {
-    fontSize: wxMs(FONT_SIZES.sm),
+    fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textMuted,
     fontStyle: "italic",
     paddingVertical: SPACING.sm,
   },
 });
 
-const ms = StyleSheet.create({
+const memberStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -416,9 +434,9 @@ const ms = StyleSheet.create({
     borderTopColor: COLORS.border + "60",
   },
   avatar: {
-    width: wxSc(36),
-    height: wxSc(36),
-    borderRadius: wxSc(18),
+    width: webSc(36),
+    height: webSc(36),
+    borderRadius: webSc(18),
     backgroundColor: COLORS.primary + "20",
     borderWidth: 1,
     borderColor: COLORS.primary + "40",
@@ -426,24 +444,24 @@ const ms = StyleSheet.create({
     justifyContent: "center",
     marginRight: SPACING.sm,
   },
-  avatarText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.primary },
+  avatarText: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.primary },
   info: { flex: 1 },
-  name: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text },
-  email: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: wxSc(1) },
+  name: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text },
+  email: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(1) },
   primaryBadge: {
     backgroundColor: COLORS.primary + "20",
     borderWidth: 1,
     borderColor: COLORS.primary + "50",
-    borderRadius: wxSc(10),
+    borderRadius: webSc(10),
     paddingHorizontal: SPACING.sm,
-    paddingVertical: wxSc(2),
+    paddingVertical: webSc(2),
     marginLeft: SPACING.sm,
   },
-  primaryBadgeText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
+  primaryBadgeText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
   removeBtn: {
-    width: wxSc(28),
-    height: wxSc(28),
-    borderRadius: wxSc(14),
+    width: webSc(28),
+    height: webSc(28),
+    borderRadius: webSc(14),
     backgroundColor: COLORS.error + "15",
     borderWidth: 1,
     borderColor: COLORS.error + "40",
@@ -451,10 +469,10 @@ const ms = StyleSheet.create({
     justifyContent: "center",
     marginLeft: SPACING.sm,
   },
-  removeBtnText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, fontWeight: "700" },
+  removeBtnText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.error, fontWeight: "700" },
 });
 
-const sh = StyleSheet.create({
+const sectionStyles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -462,39 +480,39 @@ const sh = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   left: { flex: 1, marginRight: SPACING.sm },
-  title: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
-  subtitle: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: wxSc(2) },
+  title: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  subtitle: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(2) },
   addBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.sm,
     paddingHorizontal: SPACING.md,
-    paddingVertical: wxSc(6),
+    paddingVertical: webSc(6),
     alignSelf: "flex-start",
   },
-  addBtnText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "700" },
+  addBtnText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "700" },
 });
 
-const ss = StyleSheet.create({
+const searchStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.75)",
     alignItems: "center",
     justifyContent: "flex-start",
-    paddingTop: Platform.OS === "ios" ? wxSc(160) : wxSc(120),
+    paddingTop: Platform.OS === "ios" ? webSc(160) : webSc(120),
     paddingHorizontal: SPACING.xl,
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: wxSc(16),
+    borderRadius: webSc(16),
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: SPACING.lg,
     width: "100%",
-    maxWidth: wxSc(400),
+    maxWidth: isWeb ? WEB_MAX_WIDTH : webSc(400),
     maxHeight: "80%",
   },
-  title: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, marginBottom: wxSc(4) },
-  subtitle: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: SPACING.md, lineHeight: wxMs(FONT_SIZES.sm) * 1.5 },
+  title: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, marginBottom: webSc(4) },
+  subtitle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: SPACING.md, lineHeight: webMs(FONT_SIZES.sm) * 1.5 },
   input: {
     backgroundColor: COLORS.background,
     borderRadius: RADIUS.md,
@@ -502,12 +520,12 @@ const ss = StyleSheet.create({
     borderColor: COLORS.border,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    fontSize: wxMs(FONT_SIZES.md),
+    fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
     marginBottom: SPACING.sm,
   },
-  hint: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, fontStyle: "italic", marginBottom: SPACING.sm },
-  results: { maxHeight: wxSc(240) },
+  hint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontStyle: "italic", marginBottom: SPACING.sm },
+  results: { maxHeight: webSc(240) },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -516,26 +534,26 @@ const ss = StyleSheet.create({
     borderBottomColor: COLORS.border + "60",
   },
   avatar: {
-    width: wxSc(36),
-    height: wxSc(36),
-    borderRadius: wxSc(18),
+    width: webSc(36),
+    height: webSc(36),
+    borderRadius: webSc(18),
     backgroundColor: COLORS.primary + "20",
     alignItems: "center",
     justifyContent: "center",
     marginRight: SPACING.sm,
   },
-  avatarText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.primary },
+  avatarText: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.primary },
   resultInfo: { flex: 1 },
-  resultName: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text },
-  resultEmail: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  resultName: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text },
+  resultEmail: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
   addChip: {
     backgroundColor: COLORS.primary,
-    borderRadius: wxSc(12),
+    borderRadius: webSc(12),
     paddingHorizontal: SPACING.sm,
-    paddingVertical: wxSc(4),
+    paddingVertical: webSc(4),
     marginLeft: SPACING.sm,
   },
-  addChipText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "700" },
+  addChipText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "700" },
   cancelBtn: {
     marginTop: SPACING.md,
     paddingVertical: SPACING.md,
@@ -544,5 +562,5 @@ const ss = StyleSheet.create({
     borderColor: COLORS.border,
     alignItems: "center",
   },
-  cancelBtnText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "600" },
+  cancelBtnText: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "600" },
 });
