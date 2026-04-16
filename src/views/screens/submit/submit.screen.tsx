@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { EQUIPMENT_OPTIONS, GAME_TYPES, RECURRENCE_TYPES, START_TIMES, THUMBNAIL_OPTIONS, TOURNAMENT_FORMATS, getRecurrencePatternLabel } from "../../../utils/tournament-form-data";
@@ -102,11 +102,9 @@ export const SubmitScreen = () => {
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Dismiss any keyboard that may be lingering when the screen first mounts.
   useEffect(() => {
     Keyboard.dismiss();
-    const show = Keyboard.addListener("keyboardDidShow", () => {});
-    const hide = Keyboard.addListener("keyboardDidHide", () => {});
-    return () => { show?.remove(); hide?.remove(); };
   }, []);
 
   // Shared save-template action used by both web and mobile modals.

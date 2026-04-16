@@ -1,6 +1,19 @@
-﻿import * as AppleAuthentication from "expo-apple-authentication";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import { supabase } from "../../lib/supabase";
+
+/**
+ * Generate a cryptographically secure random nonce for Apple Sign In.
+ * Uses expo-crypto's OS-level RNG, not Math.random() which is predictable
+ * and would allow an attacker to brute-force the raw nonce from the hashed
+ * nonce exposed in the identity token.
+ */
+async function generateSecureNonce(): Promise<string> {
+  const bytes = await Crypto.getRandomBytesAsync(32);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 export const authService = {
   async signUp(email: string, password: string) {
@@ -22,7 +35,7 @@ export const authService = {
   },
 
   async signInWithApple() {
-    const rawNonce = Math.random().toString(36).substring(2, 18);
+    const rawNonce = await generateSecureNonce();
     const hashedNonce = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       rawNonce,
@@ -57,7 +70,7 @@ export const authService = {
 
   async sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: 'https://thecompeteapp.com/reset-password',
+      redirectTo: "https://thecompeteapp.com/reset-password",
     });
     return { error: error?.message ?? null };
   },

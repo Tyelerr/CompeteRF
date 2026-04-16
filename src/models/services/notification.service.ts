@@ -1,4 +1,4 @@
-﻿// src/models/services/notification.service.ts
+// src/models/services/notification.service.ts
 // -----------------------------------------------------------
 // Push token management and Expo push notification sending
 // Model layer: Supabase + Expo API calls only. No React, no hooks.
@@ -14,6 +14,19 @@ import {
   NotificationPreferences,
   PushToken,
 } from "../types/notification.types";
+
+// Named type for the notification-category keys that can be toggled.
+// Kept as a top-level type alias because embedding the full Pick<> inside
+// a method signature was a common source of syntax corruption when files
+// were written through shells that strip angle brackets.
+type ToggleableCategory = keyof Pick<
+  NotificationPreferences,
+  | "tournament_updates"
+  | "venue_promotions"
+  | "app_announcements"
+  | "search_alert_matches"
+  | "giveaway_updates"
+>;
 
 // Lazy initialization flag - notification handler is configured on first use
 // rather than at module import. This prevents iOS 26 New Arch TurboModule
@@ -283,14 +296,7 @@ export const notificationService = {
 
   async isPreferenceEnabled(
     userId: string,
-    category: keyof Pick
-      NotificationPreferences,
-      | "tournament_updates"
-      | "venue_promotions"
-      | "app_announcements"
-      | "search_alert_matches"
-      | "giveaway_updates"
-    >,
+    category: ToggleableCategory,
   ): Promise<boolean> {
     const prefs = await notificationService.getPreferences(userId);
     return prefs[category];
