@@ -3,6 +3,17 @@ import * as Crypto from "expo-crypto";
 import { supabase } from "../../lib/supabase";
 
 /**
+ * Default redirect URL for password reset emails. Uses the app's custom
+ * scheme (configured in app.json as "competerf") so Expo Router's
+ * automatic deep linking routes the incoming URL to app/reset-password.tsx
+ * with token_hash and type available as search params.
+ *
+ * This must match one of the allowed Redirect URLs configured in the
+ * Supabase Dashboard under Authentication > URL Configuration.
+ */
+const PASSWORD_RESET_REDIRECT = "competerf://reset-password";
+
+/**
  * Generate a cryptographically secure random nonce for Apple Sign In.
  * Uses expo-crypto's OS-level RNG, not Math.random() which is predictable
  * and would allow an attacker to brute-force the raw nonce from the hashed
@@ -68,9 +79,23 @@ export const authService = {
     if (error) throw error;
   },
 
-  async sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
+  /**
+   * Send a password reset email. The link in the email opens the app via
+   * the competerf:// scheme with a token_hash and type=recovery as query
+   * parameters. The reset-password screen then calls verifyOtp to exchange
+   * the token for a short-lived recovery session, at which point the user
+   * can set a new password.
+   *
+   * @param email - the user's email address
+   * @param redirectTo - optional override of the redirect URL, defaulting to
+   *   competerf://reset-password. Primarily exposed for testing.
+   */
+  async sendPasswordResetEmail(
+    email: string,
+    redirectTo: string = PASSWORD_RESET_REDIRECT,
+  ): Promise<{ error: string | null }> {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: "https://thecompeteapp.com/reset-password",
+      redirectTo,
     });
     return { error: error?.message ?? null };
   },
