@@ -115,7 +115,7 @@ export const authService = {
     const { data } = await supabase
       .from("profiles")
       .select("email")
-      .eq("user_name", username.toLowerCase().trim())
+      .ilike("user_name", username.trim())
       .maybeSingle();
     return data?.email ?? null;
   },

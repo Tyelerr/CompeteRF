@@ -31,15 +31,15 @@ export const LoginScreen = () => {
       let resolvedEmail = identifier.trim();
       if (!isEmail) {
         const found = await authService.resolveEmailFromUsername(identifier.trim());
-        if (!found) { setError("No account found with that username"); return; }
+        if (!found) { setError("Incorrect credentials. Please try again."); return; }
         resolvedEmail = found;
       }
       const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
-      if (signInError) { setError("Invalid email or password"); return; }
+      if (signInError) { setError("Incorrect credentials. Please try again."); return; }
       const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user?.id).maybeSingle();
       if (profile) { router.replace("/(tabs)"); } else { router.replace("/auth/register"); }
     } catch {
-      setError("Invalid email or password");
+      setError("Incorrect credentials. Please try again.");
     } finally {
       setLoading(false);
     }

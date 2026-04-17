@@ -1,4 +1,4 @@
-﻿import { getActiveFilterCount } from "../../../models/types/filter.types";
+import { getActiveFilterCount } from "../../../models/types/filter.types";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -107,7 +107,7 @@ export const BilliardsScreen = () => {
     // Don't run collapse logic while the zip keyboard is open — the OS
     // scrolls the viewport to keep the input visible and that scroll event
     // would fight the animation, causing the visible jump.
-    if (isWeb || isZipFocusedRef.current) return;
+    if (isWeb || Platform.OS === "android" || isZipFocusedRef.current) return;
     const y = e.nativeEvent.contentOffset.y;
     const dy = y - lastScrollYRef.current;
     lastScrollYRef.current = y;
