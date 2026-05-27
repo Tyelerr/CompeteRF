@@ -27,7 +27,7 @@ export const searchAlertService = {
 
   async getAlert(id: number): Promise<SearchAlert | null> {
     const { data, error } = await supabase
-      .from("search_alerts").select("*").eq("id", id).single();
+      .from("search_alerts").select("*").eq("id", id).maybeSingle();
     if (error) throw error;
     return data;
   },
