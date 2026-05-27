@@ -1,5 +1,5 @@
-﻿import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+﻿import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { Alert, FlatList, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { searchAlertService } from "../../../models/services/search-alert.service";
 import { SearchAlert } from "../../../models/types/search-alert.types";
@@ -15,11 +15,15 @@ const isWeb = Platform.OS === "web";
 function AlertCard({ alert, onViewMatches, onEdit, onDelete, onToggleActive }: { alert: SearchAlert; onViewMatches: () => void; onEdit: () => void; onDelete: () => void; onToggleActive: () => void }) {
   const description = alert.description || searchAlertService.generateAlertDescription(alert.filter_criteria);
   const formatDate = (dateString: string) => {
-    const [y, m, d] = dateString.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+    // last_match_date is a full ISO timestamp, so parse it directly rather
+    // than splitting on "-" (which left "13T05:19:..." -> NaN -> Invalid Date).
+    const parsed = new Date(dateString);
+    if (isNaN(parsed.getTime())) return "";
+    return parsed.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
   };
 
-  const matchText = alert.match_count + (alert.match_count === 1 ? " match" : " matches") + (alert.last_match_date ? " \u00B7 Last: " + formatDate(alert.last_match_date) : "");
+  const formattedLastMatch = alert.last_match_date ? formatDate(alert.last_match_date) : "";
+  const matchText = alert.match_count + (alert.match_count === 1 ? " match" : " matches") + (formattedLastMatch ? " \u00B7 Last: " + formattedLastMatch : "");
 
   return (
     <View style={styles.alertCard}>
@@ -54,8 +58,6 @@ export default function SearchAlertsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { if (profile?.id_auto) loadAlerts(); }, [profile?.id_auto]);
-
   const loadAlerts = useCallback(async () => {
     if (!profile?.id_auto) return;
     try {
@@ -70,6 +72,14 @@ export default function SearchAlertsScreen() {
       setRefreshing(false);
     }
   }, [profile?.id_auto]);
+
+  // Re-fetch whenever the screen regains focus, so edits and newly created
+  // alerts made on the create-edit screen are reflected on return.
+  useFocusEffect(
+    useCallback(() => {
+      loadAlerts();
+    }, [loadAlerts]),
+  );
 
   const handleRefresh = async () => { setRefreshing(true); await loadAlerts(); };
   const handleCreate = () => router.push("/(tabs)/search-alerts/create" as any);
