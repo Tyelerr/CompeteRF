@@ -1,5 +1,5 @@
-﻿import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+﻿import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -64,10 +64,10 @@ function TournamentCard({ match }: { match: AlertMatch }) {
   const handleShare = async () => {
     try {
       const venue = tournament.venues
-        ? `${tournament.venues.venue} • ${tournament.venues.city}, ${tournament.venues.state}`
+        ? `${tournament.venues.venue} \u2022 ${tournament.venues.city}, ${tournament.venues.state}`
         : "";
       await Share.share({
-        message: `Check out this tournament: ${tournament.name}${venue ? `\n📍 ${venue}` : ""}\n📅 ${dateStr}`,
+        message: `Check out this tournament: ${tournament.name}${venue ? `\n\uD83D\uDCCD ${venue}` : ""}\n\uD83D\uDCC5 ${dateStr}`,
       });
     } catch (err) {
       console.log("Share error:", err);
@@ -107,25 +107,25 @@ function TournamentCard({ match }: { match: AlertMatch }) {
           </Text>
           {tournament.venues && (
             <View style={styles.infoRow}>
-              <Text allowFontScaling={false} style={styles.infoIcon}>📍</Text>
+              <Text allowFontScaling={false} style={styles.infoIcon}>{"\uD83D\uDCCD"}</Text>
               <Text allowFontScaling={false} style={styles.infoText} numberOfLines={1}>
-                {tournament.venues.venue} • {tournament.venues.city}, {tournament.venues.state}
+                {tournament.venues.venue} {"\u2022"} {tournament.venues.city}, {tournament.venues.state}
               </Text>
             </View>
           )}
           <View style={styles.infoRow}>
-            <Text allowFontScaling={false} style={styles.infoIcon}>📅</Text>
-            <Text allowFontScaling={false} style={styles.infoText}>{dateStr} • {timeStr}</Text>
+            <Text allowFontScaling={false} style={styles.infoIcon}>{"\uD83D\uDCC5"}</Text>
+            <Text allowFontScaling={false} style={styles.infoText}>{dateStr} {"\u2022"} {timeStr}</Text>
           </View>
           {tournament.entry_fee != null && (
             <View style={styles.infoRow}>
-              <Text allowFontScaling={false} style={styles.infoIcon}>💰</Text>
+              <Text allowFontScaling={false} style={styles.infoIcon}>{"\uD83D\uDCB0"}</Text>
               <Text allowFontScaling={false} style={styles.entryFeeText}>${tournament.entry_fee} entry</Text>
             </View>
           )}
           <View style={styles.matchedRow}>
             <Text allowFontScaling={false} style={styles.matchedDate}>
-              🔔 Matched {formatDate(match.created_at)}
+              {"\uD83D\uDD14"} Matched {formatDate(match.created_at)}
             </Text>
           </View>
         </View>
@@ -136,12 +136,12 @@ function TournamentCard({ match }: { match: AlertMatch }) {
               <Image source={{ uri: imageUrl }} style={styles.tournamentImage} resizeMode="cover" />
             ) : (
               <View style={styles.placeholderImage}>
-                <Text allowFontScaling={false} style={styles.placeholderText}>🎱</Text>
+                <Text allowFontScaling={false} style={styles.placeholderText}>{"\uD83C\uDFB1"}</Text>
               </View>
             )}
           </View>
           <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <Text allowFontScaling={false} style={styles.shareIcon}>📤</Text>
+            <Text allowFontScaling={false} style={styles.shareIcon}>{"\uD83D\uDCE4"}</Text>
             <Text allowFontScaling={false} style={styles.shareText}>Share</Text>
           </TouchableOpacity>
         </View>
@@ -165,9 +165,13 @@ export default function ViewMatchesScreen() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    if (id) { loadAlert(); loadMatches(); }
-  }, [id]);
+  // Re-fetch every time this screen regains focus, so the alert info and
+  // matches list reflect any edits or recomputes without needing a pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (id) { loadAlert(); loadMatches(); }
+    }, [id]),
+  );
 
   useEffect(() => {
     filterAndSortMatches();
@@ -243,7 +247,7 @@ export default function ViewMatchesScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text allowFontScaling={false} style={styles.emptyIcon}>🔍</Text>
+      <Text allowFontScaling={false} style={styles.emptyIcon}>{"\uD83D\uDD0D"}</Text>
       <Text allowFontScaling={false} style={styles.emptyTitle}>
         {searchQuery ? "No matches found" : "No tournaments matched yet"}
       </Text>
@@ -265,7 +269,7 @@ export default function ViewMatchesScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text allowFontScaling={false} style={styles.backButtonText}>‹ Back</Text>
+          <Text allowFontScaling={false} style={styles.backButtonText}>{"\u2039 Back"}</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>Alert Matches</Text>
       </View>
@@ -281,7 +285,7 @@ export default function ViewMatchesScreen() {
 
       <View style={styles.controls}>
         <View style={styles.searchContainer}>
-          <Text allowFontScaling={false} style={styles.searchIcon}>🔍</Text>
+          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
           <TextInput
             allowFontScaling={false}
             style={styles.searchInput}
@@ -292,13 +296,13 @@ export default function ViewMatchesScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity style={styles.clearButton} onPress={() => setSearchQuery("")}>
-              <Text allowFontScaling={false} style={styles.clearIcon}>✕</Text>
+              <Text allowFontScaling={false} style={styles.clearIcon}>{"\u2715"}</Text>
             </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity style={styles.sortButton} onPress={toggleSort}>
           <Text allowFontScaling={false} style={styles.sortIcon}>
-            {sortBy === "upcoming" ? "📅" : "🕐"}
+            {sortBy === "upcoming" ? "\uD83D\uDCC5" : "\uD83D\uDD50"}
           </Text>
           <Text allowFontScaling={false} style={styles.sortText}>
             {sortBy === "upcoming" ? "Date" : "Recent"}

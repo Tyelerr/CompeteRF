@@ -57,6 +57,21 @@ export const searchAlertService = {
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", id).select().single();
     if (error) throw error;
+
+    // If the filter criteria changed, recompute matches so the list reflects
+    // the new criteria. Old matches were recorded against the previous
+    // criteria and may no longer qualify. Best-effort: never fail the update.
+    if (updates.filter_criteria !== undefined) {
+      try {
+        await this.recomputeMatchesForAlert(data);
+        // Re-read so the returned alert reflects the recomputed counts.
+        const refreshed = await this.getAlert(id);
+        if (refreshed) return refreshed;
+      } catch (recomputeError) {
+        console.error("[searchAlert] Error recomputing matches after edit:", recomputeError);
+      }
+    }
+
     return data;
   },
 
@@ -207,6 +222,31 @@ export const searchAlertService = {
     if (updateError) throw updateError;
 
     return updatedAlert?.match_count ?? newCount;
+  },
+
+  // Rebuilds a single alert's match list from scratch under its current
+  // criteria. Used when a user edits an alert -- old matches may no longer
+  // qualify, and new ones may need to be added. Like the backfill, this does
+  // NOT send notifications. Returns the resulting match_count.
+  async recomputeMatchesForAlert(alert: SearchAlert): Promise<number> {
+    if (!alert) return 0;
+
+    // Clear this alert's existing matches so the list reflects only the
+    // current criteria.
+    const { error: deleteError } = await supabase
+      .from("alert_matches").delete().eq("alert_id", alert.id);
+    if (deleteError) throw deleteError;
+
+    // Reset counters so the rebuild starts from zero.
+    const { error: resetError } = await supabase
+      .from("search_alerts")
+      .update({ match_count: 0, last_match_date: null })
+      .eq("id", alert.id)
+      .select().single();
+    if (resetError) throw resetError;
+
+    // Re-run the create-time backfill against the now-empty match set.
+    return this.backfillMatchesForAlert({ ...alert, match_count: 0, last_match_date: null });
   },
 
   async notifyMatchingUsers(matchingAlerts: SearchAlert[], tournament: Tournament): Promise<void> {
