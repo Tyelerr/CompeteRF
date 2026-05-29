@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "Compete",
                  "slug":  "competerf",
-                 "version":  "1.0.12",
+                 "version": "1.0.20",
                  "orientation":  "portrait",
                  "icon":  "./assets/images/icon.png",
                  "scheme":  "competerf",
