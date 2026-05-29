@@ -34,7 +34,7 @@
 The dashboard is the *consumer* of data that does not exist yet, so it is built LAST.
 The build follows the data, not the screens.
 
-- [ ] **Phase 0 â€” Data model & types.** New tables + TS types + enum extensions. No UI.
+- [x] **Phase 0 â€” Data model & types.** New tables + TS types + enum extensions. No UI. *(DONE: tournaments columns added, tournament_players table + RLS created, common.types extended, registration types/service/hook written. tsc clean for new files.)*
 - [ ] **Phase 1 â€” TD registration & check-in.** Preregistration, queue, check-in, payment ticking, starter Fargo, no-show status.
 - [ ] **Phase 2 â€” Live engine.** Bracket generation (single + double elim), match play, live scoring, match states, event log, payouts/chop.
 - [ ] **Phase 3 â€” Results & placements.** Final placements derived from elimination order; earnings records.
@@ -64,7 +64,8 @@ The build follows the data, not the screens.
 - [x] Money/payment is **ticked off by the TD** for their own tracking + payout math. No transactions.
 
 ### Side pots
-- [x] Already modeled as `SidePot { name, amount }[]` â€” multiple allowed, variable count, each its own amount, all **optional**.
+- [x] Already modeled as `SidePot { name, amount }[]` â€” multiple allowed, **no limit**, variable count, each its own amount, all **optional**.
+- [x] **KNOWN DATA ISSUE:** existing `side_pots[].amount` is mixed-type in the DB â€” some rows store it as number (`5`), others as string (`"5"`). Any payout/chop math MUST coerce to number first (`Number(amount)`). Separate data cleanup is out of scope for now; just tolerate both.
 - [x] Player opts in per side pot at registration (checks the ones they enter).
 - [x] Tournament settings define entry fee + each named side pot + amount.
 - [DECIDE LATER] Staggered entry fees â€” OUT OF SCOPE for now.
@@ -73,6 +74,23 @@ The build follows the data, not the screens.
 - [x] TD looks up Fargo before the tournament to verify identity. **Never player-entered.**
 - [x] Real FargoRate API integration â†’ later.
 - [x] **Starter rating** = what the player is entered AS for that tournament. **Per-tournament for now**, not written back to profile.
+
+### Add-player / guest flow
+- [x] TD "Add Player" â†’ dynamic search against existing profiles as they type.
+- [x] Search results show name + **player ID** so TD can disambiguate same-named people ("what's your player number?").
+- [x] TD verifies the player ID to confirm the right account â†’ link (`player_id` set).
+- [x] **"No Account" button** â†’ register as guest with `guest_name` only, no profile required. Players do NOT need an app account to play.
+- [x] Unique `(tournament_id, player_id)` enforced ONLY when `player_id` is not null (partial unique index) â€” multiple null-player guests allowed; TD eyeballs guest dupes.
+- [x] **Same-name players CAN both play.** Different accounts = different player_id (constraint fine). Two guests = both null player_id (partial index ignores them). Never blocked.
+- [x] **Soft duplicate WARNING (Phase 1 UI, not DB):** at check-in, if a player with the same name is already registered, warn the TD ("a Mike Smith is already registered â€” same person?") and let them verify by player ID. App logic, not a constraint.
+- [x] **NO guest-claim/merge feature** â€” decided against; would require tying guest history to an account. Guests stay standalone.
+- [DECIDE LATER] **Text app invite to guests** â€” capture phone on guest reg later, offer "we'll text you the app." Future enhancement.
+
+### RLS & registration mutation rules (tournament_players)
+- [x] **Public SELECT** on `tournament_players` (needed for spectator/public bracket). Name privacy during registration is a UI concern, NOT enforced at DB.
+- [x] **Player can cancel/adjust their OWN registration** up until ~1hr before start (default window). UI shows a prompt explaining it frees their preregistered spot.
+- [x] RLS allows a player to UPDATE their own row; the **service layer only ever sends statusâ†’cancelled** for the player self-service path. Approve / seed / fargo / check-in / paid-ticks are **TD-only** service paths.
+- [x] TD of the tournament (director_id = my id_auto) + admins (super_admin/compete_admin) can do everything. Auth maps via `profiles.id = auth.uid()`, ownership via `(select id_auto from profiles where id = auth.uid())` â€” mirrors existing `tournaments` policies.
 
 ### Strikes / no-shows
 - [x] Full strikes system **DEFERRED**.
@@ -117,8 +135,10 @@ The build follows the data, not the screens.
 - [x] Whole money layer = **record-keeping / reporting**. No transactions.
 - [x] **Payout calculator** at tournament creation: set prize pool + number of paid places (3 to 10+), auto-distribute standard percentages, TD can drag **per-place sliders** that stay locked to **exactly 100%** of the pool.
 - [x] **"Added money"** box at creation: an amount that, when checked, adds to the prize pool.
-- [x] **Entry winnings and side-pot winnings tracked separately.**
+- [x] **Entry winnings and side-pot winnings tracked separately.** (Side pots COMBINED into one total â€” not per-pot.)
 - [x] Per-player **yearly earnings** reporting ("how much they made this year").
+- [x] **ARCHIVING MUST NOT DESTROY EARNINGS.** Setting a tournament `status: archived` (or cancelled/completed) only changes the tournament row â€” it never touches `placements` rows. Earnings stay keyed to the player forever.
+- [x] **Earnings query rule:** the yearly-earnings query sums `placements` by player REGARDLESS of parent tournament `status`. It must NOT copy the public-listing pattern (`.eq("status","active")`) â€” doing so would hide archived tournaments' earnings. This is the opposite filter from every existing tournament read.
 
 ---
 
@@ -139,13 +159,12 @@ The build follows the data, not the screens.
 
 ### New tables (proposed)
 - [ ] `tournament_players` (registrations)
-  - links `tournament_id` â†” player (profile or guest name)
+  - links `tournament_id` (int â†’ tournaments.id) â†” player (`player_id` int â†’ profiles.id_auto, nullable for guests) + `guest_name` text
   - `status` (RegistrationStatus), `queue_position`, `seed`
   - `fargo_rating` (the starter/entered rating â€” per-tournament), `is_starter_rating` bool
-  - payment ticks: `paid_entry` bool, plus side-pot opt-ins (see below)
+  - payment ticks: `paid_entry` bool, `paid_side_pots` jsonb (array of pot names the player bought into â€” for TD check-in + chop membership ONLY, not reporting)
   - `checked_in_at`, `registered_at`, timestamps
-- [ ] `registration_side_pots` (or JSON on registration) â€” which side pots a player opted into + paid
-  - [DECIDE LATER] separate table vs JSON column â€” decide at migration time
+- [x] **DECISION:** No separate `registration_side_pots` table. Per-individual-pot breakdown NOT stored. Earnings tracked as two combined totals only: `entry_winnings` + `side_pot_winnings` (on placements, Phase 3). `paid_side_pots` jsonb on registration is just for check-in tracking + knowing chop pot-membership.
 - [ ] `matches`
   - `tournament_id`, `round`, `bracket` (winners/losers for double elim), `match_number`
   - `table_number`, `race_to`
@@ -158,8 +177,9 @@ The build follows the data, not the screens.
 - [ ] `match_events` (append-only audit log)
   - `match_id`, `event_type` (MatchEventType), `actor_id`, `payload` (JSON: old/new score, reason, note), `created_at`
 - [ ] `placements` (final results)
-  - `tournament_id`, `player_id`, `place`, derived from elimination order
-  - `entry_winnings`, `side_pot_winnings` (separate), `chop` bool
+  - `tournament_id`, `player_id` (int â†’ profiles.id_auto), `place`, derived from elimination order
+  - `entry_winnings`, `side_pot_winnings` (two combined totals â€” NOT per-pot), `chop` bool
+  - feeds yearly earnings: sum each column by player by year
 - [ ] `tournament_payouts` (payout calculator output)
   - `tournament_id`, prize pool, added money, paid places, per-place percentages/amounts
 - [DECIDE LATER] Exact table for "TD reallow preregistration" per-TD blocklist (Phase 1+).
@@ -216,6 +236,7 @@ The build follows the data, not the screens.
 ---
 
 ## 9. Open questions parking lot
+- [NOTE] **Pre-existing tsc errors (NOT ours):** a full `npx tsc --noEmit` surfaces ~62 errors in ~17 files that predate this feature â€” `supabase/functions/**` (Deno edge functions, not app-scoped, normally excluded), `search-alert.service.ts` (brands/gameTypes/tableSizes mismatch), `PlayerCard.tsx` (years_playing), `GiveawayEntrySheet.tsx` (hook props), `register.screen.tsx` (status on ProfileInsert), `theme/index.ts` (duplicate FONT_SIZES export), web-only `transition` style props. None block Expo/Metro. Separate cleanup, out of scope for the engine.
 - [DECIDE LATER] Retire unused `profile.screen.tsx`?
 - [DECIDE LATER] `registration_side_pots` separate table vs JSON column.
 - [DECIDE LATER] Void/replay match state design.
