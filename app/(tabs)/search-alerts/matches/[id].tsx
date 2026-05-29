@@ -268,7 +268,7 @@ export default function ViewMatchesScreen() {
     <View style={styles.outerContainer}>
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.push("/(tabs)/profile" as any)}>
           <Text allowFontScaling={false} style={styles.backButtonText}>{"\u2039 Back"}</Text>
         </TouchableOpacity>
         <Text allowFontScaling={false} style={styles.headerTitle}>Alert Matches</Text>
