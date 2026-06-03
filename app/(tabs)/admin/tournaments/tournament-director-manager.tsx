@@ -84,6 +84,13 @@ export default function TDTournamentsScreen() {
     router.push(`/(tabs)/admin/edit-tournament/${tournament.id}` as any);
   };
 
+  const handleManagePlayers = (tournament: any) => {
+    router.push({
+      pathname: "/(tabs)/admin/manage-players/[id]",
+      params: { id: String(tournament.id), name: tournament.name },
+    } as any);
+  };
+
   const handleCancel = async (tournament: any) => {
     Alert.alert(
       "Cancel Tournament",

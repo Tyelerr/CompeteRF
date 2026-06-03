@@ -152,7 +152,6 @@ const TournamentCard = ({
   tournament,
   onPress,
   onEdit,
-  onManagePlayers,
   onArchive,
   onCancel,
   onRestore,
@@ -161,7 +160,6 @@ const TournamentCard = ({
   tournament: AdminTournamentWithStats;
   onPress: () => void;
   onEdit: () => void;
-  onManagePlayers: () => void;
   onArchive: () => void;
   onCancel: () => void;
   onRestore: () => void;
@@ -293,20 +291,6 @@ const TournamentCard = ({
           <Text allowFontScaling={false} style={styles.editButtonText}>✏️ Edit</Text>
         </TouchableOpacity>
 
-        {/* Manage Players - always available */}
-        <TouchableOpacity
-          style={[styles.actionButton, styles.managePlayersButton]}
-          onPress={(e) => {
-            e.stopPropagation();
-            onManagePlayers();
-          }}
-          disabled={isProcessing}
-        >
-          <Text allowFontScaling={false} style={styles.managePlayersButtonText}>
-            👥 Manage Players
-          </Text>
-        </TouchableOpacity>
-
         {/* Active tournaments: Cancel or Archive */}
         {isActive && (
           <>
@@ -419,13 +403,6 @@ export default function TournamentManagementScreen() {
     router.push({
       pathname: "/(tabs)/admin/edit-tournament/[id]",
       params: { id: tournamentId.toString() },
-    } as any);
-  };
-
-  const handleManagePlayers = (tournament: AdminTournamentWithStats) => {
-    router.push({
-      pathname: "/(tabs)/admin/manage-players/[id]",
-      params: { id: tournament.id.toString(), name: tournament.name },
     } as any);
   };
 
@@ -712,7 +689,6 @@ export default function TournamentManagementScreen() {
             tournament={item}
             onPress={() => handleTournamentPress(item.id)}
             onEdit={() => handleEditTournament(item.id)}
-            onManagePlayers={() => handleManagePlayers(item)}
             onArchive={() => handleArchiveTournament(item)}
             onCancel={() => handleCancelTournament(item)}
             onRestore={() => handleRestoreTournament(item)}
@@ -1026,15 +1002,6 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: COLORS.primary,
-    fontSize: moderateScale(FONT_SIZES.sm),
-    fontWeight: "600",
-  },
-  managePlayersButton: {
-    backgroundColor: COLORS.success + "20",
-    borderColor: COLORS.success,
-  },
-  managePlayersButtonText: {
-    color: COLORS.success,
     fontSize: moderateScale(FONT_SIZES.sm),
     fontWeight: "600",
   },

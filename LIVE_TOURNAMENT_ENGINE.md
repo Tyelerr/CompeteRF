@@ -35,7 +35,7 @@ The dashboard is the *consumer* of data that does not exist yet, so it is built 
 The build follows the data, not the screens.
 
 - [x] **Phase 0 â€” Data model & types.** New tables + TS types + enum extensions. No UI. *(DONE: tournaments columns added, tournament_players table + RLS created, common.types extended, registration types/service/hook written. tsc clean for new files.)*
-- [ ] **Phase 1 â€” TD registration & check-in.** Preregistration, queue, check-in, payment ticking, starter Fargo, no-show status.
+- [~] **Phase 1 â€” TD registration & check-in.** Preregistration, queue, check-in, payment ticking, starter Fargo, no-show status. *(IN PROGRESS: TD registration manager slice 1 done â€” list registrations, add player via profile search + guest "No Account", approve. Remaining: settings, window logic, preregistration/queue, check-in prompt, no-show.)*
 - [ ] **Phase 2 â€” Live engine.** Bracket generation (single + double elim), match play, live scoring, match states, event log, payouts/chop.
 - [ ] **Phase 3 â€” Results & placements.** Final placements derived from elimination order; earnings records.
 - [ ] **Phase 4 â€” Profile dashboard (read side).** The mockup: Player Header, You Play Next, My Tournaments buckets, Performance Snapshot, Recent Activity, detail pages, spectator view.
@@ -203,8 +203,8 @@ The build follows the data, not the screens.
 - [ ] Tournament settings: entry fee + named side pots + amounts + added money + payout calculator.
 - [ ] Registration window logic (open/lock times, 75% cap, 30-min expected window).
 - [ ] Preregistration flow (player side) + queue + auto-promote.
-- [ ] TD preregistered box (names hidden from players, visible to TD).
-- [ ] TD approve registrations.
+- [~] TD preregistered box (names hidden from players, visible to TD). *(TD-side list of all registrations done in the manager screen; player-side name privacy not yet built.)*
+- [x] TD approve registrations. *(manage-players/[id] screen: lists registrations, adds players via debounced profile search or guest "No Account", approves self-registered players; TD-added players insert as approved. New use.player.search hook + "Manage Players" button on the tournament-management card. Commit a4f09e1.)*
 - [ ] Check-in per-player prompt (payment ticks, side-pot opt-ins, Fargo / starter rating, reallow-preregistration toggle).
 - [ ] No-show status recording.
 
