@@ -84,13 +84,6 @@ export default function TDTournamentsScreen() {
     router.push(`/(tabs)/admin/edit-tournament/${tournament.id}` as any);
   };
 
-  const handleManagePlayers = (tournament: any) => {
-    router.push({
-      pathname: "/(tabs)/admin/manage-players/[id]",
-      params: { id: String(tournament.id), name: tournament.name },
-    } as any);
-  };
-
   const handleCancel = async (tournament: any) => {
     Alert.alert(
       "Cancel Tournament",
@@ -154,7 +147,16 @@ export default function TDTournamentsScreen() {
     }
   };
 
+  // Tapping the card opens the full Manage Tournament hub.
   const handleTournamentPress = (tournament: any) => {
+    router.push({
+      pathname: "/(tabs)/admin/manage-tournament/[id]",
+      params: { id: String(tournament.id), name: tournament.name },
+    } as any);
+  };
+
+  // The small "Details" button opens the read-only detail modal.
+  const handleDetails = (tournament: any) => {
     setDetailId(String(tournament.id));
   };
 
@@ -172,6 +174,7 @@ export default function TDTournamentsScreen() {
       <TournamentCard
         tournament={item}
         onPress={() => handleTournamentPress(item)}
+        onDetails={() => handleDetails(item)}
         onEdit={() => handleEdit(item)}
         onCancel={() => handleCancel(item)}
         onArchive={() => handleArchive(item)}
@@ -211,7 +214,7 @@ export default function TDTournamentsScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text allowFontScaling={false} style={styles.headerTitle}>My Tournaments</Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap cards for full details</Text>
+          <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap a card to manage</Text>
         </View>
         <View style={styles.placeholder} />
       </View>

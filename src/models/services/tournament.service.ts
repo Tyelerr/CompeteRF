@@ -5,6 +5,7 @@ import {
   TournamentFilters,
   TournamentTemplate,
 } from "../types/tournament.types";
+import { TournamentLiveState } from "../types/common.types";
 import { searchAlertService } from "./search-alert.service";
 
 function normalizeTournament<T extends { game_type?: any }>(t: T): T {
@@ -169,6 +170,65 @@ export const tournamentService = {
       .eq("id", id).select().single();
     if (error) throw error;
     if (!data) throw new Error("Unhide failed - no rows modified (possible RLS block).");
+    return normalizeTournament(data);
+  },
+
+  // ---- Live engine (live_state / pause / round) --------------------------
+  // These drive the runtime engine state, separate from `status` (lifecycle).
+  // .select().single() + null guard catches silent RLS failures.
+
+  async setLiveState(
+    id: number,
+    liveState: TournamentLiveState,
+  ): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({ live_state: liveState, updated_at: new Date().toISOString() })
+      .eq("id", id).select("*, venues(*)").single();
+    if (error) throw error;
+    if (!data) throw new Error("Live-state update failed - no rows modified (possible RLS block).");
+    return normalizeTournament(data);
+  },
+
+  openRegistration(id: number): Promise<Tournament> {
+    return tournamentService.setLiveState(id, "registration_open");
+  },
+
+  closeRegistration(id: number): Promise<Tournament> {
+    return tournamentService.setLiveState(id, "registration_closed");
+  },
+
+  startTournament(id: number): Promise<Tournament> {
+    return tournamentService.setLiveState(id, "in_progress");
+  },
+
+  finishLiveTournament(id: number): Promise<Tournament> {
+    return tournamentService.setLiveState(id, "finished");
+  },
+
+  // Pause/resume drive a boolean, NOT a live_state value (the engine stays
+  // "in_progress"). paused_at records when the hold started.
+  async setPaused(id: number, isPaused: boolean): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({
+        is_paused: isPaused,
+        paused_at: isPaused ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id).select("*, venues(*)").single();
+    if (error) throw error;
+    if (!data) throw new Error("Pause update failed - no rows modified (possible RLS block).");
+    return normalizeTournament(data);
+  },
+
+  async setCurrentRound(id: number, round: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({ current_round: round, updated_at: new Date().toISOString() })
+      .eq("id", id).select("*, venues(*)").single();
+    if (error) throw error;
+    if (!data) throw new Error("Round update failed - no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
