@@ -47,6 +47,12 @@ export type RegistrationStatus =
   | "checked_in"
   | "no_show"
   | "cancelled";
+// Physical table state during a live tournament (tournament_tables.status)
+export type TableStatus =
+  | "available"
+  | "in_use"
+  | "waiting"
+  | "unavailable";
 export type VenueStatus = "active" | "inactive" | "archived";
 export type GiveawayStatus = "active" | "ended" | "awarded" | "archived";
 export type MessageType = "general" | "important" | "cancellation" | "system";

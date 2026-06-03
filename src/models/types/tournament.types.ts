@@ -5,6 +5,7 @@ import {
   SidePot,
   TableSize,
   TournamentFormat,
+  TournamentLiveState,
   TournamentStatus,
 } from "./common.types";
 
@@ -41,6 +42,11 @@ export interface Tournament {
   // Chip Tournament data
   chip_ranges?: ChipRange[];
   status: TournamentStatus;
+  // Live-engine runtime state (Phase 0 columns; separate from `status`).
+  live_state?: TournamentLiveState;
+  is_paused?: boolean;
+  paused_at?: string | null;
+  current_round?: number;
   cancellation_reason?: string;
   cancelled_at?: string;
   cancelled_by?: number;
