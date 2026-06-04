@@ -43,10 +43,9 @@ export interface GeneratedBracket {
 }
 
 export interface TournamentLiveSettings {
-  // Bracket sizing / capacity
+  // Bracket sizing
   bracketSize?: number | null; // null/undefined => unlimited
-  maxPlayers?: number | null;
-  tableCount?: number | null;
+  // (Tables are managed in tournament_tables; max-players/capacity is the bracket size.)
 
   // Race configuration
   raceMode?: RaceMode; // "fixed" uses the per-bracket races below; "groups" uses raceGroups

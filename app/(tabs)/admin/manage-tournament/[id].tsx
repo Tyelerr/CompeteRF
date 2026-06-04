@@ -168,8 +168,6 @@ interface SettingsForm {
   raceFinals: string;
   sidePots: SidePotForm[];
   bracketSize: string;
-  maxPlayers: string;
-  tableCount: string;
   raceMode: RaceMode;
   raceGroups: RaceGroupForm[];
 }
@@ -236,8 +234,6 @@ const toForm = (t: Tournament): SettingsForm => {
       amount: numStr(p.amount as number),
     })),
     bracketSize: numStr(ls.bracketSize),
-    maxPlayers: numStr(ls.maxPlayers),
-    tableCount: numStr(ls.tableCount),
     raceMode: ls.raceMode ?? "fixed",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
       id: g.id,
@@ -288,8 +284,6 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
   live_settings: {
     bracketSize: intOrNull(f.bracketSize),
-    maxPlayers: intOrNull(f.maxPlayers),
-    tableCount: intOrNull(f.tableCount),
     raceMode: f.raceMode,
     fixedRaceWinners: winners,
     fixedRaceLosers: hasLosers ? losers : null,
@@ -1286,7 +1280,7 @@ export default function ManageTournamentScreen() {
           ))}
         </Section>
 
-        <Section title="Capacity & Tables">
+        <Section title="Bracket Size">
           <LabeledInput
             label="Bracket Size"
             value={form.bracketSize}
@@ -1294,20 +1288,10 @@ export default function ManageTournamentScreen() {
             placeholder="Blank = unlimited"
             keyboardType="numeric"
           />
-          <LabeledInput
-            label="Max Players"
-            value={form.maxPlayers}
-            onChangeText={(v) => patchForm({ maxPlayers: v })}
-            placeholder="Blank = unlimited"
-            keyboardType="numeric"
-          />
-          <LabeledInput
-            label="Table Count"
-            value={form.tableCount}
-            onChangeText={(v) => patchForm({ tableCount: v })}
-            placeholder="e.g., 8"
-            keyboardType="numeric"
-          />
+          <Text allowFontScaling={false} style={styles.hint}>
+            Tables are managed on the Tables tab. The bracket itself is built on
+            the Bracket / Draw page.
+          </Text>
         </Section>
 
         <Section title="Schedule">
