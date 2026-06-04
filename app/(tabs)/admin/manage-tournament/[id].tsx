@@ -1005,11 +1005,6 @@ export default function ManageTournamentScreen() {
                 placeholder="e.g., 9"
                 keyboardType="numeric"
               />
-              {!formatHasLosersSide(form.tournamentFormat) && (
-                <Text allowFontScaling={false} style={styles.hint}>
-                  Single elimination has no losers bracket.
-                </Text>
-              )}
             </View>
           ) : (
             <View>
