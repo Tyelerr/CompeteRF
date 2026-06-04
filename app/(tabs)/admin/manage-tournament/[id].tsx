@@ -33,6 +33,7 @@ import {
   START_TIMES,
   TOURNAMENT_FORMATS,
 } from "../../../../src/utils/tournament-form-data";
+import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import {
   GameType,
   RegistrationStatus,
@@ -173,11 +174,24 @@ const intOrNull = (s: string): number | null => {
 const numStr = (n: number | null | undefined): string =>
   n === null || n === undefined ? "" : String(n);
 
+// getTournament() normalizes game_type to its DISPLAY LABEL (e.g.
+// "9 Ball Scotch Doubles"), but the GAME_TYPES dropdown matches on the SLUG
+// ("9-ball-scotch-doubles"). Convert back to the slug so the dropdown pre-fills.
+const gameTypeSlug = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const lower = value.toLowerCase();
+  if (GAME_TYPE_MAP[lower]) return lower; // already a slug
+  const match = Object.entries(GAME_TYPE_MAP).find(
+    ([, label]) => label === value,
+  );
+  return match ? match[0] : value;
+};
+
 const toForm = (t: Tournament): SettingsForm => {
   const ls = t.live_settings ?? {};
   return {
     name: t.name ?? "",
-    gameType: t.game_type ?? "",
+    gameType: gameTypeSlug(t.game_type),
     tournamentFormat: t.tournament_format ?? "",
     gameSpot: t.game_spot ?? "",
     race: t.race ?? "",
