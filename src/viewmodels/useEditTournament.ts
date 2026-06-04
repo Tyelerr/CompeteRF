@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
 import { supabase } from "../lib/supabase";
+import { GAME_TYPE_MAP } from "../utils/game-type.utils";
 import { notificationDispatcher } from "../models/services/notification-dispatcher.service";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
@@ -33,6 +34,20 @@ interface SidePot {
   name: string;
   amount: string;
 }
+
+// getTournament() normalizes game_type to its DISPLAY LABEL (e.g.
+// "9 Ball Scotch Doubles"), but the GAME_TYPES dropdown matches on the SLUG
+// ("9-ball-scotch-doubles"). Convert back to the slug so the dropdown pre-fills
+// and a save can't write the label back (which would corrupt game_type).
+const gameTypeSlug = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const lower = value.toLowerCase();
+  if (GAME_TYPE_MAP[lower]) return lower; // already a slug
+  const match = Object.entries(GAME_TYPE_MAP).find(
+    ([, label]) => label === value,
+  );
+  return match ? match[0] : value;
+};
 
 export const useEditTournament = () => {
   const router = useRouter();
@@ -138,7 +153,7 @@ export const useEditTournament = () => {
       // Populate form with tournament data
       setFormData({
         name: tournamentData.name || "",
-        gameType: tournamentData.game_type || "",
+        gameType: gameTypeSlug(tournamentData.game_type),
         tournamentFormat: tournamentData.tournament_format || "",
         gameSpot: tournamentData.game_spot || "",
         race: tournamentData.race || "",
