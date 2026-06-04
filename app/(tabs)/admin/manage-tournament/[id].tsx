@@ -167,7 +167,6 @@ interface SettingsForm {
   raceLosers: string;
   raceFinals: string;
   sidePots: SidePotForm[];
-  bracketSize: string;
   raceMode: RaceMode;
   raceGroups: RaceGroupForm[];
 }
@@ -233,7 +232,6 @@ const toForm = (t: Tournament): SettingsForm => {
       name: p.name ?? "",
       amount: numStr(p.amount as number),
     })),
-    bracketSize: numStr(ls.bracketSize),
     raceMode: ls.raceMode ?? "fixed",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
       id: g.id,
@@ -283,7 +281,6 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
   live_settings: {
-    bracketSize: intOrNull(f.bracketSize),
     raceMode: f.raceMode,
     fixedRaceWinners: winners,
     fixedRaceLosers: hasLosers ? losers : null,
@@ -1033,8 +1030,6 @@ export default function ManageTournamentScreen() {
   }, [activeRegs, playerSearch, checkedInFilter]);
 
   const checkedInCount = activeRegs.filter((r) => r.status === "checked_in").length;
-  const bracketSize = hub.tournament?.live_settings?.bracketSize ?? null;
-  const onlineCap = bracketSize ? Math.floor(bracketSize * 0.75) : null;
 
   // ---- Tab renderers ------------------------------------------------------
   const renderSettings = () => {
@@ -1280,19 +1275,6 @@ export default function ManageTournamentScreen() {
           ))}
         </Section>
 
-        <Section title="Bracket Size">
-          <LabeledInput
-            label="Bracket Size"
-            value={form.bracketSize}
-            onChangeText={(v) => patchForm({ bracketSize: v })}
-            placeholder="Blank = unlimited"
-            keyboardType="numeric"
-          />
-          <Text allowFontScaling={false} style={styles.hint}>
-            Tables are managed on the Tables tab. The bracket itself is built on
-            the Bracket / Draw page.
-          </Text>
-        </Section>
 
         <Section title="Schedule">
           <View style={styles.field}>
@@ -1388,11 +1370,6 @@ export default function ManageTournamentScreen() {
           <Text allowFontScaling={false} style={styles.countPill}>
             {checkedInCount} checked in
           </Text>
-          {onlineCap != null && (
-            <Text allowFontScaling={false} style={styles.countPill}>
-              online cap {onlineCap}
-            </Text>
-          )}
         </View>
         <TouchableOpacity
           style={styles.addButton}

@@ -43,9 +43,9 @@ export interface GeneratedBracket {
 }
 
 export interface TournamentLiveSettings {
-  // Bracket sizing
-  bracketSize?: number | null; // null/undefined => unlimited
-  // (Tables are managed in tournament_tables; max-players/capacity is the bracket size.)
+  // NOTE: bracket size is NOT configured here — it's derived on the Bracket /
+  // Draw page from the checked-in player count (next power of two, with byes)
+  // and recorded on the generated bracket below.
 
   // Race configuration
   raceMode?: RaceMode; // "fixed" uses the per-bracket races below; "groups" uses raceGroups
