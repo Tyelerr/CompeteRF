@@ -256,7 +256,11 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   // Keep the legacy `race` text column readable for cards/detail. In fixed mode
   // it summarises the per-bracket races; in groups mode it's left untouched.
   const fixedSummary = [
-    winners != null ? `Winners ${winners}` : null,
+    winners != null
+      ? hasLosers
+        ? `Winners ${winners}`
+        : `Race to ${winners}`
+      : null,
     hasLosers && losers != null ? `Losers ${losers}` : null,
     finals != null ? `Finals ${finals}` : null,
   ]
@@ -975,7 +979,11 @@ export default function ManageTournamentScreen() {
           {form.raceMode === "fixed" ? (
             <View>
               <LabeledInput
-                label="Winners side race to"
+                label={
+                  formatHasLosersSide(form.tournamentFormat)
+                    ? "Winners side race to"
+                    : "Single Elimination race to"
+                }
                 value={form.raceWinners}
                 onChangeText={(v) => patchForm({ raceWinners: v })}
                 placeholder="e.g., 7"
