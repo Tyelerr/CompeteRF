@@ -27,7 +27,11 @@ export interface TournamentLiveSettings {
   tableCount?: number | null;
 
   // Race configuration
-  raceMode?: RaceMode; // "fixed" uses the tournament.race text; "groups" uses raceGroups
+  raceMode?: RaceMode; // "fixed" uses the per-bracket races below; "groups" uses raceGroups
+  // Fixed race, per bracket side. Losers side is unused for single elimination.
+  fixedRaceWinners?: number | null;
+  fixedRaceLosers?: number | null;
+  fixedRaceFinals?: number | null;
   raceGroups?: RaceGroup[];
 
   // Feature toggles (choice stored now; some features land in later phases)

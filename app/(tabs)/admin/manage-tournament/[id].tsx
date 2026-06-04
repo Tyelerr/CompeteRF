@@ -148,6 +148,9 @@ interface SettingsForm {
   isRecurring: boolean;
   tournamentDate: string;
   startTime: string;
+  raceWinners: string;
+  raceLosers: string;
+  raceFinals: string;
   sidePots: SidePotForm[];
   bracketSize: string;
   maxPlayers: string;
@@ -187,6 +190,19 @@ const gameTypeSlug = (value: string | null | undefined): string => {
   return match ? match[0] : value;
 };
 
+// Single-elimination formats have no losers bracket, so the Losers race is hidden.
+const SINGLE_ELIM_FORMATS = ["single-elimination", "single-elim"];
+const formatHasLosersSide = (format: string): boolean =>
+  !SINGLE_ELIM_FORMATS.includes((format || "").toLowerCase());
+
+// Pull the first number out of a legacy free-text race (e.g. "Race to 5" -> 5)
+// so existing tournaments pre-fill the Winners race.
+const parseRaceNumber = (race: string | null | undefined): number | null => {
+  if (!race) return null;
+  const m = race.match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+};
+
 const toForm = (t: Tournament): SettingsForm => {
   const ls = t.live_settings ?? {};
   return {
@@ -204,6 +220,9 @@ const toForm = (t: Tournament): SettingsForm => {
     isRecurring: !!t.is_recurring,
     tournamentDate: t.tournament_date ?? "",
     startTime: t.start_time ?? "",
+    raceWinners: numStr(ls.fixedRaceWinners ?? parseRaceNumber(t.race)),
+    raceLosers: numStr(ls.fixedRaceLosers),
+    raceFinals: numStr(ls.fixedRaceFinals),
     sidePots: (t.side_pots ?? []).map((p) => ({
       name: p.name ?? "",
       amount: numStr(p.amount as number),
@@ -229,12 +248,27 @@ const toForm = (t: Tournament): SettingsForm => {
   };
 };
 
-const toPatch = (f: SettingsForm): Partial<Tournament> => ({
+const toPatch = (f: SettingsForm): Partial<Tournament> => {
+  const winners = intOrNull(f.raceWinners);
+  const losers = intOrNull(f.raceLosers);
+  const finals = intOrNull(f.raceFinals);
+  const hasLosers = formatHasLosersSide(f.tournamentFormat);
+  // Keep the legacy `race` text column readable for cards/detail. In fixed mode
+  // it summarises the per-bracket races; in groups mode it's left untouched.
+  const fixedSummary = [
+    winners != null ? `Winners ${winners}` : null,
+    hasLosers && losers != null ? `Losers ${losers}` : null,
+    finals != null ? `Finals ${finals}` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+
+  return {
   name: f.name.trim(),
   game_type: f.gameType as GameType,
   tournament_format: f.tournamentFormat as TournamentFormat,
   game_spot: f.gameSpot.trim(),
-  race: f.race.trim(),
+  race: f.raceMode === "fixed" ? fixedSummary : f.race.trim(),
   description: f.description.trim(),
   max_fargo: intOrNull(f.maxFargo) ?? undefined,
   entry_fee: numOrNull(f.entryFee) ?? undefined,
@@ -259,6 +293,9 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => ({
     autoGenerateNextRound: f.autoGenerateNextRound,
     matchTimer: f.matchTimer,
     raceMode: f.raceMode,
+    fixedRaceWinners: winners,
+    fixedRaceLosers: hasLosers ? losers : null,
+    fixedRaceFinals: finals,
     raceGroups: f.raceGroups.map((g) => ({
       id: g.id,
       label: g.label.trim(),
@@ -267,7 +304,8 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => ({
       raceTo: intOrNull(g.raceTo) ?? 0,
     })),
   },
-});
+  };
+};
 
 // ── Small building blocks ────────────────────────────────────────────────────
 const Section = ({
@@ -935,12 +973,36 @@ export default function ManageTournamentScreen() {
           </View>
 
           {form.raceMode === "fixed" ? (
-            <LabeledInput
-              label="Race"
-              value={form.race}
-              onChangeText={(v) => patchForm({ race: v })}
-              placeholder="e.g., Race to 5"
-            />
+            <View>
+              <LabeledInput
+                label="Winners side race to"
+                value={form.raceWinners}
+                onChangeText={(v) => patchForm({ raceWinners: v })}
+                placeholder="e.g., 7"
+                keyboardType="numeric"
+              />
+              {formatHasLosersSide(form.tournamentFormat) && (
+                <LabeledInput
+                  label="Losers side race to"
+                  value={form.raceLosers}
+                  onChangeText={(v) => patchForm({ raceLosers: v })}
+                  placeholder="e.g., 5"
+                  keyboardType="numeric"
+                />
+              )}
+              <LabeledInput
+                label="Finals race to"
+                value={form.raceFinals}
+                onChangeText={(v) => patchForm({ raceFinals: v })}
+                placeholder="e.g., 9"
+                keyboardType="numeric"
+              />
+              {!formatHasLosersSide(form.tournamentFormat) && (
+                <Text allowFontScaling={false} style={styles.hint}>
+                  Single elimination has no losers bracket.
+                </Text>
+              )}
+            </View>
           ) : (
             <View>
               <Text allowFontScaling={false} style={styles.hint}>
