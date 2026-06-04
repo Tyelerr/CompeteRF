@@ -171,12 +171,7 @@ interface SettingsForm {
   maxPlayers: string;
   tableCount: string;
   qrCheckIn: boolean;
-  spectatorView: boolean;
-  liveBracket: boolean;
-  autoAdvanceWinners: boolean;
   autoAssignTables: boolean;
-  autoGenerateNextRound: boolean;
-  matchTimer: boolean;
   raceMode: RaceMode;
   raceGroups: RaceGroupForm[];
 }
@@ -246,12 +241,7 @@ const toForm = (t: Tournament): SettingsForm => {
     maxPlayers: numStr(ls.maxPlayers),
     tableCount: numStr(ls.tableCount),
     qrCheckIn: !!ls.qrCheckIn,
-    spectatorView: !!ls.spectatorView,
-    liveBracket: !!ls.liveBracket,
-    autoAdvanceWinners: !!ls.autoAdvanceWinners,
     autoAssignTables: !!ls.autoAssignTables,
-    autoGenerateNextRound: !!ls.autoGenerateNextRound,
-    matchTimer: !!ls.matchTimer,
     raceMode: ls.raceMode ?? "fixed",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
       id: g.id,
@@ -305,12 +295,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     maxPlayers: intOrNull(f.maxPlayers),
     tableCount: intOrNull(f.tableCount),
     qrCheckIn: f.qrCheckIn,
-    spectatorView: f.spectatorView,
-    liveBracket: f.liveBracket,
-    autoAdvanceWinners: f.autoAdvanceWinners,
     autoAssignTables: f.autoAssignTables,
-    autoGenerateNextRound: f.autoGenerateNextRound,
-    matchTimer: f.matchTimer,
     raceMode: f.raceMode,
     fixedRaceWinners: winners,
     fixedRaceLosers: hasLosers ? losers : null,
@@ -1389,37 +1374,15 @@ export default function ManageTournamentScreen() {
             onValueChange={(v) => patchForm({ qrCheckIn: v })}
           />
           <ToggleSwitch
-            label="Spectator View"
-            value={form.spectatorView}
-            onValueChange={(v) => patchForm({ spectatorView: v })}
-          />
-          <ToggleSwitch
-            label="Live Bracket / View Tournament"
-            value={form.liveBracket}
-            onValueChange={(v) => patchForm({ liveBracket: v })}
-          />
-          <ToggleSwitch
-            label="Auto-Advance Winners"
-            value={form.autoAdvanceWinners}
-            onValueChange={(v) => patchForm({ autoAdvanceWinners: v })}
-          />
-          <ToggleSwitch
             label="Auto-Assign Tables"
             value={form.autoAssignTables}
             onValueChange={(v) => patchForm({ autoAssignTables: v })}
           />
-          <ToggleSwitch
-            label="Auto-Generate Next Round"
-            value={form.autoGenerateNextRound}
-            onValueChange={(v) => patchForm({ autoGenerateNextRound: v })}
-          />
-          <ToggleSwitch
-            label="Match Timer"
-            value={form.matchTimer}
-            onValueChange={(v) => patchForm({ matchTimer: v })}
-          />
           <Text allowFontScaling={false} style={styles.hint}>
-            Some live features activate when the tournament is running.
+            The live bracket is the public tournament view for everyone. Players
+            auto-advance when a match is scored, and each match is timed once the
+            TD starts it. With Auto-Assign Tables on, tables are suggested at
+            match start — the TD can still change the table when starting a match.
           </Text>
         </Section>
 

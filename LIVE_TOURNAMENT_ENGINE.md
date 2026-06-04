@@ -308,3 +308,10 @@ filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced
 - Removed the "Manage Players" button (onManagePlayers) from the shared TournamentCard.
 - Removed the "Details" button + detail modal from the TD list (the hub supersedes it).
 - Retired `manage-players/[id].tsx`; its add/approve/list logic folded into the Players tab.
+
+### Live-features decisions (folded into Stage 2 Matches engine)
+- Settings "Live Features" toggles are reduced to **QR Check-In** + **Auto-Assign Tables**.
+- **Single public view:** there is no separate "Spectator View" / "Live Bracket" toggle — the live bracket IS the tournament view everyone sees (click bracket, search players). Same view for all.
+- **Auto-advance is default (both sides):** scoring a match advances BOTH players to their next bracket slot automatically (winners and losers). No "Auto-Advance Winners" / "Auto-Generate Next Round" toggles.
+- **Start Match dialog (Stage 2):** TD clicks a match -> popup shows the two players, the race, and the (auto-assigned, editable) table -> "Start Match". Auto-Assign Tables just pre-fills the table; TD can change it at start.
+- **Match timer is built-in:** every match is timed starting when the TD starts it. No per-tournament toggle.
