@@ -22,8 +22,6 @@ interface TournamentCardProps {
   tournament: TournamentCardData;
   onPress: () => void;
   onEdit?: () => void;
-  onManagePlayers?: () => void;
-  onDetails?: () => void;
   onDelete?: () => void;
   onArchive?: () => void;
   onCancel?: () => void;
@@ -58,7 +56,7 @@ const getStatusColor = (status: string): string => {
   }
 };
 
-export const TournamentCard = ({ tournament, onPress, onEdit, onManagePlayers, onDetails, onDelete, onArchive, onCancel, onRestore, isProcessing = false, showActions = true }: TournamentCardProps) => {
+export const TournamentCard = ({ tournament, onPress, onEdit, onDelete, onArchive, onCancel, onRestore, isProcessing = false, showActions = true }: TournamentCardProps) => {
   const statusColor = getStatusColor(tournament.status);
   const isArchived = tournament.status === "archived";
   const isCancelled = tournament.status === "cancelled";
@@ -128,16 +126,6 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onManagePlayers, o
         </View>
         {showActions && (
           <View style={styles.bottomActionIcons}>
-            {onDetails && (
-              <TouchableOpacity style={[styles.bottomActionIcon, styles.detailsButton]} onPress={(e) => { e.stopPropagation(); onDetails(); }} disabled={isProcessing}>
-                <Text allowFontScaling={false} style={[styles.actionButtonText, styles.detailsButtonText]}>Details</Text>
-              </TouchableOpacity>
-            )}
-            {onManagePlayers && (
-              <TouchableOpacity style={[styles.bottomActionIcon, styles.managePlayersButton]} onPress={(e) => { e.stopPropagation(); onManagePlayers(); }} disabled={isProcessing}>
-                <Text allowFontScaling={false} style={[styles.actionButtonText, styles.managePlayersButtonText]}>Players</Text>
-              </TouchableOpacity>
-            )}
             {tournament.can_edit && onEdit && (
               <TouchableOpacity style={[styles.bottomActionIcon, styles.editButton]} onPress={(e) => { e.stopPropagation(); onEdit(); }} disabled={isProcessing}>
                 <Text allowFontScaling={false} style={[styles.actionButtonText, styles.editButtonText]}>Edit</Text>
@@ -196,10 +184,6 @@ const styles = StyleSheet.create({
   actionButtonText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
   editButton: { backgroundColor: "#22c55e", borderColor: "#16a34a" },
   editButtonText: { color: "#ffffff" },
-  managePlayersButton: { backgroundColor: "#8b5cf6", borderColor: "#7c3aed" },
-  managePlayersButtonText: { color: "#ffffff" },
-  detailsButton: { backgroundColor: COLORS.surfaceLight, borderColor: COLORS.border },
-  detailsButtonText: { color: COLORS.text },
   deleteButton: { backgroundColor: "#ef4444", borderColor: "#dc2626" },
   deleteButtonText: { color: "#ffffff" },
   archiveButton: { backgroundColor: "#3b82f6", borderColor: "#2563eb" },

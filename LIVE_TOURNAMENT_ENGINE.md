@@ -251,3 +251,60 @@ The build follows the data, not the screens.
 2. Lead with branch/setup command.
 3. Do all file work (full-file replacements via `[System.IO.File]::WriteAllText()` with UTF8).
 4. End with merge commands.
+
+---
+
+## 11. Manage Tournament Hub (refined design — supersedes the earlier Overview hub)
+
+Route: `app/(tabs)/admin/manage-tournament/[id].tsx`, opened by TAPPING a tournament
+card in the live TD list (`tournaments/tournament-director-manager.tsx`). One
+status-gated hub, local-state tabs, no deep navigation.
+
+### Tabs
+Settings | Players | Tables | Matches | Bracket | Results
+- Settings / Players / Tables: always available.
+- Matches / Bracket: unlock at `Running`.
+- Results: unlocks at `Running` (stays for `Completed`).
+
+### Status lifecycle (DERIVED — no dedicated column)
+Computed in `use.manage.tournament.ts` from (`status`, `live_state`, required-fields-present):
+Setup Incomplete -> Ready to Start Registration -> Registration Open ->
+Registration Closed -> Running -> Completed -> Archived.
+- "Setup Incomplete" vs "Ready to Start Registration" = whether name/game/format/venue/date/time are present.
+- "Start Registration" button (Settings tab) SAVES then flips `live_state` -> `registration_open`. Registration is never open by default.
+
+### Data / persistence
+- `tournaments.live_state` (5-state) + registration columns: ALREADY APPLIED in Phase 0.
+- NEW columns to apply: `is_paused`, `paused_at`, `current_round`; plus `live_settings jsonb` (setup toggles + race groups).
+- NEW table: `tournament_tables` (status available|in_use|unavailable, is_streaming, stream_link, match_id) + TD/admin RLS mirroring tournament_players (public SELECT; TD-of-tournament + super_admin/compete_admin write).
+- Existing columns reused directly (NOT duplicated in the blob): entry_fee, added_money, side_pots, max_fargo, etc.
+- `live_settings` blob (TournamentLiveSettings): bracketSize, maxPlayers, tableCount, raceMode ('fixed'|'groups'), raceGroups[], qrCheckIn, spectatorView, liveBracket, autoAdvanceWinners, autoAssignTables, autoGenerateNextRound, matchTimer.
+
+### Settings tab (PRE-FILLED review form, NOT re-entry)
+Seeded from the record. Fields: name, game type, format, game spot, race/description,
+max fargo, reports-to-fargo, open tournament, entry fee, money added, side pots,
+bracket size, max players, table count, date, start time, timezone (read-only),
+recurring, venue (read-only card — edit on the Edit Tournament screen), and the
+live-feature toggles. Race settings: Fixed Race OR A/B/C Race Groups (renamed from
+"Fargo Handicap Groups") — add/remove groups with Fargo range + race number each;
+per-player auto-calc with manual override deferred. EXCLUDES (by spec): player-type
+options, public/private/invite, Fargo Matrix, Calcutta section, Auction, SMS, staff
+notes, refund/conduct policies, season points, tour rankings.
+
+### Players tab (reuses Phase 0 registration layer)
+View / add / remove / approve / check-in / no-show, search filter, checked-in vs not
+filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced at
+75% of bracket size when set (unlimited otherwise). TD "remove" = updateRegistration(status:cancelled).
+
+### Build split
+- BUILD NOW (this slice, done): hub shell + tab gating, Settings tab (pre-filled + Save +
+  Start Registration), Players tab, `tournament_tables` data layer (types/service + hook
+  mutations), reviewed SQL. Tables/Matches/Bracket/Results = status-gated placeholders.
+- DEFER (later phases): Tables tab UI (add singly / in bulk, streaming link), live scoring,
+  auto-advance / auto-assign / auto-generate-next-round, match timer, bracket generation,
+  payouts/chop, spectator view, livestream surfacing, save-as-template inside the hub.
+
+### Cleanup done
+- Removed the "Manage Players" button (onManagePlayers) from the shared TournamentCard.
+- Removed the "Details" button + detail modal from the TD list (the hub supersedes it).
+- Retired `manage-players/[id].tsx`; its add/approve/list logic folded into the Players tab.

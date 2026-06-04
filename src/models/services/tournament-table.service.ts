@@ -17,7 +17,6 @@ import { TableStatus } from "../types/common.types";
 export const tournamentTableService = {
   // ---- Reads -------------------------------------------------------------
 
-  // All tables for a tournament (Overview metrics + Tables tab).
   async getTables(tournamentId: number): Promise<TournamentTable[]> {
     const { data, error } = await supabase
       .from("tournament_tables")
@@ -28,7 +27,6 @@ export const tournamentTableService = {
     return (data || []) as unknown as TournamentTable[];
   },
 
-  // One table by id (optional record -> maybeSingle).
   async getTable(id: number): Promise<TournamentTable | null> {
     const { data, error } = await supabase
       .from("tournament_tables")
@@ -51,6 +49,27 @@ export const tournamentTableService = {
     return data as unknown as TournamentTable;
   },
 
+  // Bulk create a contiguous range of plain tables, e.g. tables 1..15.
+  // Returns the inserted rows. Caller is responsible for non-overlapping numbers
+  // (the (tournament_id, table_number) unique index also guards duplicates).
+  async createTablesBulk(
+    tournamentId: number,
+    fromNumber: number,
+    toNumber: number,
+  ): Promise<TournamentTable[]> {
+    const rows: TournamentTableInsert[] = [];
+    for (let n = fromNumber; n <= toNumber; n++) {
+      rows.push({ tournament_id: tournamentId, table_number: n });
+    }
+    if (rows.length === 0) return [];
+    const { data, error } = await supabase
+      .from("tournament_tables")
+      .insert(rows)
+      .select();
+    if (error) throw error;
+    return (data || []) as unknown as TournamentTable[];
+  },
+
   async updateTable(
     id: number,
     updates: TournamentTableUpdate,
@@ -69,8 +88,19 @@ export const tournamentTableService = {
     return data as unknown as TournamentTable;
   },
 
-  async setStatus(id: number, status: TableStatus): Promise<TournamentTable> {
+  setStatus(id: number, status: TableStatus): Promise<TournamentTable> {
     return tournamentTableService.updateTable(id, { status });
+  },
+
+  setStreaming(
+    id: number,
+    isStreaming: boolean,
+    streamLink?: string | null,
+  ): Promise<TournamentTable> {
+    return tournamentTableService.updateTable(id, {
+      is_streaming: isStreaming,
+      stream_link: isStreaming ? (streamLink ?? null) : null,
+    });
   },
 
   async deleteTable(id: number): Promise<void> {

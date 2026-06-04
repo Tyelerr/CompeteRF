@@ -1,14 +1,17 @@
 // app/(tabs)/admin/manage-tournament/[id].tsx
 // "Manage Tournament" command-center hub. Reached by tapping a tournament card
-// in tournament-director-manager.tsx. Local-state segmented tabs (no deep nav):
-// Overview | Players | Tables | Matches | Bracket | Results.
+// in tournament-director-manager.tsx. Local-state tabs (no deep nav):
+// Settings | Players | Tables | Matches | Bracket | Results.
 //
-// Players tab folds in the AddPlayerModal + RegistrationRow that previously
-// lived in app/(tabs)/admin/manage-players/[id].tsx (now retired). Emoji are
-// written as Unicode escapes (the old file's literals were encoding-corrupted).
+// The tournament's derived lifecycle phase gates the tabs: Settings/Players/
+// Tables are always available; Matches/Bracket/Results unlock at "Running".
+//
+// Settings is a PRE-FILLED review form (not re-entry) seeded from the record.
+// Players reuses the registration data layer (add / approve / check-in / remove
+// / no-show / search). Glyphs are Unicode escapes (raw emoji corrupt here).
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,34 +29,39 @@ import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { webMs, webSc } from "../../../../src/utils/scaling";
 import {
+  GAME_TYPES,
+  START_TIMES,
+  TOURNAMENT_FORMATS,
+} from "../../../../src/utils/tournament-form-data";
+import {
+  GameType,
   RegistrationStatus,
-  TournamentLiveState,
+  TournamentFormat,
 } from "../../../../src/models/types/common.types";
 import { Profile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
-import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
-import { useManageTournament } from "../../../../src/viewmodels/hooks/use.manage.tournament";
+import { Tournament } from "../../../../src/models/types/tournament.types";
+import {
+  RaceMode,
+} from "../../../../src/models/types/tournament-settings.types";
+import { Dropdown } from "../../../../src/views/components/common/dropdown";
+import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
+import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
+import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
+import {
+  ManagePhase,
+  useManageTournament,
+} from "../../../../src/viewmodels/hooks/use.manage.tournament";
 
 const isWeb = Platform.OS === "web";
 
 // Unicode-escaped glyphs (raw emoji in the source corrupt under our toolchain).
-const GLYPH = {
-  back: "\u2190", // left arrow
-  search: "\uD83D\uDD0D", // magnifying glass
-  add: "\u2795", // heavy plus
-  check: "\u2713", // check mark
-  people: "\uD83D\uDC65", // busts in silhouette
-  table: "\uD83C\uDFB1", // billiards
-  bracket: "\uD83C\uDF1F", // glowing star
-  trophy: "\uD83C\uDFC6", // trophy
-  clipboard: "\uD83D\uDCCB", // clipboard
-  pause: "\u23F8", // pause symbol
-  play: "\u25B6", // play triangle
-};
+const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12" };
 
+// ── Tabs ─────────────────────────────────────────────────────────────────────
 type TabKey =
-  | "overview"
+  | "settings"
   | "players"
   | "tables"
   | "matches"
@@ -61,7 +69,7 @@ type TabKey =
   | "results";
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: "overview", label: "Overview" },
+  { key: "settings", label: "Settings" },
   { key: "players", label: "Players" },
   { key: "tables", label: "Tables" },
   { key: "matches", label: "Matches" },
@@ -69,22 +77,28 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "results", label: "Results" },
 ];
 
-// ── Live-state presentation ─────────────────────────────────────────────────
-const LIVE_STATE_META: Record<
-  TournamentLiveState,
-  { label: string; color: string }
-> = {
-  not_started: { label: "Not Started", color: COLORS.textMuted },
-  registration_open: { label: "Registration Open", color: COLORS.success },
-  registration_closed: { label: "Registration Closed", color: COLORS.warning },
-  in_progress: { label: "In Progress", color: COLORS.primary },
-  finished: { label: "Finished", color: COLORS.textSecondary },
+// Matches/Bracket unlock at Running; Results at Running or later.
+const tabEnabled = (key: TabKey, phase: ManagePhase): boolean => {
+  if (key === "matches" || key === "bracket") return phase === "running";
+  if (key === "results") return phase === "running" || phase === "completed";
+  return true; // settings / players / tables
 };
 
-// ── Registration presentation ───────────────────────────────────────────────
+// ── Phase presentation ───────────────────────────────────────────────────────
+const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
+  setup_incomplete: { label: "Setup Incomplete", color: COLORS.warning },
+  ready_to_open: { label: "Ready to Start Registration", color: COLORS.primary },
+  registration_open: { label: "Registration Open", color: COLORS.success },
+  registration_closed: { label: "Registration Closed", color: COLORS.warning },
+  running: { label: "Running", color: COLORS.primary },
+  completed: { label: "Completed", color: COLORS.textSecondary },
+  archived: { label: "Archived", color: COLORS.textSecondary },
+};
+
+// ── Registration presentation ────────────────────────────────────────────────
 const NEEDS_APPROVAL: RegistrationStatus[] = ["preregistered", "queued"];
 
-const getStatusColor = (status: RegistrationStatus): string => {
+const getRegStatusColor = (status: RegistrationStatus): string => {
   switch (status) {
     case "approved":
       return COLORS.success;
@@ -101,29 +115,201 @@ const getStatusColor = (status: RegistrationStatus): string => {
   }
 };
 
-const getDisplayName = (registration: Registration): string => {
-  if (registration.player_id && registration.profiles) {
-    return registration.profiles.name || registration.profiles.user_name;
-  }
-  return registration.guest_name || "Unnamed guest";
+const getDisplayName = (r: Registration): string => {
+  if (r.player_id && r.profiles) return r.profiles.name || r.profiles.user_name;
+  return r.guest_name || "Unnamed guest";
 };
 
-const formatStart = (date?: string, time?: string): string => {
-  if (!date) return "—";
-  const [y, m, d] = date.split("-").map(Number);
-  const label = new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-  if (!time) return label;
-  const [hRaw, min] = time.split(":");
-  const hour = parseInt(hRaw, 10);
-  const ampm = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 || 12;
-  return `${label}, ${hour12}:${min} ${ampm}`;
+// ── Settings form state ──────────────────────────────────────────────────────
+interface SidePotForm {
+  name: string;
+  amount: string;
+}
+interface RaceGroupForm {
+  id: string;
+  label: string;
+  minFargo: string;
+  maxFargo: string;
+  raceTo: string;
+}
+interface SettingsForm {
+  name: string;
+  gameType: string;
+  tournamentFormat: string;
+  gameSpot: string;
+  race: string;
+  description: string;
+  maxFargo: string;
+  entryFee: string;
+  addedMoney: string;
+  reportsToFargo: boolean;
+  openTournament: boolean;
+  isRecurring: boolean;
+  tournamentDate: string;
+  startTime: string;
+  sidePots: SidePotForm[];
+  bracketSize: string;
+  maxPlayers: string;
+  tableCount: string;
+  qrCheckIn: boolean;
+  spectatorView: boolean;
+  liveBracket: boolean;
+  autoAdvanceWinners: boolean;
+  autoAssignTables: boolean;
+  autoGenerateNextRound: boolean;
+  matchTimer: boolean;
+  raceMode: RaceMode;
+  raceGroups: RaceGroupForm[];
+}
+
+const numOrNull = (s: string): number | null => {
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+};
+const intOrNull = (s: string): number | null => {
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+};
+const numStr = (n: number | null | undefined): string =>
+  n === null || n === undefined ? "" : String(n);
+
+const toForm = (t: Tournament): SettingsForm => {
+  const ls = t.live_settings ?? {};
+  return {
+    name: t.name ?? "",
+    gameType: t.game_type ?? "",
+    tournamentFormat: t.tournament_format ?? "",
+    gameSpot: t.game_spot ?? "",
+    race: t.race ?? "",
+    description: t.description ?? "",
+    maxFargo: numStr(t.max_fargo),
+    entryFee: numStr(t.entry_fee),
+    addedMoney: numStr(t.added_money),
+    reportsToFargo: !!t.reports_to_fargo,
+    openTournament: !!t.open_tournament,
+    isRecurring: !!t.is_recurring,
+    tournamentDate: t.tournament_date ?? "",
+    startTime: t.start_time ?? "",
+    sidePots: (t.side_pots ?? []).map((p) => ({
+      name: p.name ?? "",
+      amount: numStr(p.amount as number),
+    })),
+    bracketSize: numStr(ls.bracketSize),
+    maxPlayers: numStr(ls.maxPlayers),
+    tableCount: numStr(ls.tableCount),
+    qrCheckIn: !!ls.qrCheckIn,
+    spectatorView: !!ls.spectatorView,
+    liveBracket: !!ls.liveBracket,
+    autoAdvanceWinners: !!ls.autoAdvanceWinners,
+    autoAssignTables: !!ls.autoAssignTables,
+    autoGenerateNextRound: !!ls.autoGenerateNextRound,
+    matchTimer: !!ls.matchTimer,
+    raceMode: ls.raceMode ?? "fixed",
+    raceGroups: (ls.raceGroups ?? []).map((g) => ({
+      id: g.id,
+      label: g.label,
+      minFargo: numStr(g.minFargo),
+      maxFargo: numStr(g.maxFargo),
+      raceTo: numStr(g.raceTo),
+    })),
+  };
 };
 
-// ── Add Player Modal (folded from manage-players/[id].tsx) ───────────────────
+const toPatch = (f: SettingsForm): Partial<Tournament> => ({
+  name: f.name.trim(),
+  game_type: f.gameType as GameType,
+  tournament_format: f.tournamentFormat as TournamentFormat,
+  game_spot: f.gameSpot.trim(),
+  race: f.race.trim(),
+  description: f.description.trim(),
+  max_fargo: intOrNull(f.maxFargo) ?? undefined,
+  entry_fee: numOrNull(f.entryFee) ?? undefined,
+  added_money: numOrNull(f.addedMoney) ?? undefined,
+  reports_to_fargo: f.reportsToFargo,
+  open_tournament: f.openTournament,
+  is_recurring: f.isRecurring,
+  tournament_date: f.tournamentDate,
+  start_time: f.startTime,
+  side_pots: f.sidePots
+    .filter((p) => p.name.trim())
+    .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
+  live_settings: {
+    bracketSize: intOrNull(f.bracketSize),
+    maxPlayers: intOrNull(f.maxPlayers),
+    tableCount: intOrNull(f.tableCount),
+    qrCheckIn: f.qrCheckIn,
+    spectatorView: f.spectatorView,
+    liveBracket: f.liveBracket,
+    autoAdvanceWinners: f.autoAdvanceWinners,
+    autoAssignTables: f.autoAssignTables,
+    autoGenerateNextRound: f.autoGenerateNextRound,
+    matchTimer: f.matchTimer,
+    raceMode: f.raceMode,
+    raceGroups: f.raceGroups.map((g) => ({
+      id: g.id,
+      label: g.label.trim(),
+      minFargo: intOrNull(g.minFargo) ?? 0,
+      maxFargo: intOrNull(g.maxFargo) ?? 0,
+      raceTo: intOrNull(g.raceTo) ?? 0,
+    })),
+  },
+});
+
+// ── Small building blocks ────────────────────────────────────────────────────
+const Section = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) => (
+  <View style={styles.section}>
+    <Text allowFontScaling={false} style={styles.sectionTitle}>
+      {title}
+    </Text>
+    {children}
+  </View>
+);
+
+const LabeledInput = ({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  multiline,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder?: string;
+  keyboardType?: "default" | "numeric" | "decimal-pad" | "phone-pad";
+  multiline?: boolean;
+}) => (
+  <View style={styles.field}>
+    <Text allowFontScaling={false} style={styles.fieldLabel}>
+      {label}
+    </Text>
+    <TextInput
+      allowFontScaling={false}
+      style={[styles.input, multiline && styles.inputMultiline]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={COLORS.textMuted}
+      keyboardType={keyboardType ?? "default"}
+      multiline={multiline}
+    />
+  </View>
+);
+
+const FieldLabel = ({ label }: { label: string }) => (
+  <Text allowFontScaling={false} style={styles.fieldLabel}>
+    {label}
+  </Text>
+);
+
+// ── Add Player Modal (reused from the retired manage-players screen) ──────────
 const AddPlayerModal = ({
   visible,
   onClose,
@@ -169,13 +355,11 @@ const AddPlayerModal = ({
 
           {guestMode ? (
             <>
-              <Text allowFontScaling={false} style={styles.modalLabel}>
-                Guest Name *
-              </Text>
+              <FieldLabel label="Guest Name *" />
               <TextInput
-                style={styles.modalInput}
+                style={styles.input}
                 placeholder="Enter guest name..."
-                placeholderTextColor={COLORS.textSecondary}
+                placeholderTextColor={COLORS.textMuted}
                 value={guestName}
                 onChangeText={setGuestName}
                 autoFocus
@@ -184,7 +368,6 @@ const AddPlayerModal = ({
                 Guests don&apos;t need an app account. They&apos;re added with a
                 name only.
               </Text>
-
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={styles.modalButtonCancel}
@@ -224,7 +407,7 @@ const AddPlayerModal = ({
                 <TextInput
                   style={styles.searchInput}
                   placeholder="Search by name or username..."
-                  placeholderTextColor={COLORS.textSecondary}
+                  placeholderTextColor={COLORS.textMuted}
                   value={search.query}
                   onChangeText={search.setQuery}
                   autoFocus
@@ -265,7 +448,7 @@ const AddPlayerModal = ({
                         style={styles.resultMeta}
                         numberOfLines={1}
                       >
-                        @{profile.user_name} {"·"} #{profile.id_auto}
+                        @{profile.user_name} {"\u00B7"} #{profile.id_auto}
                       </Text>
                     </View>
                     <Text allowFontScaling={false} style={styles.resultAdd}>
@@ -309,7 +492,7 @@ const AddPlayerModal = ({
   );
 };
 
-// ── Registration Row (folded + expanded TD actions) ─────────────────────────
+// ── Registration Row ─────────────────────────────────────────────────────────
 const RegistrationRow = ({
   registration,
   onApprove,
@@ -325,12 +508,13 @@ const RegistrationRow = ({
   onRemove: () => void;
   isProcessing: boolean;
 }) => {
-  const statusColor = getStatusColor(registration.status);
+  const statusColor = getRegStatusColor(registration.status);
   const isGuest = !registration.player_id;
   const needsApproval = NEEDS_APPROVAL.includes(registration.status);
   const canCheckIn = registration.status === "approved";
   const isClosed =
     registration.status === "cancelled" || registration.status === "no_show";
+  const fargo = registration.fargo_rating;
 
   return (
     <View style={styles.regCard}>
@@ -357,15 +541,23 @@ const RegistrationRow = ({
             )
           )}
         </View>
-        <View
-          style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}
-        >
-          <Text
-            allowFontScaling={false}
-            style={[styles.statusText, { color: statusColor }]}
-          >
-            {registration.status.replace("_", " ")}
+        <View style={styles.regMeta}>
+          <Text allowFontScaling={false} style={styles.fargoText}>
+            {fargo != null ? `Fargo ${fargo}` : "No Fargo"}
           </Text>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: statusColor + "20" },
+            ]}
+          >
+            <Text
+              allowFontScaling={false}
+              style={[styles.statusText, { color: statusColor }]}
+            >
+              {registration.status.replace("_", " ")}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -378,7 +570,7 @@ const RegistrationRow = ({
               disabled={isProcessing}
             >
               <Text allowFontScaling={false} style={styles.approveBtnText}>
-                {isProcessing ? "..." : `${GLYPH.check} Approve`}
+                {isProcessing ? "..." : "Approve"}
               </Text>
             </TouchableOpacity>
           )}
@@ -417,37 +609,19 @@ const RegistrationRow = ({
   );
 };
 
-// ── Generic metric card ──────────────────────────────────────────────────────
-const MetricCard = ({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) => (
-  <View style={styles.metricCard}>
-    <Text allowFontScaling={false} style={styles.metricValue} numberOfLines={1}>
-      {value}
-    </Text>
-    <Text allowFontScaling={false} style={styles.metricLabel} numberOfLines={2}>
-      {label}
-    </Text>
-  </View>
-);
-
-// ── Placeholder for not-yet-built tabs ───────────────────────────────────────
+// ── Locked / placeholder tab ─────────────────────────────────────────────────
 const TabPlaceholder = ({
-  glyph,
+  locked,
   title,
   body,
 }: {
-  glyph: string;
+  locked: boolean;
   title: string;
   body: string;
 }) => (
   <View style={styles.placeholder}>
     <Text allowFontScaling={false} style={styles.placeholderGlyph}>
-      {glyph}
+      {locked ? GLYPH.lock : ""}
     </Text>
     <Text allowFontScaling={false} style={styles.placeholderTitle}>
       {title}
@@ -466,17 +640,104 @@ export default function ManageTournamentScreen() {
   const paramName = params.name || "";
 
   const hub = useManageTournament(tournamentId);
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [activeTab, setActiveTab] = useState<TabKey>("settings");
 
+  // Settings form (seeded once from the record).
+  const [form, setForm] = useState<SettingsForm | null>(null);
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!seededRef.current && hub.tournament) {
+      setForm(toForm(hub.tournament));
+      seededRef.current = true;
+    }
+  }, [hub.tournament]);
+
+  // Players tab state
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [checkedInFilter, setCheckedInFilter] = useState<
+    "all" | "checked" | "unchecked"
+  >("all");
 
   const tournamentName = hub.tournament?.name || paramName || "Tournament";
-  const stateMeta = LIVE_STATE_META[hub.liveState];
+  const phaseMeta = PHASE_META[hub.phase];
+
+  // ---- Settings handlers --------------------------------------------------
+  const patchForm = (patch: Partial<SettingsForm>) =>
+    setForm((f) => (f ? { ...f, ...patch } : f));
+
+  const handleSave = async () => {
+    if (!form) return;
+    try {
+      await hub.saveSettings(toPatch(form));
+      Alert.alert("Saved", "Tournament settings updated.");
+    } catch {
+      Alert.alert("Error", "Failed to save settings. Please try again.");
+    }
+  };
+
+  const handleStartRegistration = () => {
+    Alert.alert(
+      "Start Registration",
+      "Save settings and open registration? Players will be able to register once this is on.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start Registration",
+          onPress: async () => {
+            if (!form) return;
+            try {
+              await hub.saveSettings(toPatch(form));
+              await hub.startRegistration();
+            } catch {
+              Alert.alert("Error", "Failed to start registration.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Side pots
+  const addSidePot = () =>
+    patchForm({ sidePots: [...(form?.sidePots ?? []), { name: "", amount: "" }] });
+  const updateSidePot = (i: number, key: keyof SidePotForm, v: string) =>
+    patchForm({
+      sidePots: (form?.sidePots ?? []).map((p, idx) =>
+        idx === i ? { ...p, [key]: v } : p,
+      ),
+    });
+  const removeSidePot = (i: number) =>
+    patchForm({ sidePots: (form?.sidePots ?? []).filter((_, idx) => idx !== i) });
+
+  // Race groups
+  const addRaceGroup = () =>
+    patchForm({
+      raceGroups: [
+        ...(form?.raceGroups ?? []),
+        {
+          id: `g${(form?.raceGroups?.length ?? 0) + 1}-${tournamentId}`,
+          label: "",
+          minFargo: "",
+          maxFargo: "",
+          raceTo: "",
+        },
+      ],
+    });
+  const updateRaceGroup = (i: number, key: keyof RaceGroupForm, v: string) =>
+    patchForm({
+      raceGroups: (form?.raceGroups ?? []).map((g, idx) =>
+        idx === i ? { ...g, [key]: v } : g,
+      ),
+    });
+  const removeRaceGroup = (i: number) =>
+    patchForm({
+      raceGroups: (form?.raceGroups ?? []).filter((_, idx) => idx !== i),
+    });
 
   // ---- Players handlers ---------------------------------------------------
-
   const handleAddPlayer = async (profile: Profile) => {
     const existing = hub.registrations.find(
       (r) => r.player_id === profile.id_auto && r.status !== "cancelled",
@@ -519,284 +780,433 @@ export default function ManageTournamentScreen() {
     }
   };
 
-  const handleApprove = async (registration: Registration) => {
-    setProcessingId(registration.id);
-    try {
-      await hub.approve(registration.id);
-    } catch {
-      Alert.alert("Error", "Failed to approve registration.");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleCheckIn = async (registration: Registration) => {
-    setProcessingId(registration.id);
-    try {
-      await hub.checkIn(registration.id);
-    } catch {
-      Alert.alert("Error", "Failed to check the player in.");
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleNoShow = (registration: Registration) => {
-    Alert.alert(
-      "Mark No-Show",
-      `Mark ${getDisplayName(registration)} as a no-show?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Mark No-Show",
-          style: "destructive",
-          onPress: async () => {
-            setProcessingId(registration.id);
-            try {
-              await hub.markNoShow(registration.id);
-            } catch {
-              Alert.alert("Error", "Failed to mark no-show.");
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleRemove = (registration: Registration) => {
-    Alert.alert(
-      "Remove Player",
-      `Remove ${getDisplayName(registration)} from this tournament?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            setProcessingId(registration.id);
-            try {
-              // TD "remove" = soft-cancel the registration row.
-              await hub.updateRegistration({
-                id: registration.id,
-                updates: { status: "cancelled" },
-              });
-            } catch {
-              Alert.alert("Error", "Failed to remove player.");
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  // ---- Quick-action handlers (Overview) -----------------------------------
-
-  const runLive = async (fn: () => Promise<unknown>, errorMsg: string) => {
+  const withProcessing = async (id: number, fn: () => Promise<unknown>, err: string) => {
+    setProcessingId(id);
     try {
       await fn();
     } catch {
-      Alert.alert("Error", errorMsg);
+      Alert.alert("Error", err);
+    } finally {
+      setProcessingId(null);
     }
   };
 
-  const confirmThen = (
-    title: string,
-    message: string,
-    confirmLabel: string,
-    fn: () => void,
-  ) =>
-    Alert.alert(title, message, [
+  const handleApprove = (r: Registration) =>
+    withProcessing(r.id, () => hub.approve(r.id), "Failed to approve.");
+  const handleCheckIn = (r: Registration) =>
+    withProcessing(r.id, () => hub.checkIn(r.id), "Failed to check in.");
+
+  const handleNoShow = (r: Registration) =>
+    Alert.alert("Mark No-Show", `Mark ${getDisplayName(r)} as a no-show?`, [
       { text: "Cancel", style: "cancel" },
-      { text: confirmLabel, onPress: fn },
+      {
+        text: "Mark No-Show",
+        style: "destructive",
+        onPress: () =>
+          withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show."),
+      },
     ]);
 
-  const handleStart = () =>
-    confirmThen(
-      "Start Tournament",
-      "Confirm you want to start. Any later changes will notify all players.",
-      "Start",
-      () => runLive(hub.start, "Failed to start the tournament."),
-    );
-
-  const handleComplete = () =>
-    confirmThen(
-      "Complete Tournament",
-      "Mark the live tournament as finished?",
-      "Complete",
-      () => runLive(hub.complete, "Failed to complete the tournament."),
-    );
-
-  const handleGenerateBracket = () =>
-    Alert.alert(
-      "Generate Bracket",
-      "Bracket generation arrives in Phase 2 (the live engine). This button is a placeholder for now.",
-    );
-
-  // ---- Tab content --------------------------------------------------------
-
-  const renderOverview = () => {
-    const quickActions: {
-      label: string;
-      onPress: () => void;
-      kind?: "primary" | "neutral" | "danger";
-    }[] = [];
-
-    if (hub.liveState === "not_started") {
-      quickActions.push({
-        label: "Open Registration",
+  const handleRemove = (r: Registration) =>
+    Alert.alert("Remove Player", `Remove ${getDisplayName(r)} from this tournament?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
         onPress: () =>
-          runLive(hub.openRegistration, "Failed to open registration."),
-        kind: "primary",
-      });
-    }
-    if (hub.liveState === "registration_open") {
-      quickActions.push({
-        label: "Close Registration",
-        onPress: () =>
-          runLive(hub.closeRegistration, "Failed to close registration."),
-        kind: "neutral",
-      });
-    }
-    if (hub.liveState === "registration_closed") {
-      quickActions.push({
-        label: "Start Tournament",
-        onPress: handleStart,
-        kind: "primary",
-      });
-    }
-    if (hub.liveState === "in_progress") {
-      quickActions.push({
-        label: "Generate Bracket",
-        onPress: handleGenerateBracket,
-        kind: "neutral",
-      });
-      quickActions.push(
-        hub.isPaused
-          ? {
-              label: `${GLYPH.play} Resume`,
-              onPress: () => runLive(hub.resume, "Failed to resume."),
-              kind: "primary",
-            }
-          : {
-              label: `${GLYPH.pause} Pause`,
-              onPress: () => runLive(hub.pause, "Failed to pause."),
-              kind: "neutral",
-            },
+          withProcessing(
+            r.id,
+            // TD "remove" = soft-cancel the registration row.
+            () => hub.updateRegistration({ id: r.id, updates: { status: "cancelled" } }),
+            "Failed to remove player.",
+          ),
+      },
+    ]);
+
+  // ---- Derived player lists ----------------------------------------------
+  const activeRegs = useMemo(
+    () => hub.registrations.filter((r) => r.status !== "cancelled"),
+    [hub.registrations],
+  );
+  const filteredRegs = useMemo(() => {
+    const q = playerSearch.trim().toLowerCase();
+    return activeRegs.filter((r) => {
+      if (checkedInFilter === "checked" && r.status !== "checked_in") return false;
+      if (checkedInFilter === "unchecked" && r.status === "checked_in") return false;
+      if (q && !getDisplayName(r).toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [activeRegs, playerSearch, checkedInFilter]);
+
+  const checkedInCount = activeRegs.filter((r) => r.status === "checked_in").length;
+  const bracketSize = hub.tournament?.live_settings?.bracketSize ?? null;
+  const onlineCap = bracketSize ? Math.floor(bracketSize * 0.75) : null;
+
+  // ---- Tab renderers ------------------------------------------------------
+  const renderSettings = () => {
+    if (!form) {
+      return (
+        <View style={styles.centerBlock}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
       );
-      quickActions.push({
-        label: "Complete",
-        onPress: handleComplete,
-        kind: "danger",
-      });
     }
-
-    const dash = (v: number | null) => (v === null ? "—" : String(v));
+    const venue = hub.tournament?.venues;
+    const canStart = hub.phase === "ready_to_open";
 
     return (
       <View>
-        <View style={styles.stateRow}>
-          <View
-            style={[
-              styles.stateBadge,
-              { backgroundColor: stateMeta.color + "20" },
-            ]}
-          >
-            <Text
-              allowFontScaling={false}
-              style={[styles.stateBadgeText, { color: stateMeta.color }]}
-            >
-              {stateMeta.label}
-            </Text>
+        <Section title="Tournament Details">
+          <LabeledInput
+            label="Name *"
+            value={form.name}
+            onChangeText={(v) => patchForm({ name: v })}
+            placeholder="Tournament name"
+          />
+          <View style={styles.field}>
+            <FieldLabel label="Game Type *" />
+            <Dropdown
+              placeholder="Select game type"
+              options={GAME_TYPES}
+              value={form.gameType}
+              onSelect={(v) => patchForm({ gameType: v })}
+            />
           </View>
-          {hub.isPaused && (
-            <View
-              style={[
-                styles.stateBadge,
-                { backgroundColor: COLORS.warning + "20" },
-              ]}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.stateBadgeText, { color: COLORS.warning }]}
-              >
-                {GLYPH.pause} Paused
-              </Text>
-            </View>
-          )}
-        </View>
+          <View style={styles.field}>
+            <FieldLabel label="Format *" />
+            <Dropdown
+              placeholder="Select format"
+              options={TOURNAMENT_FORMATS}
+              value={form.tournamentFormat}
+              onSelect={(v) => patchForm({ tournamentFormat: v })}
+            />
+          </View>
+          <LabeledInput
+            label="Game Spot"
+            value={form.gameSpot}
+            onChangeText={(v) => patchForm({ gameSpot: v })}
+            placeholder="e.g., The Ball"
+          />
+          <LabeledInput
+            label="Description"
+            value={form.description}
+            onChangeText={(v) => patchForm({ description: v })}
+            placeholder="Describe the tournament..."
+            multiline
+          />
+        </Section>
 
-        <View style={styles.metricGrid}>
-          <MetricCard label="Registered" value={hub.metrics.registered} />
-          <MetricCard label="Checked In" value={hub.metrics.checkedIn} />
-          <MetricCard
-            label="Active Matches"
-            value={dash(hub.metrics.activeMatches)}
-          />
-          <MetricCard
-            label="Waiting Matches"
-            value={dash(hub.metrics.waitingMatches)}
-          />
-          <MetricCard
-            label="Tables Available"
-            value={dash(hub.metrics.availableTables)}
-          />
-          <MetricCard
-            label="Tables Unavailable"
-            value={dash(hub.metrics.unavailableTables)}
-          />
-          <MetricCard label="Current Round" value={hub.metrics.currentRound} />
-          <MetricCard
-            label="Start"
-            value={formatStart(
-              hub.tournament?.tournament_date,
-              hub.tournament?.start_time,
-            )}
-          />
-        </View>
-
-        <Text allowFontScaling={false} style={styles.sectionTitle}>
-          Quick Actions
-        </Text>
-        {quickActions.length === 0 ? (
-          <Text allowFontScaling={false} style={styles.noActions}>
-            No actions available in this state.
-          </Text>
-        ) : (
-          <View style={styles.actionsWrap}>
-            {quickActions.map((a) => (
+        <Section title="Race">
+          <View style={styles.segmentRow}>
+            {(["fixed", "groups"] as RaceMode[]).map((mode) => (
               <TouchableOpacity
-                key={a.label}
+                key={mode}
                 style={[
-                  styles.actionBtn,
-                  a.kind === "primary" && styles.actionBtnPrimary,
-                  a.kind === "danger" && styles.actionBtnDanger,
+                  styles.segment,
+                  form.raceMode === mode && styles.segmentActive,
                 ]}
-                onPress={a.onPress}
-                disabled={hub.isMutatingLive}
+                onPress={() => patchForm({ raceMode: mode })}
               >
                 <Text
                   allowFontScaling={false}
                   style={[
-                    styles.actionBtnText,
-                    a.kind === "primary" && styles.actionBtnTextOnFill,
-                    a.kind === "danger" && styles.actionBtnTextOnFill,
+                    styles.segmentText,
+                    form.raceMode === mode && styles.segmentTextActive,
                   ]}
                 >
-                  {a.label}
+                  {mode === "fixed" ? "Fixed Race" : "A/B/C Race Groups"}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-        )}
-        {hub.isMutatingLive && (
-          <ActivityIndicator
-            style={{ marginTop: webSc(SPACING.md) }}
-            color={COLORS.primary}
+
+          {form.raceMode === "fixed" ? (
+            <LabeledInput
+              label="Race"
+              value={form.race}
+              onChangeText={(v) => patchForm({ race: v })}
+              placeholder="e.g., Race to 5"
+            />
+          ) : (
+            <View>
+              <Text allowFontScaling={false} style={styles.hint}>
+                Players are auto-assigned a race from the group their Fargo falls
+                in (manual override per player later).
+              </Text>
+              {form.raceGroups.map((g, i) => (
+                <View key={g.id} style={styles.groupRow}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupLabel]}
+                    value={g.label}
+                    onChangeText={(v) => updateRaceGroup(i, "label", v)}
+                    placeholder="A"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.minFargo}
+                    onChangeText={(v) => updateRaceGroup(i, "minFargo", v)}
+                    placeholder="Min"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.maxFargo}
+                    onChangeText={(v) => updateRaceGroup(i, "maxFargo", v)}
+                    placeholder="Max"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.raceTo}
+                    onChangeText={(v) => updateRaceGroup(i, "raceTo", v)}
+                    placeholder="Race"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TouchableOpacity
+                    style={styles.groupRemove}
+                    onPress={() => removeRaceGroup(i)}
+                  >
+                    <Text allowFontScaling={false} style={styles.groupRemoveText}>
+                      {"\u2715"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity style={styles.addRowBtn} onPress={addRaceGroup}>
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                  + Add Group
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Section>
+
+        <Section title="Fargo">
+          <LabeledInput
+            label="Maximum Fargo"
+            value={form.maxFargo}
+            onChangeText={(v) => patchForm({ maxFargo: v })}
+            placeholder="e.g., 550 (blank = open)"
+            keyboardType="numeric"
           />
+          <ToggleSwitch
+            label="Reports to Fargo"
+            value={form.reportsToFargo}
+            onValueChange={(v) => patchForm({ reportsToFargo: v })}
+          />
+          <ToggleSwitch
+            label="Open Tournament"
+            value={form.openTournament}
+            onValueChange={(v) => patchForm({ openTournament: v })}
+          />
+        </Section>
+
+        <Section title="Entry & Money">
+          <LabeledInput
+            label="Entry Fee"
+            value={form.entryFee}
+            onChangeText={(v) => patchForm({ entryFee: v })}
+            placeholder="$0.00"
+            keyboardType="decimal-pad"
+          />
+          <LabeledInput
+            label="Money Added"
+            value={form.addedMoney}
+            onChangeText={(v) => patchForm({ addedMoney: v })}
+            placeholder="$0.00"
+            keyboardType="decimal-pad"
+          />
+          <View style={styles.sidePotHeader}>
+            <FieldLabel label="Side Pots" />
+            <TouchableOpacity style={styles.addRowBtnSm} onPress={addSidePot}>
+              <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                + Add
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {form.sidePots.map((pot, i) => (
+            <View key={i} style={styles.sidePotRow}>
+              <TextInput
+                allowFontScaling={false}
+                style={[styles.input, styles.sidePotName]}
+                value={pot.name}
+                onChangeText={(v) => updateSidePot(i, "name", v)}
+                placeholder="Name"
+                placeholderTextColor={COLORS.textMuted}
+              />
+              <TextInput
+                allowFontScaling={false}
+                style={[styles.input, styles.sidePotAmount]}
+                value={pot.amount}
+                onChangeText={(v) => updateSidePot(i, "amount", v)}
+                placeholder="$"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="decimal-pad"
+              />
+              <TouchableOpacity
+                style={styles.groupRemove}
+                onPress={() => removeSidePot(i)}
+              >
+                <Text allowFontScaling={false} style={styles.groupRemoveText}>
+                  {"\u2715"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </Section>
+
+        <Section title="Capacity & Tables">
+          <LabeledInput
+            label="Bracket Size"
+            value={form.bracketSize}
+            onChangeText={(v) => patchForm({ bracketSize: v })}
+            placeholder="Blank = unlimited"
+            keyboardType="numeric"
+          />
+          <LabeledInput
+            label="Max Players"
+            value={form.maxPlayers}
+            onChangeText={(v) => patchForm({ maxPlayers: v })}
+            placeholder="Blank = unlimited"
+            keyboardType="numeric"
+          />
+          <LabeledInput
+            label="Table Count"
+            value={form.tableCount}
+            onChangeText={(v) => patchForm({ tableCount: v })}
+            placeholder="e.g., 8"
+            keyboardType="numeric"
+          />
+        </Section>
+
+        <Section title="Schedule">
+          <View style={styles.field}>
+            <FieldLabel label="Date *" />
+            <DatePicker
+              value={form.tournamentDate}
+              onChange={(v) => patchForm({ tournamentDate: v })}
+              placeholder="Select date"
+            />
+          </View>
+          <View style={styles.field}>
+            <FieldLabel label="Start Time *" />
+            <Dropdown
+              placeholder="Select start time"
+              options={START_TIMES}
+              value={form.startTime}
+              onSelect={(v) => patchForm({ startTime: v })}
+            />
+          </View>
+          <Text allowFontScaling={false} style={styles.hint}>
+            Timezone: {hub.tournament?.timezone || "—"}
+          </Text>
+          <ToggleSwitch
+            label="Recurring Tournament"
+            value={form.isRecurring}
+            onValueChange={(v) => patchForm({ isRecurring: v })}
+          />
+        </Section>
+
+        <Section title="Venue">
+          {venue ? (
+            <View style={styles.readOnlyCard}>
+              <Text allowFontScaling={false} style={styles.readOnlyName}>
+                {venue.venue}
+              </Text>
+              <Text allowFontScaling={false} style={styles.readOnlySub}>
+                {venue.address}
+              </Text>
+              <Text allowFontScaling={false} style={styles.readOnlySub}>
+                {venue.city}, {venue.state} {venue.zip_code}
+              </Text>
+            </View>
+          ) : (
+            <Text allowFontScaling={false} style={styles.hint}>
+              No venue on record.
+            </Text>
+          )}
+          <Text allowFontScaling={false} style={styles.hint}>
+            Venue and tournament image are changed on the Edit Tournament screen.
+          </Text>
+        </Section>
+
+        <Section title="Live Features">
+          <ToggleSwitch
+            label="QR Check-In"
+            value={form.qrCheckIn}
+            onValueChange={(v) => patchForm({ qrCheckIn: v })}
+          />
+          <ToggleSwitch
+            label="Spectator View"
+            value={form.spectatorView}
+            onValueChange={(v) => patchForm({ spectatorView: v })}
+          />
+          <ToggleSwitch
+            label="Live Bracket / View Tournament"
+            value={form.liveBracket}
+            onValueChange={(v) => patchForm({ liveBracket: v })}
+          />
+          <ToggleSwitch
+            label="Auto-Advance Winners"
+            value={form.autoAdvanceWinners}
+            onValueChange={(v) => patchForm({ autoAdvanceWinners: v })}
+          />
+          <ToggleSwitch
+            label="Auto-Assign Tables"
+            value={form.autoAssignTables}
+            onValueChange={(v) => patchForm({ autoAssignTables: v })}
+          />
+          <ToggleSwitch
+            label="Auto-Generate Next Round"
+            value={form.autoGenerateNextRound}
+            onValueChange={(v) => patchForm({ autoGenerateNextRound: v })}
+          />
+          <ToggleSwitch
+            label="Match Timer"
+            value={form.matchTimer}
+            onValueChange={(v) => patchForm({ matchTimer: v })}
+          />
+          <Text allowFontScaling={false} style={styles.hint}>
+            Some live features activate when the tournament is running.
+          </Text>
+        </Section>
+
+        <View style={styles.saveRow}>
+          <TouchableOpacity
+            style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
+            onPress={handleSave}
+            disabled={hub.isSaving}
+          >
+            <Text allowFontScaling={false} style={styles.saveBtnText}>
+              {hub.isSaving ? "Saving..." : "Save Settings"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.startBtn,
+              (!canStart || hub.isMutatingLive) && styles.btnDisabled,
+            ]}
+            onPress={handleStartRegistration}
+            disabled={!canStart || hub.isMutatingLive}
+          >
+            <Text allowFontScaling={false} style={styles.startBtnText}>
+              Start Registration
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {!canStart && hub.phase === "setup_incomplete" && (
+          <Text allowFontScaling={false} style={styles.startHint}>
+            Complete the required fields (name, game, format, venue, date, time)
+            to start registration.
+          </Text>
         )}
       </View>
     );
@@ -804,29 +1214,84 @@ export default function ManageTournamentScreen() {
 
   const renderPlayers = () => (
     <View>
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => setAddModalVisible(true)}
-      >
-        <Text allowFontScaling={false} style={styles.addButtonText}>
-          {GLYPH.add} Add Player
+      <View style={styles.playersTopRow}>
+        <View style={styles.countPills}>
+          <Text allowFontScaling={false} style={styles.countPill}>
+            {activeRegs.length} registered
+          </Text>
+          <Text allowFontScaling={false} style={styles.countPill}>
+            {checkedInCount} checked in
+          </Text>
+          {onlineCap != null && (
+            <Text allowFontScaling={false} style={styles.countPill}>
+              online cap {onlineCap}
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setAddModalVisible(true)}
+        >
+          <Text allowFontScaling={false} style={styles.addButtonText}>
+            + Add Player
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.searchInputWrapper}>
+        <Text allowFontScaling={false} style={styles.searchIcon}>
+          {GLYPH.search}
         </Text>
-      </TouchableOpacity>
+        <TextInput
+          allowFontScaling={false}
+          style={styles.searchInput}
+          placeholder="Filter registered players..."
+          placeholderTextColor={COLORS.textMuted}
+          value={playerSearch}
+          onChangeText={setPlayerSearch}
+        />
+      </View>
+
+      <View style={styles.segmentRow}>
+        {(
+          [
+            { key: "all", label: "All" },
+            { key: "unchecked", label: "Not Checked In" },
+            { key: "checked", label: "Checked In" },
+          ] as { key: "all" | "checked" | "unchecked"; label: string }[]
+        ).map((opt) => (
+          <TouchableOpacity
+            key={opt.key}
+            style={[
+              styles.segment,
+              checkedInFilter === opt.key && styles.segmentActive,
+            ]}
+            onPress={() => setCheckedInFilter(opt.key)}
+          >
+            <Text
+              allowFontScaling={false}
+              style={[
+                styles.segmentText,
+                checkedInFilter === opt.key && styles.segmentTextActive,
+              ]}
+            >
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {hub.registrationsLoading ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text allowFontScaling={false} style={styles.loadingText}>
-            Loading players...
-          </Text>
         </View>
-      ) : hub.registrations.length === 0 ? (
+      ) : filteredRegs.length === 0 ? (
         <EmptyState
-          message="No players registered yet"
-          submessage="Tap Add Player to register someone."
+          message="No players to show"
+          submessage="Add players or adjust the filter."
         />
       ) : (
-        hub.registrations.map((item) => (
+        filteredRegs.map((item) => (
           <RegistrationRow
             key={item.id}
             registration={item}
@@ -843,40 +1308,40 @@ export default function ManageTournamentScreen() {
 
   const renderTab = () => {
     switch (activeTab) {
-      case "overview":
-        return renderOverview();
+      case "settings":
+        return renderSettings();
       case "players":
         return renderPlayers();
       case "tables":
         return (
           <TabPlaceholder
-            glyph={GLYPH.table}
+            locked={false}
             title="Tables"
-            body="Add and assign playing tables here. Table status drives the Overview metrics. Full table management lands with the live engine (Phase 2)."
+            body="Add tables one at a time or in bulk (e.g. 1-15), set Available / In Use / Unavailable, and flag a streaming table with a stream link. UI lands next; the data layer is ready."
           />
         );
       case "matches":
         return (
           <TabPlaceholder
-            glyph={GLYPH.people}
+            locked={hub.phase !== "running"}
             title="Matches"
-            body="Live matches, scores, and TD controls (forfeit, complete early, pause) will appear here once the engine is built (Phase 2)."
+            body="Live matches, scores, and TD controls appear here once the tournament is running (Phase 2)."
           />
         );
       case "bracket":
         return (
           <TabPlaceholder
-            glyph={GLYPH.bracket}
+            locked={hub.phase !== "running"}
             title="Bracket"
-            body="The single- and double-elimination bracket view goes here. Generated from approved players with a random draw (Phase 2)."
+            body="The single / double elimination bracket appears here once the tournament is running (Phase 2)."
           />
         );
       case "results":
         return (
           <TabPlaceholder
-            glyph={GLYPH.trophy}
+            locked={hub.phase !== "running" && hub.phase !== "completed"}
             title="Results"
-            body="Final placements and payouts will be shown here, derived from elimination order (Phase 3)."
+            body="Final placements and payouts appear here after play begins (Phase 3)."
           />
         );
       default:
@@ -920,14 +1385,25 @@ export default function ManageTournamentScreen() {
           >
             {tournamentName}
           </Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>
-            {GLYPH.clipboard} Manage Tournament
-          </Text>
+          <View
+            style={[
+              styles.phaseBadge,
+              { backgroundColor: phaseMeta.color + "20" },
+            ]}
+          >
+            <Text
+              allowFontScaling={false}
+              style={[styles.phaseBadgeText, { color: phaseMeta.color }]}
+            >
+              {phaseMeta.label}
+              {hub.isPaused ? " · Paused" : ""}
+            </Text>
+          </View>
         </View>
         <View style={styles.placeholderSpace} />
       </View>
 
-      {/* Segmented tabs */}
+      {/* Tabs */}
       <View style={styles.tabBarWrap}>
         <ScrollView
           horizontal
@@ -936,6 +1412,7 @@ export default function ManageTournamentScreen() {
         >
           {TABS.map((tab) => {
             const active = tab.key === activeTab;
+            const enabled = tabEnabled(tab.key, hub.phase);
             return (
               <TouchableOpacity
                 key={tab.key}
@@ -944,9 +1421,14 @@ export default function ManageTournamentScreen() {
               >
                 <Text
                   allowFontScaling={false}
-                  style={[styles.tabText, active && styles.tabTextActive]}
+                  style={[
+                    styles.tabText,
+                    active && styles.tabTextActive,
+                    !enabled && styles.tabTextLocked,
+                  ]}
                 >
                   {tab.label}
+                  {!enabled ? ` ${GLYPH.lock}` : ""}
                 </Text>
               </TouchableOpacity>
             );
@@ -955,11 +1437,9 @@ export default function ManageTournamentScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          isWeb && styles.contentWeb,
-        ]}
+        contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {renderTab()}
       </ScrollView>
@@ -1007,20 +1487,26 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "600",
   },
-  headerCenter: { alignItems: "center", flex: 1, marginHorizontal: webSc(SPACING.sm) },
+  headerCenter: {
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: webSc(SPACING.sm),
+  },
   headerTitle: {
     fontSize: webMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
-  headerSubtitle: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.textSecondary,
-    marginTop: webSc(2),
+  phaseBadge: {
+    marginTop: webSc(4),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.full),
   },
+  phaseBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   placeholderSpace: { width: webSc(50) },
 
-  // Tab bar
+  // Tabs
   tabBarWrap: {
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
@@ -1044,102 +1530,224 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   tabTextActive: { color: COLORS.white },
+  tabTextLocked: { opacity: 0.6 },
 
-  // Content shell
+  // Content
   content: {
     padding: webSc(SPACING.md),
     paddingBottom: webSc(SPACING.xl * 2),
   },
   contentWeb: { alignItems: "stretch" },
 
-  // Overview — state badges
-  stateRow: {
-    flexDirection: "row",
-    gap: webSc(SPACING.sm),
-    marginBottom: webSc(SPACING.md),
-  },
-  stateBadge: {
-    paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.xs),
-    borderRadius: webSc(RADIUS.full),
-  },
-  stateBadgeText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
-
-  // Overview — metric grid
-  metricGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: webSc(SPACING.sm),
-  },
-  metricCard: {
-    flexGrow: 1,
-    flexBasis: "47%",
+  // Sections / fields
+  section: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
   },
-  metricValue: {
-    fontSize: webMs(FONT_SIZES.xxl),
+  sectionTitle: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "700",
+    color: COLORS.text,
+    marginBottom: webSc(SPACING.sm),
+  },
+  field: { marginBottom: webSc(SPACING.sm) },
+  fieldLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "500",
+    marginBottom: webSc(SPACING.xs),
+  },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
+  hint: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontStyle: "italic",
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+  },
+
+  // Segmented control (race mode + player filter)
+  segmentRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.sm),
+    flexWrap: "wrap",
+  },
+  segment: {
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.full),
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  segmentActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  segmentText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  segmentTextActive: { color: COLORS.white },
+
+  // Race groups
+  groupRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+    alignItems: "center",
+  },
+  groupLabel: { width: webSc(48) },
+  groupNum: { flex: 1, minWidth: webSc(48) },
+  groupRemove: {
+    width: webSc(32),
+    height: webSc(32),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  groupRemoveText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
+  addRowBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    alignItems: "center",
+    marginTop: webSc(SPACING.xs),
+  },
+  addRowBtnSm: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.md),
+  },
+  addRowBtnText: {
+    color: COLORS.primary,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+  },
+
+  // Side pots
+  sidePotHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: webSc(SPACING.xs),
+  },
+  sidePotRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+    alignItems: "center",
+  },
+  sidePotName: { flex: 2 },
+  sidePotAmount: { flex: 1 },
+
+  // Read-only cards (venue)
+  readOnlyCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    padding: webSc(SPACING.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  readOnlyName: {
+    fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.text,
   },
-  metricLabel: {
+  readOnlySub: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginTop: webSc(2),
   },
 
-  sectionTitle: {
-    fontSize: webMs(FONT_SIZES.md),
-    fontWeight: "700",
-    color: COLORS.text,
-    marginTop: webSc(SPACING.lg),
-    marginBottom: webSc(SPACING.sm),
+  // Save / start
+  saveRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.xs),
   },
-  noActions: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    fontStyle: "italic",
-  },
-  actionsWrap: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
-  actionBtn: {
-    flexGrow: 1,
-    flexBasis: "47%",
+  saveBtn: {
+    flex: 1,
     paddingVertical: webSc(SPACING.md),
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.primary,
     backgroundColor: COLORS.surface,
     alignItems: "center",
-    justifyContent: "center",
   },
-  actionBtnPrimary: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  actionBtnDanger: { backgroundColor: COLORS.error, borderColor: COLORS.error },
-  actionBtnText: {
-    fontSize: webMs(FONT_SIZES.sm),
+  saveBtnText: {
+    color: COLORS.primary,
+    fontSize: webMs(FONT_SIZES.md),
     fontWeight: "700",
-    color: COLORS.text,
   },
-  actionBtnTextOnFill: { color: COLORS.white },
-
-  // Players — add button
-  addButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: webSc(RADIUS.sm),
+  startBtn: {
+    flex: 1,
     paddingVertical: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.primary,
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: webSc(SPACING.md),
   },
-  addButtonText: {
+  startBtnText: {
     color: COLORS.white,
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "700",
   },
+  btnDisabled: { opacity: 0.5 },
+  startHint: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontStyle: "italic",
+    marginTop: webSc(SPACING.sm),
+  },
 
-  // Players — registration row
+  // Players
+  playersTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: webSc(SPACING.sm),
+    gap: webSc(SPACING.sm),
+    flexWrap: "wrap",
+  },
+  countPills: { flexDirection: "row", gap: webSc(SPACING.xs), flexWrap: "wrap" },
+  countPill: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.full),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    overflow: "hidden",
+  },
+  addButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+  },
+  addButtonText: {
+    color: COLORS.white,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
+
   regCard: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
@@ -1168,6 +1776,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   playerId: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  regMeta: { alignItems: "flex-end", gap: webSc(2) },
+  fargoText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
   guestTag: {
     backgroundColor: COLORS.textSecondary + "20",
     paddingHorizontal: webSc(SPACING.sm),
@@ -1180,7 +1790,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   statusBadge: {
-    alignSelf: "flex-start",
     paddingHorizontal: webSc(SPACING.sm),
     paddingVertical: webSc(2),
     borderRadius: webSc(RADIUS.md),
@@ -1197,7 +1806,6 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     alignItems: "center",
-    justifyContent: "center",
   },
   approveBtn: {
     backgroundColor: COLORS.success + "20",
@@ -1230,9 +1838,33 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Search input (modal + players filter)
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    height: webSc(40),
+    marginBottom: webSc(SPACING.sm),
+  },
+  searchIcon: {
+    fontSize: webMs(14),
+    marginRight: webSc(SPACING.sm),
+    opacity: 0.6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    height: webSc(40),
+  },
+
   // Placeholders
   placeholder: { alignItems: "center", paddingVertical: webSc(SPACING.xl * 2) },
-  placeholderGlyph: { fontSize: webMs(48), marginBottom: webSc(SPACING.md) },
+  placeholderGlyph: { fontSize: webMs(40), marginBottom: webSc(SPACING.sm) },
   placeholderTitle: {
     fontSize: webMs(FONT_SIZES.lg),
     fontWeight: "700",
@@ -1247,7 +1879,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.lg),
   },
 
-  // Add Player modal
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
@@ -1268,47 +1900,11 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: webSc(SPACING.md),
   },
-  modalLabel: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    marginBottom: webSc(SPACING.xs),
-    fontWeight: "500",
-  },
   modalHint: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     marginTop: webSc(SPACING.xs),
     fontStyle: "italic",
-  },
-  modalInput: {
-    backgroundColor: COLORS.background,
-    borderRadius: webSc(RADIUS.sm),
-    padding: webSc(SPACING.sm),
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  searchInputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.sm),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    height: webSc(40),
-  },
-  searchIcon: {
-    fontSize: webMs(14),
-    marginRight: webSc(SPACING.sm),
-    opacity: 0.6,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    height: webSc(40),
   },
   resultsList: { maxHeight: webSc(240), marginTop: webSc(SPACING.sm) },
   noResults: {

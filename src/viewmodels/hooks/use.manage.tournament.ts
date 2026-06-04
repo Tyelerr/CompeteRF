@@ -1,7 +1,8 @@
 // src/viewmodels/hooks/use.manage.tournament.ts
-// Viewmodel for the "Manage Tournament" command-center hub. Composes the
-// tournament record, its registrations, and its tables into screen-ready
-// metrics + the quick-action callbacks that drive tournaments.live_state.
+// Viewmodel for the "Manage Tournament" command-center hub. Loads the
+// tournament, derives its lifecycle phase, and exposes the Settings save +
+// live_state transitions, plus registration and table passthrough for the
+// Players / Tables tabs.
 //
 // Follows the codebase dot-naming (cf. use.registrations.ts). All data access
 // goes through services; the screen never touches Supabase.
@@ -10,8 +11,45 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
-import { TournamentLiveState } from "../../models/types/common.types";
+import { Tournament } from "../../models/types/tournament.types";
+import {
+  TournamentLiveState,
+  TableStatus,
+} from "../../models/types/common.types";
 import { useRegistrations } from "./use.registrations";
+
+// Front-end lifecycle the hub gates on. Derived from (status, live_state, and
+// whether the required setup fields are present) — no dedicated DB column.
+export type ManagePhase =
+  | "setup_incomplete"
+  | "ready_to_open"
+  | "registration_open"
+  | "registration_closed"
+  | "running"
+  | "completed"
+  | "archived";
+
+const requiredComplete = (t: Tournament): boolean =>
+  !!(
+    t.name &&
+    t.game_type &&
+    t.tournament_format &&
+    t.venue_id &&
+    t.tournament_date &&
+    t.start_time
+  );
+
+const derivePhase = (t: Tournament | null): ManagePhase => {
+  if (!t) return "setup_incomplete";
+  if (t.status === "archived") return "archived";
+  if (t.status === "completed" || t.live_state === "finished")
+    return "completed";
+  const ls: TournamentLiveState = t.live_state ?? "not_started";
+  if (ls === "in_progress") return "running";
+  if (ls === "registration_closed") return "registration_closed";
+  if (ls === "registration_open") return "registration_open";
+  return requiredComplete(t) ? "ready_to_open" : "setup_incomplete";
+};
 
 export const useManageTournament = (tournamentId?: number) => {
   const queryClient = useQueryClient();
@@ -24,9 +62,8 @@ export const useManageTournament = (tournamentId?: number) => {
     enabled: !!tournamentId,
   });
 
-  // Error-tolerant: the tournament_tables table may not exist yet (the Phase 0
-  // migration is review-gated). If the read fails we still render the hub and
-  // show "—" for table metrics rather than crashing.
+  // Error-tolerant: tournament_tables may not exist until the migration is
+  // applied. On failure we still render the hub and treat tables as empty.
   const tablesQuery = useQuery({
     queryKey: ["tournament-tables", tournamentId],
     queryFn: () => tournamentTableService.getTables(tournamentId!),
@@ -38,8 +75,18 @@ export const useManageTournament = (tournamentId?: number) => {
 
   const invalidateTournament = () =>
     queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] });
+  const invalidateTables = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["tournament-tables", tournamentId],
+    });
 
-  // ---- Live-state mutations ----------------------------------------------
+  // ---- Mutations ---------------------------------------------------------
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: (patch: Partial<Tournament>) =>
+      tournamentService.updateTournament(tournamentId!, patch),
+    onSuccess: invalidateTournament,
+  });
 
   const liveStateMutation = useMutation({
     mutationFn: (state: TournamentLiveState) =>
@@ -54,41 +101,63 @@ export const useManageTournament = (tournamentId?: number) => {
   });
 
   const completeMutation = useMutation({
-    // "Complete" finishes the live engine. Lifecycle status stays as-is here;
-    // marking the tournament `completed` is a separate Results-phase action.
     mutationFn: () => tournamentService.finishLiveTournament(tournamentId!),
     onSuccess: invalidateTournament,
   });
 
-  // ---- Derived metrics ----------------------------------------------------
+  // Table mutations (used by the Tables tab)
+  const createTableMutation = useMutation({
+    mutationFn: (vars: { tableNumber: number; label?: string | null }) =>
+      tournamentTableService.createTable({
+        tournament_id: tournamentId!,
+        table_number: vars.tableNumber,
+        label: vars.label ?? null,
+      }),
+    onSuccess: invalidateTables,
+  });
+
+  const createTablesBulkMutation = useMutation({
+    mutationFn: (vars: { from: number; to: number }) =>
+      tournamentTableService.createTablesBulk(
+        tournamentId!,
+        vars.from,
+        vars.to,
+      ),
+    onSuccess: invalidateTables,
+  });
+
+  const setTableStatusMutation = useMutation({
+    mutationFn: (vars: { id: number; status: TableStatus }) =>
+      tournamentTableService.setStatus(vars.id, vars.status),
+    onSuccess: invalidateTables,
+  });
+
+  const setTableStreamingMutation = useMutation({
+    mutationFn: (vars: {
+      id: number;
+      isStreaming: boolean;
+      streamLink?: string | null;
+    }) =>
+      tournamentTableService.setStreaming(
+        vars.id,
+        vars.isStreaming,
+        vars.streamLink,
+      ),
+    onSuccess: invalidateTables,
+  });
+
+  const deleteTableMutation = useMutation({
+    mutationFn: (id: number) => tournamentTableService.deleteTable(id),
+    onSuccess: invalidateTables,
+  });
+
+  // ---- Derived state ------------------------------------------------------
+
+  const tournament = tournamentQuery.data ?? null;
+  const phase = useMemo(() => derivePhase(tournament), [tournament]);
 
   const tablesReady = !tablesQuery.isError && tablesQuery.data !== undefined;
-  // Stable reference so the metrics useMemo below doesn't recompute every render.
   const tables = useMemo(() => tablesQuery.data ?? [], [tablesQuery.data]);
-
-  const metrics = useMemo(() => {
-    const regs = registrationsApi.registrations;
-    const active = regs.filter((r) => r.status !== "cancelled");
-    return {
-      registered: active.length,
-      checkedIn: active.filter((r) => r.status === "checked_in").length,
-      // null => render "—" (tables not migrated yet)
-      availableTables: tablesReady
-        ? tables.filter((t) => t.status === "available").length
-        : null,
-      unavailableTables: tablesReady
-        ? tables.filter((t) => t.status === "unavailable").length
-        : null,
-      // Matches arrive in Phase 2; null => render "—".
-      activeMatches: null as number | null,
-      waitingMatches: null as number | null,
-      currentRound: tournamentQuery.data?.current_round ?? 0,
-    };
-  }, [registrationsApi.registrations, tables, tablesReady, tournamentQuery.data?.current_round]);
-
-  const liveState: TournamentLiveState =
-    tournamentQuery.data?.live_state ?? "not_started";
-  const isPaused = tournamentQuery.data?.is_paused ?? false;
 
   const isMutatingLive =
     liveStateMutation.isPending ||
@@ -96,7 +165,7 @@ export const useManageTournament = (tournamentId?: number) => {
     completeMutation.isPending;
 
   return {
-    tournament: tournamentQuery.data ?? null,
+    tournament,
     isLoading: tournamentQuery.isLoading,
     error: tournamentQuery.error,
     refetch: () => {
@@ -105,15 +174,16 @@ export const useManageTournament = (tournamentId?: number) => {
       registrationsApi.refetch();
     },
 
-    // Live state + metrics for the Overview tab
-    liveState,
-    isPaused,
-    metrics,
-    tables,
-    tablesReady,
+    phase,
+    liveState: tournament?.live_state ?? "not_started",
+    isPaused: tournament?.is_paused ?? false,
 
-    // Quick actions (Overview). Pause/Resume drive is_paused, not live_state.
-    openRegistration: () => liveStateMutation.mutateAsync("registration_open"),
+    // Settings
+    saveSettings: saveSettingsMutation.mutateAsync,
+    isSaving: saveSettingsMutation.isPending,
+
+    // Live-state transitions (Pause/Resume drive is_paused, not live_state)
+    startRegistration: () => liveStateMutation.mutateAsync("registration_open"),
     closeRegistration: () =>
       liveStateMutation.mutateAsync("registration_closed"),
     start: () => liveStateMutation.mutateAsync("in_progress"),
@@ -122,7 +192,16 @@ export const useManageTournament = (tournamentId?: number) => {
     complete: () => completeMutation.mutateAsync(),
     isMutatingLive,
 
-    // Registration passthrough for the Players tab
+    // Tables
+    tables,
+    tablesReady,
+    createTable: createTableMutation.mutateAsync,
+    createTablesBulk: createTablesBulkMutation.mutateAsync,
+    setTableStatus: setTableStatusMutation.mutateAsync,
+    setTableStreaming: setTableStreamingMutation.mutateAsync,
+    deleteTable: deleteTableMutation.mutateAsync,
+
+    // Registrations passthrough (Players tab)
     registrations: registrationsApi.registrations,
     registrationsLoading: registrationsApi.isLoading,
     addPlayer: registrationsApi.addPlayer,

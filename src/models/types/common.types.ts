@@ -51,7 +51,6 @@ export type RegistrationStatus =
 export type TableStatus =
   | "available"
   | "in_use"
-  | "waiting"
   | "unavailable";
 export type VenueStatus = "active" | "inactive" | "archived";
 export type GiveawayStatus = "active" | "ended" | "awarded" | "archived";

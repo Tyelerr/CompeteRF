@@ -19,7 +19,6 @@ import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useTournamentDirectorManager } from "../../../../src/viewmodels/useTournamentDirectorManager";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { TournamentCard } from "../../../../src/views/components/tournament";
-import { TournamentDetailModal } from "../../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 
@@ -57,7 +56,6 @@ export default function TDTournamentsScreen() {
   const [paginatedTournaments, setPaginatedTournaments] = useState<any[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [processingTournamentId, setProcessingTournamentId] = useState<number | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     const newCurrentPage = 1;
@@ -155,11 +153,6 @@ export default function TDTournamentsScreen() {
     } as any);
   };
 
-  // The small "Details" button opens the read-only detail modal.
-  const handleDetails = (tournament: any) => {
-    setDetailId(String(tournament.id));
-  };
-
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
@@ -174,7 +167,6 @@ export default function TDTournamentsScreen() {
       <TournamentCard
         tournament={item}
         onPress={() => handleTournamentPress(item)}
-        onDetails={() => handleDetails(item)}
         onEdit={() => handleEdit(item)}
         onCancel={() => handleCancel(item)}
         onArchive={() => handleArchive(item)}
@@ -203,11 +195,6 @@ export default function TDTournamentsScreen() {
 
   return (
     <View style={styles.container}>
-      <TournamentDetailModal
-        id={detailId}
-        visible={detailId !== null}
-        onClose={() => setDetailId(null)}
-      />
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>

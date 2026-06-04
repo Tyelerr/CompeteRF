@@ -8,6 +8,7 @@ import {
   TournamentLiveState,
   TournamentStatus,
 } from "./common.types";
+import { TournamentLiveSettings } from "./tournament-settings.types";
 
 export interface Tournament {
   id: number;
@@ -47,6 +48,8 @@ export interface Tournament {
   is_paused?: boolean;
   paused_at?: string | null;
   current_round?: number;
+  // Live-engine setup choices without dedicated columns (JSONB blob).
+  live_settings?: TournamentLiveSettings;
   cancellation_reason?: string;
   cancelled_at?: string;
   cancelled_by?: number;
