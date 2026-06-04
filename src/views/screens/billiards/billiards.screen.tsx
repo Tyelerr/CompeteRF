@@ -79,6 +79,11 @@ export const BilliardsScreen = () => {
   const scrollUpAccRef = useRef(0);
   const [filterReady, setFilterReady] = useState(false);
 
+  // List geometry — used to avoid collapsing the header when the result set is
+  // too short to scroll back up (which would trap the header off-screen).
+  const listHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+
   // Prevents handleScroll from fighting the OS keyboard scroll when zip is focused
   const isZipFocusedRef = useRef(false);
 
@@ -114,7 +119,14 @@ export const BilliardsScreen = () => {
 
     if (dy > 2) {
       scrollUpAccRef.current = 0;
-      if (y > 40 && filterVisibleRef.current) {
+      // Only collapse when the list overflows enough that the user can still
+      // scroll back up past SCROLL_UP_THRESHOLD to re-expand it. Collapsing
+      // frees the header's height, so without this guard a short result set
+      // becomes unscrollable and the header is trapped off-screen.
+      const overflow = contentHeightRef.current - listHeightRef.current;
+      const canSafelyCollapse =
+        overflow > filterHeightRef.current + SCROLL_UP_THRESHOLD;
+      if (y > 40 && filterVisibleRef.current && canSafelyCollapse) {
         filterVisibleRef.current = false;
         Animated.timing(filterAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start();
       }
@@ -126,6 +138,15 @@ export const BilliardsScreen = () => {
         Animated.timing(filterAnim, { toValue: filterHeightRef.current, duration: 220, useNativeDriver: false }).start();
       }
     }
+  }, [filterAnim]);
+
+  // Re-open the collapsed filter header. Used to recover from a collapsed state
+  // when the result set is too short to scroll up manually.
+  const expandFilter = useCallback(() => {
+    if (isWeb || filterVisibleRef.current) return;
+    filterVisibleRef.current = true;
+    scrollUpAccRef.current = 0;
+    Animated.timing(filterAnim, { toValue: filterHeightRef.current, duration: 220, useNativeDriver: false }).start();
   }, [filterAnim]);
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -378,6 +399,15 @@ export const BilliardsScreen = () => {
             onScroll={handleScroll}
             scrollEventThrottle={16}
             bounces={false}
+            onLayout={(e) => { listHeightRef.current = e.nativeEvent.layout.height; }}
+            onContentSizeChange={(_w, h) => {
+              contentHeightRef.current = h;
+              // If the results are too short to scroll, a collapsed header can't
+              // be re-expanded by scrolling — force it back open.
+              if (!isWeb && h <= listHeightRef.current + SCROLL_UP_THRESHOLD) {
+                expandFilter();
+              }
+            }}
             ListFooterComponent={
               <>
                 {pagination.totalCount > 0 && renderPagination()}
