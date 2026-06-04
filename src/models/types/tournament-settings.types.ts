@@ -56,12 +56,9 @@ export interface TournamentLiveSettings {
   fixedRaceFinals?: number | null;
   raceGroups?: RaceGroup[];
 
-  // Feature toggles kept as TD options.
-  qrCheckIn?: boolean;
-  // Suggest a table at match start; the TD can still override when starting it.
-  autoAssignTables?: boolean;
-  // NOTE: the public/live bracket view, winner+loser auto-advance on scoring,
-  // and per-match timers are built-in live behaviors (Phase 2) — not toggles.
+  // NOTE: there are no live-feature toggles. The public/live bracket view,
+  // winner+loser auto-advance on scoring, table suggestion at match start, and
+  // per-match timers are all built-in live behaviors (Phase 2).
 
   // Generated draw (built on the Bracket / Draw page, not in Settings).
   bracket?: GeneratedBracket | null;

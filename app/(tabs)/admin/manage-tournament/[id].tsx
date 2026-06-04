@@ -170,8 +170,6 @@ interface SettingsForm {
   bracketSize: string;
   maxPlayers: string;
   tableCount: string;
-  qrCheckIn: boolean;
-  autoAssignTables: boolean;
   raceMode: RaceMode;
   raceGroups: RaceGroupForm[];
 }
@@ -240,8 +238,6 @@ const toForm = (t: Tournament): SettingsForm => {
     bracketSize: numStr(ls.bracketSize),
     maxPlayers: numStr(ls.maxPlayers),
     tableCount: numStr(ls.tableCount),
-    qrCheckIn: !!ls.qrCheckIn,
-    autoAssignTables: !!ls.autoAssignTables,
     raceMode: ls.raceMode ?? "fixed",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
       id: g.id,
@@ -294,8 +290,6 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     bracketSize: intOrNull(f.bracketSize),
     maxPlayers: intOrNull(f.maxPlayers),
     tableCount: intOrNull(f.tableCount),
-    qrCheckIn: f.qrCheckIn,
-    autoAssignTables: f.autoAssignTables,
     raceMode: f.raceMode,
     fixedRaceWinners: winners,
     fixedRaceLosers: hasLosers ? losers : null,
@@ -1364,25 +1358,6 @@ export default function ManageTournamentScreen() {
           )}
           <Text allowFontScaling={false} style={styles.hint}>
             Venue and tournament image are changed on the Edit Tournament screen.
-          </Text>
-        </Section>
-
-        <Section title="Live Features">
-          <ToggleSwitch
-            label="QR Check-In"
-            value={form.qrCheckIn}
-            onValueChange={(v) => patchForm({ qrCheckIn: v })}
-          />
-          <ToggleSwitch
-            label="Auto-Assign Tables"
-            value={form.autoAssignTables}
-            onValueChange={(v) => patchForm({ autoAssignTables: v })}
-          />
-          <Text allowFontScaling={false} style={styles.hint}>
-            The live bracket is the public tournament view for everyone. Players
-            auto-advance when a match is scored, and each match is timed once the
-            TD starts it. With Auto-Assign Tables on, tables are suggested at
-            match start — the TD can still change the table when starting a match.
           </Text>
         </Section>
 
