@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
@@ -71,16 +72,35 @@ export const useTournamentDirectorManager = () => {
     }
   }, [profile?.id_auto]);
 
+  // Refetch when the screen regains focus (e.g. returning from the Edit
+  // Tournament screen or the Manage Tournament hub) so edits show immediately.
+  // The first focus is the initial mount, which the effect above already
+  // handles — skip it to avoid a duplicate load.
+  const isFirstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      if (profile?.id_auto) {
+        loadTournaments({ silent: true });
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profile?.id_auto]),
+  );
+
   useEffect(() => {
     applyFilters();
   }, [tournaments, statusFilter, sortOption, sortDirection, searchQuery]);
 
-  // Load tournaments created by this tournament director
-  const loadTournaments = async () => {
+  // Load tournaments created by this tournament director. `silent` skips the
+  // full-screen spinner for background refreshes (focus refetch).
+  const loadTournaments = async (opts?: { silent?: boolean }) => {
     if (!profile?.id_auto) return;
 
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
 
       // Get tournaments directed by this tournament director
       const { data: tournamentData } = await supabase
