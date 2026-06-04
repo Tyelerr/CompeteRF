@@ -20,6 +20,28 @@ export interface RaceGroup {
 
 export type RaceMode = "fixed" | "groups";
 
+// ── Generated bracket (V1: Round 1 only, stored in live_settings.bracket) ─────
+export interface BracketSlot {
+  registrationId?: number | null; // null for a bye slot
+  name: string;
+  fargo?: number | null;
+}
+export interface BracketMatch {
+  matchNumber: number;
+  p1: BracketSlot | null;
+  p2: BracketSlot | null; // null => bye (p1 advances)
+  bye: boolean;
+  raceTo: number | null;
+}
+export interface GeneratedBracket {
+  generatedAt: string;
+  drawType: "random"; // V1: random only
+  format: string; // tournament_format at generation time
+  bracketSize: number;
+  byes: number;
+  round1: BracketMatch[];
+}
+
 export interface TournamentLiveSettings {
   // Bracket sizing / capacity
   bracketSize?: number | null; // null/undefined => unlimited
@@ -43,4 +65,7 @@ export interface TournamentLiveSettings {
   autoGenerateNextRound?: boolean;
   matchTimer?: boolean;
   matchTimerMinutes?: number | null;
+
+  // Generated draw (built on the Bracket / Draw page, not in Settings).
+  bracket?: GeneratedBracket | null;
 }

@@ -37,6 +37,7 @@ import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import {
   GameType,
   RegistrationStatus,
+  TableStatus,
   TournamentFormat,
 } from "../../../../src/models/types/common.types";
 import { Profile } from "../../../../src/models/types/profile.types";
@@ -65,24 +66,38 @@ type TabKey =
   | "settings"
   | "players"
   | "tables"
-  | "matches"
   | "bracket"
+  | "review"
+  | "matches"
   | "results";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "settings", label: "Settings" },
-  { key: "players", label: "Players" },
-  { key: "tables", label: "Tables" },
-  { key: "matches", label: "Matches" },
-  { key: "bracket", label: "Bracket" },
-  { key: "results", label: "Results" },
+const TAB_LABELS: Record<TabKey, string> = {
+  settings: "Settings",
+  players: "Players",
+  tables: "Tables",
+  bracket: "Bracket / Draw",
+  review: "Review",
+  matches: "Matches",
+  results: "Results",
+};
+
+// The ordered setup flow the TD must complete in sequence. A later step can't
+// be opened until every earlier step is complete (gated with a friendly prompt).
+const SETUP_ORDER: TabKey[] = [
+  "settings",
+  "players",
+  "tables",
+  "bracket",
+  "review",
 ];
 
-// Matches/Bracket unlock at Running; Results at Running or later.
-const tabEnabled = (key: TabKey, phase: ManagePhase): boolean => {
-  if (key === "matches" || key === "bracket") return phase === "running";
-  if (key === "results") return phase === "running" || phase === "completed";
-  return true; // settings / players / tables
+// Which tabs are visible for a phase. No lock icons: the live tabs simply
+// aren't shown until usable. Matches appears once Running; Results once Completed.
+const visibleTabs = (phase: ManagePhase): TabKey[] => {
+  const tabs: TabKey[] = [...SETUP_ORDER];
+  if (phase === "running") tabs.push("matches");
+  if (phase === "completed") tabs.push("matches", "results");
+  return tabs;
 };
 
 // ── Phase presentation ───────────────────────────────────────────────────────
@@ -717,6 +732,156 @@ export default function ManageTournamentScreen() {
     "all" | "checked" | "unchecked"
   >("all");
 
+  // Tables tab state
+  const [singleTableNum, setSingleTableNum] = useState("");
+  const [bulkFrom, setBulkFrom] = useState("");
+  const [bulkTo, setBulkTo] = useState("");
+  const [streamDrafts, setStreamDrafts] = useState<Record<number, string>>({});
+  const [tableBusy, setTableBusy] = useState(false);
+
+  // Guided-setup prompt shown when the TD jumps ahead of an incomplete step.
+  const [gatePrompt, setGatePrompt] = useState<{
+    blocking: TabKey;
+    target: TabKey;
+  } | null>(null);
+
+  // Per-step completion — drives the sequential gating + the Review checklist.
+  const stepComplete = useMemo(() => {
+    const t = hub.tournament;
+    const ls = t?.live_settings ?? {};
+    const settings =
+      !!(
+        t &&
+        t.name &&
+        t.game_type &&
+        t.tournament_format &&
+        t.venue_id &&
+        t.tournament_date &&
+        t.start_time
+      ) &&
+      ((ls.raceMode ?? "fixed") === "groups"
+        ? (ls.raceGroups?.length ?? 0) >= 1
+        : ls.fixedRaceWinners != null);
+    const checkedIn = hub.registrations.filter(
+      (r) => r.status === "checked_in",
+    ).length;
+    return {
+      settings,
+      players: checkedIn >= 2,
+      tables: hub.tablesReady && hub.tables.length >= 1,
+      bracket: !!ls.bracket,
+    };
+  }, [hub.tournament, hub.registrations, hub.tablesReady, hub.tables]);
+
+  // Gate forward navigation: a setup step can't open until earlier ones are done.
+  const handleTabPress = (target: TabKey) => {
+    if (!SETUP_ORDER.includes(target)) {
+      setActiveTab(target);
+      return;
+    }
+    const idx = SETUP_ORDER.indexOf(target);
+    for (let i = 0; i < idx; i++) {
+      const step = SETUP_ORDER[i];
+      if (!(stepComplete as Record<string, boolean>)[step]) {
+        setGatePrompt({ blocking: step, target });
+        return;
+      }
+    }
+    setActiveTab(target);
+  };
+
+  // ---- Tables handlers ----------------------------------------------------
+  const handleAddTable = async () => {
+    const n = parseInt(singleTableNum, 10);
+    if (isNaN(n)) {
+      Alert.alert("Required", "Enter a table number.");
+      return;
+    }
+    setTableBusy(true);
+    try {
+      await hub.createTable({ tableNumber: n });
+      setSingleTableNum("");
+    } catch {
+      Alert.alert("Error", "Couldn't add the table — that number may already exist.");
+    } finally {
+      setTableBusy(false);
+    }
+  };
+  const handleBulkAddTables = async () => {
+    const from = parseInt(bulkFrom, 10);
+    const to = parseInt(bulkTo, 10);
+    if (isNaN(from) || isNaN(to) || to < from) {
+      Alert.alert("Invalid range", "Enter a valid From / To range.");
+      return;
+    }
+    if (to - from > 100) {
+      Alert.alert("Too many", "Add at most 100 tables at once.");
+      return;
+    }
+    setTableBusy(true);
+    try {
+      await hub.createTablesBulk({ from, to });
+      setBulkFrom("");
+      setBulkTo("");
+    } catch {
+      Alert.alert("Error", "Couldn't add tables — some numbers may already exist.");
+    } finally {
+      setTableBusy(false);
+    }
+  };
+  const handleSetTableStatus = (id: number, status: TableStatus) =>
+    hub
+      .setTableStatus({ id, status })
+      .catch(() => Alert.alert("Error", "Failed to update the table."));
+  const handleToggleStreaming = (id: number, on: boolean, link: string) =>
+    hub
+      .setTableStreaming({ id, isStreaming: on, streamLink: link })
+      .catch(() => Alert.alert("Error", "Failed to update streaming."));
+  const handleDeleteTable = (id: number) =>
+    Alert.alert("Remove Table", "Remove this table?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () =>
+          hub
+            .deleteTable(id)
+            .catch(() => Alert.alert("Error", "Failed to remove the table.")),
+      },
+    ]);
+
+  // ---- Status-flow actions ------------------------------------------------
+  const handleCloseRegistration = () =>
+    Alert.alert(
+      "Close Registration",
+      "Lock the player field and stop new registrations?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close & Lock",
+          onPress: () =>
+            hub
+              .closeRegistration()
+              .catch(() => Alert.alert("Error", "Failed to close registration.")),
+        },
+      ],
+    );
+  const handleStartTournament = () =>
+    Alert.alert(
+      "Start Tournament",
+      "Start the tournament now? Status changes to Running and the Matches tab becomes the live control area.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start Tournament",
+          onPress: () =>
+            hub
+              .start()
+              .catch(() => Alert.alert("Error", "Failed to start the tournament.")),
+        },
+      ],
+    );
+
   const tournamentName = hub.tournament?.name || paramName || "Tournament";
   const phaseMeta = PHASE_META[hub.phase];
 
@@ -1317,6 +1482,17 @@ export default function ManageTournamentScreen() {
         </TouchableOpacity>
       </View>
 
+      {hub.liveState === "registration_open" && (
+        <TouchableOpacity
+          style={styles.lockBtn}
+          onPress={handleCloseRegistration}
+        >
+          <Text allowFontScaling={false} style={styles.lockBtnText}>
+            Close Registration / Lock Players
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.searchInputWrapper}>
         <Text allowFontScaling={false} style={styles.searchIcon}>
           {GLYPH.search}
@@ -1385,6 +1561,208 @@ export default function ManageTournamentScreen() {
     </View>
   );
 
+  const renderTables = () => (
+    <View>
+      {!hub.tablesReady && (
+        <View style={styles.section}>
+          <Text allowFontScaling={false} style={styles.hint}>
+            Tables need the database update applied before they can be saved.
+          </Text>
+        </View>
+      )}
+
+      <Section title="Add Tables">
+        <View style={styles.tableAddRow}>
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { flex: 1 }]}
+            value={singleTableNum}
+            onChangeText={setSingleTableNum}
+            placeholder="Table #"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="numeric"
+          />
+          <TouchableOpacity
+            style={styles.tableAddBtn}
+            onPress={handleAddTable}
+            disabled={tableBusy}
+          >
+            <Text allowFontScaling={false} style={styles.tableAddBtnText}>
+              Add
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text allowFontScaling={false} style={styles.fieldLabel}>
+          Bulk add (range)
+        </Text>
+        <View style={styles.tableAddRow}>
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { flex: 1 }]}
+            value={bulkFrom}
+            onChangeText={setBulkFrom}
+            placeholder="From"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="numeric"
+          />
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { flex: 1 }]}
+            value={bulkTo}
+            onChangeText={setBulkTo}
+            placeholder="To"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="numeric"
+          />
+          <TouchableOpacity
+            style={styles.tableAddBtn}
+            onPress={handleBulkAddTables}
+            disabled={tableBusy}
+          >
+            <Text allowFontScaling={false} style={styles.tableAddBtnText}>
+              Bulk Add
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Section>
+
+      <Section title={`Tables (${hub.tables.length})`}>
+        {hub.tables.length === 0 ? (
+          <Text allowFontScaling={false} style={styles.hint}>
+            No tables yet. Add tables above.
+          </Text>
+        ) : (
+          hub.tables.map((tbl) => {
+            const draft = streamDrafts[tbl.id] ?? tbl.stream_link ?? "";
+            return (
+              <View key={tbl.id} style={styles.tableCard}>
+                <View style={styles.tableCardHead}>
+                  <Text allowFontScaling={false} style={styles.tableName}>
+                    Table {tbl.table_number}
+                    {tbl.label ? ` — ${tbl.label}` : ""}
+                  </Text>
+                  <TouchableOpacity onPress={() => handleDeleteTable(tbl.id)}>
+                    <Text allowFontScaling={false} style={styles.tableDelete}>
+                      Remove
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.tableStatusRow}>
+                  {(
+                    [
+                      { s: "available", label: "Available" },
+                      { s: "in_use", label: "In Use" },
+                      { s: "unavailable", label: "Unavailable" },
+                    ] as { s: TableStatus; label: string }[]
+                  ).map((o) => (
+                    <TouchableOpacity
+                      key={o.s}
+                      style={[
+                        styles.tableStatusBtn,
+                        tbl.status === o.s && styles.tableStatusBtnActive,
+                      ]}
+                      onPress={() => handleSetTableStatus(tbl.id, o.s)}
+                    >
+                      <Text
+                        allowFontScaling={false}
+                        style={[
+                          styles.tableStatusBtnText,
+                          tbl.status === o.s && styles.tableStatusBtnTextActive,
+                        ]}
+                      >
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <ToggleSwitch
+                  label="Streaming Table"
+                  value={tbl.is_streaming}
+                  onValueChange={(on) =>
+                    handleToggleStreaming(tbl.id, on, draft)
+                  }
+                />
+                {tbl.is_streaming && (
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, { marginTop: webSc(SPACING.sm) }]}
+                    value={draft}
+                    onChangeText={(v) =>
+                      setStreamDrafts((m) => ({ ...m, [tbl.id]: v }))
+                    }
+                    onEndEditing={() =>
+                      handleToggleStreaming(tbl.id, true, draft)
+                    }
+                    placeholder="Stream link URL"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="none"
+                  />
+                )}
+              </View>
+            );
+          })
+        )}
+      </Section>
+    </View>
+  );
+
+  const renderReview = () => {
+    const checks = [
+      { key: "settings" as TabKey, label: "Settings completed", ok: stepComplete.settings },
+      { key: "players" as TabKey, label: "Players checked in (2+)", ok: stepComplete.players },
+      { key: "tables" as TabKey, label: "Tables configured", ok: stepComplete.tables },
+      { key: "bracket" as TabKey, label: "Bracket generated", ok: stepComplete.bracket },
+    ];
+    const allOk = checks.every((c) => c.ok);
+    return (
+      <View>
+        <Section title="Review & Start">
+          <Text allowFontScaling={false} style={styles.hint}>
+            Settings define the rules · Players define the field · Tables define
+            the room · Bracket builds the draw.
+          </Text>
+          {checks.map((c) => (
+            <View key={c.key} style={styles.reviewRow}>
+              <View
+                style={[
+                  styles.reviewDot,
+                  { backgroundColor: c.ok ? COLORS.success : COLORS.border },
+                ]}
+              />
+              <Text allowFontScaling={false} style={styles.reviewLabel}>
+                {c.label}
+              </Text>
+              {!c.ok && (
+                <TouchableOpacity onPress={() => setActiveTab(c.key)}>
+                  <Text allowFontScaling={false} style={styles.reviewGo}>
+                    Go to {TAB_LABELS[c.key]}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </Section>
+        <TouchableOpacity
+          style={[
+            styles.startBtn,
+            (!allOk || hub.isMutatingLive) && styles.btnDisabled,
+          ]}
+          onPress={handleStartTournament}
+          disabled={!allOk || hub.isMutatingLive}
+        >
+          <Text allowFontScaling={false} style={styles.startBtnText}>
+            Start Tournament
+          </Text>
+        </TouchableOpacity>
+        {!allOk && (
+          <Text allowFontScaling={false} style={styles.startHint}>
+            Finish the unchecked steps above to start the tournament.
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   const renderTab = () => {
     switch (activeTab) {
       case "settings":
@@ -1392,35 +1770,31 @@ export default function ManageTournamentScreen() {
       case "players":
         return renderPlayers();
       case "tables":
-        return (
-          <TabPlaceholder
-            locked={false}
-            title="Tables"
-            body="Add tables one at a time or in bulk (e.g. 1-15), set Available / In Use / Unavailable, and flag a streaming table with a stream link. UI lands next; the data layer is ready."
-          />
-        );
-      case "matches":
-        return (
-          <TabPlaceholder
-            locked={hub.phase !== "running"}
-            title="Matches"
-            body="Live matches, scores, and TD controls appear here once the tournament is running (Phase 2)."
-          />
-        );
+        return renderTables();
       case "bracket":
         return (
           <TabPlaceholder
-            locked={hub.phase !== "running"}
-            title="Bracket"
-            body="The single / double elimination bracket appears here once the tournament is running (Phase 2)."
+            locked={false}
+            title="Bracket / Draw"
+            body="Build the draw here: checked-in players, bracket size, byes, race-assignment preview, and Generate Bracket. Arriving in the next update."
+          />
+        );
+      case "review":
+        return renderReview();
+      case "matches":
+        return (
+          <TabPlaceholder
+            locked={false}
+            title="Matches"
+            body="Live matches, scores, and TD controls. Full live scoring arrives in the Phase 2 engine."
           />
         );
       case "results":
         return (
           <TabPlaceholder
-            locked={hub.phase !== "running" && hub.phase !== "completed"}
+            locked={false}
             title="Results"
-            body="Final placements and payouts appear here after play begins (Phase 3)."
+            body="Final placements and payouts appear here after play completes (Phase 3)."
           />
         );
       default:
@@ -1448,6 +1822,56 @@ export default function ManageTournamentScreen() {
         onAddGuest={handleAddGuest}
         isAdding={isAdding}
       />
+
+      {/* Guided-setup prompt (sequential gating) */}
+      {gatePrompt && (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setGatePrompt(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text allowFontScaling={false} style={styles.modalTitle}>
+                You&apos;re almost there
+              </Text>
+              <Text allowFontScaling={false} style={styles.gateBody}>
+                Please finish {TAB_LABELS[gatePrompt.blocking]} before moving to{" "}
+                {TAB_LABELS[gatePrompt.target]}.
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonCancel}
+                  onPress={() => setGatePrompt(null)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.modalButtonCancelText}
+                  >
+                    Not now
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonConfirm}
+                  onPress={() => {
+                    const b = gatePrompt.blocking;
+                    setGatePrompt(null);
+                    setActiveTab(b);
+                  }}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.modalButtonConfirmText}
+                  >
+                    Go to {TAB_LABELS[gatePrompt.blocking]}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
@@ -1489,25 +1913,19 @@ export default function ManageTournamentScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabBar}
         >
-          {TABS.map((tab) => {
-            const active = tab.key === activeTab;
-            const enabled = tabEnabled(tab.key, hub.phase);
+          {visibleTabs(hub.phase).map((tab) => {
+            const active = tab === activeTab;
             return (
               <TouchableOpacity
-                key={tab.key}
+                key={tab}
                 style={[styles.tab, active && styles.tabActive]}
-                onPress={() => setActiveTab(tab.key)}
+                onPress={() => handleTabPress(tab)}
               >
                 <Text
                   allowFontScaling={false}
-                  style={[
-                    styles.tabText,
-                    active && styles.tabTextActive,
-                    !enabled && styles.tabTextLocked,
-                  ]}
+                  style={[styles.tabText, active && styles.tabTextActive]}
                 >
-                  {tab.label}
-                  {!enabled ? ` ${GLYPH.lock}` : ""}
+                  {TAB_LABELS[tab]}
                 </Text>
               </TouchableOpacity>
             );
@@ -1792,6 +2210,121 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontStyle: "italic",
     marginTop: webSc(SPACING.sm),
+  },
+
+  // Close registration / lock players
+  lockBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warning + "20",
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    alignItems: "center",
+    marginBottom: webSc(SPACING.sm),
+  },
+  lockBtnText: {
+    color: COLORS.warning,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
+
+  // Tables
+  tableAddRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.sm),
+    alignItems: "center",
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableAddBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+  },
+  tableAddBtnText: {
+    color: COLORS.white,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
+  tableCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableCardHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableName: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+    color: COLORS.text,
+    flexShrink: 1,
+  },
+  tableDelete: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.error,
+    fontWeight: "600",
+  },
+  tableStatusRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+  },
+  tableStatusBtn: {
+    flex: 1,
+    paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+  },
+  tableStatusBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tableStatusBtnText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  tableStatusBtnTextActive: { color: COLORS.white },
+
+  // Review
+  reviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.sm),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  reviewDot: {
+    width: webSc(12),
+    height: webSc(12),
+    borderRadius: webSc(6),
+  },
+  reviewLabel: {
+    flex: 1,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+  },
+  reviewGo: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+
+  // Guided prompt
+  gateBody: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    lineHeight: webMs(FONT_SIZES.sm) * 1.5,
   },
 
   // Players
