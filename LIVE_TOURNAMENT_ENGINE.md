@@ -327,3 +327,10 @@ filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced
   Per match: diff = |fargoA - fargoB|; extra = floor(diff / perGame) (round down default);
   lower-rated player races to MIN; higher-rated races to min(MAX, MIN + extra).
   e.g. 400 vs 550, perGame 50 -> diff 150 -> +3 -> 400 races to 3, 550 races to 6.
+
+### Players tab workflow (tournament-day speed)
+- Four display statuses (collapse the 6 raw statuses): Pre-Registered (preregistered/queued/approved), Ready (checked_in), No Show (no_show), Removed (cancelled).
+- "Ready" replaces "Checked In" / "Approve": clicking **Ready** sets status=checked_in AND records payment (paid_entry + paid_side_pots) in one tap. Only **Ready** players are eligible for bracket generation.
+- Per-card payment ticks: Entry Fee + one checkbox per side pot (pending until Ready commits them).
+- Pre-Registered card -> [Ready] [No Show] [Remove]; Ready card -> paid summary + [Undo]; No Show / Removed -> [Restore].
+- Single status **filter dropdown** (All / Pre-Registered / Ready / No Show / Removed) instead of tabs; "All" hides Removed. Top **summary pills**: Pre-Reg / Ready / No Show counts.

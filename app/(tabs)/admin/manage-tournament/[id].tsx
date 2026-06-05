@@ -115,24 +115,31 @@ const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
 };
 
 // ── Registration presentation ────────────────────────────────────────────────
-const NEEDS_APPROVAL: RegistrationStatus[] = ["preregistered", "queued"];
+// The DB has six raw statuses; the Players tab collapses them to four display
+// states. "Ready" = checked_in (confirmed + paid -> eligible for the bracket).
+type DisplayStatus = "prereg" | "ready" | "no_show" | "removed";
 
-const getRegStatusColor = (status: RegistrationStatus): string => {
-  switch (status) {
-    case "approved":
-      return COLORS.success;
-    case "checked_in":
-      return COLORS.primary;
-    case "preregistered":
-    case "queued":
-      return COLORS.textSecondary;
-    case "no_show":
-    case "cancelled":
-      return COLORS.error;
-    default:
-      return COLORS.textSecondary;
-  }
+const displayStatusOf = (s: RegistrationStatus): DisplayStatus => {
+  if (s === "checked_in") return "ready";
+  if (s === "no_show") return "no_show";
+  if (s === "cancelled") return "removed";
+  return "prereg"; // preregistered / queued / approved
 };
+
+const DISPLAY_META: Record<DisplayStatus, { label: string; color: string }> = {
+  prereg: { label: "Pre-Registered", color: "#EAB308" }, // yellow
+  ready: { label: "Ready", color: COLORS.success }, // green
+  no_show: { label: "No Show", color: COLORS.error }, // red
+  removed: { label: "Removed", color: COLORS.textMuted }, // gray
+};
+
+const PLAYER_FILTERS = [
+  { label: "All", value: "all" },
+  { label: "Pre-Registered", value: "prereg" },
+  { label: "Ready", value: "ready" },
+  { label: "No Show", value: "no_show" },
+  { label: "Removed", value: "removed" },
+];
 
 const getDisplayName = (r: Registration): string => {
   if (r.player_id && r.profiles) return r.profiles.name || r.profiles.user_name;
@@ -670,46 +677,87 @@ const AddPlayerModal = ({
   );
 };
 
+// ── Payment checkbox ─────────────────────────────────────────────────────────
+const PayCheckbox = ({
+  label,
+  checked,
+  onToggle,
+  readOnly,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle?: () => void;
+  readOnly?: boolean;
+}) => (
+  <TouchableOpacity
+    style={styles.payRow}
+    onPress={onToggle}
+    disabled={readOnly || !onToggle}
+    activeOpacity={0.7}
+  >
+    <View style={[styles.checkbox, checked && styles.checkboxOn]}>
+      {checked && (
+        <Text allowFontScaling={false} style={styles.checkboxMark}>
+          ✓
+        </Text>
+      )}
+    </View>
+    <Text
+      allowFontScaling={false}
+      style={[styles.payLabel, readOnly && checked && styles.payLabelPaid]}
+    >
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
+
 // ── Registration Row ─────────────────────────────────────────────────────────
 const RegistrationRow = ({
   registration,
-  onApprove,
-  onCheckIn,
+  sidePots,
+  onReady,
   onNoShow,
   onRemove,
+  onUndo,
+  onRestore,
   isProcessing,
 }: {
   registration: Registration;
-  onApprove: () => void;
-  onCheckIn: () => void;
+  sidePots: { name: string; amount: number }[];
+  onReady: (paidEntry: boolean, paidPots: string[]) => void;
   onNoShow: () => void;
   onRemove: () => void;
+  onUndo: () => void;
+  onRestore: () => void;
   isProcessing: boolean;
 }) => {
-  const statusColor = getRegStatusColor(registration.status);
+  const d = displayStatusOf(registration.status);
+  const meta = DISPLAY_META[d];
   const isGuest = !registration.player_id;
-  const needsApproval = NEEDS_APPROVAL.includes(registration.status);
-  const canCheckIn = registration.status === "approved";
-  const isClosed =
-    registration.status === "cancelled" || registration.status === "no_show";
   const fargo = registration.fargo_rating;
+
+  // Pending payment ticks (Pre-Registered only) — committed when Ready is tapped.
+  const [paidEntry, setPaidEntry] = useState(!!registration.paid_entry);
+  const [paidPots, setPaidPots] = useState<string[]>(
+    registration.paid_side_pots ?? [],
+  );
+  const togglePot = (name: string) =>
+    setPaidPots((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+    );
+  const potLabel = (p: { name: string; amount: number }) =>
+    p.amount ? `${p.name} ($${p.amount})` : p.name;
 
   return (
     <View style={styles.regCard}>
-      <View style={styles.regMain}>
+      <View style={styles.regHeader}>
         <View style={styles.nameRow}>
-          <Text
-            allowFontScaling={false}
-            style={styles.playerName}
-            numberOfLines={1}
-          >
+          <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
             {getDisplayName(registration)}
           </Text>
           {isGuest ? (
             <View style={styles.guestTag}>
-              <Text allowFontScaling={false} style={styles.guestTagText}>
-                Guest
-              </Text>
+              <Text allowFontScaling={false} style={styles.guestTagText}>Guest</Text>
             </View>
           ) : (
             registration.profiles && (
@@ -719,66 +767,97 @@ const RegistrationRow = ({
             )
           )}
         </View>
-        <View style={styles.regMeta}>
-          <Text allowFontScaling={false} style={styles.fargoText}>
-            {fargo != null ? `Fargo ${fargo}` : "No Fargo"}
-          </Text>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: statusColor + "20" },
-            ]}
-          >
-            <Text
-              allowFontScaling={false}
-              style={[styles.statusText, { color: statusColor }]}
-            >
-              {registration.status.replace("_", " ")}
-            </Text>
-          </View>
-        </View>
+        <Text allowFontScaling={false} style={styles.fargoText}>
+          {fargo != null ? `Fargo ${fargo}` : "No Fargo"}
+        </Text>
       </View>
 
-      {!isClosed && (
+      <View style={styles.statusLine}>
+        <View style={[styles.statusDotSm, { backgroundColor: meta.color }]} />
+        <Text
+          allowFontScaling={false}
+          style={[styles.statusLineText, { color: meta.color }]}
+        >
+          {meta.label}
+        </Text>
+      </View>
+
+      {d === "prereg" && (
+        <>
+          <PayCheckbox
+            label="Entry Fee"
+            checked={paidEntry}
+            onToggle={() => setPaidEntry((v) => !v)}
+          />
+          {sidePots.map((p) => (
+            <PayCheckbox
+              key={p.name}
+              label={potLabel(p)}
+              checked={paidPots.includes(p.name)}
+              onToggle={() => togglePot(p.name)}
+            />
+          ))}
+          <View style={styles.regActions}>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.readyBtn]}
+              onPress={() => onReady(paidEntry, paidPots)}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.readyBtnText}>
+                {isProcessing ? "..." : "Ready"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.noShowBtn]}
+              onPress={onNoShow}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.noShowBtnText}>No Show</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.removeBtn]}
+              onPress={onRemove}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.removeBtnText}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {d === "ready" && (
+        <>
+          <PayCheckbox
+            label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
+            checked={!!registration.paid_entry}
+            readOnly
+          />
+          {(registration.paid_side_pots ?? []).map((name) => (
+            <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
+          ))}
+          <View style={styles.regActions}>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.undoBtn]}
+              onPress={onUndo}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.undoBtnText}>
+                {isProcessing ? "..." : "Undo"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {(d === "no_show" || d === "removed") && (
         <View style={styles.regActions}>
-          {needsApproval && (
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.approveBtn]}
-              onPress={onApprove}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.approveBtnText}>
-                {isProcessing ? "..." : "Approve"}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {canCheckIn && (
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.checkInBtn]}
-              onPress={onCheckIn}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.checkInBtnText}>
-                {isProcessing ? "..." : "Check In"}
-              </Text>
-            </TouchableOpacity>
-          )}
           <TouchableOpacity
-            style={[styles.regActionBtn, styles.noShowBtn]}
-            onPress={onNoShow}
+            style={[styles.regActionBtn, styles.restoreBtn]}
+            onPress={onRestore}
             disabled={isProcessing}
           >
-            <Text allowFontScaling={false} style={styles.noShowBtnText}>
-              No Show
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.regActionBtn, styles.removeBtn]}
-            onPress={onRemove}
-            disabled={isProcessing}
-          >
-            <Text allowFontScaling={false} style={styles.removeBtnText}>
-              Remove
+            <Text allowFontScaling={false} style={styles.restoreBtnText}>
+              {isProcessing ? "..." : "Restore"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -835,9 +914,7 @@ export default function ManageTournamentScreen() {
   const [isAdding, setIsAdding] = useState(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
-  const [checkedInFilter, setCheckedInFilter] = useState<
-    "all" | "checked" | "unchecked"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | DisplayStatus>("all");
 
   // Tables tab state
   const [singleTableNum, setSingleTableNum] = useState("");
@@ -1140,21 +1217,29 @@ export default function ManageTournamentScreen() {
     }
   };
 
-  const handleApprove = (r: Registration) =>
-    withProcessing(r.id, () => hub.approve(r.id), "Failed to approve.");
-  const handleCheckIn = (r: Registration) =>
-    withProcessing(r.id, () => hub.checkIn(r.id), "Failed to check in.");
+  // Mark a player Ready (= confirmed + paid -> eligible for the bracket).
+  const handleReady = (
+    r: Registration,
+    paidEntry: boolean,
+    paidPots: string[],
+  ) =>
+    withProcessing(
+      r.id,
+      () =>
+        hub.updateRegistration({
+          id: r.id,
+          updates: {
+            status: "checked_in",
+            paid_entry: paidEntry,
+            paid_side_pots: paidPots,
+            checked_in_at: new Date().toISOString(),
+          },
+        }),
+      "Failed to mark the player ready.",
+    );
 
   const handleNoShow = (r: Registration) =>
-    Alert.alert("Mark No-Show", `Mark ${getDisplayName(r)} as a no-show?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Mark No-Show",
-        style: "destructive",
-        onPress: () =>
-          withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show."),
-      },
-    ]);
+    withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show.");
 
   const handleRemove = (r: Registration) =>
     Alert.alert("Remove Player", `Remove ${getDisplayName(r)} from this tournament?`, [
@@ -1165,29 +1250,53 @@ export default function ManageTournamentScreen() {
         onPress: () =>
           withProcessing(
             r.id,
-            // TD "remove" = soft-cancel the registration row.
             () => hub.updateRegistration({ id: r.id, updates: { status: "cancelled" } }),
             "Failed to remove player.",
           ),
       },
     ]);
 
+  const handleUndoReady = (r: Registration) =>
+    withProcessing(
+      r.id,
+      () => hub.updateRegistration({ id: r.id, updates: { status: "preregistered" } }),
+      "Failed to undo.",
+    );
+
+  const handleRestore = (r: Registration) =>
+    withProcessing(
+      r.id,
+      () => hub.updateRegistration({ id: r.id, updates: { status: "preregistered" } }),
+      "Failed to restore.",
+    );
+
   // ---- Derived player lists ----------------------------------------------
-  const activeRegs = useMemo(
-    () => hub.registrations.filter((r) => r.status !== "cancelled"),
-    [hub.registrations],
-  );
+  const statusCounts = useMemo(() => {
+    const c: Record<DisplayStatus, number> = {
+      prereg: 0,
+      ready: 0,
+      no_show: 0,
+      removed: 0,
+    };
+    hub.registrations.forEach((r) => {
+      c[displayStatusOf(r.status)] += 1;
+    });
+    return c;
+  }, [hub.registrations]);
+
   const filteredRegs = useMemo(() => {
     const q = playerSearch.trim().toLowerCase();
-    return activeRegs.filter((r) => {
-      if (checkedInFilter === "checked" && r.status !== "checked_in") return false;
-      if (checkedInFilter === "unchecked" && r.status === "checked_in") return false;
+    return hub.registrations.filter((r) => {
+      const d = displayStatusOf(r.status);
+      if (statusFilter === "all") {
+        if (d === "removed") return false; // hide removed in the default view
+      } else if (statusFilter !== d) {
+        return false;
+      }
       if (q && !getDisplayName(r).toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [activeRegs, playerSearch, checkedInFilter]);
-
-  const checkedInCount = activeRegs.filter((r) => r.status === "checked_in").length;
+  }, [hub.registrations, playerSearch, statusFilter]);
 
   // ---- Tab renderers ------------------------------------------------------
   const renderSettings = () => {
@@ -1611,105 +1720,107 @@ export default function ManageTournamentScreen() {
     );
   };
 
-  const renderPlayers = () => (
-    <View>
-      <View style={styles.playersTopRow}>
-        <View style={styles.countPills}>
-          <Text allowFontScaling={false} style={styles.countPill}>
-            {activeRegs.length} registered
-          </Text>
-          <Text allowFontScaling={false} style={styles.countPill}>
-            {checkedInCount} checked in
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setAddModalVisible(true)}
-        >
-          <Text allowFontScaling={false} style={styles.addButtonText}>
-            + Add Player
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {hub.liveState === "registration_open" && (
-        <TouchableOpacity
-          style={styles.lockBtn}
-          onPress={handleCloseRegistration}
-        >
-          <Text allowFontScaling={false} style={styles.lockBtnText}>
-            Close Registration / Lock Players
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.searchInputWrapper}>
-        <Text allowFontScaling={false} style={styles.searchIcon}>
-          {GLYPH.search}
-        </Text>
-        <TextInput
-          allowFontScaling={false}
-          style={styles.searchInput}
-          placeholder="Filter registered players..."
-          placeholderTextColor={COLORS.textMuted}
-          value={playerSearch}
-          onChangeText={setPlayerSearch}
-        />
-      </View>
-
-      <View style={styles.segmentRow}>
-        {(
-          [
-            { key: "all", label: "All" },
-            { key: "unchecked", label: "Not Checked In" },
-            { key: "checked", label: "Checked In" },
-          ] as { key: "all" | "checked" | "unchecked"; label: string }[]
-        ).map((opt) => (
+  const renderPlayers = () => {
+    const sidePots = (hub.tournament?.side_pots ?? []).map((p) => ({
+      name: p.name,
+      amount: Number(p.amount) || 0,
+    }));
+    const summary = [
+      { key: "prereg" as DisplayStatus, short: "Pre-Reg", n: statusCounts.prereg },
+      { key: "ready" as DisplayStatus, short: "Ready", n: statusCounts.ready },
+      { key: "no_show" as DisplayStatus, short: "No Show", n: statusCounts.no_show },
+    ];
+    return (
+      <View>
+        <View style={styles.playersTopRow}>
+          <View style={styles.summaryPills}>
+            {summary.map((sp) => (
+              <View key={sp.key} style={styles.summaryPill}>
+                <View
+                  style={[
+                    styles.statusDotSm,
+                    { backgroundColor: DISPLAY_META[sp.key].color },
+                  ]}
+                />
+                <Text allowFontScaling={false} style={styles.summaryPillText}>
+                  {sp.short} {sp.n}
+                </Text>
+              </View>
+            ))}
+          </View>
           <TouchableOpacity
-            key={opt.key}
-            style={[
-              styles.segment,
-              checkedInFilter === opt.key && styles.segmentActive,
-            ]}
-            onPress={() => setCheckedInFilter(opt.key)}
+            style={styles.addButton}
+            onPress={() => setAddModalVisible(true)}
           >
-            <Text
-              allowFontScaling={false}
-              style={[
-                styles.segmentText,
-                checkedInFilter === opt.key && styles.segmentTextActive,
-              ]}
-            >
-              {opt.label}
+            <Text allowFontScaling={false} style={styles.addButtonText}>
+              + Add Player
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {hub.registrationsLoading ? (
-        <View style={styles.centerBlock}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-      ) : filteredRegs.length === 0 ? (
-        <EmptyState
-          message="No players to show"
-          submessage="Add players or adjust the filter."
-        />
-      ) : (
-        filteredRegs.map((item) => (
-          <RegistrationRow
-            key={item.id}
-            registration={item}
-            onApprove={() => handleApprove(item)}
-            onCheckIn={() => handleCheckIn(item)}
-            onNoShow={() => handleNoShow(item)}
-            onRemove={() => handleRemove(item)}
-            isProcessing={processingId === item.id}
+
+        {hub.liveState === "registration_open" && (
+          <TouchableOpacity
+            style={styles.lockBtn}
+            onPress={handleCloseRegistration}
+          >
+            <Text allowFontScaling={false} style={styles.lockBtnText}>
+              Close Registration / Lock Players
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.searchInputWrapper}>
+          <Text allowFontScaling={false} style={styles.searchIcon}>
+            {GLYPH.search}
+          </Text>
+          <TextInput
+            allowFontScaling={false}
+            style={styles.searchInput}
+            placeholder="Search players..."
+            placeholderTextColor={COLORS.textMuted}
+            value={playerSearch}
+            onChangeText={setPlayerSearch}
           />
-        ))
-      )}
-    </View>
-  );
+        </View>
+
+        <View style={styles.field}>
+          <Dropdown
+            placeholder="Filter status"
+            options={PLAYER_FILTERS}
+            value={statusFilter}
+            onSelect={(v) => setStatusFilter(v as "all" | DisplayStatus)}
+          />
+        </View>
+
+        {hub.registrationsLoading ? (
+          <View style={styles.centerBlock}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : filteredRegs.length === 0 ? (
+          <EmptyState
+            message="No players to show"
+            submessage="Add players or adjust the filter."
+          />
+        ) : (
+          filteredRegs.map((item) => (
+            <RegistrationRow
+              key={item.id}
+              registration={item}
+              sidePots={sidePots}
+              onReady={(paidEntry, paidPots) =>
+                handleReady(item, paidEntry, paidPots)
+              }
+              onNoShow={() => handleNoShow(item)}
+              onRemove={() => handleRemove(item)}
+              onUndo={() => handleUndoReady(item)}
+              onRestore={() => handleRestore(item)}
+              isProcessing={processingId === item.id}
+            />
+          ))
+        )}
+      </View>
+    );
+  };
 
   const renderTables = () => (
     <View>
@@ -1859,7 +1970,7 @@ export default function ManageTournamentScreen() {
   const renderReview = () => {
     const checks = [
       { key: "settings" as TabKey, label: "Settings completed", ok: stepComplete.settings },
-      { key: "players" as TabKey, label: "Players checked in (2+)", ok: stepComplete.players },
+      { key: "players" as TabKey, label: "Players ready (2+)", ok: stepComplete.players },
       { key: "tables" as TabKey, label: "Tables configured", ok: stepComplete.tables },
       { key: "bracket" as TabKey, label: "Bracket generated", ok: stepComplete.bracket },
     ];
@@ -2666,6 +2777,86 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "600",
+  },
+  readyBtn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  readyBtnText: {
+    color: COLORS.white,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
+  undoBtn: { backgroundColor: COLORS.surface, borderColor: COLORS.textSecondary },
+  undoBtnText: {
+    color: COLORS.textSecondary,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+  },
+  restoreBtn: { backgroundColor: COLORS.success + "20", borderColor: COLORS.success },
+  restoreBtnText: {
+    color: COLORS.success,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+  },
+  // Player card — header / status / payment
+  regHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+  },
+  statusLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+  },
+  statusDotSm: { width: webSc(9), height: webSc(9), borderRadius: webSc(5) },
+  statusLineText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  payRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+  },
+  checkbox: {
+    width: webSc(22),
+    height: webSc(22),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.background,
+  },
+  checkboxOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  checkboxMark: {
+    color: COLORS.white,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "800",
+  },
+  payLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  payLabelPaid: { color: COLORS.success, fontWeight: "600" },
+  summaryPills: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    flexWrap: "wrap",
+    flex: 1,
+  },
+  summaryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.full),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(4),
+  },
+  summaryPillText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.text,
+    fontWeight: "700",
   },
 
   // Search input (modal + players filter)
