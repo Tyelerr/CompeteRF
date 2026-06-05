@@ -173,6 +173,7 @@ interface SettingsForm {
   diffMinRace: number;
   diffPerGame: number;
   diffMaxRace: number;
+  diffMaxEnabled: boolean;
   sidePots: SidePotForm[];
 }
 
@@ -239,9 +240,10 @@ const toForm = (t: Tournament): SettingsForm => {
     raceWinners: ls.fixedRaceWinners ?? parseRaceNumber(t.race) ?? 5,
     raceLosers: ls.fixedRaceLosers ?? 4,
     raceFinals: ls.fixedRaceFinals ?? 7,
-    diffMinRace: ls.fargoDiffMinRace ?? 3,
-    diffPerGame: ls.fargoDiffPerGame ?? 50,
+    diffMinRace: ls.fargoDiffMinRace ?? 0,
+    diffPerGame: ls.fargoDiffPerGame ?? 40,
     diffMaxRace: ls.fargoDiffMaxRace ?? 8,
+    diffMaxEnabled: ls.fargoDiffMaxRace != null,
     sidePots: (t.side_pots ?? []).map((p) => ({
       name: p.name ?? "",
       amount: numStr(p.amount as number),
@@ -307,7 +309,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     })),
     fargoDiffMinRace: f.diffMinRace,
     fargoDiffPerGame: f.diffPerGame,
-    fargoDiffMaxRace: f.diffMaxRace,
+    fargoDiffMaxRace: f.diffMaxEnabled ? f.diffMaxRace : null,
     fargoDiffRounding: "down",
   },
   };
@@ -376,47 +378,88 @@ const FieldLabel = ({ label }: { label: string }) => (
   </Text>
 );
 
-// Compact +/- stepper for short numeric values (races) — no keyboard needed.
+// Full-width +/- stepper. Center reads e.g. "Race to 7". Press-and-hold on a
+// button repeats and accelerates. No keyboard needed.
 const Stepper = ({
-  label,
   value,
   onChange,
-  min = 1,
+  prefix,
+  suffix,
+  min = 0,
   max = 99,
   step = 1,
 }: {
-  label: string;
   value: number;
   onChange: (v: number) => void;
+  prefix?: string;
+  suffix?: string;
   min?: number;
   max?: number;
   step?: number;
-}) => (
-  <View style={styles.field}>
-    <FieldLabel label={label} />
+}) => {
+  const safe = Number.isFinite(value) ? value : min;
+  const valueRef = useRef(safe);
+  valueRef.current = safe;
+  const holdRef = useRef<{
+    t?: ReturnType<typeof setTimeout>;
+    i?: ReturnType<typeof setInterval>;
+  }>({});
+
+  const stop = () => {
+    if (holdRef.current.t) clearTimeout(holdRef.current.t);
+    if (holdRef.current.i) clearInterval(holdRef.current.i);
+    holdRef.current = {};
+  };
+  useEffect(() => stop, []);
+
+  const bump = (dir: number, mult = 1) => {
+    const next = Math.min(max, Math.max(min, valueRef.current + dir * step * mult));
+    if (next !== valueRef.current) {
+      valueRef.current = next;
+      onChange(next);
+    }
+  };
+  const startHold = (dir: number) => {
+    bump(dir); // immediate tap
+    holdRef.current.t = setTimeout(() => {
+      let count = 0;
+      holdRef.current.i = setInterval(() => {
+        count += 1;
+        bump(dir, count > 25 ? 10 : count > 12 ? 3 : 1); // accelerate
+      }, 70);
+    }, 350);
+  };
+
+  const center = [prefix, safe, suffix]
+    .filter((p) => p !== undefined && p !== "")
+    .join(" ");
+
+  return (
     <View style={styles.stepperRow}>
       <TouchableOpacity
         style={styles.stepBtn}
-        onPress={() => onChange(Math.max(min, value - step))}
+        onPressIn={() => startHold(-1)}
+        onPressOut={stop}
       >
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           -
         </Text>
       </TouchableOpacity>
-      <Text allowFontScaling={false} style={styles.stepValue}>
-        {value}
+      <Text allowFontScaling={false} style={styles.stepCenter}>
+        {center}
       </Text>
       <TouchableOpacity
         style={styles.stepBtn}
-        onPress={() => onChange(Math.min(max, value + step))}
+        onPressIn={() => startHold(1)}
+        onPressOut={stop}
       >
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           +
         </Text>
       </TouchableOpacity>
     </View>
-  </View>
-);
+  );
+};
 
 // ── Add Player Modal (reused from the retired manage-players screen) ──────────
 const AddPlayerModal = ({
@@ -792,9 +835,7 @@ export default function ManageTournamentScreen() {
       raceMode === "groups"
         ? (ls.raceGroups?.length ?? 0) >= 1
         : raceMode === "differential"
-          ? ls.fargoDiffMinRace != null &&
-            ls.fargoDiffPerGame != null &&
-            ls.fargoDiffMaxRace != null
+          ? ls.fargoDiffMinRace != null && ls.fargoDiffPerGame != null
           : ls.fixedRaceWinners != null;
     const settings =
       !!(
@@ -1172,30 +1213,30 @@ export default function ManageTournamentScreen() {
           {form.raceMode === "fixed" && (
             <View>
               <Stepper
-                label={
+                prefix={
                   formatHasLosersSide(form.tournamentFormat)
-                    ? "Winners Race To"
-                    : "Match Race To"
+                    ? "Winners race to"
+                    : "Race to"
                 }
                 value={form.raceWinners}
                 onChange={(v) => patchForm({ raceWinners: v })}
-                min={1}
+                min={0}
                 max={50}
               />
               {formatHasLosersSide(form.tournamentFormat) && (
                 <Stepper
-                  label="Losers Race To"
+                  prefix="Losers race to"
                   value={form.raceLosers}
                   onChange={(v) => patchForm({ raceLosers: v })}
-                  min={1}
+                  min={0}
                   max={50}
                 />
               )}
               <Stepper
-                label="Finals Race To"
+                prefix="Finals race to"
                 value={form.raceFinals}
                 onChange={(v) => patchForm({ raceFinals: v })}
-                min={1}
+                min={0}
                 max={50}
               />
             </View>
@@ -1206,42 +1247,58 @@ export default function ManageTournamentScreen() {
               <Text allowFontScaling={false} style={styles.hint}>
                 Races are calculated automatically from each pair&apos;s Fargo
                 gap. The lower-rated player races to the minimum; the higher gets
-                one extra game per the Fargo step, capped at the maximum (rounded
-                down).
+                one extra game per the point difference (rounded down).
               </Text>
               <Stepper
-                label="Minimum Race To"
+                prefix="Min race to"
                 value={form.diffMinRace}
                 onChange={(v) => patchForm({ diffMinRace: v })}
-                min={1}
+                min={0}
                 max={50}
               />
               <Stepper
-                label="Fargo Difference Per Game"
+                prefix="Point difference"
                 value={form.diffPerGame}
                 onChange={(v) => patchForm({ diffPerGame: v })}
-                min={5}
-                max={300}
-                step={5}
-              />
-              <Stepper
-                label="Maximum Race To"
-                value={form.diffMaxRace}
-                onChange={(v) => patchForm({ diffMaxRace: v })}
                 min={1}
-                max={50}
+                max={300}
+                step={1}
               />
-              <Text allowFontScaling={false} style={styles.hint}>
-                Example: a 150-point gap ={" "}
-                {Math.floor(150 / form.diffPerGame)} extra game
-                {Math.floor(150 / form.diffPerGame) === 1 ? "" : "s"} — lower
-                player races to {form.diffMinRace}, higher to{" "}
-                {Math.min(
-                  form.diffMaxRace,
-                  form.diffMinRace + Math.floor(150 / form.diffPerGame),
-                )}
-                .
-              </Text>
+              <ToggleSwitch
+                label="Limit maximum race"
+                value={form.diffMaxEnabled}
+                onValueChange={(v) => patchForm({ diffMaxEnabled: v })}
+              />
+              {form.diffMaxEnabled && (
+                <Stepper
+                  prefix="Max race to"
+                  value={form.diffMaxRace}
+                  onChange={(v) => patchForm({ diffMaxRace: v })}
+                  min={1}
+                  max={50}
+                />
+              )}
+              {(() => {
+                const per = Math.max(1, form.diffPerGame);
+                const higher = 500 + per;
+                const capped = form.diffMaxEnabled
+                  ? Math.min(form.diffMaxRace, form.diffMinRace + 1)
+                  : form.diffMinRace + 1;
+                return (
+                  <View style={styles.exampleBox}>
+                    <Text allowFontScaling={false} style={styles.exampleTitle}>
+                      Example
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.exampleText}>
+                      A player rated 500 races to {form.diffMinRace}.
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.exampleText}>
+                      A player rated {higher} (a {per}-point gap = 1 game) races
+                      to {capped}.
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
           )}
 
@@ -1303,6 +1360,29 @@ export default function ManageTournamentScreen() {
                   + Add Group
                 </Text>
               </TouchableOpacity>
+              {form.raceGroups.length > 0 &&
+                (() => {
+                  const g = form.raceGroups[0];
+                  const mn = parseInt(g.minFargo, 10);
+                  const mx = parseInt(g.maxFargo, 10);
+                  const sample = Number.isFinite(mn)
+                    ? Number.isFinite(mx)
+                      ? Math.round((mn + mx) / 2)
+                      : mn + 10
+                    : 600;
+                  return (
+                    <View style={styles.exampleBox}>
+                      <Text allowFontScaling={false} style={styles.exampleTitle}>
+                        Example
+                      </Text>
+                      <Text allowFontScaling={false} style={styles.exampleText}>
+                        A player rated {sample} falls in Group{" "}
+                        {g.label || "A"} ({g.minFargo || "0"}-{g.maxFargo || "+"}
+                        ) and races to {g.raceTo || "?"}.
+                      </Text>
+                    </View>
+                  );
+                })()}
             </View>
           )}
         </Section>
@@ -2076,35 +2156,56 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
   inputNarrow: { width: webSc(96), alignSelf: "flex-start" },
 
-  // +/- stepper
+  // +/- stepper (full width: [-]  centered text  [+])
   stepperRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: webSc(SPACING.md),
-    alignSelf: "flex-start",
-  },
-  stepBtn: {
-    width: webSc(44),
-    height: webSc(44),
+    justifyContent: "space-between",
+    backgroundColor: COLORS.background,
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    marginBottom: webSc(SPACING.sm),
+  },
+  stepBtn: {
+    width: webSc(52),
+    height: webSc(46),
     alignItems: "center",
     justifyContent: "center",
   },
   stepBtnText: {
-    fontSize: webMs(FONT_SIZES.xl),
+    fontSize: webMs(FONT_SIZES.xxl),
     fontWeight: "700",
     color: COLORS.primary,
-    lineHeight: webMs(FONT_SIZES.xl),
+    lineHeight: webMs(FONT_SIZES.xxl) + 2,
   },
-  stepValue: {
-    minWidth: webSc(36),
+  stepCenter: {
+    flex: 1,
     textAlign: "center",
-    fontSize: webMs(FONT_SIZES.xl),
+    fontSize: webMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
+  },
+  // Worked-example box (differential + groups)
+  exampleBox: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.xs),
+  },
+  exampleTitle: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: webSc(SPACING.xs),
+    textTransform: "uppercase",
+  },
+  exampleText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    lineHeight: webMs(FONT_SIZES.sm) * 1.4,
   },
   hint: {
     fontSize: webMs(FONT_SIZES.xs),
