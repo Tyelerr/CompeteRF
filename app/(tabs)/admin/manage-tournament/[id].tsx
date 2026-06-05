@@ -351,6 +351,8 @@ const LabeledInput = ({
   multiline,
   narrow,
   maxLength,
+  disabled,
+  hint,
 }: {
   label: string;
   value: string;
@@ -360,17 +362,24 @@ const LabeledInput = ({
   multiline?: boolean;
   narrow?: boolean; // compact width for short numeric values (e.g. race-to)
   maxLength?: number;
+  disabled?: boolean;
+  hint?: string;
 }) => (
   <View style={styles.field}>
-    <Text allowFontScaling={false} style={styles.fieldLabel}>
+    <Text
+      allowFontScaling={false}
+      style={[styles.fieldLabel, disabled && styles.labelDisabled]}
+    >
       {label}
     </Text>
     <TextInput
       allowFontScaling={false}
+      editable={!disabled}
       style={[
         styles.input,
         multiline && styles.inputMultiline,
         narrow && styles.inputNarrow,
+        disabled && styles.inputDisabled,
       ]}
       value={value}
       onChangeText={onChangeText}
@@ -380,6 +389,11 @@ const LabeledInput = ({
       multiline={multiline}
       maxLength={maxLength}
     />
+    {hint ? (
+      <Text allowFontScaling={false} style={styles.hint}>
+        {hint}
+      </Text>
+    ) : null}
   </View>
 );
 
@@ -1168,6 +1182,9 @@ export default function ManageTournamentScreen() {
     }
     const venue = hub.tournament?.venues;
     const canStart = hub.phase === "ready_to_open";
+    // Max Fargo and Open Tournament are mutually exclusive — each greys the other.
+    const maxFargoDisabled = form.openTournament;
+    const openTournamentDisabled = !!form.maxFargo.trim();
 
     return (
       <View>
@@ -1209,6 +1226,42 @@ export default function ManageTournamentScreen() {
             placeholder="Describe the tournament..."
             multiline
           />
+        </Section>
+
+        <Section title="Fargo">
+          <LabeledInput
+            label="Maximum Fargo"
+            value={form.maxFargo}
+            onChangeText={(v) => patchForm({ maxFargo: v })}
+            placeholder={
+              maxFargoDisabled
+                ? "Disabled (Open Tournament is on)"
+                : "e.g., 550 (blank = open)"
+            }
+            keyboardType="numeric"
+            disabled={maxFargoDisabled}
+            hint={
+              maxFargoDisabled
+                ? "Turn off Open Tournament to set a maximum Fargo."
+                : undefined
+            }
+          />
+          <ToggleSwitch
+            label="Reports to Fargo"
+            value={form.reportsToFargo}
+            onValueChange={(v) => patchForm({ reportsToFargo: v })}
+          />
+          <ToggleSwitch
+            label="Open Tournament"
+            value={form.openTournament}
+            onValueChange={(v) => patchForm({ openTournament: v })}
+            disabled={openTournamentDisabled}
+          />
+          {openTournamentDisabled && (
+            <Text allowFontScaling={false} style={styles.hint}>
+              Clear the maximum Fargo to allow an open tournament.
+            </Text>
+          )}
         </Section>
 
         <Section title="Race">
@@ -1396,26 +1449,6 @@ export default function ManageTournamentScreen() {
                 })()}
             </View>
           )}
-        </Section>
-
-        <Section title="Fargo">
-          <LabeledInput
-            label="Maximum Fargo"
-            value={form.maxFargo}
-            onChangeText={(v) => patchForm({ maxFargo: v })}
-            placeholder="e.g., 550 (blank = open)"
-            keyboardType="numeric"
-          />
-          <ToggleSwitch
-            label="Reports to Fargo"
-            value={form.reportsToFargo}
-            onValueChange={(v) => patchForm({ reportsToFargo: v })}
-          />
-          <ToggleSwitch
-            label="Open Tournament"
-            value={form.openTournament}
-            onValueChange={(v) => patchForm({ openTournament: v })}
-          />
         </Section>
 
         <Section title="Entry & Money">
@@ -2170,6 +2203,8 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
   inputNarrow: { width: webSc(96), alignSelf: "flex-start" },
+  inputDisabled: { opacity: 0.4 },
+  labelDisabled: { color: COLORS.textMuted },
 
   // +/- stepper (full width: [-]  centered text  [+])
   stepperRow: {
