@@ -57,6 +57,8 @@ export interface Tournament {
   updated_at: string;
   archived_at?: string;
   archived_by?: number;
+  // Computed (attached by viewmodels): active registration count for status badges.
+  registered_count?: number;
   // Joined data (from queries)
   venues?: {
     id: number;

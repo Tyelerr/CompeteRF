@@ -31,6 +31,22 @@ export const registrationService = {
     return (data || []) as unknown as Registration[];
   },
 
+  // Active (non-cancelled, non-no-show) registration count per tournament, for the
+  // public billiards status badges. Public SELECT on tournament_players permits
+  // this unauthenticated. Returns a { [tournamentId]: count } map.
+  async getRegistrationCounts(): Promise<Record<number, number>> {
+    const { data, error } = await supabase
+      .from("tournament_players")
+      .select("tournament_id, status")
+      .not("status", "in", "(cancelled,no_show)");
+    if (error) throw error;
+    const counts: Record<number, number> = {};
+    for (const row of (data || []) as { tournament_id: number }[]) {
+      counts[row.tournament_id] = (counts[row.tournament_id] || 0) + 1;
+    }
+    return counts;
+  },
+
   // A single player's registrations across tournaments (profile "Registered" bucket).
   async getPlayerRegistrations(playerId: number): Promise<Registration[]> {
     const { data, error } = await supabase

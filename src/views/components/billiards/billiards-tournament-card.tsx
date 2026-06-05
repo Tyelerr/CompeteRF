@@ -1,5 +1,6 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Image,
   Platform,
   StyleSheet,
@@ -37,6 +38,153 @@ const isWeb = Platform.OS === "web";
 const HEART_ICON_SIZE = moderateScale(34);
 const HEART_CONTAINER_SIZE = moderateScale(55);
 
+// ── Tournament status (derived for the card badge) ───────────────────────────
+type CardStatusKey =
+  | "prereg"
+  | "reg_open"
+  | "live"
+  | "reg_closed"
+  | "completed";
+
+interface CardStatus {
+  key: CardStatusKey;
+  label: string;
+  color: string;
+  animate: boolean; // breathe the dot + image glow (active statuses only)
+  scalePulse: boolean; // LIVE only: slight image scale
+}
+
+const STATUS_COLORS: Record<CardStatusKey, string> = {
+  prereg: "#EAB308", // yellow
+  reg_open: COLORS.success, // green
+  live: COLORS.primary, // blue
+  reg_closed: "#F97316", // orange
+  completed: COLORS.textMuted, // gray
+};
+
+// Derive the status shown on the card. Returns null for plain listings that
+// aren't using Compete registration yet (keeps those cards clean).
+const deriveCardStatus = (t: Tournament): CardStatus | null => {
+  const count = t.registered_count ?? 0;
+  const live = t.live_state ?? "not_started";
+  const make = (
+    key: CardStatusKey,
+    label: string,
+    animate: boolean,
+    scalePulse = false,
+  ): CardStatus => ({ key, label, color: STATUS_COLORS[key], animate, scalePulse });
+
+  if (t.status === "completed" || live === "finished")
+    return make("completed", "Completed", false);
+  if (live === "in_progress") return make("live", "LIVE", true, true);
+  if (live === "registration_open")
+    return make("reg_open", "Registration Open", true);
+  if (live === "registration_closed")
+    return make("reg_closed", "Registration Closed", false);
+  if (count > 0) return make("prereg", "Pre-Reg Open", true); // not_started w/ pre-regs
+  return null;
+};
+
+const statusCountText = (status: CardStatus, count: number): string => {
+  if (status.key === "live" || status.key === "completed")
+    return count > 0 ? `${count} ${count === 1 ? "Player" : "Players"}` : "";
+  return `${count} Registered`;
+};
+
+// Discord-style breathing dot: scale 1->1.15, opacity 0.85->0.25, ~2.6s loop.
+const StatusDot = ({ color, animate }: { color: string; animate: boolean }) => {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!animate) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(v, { toValue: 1, duration: 1300, useNativeDriver: !isWeb }),
+        Animated.timing(v, { toValue: 0, duration: 1300, useNativeDriver: !isWeb }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animate, v]);
+  const animatedStyle = animate
+    ? {
+        opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 0.25] }),
+        transform: [
+          { scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }) },
+        ],
+      }
+    : undefined;
+  const size = isWeb ? 9 : scale(9);
+  return (
+    <Animated.View
+      style={[
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: color },
+        animatedStyle,
+      ]}
+    />
+  );
+};
+
+// Subtle breathing glow ring over the image for active statuses.
+const StatusGlow = ({ status }: { status: CardStatus }) => {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!status.animate) return;
+    const dur = status.scalePulse ? 1500 : 1800;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(v, { toValue: 1, duration: dur, useNativeDriver: !isWeb }),
+        Animated.timing(v, { toValue: 0, duration: dur, useNativeDriver: !isWeb }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [status.animate, status.scalePulse, v]);
+  if (!status.animate) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.glowRing,
+        {
+          borderColor: status.color,
+          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.65] }),
+          transform: [
+            {
+              scale: v.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, status.scalePulse ? 1.03 : 1.0],
+              }),
+            },
+          ],
+        },
+      ]}
+    />
+  );
+};
+
+const StatusSection = ({ status, count }: { status: CardStatus; count: number }) => {
+  const countText = statusCountText(status, count);
+  return (
+    <View style={styles.statusSection}>
+      <View style={styles.statusRow}>
+        <StatusDot color={status.color} animate={status.animate} />
+        <Text
+          allowFontScaling={false}
+          style={[styles.statusLabel, { color: status.color }]}
+          numberOfLines={1}
+        >
+          {status.label}
+        </Text>
+      </View>
+      {!!countText && (
+        <Text allowFontScaling={false} style={styles.statusCount}>
+          {countText}
+        </Text>
+      )}
+    </View>
+  );
+};
+
 export const BilliardsTournamentCard = ({
   tournament,
   isFavorited,
@@ -49,6 +197,8 @@ export const BilliardsTournamentCard = ({
   const venue = tournament.venues;
   const imageUrl = getTournamentImageUrl(tournament);
   const [hovered, setHovered] = useState(false);
+  const status = deriveCardStatus(tournament);
+  const regCount = tournament.registered_count ?? 0;
 
   const renderImage = () => {
     if (imageUrl) {
@@ -95,6 +245,7 @@ export const BilliardsTournamentCard = ({
           ]}
         >
           {renderImage()}
+          {status && <StatusGlow status={status} />}
           <View style={styles.idBadge}>
             <Text allowFontScaling={false} style={styles.idText}>ID:{tournament.id}</Text>
           </View>
@@ -115,6 +266,7 @@ export const BilliardsTournamentCard = ({
           <View style={styles.gameTypeBadge}>
             <Text allowFontScaling={false} style={styles.gameTypeText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{tournament.game_type}</Text>
           </View>
+          {status && <StatusSection status={status} count={regCount} />}
           <Text allowFontScaling={false} style={styles.dateTime}>
             {formatDate(tournament.tournament_date)}
           </Text>
@@ -152,6 +304,7 @@ export const BilliardsTournamentCard = ({
     >
       <View style={styles.webImageSection}>
         {renderImage()}
+        {status && <StatusGlow status={status} />}
         {hovered && <View style={styles.webImageOverlay} />}
         <View style={styles.webIdBadge}>
           <Text allowFontScaling={false} style={styles.webIdText}>ID:{tournament.id}</Text>
@@ -176,6 +329,25 @@ export const BilliardsTournamentCard = ({
         <Text allowFontScaling={false} style={[styles.webName, hovered && styles.webNameHovered]} numberOfLines={2}>
           {tournament.name}
         </Text>
+
+        {status && (
+          <View style={styles.webStatusRow}>
+            <StatusDot color={status.color} animate={status.animate} />
+            <Text
+              allowFontScaling={false}
+              style={[styles.webStatusLabel, { color: status.color }]}
+              numberOfLines={1}
+            >
+              {status.label}
+            </Text>
+            {!!statusCountText(status, regCount) && (
+              <Text allowFontScaling={false} style={styles.webStatusCount}>
+                {"· "}
+                {statusCountText(status, regCount)}
+              </Text>
+            )}
+          </View>
+        )}
 
         <View style={styles.webRow}>
           <Text allowFontScaling={false} style={styles.webIcon}>📅</Text>
@@ -351,6 +523,44 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  // Status section (mobile)
+  statusSection: {
+    alignItems: "center",
+    marginTop: -scale(SPACING.xs),
+    marginBottom: scale(SPACING.sm),
+  },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: scale(6) },
+  statusLabel: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  statusCount: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginTop: scale(2),
+  },
+  // Breathing glow ring over the image (mobile + web)
+  glowRing: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 3,
+    borderRadius: RADIUS.lg,
+  },
+  // Status section (web)
+  webStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+    flexWrap: "wrap",
+  },
+  webStatusLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.3 },
+  webStatusCount: { fontSize: 11, color: COLORS.textSecondary, fontWeight: "600" },
   dateTime: {
     fontSize: moderateScale(FONT_SIZES.xs),
     color: COLORS.textSecondary,

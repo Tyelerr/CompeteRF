@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
+import { registrationService } from "../models/services/registration.service";
 import { normalizeGameType, tournamentService } from "../models/services/tournament.service";
 import { venueService } from "../models/services/venue.service";
 import { defaultFilters, Filters, getFargoMax } from "../models/types/filter.types";
@@ -125,7 +126,18 @@ export function useBilliards(): UseBilliardsReturn {
   const loadTournaments = async () => {
     try {
       const { data } = await tournamentService.getTournaments({}, 1, 10000);
-      setTournaments(data);
+      // Best-effort: attach active registration counts for the status badges.
+      let withCounts = data;
+      try {
+        const counts = await registrationService.getRegistrationCounts();
+        withCounts = data.map((t) => ({
+          ...t,
+          registered_count: counts[t.id] ?? 0,
+        }));
+      } catch {
+        // tournament_players unavailable — render cards without counts.
+      }
+      setTournaments(withCounts);
     } catch (err: any) {
       setError(err.message);
     } finally {
