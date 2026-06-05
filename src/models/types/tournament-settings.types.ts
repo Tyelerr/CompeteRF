@@ -25,21 +25,36 @@ export interface BracketSlot {
   registrationId?: number | null; // null for a bye slot
   name: string;
   fargo?: number | null;
+  raceTo?: number | null; // this player's race in their match (handicap-aware)
 }
 export interface BracketMatch {
   matchNumber: number;
   p1: BracketSlot | null;
   p2: BracketSlot | null; // null => bye (p1 advances)
   bye: boolean;
-  raceTo: number | null;
+  raceTo: number | null; // common race (fixed mode); per-slot otherwise
 }
 export interface GeneratedBracket {
   generatedAt: string;
   drawType: "random"; // V1: random only
   format: string; // tournament_format at generation time
+  drawNumber: number; // increments each (re)draw
+  players: number;
   bracketSize: number;
   byes: number;
   round1: BracketMatch[];
+}
+
+// One entry in the draw history (append-only) — stored in live_settings.drawLog.
+export interface DrawLogEntry {
+  drawNumber: number;
+  tdUserId?: number | null; // profiles.id_auto
+  tdName?: string;
+  timestamp: string;
+  reason: string; // "Initial draw" for #1
+  players: number;
+  bracketSize: number;
+  drawType: "random";
 }
 
 export interface TournamentLiveSettings {
@@ -69,4 +84,6 @@ export interface TournamentLiveSettings {
 
   // Generated draw (built on the Bracket / Draw page, not in Settings).
   bracket?: GeneratedBracket | null;
+  // Append-only draw history (every Draw / Redraw).
+  drawLog?: DrawLogEntry[];
 }

@@ -47,9 +47,22 @@ import { Profile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
 import { Tournament } from "../../../../src/models/types/tournament.types";
 import {
+  BracketMatch,
+  DrawLogEntry,
+  GeneratedBracket,
   RaceGroup,
   RaceMode,
 } from "../../../../src/models/types/tournament-settings.types";
+import {
+  DrawPlayer,
+  RaceConfig,
+  STANDARD_SIZES,
+  averageRace,
+  computeBracketStats,
+  generateRound1,
+  recommendedBracketSize,
+} from "../../../../src/utils/bracket.utils";
+import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
@@ -110,6 +123,7 @@ const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
   ready_to_open: { label: "Ready to Start Registration", color: COLORS.primary },
   registration_open: { label: "Registration Open", color: COLORS.success },
   registration_closed: { label: "Registration Closed", color: COLORS.warning },
+  bracket_drawn: { label: "Bracket Drawn", color: COLORS.primary },
   running: { label: "Running", color: COLORS.primary },
   completed: { label: "Completed", color: COLORS.textSecondary },
   archived: { label: "Archived", color: COLORS.textSecondary },
@@ -731,6 +745,58 @@ const groupRep = (g: RaceGroup): number =>
     ? Math.round((g.minFargo + g.maxFargo) / 2)
     : g.minFargo;
 
+// ── Bracket helpers ──────────────────────────────────────────────────────────
+const prettyFormat = (f: string): string =>
+  (f || "")
+    .split("-")
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(" ");
+
+const matchLabel = (m: BracketMatch): string => {
+  const n1 = m.p1?.name;
+  const n2 = m.p2?.name;
+  if (m.bye) return `${n1 ?? n2 ?? "TBD"} — BYE`;
+  const race =
+    m.raceTo != null
+      ? `Race to ${m.raceTo}`
+      : `${n1} to ${m.p1?.raceTo ?? "?"} / ${n2} to ${m.p2?.raceTo ?? "?"}`;
+  return `${n1} vs ${n2} · ${race}`;
+};
+
+const BracketSum = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) => (
+  <View style={styles.sumCard}>
+    <Text allowFontScaling={false} style={styles.sumValue} numberOfLines={1}>
+      {value}
+    </Text>
+    <Text allowFontScaling={false} style={styles.sumLabel} numberOfLines={2}>
+      {label}
+    </Text>
+  </View>
+);
+
+const BracketCalc = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) => (
+  <View style={styles.calcRow}>
+    <Text allowFontScaling={false} style={styles.calcLabel}>
+      {label}
+    </Text>
+    <Text allowFontScaling={false} style={styles.calcVal}>
+      {value}
+    </Text>
+  </View>
+);
+
 // ── Registration Row ─────────────────────────────────────────────────────────
 const RegistrationRow = ({
   registration,
@@ -744,6 +810,7 @@ const RegistrationRow = ({
   onUndo,
   onRestore,
   isProcessing,
+  locked,
 }: {
   registration: Registration;
   sidePots: { name: string; amount: number }[];
@@ -766,6 +833,7 @@ const RegistrationRow = ({
   onUndo: () => void;
   onRestore: () => void;
   isProcessing: boolean;
+  locked?: boolean;
 }) => {
   const d = displayStatusOf(registration.status);
   const meta = DISPLAY_META[d];
@@ -948,13 +1016,24 @@ const RegistrationRow = ({
         </Text>
       </View>
 
-      {d === "prereg" &&
+      {locked && (
+        <>
+          <Text allowFontScaling={false} style={styles.assignText}>
+            {assignmentDisplay()}
+          </Text>
+          <Text allowFontScaling={false} style={styles.hint}>
+            Player list locked — reopen &amp; redraw to change.
+          </Text>
+        </>
+      )}
+
+      {!locked && d === "prereg" &&
         renderEditableBody(
           () => onReady(fargoNum, isGroups, paidEntry, paidPots),
           "Ready",
         )}
 
-      {d === "ready" && editing &&
+      {!locked && d === "ready" && editing &&
         renderEditableBody(
           () => {
             onSaveEdit(fargoNum, isGroups, paidEntry, paidPots);
@@ -967,7 +1046,7 @@ const RegistrationRow = ({
           },
         )}
 
-      {d === "ready" && !editing && (
+      {!locked && d === "ready" && !editing && (
         <>
           <View style={styles.assignPayRow}>
             <View style={styles.payCol}>
@@ -1028,7 +1107,7 @@ const RegistrationRow = ({
         </>
       )}
 
-      {(d === "no_show" || d === "removed") && (
+      {!locked && (d === "no_show" || d === "removed") && (
         <>
           <Text allowFontScaling={false} style={styles.assignText}>
             {assignmentDisplay()}
@@ -1240,34 +1319,6 @@ export default function ManageTournamentScreen() {
     ]);
 
   // ---- Status-flow actions ------------------------------------------------
-  const handleCloseRegistration = () => {
-    // Block if any player is still pending (Pre-Registered — not yet Ready,
-    // which means a missing Fargo and/or unpaid entry fee).
-    const pending = hub.registrations.filter(
-      (r) => displayStatusOf(r.status) === "prereg",
-    ).length;
-    if (pending > 0) {
-      Alert.alert(
-        "Still Pending Players",
-        `${pending} player${pending === 1 ? "" : "s"} ${pending === 1 ? "is" : "are"} still pre-registered (missing Fargo or unpaid entry fee). Mark each as Ready, No Show, or Remove before locking the field.`,
-      );
-      return;
-    }
-    Alert.alert(
-      "Close Registration",
-      "Lock the player field and stop new registrations?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Close & Lock",
-          onPress: () =>
-            hub
-              .closeRegistration()
-              .catch(() => Alert.alert("Error", "Failed to close registration.")),
-        },
-      ],
-    );
-  };
   const handleStartTournament = () =>
     Alert.alert(
       "Start Tournament",
@@ -1286,6 +1337,103 @@ export default function ManageTournamentScreen() {
 
   const tournamentName = hub.tournament?.name || paramName || "Tournament";
   const phaseMeta = PHASE_META[hub.phase];
+
+  // ---- Bracket / Draw state ----------------------------------------------
+  const { profile: tdProfile } = useAuthContext();
+  const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
+  const [redrawVisible, setRedrawVisible] = useState(false);
+  const [redrawReason, setRedrawReason] = useState("");
+  const [showDrawHistory, setShowDrawHistory] = useState(false);
+  const pendingRedrawReason = useRef<string | null>(null);
+
+  const readyPlayers: DrawPlayer[] = useMemo(
+    () =>
+      hub.registrations
+        .filter((r) => r.status === "checked_in")
+        .map((r) => ({
+          registrationId: r.id,
+          name: getDisplayName(r),
+          fargo: r.fargo_rating ?? null,
+        })),
+    [hub.registrations],
+  );
+
+  const raceConfig: RaceConfig = useMemo(() => {
+    const ls = hub.tournament?.live_settings ?? {};
+    return {
+      mode: ls.raceMode ?? "fixed",
+      fixedWinners: ls.fixedRaceWinners ?? 5,
+      groups: ls.raceGroups ?? [],
+      diffMin: ls.fargoDiffMinRace ?? 3,
+      diffPerGame: ls.fargoDiffPerGame ?? 40,
+      diffMax: ls.fargoDiffMaxRace ?? null,
+    };
+  }, [hub.tournament]);
+
+  const handleDrawBracket = (reason: string) => {
+    if (readyPlayers.length < 2) {
+      Alert.alert(
+        "Not Enough Players",
+        "You need at least 2 Ready players to draw the bracket.",
+      );
+      return;
+    }
+    const size = bracketSizeSel ?? recommendedBracketSize(readyPlayers.length);
+    const round1 = generateRound1(readyPlayers, size, raceConfig);
+    const drawNumber = (hub.drawLog?.length ?? 0) + 1;
+    const now = new Date().toISOString();
+    const bracket: GeneratedBracket = {
+      generatedAt: now,
+      drawType: "random",
+      format: hub.tournament?.tournament_format ?? "single-elimination",
+      drawNumber,
+      players: readyPlayers.length,
+      bracketSize: size,
+      byes: Math.max(0, size - readyPlayers.length),
+      round1,
+    };
+    const logEntry: DrawLogEntry = {
+      drawNumber,
+      tdUserId: tdProfile?.id_auto ?? null,
+      tdName: tdProfile?.name,
+      timestamp: now,
+      reason,
+      players: readyPlayers.length,
+      bracketSize: size,
+      drawType: "random",
+    };
+    hub
+      .drawBracket({ bracket, logEntry })
+      .then(() => {
+        pendingRedrawReason.current = null;
+      })
+      .catch(() => Alert.alert("Error", "Failed to draw the bracket."));
+  };
+
+  const handleDrawPress = () => {
+    const reason = pendingRedrawReason.current ?? "Initial draw";
+    Alert.alert(
+      "Draw Bracket",
+      "This closes registration and locks the player field. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
+      ],
+    );
+  };
+
+  const handleConfirmReopen = () => {
+    if (!redrawReason.trim()) {
+      Alert.alert("Reason Required", "Enter a reason to reopen and redraw.");
+      return;
+    }
+    pendingRedrawReason.current = redrawReason.trim();
+    setRedrawVisible(false);
+    setActiveTab("bracket");
+    hub
+      .reopenRegistration()
+      .catch(() => Alert.alert("Error", "Failed to reopen registration."));
+  };
 
   // ---- Settings handlers --------------------------------------------------
   const patchForm = (patch: Partial<SettingsForm>) =>
@@ -2004,6 +2152,7 @@ export default function ManageTournamentScreen() {
               onUndo={() => handleUndoReady(item)}
               onRestore={() => handleRestore(item)}
               isProcessing={processingId === item.id}
+              locked={hub.phase === "bracket_drawn"}
             />
           ))
         )}
@@ -2213,6 +2362,244 @@ export default function ManageTournamentScreen() {
     );
   };
 
+  const renderBracket = () => {
+    const ready = readyPlayers;
+    if (ready.length < 2) {
+      return (
+        <TabPlaceholder
+          locked={false}
+          title="Bracket / Draw"
+          body="You need at least 2 Ready players to build the bracket. Mark players Ready on the Players tab first."
+        />
+      );
+    }
+    const recommended = recommendedBracketSize(ready.length);
+    const size = bracketSizeSel ?? hub.bracket?.bracketSize ?? recommended;
+    const format = hub.tournament?.tournament_format ?? "single-elimination";
+    const tablesAvail = Math.max(
+      1,
+      hub.tables.filter((t) => t.status !== "unavailable").length ||
+        hub.tables.length,
+    );
+    const avg = averageRace(ready, raceConfig);
+    const stats = computeBracketStats(
+      ready.length,
+      size,
+      format,
+      avg,
+      tablesAvail,
+    );
+    const locked = hub.phase === "bracket_drawn";
+    const bracket = hub.bracket;
+    const sizeOptions = STANDARD_SIZES.filter((s) => s >= ready.length);
+    const fmtHours = (h: number) => `${h.toFixed(1)} hr`;
+
+    const racePreview = () => {
+      if (raceConfig.mode === "groups") {
+        if (raceConfig.groups.length === 0)
+          return (
+            <Text allowFontScaling={false} style={styles.hint}>
+              No race groups configured.
+            </Text>
+          );
+        return raceConfig.groups.map((g) => {
+          const count = ready.filter(
+            (p) =>
+              p.fargo != null &&
+              p.fargo >= g.minFargo &&
+              (g.maxFargo <= 0 || p.fargo <= g.maxFargo),
+          ).length;
+          return (
+            <BracketCalc
+              key={g.id}
+              label={`Group ${g.label || "?"} (${g.minFargo}-${g.maxFargo || "+"})`}
+              value={`${count} players · Race ${g.raceTo}`}
+            />
+          );
+        });
+      }
+      if (raceConfig.mode === "differential")
+        return (
+          <Text allowFontScaling={false} style={styles.hint}>
+            Each match races by Fargo gap: lower player to {raceConfig.diffMin},
+            higher +1 game per {raceConfig.diffPerGame} pts
+            {raceConfig.diffMax != null ? `, capped at ${raceConfig.diffMax}` : ""}
+            .
+          </Text>
+        );
+      return (
+        <Text allowFontScaling={false} style={styles.hint}>
+          Everyone races to {raceConfig.fixedWinners}.
+        </Text>
+      );
+    };
+
+    return (
+      <View>
+        {bracket && !locked && (
+          <View style={styles.staleBanner}>
+            <Text allowFontScaling={false} style={styles.staleBannerText}>
+              Showing a previous draw (Draw #{bracket.drawNumber}). Draw again to
+              apply changes.
+            </Text>
+          </View>
+        )}
+
+        <Section title="Summary">
+          <View style={styles.sumGrid}>
+            <BracketSum label="Players Added" value={ready.length} />
+            <BracketSum label="Recommended Size" value={recommended} />
+            <BracketSum label="Bracket Size" value={size} />
+            <BracketSum label="Byes" value={stats.byes} />
+            <BracketSum label="Format" value={prettyFormat(format)} />
+            <BracketSum label="Tables Available" value={tablesAvail} />
+            <BracketSum label="Est. Matches" value={stats.totalMatches} />
+            <BracketSum label="Est. Time" value={fmtHours(stats.estCompletionHours)} />
+          </View>
+        </Section>
+
+        {!locked && (
+          <Section title="Bracket Size">
+            <Text allowFontScaling={false} style={styles.hint}>
+              Recommended {recommended} for {ready.length} Ready players. You can
+              size up.
+            </Text>
+            <View style={styles.segmentRow}>
+              {sizeOptions.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.segment, size === s && styles.segmentActive]}
+                  onPress={() => setBracketSizeSel(s)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.segmentText,
+                      size === s && styles.segmentTextActive,
+                    ]}
+                  >
+                    {s}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Section>
+        )}
+
+        {!locked && (
+          <Section title="Draw Type">
+            <View style={styles.segmentRow}>
+              <View style={[styles.segment, styles.segmentActive]}>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.segmentText, styles.segmentTextActive]}
+                >
+                  Random Draw
+                </Text>
+              </View>
+            </View>
+          </Section>
+        )}
+
+        <Section title="Race Assignment">{racePreview()}</Section>
+
+        <Section title="Calculation Summary">
+          <BracketCalc label="Players" value={stats.players} />
+          <BracketCalc label="Bracket Size" value={stats.bracketSize} />
+          <BracketCalc label="Total Byes" value={stats.byes} />
+          <BracketCalc label="Total Matches" value={stats.totalMatches} />
+          <BracketCalc label="Winner Side" value={stats.winnerSideMatches} />
+          <BracketCalc label="Loser Side" value={stats.loserSideMatches} />
+          <BracketCalc label="Estimated Games" value={stats.estGames} />
+          <BracketCalc label="Avg Min / Game" value={stats.minPerGame} />
+          <BracketCalc label="Tables Available" value={tablesAvail} />
+          <BracketCalc
+            label="Est. Completion"
+            value={fmtHours(stats.estCompletionHours)}
+          />
+          <Text
+            allowFontScaling={false}
+            style={[styles.hint, { marginTop: webSc(SPACING.sm) }]}
+          >
+            Estimated time by table count
+          </Text>
+          {stats.byTable.map((b) => (
+            <BracketCalc
+              key={b.tables}
+              label={`Using ${b.tables} tables`}
+              value={fmtHours(b.hours)}
+            />
+          ))}
+        </Section>
+
+        {bracket && (
+          <Section title={`Round 1 — ${bracket.round1.length} matches`}>
+            {bracket.round1.map((m) => (
+              <View key={m.matchNumber} style={styles.matchRow}>
+                <Text allowFontScaling={false} style={styles.matchNum}>
+                  M{m.matchNumber}
+                </Text>
+                <Text
+                  allowFontScaling={false}
+                  style={styles.matchText}
+                  numberOfLines={2}
+                >
+                  {matchLabel(m)}
+                </Text>
+              </View>
+            ))}
+          </Section>
+        )}
+
+        {(hub.drawLog?.length ?? 0) > 0 && (
+          <TouchableOpacity
+            style={styles.historyBtn}
+            onPress={() => setShowDrawHistory(true)}
+          >
+            <Text allowFontScaling={false} style={styles.historyBtnText}>
+              View Draw History ({hub.drawLog.length})
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!locked ? (
+          <TouchableOpacity
+            style={[styles.startBtn, hub.isDrawing && styles.btnDisabled]}
+            onPress={handleDrawPress}
+            disabled={hub.isDrawing}
+          >
+            <Text allowFontScaling={false} style={styles.startBtnText}>
+              {hub.isDrawing ? "Drawing..." : "Draw Bracket"}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.bracketActions}>
+            <TouchableOpacity
+              style={styles.reopenBtn}
+              onPress={() => {
+                setRedrawReason("");
+                setRedrawVisible(true);
+              }}
+            >
+              <Text allowFontScaling={false} style={styles.reopenBtnText}>
+                Reopen &amp; Redraw
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
+              onPress={handleStartTournament}
+              disabled={hub.isMutatingLive}
+            >
+              <Text allowFontScaling={false} style={styles.startBtnText}>
+                Start Tournament
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderTab = () => {
     switch (activeTab) {
       case "settings":
@@ -2222,13 +2609,7 @@ export default function ManageTournamentScreen() {
       case "tables":
         return renderTables();
       case "bracket":
-        return (
-          <TabPlaceholder
-            locked={false}
-            title="Bracket / Draw"
-            body="Build the draw here: checked-in players, bracket size, byes, race-assignment preview, and Generate Bracket. Arriving in the next update."
-          />
-        );
+        return renderBracket();
       case "review":
         return renderReview();
       case "matches":
@@ -2273,6 +2654,120 @@ export default function ManageTournamentScreen() {
         isAdding={isAdding}
       />
 
+      {/* Reopen & Redraw (big warning + required reason) */}
+      {redrawVisible && (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setRedrawVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text allowFontScaling={false} style={styles.redrawTitle}>
+                Reopen &amp; Redraw?
+              </Text>
+              <Text allowFontScaling={false} style={styles.gateBody}>
+                This reopens registration so you can change the field, then
+                rebuild the bracket. The current draw stays visible until you
+                draw again. This is logged and requires a reason.
+              </Text>
+              <Text
+                allowFontScaling={false}
+                style={[styles.fieldLabel, { marginTop: webSc(SPACING.md) }]}
+              >
+                Reason for redraw *
+              </Text>
+              <TextInput
+                allowFontScaling={false}
+                style={[styles.input, styles.inputMultiline]}
+                value={redrawReason}
+                onChangeText={setRedrawReason}
+                placeholder="e.g., Late player added before start"
+                placeholderTextColor={COLORS.textMuted}
+                multiline
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonCancel}
+                  onPress={() => setRedrawVisible(false)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.modalButtonCancelText}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonConfirm}
+                  onPress={handleConfirmReopen}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.modalButtonConfirmText}
+                  >
+                    Reopen &amp; Redraw
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Draw history */}
+      {showDrawHistory && (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setShowDrawHistory(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text allowFontScaling={false} style={styles.modalTitle}>
+                Draw History
+              </Text>
+              <ScrollView style={{ maxHeight: webSc(360) }}>
+                {[...(hub.drawLog ?? [])].reverse().map((e) => (
+                  <View key={e.drawNumber} style={styles.drawLogRow}>
+                    <Text allowFontScaling={false} style={styles.drawLogTitle}>
+                      Draw #{e.drawNumber} · {e.players} players · {e.bracketSize}{" "}
+                      bracket
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.drawLogSub}>
+                      {e.drawType} draw · {e.tdName ?? "TD"}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.drawLogSub}>
+                      {new Date(e.timestamp).toLocaleString()}
+                    </Text>
+                    {e.reason ? (
+                      <Text allowFontScaling={false} style={styles.drawLogReason}>
+                        Reason: {e.reason}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+              </ScrollView>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonConfirm}
+                  onPress={() => setShowDrawHistory(false)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.modalButtonConfirmText}
+                  >
+                    Close
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {/* Guided-setup prompt (sequential gating) */}
       {gatePrompt && (
         <Modal
@@ -2288,8 +2783,10 @@ export default function ManageTournamentScreen() {
                   You&apos;re almost there
                 </Text>
               <Text allowFontScaling={false} style={styles.gateBody}>
-                Please finish {TAB_LABELS[gatePrompt.blocking]} before moving to{" "}
-                {TAB_LABELS[gatePrompt.target]}.
+                {gatePrompt.blocking === "tables" &&
+                gatePrompt.target === "bracket"
+                  ? "Finish tables first before building the bracket."
+                  : `Please finish ${TAB_LABELS[gatePrompt.blocking]} before moving to ${TAB_LABELS[gatePrompt.target]}.`}
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -2410,10 +2907,10 @@ export default function ManageTournamentScreen() {
         <View style={styles.playersFooter}>
           <TouchableOpacity
             style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
-            onPress={handleCloseRegistration}
+            onPress={() => handleTabPress("bracket")}
           >
             <Text allowFontScaling={false} style={styles.lockBtnText}>
-              Close Registration / Lock Players
+              Add Players to Bracket →
             </Text>
           </TouchableOpacity>
         </View>
@@ -3133,6 +3630,122 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "800",
     lineHeight: webMs(FONT_SIZES.xxl) + 2,
+  },
+
+  // ── Bracket / Draw ──────────────────────────────────────────────────────────
+  sumGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
+  sumCard: {
+    flexGrow: 1,
+    flexBasis: "47%",
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+  },
+  sumValue: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  sumLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: webSc(2),
+  },
+  calcRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: webSc(SPACING.xs),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: webSc(SPACING.sm),
+  },
+  calcLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    flexShrink: 1,
+  },
+  calcVal: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+  },
+  matchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  matchNum: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "800",
+    color: COLORS.primary,
+    width: webSc(36),
+  },
+  matchText: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  staleBanner: {
+    backgroundColor: COLORS.warning + "20",
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    borderRadius: webSc(RADIUS.sm),
+    padding: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.md),
+  },
+  staleBannerText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.warning },
+  historyBtn: {
+    alignItems: "center",
+    paddingVertical: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
+  historyBtnText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  bracketActions: { gap: webSc(SPACING.sm) },
+  reopenBtn: {
+    paddingVertical: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warning + "20",
+    alignItems: "center",
+  },
+  reopenBtnText: {
+    color: COLORS.warning,
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "700",
+  },
+  redrawTitle: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "700",
+    color: COLORS.warning,
+    marginBottom: webSc(SPACING.sm),
+  },
+  drawLogRow: {
+    paddingVertical: webSc(SPACING.sm),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  drawLogTitle: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+    color: COLORS.text,
+  },
+  drawLogSub: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: webSc(2),
+  },
+  drawLogReason: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.text,
+    marginTop: webSc(2),
+    fontStyle: "italic",
   },
   summaryPills: {
     flexDirection: "row",

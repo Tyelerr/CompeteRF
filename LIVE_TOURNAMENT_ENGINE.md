@@ -341,3 +341,11 @@ filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced
   - A/B/C Groups -> **Race Group** dropdown (required for Ready). Selecting a group stores a representative Fargo (group midpoint) + is_starter_rating=true, so the group derives from fargo_rating with NO extra column.
 - **Ready is disabled until the rating/group is set** (with a hint). Ready commits status=checked_in + fargo + payments in one tap.
 - A Ready entry is **editable** (Edit button -> change rating/group/payments -> Save) and still **Removable** (with prompt). No Show / Removed show the assignment + Restore.
+
+### Bracket / Draw (Stage 2 V1) — built, all in live_settings JSON (no SQL)
+- **Status flow:** Registration stays Open until the bracket is drawn. Draw Bracket = the lock point -> live_state registration_closed + live_settings.bracket -> derived phase **Bracket Drawn**. Start Tournament -> in_progress (Running). Phase `bracket_drawn` derived = registration_closed + bracket present.
+- **Players tab:** footer is now **"Add Players to Bracket →"** (navigates to the gated Bracket tab; only Ready players form the pool). When **Bracket Drawn**, player cards are **locked** ("reopen & redraw to change").
+- **Bracket / Draw page** (`renderBracket`): summary cards (Players Added / Recommended Size / Bracket Size / Byes / Format / Tables Available / Est. Matches / Est. Time); adjustable **bracket size** (standard sizes >= players, recommended = next power of two); **Random Draw** (V1); **race-assignment preview** (groups buckets / differential rule / fixed); **calculation summary** (players, size, byes, total/winner/loser matches, est. games, avg min/game, tables, est. completion + by-table-count table); **Round 1 preview** after draw; **Draw History** modal.
+- **Draw Bracket:** `generateRound1` (random seed order + byes + handicap-aware races) -> `live_settings.bracket` + appends a `drawLog` entry (draw #, TD id/name, timestamp, reason, players, size, type) + closes registration.
+- **Reopen & Redraw:** big-warning modal + **required reason** -> reopens registration (unlocks players), stashes the reason for the next draw; every draw is logged. Draw History viewable.
+- Helpers in `src/utils/bracket.utils.ts`. Estimates are rough V1 (double-elim matches ~2n-2, games/match ~1.5*avgRace, default 9 min/game).

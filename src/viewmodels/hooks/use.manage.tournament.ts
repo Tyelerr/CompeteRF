@@ -13,6 +13,10 @@ import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import { Tournament } from "../../models/types/tournament.types";
 import {
+  DrawLogEntry,
+  GeneratedBracket,
+} from "../../models/types/tournament-settings.types";
+import {
   TournamentLiveState,
   TableStatus,
 } from "../../models/types/common.types";
@@ -25,6 +29,7 @@ export type ManagePhase =
   | "ready_to_open"
   | "registration_open"
   | "registration_closed"
+  | "bracket_drawn"
   | "running"
   | "completed"
   | "archived";
@@ -46,7 +51,9 @@ const derivePhase = (t: Tournament | null): ManagePhase => {
     return "completed";
   const ls: TournamentLiveState = t.live_state ?? "not_started";
   if (ls === "in_progress") return "running";
-  if (ls === "registration_closed") return "registration_closed";
+  if (ls === "registration_closed")
+    // Registration only closes when the bracket is drawn.
+    return t.live_settings?.bracket ? "bracket_drawn" : "registration_closed";
   if (ls === "registration_open") return "registration_open";
   return requiredComplete(t) ? "ready_to_open" : "setup_incomplete";
 };
@@ -102,6 +109,26 @@ export const useManageTournament = (tournamentId?: number) => {
 
   const completeMutation = useMutation({
     mutationFn: () => tournamentService.finishLiveTournament(tournamentId!),
+    onSuccess: invalidateTournament,
+  });
+
+  // Draw the bracket: store it + append a draw-log entry (merging into the
+  // existing live_settings) and close registration. This is the lock point.
+  const drawBracketMutation = useMutation({
+    mutationFn: (vars: {
+      bracket: GeneratedBracket;
+      logEntry: DrawLogEntry;
+    }) => {
+      const ls = tournamentQuery.data?.live_settings ?? {};
+      return tournamentService.updateTournament(tournamentId!, {
+        live_state: "registration_closed",
+        live_settings: {
+          ...ls,
+          bracket: vars.bracket,
+          drawLog: [...(ls.drawLog ?? []), vars.logEntry],
+        },
+      });
+    },
     onSuccess: invalidateTournament,
   });
 
@@ -193,6 +220,15 @@ export const useManageTournament = (tournamentId?: number) => {
     resume: () => pauseMutation.mutateAsync(false),
     complete: () => completeMutation.mutateAsync(),
     isMutatingLive,
+
+    // Bracket / Draw
+    bracket: tournament?.live_settings?.bracket ?? null,
+    drawLog: tournament?.live_settings?.drawLog ?? [],
+    drawBracket: drawBracketMutation.mutateAsync,
+    isDrawing: drawBracketMutation.isPending,
+    // Reopen registration to change the field before a redraw.
+    reopenRegistration: () =>
+      liveStateMutation.mutateAsync("registration_open"),
 
     // Tables
     tables,
