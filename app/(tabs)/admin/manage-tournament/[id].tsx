@@ -800,6 +800,8 @@ const RegistrationRow = ({
   const fargoValid = !isNaN(fargoNum) && fargoNum > 0;
   const selectedGroup = isGroups ? groupForFargo(fargoNum, raceGroups) : null;
   const assignReady = isGroups ? !!selectedGroup : fargoValid;
+  // Ready requires the rating/group AND the entry fee paid.
+  const canBeReady = assignReady && paidEntry;
 
   const groupOptions = raceGroups.map((g) => ({
     label: `${g.label || "?"} (${g.minFargo}-${g.maxFargo || "+"}) - Race ${g.raceTo}`,
@@ -866,18 +868,20 @@ const RegistrationRow = ({
           </View>
         )}
       </View>
-      {!assignReady && (
+      {!canBeReady && (
         <Text allowFontScaling={false} style={styles.hint}>
-          {isGroups
-            ? "Select a race group to mark this player ready."
-            : "Enter a Fargo rating to mark this player ready."}
+          {!paidEntry
+            ? "Mark the entry fee paid to make this player ready."
+            : isGroups
+              ? "Select a race group to mark this player ready."
+              : "Enter a Fargo rating to mark this player ready."}
         </Text>
       )}
       <View style={styles.regActions}>
         <TouchableOpacity
-          style={[styles.regActionBtn, styles.readyBtn, !assignReady && styles.btnDisabled]}
+          style={[styles.regActionBtn, styles.readyBtn, !canBeReady && styles.btnDisabled]}
           onPress={onCommit}
-          disabled={isProcessing || !assignReady}
+          disabled={isProcessing || !canBeReady}
         >
           <Text allowFontScaling={false} style={styles.readyBtnText}>
             {isProcessing ? "..." : commitLabel}
