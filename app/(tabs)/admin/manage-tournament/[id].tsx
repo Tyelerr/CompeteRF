@@ -931,7 +931,7 @@ const RegistrationRow = ({
           ) : (
             registration.profiles && (
               <Text allowFontScaling={false} style={styles.playerId}>
-                #{registration.profiles.id_auto}
+                Player ID #{registration.profiles.id_auto}
               </Text>
             )
           )}
