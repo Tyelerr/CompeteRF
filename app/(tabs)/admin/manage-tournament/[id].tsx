@@ -1502,7 +1502,6 @@ export default function ManageTournamentScreen() {
       );
     }
     const venue = hub.tournament?.venues;
-    const canStart = hub.phase === "ready_to_open";
     // Max Fargo and Open Tournament are mutually exclusive — each greys the other.
     const maxFargoDisabled = form.openTournament;
     const openTournamentDisabled = !!form.maxFargo.trim();
@@ -1880,36 +1879,6 @@ export default function ManageTournamentScreen() {
             Venue and tournament image are changed on the Edit Tournament screen.
           </Text>
         </Section>
-
-        <View style={styles.saveRow}>
-          <TouchableOpacity
-            style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
-            onPress={handleSave}
-            disabled={hub.isSaving}
-          >
-            <Text allowFontScaling={false} style={styles.saveBtnText}>
-              {hub.isSaving ? "Saving..." : "Save Settings"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.startBtn,
-              (!canStart || hub.isMutatingLive) && styles.btnDisabled,
-            ]}
-            onPress={handleStartRegistration}
-            disabled={!canStart || hub.isMutatingLive}
-          >
-            <Text allowFontScaling={false} style={styles.startBtnText}>
-              Start Registration
-            </Text>
-          </TouchableOpacity>
-        </View>
-        {!canStart && hub.phase === "setup_incomplete" && (
-          <Text allowFontScaling={false} style={styles.startHint}>
-            Complete the required fields (name, game, format, venue, date, time)
-            to start registration.
-          </Text>
-        )}
       </View>
     );
   };
@@ -2419,6 +2388,42 @@ export default function ManageTournamentScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Fixed footer: Save Settings / Start Registration */}
+      {activeTab === "settings" && form && (
+        <View style={styles.settingsFooter}>
+          {hub.phase === "setup_incomplete" && (
+            <Text allowFontScaling={false} style={styles.startHintFooter}>
+              Complete the required fields (name, game, format, venue, date,
+              time) to start registration.
+            </Text>
+          )}
+          <View style={[styles.saveRow, styles.settingsFooterInner]}>
+            <TouchableOpacity
+              style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
+              onPress={handleSave}
+              disabled={hub.isSaving}
+            >
+              <Text allowFontScaling={false} style={styles.saveBtnText}>
+                {hub.isSaving ? "Saving..." : "Save Settings"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.startBtn,
+                (hub.phase !== "ready_to_open" || hub.isMutatingLive) &&
+                  styles.btnDisabled,
+              ]}
+              onPress={handleStartRegistration}
+              disabled={hub.phase !== "ready_to_open" || hub.isMutatingLive}
+            >
+              <Text allowFontScaling={false} style={styles.startBtnText}>
+                Start Registration
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -2773,6 +2778,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   lockBtnFooterInner: { width: "95%" },
+  settingsFooter: {
+    paddingHorizontal: webSc(5),
+    paddingTop: webSc(18),
+    paddingBottom: Platform.OS === "ios" ? webSc(15) : webSc(10),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+  },
+  settingsFooterInner: { width: "95%", marginTop: 0 },
+  startHintFooter: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontStyle: "italic",
+    textAlign: "center",
+    marginBottom: webSc(SPACING.xs),
+    width: "95%",
+  },
 
   // Tables
   tableAddRow: {
