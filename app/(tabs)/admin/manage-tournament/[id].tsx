@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -22,6 +23,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
@@ -1916,11 +1918,12 @@ export default function ManageTournamentScreen() {
           animationType="fade"
           onRequestClose={() => setGatePrompt(null)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text allowFontScaling={false} style={styles.modalTitle}>
-                You&apos;re almost there
-              </Text>
+          <TouchableWithoutFeedback onPress={() => setGatePrompt(null)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text allowFontScaling={false} style={styles.modalTitle}>
+                  You&apos;re almost there
+                </Text>
               <Text allowFontScaling={false} style={styles.gateBody}>
                 Please finish {TAB_LABELS[gatePrompt.blocking]} before moving to{" "}
                 {TAB_LABELS[gatePrompt.target]}.
@@ -1953,8 +1956,9 @@ export default function ManageTournamentScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </Modal>
       )}
 
@@ -2022,6 +2026,8 @@ export default function ManageTournamentScreen() {
         contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onScrollBeginDrag={() => Keyboard.dismiss()}
       >
         {renderTab()}
       </ScrollView>
