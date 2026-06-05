@@ -208,6 +208,11 @@ const parseRaceNumber = (race: string | null | undefined): number | null => {
   return m ? parseInt(m[0], 10) : null;
 };
 
+const RACE_MODE_OPTIONS = [
+  { label: "Fixed Race", value: "fixed" },
+  { label: "A/B/C Race Groups", value: "groups" },
+];
+
 const toForm = (t: Tournament): SettingsForm => {
   const ls = t.live_settings ?? {};
   return {
@@ -319,6 +324,8 @@ const LabeledInput = ({
   placeholder,
   keyboardType,
   multiline,
+  narrow,
+  maxLength,
 }: {
   label: string;
   value: string;
@@ -326,6 +333,8 @@ const LabeledInput = ({
   placeholder?: string;
   keyboardType?: "default" | "numeric" | "decimal-pad" | "phone-pad";
   multiline?: boolean;
+  narrow?: boolean; // compact width for short numeric values (e.g. race-to)
+  maxLength?: number;
 }) => (
   <View style={styles.field}>
     <Text allowFontScaling={false} style={styles.fieldLabel}>
@@ -333,13 +342,18 @@ const LabeledInput = ({
     </Text>
     <TextInput
       allowFontScaling={false}
-      style={[styles.input, multiline && styles.inputMultiline]}
+      style={[
+        styles.input,
+        multiline && styles.inputMultiline,
+        narrow && styles.inputNarrow,
+      ]}
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
       placeholderTextColor={COLORS.textMuted}
       keyboardType={keyboardType ?? "default"}
       multiline={multiline}
+      maxLength={maxLength}
     />
   </View>
 );
@@ -1086,27 +1100,13 @@ export default function ManageTournamentScreen() {
         </Section>
 
         <Section title="Race">
-          <View style={styles.segmentRow}>
-            {(["fixed", "groups"] as RaceMode[]).map((mode) => (
-              <TouchableOpacity
-                key={mode}
-                style={[
-                  styles.segment,
-                  form.raceMode === mode && styles.segmentActive,
-                ]}
-                onPress={() => patchForm({ raceMode: mode })}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={[
-                    styles.segmentText,
-                    form.raceMode === mode && styles.segmentTextActive,
-                  ]}
-                >
-                  {mode === "fixed" ? "Fixed Race" : "A/B/C Race Groups"}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.field}>
+            <Dropdown
+              placeholder="Select race type"
+              options={RACE_MODE_OPTIONS}
+              value={form.raceMode}
+              onSelect={(v) => patchForm({ raceMode: v as RaceMode })}
+            />
           </View>
 
           {form.raceMode === "fixed" ? (
@@ -1121,6 +1121,8 @@ export default function ManageTournamentScreen() {
                 onChangeText={(v) => patchForm({ raceWinners: v })}
                 placeholder="e.g., 7"
                 keyboardType="numeric"
+                narrow
+                maxLength={3}
               />
               {formatHasLosersSide(form.tournamentFormat) && (
                 <LabeledInput
@@ -1129,6 +1131,8 @@ export default function ManageTournamentScreen() {
                   onChangeText={(v) => patchForm({ raceLosers: v })}
                   placeholder="e.g., 5"
                   keyboardType="numeric"
+                  narrow
+                  maxLength={3}
                 />
               )}
               <LabeledInput
@@ -1137,6 +1141,8 @@ export default function ManageTournamentScreen() {
                 onChangeText={(v) => patchForm({ raceFinals: v })}
                 placeholder="e.g., 9"
                 keyboardType="numeric"
+                narrow
+                maxLength={3}
               />
             </View>
           ) : (
@@ -1968,6 +1974,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
+  inputNarrow: { width: webSc(96), alignSelf: "flex-start" },
   hint: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
