@@ -47,6 +47,7 @@ import { Profile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
 import { Tournament } from "../../../../src/models/types/tournament.types";
 import {
+  RaceGroup,
   RaceMode,
 } from "../../../../src/models/types/tournament-settings.types";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
@@ -711,11 +712,33 @@ const PayCheckbox = ({
   </TouchableOpacity>
 );
 
+// Race-group helpers (group mode). Each player's group/race is derived from
+// their Fargo against the configured ranges; selecting a group stores a
+// representative Fargo (midpoint) so there is no extra column.
+const groupForFargo = (
+  fargo: number | null,
+  groups: RaceGroup[],
+): RaceGroup | null => {
+  if (fargo == null || isNaN(fargo)) return null;
+  return (
+    groups.find(
+      (g) => fargo >= g.minFargo && (g.maxFargo <= 0 || fargo <= g.maxFargo),
+    ) ?? null
+  );
+};
+const groupRep = (g: RaceGroup): number =>
+  g.maxFargo && g.maxFargo >= g.minFargo
+    ? Math.round((g.minFargo + g.maxFargo) / 2)
+    : g.minFargo;
+
 // ── Registration Row ─────────────────────────────────────────────────────────
 const RegistrationRow = ({
   registration,
   sidePots,
+  raceMode,
+  raceGroups,
   onReady,
+  onSaveEdit,
   onNoShow,
   onRemove,
   onUndo,
@@ -724,7 +747,20 @@ const RegistrationRow = ({
 }: {
   registration: Registration;
   sidePots: { name: string; amount: number }[];
-  onReady: (paidEntry: boolean, paidPots: string[]) => void;
+  raceMode: RaceMode;
+  raceGroups: RaceGroup[];
+  onReady: (
+    fargo: number,
+    isStarter: boolean,
+    paidEntry: boolean,
+    paidPots: string[],
+  ) => void;
+  onSaveEdit: (
+    fargo: number,
+    isStarter: boolean,
+    paidEntry: boolean,
+    paidPots: string[],
+  ) => void;
   onNoShow: () => void;
   onRemove: () => void;
   onUndo: () => void;
@@ -734,19 +770,144 @@ const RegistrationRow = ({
   const d = displayStatusOf(registration.status);
   const meta = DISPLAY_META[d];
   const isGuest = !registration.player_id;
-  const fargo = registration.fargo_rating;
+  const isGroups = raceMode === "groups";
 
-  // Pending payment ticks (Pre-Registered only) — committed when Ready is tapped.
+  const [editing, setEditing] = useState(false);
   const [paidEntry, setPaidEntry] = useState(!!registration.paid_entry);
   const [paidPots, setPaidPots] = useState<string[]>(
     registration.paid_side_pots ?? [],
   );
+  const [fargoInput, setFargoInput] = useState(
+    registration.fargo_rating != null ? String(registration.fargo_rating) : "",
+  );
+
+  const reseed = () => {
+    setPaidEntry(!!registration.paid_entry);
+    setPaidPots(registration.paid_side_pots ?? []);
+    setFargoInput(
+      registration.fargo_rating != null ? String(registration.fargo_rating) : "",
+    );
+  };
+
   const togglePot = (name: string) =>
     setPaidPots((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
     );
   const potLabel = (p: { name: string; amount: number }) =>
     p.amount ? `${p.name} ($${p.amount})` : p.name;
+
+  const fargoNum = parseInt(fargoInput, 10);
+  const fargoValid = !isNaN(fargoNum) && fargoNum > 0;
+  const selectedGroup = isGroups ? groupForFargo(fargoNum, raceGroups) : null;
+  const assignReady = isGroups ? !!selectedGroup : fargoValid;
+
+  const groupOptions = raceGroups.map((g) => ({
+    label: `${g.label || "?"} (${g.minFargo}-${g.maxFargo || "+"}) - Race ${g.raceTo}`,
+    value: g.id,
+  }));
+
+  const assignmentDisplay = () => {
+    if (isGroups) {
+      const g = groupForFargo(registration.fargo_rating ?? null, raceGroups);
+      return g ? `Group ${g.label || "?"} · Race to ${g.raceTo}` : "No group set";
+    }
+    return registration.fargo_rating != null
+      ? `Fargo ${registration.fargo_rating}`
+      : "No Fargo set";
+  };
+
+  const renderAssignmentInput = () =>
+    isGroups ? (
+      <View style={styles.field}>
+        <FieldLabel label="Race Group" />
+        <Dropdown
+          placeholder="Select group"
+          options={groupOptions}
+          value={selectedGroup?.id ?? ""}
+          onSelect={(gid) => {
+            const g = raceGroups.find((x) => x.id === gid);
+            if (g) setFargoInput(String(groupRep(g)));
+          }}
+        />
+      </View>
+    ) : (
+      <View style={styles.field}>
+        <FieldLabel label="Fargo" />
+        <TextInput
+          allowFontScaling={false}
+          style={[styles.input, styles.inputNarrow]}
+          value={fargoInput}
+          onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
+          placeholder="e.g., 525"
+          placeholderTextColor={COLORS.textMuted}
+          keyboardType="numeric"
+          maxLength={3}
+        />
+      </View>
+    );
+
+  const renderEditableBody = (onCommit: () => void, commitLabel: string, onCancel?: () => void) => (
+    <>
+      {renderAssignmentInput()}
+      <PayCheckbox
+        label="Entry Fee"
+        checked={paidEntry}
+        onToggle={() => setPaidEntry((v) => !v)}
+      />
+      {sidePots.map((p) => (
+        <PayCheckbox
+          key={p.name}
+          label={potLabel(p)}
+          checked={paidPots.includes(p.name)}
+          onToggle={() => togglePot(p.name)}
+        />
+      ))}
+      {!assignReady && (
+        <Text allowFontScaling={false} style={styles.hint}>
+          {isGroups
+            ? "Select a race group to mark this player ready."
+            : "Enter a Fargo rating to mark this player ready."}
+        </Text>
+      )}
+      <View style={styles.regActions}>
+        <TouchableOpacity
+          style={[styles.regActionBtn, styles.readyBtn, !assignReady && styles.btnDisabled]}
+          onPress={onCommit}
+          disabled={isProcessing || !assignReady}
+        >
+          <Text allowFontScaling={false} style={styles.readyBtnText}>
+            {isProcessing ? "..." : commitLabel}
+          </Text>
+        </TouchableOpacity>
+        {onCancel ? (
+          <TouchableOpacity
+            style={[styles.regActionBtn, styles.undoBtn]}
+            onPress={onCancel}
+            disabled={isProcessing}
+          >
+            <Text allowFontScaling={false} style={styles.undoBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.noShowBtn]}
+              onPress={onNoShow}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.noShowBtnText}>No Show</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.regActionBtn, styles.removeBtn]}
+              onPress={onRemove}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={styles.removeBtnText}>Remove</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.regCard}>
@@ -767,9 +928,6 @@ const RegistrationRow = ({
             )
           )}
         </View>
-        <Text allowFontScaling={false} style={styles.fargoText}>
-          {fargo != null ? `Fargo ${fargo}` : "No Fargo"}
-        </Text>
       </View>
 
       <View style={styles.statusLine}>
@@ -782,37 +940,57 @@ const RegistrationRow = ({
         </Text>
       </View>
 
-      {d === "prereg" && (
+      {d === "prereg" &&
+        renderEditableBody(
+          () => onReady(fargoNum, isGroups, paidEntry, paidPots),
+          "Ready",
+        )}
+
+      {d === "ready" && editing &&
+        renderEditableBody(
+          () => {
+            onSaveEdit(fargoNum, isGroups, paidEntry, paidPots);
+            setEditing(false);
+          },
+          "Save",
+          () => {
+            reseed();
+            setEditing(false);
+          },
+        )}
+
+      {d === "ready" && !editing && (
         <>
+          <Text allowFontScaling={false} style={styles.assignText}>
+            {assignmentDisplay()}
+          </Text>
           <PayCheckbox
-            label="Entry Fee"
-            checked={paidEntry}
-            onToggle={() => setPaidEntry((v) => !v)}
+            label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
+            checked={!!registration.paid_entry}
+            readOnly
           />
-          {sidePots.map((p) => (
-            <PayCheckbox
-              key={p.name}
-              label={potLabel(p)}
-              checked={paidPots.includes(p.name)}
-              onToggle={() => togglePot(p.name)}
-            />
+          {(registration.paid_side_pots ?? []).map((name) => (
+            <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
           ))}
           <View style={styles.regActions}>
             <TouchableOpacity
-              style={[styles.regActionBtn, styles.readyBtn]}
-              onPress={() => onReady(paidEntry, paidPots)}
+              style={[styles.regActionBtn, styles.checkInBtn]}
+              onPress={() => {
+                reseed();
+                setEditing(true);
+              }}
               disabled={isProcessing}
             >
-              <Text allowFontScaling={false} style={styles.readyBtnText}>
-                {isProcessing ? "..." : "Ready"}
-              </Text>
+              <Text allowFontScaling={false} style={styles.checkInBtnText}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.regActionBtn, styles.noShowBtn]}
-              onPress={onNoShow}
+              style={[styles.regActionBtn, styles.undoBtn]}
+              onPress={onUndo}
               disabled={isProcessing}
             >
-              <Text allowFontScaling={false} style={styles.noShowBtnText}>No Show</Text>
+              <Text allowFontScaling={false} style={styles.undoBtnText}>
+                {isProcessing ? "..." : "Undo"}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.regActionBtn, styles.removeBtn]}
@@ -825,42 +1003,23 @@ const RegistrationRow = ({
         </>
       )}
 
-      {d === "ready" && (
+      {(d === "no_show" || d === "removed") && (
         <>
-          <PayCheckbox
-            label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
-            checked={!!registration.paid_entry}
-            readOnly
-          />
-          {(registration.paid_side_pots ?? []).map((name) => (
-            <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
-          ))}
+          <Text allowFontScaling={false} style={styles.assignText}>
+            {assignmentDisplay()}
+          </Text>
           <View style={styles.regActions}>
             <TouchableOpacity
-              style={[styles.regActionBtn, styles.undoBtn]}
-              onPress={onUndo}
+              style={[styles.regActionBtn, styles.restoreBtn]}
+              onPress={onRestore}
               disabled={isProcessing}
             >
-              <Text allowFontScaling={false} style={styles.undoBtnText}>
-                {isProcessing ? "..." : "Undo"}
+              <Text allowFontScaling={false} style={styles.restoreBtnText}>
+                {isProcessing ? "..." : "Restore"}
               </Text>
             </TouchableOpacity>
           </View>
         </>
-      )}
-
-      {(d === "no_show" || d === "removed") && (
-        <View style={styles.regActions}>
-          <TouchableOpacity
-            style={[styles.regActionBtn, styles.restoreBtn]}
-            onPress={onRestore}
-            disabled={isProcessing}
-          >
-            <Text allowFontScaling={false} style={styles.restoreBtnText}>
-              {isProcessing ? "..." : "Restore"}
-            </Text>
-          </TouchableOpacity>
-        </View>
       )}
     </View>
   );
@@ -1217,9 +1376,11 @@ export default function ManageTournamentScreen() {
     }
   };
 
-  // Mark a player Ready (= confirmed + paid -> eligible for the bracket).
+  // Mark a player Ready (= confirmed + rated + paid -> eligible for the bracket).
   const handleReady = (
     r: Registration,
+    fargo: number,
+    isStarter: boolean,
     paidEntry: boolean,
     paidPots: string[],
   ) =>
@@ -1230,12 +1391,37 @@ export default function ManageTournamentScreen() {
           id: r.id,
           updates: {
             status: "checked_in",
+            fargo_rating: fargo,
+            is_starter_rating: isStarter,
             paid_entry: paidEntry,
             paid_side_pots: paidPots,
             checked_in_at: new Date().toISOString(),
           },
         }),
       "Failed to mark the player ready.",
+    );
+
+  // Edit a Ready player's rating/payment without changing their status.
+  const handleSaveEdit = (
+    r: Registration,
+    fargo: number,
+    isStarter: boolean,
+    paidEntry: boolean,
+    paidPots: string[],
+  ) =>
+    withProcessing(
+      r.id,
+      () =>
+        hub.updateRegistration({
+          id: r.id,
+          updates: {
+            fargo_rating: fargo,
+            is_starter_rating: isStarter,
+            paid_entry: paidEntry,
+            paid_side_pots: paidPots,
+          },
+        }),
+      "Failed to save changes.",
     );
 
   const handleNoShow = (r: Registration) =>
@@ -1725,6 +1911,8 @@ export default function ManageTournamentScreen() {
       name: p.name,
       amount: Number(p.amount) || 0,
     }));
+    const raceMode = hub.tournament?.live_settings?.raceMode ?? "fixed";
+    const raceGroups = hub.tournament?.live_settings?.raceGroups ?? [];
     const summary = [
       { key: "prereg" as DisplayStatus, short: "Pre-Reg", n: statusCounts.prereg },
       { key: "ready" as DisplayStatus, short: "Ready", n: statusCounts.ready },
@@ -1807,8 +1995,13 @@ export default function ManageTournamentScreen() {
               key={item.id}
               registration={item}
               sidePots={sidePots}
-              onReady={(paidEntry, paidPots) =>
-                handleReady(item, paidEntry, paidPots)
+              raceMode={raceMode}
+              raceGroups={raceGroups}
+              onReady={(fargo, isStarter, paidEntry, paidPots) =>
+                handleReady(item, fargo, isStarter, paidEntry, paidPots)
+              }
+              onSaveEdit={(fargo, isStarter, paidEntry, paidPots) =>
+                handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots)
               }
               onNoShow={() => handleNoShow(item)}
               onRemove={() => handleRemove(item)}
@@ -2836,6 +3029,12 @@ const styles = StyleSheet.create({
   },
   payLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
   payLabelPaid: { color: COLORS.success, fontWeight: "600" },
+  assignText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginBottom: webSc(SPACING.xs),
+  },
   summaryPills: {
     flexDirection: "row",
     gap: webSc(SPACING.xs),

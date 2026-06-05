@@ -334,3 +334,10 @@ filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced
 - Per-card payment ticks: Entry Fee + one checkbox per side pot (pending until Ready commits them).
 - Pre-Registered card -> [Ready] [No Show] [Remove]; Ready card -> paid summary + [Undo]; No Show / Removed -> [Restore].
 - Single status **filter dropdown** (All / Pre-Registered / Ready / No Show / Removed) instead of tabs; "All" hides Removed. Top **summary pills**: Pre-Reg / Ready / No Show counts.
+
+### Player rating / group on the card (required for Ready)
+- The player card carries the race assignment, mode-aware:
+  - Fixed / Fargo-Differential -> **Fargo** number input (3 digits, required for Ready).
+  - A/B/C Groups -> **Race Group** dropdown (required for Ready). Selecting a group stores a representative Fargo (group midpoint) + is_starter_rating=true, so the group derives from fargo_rating with NO extra column.
+- **Ready is disabled until the rating/group is set** (with a hint). Ready commits status=checked_in + fargo + payments in one tap.
+- A Ready entry is **editable** (Edit button -> change rating/group/payments -> Save) and still **Removable** (with prompt). No Show / Removed show the assignment + Restore.
