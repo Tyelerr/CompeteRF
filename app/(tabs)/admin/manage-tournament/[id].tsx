@@ -816,44 +816,48 @@ const RegistrationRow = ({
       : "No Fargo set";
   };
 
-  const renderAssignmentInput = () =>
-    isGroups ? (
-      <View style={styles.field}>
-        <FieldLabel label="Race Group" />
-        <Dropdown
-          placeholder="Select group"
-          options={groupOptions}
-          value={selectedGroup?.id ?? ""}
-          onSelect={(gid) => {
-            const g = raceGroups.find((x) => x.id === gid);
-            if (g) setFargoInput(String(groupRep(g)));
-          }}
-        />
-      </View>
-    ) : (
-      <View style={styles.field}>
-        <FieldLabel label="Fargo" />
-        <TextInput
-          allowFontScaling={false}
-          style={[styles.input, styles.inputNarrow]}
-          value={fargoInput}
-          onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
-          placeholder="e.g., 525"
-          placeholderTextColor={COLORS.textMuted}
-          keyboardType="numeric"
-          maxLength={3}
-        />
-      </View>
-    );
+  const renderGroupInput = () => (
+    <View style={styles.field}>
+      <FieldLabel label="Race Group" />
+      <Dropdown
+        placeholder="Select group"
+        options={groupOptions}
+        value={selectedGroup?.id ?? ""}
+        onSelect={(gid) => {
+          const g = raceGroups.find((x) => x.id === gid);
+          if (g) setFargoInput(String(groupRep(g)));
+        }}
+      />
+    </View>
+  );
 
   const renderEditableBody = (onCommit: () => void, commitLabel: string, onCancel?: () => void) => (
     <>
-      {renderAssignmentInput()}
-      <PayCheckbox
-        label="Entry Fee"
-        checked={paidEntry}
-        onToggle={() => setPaidEntry((v) => !v)}
-      />
+      {isGroups && renderGroupInput()}
+      <View style={styles.assignPayRow}>
+        <PayCheckbox
+          label="Entry Fee"
+          checked={paidEntry}
+          onToggle={() => setPaidEntry((v) => !v)}
+        />
+        {!isGroups && (
+          <View style={styles.fargoInline}>
+            <Text allowFontScaling={false} style={styles.fargoInlineLabel}>
+              Fargo
+            </Text>
+            <TextInput
+              allowFontScaling={false}
+              style={[styles.input, styles.fargoMini]}
+              value={fargoInput}
+              onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
+              placeholder="000"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="numeric"
+              maxLength={3}
+            />
+          </View>
+        )}
+      </View>
       {sidePots.map((p) => (
         <PayCheckbox
           key={p.name}
@@ -3029,6 +3033,24 @@ const styles = StyleSheet.create({
   },
   payLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
   payLabelPaid: { color: COLORS.success, fontWeight: "600" },
+  // Entry Fee (left) + Fargo (right) on one row
+  assignPayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+  },
+  fargoInline: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  fargoInlineLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  fargoMini: {
+    width: webSc(72),
+    textAlign: "center",
+    paddingVertical: webSc(SPACING.xs),
+  },
   assignText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
