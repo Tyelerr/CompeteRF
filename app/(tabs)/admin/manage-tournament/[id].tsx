@@ -163,12 +163,17 @@ interface SettingsForm {
   isRecurring: boolean;
   tournamentDate: string;
   startTime: string;
-  raceWinners: string;
-  raceLosers: string;
-  raceFinals: string;
-  sidePots: SidePotForm[];
   raceMode: RaceMode;
+  // Fixed race (numbers — driven by steppers)
+  raceWinners: number; // also the single-elim "Match Race To"
+  raceLosers: number;
+  raceFinals: number;
   raceGroups: RaceGroupForm[];
+  // Fargo Differential
+  diffMinRace: number;
+  diffPerGame: number;
+  diffMaxRace: number;
+  sidePots: SidePotForm[];
 }
 
 const numOrNull = (s: string): number | null => {
@@ -211,6 +216,7 @@ const parseRaceNumber = (race: string | null | undefined): number | null => {
 const RACE_MODE_OPTIONS = [
   { label: "Fixed Race", value: "fixed" },
   { label: "A/B/C Race Groups", value: "groups" },
+  { label: "Fargo Differential", value: "differential" },
 ];
 
 const toForm = (t: Tournament): SettingsForm => {
@@ -230,9 +236,12 @@ const toForm = (t: Tournament): SettingsForm => {
     isRecurring: !!t.is_recurring,
     tournamentDate: t.tournament_date ?? "",
     startTime: t.start_time ?? "",
-    raceWinners: numStr(ls.fixedRaceWinners ?? parseRaceNumber(t.race)),
-    raceLosers: numStr(ls.fixedRaceLosers),
-    raceFinals: numStr(ls.fixedRaceFinals),
+    raceWinners: ls.fixedRaceWinners ?? parseRaceNumber(t.race) ?? 5,
+    raceLosers: ls.fixedRaceLosers ?? 4,
+    raceFinals: ls.fixedRaceFinals ?? 7,
+    diffMinRace: ls.fargoDiffMinRace ?? 3,
+    diffPerGame: ls.fargoDiffPerGame ?? 50,
+    diffMaxRace: ls.fargoDiffMaxRace ?? 8,
     sidePots: (t.side_pots ?? []).map((p) => ({
       name: p.name ?? "",
       amount: numStr(p.amount as number),
@@ -249,30 +258,29 @@ const toForm = (t: Tournament): SettingsForm => {
 };
 
 const toPatch = (f: SettingsForm): Partial<Tournament> => {
-  const winners = intOrNull(f.raceWinners);
-  const losers = intOrNull(f.raceLosers);
-  const finals = intOrNull(f.raceFinals);
   const hasLosers = formatHasLosersSide(f.tournamentFormat);
-  // Keep the legacy `race` text column readable for cards/detail. In fixed mode
-  // it summarises the per-bracket races; in groups mode it's left untouched.
+  // Keep the legacy `race` text column readable for cards/detail.
   const fixedSummary = [
-    winners != null
-      ? hasLosers
-        ? `Winners ${winners}`
-        : `Race to ${winners}`
-      : null,
-    hasLosers && losers != null ? `Losers ${losers}` : null,
-    finals != null ? `Finals ${finals}` : null,
+    hasLosers ? `Winners ${f.raceWinners}` : `Race to ${f.raceWinners}`,
+    hasLosers ? `Losers ${f.raceLosers}` : null,
+    `Finals ${f.raceFinals}`,
   ]
     .filter(Boolean)
     .join(" / ");
+  const diffSummary = `Fargo Differential (min ${f.diffMinRace}, +1/${f.diffPerGame}, max ${f.diffMaxRace})`;
+  const raceColumn =
+    f.raceMode === "fixed"
+      ? fixedSummary
+      : f.raceMode === "differential"
+        ? diffSummary
+        : f.race.trim();
 
   return {
   name: f.name.trim(),
   game_type: f.gameType as GameType,
   tournament_format: f.tournamentFormat as TournamentFormat,
   game_spot: f.gameSpot.trim(),
-  race: f.raceMode === "fixed" ? fixedSummary : f.race.trim(),
+  race: raceColumn,
   description: f.description.trim(),
   max_fargo: intOrNull(f.maxFargo) ?? undefined,
   entry_fee: numOrNull(f.entryFee) ?? undefined,
@@ -287,9 +295,9 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
   live_settings: {
     raceMode: f.raceMode,
-    fixedRaceWinners: winners,
-    fixedRaceLosers: hasLosers ? losers : null,
-    fixedRaceFinals: finals,
+    fixedRaceWinners: f.raceWinners,
+    fixedRaceLosers: hasLosers ? f.raceLosers : null,
+    fixedRaceFinals: f.raceFinals,
     raceGroups: f.raceGroups.map((g) => ({
       id: g.id,
       label: g.label.trim(),
@@ -297,6 +305,10 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
       maxFargo: intOrNull(g.maxFargo) ?? 0,
       raceTo: intOrNull(g.raceTo) ?? 0,
     })),
+    fargoDiffMinRace: f.diffMinRace,
+    fargoDiffPerGame: f.diffPerGame,
+    fargoDiffMaxRace: f.diffMaxRace,
+    fargoDiffRounding: "down",
   },
   };
 };
@@ -362,6 +374,48 @@ const FieldLabel = ({ label }: { label: string }) => (
   <Text allowFontScaling={false} style={styles.fieldLabel}>
     {label}
   </Text>
+);
+
+// Compact +/- stepper for short numeric values (races) — no keyboard needed.
+const Stepper = ({
+  label,
+  value,
+  onChange,
+  min = 1,
+  max = 99,
+  step = 1,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) => (
+  <View style={styles.field}>
+    <FieldLabel label={label} />
+    <View style={styles.stepperRow}>
+      <TouchableOpacity
+        style={styles.stepBtn}
+        onPress={() => onChange(Math.max(min, value - step))}
+      >
+        <Text allowFontScaling={false} style={styles.stepBtnText}>
+          -
+        </Text>
+      </TouchableOpacity>
+      <Text allowFontScaling={false} style={styles.stepValue}>
+        {value}
+      </Text>
+      <TouchableOpacity
+        style={styles.stepBtn}
+        onPress={() => onChange(Math.min(max, value + step))}
+      >
+        <Text allowFontScaling={false} style={styles.stepBtnText}>
+          +
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
 );
 
 // ── Add Player Modal (reused from the retired manage-players screen) ──────────
@@ -733,6 +787,15 @@ export default function ManageTournamentScreen() {
   const stepComplete = useMemo(() => {
     const t = hub.tournament;
     const ls = t?.live_settings ?? {};
+    const raceMode = ls.raceMode ?? "fixed";
+    const raceOk =
+      raceMode === "groups"
+        ? (ls.raceGroups?.length ?? 0) >= 1
+        : raceMode === "differential"
+          ? ls.fargoDiffMinRace != null &&
+            ls.fargoDiffPerGame != null &&
+            ls.fargoDiffMaxRace != null
+          : ls.fixedRaceWinners != null;
     const settings =
       !!(
         t &&
@@ -742,10 +805,7 @@ export default function ManageTournamentScreen() {
         t.venue_id &&
         t.tournament_date &&
         t.start_time
-      ) &&
-      ((ls.raceMode ?? "fixed") === "groups"
-        ? (ls.raceGroups?.length ?? 0) >= 1
-        : ls.fixedRaceWinners != null);
+      ) && raceOk;
     const checkedIn = hub.registrations.filter(
       (r) => r.status === "checked_in",
     ).length;
@@ -1109,43 +1169,83 @@ export default function ManageTournamentScreen() {
             />
           </View>
 
-          {form.raceMode === "fixed" ? (
+          {form.raceMode === "fixed" && (
             <View>
-              <LabeledInput
+              <Stepper
                 label={
                   formatHasLosersSide(form.tournamentFormat)
-                    ? "Winners side race to"
-                    : "Single Elimination race to"
+                    ? "Winners Race To"
+                    : "Match Race To"
                 }
                 value={form.raceWinners}
-                onChangeText={(v) => patchForm({ raceWinners: v })}
-                placeholder="e.g., 7"
-                keyboardType="numeric"
-                narrow
-                maxLength={3}
+                onChange={(v) => patchForm({ raceWinners: v })}
+                min={1}
+                max={50}
               />
               {formatHasLosersSide(form.tournamentFormat) && (
-                <LabeledInput
-                  label="Losers side race to"
+                <Stepper
+                  label="Losers Race To"
                   value={form.raceLosers}
-                  onChangeText={(v) => patchForm({ raceLosers: v })}
-                  placeholder="e.g., 5"
-                  keyboardType="numeric"
-                  narrow
-                  maxLength={3}
+                  onChange={(v) => patchForm({ raceLosers: v })}
+                  min={1}
+                  max={50}
                 />
               )}
-              <LabeledInput
-                label="Finals race to"
+              <Stepper
+                label="Finals Race To"
                 value={form.raceFinals}
-                onChangeText={(v) => patchForm({ raceFinals: v })}
-                placeholder="e.g., 9"
-                keyboardType="numeric"
-                narrow
-                maxLength={3}
+                onChange={(v) => patchForm({ raceFinals: v })}
+                min={1}
+                max={50}
               />
             </View>
-          ) : (
+          )}
+
+          {form.raceMode === "differential" && (
+            <View>
+              <Text allowFontScaling={false} style={styles.hint}>
+                Races are calculated automatically from each pair&apos;s Fargo
+                gap. The lower-rated player races to the minimum; the higher gets
+                one extra game per the Fargo step, capped at the maximum (rounded
+                down).
+              </Text>
+              <Stepper
+                label="Minimum Race To"
+                value={form.diffMinRace}
+                onChange={(v) => patchForm({ diffMinRace: v })}
+                min={1}
+                max={50}
+              />
+              <Stepper
+                label="Fargo Difference Per Game"
+                value={form.diffPerGame}
+                onChange={(v) => patchForm({ diffPerGame: v })}
+                min={5}
+                max={300}
+                step={5}
+              />
+              <Stepper
+                label="Maximum Race To"
+                value={form.diffMaxRace}
+                onChange={(v) => patchForm({ diffMaxRace: v })}
+                min={1}
+                max={50}
+              />
+              <Text allowFontScaling={false} style={styles.hint}>
+                Example: a 150-point gap ={" "}
+                {Math.floor(150 / form.diffPerGame)} extra game
+                {Math.floor(150 / form.diffPerGame) === 1 ? "" : "s"} — lower
+                player races to {form.diffMinRace}, higher to{" "}
+                {Math.min(
+                  form.diffMaxRace,
+                  form.diffMinRace + Math.floor(150 / form.diffPerGame),
+                )}
+                .
+              </Text>
+            </View>
+          )}
+
+          {form.raceMode === "groups" && (
             <View>
               <Text allowFontScaling={false} style={styles.hint}>
                 Players are auto-assigned a race from the group their Fargo falls
@@ -1975,6 +2075,37 @@ const styles = StyleSheet.create({
   },
   inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
   inputNarrow: { width: webSc(96), alignSelf: "flex-start" },
+
+  // +/- stepper
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.md),
+    alignSelf: "flex-start",
+  },
+  stepBtn: {
+    width: webSc(44),
+    height: webSc(44),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepBtnText: {
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "700",
+    color: COLORS.primary,
+    lineHeight: webMs(FONT_SIZES.xl),
+  },
+  stepValue: {
+    minWidth: webSc(36),
+    textAlign: "center",
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "700",
+    color: COLORS.text,
+  },
   hint: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,

@@ -315,3 +315,15 @@ filter, Fargo display, walk-up (guest) add. Online pre-registration cap surfaced
 - **Auto-advance is default (both sides):** scoring a match advances BOTH players to their next bracket slot automatically (winners and losers). No "Auto-Advance Winners" / "Auto-Generate Next Round" toggles.
 - **Start Match dialog (Stage 2):** TD clicks a match -> popup shows the two players, the race, and the (auto-assigned, editable) table -> "Start Match". Auto-Assign Tables just pre-fills the table; TD can change it at start.
 - **Match timer is built-in:** every match is timed starting when the TD starts it. No per-tournament toggle.
+
+### Race configuration (3 modes) — Settings uses +/- steppers, format-aware labels
+- **Race Type** dropdown: Fixed Race · A/B/C Race Groups · Fargo Differential.
+- All race numbers are +/- steppers (no keyboard). Stored in live_settings.
+- **Dynamic labels** by format: single-elim -> "Match Race To" + "Finals Race To";
+  double/true-double -> "Winners Race To" + "Losers Race To" + "Finals Race To".
+- **Fixed:** fixedRaceWinners (a.k.a. match race), fixedRaceLosers (double only), fixedRaceFinals.
+- **A/B/C Groups:** raceGroups[] (label, minFargo, maxFargo, raceTo). Auto-assign per player by Fargo band, TD override (Stage 2).
+- **Fargo Differential (Stage 2 calc):** config = fargoDiffMinRace, fargoDiffPerGame, fargoDiffMaxRace, fargoDiffRounding (default "down").
+  Per match: diff = |fargoA - fargoB|; extra = floor(diff / perGame) (round down default);
+  lower-rated player races to MIN; higher-rated races to min(MAX, MIN + extra).
+  e.g. 400 vs 550, perGame 50 -> diff 150 -> +3 -> 400 races to 3, 550 races to 6.

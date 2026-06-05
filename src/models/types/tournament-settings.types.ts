@@ -18,7 +18,7 @@ export interface RaceGroup {
   raceTo: number;
 }
 
-export type RaceMode = "fixed" | "groups";
+export type RaceMode = "fixed" | "groups" | "differential";
 
 // ── Generated bracket (V1: Round 1 only, stored in live_settings.bracket) ─────
 export interface BracketSlot {
@@ -50,10 +50,18 @@ export interface TournamentLiveSettings {
   // Race configuration
   raceMode?: RaceMode; // "fixed" uses the per-bracket races below; "groups" uses raceGroups
   // Fixed race, per bracket side. Losers side is unused for single elimination.
-  fixedRaceWinners?: number | null;
+  fixedRaceWinners?: number | null; // also the single-elim "Match Race To"
   fixedRaceLosers?: number | null;
   fixedRaceFinals?: number | null;
+  // A/B/C race groups (race by Fargo band).
   raceGroups?: RaceGroup[];
+  // Fargo Differential: auto race per match from the two players' Fargo gap.
+  // Lower player races to min; higher player gets +1 game per `perGame` of gap,
+  // capped at max. Rounding defaults to "down".
+  fargoDiffMinRace?: number | null;
+  fargoDiffPerGame?: number | null;
+  fargoDiffMaxRace?: number | null;
+  fargoDiffRounding?: "down" | "up";
 
   // NOTE: there are no live-feature toggles. The public/live bracket view,
   // winner+loser auto-advance on scoring, table suggestion at match start, and
