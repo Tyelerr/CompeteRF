@@ -969,17 +969,34 @@ const RegistrationRow = ({
 
       {d === "ready" && !editing && (
         <>
-          <Text allowFontScaling={false} style={styles.assignText}>
-            {assignmentDisplay()}
-          </Text>
-          <PayCheckbox
-            label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
-            checked={!!registration.paid_entry}
-            readOnly
-          />
-          {(registration.paid_side_pots ?? []).map((name) => (
-            <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
-          ))}
+          <View style={styles.assignPayRow}>
+            <View style={styles.payCol}>
+              <PayCheckbox
+                label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
+                checked={!!registration.paid_entry}
+                readOnly
+              />
+              {(registration.paid_side_pots ?? []).map((name) => (
+                <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
+              ))}
+            </View>
+            <View style={styles.fargoRight}>
+              {isGroups ? (
+                <Text allowFontScaling={false} style={styles.assignText}>
+                  {assignmentDisplay()}
+                </Text>
+              ) : (
+                <>
+                  <Text allowFontScaling={false} style={styles.fargoReadLabel}>
+                    Fargo
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.fargoReadNumber}>
+                    {registration.fargo_rating ?? "—"}
+                  </Text>
+                </>
+              )}
+            </View>
+          </View>
           <View style={styles.regActions}>
             <TouchableOpacity
               style={[styles.regActionBtn, styles.checkInBtn]}
@@ -1223,7 +1240,19 @@ export default function ManageTournamentScreen() {
     ]);
 
   // ---- Status-flow actions ------------------------------------------------
-  const handleCloseRegistration = () =>
+  const handleCloseRegistration = () => {
+    // Block if any player is still pending (Pre-Registered — not yet Ready,
+    // which means a missing Fargo and/or unpaid entry fee).
+    const pending = hub.registrations.filter(
+      (r) => displayStatusOf(r.status) === "prereg",
+    ).length;
+    if (pending > 0) {
+      Alert.alert(
+        "Still Pending Players",
+        `${pending} player${pending === 1 ? "" : "s"} ${pending === 1 ? "is" : "are"} still pre-registered (missing Fargo or unpaid entry fee). Mark each as Ready, No Show, or Remove before locking the field.`,
+      );
+      return;
+    }
     Alert.alert(
       "Close Registration",
       "Lock the player field and stop new registrations?",
@@ -1238,6 +1267,7 @@ export default function ManageTournamentScreen() {
         },
       ],
     );
+  };
   const handleStartTournament = () =>
     Alert.alert(
       "Start Tournament",
@@ -3091,6 +3121,18 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: "600",
     marginBottom: webSc(SPACING.xs),
+  },
+  // Fargo readout on a Ready card: gray label, big blue number.
+  fargoReadLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+  },
+  fargoReadNumber: {
+    fontSize: webMs(FONT_SIZES.xxl),
+    color: COLORS.primary,
+    fontWeight: "800",
+    lineHeight: webMs(FONT_SIZES.xxl) + 2,
   },
   summaryPills: {
     flexDirection: "row",
