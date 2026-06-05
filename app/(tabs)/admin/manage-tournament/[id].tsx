@@ -222,6 +222,15 @@ const RACE_MODE_OPTIONS = [
   { label: "Fargo Differential", value: "differential" },
 ];
 
+// A Postgres `time` column reads back as "HH:MM:SS", but the START_TIMES
+// dropdown matches "HH:MM". Trim to HH:MM so the saved time pre-fills.
+const toStartTime = (t: string | null | undefined): string => {
+  if (!t) return "";
+  const [h, m] = t.split(":");
+  if (h == null || m == null) return t;
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+};
+
 const toForm = (t: Tournament): SettingsForm => {
   const ls = t.live_settings ?? {};
   return {
@@ -238,7 +247,7 @@ const toForm = (t: Tournament): SettingsForm => {
     openTournament: !!t.open_tournament,
     isRecurring: !!t.is_recurring,
     tournamentDate: t.tournament_date ?? "",
-    startTime: t.start_time ?? "",
+    startTime: toStartTime(t.start_time),
     raceWinners: ls.fixedRaceWinners ?? parseRaceNumber(t.race) ?? 5,
     raceLosers: ls.fixedRaceLosers ?? 4,
     raceFinals: ls.fixedRaceFinals ?? 7,

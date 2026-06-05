@@ -49,6 +49,15 @@ const gameTypeSlug = (value: string | null | undefined): string => {
   return match ? match[0] : value;
 };
 
+// A Postgres `time` column reads back as "HH:MM:SS", but the START_TIMES
+// dropdown matches "HH:MM". Trim to HH:MM so the saved time pre-fills.
+const toStartTime = (t: string | null | undefined): string => {
+  if (!t) return "";
+  const [h, m] = t.split(":");
+  if (h == null || m == null) return t;
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+};
+
 export const useEditTournament = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -166,7 +175,7 @@ export const useEditTournament = () => {
         tournamentDate: tournamentData.tournament_date
           ? new Date(tournamentData.tournament_date)
           : null,
-        startTime: tournamentData.start_time || "",
+        startTime: toStartTime(tournamentData.start_time),
         timezone: tournamentData.timezone || "America/Phoenix",
         venueId: tournamentData.venue_id || null,
         phoneNumber: tournamentData.phone_number || "",
