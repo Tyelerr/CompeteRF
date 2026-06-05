@@ -1,7 +1,7 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useState } from "react";
 import {
-  Image, Modal, Platform, ScrollView, Share, StyleSheet,
+  Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet,
   Text, TouchableOpacity, View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
@@ -12,6 +12,7 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { useReport } from "../../../viewmodels/hooks/useReport";
+import { useSelfRegistration } from "../../../viewmodels/hooks/use.self.registration";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
 import { Button } from "../common/button";
 import { FullScreenImageViewer } from "../common/FullScreenImageViewer";
@@ -33,7 +34,29 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const { profile } = useAuthContext();
   const { isFavorited, toggleFavorite, isToggling } = useFavorites(profile?.id_auto);
 
+  // Self-registration (player registers themselves from this modal).
+  const reg = useSelfRegistration(vm.tournament?.id, profile?.id_auto);
+  const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+
   const handleClose = useCallback(() => { closeReportModal(); onClose(); }, [closeReportModal, onClose]);
+
+  const handleRegisterPress = () => {
+    if (!profile?.id_auto) {
+      Alert.alert("Log In Required", "Create a free account or log in to register for tournaments.");
+      return;
+    }
+    setShowRegisterConfirm(true);
+  };
+
+  const handleConfirmRegister = async () => {
+    try {
+      await reg.register();
+      setShowRegisterConfirm(false);
+      Alert.alert("You're registered", "You're registered for this tournament.");
+    } catch {
+      Alert.alert("Error", "Couldn't complete registration. Please try again.");
+    }
+  };
 
   const getTournamentImageUrl = (tournament: any) => {
     const gameTypeImageMap: Record<string, string> = {
@@ -82,6 +105,8 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const director = tournament?.profiles ?? null;
   const directorName = getDirectorName(director);
   const directorId = getDirectorId(director);
+  // Registration is open through Compete (players self-register as preregistered).
+  const canRegister = tournament?.live_state === "registration_open";
 
   const innerContent = (
     <>
@@ -218,6 +243,20 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
             </Text>
           </ScrollView>
 
+          {canRegister && (
+            <View style={s.registerContainer}>
+              {reg.isRegistered ? (
+                <View style={s.registeredPill}>
+                  <Text allowFontScaling={false} style={s.registeredPillText}>✓ Registered</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={s.registerButton} onPress={handleRegisterPress} disabled={reg.loading}>
+                  <Text allowFontScaling={false} style={s.registerButtonText}>Register for Tournament</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           <View style={s.bottomBar}>
             <TouchableOpacity style={s.shareButton} onPress={handleShare}>
               <Text allowFontScaling={false} style={s.shareButtonText}>Share</Text>
@@ -230,6 +269,42 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
               <Text allowFontScaling={false} style={s.closeBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
+
+          {showRegisterConfirm && (
+            <View style={s.confirmOverlay}>
+              <TouchableOpacity
+                style={s.confirmBackdrop}
+                activeOpacity={1}
+                onPress={() => !reg.registering && setShowRegisterConfirm(false)}
+              />
+              <View style={s.confirmCard}>
+                <Text allowFontScaling={false} style={s.confirmTitle}>Register for Tournament?</Text>
+                <Text allowFontScaling={false} style={s.confirmBody}>You are registering for:</Text>
+                <Text allowFontScaling={false} style={s.confirmName}>{tournament.name}</Text>
+                <Text allowFontScaling={false} style={s.confirmBody}>
+                  Your account will be added to the tournament registration list.
+                </Text>
+                <View style={s.confirmButtons}>
+                  <TouchableOpacity
+                    style={s.confirmCancel}
+                    onPress={() => setShowRegisterConfirm(false)}
+                    disabled={reg.registering}
+                  >
+                    <Text allowFontScaling={false} style={s.confirmCancelText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.confirmConfirm}
+                    onPress={handleConfirmRegister}
+                    disabled={reg.registering}
+                  >
+                    <Text allowFontScaling={false} style={s.confirmConfirmText}>
+                      {reg.registering ? "Registering..." : "Register"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
         </>
       )}
     </>
@@ -303,6 +378,22 @@ const s = StyleSheet.create({
   chipLine: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, paddingVertical: 2, textAlign: "center" },
   chipLineCount: { fontWeight: "800", color: COLORS.primary },
   disclaimerText: { fontSize: moderateScale(11), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.md), lineHeight: moderateScale(16), opacity: 0.6 },
+  registerContainer: { paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.md) },
+  registerButton: { backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center" },
+  registerButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
+  registeredPill: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.success + "20", borderColor: COLORS.success, borderWidth: 1, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
+  registeredPillText: { color: COLORS.success, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
+  confirmOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", padding: scale(SPACING.lg) },
+  confirmBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.7)" },
+  confirmCard: { width: "100%", backgroundColor: COLORS.surface, borderRadius: scale(16), borderWidth: 1, borderColor: COLORS.border, padding: scale(SPACING.lg) },
+  confirmTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.md) },
+  confirmBody: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: moderateScale(20) },
+  confirmName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, marginVertical: scale(SPACING.sm), textAlign: "center" },
+  confirmButtons: { flexDirection: "row", gap: scale(SPACING.sm), marginTop: scale(SPACING.lg) },
+  confirmCancel: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  confirmCancelText: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
+  confirmConfirm: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.primary },
+  confirmConfirmText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
   bottomBar: { flexDirection: "row", padding: scale(SPACING.md), gap: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, paddingBottom: Platform.OS === "ios" ? 20 : scale(SPACING.md) },
   shareButton: { flex: 1, backgroundColor: COLORS.surface, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center", borderWidth: 1, borderColor: COLORS.primary },
   shareButtonText: { color: COLORS.primary, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },

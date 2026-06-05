@@ -1,0 +1,64 @@
+// src/viewmodels/hooks/use.self.registration.ts
+// Lets a logged-in player register THEMSELVES for a tournament from the public
+// detail modal. Loads the player's existing registration (if any) so the UI can
+// show "Register" vs "✓ Registered", and self-registers as `preregistered`
+// (NOT checked in — only the TD checks players in on tournament day).
+
+import { useCallback, useEffect, useState } from "react";
+import { registrationService } from "../../models/services/registration.service";
+import { Registration } from "../../models/types/registration.types";
+
+export const useSelfRegistration = (
+  tournamentId?: number,
+  playerId?: number,
+) => {
+  const [registration, setRegistration] = useState<Registration | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!tournamentId || !playerId) {
+      setRegistration(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await registrationService.getPlayerRegistrationForTournament(
+        tournamentId,
+        playerId,
+      );
+      setRegistration(r);
+    } catch {
+      setRegistration(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [tournamentId, playerId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Active = has a row that isn't cancelled.
+  const isRegistered = !!registration && registration.status !== "cancelled";
+
+  // Self-register as preregistered. Re-uses an existing (e.g. cancelled) row to
+  // satisfy the (tournament_id, player_id) unique index. Throws on failure.
+  const register = useCallback(async () => {
+    if (!tournamentId || !playerId) return;
+    setRegistering(true);
+    try {
+      const r = registration
+        ? await registrationService.reRegister(registration.id)
+        : await registrationService.register({
+            tournament_id: tournamentId,
+            player_id: playerId,
+          });
+      setRegistration(r);
+    } finally {
+      setRegistering(false);
+    }
+  }, [tournamentId, playerId, registration]);
+
+  return { registration, isRegistered, loading, register, registering, refresh };
+};

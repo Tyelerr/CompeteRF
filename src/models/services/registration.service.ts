@@ -97,6 +97,22 @@ export const registrationService = {
     return data as unknown as Registration;
   },
 
+  // A player re-activates their OWN registration (e.g. after cancelling). The
+  // (tournament_id, player_id) partial unique index blocks a second insert, so
+  // re-registration flips the existing row back to preregistered. RLS allows a
+  // player to update their own row.
+  async reRegister(id: number): Promise<Registration> {
+    const { data, error } = await supabase
+      .from("tournament_players")
+      .update({ status: "preregistered" as RegistrationStatus })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Re-register failed - no rows modified (possible RLS block).");
+    return data as unknown as Registration;
+  },
+
   // A player cancels their OWN preregistration (allowed until the lock window;
   // the UI enforces timing). Soft-cancel via status, preserving the row.
   async cancelOwnRegistration(id: number): Promise<Registration> {
