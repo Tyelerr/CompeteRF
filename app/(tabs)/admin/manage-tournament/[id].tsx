@@ -1232,13 +1232,16 @@ export default function ManageTournamentScreen() {
           <LabeledInput
             label="Maximum Fargo"
             value={form.maxFargo}
-            onChangeText={(v) => patchForm({ maxFargo: v })}
+            onChangeText={(v) =>
+              patchForm({ maxFargo: v.replace(/[^0-9]/g, "") })
+            }
             placeholder={
               maxFargoDisabled
                 ? "Disabled (Open Tournament is on)"
                 : "e.g., 550 (blank = open)"
             }
             keyboardType="numeric"
+            maxLength={3}
             disabled={maxFargoDisabled}
             hint={
               maxFargoDisabled
