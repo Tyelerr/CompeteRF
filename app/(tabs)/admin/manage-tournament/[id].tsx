@@ -2764,9 +2764,9 @@ const styles = StyleSheet.create({
   },
   lockBtnFooter: { marginBottom: 0, paddingVertical: webSc(SPACING.md) },
   playersFooter: {
-    paddingHorizontal: webSc(6),
-    paddingTop: webSc(22),
-    paddingBottom: Platform.OS === "ios" ? webSc(19) : webSc(13),
+    paddingHorizontal: webSc(5),
+    paddingTop: webSc(18),
+    paddingBottom: Platform.OS === "ios" ? webSc(15) : webSc(10),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     backgroundColor: COLORS.background,
