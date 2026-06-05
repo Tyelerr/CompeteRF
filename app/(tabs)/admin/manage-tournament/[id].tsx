@@ -1954,17 +1954,6 @@ export default function ManageTournamentScreen() {
           </TouchableOpacity>
         </View>
 
-        {hub.liveState === "registration_open" && (
-          <TouchableOpacity
-            style={styles.lockBtn}
-            onPress={handleCloseRegistration}
-          >
-            <Text allowFontScaling={false} style={styles.lockBtnText}>
-              Close Registration / Lock Players
-            </Text>
-          </TouchableOpacity>
-        )}
-
         <View style={styles.searchInputWrapper}>
           <Text allowFontScaling={false} style={styles.searchIcon}>
             {GLYPH.search}
@@ -2398,6 +2387,7 @@ export default function ManageTournamentScreen() {
       </View>
 
       <ScrollView
+        style={styles.scrollFlex}
         contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -2415,6 +2405,20 @@ export default function ManageTournamentScreen() {
       >
         {renderTab()}
       </ScrollView>
+
+      {/* Fixed footer: Close Registration stays pinned while the list scrolls */}
+      {activeTab === "players" && hub.liveState === "registration_open" && (
+        <View style={styles.playersFooter}>
+          <TouchableOpacity
+            style={[styles.lockBtn, styles.lockBtnFooter]}
+            onPress={handleCloseRegistration}
+          >
+            <Text allowFontScaling={false} style={styles.lockBtnText}>
+              Close Registration / Lock Players
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -2510,6 +2514,7 @@ const styles = StyleSheet.create({
     paddingBottom: webSc(SPACING.xl * 2),
   },
   contentWeb: { alignItems: "stretch" },
+  scrollFlex: { flex: 1 },
 
   // Sections / fields
   section: {
@@ -2756,6 +2761,15 @@ const styles = StyleSheet.create({
     color: COLORS.warning,
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "700",
+  },
+  lockBtnFooter: { marginBottom: 0, paddingVertical: webSc(SPACING.md) },
+  playersFooter: {
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+    paddingBottom: Platform.OS === "ios" ? webSc(SPACING.lg) : webSc(SPACING.md),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   // Tables
