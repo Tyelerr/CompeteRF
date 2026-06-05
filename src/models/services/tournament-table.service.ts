@@ -56,10 +56,11 @@ export const tournamentTableService = {
     tournamentId: number,
     fromNumber: number,
     toNumber: number,
+    label: string | null = null,
   ): Promise<TournamentTable[]> {
     const rows: TournamentTableInsert[] = [];
     for (let n = fromNumber; n <= toNumber; n++) {
-      rows.push({ tournament_id: tournamentId, table_number: n });
+      rows.push({ tournament_id: tournamentId, table_number: n, label });
     }
     if (rows.length === 0) return [];
     const { data, error } = await supabase

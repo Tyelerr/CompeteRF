@@ -1181,8 +1181,10 @@ export default function ManageTournamentScreen() {
 
   // Tables tab state
   const [singleTableNum, setSingleTableNum] = useState("");
+  const [singleTableLabel, setSingleTableLabel] = useState("");
   const [bulkFrom, setBulkFrom] = useState("");
   const [bulkTo, setBulkTo] = useState("");
+  const [bulkLabel, setBulkLabel] = useState("");
   const [streamDrafts, setStreamDrafts] = useState<Record<number, string>>({});
   const [tableBusy, setTableBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -1267,8 +1269,12 @@ export default function ManageTournamentScreen() {
     }
     setTableBusy(true);
     try {
-      await hub.createTable({ tableNumber: n });
+      await hub.createTable({
+        tableNumber: n,
+        label: singleTableLabel.trim() || null,
+      });
       setSingleTableNum("");
+      setSingleTableLabel("");
     } catch {
       Alert.alert("Error", "Couldn't add the table — that number may already exist.");
     } finally {
@@ -1288,9 +1294,10 @@ export default function ManageTournamentScreen() {
     }
     setTableBusy(true);
     try {
-      await hub.createTablesBulk({ from, to });
+      await hub.createTablesBulk({ from, to, label: bulkLabel.trim() || null });
       setBulkFrom("");
       setBulkTo("");
+      setBulkLabel("");
     } catch {
       Alert.alert("Error", "Couldn't add tables — some numbers may already exist.");
     } finally {
@@ -2174,12 +2181,21 @@ export default function ManageTournamentScreen() {
         <View style={styles.tableAddRow}>
           <TextInput
             allowFontScaling={false}
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, { width: webSc(72) }]}
             value={singleTableNum}
-            onChangeText={setSingleTableNum}
-            placeholder="Table #"
+            onChangeText={(v) => setSingleTableNum(v.replace(/[^0-9]/g, ""))}
+            placeholder="#"
             placeholderTextColor={COLORS.textMuted}
             keyboardType="numeric"
+            maxLength={3}
+          />
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { flex: 1 }]}
+            value={singleTableLabel}
+            onChangeText={setSingleTableLabel}
+            placeholder="Label (e.g. 9ft) — optional"
+            placeholderTextColor={COLORS.textMuted}
           />
           <TouchableOpacity
             style={styles.tableAddBtn}
@@ -2191,6 +2207,7 @@ export default function ManageTournamentScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
         <Text allowFontScaling={false} style={styles.fieldLabel}>
           Bulk add (range)
         </Text>
@@ -2199,19 +2216,31 @@ export default function ManageTournamentScreen() {
             allowFontScaling={false}
             style={[styles.input, { flex: 1 }]}
             value={bulkFrom}
-            onChangeText={setBulkFrom}
+            onChangeText={(v) => setBulkFrom(v.replace(/[^0-9]/g, ""))}
             placeholder="From"
             placeholderTextColor={COLORS.textMuted}
             keyboardType="numeric"
+            maxLength={3}
           />
           <TextInput
             allowFontScaling={false}
             style={[styles.input, { flex: 1 }]}
             value={bulkTo}
-            onChangeText={setBulkTo}
+            onChangeText={(v) => setBulkTo(v.replace(/[^0-9]/g, ""))}
             placeholder="To"
             placeholderTextColor={COLORS.textMuted}
             keyboardType="numeric"
+            maxLength={3}
+          />
+        </View>
+        <View style={styles.tableAddRow}>
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { flex: 1 }]}
+            value={bulkLabel}
+            onChangeText={setBulkLabel}
+            placeholder="Label for these tables (e.g. 7ft) — optional"
+            placeholderTextColor={COLORS.textMuted}
           />
           <TouchableOpacity
             style={styles.tableAddBtn}

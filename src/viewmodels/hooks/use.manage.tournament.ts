@@ -144,11 +144,12 @@ export const useManageTournament = (tournamentId?: number) => {
   });
 
   const createTablesBulkMutation = useMutation({
-    mutationFn: (vars: { from: number; to: number }) =>
+    mutationFn: (vars: { from: number; to: number; label?: string | null }) =>
       tournamentTableService.createTablesBulk(
         tournamentId!,
         vars.from,
         vars.to,
+        vars.label ?? null,
       ),
     onSuccess: invalidateTables,
   });
