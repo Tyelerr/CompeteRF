@@ -835,22 +835,30 @@ const RegistrationRow = ({
     <>
       {isGroups && renderGroupInput()}
       <View style={styles.assignPayRow}>
-        <PayCheckbox
-          label="Entry Fee"
-          checked={paidEntry}
-          onToggle={() => setPaidEntry((v) => !v)}
-        />
+        <View style={styles.payCol}>
+          <PayCheckbox
+            label="Entry Fee"
+            checked={paidEntry}
+            onToggle={() => setPaidEntry((v) => !v)}
+          />
+          {sidePots.map((p) => (
+            <PayCheckbox
+              key={p.name}
+              label={potLabel(p)}
+              checked={paidPots.includes(p.name)}
+              onToggle={() => togglePot(p.name)}
+            />
+          ))}
+        </View>
         {!isGroups && (
-          <View style={styles.fargoInline}>
-            <Text allowFontScaling={false} style={styles.fargoInlineLabel}>
-              Fargo
-            </Text>
+          <View style={styles.fargoRight}>
+            <FieldLabel label="Fargo" />
             <TextInput
               allowFontScaling={false}
-              style={[styles.input, styles.fargoMini]}
+              style={[styles.input, styles.inputNarrow]}
               value={fargoInput}
               onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
-              placeholder="000"
+              placeholder="e.g., 525"
               placeholderTextColor={COLORS.textMuted}
               keyboardType="numeric"
               maxLength={3}
@@ -858,14 +866,6 @@ const RegistrationRow = ({
           </View>
         )}
       </View>
-      {sidePots.map((p) => (
-        <PayCheckbox
-          key={p.name}
-          label={potLabel(p)}
-          checked={paidPots.includes(p.name)}
-          onToggle={() => togglePot(p.name)}
-        />
-      ))}
       {!assignReady && (
         <Text allowFontScaling={false} style={styles.hint}>
           {isGroups
@@ -3033,24 +3033,14 @@ const styles = StyleSheet.create({
   },
   payLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
   payLabelPaid: { color: COLORS.success, fontWeight: "600" },
-  // Entry Fee (left) + Fargo (right) on one row
+  // Left: Entry Fee + side pots stacked tightly. Right: the Fargo field.
   assignPayRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: webSc(SPACING.sm),
   },
-  fargoInline: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
-  fargoInlineLabel: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  fargoMini: {
-    width: webSc(72),
-    textAlign: "center",
-    paddingVertical: webSc(SPACING.xs),
-  },
+  payCol: { flex: 1 },
+  fargoRight: { alignItems: "flex-start" },
   assignText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
