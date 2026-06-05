@@ -2940,7 +2940,7 @@ const styles = StyleSheet.create({
   regActions: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
   regActionBtn: {
     flex: 1,
-    paddingVertical: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
