@@ -2410,7 +2410,7 @@ export default function ManageTournamentScreen() {
       {activeTab === "players" && hub.liveState === "registration_open" && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
-            style={[styles.lockBtn, styles.lockBtnFooter]}
+            style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
             onPress={handleCloseRegistration}
           >
             <Text allowFontScaling={false} style={styles.lockBtnText}>
@@ -2764,13 +2764,15 @@ const styles = StyleSheet.create({
   },
   lockBtnFooter: { marginBottom: 0, paddingVertical: webSc(SPACING.md) },
   playersFooter: {
-    paddingHorizontal: webSc(SPACING.md),
-    paddingTop: webSc(SPACING.sm),
-    paddingBottom: Platform.OS === "ios" ? webSc(SPACING.lg) : webSc(SPACING.md),
+    paddingHorizontal: webSc(6),
+    paddingTop: webSc(22),
+    paddingBottom: Platform.OS === "ios" ? webSc(19) : webSc(13),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
   },
+  lockBtnFooterInner: { width: "95%" },
 
   // Tables
   tableAddRow: {
