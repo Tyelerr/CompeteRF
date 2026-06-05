@@ -2939,11 +2939,13 @@ const styles = StyleSheet.create({
   },
   regActions: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
   regActionBtn: {
-    paddingVertical: webSc(SPACING.sm),
-    paddingHorizontal: webSc(SPACING.md),
+    flex: 1,
+    paddingVertical: webSc(SPACING.md),
+    paddingHorizontal: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     alignItems: "center",
+    justifyContent: "center",
   },
   approveBtn: {
     backgroundColor: COLORS.success + "20",
