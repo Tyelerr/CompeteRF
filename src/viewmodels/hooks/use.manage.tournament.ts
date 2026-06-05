@@ -168,11 +168,13 @@ export const useManageTournament = (tournamentId?: number) => {
     tournament,
     isLoading: tournamentQuery.isLoading,
     error: tournamentQuery.error,
-    refetch: () => {
-      tournamentQuery.refetch();
-      tablesQuery.refetch();
-      registrationsApi.refetch();
-    },
+    refetch: () =>
+      Promise.all([
+        tournamentQuery.refetch(),
+        tablesQuery.refetch(),
+        registrationsApi.refetch(),
+      ]),
+    refetchRegistrations: registrationsApi.refetch,
 
     phase,
     liveState: tournament?.live_state ?? "not_started",

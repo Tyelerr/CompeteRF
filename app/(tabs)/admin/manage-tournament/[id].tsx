@@ -18,6 +18,7 @@ import {
   Keyboard,
   Modal,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -844,6 +845,23 @@ export default function ManageTournamentScreen() {
   const [bulkTo, setBulkTo] = useState("");
   const [streamDrafts, setStreamDrafts] = useState<Record<number, string>>({});
   const [tableBusy, setTableBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await hub.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Re-fetch registrations whenever the Players tab is opened, so self-service
+  // registrations/removals made elsewhere show up without a manual refresh.
+  useEffect(() => {
+    if (activeTab === "players") hub.refetchRegistrations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Guided-setup prompt shown when the TD jumps ahead of an incomplete step.
   const [gatePrompt, setGatePrompt] = useState<{
@@ -2073,6 +2091,15 @@ export default function ManageTournamentScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={() => Keyboard.dismiss()}
+        refreshControl={
+          isWeb ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={COLORS.primary}
+            />
+          )
+        }
       >
         {renderTab()}
       </ScrollView>
