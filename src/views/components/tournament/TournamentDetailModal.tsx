@@ -1,5 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet,
   Text, TouchableOpacity, View,
@@ -37,6 +37,14 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   // Self-registration (player registers themselves from this modal).
   const reg = useSelfRegistration(vm.tournament?.id, profile?.id_auto);
   const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+
+  // The modal stays mounted (only `visible` toggles), so re-fetch the player's
+  // registration each time it opens — otherwise a TD removing the player leaves
+  // a stale "✓ Registered" state and blocks re-registering.
+  useEffect(() => {
+    if (visible) reg.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, reg.refresh]);
 
   const handleClose = useCallback(() => { closeReportModal(); onClose(); }, [closeReportModal, onClose]);
 
