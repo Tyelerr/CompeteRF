@@ -847,7 +847,11 @@ const RegistrationRow = ({
   // still list pots the TD has since removed. Filter those out so removed pots
   // never display and never get re-saved when the row is edited.
   const potExists = (name: string) => sidePots.some((p) => p.name === name);
-  const livePaidPots = () => (registration.paid_side_pots ?? []).filter(potExists);
+  // Filter to pots that still exist AND drop duplicates (stale data could hold
+  // the same pot name twice). Self-heals on the next edit/save.
+  const livePaidPots = () => [
+    ...new Set((registration.paid_side_pots ?? []).filter(potExists)),
+  ];
 
   const [editing, setEditing] = useState(false);
   const [paidEntry, setPaidEntry] = useState(!!registration.paid_entry);
@@ -919,9 +923,9 @@ const RegistrationRow = ({
             checked={paidEntry}
             onToggle={() => setPaidEntry((v) => !v)}
           />
-          {sidePots.map((p) => (
+          {sidePots.map((p, i) => (
             <PayCheckbox
-              key={p.name}
+              key={`${p.name}-${i}`}
               label={potLabel(p)}
               checked={paidPots.includes(p.name)}
               onToggle={() => togglePot(p.name)}
@@ -1067,12 +1071,12 @@ const RegistrationRow = ({
                 checked={!!registration.paid_entry}
                 readOnly
               />
-              {livePaidPots().map((name) => {
+              {livePaidPots().map((name, i) => {
                 const pot = sidePots.find((p) => p.name === name);
                 if (!pot) return null;
                 return (
                   <PayCheckbox
-                    key={name}
+                    key={`${name}-${i}`}
                     label={`${potLabel(pot)} Entered`}
                     checked
                     readOnly
