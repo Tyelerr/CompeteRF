@@ -14,6 +14,7 @@ export interface DrawPlayer {
   registrationId: number;
   name: string;
   fargo: number | null;
+  raceOverride?: number | null; // TD-set race-to; wins over group/Fargo logic
 }
 
 export interface RaceConfig {
@@ -64,9 +65,11 @@ const groupForFargo = (
 };
 
 // A player's race independent of opponent (fixed/groups, or differential solo).
-const soloRace = (fargo: number | null, cfg: RaceConfig): number => {
+// A manual override always wins.
+const soloRace = (player: DrawPlayer | null, cfg: RaceConfig): number => {
+  if (player?.raceOverride != null) return player.raceOverride;
   if (cfg.mode === "groups") {
-    const g = groupForFargo(fargo, cfg.groups);
+    const g = groupForFargo(player?.fargo ?? null, cfg.groups);
     return g ? g.raceTo : cfg.fixedWinners;
   }
   if (cfg.mode === "differential") return cfg.diffMin;
@@ -75,7 +78,7 @@ const soloRace = (fargo: number | null, cfg: RaceConfig): number => {
 
 export const averageRace = (players: DrawPlayer[], cfg: RaceConfig): number => {
   if (players.length === 0) return cfg.fixedWinners || 5;
-  const sum = players.reduce((acc, p) => acc + soloRace(p.fargo, cfg), 0);
+  const sum = players.reduce((acc, p) => acc + soloRace(p, cfg), 0);
   return Math.max(1, Math.round(sum / players.length));
 };
 
@@ -99,17 +102,20 @@ const matchRaces = (
       cfg.diffMax != null
         ? Math.min(cfg.diffMax, cfg.diffMin + extra)
         : cfg.diffMin + extra;
-    const p1Race = p1.fargo <= p2.fargo ? cfg.diffMin : hiRace;
-    const p2Race = p2.fargo <= p1.fargo ? cfg.diffMin : hiRace;
+    // A manual override wins over the computed differential race.
+    const p1Race =
+      p1.raceOverride ?? (p1.fargo <= p2.fargo ? cfg.diffMin : hiRace);
+    const p2Race =
+      p2.raceOverride ?? (p2.fargo <= p1.fargo ? cfg.diffMin : hiRace);
     return { p1Race, p2Race, common: p1Race === p2Race ? p1Race : null };
   }
-  const p1Race = p1 ? soloRace(p1.fargo, cfg) : null;
-  const p2Race = p2 ? soloRace(p2.fargo, cfg) : null;
+  const p1Race = p1 ? soloRace(p1, cfg) : null;
+  const p2Race = p2 ? soloRace(p2, cfg) : null;
   const common =
-    cfg.mode === "fixed"
-      ? cfg.fixedWinners
-      : p1Race != null && p1Race === p2Race
-        ? p1Race
+    p1Race != null && p1Race === p2Race
+      ? p1Race
+      : cfg.mode === "fixed" && !p1?.raceOverride && !p2?.raceOverride
+        ? cfg.fixedWinners
         : null;
   return { p1Race, p2Race, common };
 };

@@ -16,6 +16,7 @@ export interface Registration {
   seed?: number | null;
   fargo_rating?: number | null;
   is_starter_rating: boolean;       // TD assigned a starting rating (no Fargo yet)
+  race_override?: number | null;    // TD-set race-to that overrides group/Fargo logic
   paid_entry: boolean;
   paid_side_pots: string[];         // names of side pots the player bought into
   registered_at: string;
@@ -41,6 +42,7 @@ export interface RegistrationInsert {
   seed?: number | null;
   fargo_rating?: number | null;
   is_starter_rating?: boolean;
+  race_override?: number | null;
   paid_entry?: boolean;
   paid_side_pots?: string[];
 }
@@ -51,6 +53,7 @@ export interface RegistrationUpdate {
   seed?: number | null;
   fargo_rating?: number | null;
   is_starter_rating?: boolean;
+  race_override?: number | null;
   paid_entry?: boolean;
   paid_side_pots?: string[];
   checked_in_at?: string | null;

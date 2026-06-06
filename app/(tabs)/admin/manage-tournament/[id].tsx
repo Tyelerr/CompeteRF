@@ -843,12 +843,14 @@ const RegistrationRow = ({
     isStarter: boolean,
     paidEntry: boolean,
     paidPots: string[],
+    raceOverride: number | null,
   ) => void;
   onSaveEdit: (
     fargo: number,
     isStarter: boolean,
     paidEntry: boolean,
     paidPots: string[],
+    raceOverride: number | null,
   ) => void;
   onNoShow: () => void;
   onRemove: () => void;
@@ -878,6 +880,12 @@ const RegistrationRow = ({
   const [fargoInput, setFargoInput] = useState(
     registration.fargo_rating != null ? String(registration.fargo_rating) : "",
   );
+  const [overrideOn, setOverrideOn] = useState(
+    registration.race_override != null,
+  );
+  const [overrideRace, setOverrideRace] = useState(
+    registration.race_override ?? 5,
+  );
 
   const reseed = () => {
     setPaidEntry(!!registration.paid_entry);
@@ -885,6 +893,8 @@ const RegistrationRow = ({
     setFargoInput(
       registration.fargo_rating != null ? String(registration.fargo_rating) : "",
     );
+    setOverrideOn(registration.race_override != null);
+    setOverrideRace(registration.race_override ?? 5);
   };
 
   const togglePot = (name: string) =>
@@ -898,10 +908,16 @@ const RegistrationRow = ({
   const fargoNum = parseInt(fargoInput, 10);
   const fargoValid = !isNaN(fargoNum) && fargoNum > 0;
   const selectedGroup = isGroups ? groupForFargo(fargoNum, raceGroups) : null;
-  // In groups mode the player still enters a real Fargo; their race group is
-  // derived from it. Ready requires a valid Fargo (that lands in a group, when
-  // groups are used) AND the entry fee paid.
-  const assignReady = isGroups ? fargoValid && !!selectedGroup : fargoValid;
+  const overrideValid = !overrideOn || overrideRace >= 1;
+  const committedOverride = overrideOn && overrideValid ? overrideRace : null;
+  // A manual override stands in for the group requirement. Otherwise (groups
+  // mode) the Fargo must land in a group. Ready always needs a valid Fargo and
+  // the entry fee paid.
+  const assignReady = overrideOn
+    ? fargoValid && overrideValid
+    : isGroups
+      ? fargoValid && !!selectedGroup
+      : fargoValid;
   const canBeReady = assignReady && paidEntry;
 
   // "Group A · Race to 5" line derived from a Fargo rating (groups mode).
@@ -915,6 +931,13 @@ const RegistrationRow = ({
     registration.fargo_rating != null
       ? `Fargo ${registration.fargo_rating}`
       : "No Fargo set";
+  // Race line shown on read-only / locked cards. A manual override wins.
+  const raceLine = (): string | null => {
+    if (registration.race_override != null)
+      return `Race to ${registration.race_override} (manual)`;
+    if (isGroups) return groupLineFor(registration.fargo_rating ?? null);
+    return null;
+  };
 
   const renderEditableBody = (onCommit: () => void, commitLabel: string, onCancel?: () => void) => (
     <>
@@ -948,20 +971,34 @@ const RegistrationRow = ({
           />
         </View>
       </View>
-      {isGroups && (
+      {isGroups && !overrideOn && (
         <Text allowFontScaling={false} style={styles.assignText}>
           {fargoValid
             ? groupLineFor(fargoNum)
             : "Enter a Fargo to assign a race group."}
         </Text>
       )}
+      <ToggleSwitch
+        label="Set race manually"
+        value={overrideOn}
+        onValueChange={setOverrideOn}
+      />
+      {overrideOn && (
+        <Stepper
+          prefix="Race to"
+          value={overrideRace}
+          onChange={setOverrideRace}
+          min={1}
+          max={50}
+        />
+      )}
       {!canBeReady && (
         <Text allowFontScaling={false} style={styles.hint}>
           {!paidEntry
             ? "Mark the entry fee paid to make this player ready."
-            : isGroups
-              ? "Enter a Fargo that falls in a race group to mark this player ready."
-              : "Enter a Fargo rating to mark this player ready."}
+            : !fargoValid
+              ? "Enter a Fargo rating to mark this player ready."
+              : 'Fargo is outside all race groups — turn on "Set race manually" to continue.'}
         </Text>
       )}
       <View style={styles.regActions}>
@@ -1039,7 +1076,7 @@ const RegistrationRow = ({
         <>
           <Text allowFontScaling={false} style={styles.assignText}>
             {fargoText}
-            {isGroups ? ` · ${groupLineFor(registration.fargo_rating ?? null)}` : ""}
+            {raceLine() ? ` · ${raceLine()}` : ""}
           </Text>
           <Text allowFontScaling={false} style={styles.hint}>
             Player list locked — reopen &amp; redraw to change.
@@ -1049,14 +1086,14 @@ const RegistrationRow = ({
 
       {!locked && d === "prereg" &&
         renderEditableBody(
-          () => onReady(fargoNum, false, paidEntry, paidPots),
+          () => onReady(fargoNum, false, paidEntry, paidPots, committedOverride),
           "Ready",
         )}
 
       {!locked && d === "ready" && editing &&
         renderEditableBody(
           () => {
-            onSaveEdit(fargoNum, false, paidEntry, paidPots);
+            onSaveEdit(fargoNum, false, paidEntry, paidPots, committedOverride);
             setEditing(false);
           },
           "Save",
@@ -1099,9 +1136,9 @@ const RegistrationRow = ({
               <Text allowFontScaling={false} style={styles.fargoReadNumber}>
                 {registration.fargo_rating ?? "—"}
               </Text>
-              {isGroups && (
+              {raceLine() && (
                 <Text allowFontScaling={false} style={styles.assignText}>
-                  {groupLineFor(registration.fargo_rating ?? null)}
+                  {raceLine()}
                 </Text>
               )}
             </View>
@@ -1141,7 +1178,7 @@ const RegistrationRow = ({
         <>
           <Text allowFontScaling={false} style={styles.assignText}>
             {fargoText}
-            {isGroups ? ` · ${groupLineFor(registration.fargo_rating ?? null)}` : ""}
+            {raceLine() ? ` · ${raceLine()}` : ""}
           </Text>
           <View style={styles.regActions}>
             <TouchableOpacity
@@ -1511,6 +1548,7 @@ export default function ManageTournamentScreen() {
           registrationId: r.id,
           name: getDisplayName(r),
           fargo: r.fargo_rating ?? null,
+          raceOverride: r.race_override ?? null,
         })),
     [hub.registrations],
   );
@@ -1732,6 +1770,7 @@ export default function ManageTournamentScreen() {
     isStarter: boolean,
     paidEntry: boolean,
     paidPots: string[],
+    raceOverride: number | null,
   ) =>
     withProcessing(
       r.id,
@@ -1742,6 +1781,7 @@ export default function ManageTournamentScreen() {
             status: "checked_in",
             fargo_rating: fargo,
             is_starter_rating: isStarter,
+            race_override: raceOverride,
             paid_entry: paidEntry,
             paid_side_pots: paidPots,
             checked_in_at: new Date().toISOString(),
@@ -1757,6 +1797,7 @@ export default function ManageTournamentScreen() {
     isStarter: boolean,
     paidEntry: boolean,
     paidPots: string[],
+    raceOverride: number | null,
   ) =>
     withProcessing(
       r.id,
@@ -1766,6 +1807,7 @@ export default function ManageTournamentScreen() {
           updates: {
             fargo_rating: fargo,
             is_starter_rating: isStarter,
+            race_override: raceOverride,
             paid_entry: paidEntry,
             paid_side_pots: paidPots,
           },
@@ -2312,11 +2354,11 @@ export default function ManageTournamentScreen() {
               entryFee={entryFee}
               raceMode={raceMode}
               raceGroups={raceGroups}
-              onReady={(fargo, isStarter, paidEntry, paidPots) =>
-                handleReady(item, fargo, isStarter, paidEntry, paidPots)
+              onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
+                handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
               }
-              onSaveEdit={(fargo, isStarter, paidEntry, paidPots) =>
-                handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots)
+              onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
+                handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
               }
               onNoShow={() => handleNoShow(item)}
               onRemove={() => handleRemove(item)}
