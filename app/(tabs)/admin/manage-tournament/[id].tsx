@@ -2181,21 +2181,21 @@ export default function ManageTournamentScreen() {
         <View style={styles.tableAddRow}>
           <TextInput
             allowFontScaling={false}
-            style={[styles.input, { width: webSc(72) }]}
+            style={[styles.input, { flex: 1 }]}
+            value={singleTableLabel}
+            onChangeText={setSingleTableLabel}
+            placeholder="Label (e.g. 9ft) — optional"
+            placeholderTextColor={COLORS.textMuted}
+          />
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { width: webSc(60) }]}
             value={singleTableNum}
             onChangeText={(v) => setSingleTableNum(v.replace(/[^0-9]/g, ""))}
             placeholder="#"
             placeholderTextColor={COLORS.textMuted}
             keyboardType="numeric"
             maxLength={3}
-          />
-          <TextInput
-            allowFontScaling={false}
-            style={[styles.input, { flex: 1 }]}
-            value={singleTableLabel}
-            onChangeText={setSingleTableLabel}
-            placeholder="Label (e.g. 9ft) — optional"
-            placeholderTextColor={COLORS.textMuted}
           />
           <TouchableOpacity
             style={styles.tableAddBtn}
@@ -2215,6 +2215,16 @@ export default function ManageTournamentScreen() {
           <TextInput
             allowFontScaling={false}
             style={[styles.input, { flex: 1 }]}
+            value={bulkLabel}
+            onChangeText={setBulkLabel}
+            placeholder="Label (e.g. 7ft) — optional"
+            placeholderTextColor={COLORS.textMuted}
+          />
+        </View>
+        <View style={styles.tableAddRow}>
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, { width: webSc(70) }]}
             value={bulkFrom}
             onChangeText={(v) => setBulkFrom(v.replace(/[^0-9]/g, ""))}
             placeholder="From"
@@ -2224,7 +2234,7 @@ export default function ManageTournamentScreen() {
           />
           <TextInput
             allowFontScaling={false}
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, { width: webSc(70) }]}
             value={bulkTo}
             onChangeText={(v) => setBulkTo(v.replace(/[^0-9]/g, ""))}
             placeholder="To"
@@ -2232,18 +2242,8 @@ export default function ManageTournamentScreen() {
             keyboardType="numeric"
             maxLength={3}
           />
-        </View>
-        <View style={styles.tableAddRow}>
-          <TextInput
-            allowFontScaling={false}
-            style={[styles.input, { flex: 1 }]}
-            value={bulkLabel}
-            onChangeText={setBulkLabel}
-            placeholder="Label for these tables (e.g. 7ft) — optional"
-            placeholderTextColor={COLORS.textMuted}
-          />
           <TouchableOpacity
-            style={styles.tableAddBtn}
+            style={[styles.tableAddBtn, { flex: 1 }]}
             onPress={handleBulkAddTables}
             disabled={tableBusy}
           >
