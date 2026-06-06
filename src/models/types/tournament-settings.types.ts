@@ -45,6 +45,17 @@ export interface GeneratedBracket {
   round1: BracketMatch[];
 }
 
+// Live per-match state (Phase 2). Stored in live_settings.matchState keyed by
+// the round-1 match number (as a string). Absent => "scheduled".
+export type MatchStatus = "scheduled" | "in_progress" | "completed";
+export interface MatchLiveState {
+  status: MatchStatus;
+  tableId?: number | null; // assigned tournament_tables.id
+  startedAt?: string | null; // ISO timestamp the match started (drives the timer)
+  completedAt?: string | null;
+  winner?: 1 | 2 | null; // which slot won (1 = p1, 2 = p2)
+}
+
 // One entry in the draw history (append-only) — stored in live_settings.drawLog.
 export interface DrawLogEntry {
   drawNumber: number;
@@ -86,4 +97,6 @@ export interface TournamentLiveSettings {
   bracket?: GeneratedBracket | null;
   // Append-only draw history (every Draw / Redraw).
   drawLog?: DrawLogEntry[];
+  // Live per-match state keyed by match number (Matches tab). See MatchLiveState.
+  matchState?: Record<string, MatchLiveState>;
 }

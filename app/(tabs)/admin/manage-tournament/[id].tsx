@@ -68,6 +68,8 @@ import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
+import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
+import { buildLiveMatches } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import {
   ManagePhase,
@@ -1553,6 +1555,18 @@ export default function ManageTournamentScreen() {
     [hub.registrations],
   );
 
+  // Live matches for the Matches tab: bracket round 1 + per-match state + tables.
+  const liveMatches = useMemo(
+    () =>
+      buildLiveMatches(
+        hub.bracket,
+        hub.matchState,
+        hub.tables,
+        hub.tournament?.game_type ?? "",
+      ),
+    [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type],
+  );
+
   const raceConfig: RaceConfig = useMemo(() => {
     const ls = hub.tournament?.live_settings ?? {};
     return {
@@ -2865,10 +2879,11 @@ export default function ManageTournamentScreen() {
         return renderReview();
       case "matches":
         return (
-          <TabPlaceholder
-            locked={false}
-            title="Matches"
-            body="Live matches, scores, and TD controls. Full live scoring arrives in the Phase 2 engine."
+          <MatchesView
+            matches={liveMatches}
+            tables={hub.tables}
+            bracketSize={hub.bracket?.bracketSize ?? 0}
+            onSetMatchState={hub.setMatchState}
           />
         );
       case "results":

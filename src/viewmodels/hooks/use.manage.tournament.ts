@@ -15,6 +15,7 @@ import { Tournament } from "../../models/types/tournament.types";
 import {
   DrawLogEntry,
   GeneratedBracket,
+  MatchLiveState,
 } from "../../models/types/tournament-settings.types";
 import {
   TournamentLiveState,
@@ -132,6 +133,26 @@ export const useManageTournament = (tournamentId?: number) => {
     onSuccess: invalidateTournament,
   });
 
+  // Merge a patch into one match's live state (Matches tab). Stored in
+  // live_settings.matchState keyed by match number.
+  const setMatchStateMutation = useMutation({
+    mutationFn: (vars: { matchNumber: number; patch: Partial<MatchLiveState> }) => {
+      const ls = tournamentQuery.data?.live_settings ?? {};
+      const prev = ls.matchState ?? {};
+      const key = String(vars.matchNumber);
+      const existing = prev[key];
+      const merged: MatchLiveState = {
+        ...existing,
+        ...vars.patch,
+        status: vars.patch.status ?? existing?.status ?? "scheduled",
+      };
+      return tournamentService.updateTournament(tournamentId!, {
+        live_settings: { ...ls, matchState: { ...prev, [key]: merged } },
+      });
+    },
+    onSuccess: invalidateTournament,
+  });
+
   // Table mutations (used by the Tables tab)
   const createTableMutation = useMutation({
     mutationFn: (vars: { tableNumber: number; label?: string | null }) =>
@@ -225,6 +246,10 @@ export const useManageTournament = (tournamentId?: number) => {
     // Bracket / Draw
     bracket: tournament?.live_settings?.bracket ?? null,
     drawLog: tournament?.live_settings?.drawLog ?? [],
+
+    // Live matches (Matches tab)
+    matchState: tournament?.live_settings?.matchState ?? {},
+    setMatchState: setMatchStateMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,
     isDrawing: drawBracketMutation.isPending,
     // Reopen registration to change the field before a redraw.
