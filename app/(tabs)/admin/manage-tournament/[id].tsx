@@ -1163,15 +1163,23 @@ export default function ManageTournamentScreen() {
   const hub = useManageTournament(tournamentId);
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
 
-  // Settings form (seeded once from the record).
+  // Settings form (seeded once from the record). savedSnapshot tracks the
+  // last-saved form so we can warn about unsaved changes when leaving.
   const [form, setForm] = useState<SettingsForm | null>(null);
   const seededRef = useRef(false);
+  const savedSnapshotRef = useRef<string | null>(null);
   useEffect(() => {
     if (!seededRef.current && hub.tournament) {
-      setForm(toForm(hub.tournament));
+      const seeded = toForm(hub.tournament);
+      setForm(seeded);
+      savedSnapshotRef.current = JSON.stringify(seeded);
       seededRef.current = true;
     }
   }, [hub.tournament]);
+  const settingsDirty =
+    !!form &&
+    savedSnapshotRef.current !== null &&
+    JSON.stringify(form) !== savedSnapshotRef.current;
 
   // Players tab state
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -1245,7 +1253,7 @@ export default function ManageTournamentScreen() {
   }, [hub.tournament, hub.registrations, hub.tablesReady, hub.tables]);
 
   // Gate forward navigation: a setup step can't open until earlier ones are done.
-  const handleTabPress = (target: TabKey) => {
+  const goToTab = (target: TabKey) => {
     if (!SETUP_ORDER.includes(target)) {
       setActiveTab(target);
       return;
@@ -1259,6 +1267,61 @@ export default function ManageTournamentScreen() {
       }
     }
     setActiveTab(target);
+  };
+
+  // Warn about unsaved Settings edits before leaving the Settings tab / screen.
+  const confirmLeaveSettings = (proceed: () => void) => {
+    Alert.alert(
+      "Unsaved Changes",
+      "You have unsaved settings changes. Save them before leaving?",
+      [
+        { text: "Keep Editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            if (hub.tournament) {
+              const seeded = toForm(hub.tournament);
+              setForm(seeded);
+              savedSnapshotRef.current = JSON.stringify(seeded);
+            }
+            proceed();
+          },
+        },
+        {
+          text: "Save",
+          onPress: async () => {
+            if (!form) {
+              proceed();
+              return;
+            }
+            try {
+              await hub.saveSettings(toPatch(form));
+              savedSnapshotRef.current = JSON.stringify(form);
+              proceed();
+            } catch {
+              Alert.alert("Error", "Failed to save — your changes were kept.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleTabPress = (target: TabKey) => {
+    if (activeTab === "settings" && target !== "settings" && settingsDirty) {
+      confirmLeaveSettings(() => goToTab(target));
+      return;
+    }
+    goToTab(target);
+  };
+
+  const handleBack = () => {
+    if (activeTab === "settings" && settingsDirty) {
+      confirmLeaveSettings(() => router.back());
+    } else {
+      router.back();
+    }
   };
 
   // ---- Tables handlers ----------------------------------------------------
@@ -1451,6 +1514,7 @@ export default function ManageTournamentScreen() {
     if (!form) return;
     try {
       await hub.saveSettings(toPatch(form));
+      savedSnapshotRef.current = JSON.stringify(form);
       Alert.alert("Saved", "Tournament settings updated.");
     } catch {
       Alert.alert("Error", "Failed to save settings. Please try again.");
@@ -1469,6 +1533,7 @@ export default function ManageTournamentScreen() {
             if (!form) return;
             try {
               await hub.saveSettings(toPatch(form));
+              savedSnapshotRef.current = JSON.stringify(form);
               await hub.startRegistration();
             } catch {
               Alert.alert("Error", "Failed to start registration.");
@@ -2865,7 +2930,7 @@ export default function ManageTournamentScreen() {
 
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Text allowFontScaling={false} style={styles.backText}>
             {GLYPH.back} Back
           </Text>
