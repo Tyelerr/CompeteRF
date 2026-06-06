@@ -2670,25 +2670,26 @@ export default function ManageTournamentScreen() {
               Recommended {recommended} for {ready.length} Ready players. You can
               size up.
             </Text>
-            <View style={styles.segmentRow}>
-              {sizeOptions.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.segment, size === s && styles.segmentActive]}
-                  onPress={() => setBracketSizeSel(s)}
-                >
-                  <Text
-                    allowFontScaling={false}
-                    style={[
-                      styles.segmentText,
-                      size === s && styles.segmentTextActive,
-                    ]}
-                  >
-                    {s}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Dropdown
+              options={[
+                ...sizeOptions.map((s) => ({
+                  label: `${s} players`,
+                  value: String(s),
+                })),
+                { label: "256 players (Coming Soon)", value: "256" },
+              ]}
+              value={String(size)}
+              onSelect={(v) => {
+                if (v === "256") {
+                  Alert.alert(
+                    "Coming Soon",
+                    "256-player brackets aren't available yet.",
+                  );
+                  return;
+                }
+                setBracketSizeSel(Number(v));
+              }}
+            />
           </Section>
         )}
 
