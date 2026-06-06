@@ -399,6 +399,10 @@ export const BracketCanvas = ({
                       style={{
                         width,
                         height,
+                        // Anchor scaling at the top-left so the bracket starts in
+                        // the top-left corner and focal-point zoom math is exact
+                        // (screen = translate + point * scale).
+                        transformOrigin: "left top",
                         transform: [
                           { translateX: txA },
                           { translateY: tyA },
