@@ -753,6 +753,10 @@ const prettyFormat = (f: string): string =>
     .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
     .join(" ");
 
+// Compact format for the narrow summary card: "Double Elimination" -> "Double Elim".
+const shortFormat = (f: string): string =>
+  prettyFormat(f).replace(/Elimination/i, "Elim");
+
 const matchLabel = (m: BracketMatch): string => {
   const n1 = m.p1?.name;
   const n2 = m.p2?.name;
@@ -2642,7 +2646,7 @@ export default function ManageTournamentScreen() {
             <BracketSum label="Recommended Size" value={recommended} />
             <BracketSum label="Bracket Size" value={size} />
             <BracketSum label="Byes" value={stats.byes} />
-            <BracketSum label="Format" value={prettyFormat(format)} />
+            <BracketSum label="Format" value={shortFormat(format)} />
             <BracketSum label="Tables Available" value={tablesAvail} />
             <BracketSum label="Est. Matches" value={stats.totalMatches} />
             <BracketSum label="Est. Time" value={fmtHours(stats.estCompletionHours)} />
