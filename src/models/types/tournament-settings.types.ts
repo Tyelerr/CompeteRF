@@ -48,12 +48,17 @@ export interface GeneratedBracket {
 // Live per-match state (Phase 2). Stored in live_settings.matchState keyed by
 // the round-1 match number (as a string). Absent => "scheduled".
 export type MatchStatus = "scheduled" | "in_progress" | "completed";
+export type MatchResult = "normal" | "forfeit" | "withdraw";
 export interface MatchLiveState {
   status: MatchStatus;
   tableId?: number | null; // assigned tournament_tables.id
   startedAt?: string | null; // ISO timestamp the match started (drives the timer)
   completedAt?: string | null;
   winner?: 1 | 2 | null; // which slot won (1 = p1, 2 = p2)
+  p1Score?: number | null;
+  p2Score?: number | null;
+  timerSeconds?: number | null; // custom allowed-time override (seconds)
+  result?: MatchResult | null; // how the match ended
 }
 
 // One entry in the draw history (append-only) — stored in live_settings.drawLog.

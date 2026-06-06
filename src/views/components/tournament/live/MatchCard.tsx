@@ -1,66 +1,90 @@
 // src/views/components/tournament/live/MatchCard.tsx
-// One match rendered as a clean card for the Matches "Card View". Shows the two
-// players + race, a live per-match timer (red when over the allowed time), a
-// green pulsing dot when in progress, and a red outline + LIVE label when the
-// assigned table is a stream table. Actions (Start / End / Reopen) are inline.
+// A compact, dashboard-style live match card. Big player names, prominent timer
+// (always shown; red when over time), compact race, live + stream indicators,
+// status-based primary actions, and an overflow menu for everything else.
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
-import { formatClock, LiveMatch } from "../../../../utils/match.utils";
+import {
+  formatClock,
+  LiveMatch,
+  MatchActionStep,
+} from "../../../../utils/match.utils";
 import { LiveDot } from "./LiveDot";
 import { useMatchTimer } from "./useMatchTimer";
 
+// Built at runtime so no raw emoji lives in source (toolchain-safe).
+const GLYPH = { cam: String.fromCodePoint(0x1f4f9) };
+
 export const MatchCard = ({
   match,
-  onStart,
-  onEnd,
-  onReopen,
+  onAction,
   busy,
 }: {
   match: LiveMatch;
-  onStart: (m: LiveMatch) => void;
-  onEnd: (m: LiveMatch) => void;
-  onReopen: (m: LiveMatch) => void;
+  onAction: (m: LiveMatch, step: MatchActionStep) => void;
   busy?: boolean;
 }) => {
-  const running = match.status === "in_progress";
+  const m = match;
+  const running = m.status === "in_progress";
   const { elapsedSeconds, isOvertime } = useMatchTimer(
-    match.startedAt,
-    match.allowedSeconds,
+    m.startedAt,
+    m.allowedSeconds,
     running,
+    m.completedAt,
   );
 
-  const winnerName =
-    match.winner === 1 ? match.p1Name : match.winner === 2 ? match.p2Name : null;
+  const timerText =
+    m.status === "scheduled"
+      ? "Not started"
+      : running
+        ? formatClock(elapsedSeconds)
+        : m.startedAt
+          ? formatClock(elapsedSeconds)
+          : "Completed";
+  const timerStyle = [
+    styles.timer,
+    m.status === "scheduled" && styles.timerIdle,
+    running && isOvertime && styles.timerOver,
+    m.status === "completed" && styles.timerDone,
+  ];
+
+  const score =
+    m.p1Score != null || m.p2Score != null
+      ? `${m.p1Score ?? 0}–${m.p2Score ?? 0}`
+      : null;
 
   return (
     <View
       style={[
         styles.card,
-        match.isStream && styles.cardStream,
         running && styles.cardLive,
+        m.isStream && styles.cardStream,
       ]}
     >
-      {/* Header: match # + table on the left, status badges on the right */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
+      {/* Top meta row */}
+      <View style={styles.topRow}>
+        <View style={styles.topLeft}>
           <Text allowFontScaling={false} style={styles.matchNum}>
-            M{match.matchNumber}
+            M{m.matchNumber}
           </Text>
-          {match.tableLabel && (
-            <Text allowFontScaling={false} style={styles.tableLabel} numberOfLines={1}>
-              {match.tableLabel}
+          <Text allowFontScaling={false} style={styles.race}>
+            {m.raceLabel}
+          </Text>
+          {m.tableLabel && (
+            <Text allowFontScaling={false} style={styles.table} numberOfLines={1}>
+              · {m.tableLabel}
             </Text>
           )}
         </View>
-        <View style={styles.badges}>
-          {match.isStream && (
+        <View style={styles.topRight}>
+          {m.isStream && (
             <View style={styles.liveBadge}>
               <Text allowFontScaling={false} style={styles.liveBadgeText}>
-                LIVE
+                {GLYPH.cam} LIVE
               </Text>
             </View>
           )}
@@ -68,127 +92,103 @@ export const MatchCard = ({
         </View>
       </View>
 
-      {/* Players */}
-      {match.bye ? (
-        <Text allowFontScaling={false} style={styles.byeText}>
-          {match.p1Name ?? match.p2Name ?? "TBD"} advances (bye)
+      {/* Players + timer */}
+      {m.bye ? (
+        <Text allowFontScaling={false} style={styles.bye}>
+          {m.p1Name ?? m.p2Name ?? "TBD"} advances (bye)
         </Text>
       ) : (
-        <View style={styles.playersBlock}>
-          <PlayerRow
-            name={match.p1Name}
-            race={match.p1Race}
-            won={match.winner === 1}
-            lost={match.winner === 2}
-          />
-          <Text allowFontScaling={false} style={styles.vs}>
-            vs
-          </Text>
-          <PlayerRow
-            name={match.p2Name}
-            race={match.p2Race}
-            won={match.winner === 2}
-            lost={match.winner === 1}
-          />
-          <Text allowFontScaling={false} style={styles.race}>
-            {match.raceLabel}
-          </Text>
-        </View>
-      )}
-
-      {/* Timer / status line */}
-      {!match.bye && (
-        <View style={styles.statusRow}>
-          {match.status === "scheduled" && (
-            <Text allowFontScaling={false} style={styles.statusMuted}>
-              Not started
+        <View style={styles.body}>
+          <View style={styles.names}>
+            <Name name={m.p1Name} won={m.winner === 1} lost={m.winner === 2} />
+            <Name name={m.p2Name} won={m.winner === 2} lost={m.winner === 1} />
+          </View>
+          <View style={styles.timerBox}>
+            <Text allowFontScaling={false} style={timerStyle}>
+              {timerText}
             </Text>
-          )}
-          {running && (
-            <Text
-              allowFontScaling={false}
-              style={[styles.timer, isOvertime && styles.timerOver]}
-            >
-              {formatClock(elapsedSeconds)}
-              {isOvertime ? "  • OVER" : ""}
-            </Text>
-          )}
-          {match.status === "completed" && (
-            <Text allowFontScaling={false} style={styles.statusDone}>
-              Final{winnerName ? ` · ${winnerName} won` : ""}
-            </Text>
-          )}
+            {score && (
+              <Text allowFontScaling={false} style={styles.score}>
+                {score}
+              </Text>
+            )}
+            {m.result && m.result !== "normal" && (
+              <Text allowFontScaling={false} style={styles.resultTag}>
+                {m.result}
+              </Text>
+            )}
+          </View>
         </View>
       )}
 
       {/* Actions */}
-      {!match.bye && (
+      {!m.bye && (
         <View style={styles.actions}>
-          {match.status === "scheduled" && (
-            <TouchableOpacity
-              style={[styles.btn, styles.btnPrimary, busy && styles.btnDisabled]}
-              onPress={() => onStart(match)}
-              disabled={busy}
-            >
-              <Text allowFontScaling={false} style={styles.btnPrimaryText}>
-                Start Match
-              </Text>
-            </TouchableOpacity>
+          {m.status === "scheduled" && (
+            <>
+              <Btn label="Start Match" primary onPress={() => onAction(m, "table")} busy={busy} />
+              <Btn label="Assign Table" onPress={() => onAction(m, "table")} busy={busy} />
+            </>
           )}
           {running && (
-            <TouchableOpacity
-              style={[styles.btn, styles.btnEnd, busy && styles.btnDisabled]}
-              onPress={() => onEnd(match)}
-              disabled={busy}
-            >
-              <Text allowFontScaling={false} style={styles.btnEndText}>
-                End Match
-              </Text>
-            </TouchableOpacity>
+            <>
+              <Btn label="End Match" primary onPress={() => onAction(m, "winner")} busy={busy} />
+              <Btn label="Edit Score" onPress={() => onAction(m, "score")} busy={busy} />
+            </>
           )}
-          {match.status === "completed" && (
-            <TouchableOpacity
-              style={[styles.btn, styles.btnGhost, busy && styles.btnDisabled]}
-              onPress={() => onReopen(match)}
-              disabled={busy}
-            >
-              <Text allowFontScaling={false} style={styles.btnGhostText}>
-                Reopen
-              </Text>
-            </TouchableOpacity>
+          {m.status === "completed" && (
+            <>
+              <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
+              <Btn label="Reopen" onPress={() => onAction(m, "menu")} busy={busy} />
+            </>
           )}
+          <TouchableOpacity
+            style={styles.overflow}
+            onPress={() => onAction(m, "menu")}
+            disabled={busy}
+            hitSlop={6}
+          >
+            <Text allowFontScaling={false} style={styles.overflowText}>
+              ⋯
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
   );
 };
 
-const PlayerRow = ({
-  name,
-  race,
-  won,
-  lost,
+const Name = ({ name, won, lost }: { name: string | null; won: boolean; lost: boolean }) => (
+  <Text
+    allowFontScaling={false}
+    style={[styles.name, won && styles.nameWon, lost && styles.nameLost]}
+    numberOfLines={1}
+  >
+    {name ?? "TBD"}
+    {won ? "  ✓" : ""}
+  </Text>
+);
+
+const Btn = ({
+  label,
+  onPress,
+  primary,
+  busy,
 }: {
-  name: string | null;
-  race: number | null;
-  won: boolean;
-  lost: boolean;
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+  busy?: boolean;
 }) => (
-  <View style={styles.playerRow}>
-    <Text
-      allowFontScaling={false}
-      style={[styles.playerName, won && styles.playerWon, lost && styles.playerLost]}
-      numberOfLines={1}
-    >
-      {name ?? "TBD"}
-      {won ? "  ✓" : ""}
+  <TouchableOpacity
+    style={[styles.btn, primary ? styles.btnPrimary : styles.btnGhost, busy && styles.btnDisabled]}
+    onPress={onPress}
+    disabled={busy}
+  >
+    <Text allowFontScaling={false} style={primary ? styles.btnPrimaryText : styles.btnGhostText}>
+      {label}
     </Text>
-    {race != null && (
-      <Text allowFontScaling={false} style={styles.playerRace}>
-        to {race}
-      </Text>
-    )}
-  </View>
+  </TouchableOpacity>
 );
 
 const styles = StyleSheet.create({
@@ -197,98 +197,67 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.lg),
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: webSc(SPACING.md),
-    marginBottom: webSc(SPACING.md),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
   },
-  cardStream: { borderColor: COLORS.error, borderWidth: 2 },
   cardLive: { backgroundColor: "#16241B" },
-  header: {
+  cardStream: { borderColor: COLORS.error, borderWidth: 2 },
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: webSc(SPACING.sm),
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), flex: 1 },
-  matchNum: {
-    fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "800",
-    color: COLORS.primary,
-  },
-  tableLabel: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    flexShrink: 1,
-  },
-  badges: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  topLeft: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), flex: 1 },
+  matchNum: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
+  race: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
+  table: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, flexShrink: 1 },
+  topRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   liveBadge: {
     backgroundColor: COLORS.error,
     borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.sm),
-    paddingVertical: webSc(2),
+    paddingHorizontal: webSc(SPACING.xs),
+    paddingVertical: 1,
   },
-  liveBadgeText: {
-    color: "#fff",
-    fontSize: webMs(FONT_SIZES.xs),
-    fontWeight: "900",
-    letterSpacing: 0.5,
-  },
-  byeText: {
+  liveBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
+  bye: {
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.textSecondary,
     fontWeight: "600",
     paddingVertical: webSc(SPACING.sm),
   },
-  playersBlock: { gap: webSc(SPACING.xs) },
-  playerRow: {
+  body: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  playerName: {
-    fontSize: webMs(FONT_SIZES.md),
-    fontWeight: "700",
-    color: COLORS.text,
-    flex: 1,
-  },
-  playerWon: { color: COLORS.success },
-  playerLost: { color: COLORS.textMuted },
-  playerRace: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    marginLeft: webSc(SPACING.sm),
-  },
-  vs: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.textMuted,
-    fontWeight: "700",
-  },
-  race: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
     marginTop: webSc(SPACING.xs),
   },
-  statusRow: {
-    marginTop: webSc(SPACING.sm),
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  statusMuted: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted },
-  statusDone: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.success,
-    fontWeight: "700",
-  },
+  names: { flex: 1, gap: webSc(2) },
+  name: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
+  nameWon: { color: COLORS.success },
+  nameLost: { color: COLORS.textMuted },
+  timerBox: { alignItems: "flex-end", marginLeft: webSc(SPACING.sm) },
   timer: {
-    fontSize: webMs(FONT_SIZES.lg),
-    fontWeight: "800",
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "900",
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
   },
+  timerIdle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
   timerOver: { color: COLORS.error },
+  timerDone: { fontSize: webMs(FONT_SIZES.md), color: COLORS.success },
+  score: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "700" },
+  resultTag: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
   actions: {
     flexDirection: "row",
-    gap: webSc(SPACING.sm),
-    marginTop: webSc(SPACING.md),
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.sm),
   },
   btn: {
     flex: 1,
@@ -299,12 +268,15 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnPrimary: { backgroundColor: COLORS.primary },
   btnPrimaryText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
-  btnEnd: { backgroundColor: COLORS.success },
-  btnEndText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
   btnGhost: { borderWidth: 1, borderColor: COLORS.border },
-  btnGhostText: {
-    color: COLORS.textSecondary,
-    fontWeight: "700",
-    fontSize: webMs(FONT_SIZES.sm),
+  btnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.sm) },
+  overflow: {
+    width: webSc(38),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
   },
+  overflowText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "900" },
 });

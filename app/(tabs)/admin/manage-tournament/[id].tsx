@@ -3148,25 +3148,31 @@ export default function ManageTournamentScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView
-        style={styles.scrollFlex}
-        contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        onScrollBeginDrag={() => Keyboard.dismiss()}
-        refreshControl={
-          isWeb ? undefined : (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={COLORS.primary}
-            />
-          )
-        }
-      >
-        {renderTab()}
-      </ScrollView>
+      {activeTab === "matches" ? (
+        // Matches owns its own scrolling (cards) / gestures (bracket) and fills
+        // the available height, so it lives outside the page ScrollView.
+        <View style={styles.scrollFlex}>{renderTab()}</View>
+      ) : (
+        <ScrollView
+          style={styles.scrollFlex}
+          contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onScrollBeginDrag={() => Keyboard.dismiss()}
+          refreshControl={
+            isWeb ? undefined : (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={COLORS.primary}
+              />
+            )
+          }
+        >
+          {renderTab()}
+        </ScrollView>
+      )}
 
       {/* Fixed footer: Close Registration stays pinned while the list scrolls */}
       {activeTab === "players" && hub.liveState === "registration_open" && (

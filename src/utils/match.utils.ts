@@ -6,10 +6,22 @@
 import {
   GeneratedBracket,
   MatchLiveState,
+  MatchResult,
   MatchStatus,
 } from "../models/types/tournament-settings.types";
 import { TournamentTable } from "../models/types/tournament-table.types";
 import { minutesPerGameForType } from "./bracket.utils";
+
+// Steps the match action sheet can open to (shared by cards, nodes, and the modal).
+export type MatchActionStep =
+  | "menu"
+  | "table"
+  | "winner"
+  | "score"
+  | "timer"
+  | "forfeit"
+  | "withdraw"
+  | "details";
 
 export interface LiveMatch {
   matchNumber: number;
@@ -18,7 +30,7 @@ export interface LiveMatch {
   p1Race: number | null;
   p2Race: number | null;
   raceTo: number | null; // common race when both sides match
-  raceLabel: string;
+  raceLabel: string; // compact, e.g. "Race 7"
   bye: boolean;
   status: MatchStatus;
   tableId: number | null;
@@ -26,8 +38,13 @@ export interface LiveMatch {
   isStream: boolean;
   streamLink: string | null;
   startedAt: string | null;
+  completedAt: string | null;
   winner: 1 | 2 | null;
+  p1Score: number | null;
+  p2Score: number | null;
+  result: MatchResult | null;
   allowedSeconds: number; // overtime threshold (timer turns red past this)
+  hasCustomTimer: boolean;
 }
 
 const tableLabelOf = (t: TournamentTable | undefined): string | null => {
@@ -61,8 +78,9 @@ export const buildLiveMatches = (
     const raceLabel = m.bye
       ? "Bye"
       : m.raceTo != null
-        ? `Race to ${m.raceTo}`
-        : `${m.p1?.name ?? "?"} to ${m.p1?.raceTo ?? "?"} / ${m.p2?.name ?? "?"} to ${m.p2?.raceTo ?? "?"}`;
+        ? `Race ${m.raceTo}`
+        : `${m.p1?.raceTo ?? "?"} / ${m.p2?.raceTo ?? "?"}`;
+    const hasCustomTimer = st?.timerSeconds != null && st.timerSeconds > 0;
     return {
       matchNumber: m.matchNumber,
       p1Name: m.p1?.name ?? null,
@@ -78,8 +96,15 @@ export const buildLiveMatches = (
       isStream: !!table?.is_streaming,
       streamLink: table?.stream_link ?? null,
       startedAt: st?.startedAt ?? null,
+      completedAt: st?.completedAt ?? null,
       winner: st?.winner ?? null,
-      allowedSeconds: allowedSecondsForRace(raceForEst, gameType),
+      p1Score: st?.p1Score ?? null,
+      p2Score: st?.p2Score ?? null,
+      result: st?.result ?? null,
+      allowedSeconds: hasCustomTimer
+        ? (st?.timerSeconds as number)
+        : allowedSecondsForRace(raceForEst, gameType),
+      hasCustomTimer,
     };
   });
 };

@@ -1,23 +1,20 @@
 // src/views/components/tournament/live/BracketCanvas.tsx
-// Pinch-zoom + drag-pan canvas that lays out the single-elimination skeleton.
-// Round 1 nodes are real (live) matches; later rounds render as muted TBD nodes
-// so the bracket reads as a whole. Connectors are drawn with thin Views (no SVG).
+// Pinch-zoom (around the finger focal point) + drag-pan canvas for the single-
+// elimination skeleton. Round-1 nodes are real (live) matches; later rounds are
+// muted TBD nodes. Double-tap to zoom toward a point. Connectors are thin Views.
+//
+// All transforms are JS-driven (Animated.Value.setValue) with plain-number
+// mirrors so pinch focal math and pan share one transform without driver
+// conflicts. Single-finger = pan, two-finger = pinch.
 
 import { useRef } from "react";
-import {
-  Animated,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import {
   GestureHandlerRootView,
   PanGestureHandler,
   PinchGestureHandler,
-  PanGestureHandlerStateChangeEvent,
-  PinchGestureHandlerStateChangeEvent,
   State,
+  TapGestureHandler,
 } from "react-native-gesture-handler";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
@@ -28,9 +25,10 @@ import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
 const GAP_X = 52;
 const GAP_Y = 18;
-const VIEWPORT_HEIGHT = 460;
-const MIN_SCALE = 0.4;
+const MIN_SCALE = 0.35;
 const MAX_SCALE = 2.5;
+const START_SCALE = 0.7;
+const PAD = SPACING.md;
 
 interface NodePos {
   x: number;
@@ -42,25 +40,20 @@ interface NodePos {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-const buildLayout = (
-  round1: LiveMatch[],
-  bracketSize: number,
-): { nodes: NodePos[]; width: number; height: number } => {
+const buildLayout = (round1: LiveMatch[], bracketSize: number) => {
   const round0Count = Math.max(1, Math.round(bracketSize / 2));
   const totalRounds = Math.max(1, Math.round(Math.log2(bracketSize)) || 1);
   const rowStride = NODE_HEIGHT + GAP_Y;
   const colStride = NODE_WIDTH + GAP_X;
 
-  // positions[r][i] -> NodePos
   const positions: NodePos[][] = [];
   for (let r = 0; r < totalRounds; r++) {
     const count = Math.max(1, Math.round(round0Count / Math.pow(2, r)));
     const row: NodePos[] = [];
     for (let i = 0; i < count; i++) {
       let y: number;
-      if (r === 0) {
-        y = i * rowStride;
-      } else {
+      if (r === 0) y = i * rowStride;
+      else {
         const c1 = positions[r - 1][i * 2];
         const c2 = positions[r - 1][i * 2 + 1] ?? c1;
         y = (c1.y + c2.y) / 2;
@@ -75,11 +68,12 @@ const buildLayout = (
     }
     positions.push(row);
   }
-
   const nodes = positions.flat();
-  const width = totalRounds * colStride;
-  const height = round0Count * rowStride;
-  return { nodes, width, height };
+  return {
+    nodes,
+    width: totalRounds * colStride,
+    height: round0Count * rowStride,
+  };
 };
 
 const Connectors = ({ nodes }: { nodes: NodePos[] }) => {
@@ -88,36 +82,26 @@ const Connectors = ({ nodes }: { nodes: NodePos[] }) => {
     byRound[n.round] = byRound[n.round] || [];
     byRound[n.round].push(n);
   });
-  const rounds = Object.keys(byRound).map(Number).sort((a, b) => a - b);
   const lines: { left: number; top: number; w: number; h: number }[] = [];
-
-  rounds.forEach((r) => {
-    if (r === 0) return;
-    byRound[r].forEach((parent) => {
-      const c1 = byRound[r - 1][parent.index * 2];
-      const c2 = byRound[r - 1][parent.index * 2 + 1];
-      if (!c1) return;
-      const childRight = c1.x + NODE_WIDTH;
-      const parentLeft = parent.x;
-      const midX = (childRight + parentLeft) / 2;
-      const cy1 = c1.y + NODE_HEIGHT / 2;
-      const cy2 = (c2 ?? c1).y + NODE_HEIGHT / 2;
-      const py = parent.y + NODE_HEIGHT / 2;
-      // child stubs
-      lines.push({ left: childRight, top: cy1, w: midX - childRight, h: 1 });
-      if (c2) lines.push({ left: childRight, top: cy2, w: midX - childRight, h: 1 });
-      // vertical bus
-      lines.push({
-        left: midX,
-        top: Math.min(cy1, cy2),
-        w: 1,
-        h: Math.abs(cy2 - cy1) || 1,
+  Object.keys(byRound)
+    .map(Number)
+    .forEach((r) => {
+      if (r === 0) return;
+      byRound[r].forEach((parent) => {
+        const c1 = byRound[r - 1][parent.index * 2];
+        const c2 = byRound[r - 1][parent.index * 2 + 1];
+        if (!c1) return;
+        const childRight = c1.x + NODE_WIDTH;
+        const midX = (childRight + parent.x) / 2;
+        const cy1 = c1.y + NODE_HEIGHT / 2;
+        const cy2 = (c2 ?? c1).y + NODE_HEIGHT / 2;
+        const py = parent.y + NODE_HEIGHT / 2;
+        lines.push({ left: childRight, top: cy1, w: midX - childRight, h: 1 });
+        if (c2) lines.push({ left: childRight, top: cy2, w: midX - childRight, h: 1 });
+        lines.push({ left: midX, top: Math.min(cy1, cy2), w: 1, h: Math.abs(cy2 - cy1) || 1 });
+        lines.push({ left: midX, top: py, w: parent.x - midX, h: 1 });
       });
-      // into parent
-      lines.push({ left: midX, top: py, w: parentLeft - midX, h: 1 });
     });
-  });
-
   return (
     <>
       {lines.map((l, i) => (
@@ -148,63 +132,97 @@ export const BracketCanvas = ({
 }) => {
   const { nodes, width, height } = buildLayout(round1, bracketSize);
 
-  const scale = useRef(new Animated.Value(0.7)).current;
-  const savedScale = useRef(0.7);
-  const translateX = useRef(new Animated.Value(SPACING.md)).current;
-  const translateY = useRef(new Animated.Value(SPACING.md)).current;
-  const savedX = useRef(SPACING.md);
-  const savedY = useRef(SPACING.md);
+  // Animated values + plain-number mirrors.
+  const scaleA = useRef(new Animated.Value(START_SCALE)).current;
+  const txA = useRef(new Animated.Value(PAD)).current;
+  const tyA = useRef(new Animated.Value(PAD)).current;
+  const scale = useRef(START_SCALE);
+  const tx = useRef(PAD);
+  const ty = useRef(PAD);
+
+  // Pinch session state.
+  const pinchStartScale = useRef(START_SCALE);
+  const cp = useRef({ x: 0, y: 0 }); // content point under the focal at pinch start
+  // Pan session state.
+  const panStart = useRef({ x: PAD, y: PAD });
 
   const pinchRef = useRef(null);
   const panRef = useRef(null);
+  const tapRef = useRef(null);
 
-  // All transforms are JS-driven (setValue) so pinch (scale) and pan (translate)
-  // can share one transform without the native/JS driver conflict.
-  const onPinch = (e: { nativeEvent: { scale: number } }) => {
-    scale.setValue(
-      clamp(savedScale.current * e.nativeEvent.scale, MIN_SCALE, MAX_SCALE),
+  const set = (s: number, x: number, y: number) => {
+    scale.current = s;
+    tx.current = x;
+    ty.current = y;
+    scaleA.setValue(s);
+    txA.setValue(x);
+    tyA.setValue(y);
+  };
+
+  // ---- Pinch (two fingers): zoom around the focal point ----
+  const onPinchEvent = (e: {
+    nativeEvent: { scale: number; focalX: number; focalY: number };
+  }) => {
+    const ns = clamp(pinchStartScale.current * e.nativeEvent.scale, MIN_SCALE, MAX_SCALE);
+    const nx = e.nativeEvent.focalX - cp.current.x * ns;
+    const ny = e.nativeEvent.focalY - cp.current.y * ns;
+    set(ns, nx, ny);
+  };
+  const onPinchState = (e: {
+    nativeEvent: { state: number; focalX: number; focalY: number };
+  }) => {
+    if (e.nativeEvent.state === State.BEGAN) {
+      pinchStartScale.current = scale.current;
+      cp.current = {
+        x: (e.nativeEvent.focalX - tx.current) / scale.current,
+        y: (e.nativeEvent.focalY - ty.current) / scale.current,
+      };
+    }
+  };
+
+  // ---- Pan (single finger) ----
+  const onPanEvent = (e: {
+    nativeEvent: { translationX: number; translationY: number };
+  }) => {
+    set(
+      scale.current,
+      panStart.current.x + e.nativeEvent.translationX,
+      panStart.current.y + e.nativeEvent.translationY,
     );
   };
-  const onPinchEnd = (e: PinchGestureHandlerStateChangeEvent) => {
-    if (e.nativeEvent.state === State.END) {
-      const next = clamp(savedScale.current * e.nativeEvent.scale, MIN_SCALE, MAX_SCALE);
-      savedScale.current = next;
-      scale.setValue(next);
+  const onPanState = (e: { nativeEvent: { state: number } }) => {
+    if (e.nativeEvent.state === State.BEGAN) {
+      panStart.current = { x: tx.current, y: ty.current };
     }
   };
 
-  const onPan = (e: { nativeEvent: { translationX: number; translationY: number } }) => {
-    translateX.setValue(savedX.current + e.nativeEvent.translationX);
-    translateY.setValue(savedY.current + e.nativeEvent.translationY);
-  };
-  const onPanEnd = (e: PanGestureHandlerStateChangeEvent) => {
-    if (e.nativeEvent.state === State.END) {
-      savedX.current += e.nativeEvent.translationX;
-      savedY.current += e.nativeEvent.translationY;
-    }
-  };
-
-  const zoomBy = (factor: number) => {
-    const next = clamp(savedScale.current * factor, MIN_SCALE, MAX_SCALE);
-    savedScale.current = next;
-    Animated.timing(scale, { toValue: next, duration: 140, useNativeDriver: false }).start();
-  };
-  const reset = () => {
-    savedScale.current = 0.7;
-    savedX.current = SPACING.md;
-    savedY.current = SPACING.md;
+  // ---- Double-tap zoom toward the tapped point ----
+  const onDoubleTap = (e: { nativeEvent: { state: number; x: number; y: number } }) => {
+    if (e.nativeEvent.state !== State.ACTIVE) return;
+    const target = scale.current < 1 ? 1.6 : START_SCALE;
+    const px = (e.nativeEvent.x - tx.current) / scale.current;
+    const py = (e.nativeEvent.y - ty.current) / scale.current;
+    const nx = e.nativeEvent.x - px * target;
+    const ny = e.nativeEvent.y - py * target;
+    scale.current = target;
+    tx.current = nx;
+    ty.current = ny;
     Animated.parallel([
-      Animated.timing(scale, { toValue: 0.7, duration: 160, useNativeDriver: false }),
-      Animated.timing(translateX, { toValue: SPACING.md, duration: 160, useNativeDriver: false }),
-      Animated.timing(translateY, { toValue: SPACING.md, duration: 160, useNativeDriver: false }),
+      Animated.timing(scaleA, { toValue: target, duration: 180, useNativeDriver: false }),
+      Animated.timing(txA, { toValue: nx, duration: 180, useNativeDriver: false }),
+      Animated.timing(tyA, { toValue: ny, duration: 180, useNativeDriver: false }),
     ]).start();
   };
 
+  const zoomBy = (factor: number) =>
+    set(clamp(scale.current * factor, MIN_SCALE, MAX_SCALE), tx.current, ty.current);
+  const reset = () => set(START_SCALE, PAD, PAD);
+
   return (
-    <View>
+    <View style={styles.root}>
       <View style={styles.controls}>
         <Text allowFontScaling={false} style={styles.hint}>
-          Pinch to zoom · drag to pan
+          Pinch / double-tap to zoom · drag to pan
         </Text>
         <View style={styles.zoomBtns}>
           <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(0.8)}>
@@ -226,70 +244,83 @@ export const BracketCanvas = ({
       </View>
 
       <GestureHandlerRootView style={styles.viewport}>
-        <PanGestureHandler
-          ref={panRef}
-          simultaneousHandlers={pinchRef}
-          minPointers={1}
-          maxPointers={2}
-          onGestureEvent={onPan}
-          onHandlerStateChange={onPanEnd}
+        <TapGestureHandler
+          ref={tapRef}
+          numberOfTaps={2}
+          onHandlerStateChange={onDoubleTap}
         >
           <Animated.View style={styles.fill}>
             <PinchGestureHandler
               ref={pinchRef}
               simultaneousHandlers={panRef}
-              onGestureEvent={onPinch}
-              onHandlerStateChange={onPinchEnd}
+              onGestureEvent={onPinchEvent}
+              onHandlerStateChange={onPinchState}
             >
               <Animated.View style={styles.fill}>
-                <Animated.View
-                  style={{
-                    width,
-                    height,
-                    transform: [{ translateX }, { translateY }, { scale }],
-                  }}
+                <PanGestureHandler
+                  ref={panRef}
+                  simultaneousHandlers={pinchRef}
+                  minPointers={1}
+                  maxPointers={1}
+                  onGestureEvent={onPanEvent}
+                  onHandlerStateChange={onPanState}
                 >
-                  <Connectors nodes={nodes} />
-                  {nodes.map((n) =>
-                    n.match ? (
-                      <View
-                        key={`r${n.round}-${n.index}`}
-                        style={{ position: "absolute", left: n.x, top: n.y }}
-                      >
-                        <MatchNode match={n.match} onPress={onNodePress} />
-                      </View>
-                    ) : (
-                      <View
-                        key={`r${n.round}-${n.index}`}
-                        style={[styles.tbd, { left: n.x, top: n.y }]}
-                      >
-                        <Text allowFontScaling={false} style={styles.tbdText}>
-                          TBD
-                        </Text>
-                      </View>
-                    ),
-                  )}
-                </Animated.View>
+                  <Animated.View style={styles.fill}>
+                    <Animated.View
+                      style={{
+                        width,
+                        height,
+                        transform: [
+                          { translateX: txA },
+                          { translateY: tyA },
+                          { scale: scaleA },
+                        ],
+                      }}
+                    >
+                      <Connectors nodes={nodes} />
+                      {nodes.map((n) =>
+                        n.match ? (
+                          <View
+                            key={`r${n.round}-${n.index}`}
+                            style={{ position: "absolute", left: n.x, top: n.y }}
+                          >
+                            <MatchNode match={n.match} onPress={onNodePress} />
+                          </View>
+                        ) : (
+                          <View
+                            key={`r${n.round}-${n.index}`}
+                            style={[styles.tbd, { left: n.x, top: n.y }]}
+                          >
+                            <Text allowFontScaling={false} style={styles.tbdText}>
+                              TBD
+                            </Text>
+                          </View>
+                        ),
+                      )}
+                    </Animated.View>
+                  </Animated.View>
+                </PanGestureHandler>
               </Animated.View>
             </PinchGestureHandler>
           </Animated.View>
-        </PanGestureHandler>
+        </TapGestureHandler>
       </GestureHandlerRootView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   controls: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.xs),
   },
-  hint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  hint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, flex: 1 },
   zoomBtns: { flexDirection: "row", gap: webSc(SPACING.xs) },
   zoomBtn: {
-    minWidth: webSc(38),
+    minWidth: webSc(36),
     paddingHorizontal: webSc(SPACING.sm),
     paddingVertical: webSc(SPACING.xs),
     borderRadius: webSc(RADIUS.sm),
@@ -300,14 +331,8 @@ const styles = StyleSheet.create({
   },
   zoomBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
   zoomResetText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
-  viewport: {
-    height: VIEWPORT_HEIGHT,
-    borderRadius: webSc(RADIUS.lg),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-    overflow: "hidden",
-  },
+  // No border: the bracket reads as an open, native canvas.
+  viewport: { flex: 1, overflow: "hidden", backgroundColor: COLORS.background },
   fill: { flex: 1 },
   tbd: {
     position: "absolute",
