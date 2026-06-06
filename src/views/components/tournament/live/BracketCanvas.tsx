@@ -164,9 +164,7 @@ export const BracketCanvas = ({
   const tx = useRef(PAD);
   const ty = useRef(PAD);
 
-  const pinchStartScale = useRef(START_SCALE);
-  const cp = useRef({ x: 0, y: 0 });
-  const pinchPrimed = useRef(false);
+  const lastGScale = useRef(1); // pinch scale reported last frame (resets each gesture)
   const panStart = useRef({ x: PAD, y: PAD });
 
   const pinchRef = useRef(null);
@@ -190,25 +188,25 @@ export const BracketCanvas = ({
     tyA.setValue(y);
   };
 
-  // ---- Pinch (focal-point zoom). cp is captured on the first active frame so the
-  // focal coordinate is valid (avoids the "drifts to a corner" bug). ----
+  // ---- Pinch: incremental focal-point zoom. Each frame applies only the change
+  // since the last frame, computed off the *current* translate/scale, and keeps
+  // the focal point fixed. At the zoom cap the factor becomes 1 so nothing slides.
   const onPinchEvent = (e: {
     nativeEvent: { scale: number; focalX: number; focalY: number };
   }) => {
     const { scale: gScale, focalX, focalY } = e.nativeEvent;
-    if (pinchPrimed.current) {
-      pinchStartScale.current = scale.current;
-      cp.current = {
-        x: (focalX - tx.current) / scale.current,
-        y: (focalY - ty.current) / scale.current,
-      };
-      pinchPrimed.current = false;
-    }
-    const ns = clamp(pinchStartScale.current * gScale, MIN_SCALE, MAX_SCALE);
-    set(ns, focalX - cp.current.x * ns, focalY - cp.current.y * ns);
+    const factor = gScale / (lastGScale.current || 1);
+    lastGScale.current = gScale;
+    const ns = clamp(scale.current * factor, MIN_SCALE, MAX_SCALE);
+    const actual = ns / scale.current; // honors the clamp (==1 at the cap)
+    set(
+      ns,
+      focalX - (focalX - tx.current) * actual,
+      focalY - (focalY - ty.current) * actual,
+    );
   };
   const onPinchState = (e: { nativeEvent: { state: number } }) => {
-    if (e.nativeEvent.state === State.BEGAN) pinchPrimed.current = true;
+    if (e.nativeEvent.state === State.BEGAN) lastGScale.current = 1;
   };
 
   // ---- Pan (single finger) ----
