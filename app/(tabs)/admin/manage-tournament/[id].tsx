@@ -741,10 +741,6 @@ const groupForFargo = (
     ) ?? null
   );
 };
-const groupRep = (g: RaceGroup): number =>
-  g.maxFargo && g.maxFargo >= g.minFargo
-    ? Math.round((g.minFargo + g.maxFargo) / 2)
-    : g.minFargo;
 
 // ── Bracket helpers ──────────────────────────────────────────────────────────
 const prettyFormat = (f: string): string =>
@@ -893,43 +889,26 @@ const RegistrationRow = ({
   const fargoNum = parseInt(fargoInput, 10);
   const fargoValid = !isNaN(fargoNum) && fargoNum > 0;
   const selectedGroup = isGroups ? groupForFargo(fargoNum, raceGroups) : null;
-  const assignReady = isGroups ? !!selectedGroup : fargoValid;
-  // Ready requires the rating/group AND the entry fee paid.
+  // In groups mode the player still enters a real Fargo; their race group is
+  // derived from it. Ready requires a valid Fargo (that lands in a group, when
+  // groups are used) AND the entry fee paid.
+  const assignReady = isGroups ? fargoValid && !!selectedGroup : fargoValid;
   const canBeReady = assignReady && paidEntry;
 
-  const groupOptions = raceGroups.map((g) => ({
-    label: `${g.label || "?"} (${g.minFargo}-${g.maxFargo || "+"}) - Race ${g.raceTo}`,
-    value: g.id,
-  }));
-
-  const assignmentDisplay = () => {
-    if (isGroups) {
-      const g = groupForFargo(registration.fargo_rating ?? null, raceGroups);
-      return g ? `Group ${g.label || "?"} · Race to ${g.raceTo}` : "No group set";
-    }
-    return registration.fargo_rating != null
+  // "Group A · Race to 5" line derived from a Fargo rating (groups mode).
+  const groupLineFor = (fargo: number | null): string => {
+    const g = groupForFargo(fargo, raceGroups);
+    return g
+      ? `Group ${g.label || "?"} · Race to ${g.raceTo}`
+      : "No matching race group";
+  };
+  const fargoText =
+    registration.fargo_rating != null
       ? `Fargo ${registration.fargo_rating}`
       : "No Fargo set";
-  };
-
-  const renderGroupInput = () => (
-    <View style={styles.field}>
-      <FieldLabel label="Race Group" />
-      <Dropdown
-        placeholder="Select group"
-        options={groupOptions}
-        value={selectedGroup?.id ?? ""}
-        onSelect={(gid) => {
-          const g = raceGroups.find((x) => x.id === gid);
-          if (g) setFargoInput(String(groupRep(g)));
-        }}
-      />
-    </View>
-  );
 
   const renderEditableBody = (onCommit: () => void, commitLabel: string, onCancel?: () => void) => (
     <>
-      {isGroups && renderGroupInput()}
       <View style={styles.assignPayRow}>
         <View style={styles.payCol}>
           <PayCheckbox
@@ -946,28 +925,33 @@ const RegistrationRow = ({
             />
           ))}
         </View>
-        {!isGroups && (
-          <View style={styles.fargoRight}>
-            <FieldLabel label="Fargo" />
-            <TextInput
-              allowFontScaling={false}
-              style={[styles.input, styles.inputNarrow]}
-              value={fargoInput}
-              onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
-              placeholder="e.g., 525"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
-              maxLength={3}
-            />
-          </View>
-        )}
+        <View style={styles.fargoRight}>
+          <FieldLabel label="Fargo" />
+          <TextInput
+            allowFontScaling={false}
+            style={[styles.input, styles.inputNarrow]}
+            value={fargoInput}
+            onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
+            placeholder="e.g., 525"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="numeric"
+            maxLength={3}
+          />
+        </View>
       </View>
+      {isGroups && (
+        <Text allowFontScaling={false} style={styles.assignText}>
+          {fargoValid
+            ? groupLineFor(fargoNum)
+            : "Enter a Fargo to assign a race group."}
+        </Text>
+      )}
       {!canBeReady && (
         <Text allowFontScaling={false} style={styles.hint}>
           {!paidEntry
             ? "Mark the entry fee paid to make this player ready."
             : isGroups
-              ? "Select a race group to mark this player ready."
+              ? "Enter a Fargo that falls in a race group to mark this player ready."
               : "Enter a Fargo rating to mark this player ready."}
         </Text>
       )}
@@ -1045,7 +1029,8 @@ const RegistrationRow = ({
       {locked && (
         <>
           <Text allowFontScaling={false} style={styles.assignText}>
-            {assignmentDisplay()}
+            {fargoText}
+            {isGroups ? ` · ${groupLineFor(registration.fargo_rating ?? null)}` : ""}
           </Text>
           <Text allowFontScaling={false} style={styles.hint}>
             Player list locked — reopen &amp; redraw to change.
@@ -1055,14 +1040,14 @@ const RegistrationRow = ({
 
       {!locked && d === "prereg" &&
         renderEditableBody(
-          () => onReady(fargoNum, isGroups, paidEntry, paidPots),
+          () => onReady(fargoNum, false, paidEntry, paidPots),
           "Ready",
         )}
 
       {!locked && d === "ready" && editing &&
         renderEditableBody(
           () => {
-            onSaveEdit(fargoNum, isGroups, paidEntry, paidPots);
+            onSaveEdit(fargoNum, false, paidEntry, paidPots);
             setEditing(false);
           },
           "Save",
@@ -1099,19 +1084,16 @@ const RegistrationRow = ({
               })}
             </View>
             <View style={styles.fargoRight}>
-              {isGroups ? (
+              <Text allowFontScaling={false} style={styles.fargoReadLabel}>
+                Fargo
+              </Text>
+              <Text allowFontScaling={false} style={styles.fargoReadNumber}>
+                {registration.fargo_rating ?? "—"}
+              </Text>
+              {isGroups && (
                 <Text allowFontScaling={false} style={styles.assignText}>
-                  {assignmentDisplay()}
+                  {groupLineFor(registration.fargo_rating ?? null)}
                 </Text>
-              ) : (
-                <>
-                  <Text allowFontScaling={false} style={styles.fargoReadLabel}>
-                    Fargo
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.fargoReadNumber}>
-                    {registration.fargo_rating ?? "—"}
-                  </Text>
-                </>
               )}
             </View>
           </View>
@@ -1149,7 +1131,8 @@ const RegistrationRow = ({
       {!locked && (d === "no_show" || d === "removed") && (
         <>
           <Text allowFontScaling={false} style={styles.assignText}>
-            {assignmentDisplay()}
+            {fargoText}
+            {isGroups ? ` · ${groupLineFor(registration.fargo_rating ?? null)}` : ""}
           </Text>
           <View style={styles.regActions}>
             <TouchableOpacity
@@ -2077,7 +2060,7 @@ export default function ManageTournamentScreen() {
                     style={[styles.input, styles.groupNum]}
                     value={g.raceTo}
                     onChangeText={(v) => updateRaceGroup(i, "raceTo", v)}
-                    placeholder="Race"
+                    placeholder="Race to"
                     placeholderTextColor={COLORS.textMuted}
                     keyboardType="numeric"
                   />
@@ -2096,29 +2079,28 @@ export default function ManageTournamentScreen() {
                   + Add Group
                 </Text>
               </TouchableOpacity>
-              {form.raceGroups.length > 0 &&
-                (() => {
-                  const g = form.raceGroups[0];
-                  const mn = parseInt(g.minFargo, 10);
-                  const mx = parseInt(g.maxFargo, 10);
-                  const sample = Number.isFinite(mn)
-                    ? Number.isFinite(mx)
-                      ? Math.round((mn + mx) / 2)
-                      : mn + 10
-                    : 600;
-                  return (
-                    <View style={styles.exampleBox}>
-                      <Text allowFontScaling={false} style={styles.exampleTitle}>
-                        Example
-                      </Text>
-                      <Text allowFontScaling={false} style={styles.exampleText}>
-                        A player rated {sample} falls in Group{" "}
-                        {g.label || "A"} ({g.minFargo || "0"}-{g.maxFargo || "+"}
-                        ) and races to {g.raceTo || "?"}.
-                      </Text>
-                    </View>
-                  );
-                })()}
+              {form.raceGroups.length > 0 && (
+                <View style={styles.exampleBox}>
+                  <Text allowFontScaling={false} style={styles.exampleTitle}>
+                    Group Settings
+                  </Text>
+                  {form.raceGroups.map((g, i) => (
+                    <Text
+                      key={g.id}
+                      allowFontScaling={false}
+                      style={styles.exampleText}
+                    >
+                      Group {g.label || String.fromCharCode(65 + i)}:{" "}
+                      {g.minFargo.trim() || "0"}-{g.maxFargo.trim() || "+"} · Race
+                      to {g.raceTo.trim() || "?"}
+                    </Text>
+                  ))}
+                  <Text allowFontScaling={false} style={styles.exampleText}>
+                    A blank minimum counts as 0; a blank maximum has no upper
+                    limit.
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </Section>
