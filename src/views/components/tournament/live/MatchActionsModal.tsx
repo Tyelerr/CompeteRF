@@ -139,11 +139,10 @@ export const MatchActionsModal = ({
 
   const Header = ({ title }: { title: string }) => (
     <View style={styles.sheetHeader}>
-      <View style={{ width: webSc(44) }} />
       <Text allowFontScaling={false} style={styles.sheetTitle} numberOfLines={1}>
         {title}
       </Text>
-      <TouchableOpacity onPress={onClose} hitSlop={8}>
+      <TouchableOpacity style={styles.closeX} onPress={onClose} hitSlop={10}>
         <Text allowFontScaling={false} style={styles.closeLink}>
           ✕
         </Text>
@@ -308,9 +307,6 @@ export const MatchActionsModal = ({
                   value={p1Score}
                   onChange={setP1Score}
                 />
-                <Text allowFontScaling={false} style={styles.scoreDash}>
-                  –
-                </Text>
                 <ScoreCol
                   name={m.p2Name ?? "P2"}
                   value={p2Score}
@@ -520,17 +516,23 @@ const styles = StyleSheet.create({
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     marginBottom: webSc(SPACING.sm),
+    minHeight: webSc(28),
   },
   sheetTitle: {
     fontSize: webMs(FONT_SIZES.lg),
     fontWeight: "800",
     color: COLORS.text,
-    flex: 1,
     textAlign: "center",
   },
-  backLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", width: webSc(44) },
+  closeX: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
   closeLink: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700" },
   sub: {
     fontSize: webMs(FONT_SIZES.sm),
@@ -580,33 +582,30 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: webSc(SPACING.sm),
+    gap: webSc(SPACING.lg),
     marginTop: webSc(SPACING.sm),
   },
   scoreCol: { alignItems: "center" },
   scoreName: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: webSc(SPACING.xs) },
-  stepperRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  stepperRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  // Borderless tap target; the sign is gray (no box).
   stepBtn: {
-    width: webSc(36),
+    width: webSc(34),
     height: webSc(44),
-    borderRadius: webSc(RADIUS.md),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "900" },
+  stepBtnText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "900" },
   scoreInput: {
     backgroundColor: COLORS.background,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
-    color: COLORS.text,
-    fontSize: webMs(FONT_SIZES.xl),
-    fontWeight: "800",
+    color: COLORS.primary,
+    fontSize: webMs(FONT_SIZES.xxl),
+    fontWeight: "900",
     textAlign: "center",
-    width: webSc(46),
+    width: webSc(54),
     paddingVertical: webSc(SPACING.sm),
   },
   stepInput: {
@@ -621,7 +620,6 @@ const styles = StyleSheet.create({
     width: webSc(90),
     paddingVertical: webSc(SPACING.sm),
   },
-  scoreDash: { fontSize: webMs(FONT_SIZES.xl), color: COLORS.textMuted, marginTop: webSc(SPACING.lg) },
   footer: {
     flexDirection: "row",
     gap: webSc(SPACING.sm),
