@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,6 +31,12 @@ import { Dropdown } from "../../common/dropdown";
 type Step = MatchActionStep;
 
 const now = () => new Date().toISOString();
+
+// Increment/decrement a numeric string field, clamped.
+const bump = (val: string, delta: number, min = 0, max = 99): string => {
+  const n = parseInt(val || "0", 10) || 0;
+  return String(Math.min(max, Math.max(min, n + delta)));
+};
 
 export const MatchActionsModal = ({
   match,
@@ -130,17 +137,9 @@ export const MatchActionsModal = ({
   }
   items.push({ label: "View Match Details", onPress: () => setStep("details") });
 
-  const Header = ({ title, back }: { title: string; back?: boolean }) => (
+  const Header = ({ title }: { title: string }) => (
     <View style={styles.sheetHeader}>
-      {back ? (
-        <TouchableOpacity onPress={() => setStep("menu")} hitSlop={8}>
-          <Text allowFontScaling={false} style={styles.backLink}>
-            ‹ Back
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <View style={{ width: webSc(44) }} />
-      )}
+      <View style={{ width: webSc(44) }} />
       <Text allowFontScaling={false} style={styles.sheetTitle} numberOfLines={1}>
         {title}
       </Text>
@@ -150,6 +149,45 @@ export const MatchActionsModal = ({
         </Text>
       </TouchableOpacity>
     </View>
+  );
+
+  // Footer for editable steps: a labeled Close + a Save Changes action.
+  const Footer = ({
+    onSave,
+    saveLabel = "Save Changes",
+  }: {
+    onSave: () => void;
+    saveLabel?: string;
+  }) => (
+    <View style={styles.footer}>
+      <TouchableOpacity
+        style={[styles.btn, styles.btnGhost]}
+        onPress={onClose}
+        disabled={busy}
+      >
+        <Text allowFontScaling={false} style={styles.btnGhostText}>
+          Close
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.btn, styles.btnPrimary, busy && styles.disabled]}
+        onPress={onSave}
+        disabled={busy}
+      >
+        <Text allowFontScaling={false} style={styles.btnPrimaryText}>
+          {busy ? "..." : saveLabel}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Close-only footer for pick / read-only steps.
+  const CloseBtn = () => (
+    <TouchableOpacity style={[styles.btn, styles.btnGhost, styles.closeBtn]} onPress={onClose}>
+      <Text allowFontScaling={false} style={styles.btnGhostText}>
+        Close
+      </Text>
+    </TouchableOpacity>
   );
 
   const matchTitle = `M${m.matchNumber}`;
@@ -188,8 +226,8 @@ export const MatchActionsModal = ({
 
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
           {step === "menu" && (
             <>
               <Header title={`${matchTitle} actions`} />
@@ -221,7 +259,7 @@ export const MatchActionsModal = ({
 
           {step === "table" && (
             <>
-              <Header title={tableMode === "start" ? "Start match" : "Assign table"} back />
+              <Header title={tableMode === "start" ? "Start match" : "Assign table"} />
               <Text allowFontScaling={false} style={styles.fieldLabel}>
                 Table
               </Text>
@@ -230,27 +268,22 @@ export const MatchActionsModal = ({
                 value={tableId != null ? String(tableId) : ""}
                 onSelect={(v) => setTableId(v ? Number(v) : null)}
               />
-              <TouchableOpacity
-                style={[styles.bigBtn, styles.primary, busy && styles.disabled]}
-                disabled={busy}
-                onPress={() =>
+              <Footer
+                saveLabel={tableMode === "start" ? "Start Match" : "Save Changes"}
+                onSave={() =>
                   apply(
                     tableMode === "start"
                       ? { status: "in_progress", tableId, startedAt: m.startedAt ?? now() }
                       : { tableId },
                   )
                 }
-              >
-                <Text allowFontScaling={false} style={styles.bigBtnText}>
-                  {tableMode === "start" ? "Start Match" : "Save Table"}
-                </Text>
-              </TouchableOpacity>
+              />
             </>
           )}
 
           {step === "winner" && (
             <>
-              <Header title="Set winner" back />
+              <Header title="Set winner" />
               <PlayerPick
                 actionLabel="Winner"
                 onPick={(slot) =>
@@ -262,99 +295,86 @@ export const MatchActionsModal = ({
                   })
                 }
               />
+              <CloseBtn />
             </>
           )}
 
           {step === "score" && (
             <>
-              <Header title="Edit score" back />
+              <Header title="Edit score" />
               <View style={styles.scoreRow}>
-                <View style={styles.scoreCol}>
-                  <Text allowFontScaling={false} style={styles.scoreName} numberOfLines={1}>
-                    {m.p1Name ?? "P1"}
-                  </Text>
-                  <TextInput
-                    allowFontScaling={false}
-                    style={styles.scoreInput}
-                    value={p1Score}
-                    onChangeText={(v) => setP1Score(v.replace(/[^0-9]/g, ""))}
-                    keyboardType="numeric"
-                    maxLength={2}
-                    placeholder="0"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                </View>
+                <ScoreCol
+                  name={m.p1Name ?? "P1"}
+                  value={p1Score}
+                  onChange={setP1Score}
+                />
                 <Text allowFontScaling={false} style={styles.scoreDash}>
                   –
                 </Text>
-                <View style={styles.scoreCol}>
-                  <Text allowFontScaling={false} style={styles.scoreName} numberOfLines={1}>
-                    {m.p2Name ?? "P2"}
-                  </Text>
-                  <TextInput
-                    allowFontScaling={false}
-                    style={styles.scoreInput}
-                    value={p2Score}
-                    onChangeText={(v) => setP2Score(v.replace(/[^0-9]/g, ""))}
-                    keyboardType="numeric"
-                    maxLength={2}
-                    placeholder="0"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                </View>
+                <ScoreCol
+                  name={m.p2Name ?? "P2"}
+                  value={p2Score}
+                  onChange={setP2Score}
+                />
               </View>
-              <TouchableOpacity
-                style={[styles.bigBtn, styles.primary, busy && styles.disabled]}
-                disabled={busy}
-                onPress={() =>
+              <Footer
+                onSave={() =>
                   apply({
                     p1Score: p1Score === "" ? null : Number(p1Score),
                     p2Score: p2Score === "" ? null : Number(p2Score),
                   })
                 }
-              >
-                <Text allowFontScaling={false} style={styles.bigBtnText}>
-                  Save Score
-                </Text>
-              </TouchableOpacity>
+              />
             </>
           )}
 
           {step === "timer" && (
             <>
-              <Header title="Match timer" back />
+              <Header title="Match timer" />
               <Text allowFontScaling={false} style={styles.fieldLabel}>
                 Allowed minutes (blank = auto)
               </Text>
-              <TextInput
-                allowFontScaling={false}
-                style={styles.input}
-                value={timerMin}
-                onChangeText={(v) => setTimerMin(v.replace(/[^0-9]/g, ""))}
-                keyboardType="numeric"
-                maxLength={3}
-                placeholder="Auto"
-                placeholderTextColor={COLORS.textMuted}
-              />
-              <TouchableOpacity
-                style={[styles.bigBtn, styles.primary, busy && styles.disabled]}
-                disabled={busy}
-                onPress={() =>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => setTimerMin(bump(timerMin, -1, 0, 999))}
+                >
+                  <Text allowFontScaling={false} style={styles.stepBtnText}>
+                    −
+                  </Text>
+                </TouchableOpacity>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.stepInput}
+                  value={timerMin}
+                  onChangeText={(v) => setTimerMin(v.replace(/[^0-9]/g, ""))}
+                  keyboardType="numeric"
+                  maxLength={3}
+                  placeholder="Auto"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => setTimerMin(bump(timerMin, 1, 0, 999))}
+                >
+                  <Text allowFontScaling={false} style={styles.stepBtnText}>
+                    +
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Footer
+                onSave={() =>
                   apply({
                     timerSeconds: timerMin === "" ? null : Number(timerMin) * 60,
                   })
                 }
-              >
-                <Text allowFontScaling={false} style={styles.bigBtnText}>
-                  Save Timer
-                </Text>
-              </TouchableOpacity>
+              />
             </>
           )}
 
           {step === "forfeit" && (
             <>
-              <Header title="Forfeit — who forfeits?" back />
+              <Header title="Forfeit — who forfeits?" />
               <PlayerPick
                 actionLabel="Forfeits"
                 onPick={(slot) =>
@@ -366,12 +386,13 @@ export const MatchActionsModal = ({
                   })
                 }
               />
+              <CloseBtn />
             </>
           )}
 
           {step === "withdraw" && (
             <>
-              <Header title="Withdraw — who withdraws?" back />
+              <Header title="Withdraw — who withdraws?" />
               <PlayerPick
                 actionLabel="Withdraws"
                 onPick={(slot) =>
@@ -383,12 +404,13 @@ export const MatchActionsModal = ({
                   })
                 }
               />
+              <CloseBtn />
             </>
           )}
 
           {step === "details" && (
             <>
-              <Header title={`${matchTitle} details`} back />
+              <Header title={`${matchTitle} details`} />
               <View style={styles.detailBox}>
                 <Detail label="Players" value={namesLine} />
                 <Detail label="Race" value={m.raceLabel} />
@@ -418,10 +440,11 @@ export const MatchActionsModal = ({
                 />
                 {m.isStream && <Detail label="Stream" value="LIVE / stream table" />}
               </View>
+              <CloseBtn />
             </>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
@@ -434,6 +457,45 @@ const Detail = ({ label, value }: { label: string; value: string }) => (
     <Text allowFontScaling={false} style={styles.detailValue} numberOfLines={2}>
       {value}
     </Text>
+  </View>
+);
+
+// One player's score column: −  [input]  +  (manual entry kept).
+const ScoreCol = ({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: string;
+  onChange: (v: string) => void;
+}) => (
+  <View style={styles.scoreCol}>
+    <Text allowFontScaling={false} style={styles.scoreName} numberOfLines={1}>
+      {name}
+    </Text>
+    <View style={styles.stepperRow}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, -1))}>
+        <Text allowFontScaling={false} style={styles.stepBtnText}>
+          −
+        </Text>
+      </TouchableOpacity>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.scoreInput}
+        value={value}
+        onChangeText={(v) => onChange(v.replace(/[^0-9]/g, ""))}
+        keyboardType="numeric"
+        maxLength={2}
+        placeholder="0"
+        placeholderTextColor={COLORS.textMuted}
+      />
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, 1))}>
+        <Text allowFontScaling={false} style={styles.stepBtnText}>
+          +
+        </Text>
+      </TouchableOpacity>
+    </View>
   </View>
 );
 
@@ -518,24 +580,64 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "center",
-    gap: webSc(SPACING.md),
+    gap: webSc(SPACING.sm),
     marginTop: webSc(SPACING.sm),
   },
-  scoreCol: { alignItems: "center", flex: 1 },
+  scoreCol: { alignItems: "center" },
   scoreName: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: webSc(SPACING.xs) },
+  stepperRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  stepBtn: {
+    width: webSc(36),
+    height: webSc(44),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "900" },
   scoreInput: {
     backgroundColor: COLORS.background,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
     color: COLORS.text,
-    fontSize: webMs(FONT_SIZES.xxl),
+    fontSize: webMs(FONT_SIZES.xl),
     fontWeight: "800",
     textAlign: "center",
-    width: webSc(80),
+    width: webSc(46),
     paddingVertical: webSc(SPACING.sm),
   },
-  scoreDash: { fontSize: webMs(FONT_SIZES.xl), color: COLORS.textMuted, marginBottom: webSc(SPACING.md) },
+  stepInput: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "800",
+    textAlign: "center",
+    width: webSc(90),
+    paddingVertical: webSc(SPACING.sm),
+  },
+  scoreDash: { fontSize: webMs(FONT_SIZES.xl), color: COLORS.textMuted, marginTop: webSc(SPACING.lg) },
+  footer: {
+    flexDirection: "row",
+    gap: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.lg),
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    alignItems: "center",
+  },
+  btnPrimary: { backgroundColor: COLORS.primary },
+  btnPrimaryText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.md) },
+  btnGhost: { borderWidth: 1, borderColor: COLORS.border },
+  btnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) },
+  closeBtn: { marginTop: webSc(SPACING.md) },
   detailBox: { marginTop: webSc(SPACING.xs) },
   detailRow: {
     flexDirection: "row",
