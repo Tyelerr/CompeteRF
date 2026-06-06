@@ -10,6 +10,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Keyboard,
   LayoutChangeEvent,
   StyleSheet,
   Text,
@@ -206,7 +207,10 @@ export const BracketCanvas = ({
     );
   };
   const onPinchState = (e: { nativeEvent: { state: number } }) => {
-    if (e.nativeEvent.state === State.BEGAN) lastGScale.current = 1;
+    if (e.nativeEvent.state === State.BEGAN) {
+      Keyboard.dismiss();
+      lastGScale.current = 1;
+    }
   };
 
   // ---- Pan (single finger) ----
@@ -219,13 +223,16 @@ export const BracketCanvas = ({
       panStart.current.y + e.nativeEvent.translationY,
     );
   const onPanState = (e: { nativeEvent: { state: number } }) => {
-    if (e.nativeEvent.state === State.BEGAN)
+    if (e.nativeEvent.state === State.BEGAN) {
+      Keyboard.dismiss();
       panStart.current = { x: tx.current, y: ty.current };
+    }
   };
 
   // ---- Double-tap zoom toward the tapped point ----
   const onDoubleTap = (e: { nativeEvent: { state: number; x: number; y: number } }) => {
     if (e.nativeEvent.state !== State.ACTIVE) return;
+    Keyboard.dismiss();
     const target = scale.current < 1 ? 1.6 : START_SCALE;
     animateTo(
       target,
@@ -275,6 +282,7 @@ export const BracketCanvas = ({
     setSummary({ name, match });
     setQuery("");
     setShowFavs(false);
+    Keyboard.dismiss();
   };
 
   const toggleFav = (name: string) =>
@@ -429,7 +437,10 @@ export const BracketCanvas = ({
                             <MatchNode
                               match={n.match}
                               highlighted={highlight === n.match.matchNumber}
-                              onPress={onNodePress}
+                              onPress={(mm) => {
+                                Keyboard.dismiss();
+                                onNodePress(mm);
+                              }}
                             />
                           </View>
                         ) : (

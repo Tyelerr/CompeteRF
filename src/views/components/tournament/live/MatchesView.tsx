@@ -6,6 +6,7 @@
 import { useMemo, useState } from "react";
 import {
   Alert,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -110,7 +111,10 @@ export const MatchesView = ({
           <TouchableOpacity
             key={m}
             style={[styles.toggleBtn, mode === m && styles.toggleBtnActive]}
-            onPress={() => setMode(m)}
+            onPress={() => {
+              Keyboard.dismiss();
+              setMode(m);
+            }}
           >
             <Text
               allowFontScaling={false}
@@ -147,6 +151,7 @@ export const MatchesView = ({
             contentContainerStyle={styles.cardsContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
             {filtered.length === 0 ? (
               <Text allowFontScaling={false} style={styles.noResults}>
