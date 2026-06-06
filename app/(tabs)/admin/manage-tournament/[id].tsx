@@ -2169,6 +2169,15 @@ export default function ManageTournamentScreen() {
 
   const renderTables = () => (
     <View>
+      <View style={styles.readyBanner}>
+        <Text allowFontScaling={false} style={styles.readyBannerNum}>
+          {readyPlayers.length}
+        </Text>
+        <Text allowFontScaling={false} style={styles.readyBannerLabel}>
+          Players Ready
+        </Text>
+      </View>
+
       {!hub.tablesReady && (
         <View style={styles.section}>
           <Text allowFontScaling={false} style={styles.hint}>
@@ -3659,6 +3668,30 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "800",
     lineHeight: webMs(FONT_SIZES.xxl) + 2,
+  },
+
+  // Players-ready banner (Tables tab)
+  readyBanner: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "center",
+    gap: webSc(SPACING.xs),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.md),
+    padding: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
+  },
+  readyBannerNum: {
+    fontSize: webMs(FONT_SIZES.xxl),
+    fontWeight: "800",
+    color: COLORS.primary,
+  },
+  readyBannerLabel: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "600",
+    color: COLORS.textSecondary,
   },
 
   // ── Bracket / Draw ──────────────────────────────────────────────────────────
