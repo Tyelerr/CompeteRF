@@ -802,6 +802,7 @@ const BracketCalc = ({
 const RegistrationRow = ({
   registration,
   sidePots,
+  entryFee,
   raceMode,
   raceGroups,
   onReady,
@@ -815,6 +816,7 @@ const RegistrationRow = ({
 }: {
   registration: Registration;
   sidePots: { name: string; amount: number }[];
+  entryFee: number;
   raceMode: RaceMode;
   raceGroups: RaceGroup[];
   onReady: (
@@ -864,6 +866,7 @@ const RegistrationRow = ({
     );
   const potLabel = (p: { name: string; amount: number }) =>
     p.amount ? `${p.name} ($${p.amount})` : p.name;
+  const entryLabel = entryFee ? `Entry Fee ($${entryFee})` : "Entry Fee";
 
   const fargoNum = parseInt(fargoInput, 10);
   const fargoValid = !isNaN(fargoNum) && fargoNum > 0;
@@ -908,7 +911,7 @@ const RegistrationRow = ({
       <View style={styles.assignPayRow}>
         <View style={styles.payCol}>
           <PayCheckbox
-            label="Entry Fee"
+            label={entryLabel}
             checked={paidEntry}
             onToggle={() => setPaidEntry((v) => !v)}
           />
@@ -1052,13 +1055,25 @@ const RegistrationRow = ({
           <View style={styles.assignPayRow}>
             <View style={styles.payCol}>
               <PayCheckbox
-                label={registration.paid_entry ? "Entry Fee Paid" : "Entry Fee not marked"}
+                label={
+                  registration.paid_entry
+                    ? `${entryLabel} Paid`
+                    : `${entryLabel} not marked`
+                }
                 checked={!!registration.paid_entry}
                 readOnly
               />
-              {(registration.paid_side_pots ?? []).map((name) => (
-                <PayCheckbox key={name} label={`${name} Entered`} checked readOnly />
-              ))}
+              {(registration.paid_side_pots ?? []).map((name) => {
+                const pot = sidePots.find((p) => p.name === name);
+                return (
+                  <PayCheckbox
+                    key={name}
+                    label={`${pot ? potLabel(pot) : name} Entered`}
+                    checked
+                    readOnly
+                  />
+                );
+              })}
             </View>
             <View style={styles.fargoRight}>
               {isGroups ? (
@@ -2139,6 +2154,7 @@ export default function ManageTournamentScreen() {
       name: p.name,
       amount: Number(p.amount) || 0,
     }));
+    const entryFee = Number(hub.tournament?.entry_fee) || 0;
     const raceMode = hub.tournament?.live_settings?.raceMode ?? "fixed";
     const raceGroups = hub.tournament?.live_settings?.raceGroups ?? [];
     const summary = [
@@ -2212,6 +2228,7 @@ export default function ManageTournamentScreen() {
               key={item.id}
               registration={item}
               sidePots={sidePots}
+              entryFee={entryFee}
               raceMode={raceMode}
               raceGroups={raceGroups}
               onReady={(fargo, isStarter, paidEntry, paidPots) =>
