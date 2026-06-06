@@ -1533,6 +1533,29 @@ export default function ManageTournamentScreen() {
   const tournamentName = hub.tournament?.name || paramName || "Tournament";
   const phaseMeta = PHASE_META[hub.phase];
 
+  // Settings lock once the bracket is drawn — editing format/race/entry after a
+  // draw would desync the bracket. Editing requires undoing the draw (reopen).
+  const settingsLocked = (
+    ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
+  ).includes(hub.phase);
+
+  const handleUndoDraw = () =>
+    Alert.alert(
+      "Undo Draw",
+      "This reopens registration so you can edit settings. You'll need to draw the bracket again afterward. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Undo Draw",
+          style: "destructive",
+          onPress: () =>
+            hub
+              .reopenRegistration()
+              .catch(() => Alert.alert("Error", "Failed to reopen registration.")),
+        },
+      ],
+    );
+
   // ---- Bracket / Draw state ----------------------------------------------
   const { profile: tdProfile } = useAuthContext();
   const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
@@ -1912,6 +1935,33 @@ export default function ManageTournamentScreen() {
 
     return (
       <View>
+        {settingsLocked && (
+          <View style={styles.settingsLockBanner}>
+            <Text allowFontScaling={false} style={styles.settingsLockTitle}>
+              {GLYPH.lock} Settings locked
+            </Text>
+            <Text allowFontScaling={false} style={styles.settingsLockBody}>
+              The bracket has been drawn, so settings are locked to keep it in
+              sync. To make changes, undo the draw — this reopens registration and
+              you&apos;ll re-draw the bracket afterward.
+            </Text>
+            {hub.phase === "bracket_drawn" && (
+              <TouchableOpacity
+                style={styles.settingsLockBtn}
+                onPress={handleUndoDraw}
+                disabled={hub.isMutatingLive}
+              >
+                <Text allowFontScaling={false} style={styles.settingsLockBtnText}>
+                  Undo Draw &amp; Edit
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+        <View
+          pointerEvents={settingsLocked ? "none" : "auto"}
+          style={settingsLocked ? styles.lockedDim : undefined}
+        >
         <Section title="Tournament Details">
           <LabeledInput
             label="Name *"
@@ -2282,6 +2332,7 @@ export default function ManageTournamentScreen() {
             Venue and tournament image are changed on the Edit Tournament screen.
           </Text>
         </Section>
+        </View>
       </View>
     );
   };
@@ -3190,7 +3241,7 @@ export default function ManageTournamentScreen() {
       )}
 
       {/* Fixed footer: Save Settings / Start Registration */}
-      {activeTab === "settings" && form && (
+      {activeTab === "settings" && form && !settingsLocked && (
         <View style={styles.settingsFooter}>
           {hub.phase === "setup_incomplete" && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
@@ -4011,6 +4062,38 @@ const styles = StyleSheet.create({
     borderColor: COLORS.warning,
     backgroundColor: COLORS.warning + "20",
     alignItems: "center",
+  },
+  lockedDim: { opacity: 0.5 },
+  settingsLockBanner: {
+    backgroundColor: COLORS.warning + "1A",
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    borderRadius: webSc(RADIUS.lg),
+    padding: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
+  },
+  settingsLockTitle: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "800",
+    color: COLORS.warning,
+    marginBottom: webSc(SPACING.xs),
+  },
+  settingsLockBody: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    lineHeight: webMs(FONT_SIZES.sm) + 6,
+  },
+  settingsLockBtn: {
+    marginTop: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.warning,
+    alignItems: "center",
+  },
+  settingsLockBtnText: {
+    color: "#000",
+    fontWeight: "800",
+    fontSize: webMs(FONT_SIZES.sm),
   },
   reopenBtnText: {
     color: COLORS.warning,
