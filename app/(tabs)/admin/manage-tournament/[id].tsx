@@ -2667,8 +2667,7 @@ export default function ManageTournamentScreen() {
         {!locked && (
           <Section title="Bracket Size">
             <Text allowFontScaling={false} style={styles.hint}>
-              Recommended {recommended} for {ready.length} Ready players. You can
-              size up.
+              Recommended {recommended} for {ready.length} Ready players.
             </Text>
             <Dropdown
               options={[
