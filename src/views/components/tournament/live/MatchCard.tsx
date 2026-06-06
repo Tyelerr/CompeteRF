@@ -52,11 +52,6 @@ export const MatchCard = ({
     m.status === "completed" && styles.timerDone,
   ];
 
-  const score =
-    m.p1Score != null || m.p2Score != null
-      ? `${m.p1Score ?? 0}–${m.p2Score ?? 0}`
-      : null;
-
   return (
     <View
       style={[
@@ -92,33 +87,40 @@ export const MatchCard = ({
         </View>
       </View>
 
-      {/* Players + timer */}
+      {/* Players (name + race) with a Fargo-style score box each */}
       {m.bye ? (
         <Text allowFontScaling={false} style={styles.bye}>
           {m.p1Name ?? m.p2Name ?? "TBD"} advances (bye)
         </Text>
       ) : (
-        <View style={styles.body}>
-          <View style={styles.names}>
-            <Name name={m.p1Name} won={m.winner === 1} lost={m.winner === 2} />
-            <Name name={m.p2Name} won={m.winner === 2} lost={m.winner === 1} />
+        <>
+          <View style={styles.players}>
+            <PlayerRow
+              name={m.p1Name}
+              race={m.p1Race}
+              score={m.p1Score}
+              won={m.winner === 1}
+              lost={m.winner === 2}
+            />
+            <PlayerRow
+              name={m.p2Name}
+              race={m.p2Race}
+              score={m.p2Score}
+              won={m.winner === 2}
+              lost={m.winner === 1}
+            />
           </View>
-          <View style={styles.timerBox}>
+          <View style={styles.timerRow}>
             <Text allowFontScaling={false} style={timerStyle}>
               {timerText}
             </Text>
-            {score && (
-              <Text allowFontScaling={false} style={styles.score}>
-                {score}
-              </Text>
-            )}
             {m.result && m.result !== "normal" && (
               <Text allowFontScaling={false} style={styles.resultTag}>
                 {m.result}
               </Text>
             )}
           </View>
-        </View>
+        </>
       )}
 
       {/* Actions */}
@@ -158,15 +160,38 @@ export const MatchCard = ({
   );
 };
 
-const Name = ({ name, won, lost }: { name: string | null; won: boolean; lost: boolean }) => (
-  <Text
-    allowFontScaling={false}
-    style={[styles.name, won && styles.nameWon, lost && styles.nameLost]}
-    numberOfLines={1}
-  >
-    {name ?? "TBD"}
-    {won ? "  ✓" : ""}
-  </Text>
+const PlayerRow = ({
+  name,
+  race,
+  score,
+  won,
+  lost,
+}: {
+  name: string | null;
+  race: number | null;
+  score: number | null;
+  won: boolean;
+  lost: boolean;
+}) => (
+  <View style={styles.playerRow}>
+    <Text
+      allowFontScaling={false}
+      style={[styles.name, won && styles.nameWon, lost && styles.nameLost]}
+      numberOfLines={1}
+    >
+      {name ?? "TBD"}
+      {race != null ? ` (${race})` : ""}
+      {won ? "  ✓" : ""}
+    </Text>
+    <View style={[styles.scoreBox, won && styles.scoreBoxWon]}>
+      <Text
+        allowFontScaling={false}
+        style={[styles.scoreNum, won && styles.scoreNumWon]}
+      >
+        {score ?? 0}
+      </Text>
+    </View>
+  </View>
 );
 
 const Btn = ({
@@ -198,8 +223,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.sm),
-    marginBottom: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
   },
   cardLive: { backgroundColor: "#16241B" },
   cardStream: { borderColor: COLORS.error, borderWidth: 2 },
@@ -226,19 +251,51 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingVertical: webSc(SPACING.sm),
   },
-  body: {
+  players: {
+    marginTop: webSc(SPACING.sm),
+    gap: webSc(SPACING.sm),
+  },
+  playerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: webSc(SPACING.xs),
+    gap: webSc(SPACING.sm),
   },
-  names: { flex: 1, gap: webSc(2) },
-  name: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
+  name: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "800",
+    color: COLORS.text,
+    flex: 1,
+  },
   nameWon: { color: COLORS.success },
   nameLost: { color: COLORS.textMuted },
-  timerBox: { alignItems: "flex-end", marginLeft: webSc(SPACING.sm) },
-  timer: {
+  scoreBox: {
+    minWidth: webSc(46),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scoreBoxWon: { borderColor: COLORS.success },
+  scoreNum: {
     fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "900",
+    color: COLORS.primary,
+    fontVariant: ["tabular-nums"],
+  },
+  scoreNumWon: { color: COLORS.success },
+  timerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: webSc(SPACING.md),
+  },
+  timer: {
+    fontSize: webMs(FONT_SIZES.xxl),
     fontWeight: "900",
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
@@ -246,7 +303,6 @@ const styles = StyleSheet.create({
   timerIdle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
   timerOver: { color: COLORS.error },
   timerDone: { fontSize: webMs(FONT_SIZES.md), color: COLORS.success },
-  score: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "700" },
   resultTag: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.warning,
