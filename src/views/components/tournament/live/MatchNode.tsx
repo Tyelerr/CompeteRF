@@ -1,9 +1,8 @@
 // src/views/components/tournament/live/MatchNode.tsx
-// Bracket node — a compact sibling of MatchCard so the two views share one visual
-// language: same rounded corners, name (race), winner highlight, timer styling
-// (red over time), green pulsing dot when live, LIVE badge + red border only for
-// an actively-streamed live match, result tags, and the bye display. Tapping
-// opens the shared match action modal.
+// Bracket node — a compact MatchCard. Shares the card's visual language: rounded
+// corners, name (race) per player with a small score box, a timer line (red over
+// time), green pulsing dot when live, LIVE badge + red border only for an
+// actively-streamed match, result tags, and the bye display. Tap opens the modal.
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
@@ -14,8 +13,8 @@ import { formatClock, LiveMatch } from "../../../../utils/match.utils";
 import { LiveDot } from "./LiveDot";
 import { useMatchTimer } from "./useMatchTimer";
 
-export const NODE_WIDTH = 184;
-export const NODE_HEIGHT = 104;
+export const NODE_WIDTH = 204;
+export const NODE_HEIGHT = 124;
 
 export const MatchNode = ({
   match,
@@ -35,13 +34,20 @@ export const MatchNode = ({
     m.completedAt,
   );
 
-  const bottom = m.bye
-    ? "Advances (bye)"
-    : running
-      ? formatClock(elapsedSeconds)
-      : m.status === "completed"
-        ? "Final"
-        : "Not started";
+  const timerText =
+    m.status === "scheduled"
+      ? "Not started"
+      : running
+        ? formatClock(elapsedSeconds)
+        : m.startedAt
+          ? `Final ${formatClock(elapsedSeconds)}`
+          : "Completed";
+  const timerStyle = [
+    styles.timer,
+    m.status === "scheduled" && styles.timerIdle,
+    running && isOvertime && styles.timerOver,
+    m.status === "completed" && styles.timerDone,
+  ];
 
   return (
     <TouchableOpacity
@@ -55,9 +61,10 @@ export const MatchNode = ({
       ]}
     >
       <View style={styles.top}>
-        <Text allowFontScaling={false} style={styles.num}>
+        <Text allowFontScaling={false} style={styles.num} numberOfLines={1}>
           M{m.matchNumber}
           {!m.bye ? `  ${m.raceLabel}` : ""}
+          {m.tableLabel ? `  ·  ${m.tableLabel}` : ""}
         </Text>
         <View style={styles.topRight}>
           {m.isLiveActive && (
@@ -72,59 +79,73 @@ export const MatchNode = ({
       </View>
 
       {m.bye ? (
-        <Text allowFontScaling={false} style={styles.byeName} numberOfLines={1}>
-          {m.p1Name ?? m.p2Name ?? "TBD"}
+        <Text allowFontScaling={false} style={styles.byeName} numberOfLines={2}>
+          {m.p1Name ?? m.p2Name ?? "TBD"} advances (bye)
         </Text>
       ) : (
-        <>
-          <PlayerLine name={m.p1Name} race={m.p1Race} won={m.winner === 1} lost={m.winner === 2} />
-          <PlayerLine name={m.p2Name} race={m.p2Race} won={m.winner === 2} lost={m.winner === 1} />
-        </>
+        <View style={styles.players}>
+          <PlayerRow
+            name={m.p1Name}
+            race={m.p1Race}
+            score={m.p1Score}
+            won={m.winner === 1}
+            lost={m.winner === 2}
+          />
+          <PlayerRow
+            name={m.p2Name}
+            race={m.p2Race}
+            score={m.p2Score}
+            won={m.winner === 2}
+            lost={m.winner === 1}
+          />
+        </View>
       )}
 
-      <View style={styles.bottom}>
-        <Text
-          allowFontScaling={false}
-          style={[
-            styles.meta,
-            running && styles.timer,
-            running && isOvertime && styles.timerOver,
-            m.status === "completed" && styles.metaDone,
-          ]}
-          numberOfLines={1}
-        >
-          {bottom}
-        </Text>
-        {m.result && m.result !== "normal" && (
-          <Text allowFontScaling={false} style={styles.resultTag}>
-            {m.result}
+      {!m.bye && (
+        <View style={styles.bottom}>
+          <Text allowFontScaling={false} style={timerStyle} numberOfLines={1}>
+            {timerText}
           </Text>
-        )}
-      </View>
+          {m.result && m.result !== "normal" && (
+            <Text allowFontScaling={false} style={styles.resultTag}>
+              {m.result}
+            </Text>
+          )}
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
 
-const PlayerLine = ({
+const PlayerRow = ({
   name,
   race,
+  score,
   won,
   lost,
 }: {
   name: string | null;
   race: number | null;
+  score: number | null;
   won: boolean;
   lost: boolean;
 }) => (
-  <Text
-    allowFontScaling={false}
-    style={[styles.name, won && styles.won, lost && styles.lost]}
-    numberOfLines={1}
-  >
-    {name ?? "TBD"}
-    {race != null ? ` (${race})` : ""}
-    {won ? "  ✓" : ""}
-  </Text>
+  <View style={styles.playerRow}>
+    <Text
+      allowFontScaling={false}
+      style={[styles.name, won && styles.won, lost && styles.lost]}
+      numberOfLines={1}
+    >
+      {name ?? "TBD"}
+      {race != null ? ` (${race})` : ""}
+      {won ? "  ✓" : ""}
+    </Text>
+    <View style={[styles.scoreBox, won && styles.scoreBoxWon]}>
+      <Text allowFontScaling={false} style={[styles.scoreNum, won && styles.scoreNumWon]}>
+        {score ?? 0}
+      </Text>
+    </View>
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -152,20 +173,45 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   liveBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
-  name: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "700" },
+  players: { gap: webSc(SPACING.xs) },
+  playerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.xs),
+  },
+  name: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "700", flex: 1 },
   won: { color: COLORS.success, fontWeight: "800" },
   lost: { color: COLORS.textMuted },
-  byeName: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "700" },
+  scoreBox: {
+    minWidth: webSc(30),
+    paddingHorizontal: webSc(SPACING.xs),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+  },
+  scoreBoxWon: { borderColor: COLORS.success },
+  scoreNum: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "900",
+    color: COLORS.primary,
+    fontVariant: ["tabular-nums"],
+  },
+  scoreNumWon: { color: COLORS.success },
+  byeName: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "600" },
   bottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  meta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "600" },
-  metaDone: { color: COLORS.success, fontWeight: "700" },
   timer: {
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
   },
+  timerIdle: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "600" },
   timerOver: { color: COLORS.error },
+  timerDone: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
   resultTag: {
     fontSize: 9,
     color: COLORS.warning,
