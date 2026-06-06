@@ -149,6 +149,15 @@ const DISPLAY_META: Record<DisplayStatus, { label: string; color: string }> = {
   removed: { label: "Removed", color: COLORS.textMuted }, // gray
 };
 
+// Display order for the player list: confirmed first, then those needing
+// action, then no-shows, then removed.
+const STATUS_RANK: Record<DisplayStatus, number> = {
+  ready: 0,
+  prereg: 1,
+  no_show: 2,
+  removed: 3,
+};
+
 const PLAYER_FILTERS = [
   { label: "All", value: "all" },
   { label: "Pre-Registered", value: "prereg" },
@@ -1812,16 +1821,23 @@ export default function ManageTournamentScreen() {
 
   const filteredRegs = useMemo(() => {
     const q = playerSearch.trim().toLowerCase();
-    return hub.registrations.filter((r) => {
-      const d = displayStatusOf(r.status);
-      if (statusFilter === "all") {
-        if (d === "removed") return false; // hide removed in the default view
-      } else if (statusFilter !== d) {
-        return false;
-      }
-      if (q && !getDisplayName(r).toLowerCase().includes(q)) return false;
-      return true;
-    });
+    return hub.registrations
+      .filter((r) => {
+        const d = displayStatusOf(r.status);
+        if (statusFilter === "all") {
+          if (d === "removed") return false; // hide removed in the default view
+        } else if (statusFilter !== d) {
+          return false;
+        }
+        if (q && !getDisplayName(r).toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const ra = STATUS_RANK[displayStatusOf(a.status)];
+        const rb = STATUS_RANK[displayStatusOf(b.status)];
+        if (ra !== rb) return ra - rb;
+        return getDisplayName(a).localeCompare(getDisplayName(b));
+      });
   }, [hub.registrations, playerSearch, statusFilter]);
 
   // ---- Tab renderers ------------------------------------------------------
