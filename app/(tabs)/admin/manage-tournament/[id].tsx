@@ -1196,33 +1196,50 @@ export default function ManageTournamentScreen() {
     savedSnapshotRef.current !== null &&
     JSON.stringify(form) !== savedSnapshotRef.current;
 
-  // Players who already entered a side pot store its name in paid_side_pots.
-  // When a pot is renamed in Settings, carry those references to the new name
-  // (index-aligned against the previous saved form) so the Players tab stays in
-  // sync. Pass the form snapshot captured *before* the save.
-  const propagateSidePotRenames = async (prevForm: SettingsForm | null) => {
+  // Players who entered a side pot store its name in paid_side_pots. When a pot
+  // is renamed or removed in Settings, those stored names go stale (the Players
+  // tab keeps showing the old/removed pot). Reconcile each player's entries
+  // against the new pot list on save. Pass the form snapshot captured *before*
+  // the save. Identity is name-only (no stable id), so we use a set diff:
+  //  - a single removed + single added name is treated as a rename;
+  //  - any other removed name is dropped from players' records.
+  const propagateSidePotChanges = async (prevForm: SettingsForm | null) => {
     if (!prevForm || !form) return;
-    const renames = form.sidePots
-      .map((p, i) => ({
-        from: (prevForm.sidePots[i]?.name ?? "").trim(),
-        to: p.name.trim(),
-      }))
-      .filter((r) => r.from && r.to && r.from !== r.to);
-    if (renames.length === 0) return;
-    const apply = (name: string) =>
-      renames.find((r) => r.from === name)?.to ?? name;
+    const prevNames = prevForm.sidePots
+      .map((p) => p.name.trim())
+      .filter(Boolean);
+    const curNames = form.sidePots.map((p) => p.name.trim()).filter(Boolean);
+    const removed = prevNames.filter((n) => !curNames.includes(n));
+    const added = curNames.filter((n) => !prevNames.includes(n));
+    if (removed.length === 0) return; // nothing stale to clean up
+    const renameMap: Record<string, string> =
+      removed.length === 1 && added.length === 1
+        ? { [removed[0]]: added[0] }
+        : {};
+    const reconcile = (pots: string[]): string[] => {
+      const out: string[] = [];
+      for (const n of pots) {
+        if (curNames.includes(n)) out.push(n);
+        else if (n in renameMap) out.push(renameMap[n]);
+        // otherwise: pot was removed — drop it
+      }
+      return out;
+    };
     const tasks = hub.registrations
-      .filter((reg) =>
-        (reg.paid_side_pots ?? []).some((n) =>
-          renames.some((r) => r.from === n),
-        ),
-      )
-      .map((reg) =>
-        hub.updateRegistration({
-          id: reg.id,
-          updates: { paid_side_pots: (reg.paid_side_pots ?? []).map(apply) },
-        }),
-      );
+      .map((reg) => {
+        const current = reg.paid_side_pots ?? [];
+        const next = reconcile(current);
+        const changed =
+          next.length !== current.length ||
+          next.some((n, i) => n !== current[i]);
+        return changed
+          ? hub.updateRegistration({
+              id: reg.id,
+              updates: { paid_side_pots: next },
+            })
+          : null;
+      })
+      .filter(Boolean) as Promise<unknown>[];
     if (tasks.length > 0) await Promise.all(tasks);
   };
 
@@ -1350,7 +1367,7 @@ export default function ManageTournamentScreen() {
             try {
               await hub.saveSettings(toPatch(form));
               savedSnapshotRef.current = JSON.stringify(form);
-              await propagateSidePotRenames(prevForm);
+              await propagateSidePotChanges(prevForm);
               proceed();
             } catch {
               Alert.alert("Error", "Failed to save — your changes were kept.");
@@ -1569,7 +1586,7 @@ export default function ManageTournamentScreen() {
     try {
       await hub.saveSettings(toPatch(form));
       savedSnapshotRef.current = JSON.stringify(form);
-      await propagateSidePotRenames(prevForm);
+      await propagateSidePotChanges(prevForm);
       Alert.alert("Saved", "Tournament settings updated.");
     } catch {
       Alert.alert("Error", "Failed to save settings. Please try again.");
@@ -1590,7 +1607,7 @@ export default function ManageTournamentScreen() {
             try {
               await hub.saveSettings(toPatch(form));
               savedSnapshotRef.current = JSON.stringify(form);
-              await propagateSidePotRenames(prevForm);
+              await propagateSidePotChanges(prevForm);
               await hub.startRegistration();
             } catch {
               Alert.alert("Error", "Failed to start registration.");
