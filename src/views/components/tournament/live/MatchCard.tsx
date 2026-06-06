@@ -178,6 +178,8 @@ const PlayerRow = ({
       allowFontScaling={false}
       style={[styles.name, won && styles.nameWon, lost && styles.nameLost]}
       numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
     >
       {name ?? "TBD"}
       {race != null ? ` (${race})` : ""}
