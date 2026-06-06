@@ -757,6 +757,16 @@ const prettyFormat = (f: string): string =>
 const shortFormat = (f: string): string =>
   prettyFormat(f).replace(/Elimination/i, "Elim");
 
+// Draw types. V1 only generates a random draw; the others are placeholders so
+// the dropdown is forward-ready (selecting them shows a "coming soon" note).
+type DrawType = "random" | "seeded" | "manual";
+const DRAW_TYPE_OPTIONS: { label: string; value: DrawType }[] = [
+  { label: "Random Draw", value: "random" },
+  { label: "Seeded Draw (Coming Soon)", value: "seeded" },
+  { label: "Manual Draw (Coming Soon)", value: "manual" },
+];
+const DRAW_TYPE_SUPPORTED: DrawType[] = ["random"];
+
 const matchLabel = (m: BracketMatch): string => {
   const n1 = m.p1?.name;
   const n2 = m.p2?.name;
@@ -1495,6 +1505,7 @@ export default function ManageTournamentScreen() {
   // ---- Bracket / Draw state ----------------------------------------------
   const { profile: tdProfile } = useAuthContext();
   const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
+  const [drawType, setDrawType] = useState<DrawType>("random");
   const [redrawVisible, setRedrawVisible] = useState(false);
   const [redrawReason, setRedrawReason] = useState("");
   const [showDrawHistory, setShowDrawHistory] = useState(false);
@@ -2683,16 +2694,21 @@ export default function ManageTournamentScreen() {
 
         {!locked && (
           <Section title="Draw Type">
-            <View style={styles.segmentRow}>
-              <View style={[styles.segment, styles.segmentActive]}>
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.segmentText, styles.segmentTextActive]}
-                >
-                  Random Draw
-                </Text>
-              </View>
-            </View>
+            <Dropdown
+              options={DRAW_TYPE_OPTIONS}
+              value={drawType}
+              onSelect={(v) => {
+                const dt = v as DrawType;
+                if (!DRAW_TYPE_SUPPORTED.includes(dt)) {
+                  Alert.alert(
+                    "Coming Soon",
+                    "Only Random Draw is available in this version.",
+                  );
+                  return;
+                }
+                setDrawType(dt);
+              }}
+            />
           </Section>
         )}
 
