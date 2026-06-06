@@ -45,6 +45,9 @@ export interface LiveMatch {
   result: MatchResult | null;
   allowedSeconds: number; // overtime threshold (timer turns red past this)
   hasCustomTimer: boolean;
+  // True only while a match is actually being played on a stream table — drives
+  // the LIVE badge + red border. Completed matches are never "live active".
+  isLiveActive: boolean;
 }
 
 const tableLabelOf = (t: TournamentTable | undefined): string | null => {
@@ -81,6 +84,7 @@ export const buildLiveMatches = (
         ? `Race ${m.raceTo}`
         : `${m.p1?.raceTo ?? "?"} / ${m.p2?.raceTo ?? "?"}`;
     const hasCustomTimer = st?.timerSeconds != null && st.timerSeconds > 0;
+    const status = (st?.status ?? "scheduled") as MatchStatus;
     return {
       matchNumber: m.matchNumber,
       p1Name: m.p1?.name ?? null,
@@ -90,10 +94,11 @@ export const buildLiveMatches = (
       raceTo: m.raceTo,
       raceLabel,
       bye: m.bye,
-      status: (st?.status ?? "scheduled") as MatchStatus,
+      status,
       tableId: st?.tableId ?? null,
       tableLabel: tableLabelOf(table),
       isStream: !!table?.is_streaming,
+      isLiveActive: status === "in_progress" && !!table?.is_streaming,
       streamLink: table?.stream_link ?? null,
       startedAt: st?.startedAt ?? null,
       completedAt: st?.completedAt ?? null,

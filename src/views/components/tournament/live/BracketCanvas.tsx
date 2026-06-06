@@ -1,14 +1,22 @@
 // src/views/components/tournament/live/BracketCanvas.tsx
-// Pinch-zoom (around the finger focal point) + drag-pan canvas for the single-
-// elimination skeleton. Round-1 nodes are real (live) matches; later rounds are
-// muted TBD nodes. Double-tap to zoom toward a point. Connectors are thin Views.
+// Pinch-zoom (around the finger focal point), drag-pan, and double-tap canvas for
+// the bracket. Round-1 nodes are live matches (MatchNode); later rounds are muted
+// TBD nodes. Includes a player search that centers + highlights a player's match
+// and shows a quick summary, plus session favorites for fast jumps.
 //
-// All transforms are JS-driven (Animated.Value.setValue) with plain-number
-// mirrors so pinch focal math and pan share one transform without driver
-// conflicts. Single-finger = pan, two-finger = pinch.
+// Transforms are JS-driven (Animated.Value.setValue) with plain-number mirrors so
+// pinch focal math + pan share one transform. Single finger = pan, two = pinch.
 
-import { useRef } from "react";
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  LayoutChangeEvent,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import {
   GestureHandlerRootView,
   PanGestureHandler,
@@ -23,8 +31,9 @@ import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
 import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
-const GAP_X = 52;
-const GAP_Y = 18;
+const GAP_X = 56;
+const GAP_Y = 22;
+const LABEL_H = 34;
 const MIN_SCALE = 0.35;
 const MAX_SCALE = 2.5;
 const START_SCALE = 0.7;
@@ -40,6 +49,19 @@ interface NodePos {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+const roundName = (r: number, total: number, double: boolean): string => {
+  const fromEnd = total - 1 - r;
+  const base =
+    fromEnd === 0
+      ? "Final"
+      : fromEnd === 1
+        ? "Semifinal"
+        : fromEnd === 2
+          ? "Quarterfinal"
+          : `Round ${r + 1}`;
+  return double ? `Winners ${base}` : base;
+};
+
 const buildLayout = (round1: LiveMatch[], bracketSize: number) => {
   const round0Count = Math.max(1, Math.round(bracketSize / 2));
   const totalRounds = Math.max(1, Math.round(Math.log2(bracketSize)) || 1);
@@ -52,7 +74,7 @@ const buildLayout = (round1: LiveMatch[], bracketSize: number) => {
     const row: NodePos[] = [];
     for (let i = 0; i < count; i++) {
       let y: number;
-      if (r === 0) y = i * rowStride;
+      if (r === 0) y = LABEL_H + i * rowStride;
       else {
         const c1 = positions[r - 1][i * 2];
         const c2 = positions[r - 1][i * 2 + 1] ?? c1;
@@ -68,11 +90,11 @@ const buildLayout = (round1: LiveMatch[], bracketSize: number) => {
     }
     positions.push(row);
   }
-  const nodes = positions.flat();
   return {
-    nodes,
+    nodes: positions.flat(),
+    totalRounds,
     width: totalRounds * colStride,
-    height: round0Count * rowStride,
+    height: LABEL_H + round0Count * rowStride,
   };
 };
 
@@ -124,15 +146,17 @@ const Connectors = ({ nodes }: { nodes: NodePos[] }) => {
 export const BracketCanvas = ({
   round1,
   bracketSize,
+  format,
   onNodePress,
 }: {
   round1: LiveMatch[];
   bracketSize: number;
+  format?: string;
   onNodePress: (m: LiveMatch) => void;
 }) => {
-  const { nodes, width, height } = buildLayout(round1, bracketSize);
+  const { nodes, totalRounds, width, height } = buildLayout(round1, bracketSize);
+  const isDouble = (format ?? "").toLowerCase().includes("double");
 
-  // Animated values + plain-number mirrors.
   const scaleA = useRef(new Animated.Value(START_SCALE)).current;
   const txA = useRef(new Animated.Value(PAD)).current;
   const tyA = useRef(new Animated.Value(PAD)).current;
@@ -140,15 +164,22 @@ export const BracketCanvas = ({
   const tx = useRef(PAD);
   const ty = useRef(PAD);
 
-  // Pinch session state.
   const pinchStartScale = useRef(START_SCALE);
-  const cp = useRef({ x: 0, y: 0 }); // content point under the focal at pinch start
-  // Pan session state.
+  const cp = useRef({ x: 0, y: 0 });
+  const pinchPrimed = useRef(false);
   const panStart = useRef({ x: PAD, y: PAD });
 
   const pinchRef = useRef(null);
   const panRef = useRef(null);
   const tapRef = useRef(null);
+
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [query, setQuery] = useState("");
+  const [showFavs, setShowFavs] = useState(false);
+  const [favs, setFavs] = useState<string[]>([]);
+  const [summary, setSummary] = useState<{ name: string; match: LiveMatch } | null>(null);
+  const [highlight, setHighlight] = useState<number | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const set = (s: number, x: number, y: number) => {
     scale.current = s;
@@ -159,67 +190,197 @@ export const BracketCanvas = ({
     tyA.setValue(y);
   };
 
-  // ---- Pinch (two fingers): zoom around the focal point ----
+  // ---- Pinch (focal-point zoom). cp is captured on the first active frame so the
+  // focal coordinate is valid (avoids the "drifts to a corner" bug). ----
   const onPinchEvent = (e: {
     nativeEvent: { scale: number; focalX: number; focalY: number };
   }) => {
-    const ns = clamp(pinchStartScale.current * e.nativeEvent.scale, MIN_SCALE, MAX_SCALE);
-    const nx = e.nativeEvent.focalX - cp.current.x * ns;
-    const ny = e.nativeEvent.focalY - cp.current.y * ns;
-    set(ns, nx, ny);
-  };
-  const onPinchState = (e: {
-    nativeEvent: { state: number; focalX: number; focalY: number };
-  }) => {
-    if (e.nativeEvent.state === State.BEGAN) {
+    const { scale: gScale, focalX, focalY } = e.nativeEvent;
+    if (pinchPrimed.current) {
       pinchStartScale.current = scale.current;
       cp.current = {
-        x: (e.nativeEvent.focalX - tx.current) / scale.current,
-        y: (e.nativeEvent.focalY - ty.current) / scale.current,
+        x: (focalX - tx.current) / scale.current,
+        y: (focalY - ty.current) / scale.current,
       };
+      pinchPrimed.current = false;
     }
+    const ns = clamp(pinchStartScale.current * gScale, MIN_SCALE, MAX_SCALE);
+    set(ns, focalX - cp.current.x * ns, focalY - cp.current.y * ns);
+  };
+  const onPinchState = (e: { nativeEvent: { state: number } }) => {
+    if (e.nativeEvent.state === State.BEGAN) pinchPrimed.current = true;
   };
 
   // ---- Pan (single finger) ----
   const onPanEvent = (e: {
     nativeEvent: { translationX: number; translationY: number };
-  }) => {
+  }) =>
     set(
       scale.current,
       panStart.current.x + e.nativeEvent.translationX,
       panStart.current.y + e.nativeEvent.translationY,
     );
-  };
   const onPanState = (e: { nativeEvent: { state: number } }) => {
-    if (e.nativeEvent.state === State.BEGAN) {
+    if (e.nativeEvent.state === State.BEGAN)
       panStart.current = { x: tx.current, y: ty.current };
-    }
   };
 
   // ---- Double-tap zoom toward the tapped point ----
   const onDoubleTap = (e: { nativeEvent: { state: number; x: number; y: number } }) => {
     if (e.nativeEvent.state !== State.ACTIVE) return;
     const target = scale.current < 1 ? 1.6 : START_SCALE;
-    const px = (e.nativeEvent.x - tx.current) / scale.current;
-    const py = (e.nativeEvent.y - ty.current) / scale.current;
-    const nx = e.nativeEvent.x - px * target;
-    const ny = e.nativeEvent.y - py * target;
-    scale.current = target;
-    tx.current = nx;
-    ty.current = ny;
+    animateTo(
+      target,
+      e.nativeEvent.x - ((e.nativeEvent.x - tx.current) / scale.current) * target,
+      e.nativeEvent.y - ((e.nativeEvent.y - ty.current) / scale.current) * target,
+    );
+  };
+
+  const animateTo = (s: number, x: number, y: number) => {
+    scale.current = s;
+    tx.current = x;
+    ty.current = y;
     Animated.parallel([
-      Animated.timing(scaleA, { toValue: target, duration: 180, useNativeDriver: false }),
-      Animated.timing(txA, { toValue: nx, duration: 180, useNativeDriver: false }),
-      Animated.timing(tyA, { toValue: ny, duration: 180, useNativeDriver: false }),
+      Animated.timing(scaleA, { toValue: s, duration: 220, useNativeDriver: false }),
+      Animated.timing(txA, { toValue: x, duration: 220, useNativeDriver: false }),
+      Animated.timing(tyA, { toValue: y, duration: 220, useNativeDriver: false }),
     ]).start();
   };
 
-  const zoomBy = (factor: number) =>
-    set(clamp(scale.current * factor, MIN_SCALE, MAX_SCALE), tx.current, ty.current);
+  const zoomBy = (f: number) =>
+    set(clamp(scale.current * f, MIN_SCALE, MAX_SCALE), tx.current, ty.current);
   const reset = () => set(START_SCALE, PAD, PAD);
+
+  // ---- Player search / locate ----
+  const playerIndex = useMemo(() => {
+    const out: { name: string; match: LiveMatch }[] = [];
+    round1.forEach((m) => {
+      if (m.p1Name) out.push({ name: m.p1Name, match: m });
+      if (m.p2Name) out.push({ name: m.p2Name, match: m });
+    });
+    return out;
+  }, [round1]);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return playerIndex.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [query, playerIndex]);
+
+  const focusOnMatch = (name: string, match: LiveMatch) => {
+    const node = nodes.find((n) => n.match?.matchNumber === match.matchNumber);
+    if (node && viewport.w > 0) {
+      const target = 1;
+      const cx = node.x + NODE_WIDTH / 2;
+      const cy = node.y + NODE_HEIGHT / 2;
+      animateTo(target, viewport.w / 2 - cx * target, viewport.h / 2 - cy * target);
+    }
+    setHighlight(match.matchNumber);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlight(null), 2600);
+    setSummary({ name, match });
+    setQuery("");
+    setShowFavs(false);
+  };
+
+  const toggleFav = (name: string) =>
+    setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+
+  const statusText = (m: LiveMatch) =>
+    m.bye
+      ? "Bye"
+      : m.isLiveActive
+        ? "Live"
+        : m.status === "in_progress"
+          ? "In progress"
+          : m.status === "completed"
+            ? "Completed"
+            : "Not started";
+
+  const onViewport = (e: LayoutChangeEvent) =>
+    setViewport({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
   return (
     <View style={styles.root}>
+      {/* Search + favorites */}
+      <View style={styles.searchRow}>
+        <TextInput
+          allowFontScaling={false}
+          style={styles.search}
+          placeholder="Find a player…"
+          placeholderTextColor={COLORS.textMuted}
+          value={query}
+          onChangeText={(v) => {
+            setQuery(v);
+            setShowFavs(false);
+          }}
+        />
+        <TouchableOpacity
+          style={[styles.starBtn, showFavs && styles.starBtnOn]}
+          onPress={() => {
+            setShowFavs((s) => !s);
+            setQuery("");
+          }}
+          hitSlop={8}
+        >
+          <Text allowFontScaling={false} style={styles.star}>
+            {favs.length ? "★" : "☆"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Search results */}
+      {results.length > 0 && (
+        <View style={styles.dropdown}>
+          {results.map((p) => (
+            <TouchableOpacity
+              key={`${p.name}-${p.match.matchNumber}`}
+              style={styles.dropRow}
+              onPress={() => focusOnMatch(p.name, p.match)}
+            >
+              <Text allowFontScaling={false} style={styles.dropName} numberOfLines={1}>
+                {p.name}
+              </Text>
+              <Text allowFontScaling={false} style={styles.dropMeta}>
+                M{p.match.matchNumber} · {statusText(p.match)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Favorites list */}
+      {showFavs && (
+        <View style={styles.dropdown}>
+          {favs.length === 0 ? (
+            <Text allowFontScaling={false} style={styles.favEmpty}>
+              No favorites yet. Search a player and tap the star in their summary.
+            </Text>
+          ) : (
+            favs.map((name) => {
+              const hit = playerIndex.find((p) => p.name === name);
+              return (
+                <TouchableOpacity
+                  key={name}
+                  style={styles.dropRow}
+                  onPress={() => hit && focusOnMatch(name, hit.match)}
+                >
+                  <Text allowFontScaling={false} style={styles.dropName} numberOfLines={1}>
+                    ★ {name}
+                  </Text>
+                  {hit && (
+                    <Text allowFontScaling={false} style={styles.dropMeta}>
+                      M{hit.match.matchNumber} · {statusText(hit.match)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+      )}
+
+      {/* Controls */}
       <View style={styles.controls}>
         <Text allowFontScaling={false} style={styles.hint}>
           Pinch / double-tap to zoom · drag to pan
@@ -243,12 +404,8 @@ export const BracketCanvas = ({
         </View>
       </View>
 
-      <GestureHandlerRootView style={styles.viewport}>
-        <TapGestureHandler
-          ref={tapRef}
-          numberOfTaps={2}
-          onHandlerStateChange={onDoubleTap}
-        >
+      <GestureHandlerRootView style={styles.viewport} onLayout={onViewport}>
+        <TapGestureHandler ref={tapRef} numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
           <Animated.View style={styles.fill}>
             <PinchGestureHandler
               ref={pinchRef}
@@ -278,13 +435,28 @@ export const BracketCanvas = ({
                       }}
                     >
                       <Connectors nodes={nodes} />
+                      {/* Round labels */}
+                      {Array.from({ length: totalRounds }).map((_, r) => (
+                        <Text
+                          key={`label-${r}`}
+                          allowFontScaling={false}
+                          style={[styles.roundLabel, { left: r * (NODE_WIDTH + GAP_X) }]}
+                          numberOfLines={1}
+                        >
+                          {roundName(r, totalRounds, isDouble)}
+                        </Text>
+                      ))}
                       {nodes.map((n) =>
                         n.match ? (
                           <View
                             key={`r${n.round}-${n.index}`}
                             style={{ position: "absolute", left: n.x, top: n.y }}
                           >
-                            <MatchNode match={n.match} onPress={onNodePress} />
+                            <MatchNode
+                              match={n.match}
+                              highlighted={highlight === n.match.matchNumber}
+                              onPress={onNodePress}
+                            />
                           </View>
                         ) : (
                           <View
@@ -304,6 +476,45 @@ export const BracketCanvas = ({
             </PinchGestureHandler>
           </Animated.View>
         </TapGestureHandler>
+
+        {/* Player summary popover */}
+        {summary && (
+          <View style={styles.summary}>
+            <View style={styles.summaryHead}>
+              <Text allowFontScaling={false} style={styles.summaryName} numberOfLines={1}>
+                {summary.name}
+              </Text>
+              <TouchableOpacity onPress={() => toggleFav(summary.name)} hitSlop={8}>
+                <Text allowFontScaling={false} style={styles.summaryStar}>
+                  {favs.includes(summary.name) ? "★" : "☆"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setSummary(null)} hitSlop={8}>
+                <Text allowFontScaling={false} style={styles.summaryClose}>
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text allowFontScaling={false} style={styles.summaryLine}>
+              Current Match: M{summary.match.matchNumber}
+            </Text>
+            <Text allowFontScaling={false} style={styles.summaryLine}>
+              {summary.match.tableLabel ?? "No table"} · {statusText(summary.match)}
+            </Text>
+            <TouchableOpacity
+              style={styles.viewBtn}
+              onPress={() => {
+                const m = summary.match;
+                setSummary(null);
+                onNodePress(m);
+              }}
+            >
+              <Text allowFontScaling={false} style={styles.viewBtnText}>
+                View Match
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </GestureHandlerRootView>
     </View>
   );
@@ -311,6 +522,60 @@ export const BracketCanvas = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.xs),
+  },
+  search: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    fontSize: webMs(FONT_SIZES.sm),
+  },
+  starBtn: {
+    width: webSc(44),
+    height: webSc(40),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  starBtnOn: { borderColor: COLORS.warning },
+  star: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.warning },
+  dropdown: {
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: webSc(SPACING.xs),
+    overflow: "hidden",
+  },
+  dropRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
+    gap: webSc(SPACING.sm),
+  },
+  dropName: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700", flex: 1 },
+  dropMeta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  favEmpty: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    padding: webSc(SPACING.md),
+  },
   controls: {
     flexDirection: "row",
     alignItems: "center",
@@ -331,14 +596,24 @@ const styles = StyleSheet.create({
   },
   zoomBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
   zoomResetText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
-  // No border: the bracket reads as an open, native canvas.
   viewport: { flex: 1, overflow: "hidden", backgroundColor: COLORS.background },
   fill: { flex: 1 },
+  roundLabel: {
+    position: "absolute",
+    top: 4,
+    width: NODE_WIDTH,
+    textAlign: "center",
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   tbd: {
     position: "absolute",
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
-    borderRadius: webSc(RADIUS.md),
+    borderRadius: webSc(RADIUS.lg),
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: "dashed",
@@ -347,4 +622,32 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundLight,
   },
   tbdText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  summary: {
+    position: "absolute",
+    left: webSc(SPACING.sm),
+    right: webSc(SPACING.sm),
+    bottom: webSc(SPACING.sm),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    padding: webSc(SPACING.md),
+  },
+  summaryHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  summaryName: { flex: 1, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
+  summaryStar: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.warning },
+  summaryClose: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.textSecondary, fontWeight: "700" },
+  summaryLine: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    marginTop: webSc(SPACING.xs),
+  },
+  viewBtn: {
+    marginTop: webSc(SPACING.sm),
+    backgroundColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.md),
+    paddingVertical: webSc(SPACING.sm),
+    alignItems: "center",
+  },
+  viewBtnText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
 });

@@ -57,7 +57,7 @@ export const MatchCard = ({
       style={[
         styles.card,
         running && styles.cardLive,
-        m.isStream && styles.cardStream,
+        m.isLiveActive && styles.cardStream,
       ]}
     >
       {/* Top meta row */}
@@ -76,7 +76,7 @@ export const MatchCard = ({
           )}
         </View>
         <View style={styles.topRight}>
-          {m.isStream && (
+          {m.isLiveActive && (
             <View style={styles.liveBadge}>
               <Text allowFontScaling={false} style={styles.liveBadgeText}>
                 {GLYPH.cam} LIVE

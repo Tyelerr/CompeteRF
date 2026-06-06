@@ -2883,6 +2883,7 @@ export default function ManageTournamentScreen() {
             matches={liveMatches}
             tables={hub.tables}
             bracketSize={hub.bracket?.bracketSize ?? 0}
+            format={hub.bracket?.format ?? hub.tournament?.tournament_format ?? ""}
             onSetMatchState={hub.setMatchState}
           />
         );
