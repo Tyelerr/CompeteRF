@@ -2174,7 +2174,7 @@ export default function ManageTournamentScreen() {
           {readyPlayers.length}
         </Text>
         <Text allowFontScaling={false} style={styles.readyBannerLabel}>
-          Players Ready
+          Players Signed Up
         </Text>
       </View>
 
