@@ -60,6 +60,7 @@ import {
   averageRace,
   computeBracketStats,
   generateRound1,
+  minutesPerGameForType,
   recommendedBracketSize,
 } from "../../../../src/utils/bracket.utils";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
@@ -2420,12 +2421,14 @@ export default function ManageTournamentScreen() {
         hub.tables.length,
     );
     const avg = averageRace(ready, raceConfig);
+    const minPerGame = minutesPerGameForType(hub.tournament?.game_type ?? "");
     const stats = computeBracketStats(
       ready.length,
       size,
       format,
       avg,
       tablesAvail,
+      minPerGame,
     );
     const locked = hub.phase === "bracket_drawn";
     const bracket = hub.bracket;

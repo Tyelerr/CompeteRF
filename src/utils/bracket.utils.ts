@@ -39,6 +39,17 @@ export const recommendedBracketSize = (players: number): number =>
 
 export const STANDARD_SIZES = [8, 16, 32, 64, 128];
 
+// Average minutes per game by game type (drives the time estimate). Handles
+// both slugs ("9-ball") and normalized labels ("9 Ball"). Order matters: check
+// "10" before "8"/"9". Unlisted games fall back to a default.
+export const minutesPerGameForType = (gameType: string): number => {
+  const g = (gameType || "").toLowerCase();
+  if (g.includes("10")) return 9; // 10-ball
+  if (g.includes("9")) return 7; // 9-ball
+  if (g.includes("8")) return 10; // 8-ball
+  return 9; // one-pocket / straight / banks / other
+};
+
 // ── Race assignment ──────────────────────────────────────────────────────────
 const groupForFargo = (
   fargo: number | null,
