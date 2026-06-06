@@ -63,7 +63,6 @@ export const MatchNode = ({
       <View style={styles.top}>
         <Text allowFontScaling={false} style={styles.num} numberOfLines={1}>
           M{m.matchNumber}
-          {!m.bye ? `  ${m.raceLabel}` : ""}
           {m.tableLabel ? `  ·  ${m.tableLabel}` : ""}
         </Text>
         <View style={styles.topRight}>

@@ -66,9 +66,6 @@ export const MatchCard = ({
           <Text allowFontScaling={false} style={styles.matchNum}>
             M{m.matchNumber}
           </Text>
-          <Text allowFontScaling={false} style={styles.race}>
-            {m.raceLabel}
-          </Text>
           {m.tableLabel && (
             <Text allowFontScaling={false} style={styles.table} numberOfLines={1}>
               · {m.tableLabel}
