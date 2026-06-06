@@ -214,13 +214,14 @@ const styles = StyleSheet.create({
   },
   search: {
     flex: 1,
+    height: webSc(44), // match the filter Dropdown's selector height
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
     color: COLORS.text,
     paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.sm),
+    paddingVertical: 0,
     fontSize: webMs(FONT_SIZES.sm),
   },
   filterWrap: { width: webSc(150) },

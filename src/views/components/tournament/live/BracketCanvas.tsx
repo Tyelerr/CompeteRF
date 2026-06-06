@@ -247,10 +247,6 @@ export const BracketCanvas = ({
     ]).start();
   };
 
-  const zoomBy = (f: number) =>
-    set(clamp(scale.current * f, MIN_SCALE, MAX_SCALE), tx.current, ty.current);
-  const reset = () => set(START_SCALE, PAD, PAD);
-
   // ---- Player search / locate ----
   const playerIndex = useMemo(() => {
     const out: { name: string; match: LiveMatch }[] = [];
@@ -379,30 +375,6 @@ export const BracketCanvas = ({
           )}
         </View>
       )}
-
-      {/* Controls */}
-      <View style={styles.controls}>
-        <Text allowFontScaling={false} style={styles.hint}>
-          Pinch / double-tap to zoom · drag to pan
-        </Text>
-        <View style={styles.zoomBtns}>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(0.8)}>
-            <Text allowFontScaling={false} style={styles.zoomBtnText}>
-              −
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={() => zoomBy(1.25)}>
-            <Text allowFontScaling={false} style={styles.zoomBtnText}>
-              +
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomBtn} onPress={reset}>
-            <Text allowFontScaling={false} style={styles.zoomResetText}>
-              Reset
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
       <GestureHandlerRootView style={styles.viewport} onLayout={onViewport}>
         <TapGestureHandler ref={tapRef} numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
@@ -576,26 +548,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     padding: webSc(SPACING.md),
   },
-  controls: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: webSc(SPACING.xs),
-  },
-  hint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, flex: 1 },
-  zoomBtns: { flexDirection: "row", gap: webSc(SPACING.xs) },
-  zoomBtn: {
-    minWidth: webSc(36),
-    paddingHorizontal: webSc(SPACING.sm),
-    paddingVertical: webSc(SPACING.xs),
-    borderRadius: webSc(RADIUS.sm),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: "center",
-  },
-  zoomBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
-  zoomResetText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   viewport: { flex: 1, overflow: "hidden", backgroundColor: COLORS.background },
   fill: { flex: 1 },
   roundLabel: {
