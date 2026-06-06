@@ -78,41 +78,39 @@ export const MatchNode = ({
         </View>
       </View>
 
-      {m.bye ? (
-        <Text allowFontScaling={false} style={styles.byeName} numberOfLines={2}>
-          {m.p1Name ?? m.p2Name ?? "TBD"} advances (bye)
-        </Text>
-      ) : (
-        <View style={styles.players}>
-          <PlayerRow
-            name={m.p1Name}
-            race={m.p1Race}
-            score={m.p1Score}
-            won={m.winner === 1}
-            lost={m.winner === 2}
-          />
-          <PlayerRow
-            name={m.p2Name}
-            race={m.p2Race}
-            score={m.p2Score}
-            won={m.winner === 2}
-            lost={m.winner === 1}
-          />
-        </View>
-      )}
+      <View style={styles.players}>
+        <PlayerRow
+          name={m.p1Name}
+          race={m.p1Race}
+          score={m.p1Score}
+          dash={m.bye}
+          won={m.winner === 1}
+          lost={m.winner === 2}
+        />
+        <PlayerRow
+          name={m.bye ? "Bye" : m.p2Name}
+          race={m.bye ? null : m.p2Race}
+          score={m.p2Score}
+          dash={m.bye}
+          won={m.winner === 2}
+          lost={m.winner === 1}
+        />
+      </View>
 
-      {!m.bye && (
-        <View style={styles.bottom}>
-          <Text allowFontScaling={false} style={timerStyle} numberOfLines={1}>
-            {timerText}
+      <View style={styles.bottom}>
+        <Text
+          allowFontScaling={false}
+          style={m.bye ? [styles.timer, styles.timerIdle] : timerStyle}
+          numberOfLines={1}
+        >
+          {m.bye ? "Advances (bye)" : timerText}
+        </Text>
+        {!m.bye && m.result && m.result !== "normal" && (
+          <Text allowFontScaling={false} style={styles.resultTag}>
+            {m.result}
           </Text>
-          {m.result && m.result !== "normal" && (
-            <Text allowFontScaling={false} style={styles.resultTag}>
-              {m.result}
-            </Text>
-          )}
-        </View>
-      )}
+        )}
+      </View>
     </TouchableOpacity>
   );
 };
@@ -121,12 +119,14 @@ const PlayerRow = ({
   name,
   race,
   score,
+  dash,
   won,
   lost,
 }: {
   name: string | null;
   race: number | null;
   score: number | null;
+  dash?: boolean;
   won: boolean;
   lost: boolean;
 }) => (
@@ -144,7 +144,7 @@ const PlayerRow = ({
     </Text>
     <View style={[styles.scoreBox, won && styles.scoreBoxWon]}>
       <Text allowFontScaling={false} style={[styles.scoreNum, won && styles.scoreNumWon]}>
-        {score ?? 0}
+        {dash ? "–" : (score ?? 0)}
       </Text>
     </View>
   </View>

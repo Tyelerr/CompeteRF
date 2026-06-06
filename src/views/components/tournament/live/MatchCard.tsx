@@ -87,41 +87,39 @@ export const MatchCard = ({
         </View>
       </View>
 
-      {/* Players (name + race) with a Fargo-style score box each */}
-      {m.bye ? (
-        <Text allowFontScaling={false} style={styles.bye}>
-          {m.p1Name ?? m.p2Name ?? "TBD"} advances (bye)
+      {/* Players (name + race) with a Fargo-style score box each. Byes use the
+          same layout with dashes for the scores. */}
+      <View style={styles.players}>
+        <PlayerRow
+          name={m.p1Name}
+          race={m.p1Race}
+          score={m.p1Score}
+          dash={m.bye}
+          won={m.winner === 1}
+          lost={m.winner === 2}
+        />
+        <PlayerRow
+          name={m.bye ? "Bye" : m.p2Name}
+          race={m.bye ? null : m.p2Race}
+          score={m.p2Score}
+          dash={m.bye}
+          won={m.winner === 2}
+          lost={m.winner === 1}
+        />
+      </View>
+      <View style={styles.timerRow}>
+        <Text
+          allowFontScaling={false}
+          style={m.bye ? [styles.timer, styles.timerIdle] : timerStyle}
+        >
+          {m.bye ? "Advances (bye)" : timerText}
         </Text>
-      ) : (
-        <>
-          <View style={styles.players}>
-            <PlayerRow
-              name={m.p1Name}
-              race={m.p1Race}
-              score={m.p1Score}
-              won={m.winner === 1}
-              lost={m.winner === 2}
-            />
-            <PlayerRow
-              name={m.p2Name}
-              race={m.p2Race}
-              score={m.p2Score}
-              won={m.winner === 2}
-              lost={m.winner === 1}
-            />
-          </View>
-          <View style={styles.timerRow}>
-            <Text allowFontScaling={false} style={timerStyle}>
-              {timerText}
-            </Text>
-            {m.result && m.result !== "normal" && (
-              <Text allowFontScaling={false} style={styles.resultTag}>
-                {m.result}
-              </Text>
-            )}
-          </View>
-        </>
-      )}
+        {!m.bye && m.result && m.result !== "normal" && (
+          <Text allowFontScaling={false} style={styles.resultTag}>
+            {m.result}
+          </Text>
+        )}
+      </View>
 
       {/* Actions */}
       {!m.bye && (
@@ -164,12 +162,14 @@ const PlayerRow = ({
   name,
   race,
   score,
+  dash,
   won,
   lost,
 }: {
   name: string | null;
   race: number | null;
   score: number | null;
+  dash?: boolean;
   won: boolean;
   lost: boolean;
 }) => (
@@ -190,7 +190,7 @@ const PlayerRow = ({
         allowFontScaling={false}
         style={[styles.scoreNum, won && styles.scoreNumWon]}
       >
-        {score ?? 0}
+        {dash ? "–" : (score ?? 0)}
       </Text>
     </View>
   </View>
