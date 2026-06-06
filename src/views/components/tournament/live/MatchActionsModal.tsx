@@ -187,7 +187,7 @@ export const MatchActionsModal = ({
   );
 
   return (
-    <Modal transparent visible animationType="slide" onRequestClose={onClose}>
+    <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           {step === "menu" && (
@@ -438,14 +438,20 @@ const Detail = ({ label, value }: { label: string; value: string }) => (
 );
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
-  sheet: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: webSc(RADIUS.xl),
-    borderTopRightRadius: webSc(RADIUS.xl),
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: webSc(SPACING.lg),
-    paddingBottom: webSc(SPACING.xl),
-    borderTopWidth: 1,
+  },
+  sheet: {
+    width: "100%",
+    maxWidth: webSc(440),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.xl),
+    padding: webSc(SPACING.lg),
+    borderWidth: 1,
     borderColor: COLORS.border,
     maxHeight: "82%",
   },
