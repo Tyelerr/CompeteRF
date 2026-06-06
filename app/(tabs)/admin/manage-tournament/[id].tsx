@@ -843,18 +843,22 @@ const RegistrationRow = ({
   const isGuest = !registration.player_id;
   const isGroups = raceMode === "groups";
 
+  // Current pots are the source of truth: a player's stored paid_side_pots may
+  // still list pots the TD has since removed. Filter those out so removed pots
+  // never display and never get re-saved when the row is edited.
+  const potExists = (name: string) => sidePots.some((p) => p.name === name);
+  const livePaidPots = () => (registration.paid_side_pots ?? []).filter(potExists);
+
   const [editing, setEditing] = useState(false);
   const [paidEntry, setPaidEntry] = useState(!!registration.paid_entry);
-  const [paidPots, setPaidPots] = useState<string[]>(
-    registration.paid_side_pots ?? [],
-  );
+  const [paidPots, setPaidPots] = useState<string[]>(livePaidPots());
   const [fargoInput, setFargoInput] = useState(
     registration.fargo_rating != null ? String(registration.fargo_rating) : "",
   );
 
   const reseed = () => {
     setPaidEntry(!!registration.paid_entry);
-    setPaidPots(registration.paid_side_pots ?? []);
+    setPaidPots(livePaidPots());
     setFargoInput(
       registration.fargo_rating != null ? String(registration.fargo_rating) : "",
     );
@@ -1063,12 +1067,13 @@ const RegistrationRow = ({
                 checked={!!registration.paid_entry}
                 readOnly
               />
-              {(registration.paid_side_pots ?? []).map((name) => {
+              {livePaidPots().map((name) => {
                 const pot = sidePots.find((p) => p.name === name);
+                if (!pot) return null;
                 return (
                   <PayCheckbox
                     key={name}
-                    label={`${pot ? potLabel(pot) : name} Entered`}
+                    label={`${potLabel(pot)} Entered`}
                     checked
                     readOnly
                   />
