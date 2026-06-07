@@ -399,14 +399,14 @@ export default function ProfileScreen() {
               <DetailCell
                 icon="star"
                 color={COLORS.warning}
-                label="Favorite Player"
+                label="Fav. Player"
                 value={profile?.favorite_player || "\u2014"}
               />
               <View style={styles.detailDivider} />
               <DetailCell
                 icon="ellipse"
                 color={COLORS.primary}
-                label="Favorite Game"
+                label="Fav. Game"
                 value={profile?.preferred_game ? formatGameName(profile.preferred_game) : "\u2014"}
               />
             </View>
