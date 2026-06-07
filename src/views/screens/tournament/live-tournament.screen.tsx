@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -89,6 +90,13 @@ const liveStatus = (
   return { label: prettify(liveState ?? status ?? "").toUpperCase(), live: false, done: false };
 };
 
+const statusChipStyle = (status: string) => {
+  if (status === "checked_in") return { backgroundColor: COLORS.success + "22", borderColor: COLORS.success };
+  if (status === "approved") return { backgroundColor: COLORS.primary + "22", borderColor: COLORS.primary };
+  if (status === "no_show") return { backgroundColor: COLORS.error + "22", borderColor: COLORS.error };
+  return { backgroundColor: COLORS.surface, borderColor: COLORS.border };
+};
+
 const Row = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.row}>
     <Text allowFontScaling={false} style={styles.rowLabel}>
@@ -102,6 +110,7 @@ const Row = ({ label, value }: { label: string; value: string }) => (
 
 export const LiveTournamentScreen = ({ id }: { id: string }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const tournamentId = id ? Number(id) : undefined;
   const sp = useTournamentSpectator(tournamentId);
   const [tab, setTab] = useState<Tab>("overview");
@@ -117,7 +126,7 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + wxSc(SPACING.xs) }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-back" size={wxMs(24)} color={COLORS.text} />
         </TouchableOpacity>
@@ -187,34 +196,40 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
                 <View key={p.id}>
                   {i > 0 && <View style={styles.divider} />}
                   <View style={styles.playerRow}>
-                    {p.seed != null && (
-                      <View style={styles.seedBadge}>
-                        <Text allowFontScaling={false} style={styles.seedText}>
-                          {p.seed}
+                    <View style={styles.seedBadge}>
+                      <Text allowFontScaling={false} style={styles.seedText}>
+                        {p.seed ?? i + 1}
+                      </Text>
+                    </View>
+                    <View style={styles.playerMain}>
+                      <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
+                        {p.name}
+                      </Text>
+                      <View style={styles.statPills}>
+                        <View style={styles.statPill}>
+                          <Text allowFontScaling={false} style={styles.statPillLabel}>FARGO</Text>
+                          <Text allowFontScaling={false} style={styles.statPillVal}>
+                            {p.fargo != null ? p.fargo : "—"}
+                          </Text>
+                        </View>
+                        {p.group != null && (
+                          <View style={[styles.statPill, styles.statPillGroup]}>
+                            <Text allowFontScaling={false} style={[styles.statPillLabel, styles.statPillLabelGroup]}>GROUP</Text>
+                            <Text allowFontScaling={false} style={[styles.statPillVal, styles.statPillValGroup]}>
+                              {p.group}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {STATUS_LABEL[p.status] && (
+                      <View style={[styles.statusChip, statusChipStyle(p.status)]}>
+                        <Text allowFontScaling={false} style={styles.statusChipText}>
+                          {STATUS_LABEL[p.status]}
                         </Text>
                       </View>
                     )}
-                    <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
-                      {p.name}
-                    </Text>
-                    <View style={styles.playerMeta}>
-                      {p.group != null && (
-                        <View style={styles.groupChip}>
-                          <Text allowFontScaling={false} style={styles.groupChipText}>
-                            {p.group}
-                          </Text>
-                        </View>
-                      )}
-                      <Text allowFontScaling={false} style={styles.playerFargo}>
-                        {p.fargo != null ? p.fargo : "—"}
-                      </Text>
-                    </View>
                   </View>
-                  {STATUS_LABEL[p.status] && (
-                    <Text allowFontScaling={false} style={styles.playerStatus}>
-                      {STATUS_LABEL[p.status]}
-                    </Text>
-                  )}
                 </View>
               ))
             )}
@@ -270,7 +285,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: wxSc(SPACING.sm),
-    paddingTop: Platform.OS === "ios" ? wxSc(54) : wxSc(SPACING.md),
     paddingBottom: wxSc(SPACING.sm),
     gap: wxSc(SPACING.xs),
   },
@@ -362,17 +376,17 @@ const styles = StyleSheet.create({
   },
   poolText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted },
 
-  divider: { height: 1, backgroundColor: COLORS.border },
+  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: wxSc(SPACING.xs) },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: wxSc(SPACING.sm),
-    paddingTop: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.sm),
   },
   seedBadge: {
-    minWidth: wxSc(24),
-    height: wxSc(24),
-    borderRadius: wxSc(12),
+    minWidth: wxSc(26),
+    height: wxSc(26),
+    borderRadius: wxSc(13),
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -381,29 +395,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: wxSc(4),
   },
   seedText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.textSecondary },
-  playerName: { flex: 1, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
-  playerMeta: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm) },
-  groupChip: {
+  playerMain: { flex: 1, gap: wxSc(SPACING.xs) },
+  playerName: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  statPills: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.xs) },
+  statPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wxSc(4),
     paddingHorizontal: wxSc(SPACING.sm),
-    paddingVertical: wxSc(2),
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.primary + "22",
+    paddingVertical: wxSc(3),
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.background,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.border,
   },
-  groupChipText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
-  playerFargo: {
+  statPillGroup: { backgroundColor: COLORS.primary + "18", borderColor: COLORS.primary },
+  statPillLabel: {
+    fontSize: wxMs(9),
+    fontWeight: "800",
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+  },
+  statPillLabelGroup: { color: COLORS.primary },
+  statPillVal: {
     fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "800",
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
-    minWidth: wxSc(36),
-    textAlign: "right",
   },
-  playerStatus: {
-    fontSize: wxMs(FONT_SIZES.xs),
-    color: COLORS.textMuted,
-    marginLeft: wxSc(32),
-    marginTop: wxSc(2),
+  statPillValGroup: { color: COLORS.primary },
+  statusChip: {
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(4),
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
   },
+  statusChipText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.text },
 });

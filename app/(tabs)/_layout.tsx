@@ -193,6 +193,7 @@ export default function TabLayout() {
         <Tabs.Screen name="compose-message" options={{ href: null }} />
         <Tabs.Screen name="conversation-detail" options={{ href: null }} />
         <Tabs.Screen name="search-alerts" options={{ href: null }} />
+        <Tabs.Screen name="live-tournament" options={{ href: null }} />
         <Tabs.Screen name="notification-preferences" options={{ href: null }} />
       </Tabs>
     );
@@ -233,6 +234,7 @@ export default function TabLayout() {
       <Tabs.Screen name="compose-message" options={{ href: null }} />
       <Tabs.Screen name="conversation-detail" options={{ href: null }} />
       <Tabs.Screen name="search-alerts" options={{ href: null }} />
+      <Tabs.Screen name="live-tournament" options={{ href: null }} />
       <Tabs.Screen name="notification-preferences" options={{ href: null }} />
     </Tabs>
   );
