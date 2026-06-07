@@ -6,12 +6,13 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,7 +22,11 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { RaceConfig } from "../../../utils/bracket.utils";
 import { moderateScale, scale } from "../../../utils/scaling";
-import { useTournamentSpectator } from "../../../viewmodels/useTournamentSpectator";
+import {
+  SpectatorPlayer,
+  useTournamentSpectator,
+} from "../../../viewmodels/useTournamentSpectator";
+import { Dropdown } from "../../components/common/dropdown";
 import { Loading } from "../../components/common/loading";
 import { MatchesView } from "../../components/tournament/live/MatchesView";
 
@@ -36,11 +41,35 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "players", label: "Players" },
 ];
 
-const STATUS_LABEL: Record<string, string> = {
-  preregistered: "Registered",
-  approved: "Approved",
-  checked_in: "Checked in",
-  no_show: "No show",
+type PlayerSort = "active" | "seed" | "fargo" | "name";
+const SORTS: { label: string; value: PlayerSort }[] = [
+  { label: "Still In", value: "active" },
+  { label: "Seed", value: "seed" },
+  { label: "Fargo", value: "fargo" },
+  { label: "Name", value: "name" },
+];
+
+// "Still In" first (active before eliminated), then deeper run, then seed.
+const sortPlayers = (players: SpectatorPlayer[], sort: PlayerSort): SpectatorPlayer[] => {
+  const bySeed = (a: SpectatorPlayer, b: SpectatorPlayer) => {
+    if (a.seed != null && b.seed != null) return a.seed - b.seed;
+    if (a.seed != null) return -1;
+    if (b.seed != null) return 1;
+    return a.name.localeCompare(b.name);
+  };
+  const copy = [...players];
+  if (sort === "seed") return copy.sort(bySeed);
+  if (sort === "name") return copy.sort((a, b) => a.name.localeCompare(b.name));
+  if (sort === "fargo")
+    return copy.sort((a, b) => (b.fargo ?? -1) - (a.fargo ?? -1) || bySeed(a, b));
+  // "active": still-in first, then by wins (deeper run), then seed.
+  return copy.sort((a, b) => {
+    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+    const aw = a.record.filter((x) => x === "W").length;
+    const bw = b.record.filter((x) => x === "W").length;
+    if (aw !== bw) return bw - aw;
+    return bySeed(a, b);
+  });
 };
 
 const prettify = (s?: string) =>
@@ -90,12 +119,33 @@ const liveStatus = (
   return { label: prettify(liveState ?? status ?? "").toUpperCase(), live: false, done: false };
 };
 
-const statusChipStyle = (status: string) => {
-  if (status === "checked_in") return { backgroundColor: COLORS.success + "22", borderColor: COLORS.success };
-  if (status === "approved") return { backgroundColor: COLORS.primary + "22", borderColor: COLORS.primary };
-  if (status === "no_show") return { backgroundColor: COLORS.error + "22", borderColor: COLORS.error };
-  return { backgroundColor: COLORS.surface, borderColor: COLORS.border };
-};
+// Small W/L boxes under a player's name so spectators can see their run + if
+// they're still in.
+const RecordBoxes = ({ player }: { player: SpectatorPlayer }) => (
+  <View style={styles.recordRow}>
+    {player.record.length === 0 ? (
+      <Text allowFontScaling={false} style={styles.recordEmpty}>
+        {player.eliminated ? "—" : "Not played yet"}
+      </Text>
+    ) : (
+      player.record.map((r, idx) => (
+        <View
+          key={idx}
+          style={[styles.recBox, r === "W" ? styles.recWin : styles.recLoss]}
+        >
+          <Text allowFontScaling={false} style={styles.recBoxText}>
+            {r}
+          </Text>
+        </View>
+      ))
+    )}
+    {player.eliminated && (
+      <Text allowFontScaling={false} style={styles.outTag}>
+        OUT
+      </Text>
+    )}
+  </View>
+);
 
 const Row = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.row}>
@@ -114,6 +164,16 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
   const tournamentId = id ? Number(id) : undefined;
   const sp = useTournamentSpectator(tournamentId);
   const [tab, setTab] = useState<Tab>("overview");
+  const [playerQuery, setPlayerQuery] = useState("");
+  const [playerSort, setPlayerSort] = useState<PlayerSort>("active");
+
+  const displayedPlayers = useMemo(() => {
+    const q = playerQuery.trim().toLowerCase();
+    const filtered = q
+      ? sp.players.filter((p) => p.name.toLowerCase().includes(q))
+      : sp.players;
+    return sortPlayers(filtered, playerSort);
+  }, [sp.players, playerQuery, playerSort]);
 
   const t: any = sp.tournament;
   const status = liveStatus(t?.live_state, t?.status);
@@ -182,17 +242,41 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
           <MatchesView matches={sp.matches} tables={sp.tables} readOnly groups={sp.groups} />
         </View>
       ) : tab === "players" ? (
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.searchRow}>
+            <TextInput
+              allowFontScaling={false}
+              style={styles.search}
+              placeholder="Search players"
+              placeholderTextColor={COLORS.textMuted}
+              value={playerQuery}
+              onChangeText={setPlayerQuery}
+            />
+            <View style={styles.sortWrap}>
+              <Dropdown
+                compact
+                options={SORTS}
+                value={playerSort}
+                onSelect={(v) => setPlayerSort(v as PlayerSort)}
+              />
+            </View>
+          </View>
+
           <Text allowFontScaling={false} style={styles.sectionHeader}>
-            {sp.players.length} PLAYER{sp.players.length === 1 ? "" : "S"}
+            {displayedPlayers.length} PLAYER{displayedPlayers.length === 1 ? "" : "S"}
           </Text>
           <View style={styles.card}>
-            {sp.players.length === 0 ? (
+            {displayedPlayers.length === 0 ? (
               <Text allowFontScaling={false} style={styles.empty}>
-                No players yet.
+                {sp.players.length === 0 ? "No players yet." : "No players match your search."}
               </Text>
             ) : (
-              sp.players.map((p, i) => (
+              displayedPlayers.map((p, i) => (
                 <View key={p.id}>
                   {i > 0 && <View style={styles.divider} />}
                   <View style={styles.playerRow}>
@@ -202,33 +286,31 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
                       </Text>
                     </View>
                     <View style={styles.playerMain}>
-                      <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
+                      <Text
+                        allowFontScaling={false}
+                        style={[styles.playerName, p.eliminated && styles.playerNameOut]}
+                        numberOfLines={1}
+                      >
                         {p.name}
                       </Text>
-                      <View style={styles.statPills}>
-                        <View style={styles.statPill}>
-                          <Text allowFontScaling={false} style={styles.statPillLabel}>FARGO</Text>
-                          <Text allowFontScaling={false} style={styles.statPillVal}>
-                            {p.fargo != null ? p.fargo : "—"}
-                          </Text>
-                        </View>
-                        {p.group != null && (
-                          <View style={[styles.statPill, styles.statPillGroup]}>
-                            <Text allowFontScaling={false} style={[styles.statPillLabel, styles.statPillLabelGroup]}>GROUP</Text>
-                            <Text allowFontScaling={false} style={[styles.statPillVal, styles.statPillValGroup]}>
-                              {p.group}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                      <RecordBoxes player={p} />
                     </View>
-                    {STATUS_LABEL[p.status] && (
-                      <View style={[styles.statusChip, statusChipStyle(p.status)]}>
-                        <Text allowFontScaling={false} style={styles.statusChipText}>
-                          {STATUS_LABEL[p.status]}
+                    <View style={styles.playerRight}>
+                      <View style={styles.statPill}>
+                        <Text allowFontScaling={false} style={styles.statPillLabel}>FARGO</Text>
+                        <Text allowFontScaling={false} style={styles.statPillVal}>
+                          {p.fargo != null ? p.fargo : "—"}
                         </Text>
                       </View>
-                    )}
+                      {p.group != null && (
+                        <View style={[styles.statPill, styles.statPillGroup]}>
+                          <Text allowFontScaling={false} style={[styles.statPillLabel, styles.statPillLabelGroup]}>GROUP</Text>
+                          <Text allowFontScaling={false} style={[styles.statPillVal, styles.statPillValGroup]}>
+                            {p.group}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </View>
               ))
@@ -376,6 +458,27 @@ const styles = StyleSheet.create({
   },
   poolText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted },
 
+  // Players search + sort row
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wxSc(SPACING.sm),
+    marginBottom: wxSc(SPACING.sm),
+  },
+  search: {
+    flex: 1,
+    height: wxSc(44),
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: 0,
+    fontSize: wxMs(FONT_SIZES.sm),
+  },
+  sortWrap: { width: wxSc(140) },
+
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: wxSc(SPACING.xs) },
   playerRow: {
     flexDirection: "row",
@@ -397,7 +500,31 @@ const styles = StyleSheet.create({
   seedText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.textSecondary },
   playerMain: { flex: 1, gap: wxSc(SPACING.xs) },
   playerName: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
-  statPills: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.xs) },
+  playerNameOut: { color: COLORS.textMuted },
+
+  // W/L record boxes
+  recordRow: { flexDirection: "row", alignItems: "center", gap: wxSc(4), flexWrap: "wrap" },
+  recBox: {
+    width: wxSc(18),
+    height: wxSc(18),
+    borderRadius: wxSc(4),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recWin: { backgroundColor: COLORS.success },
+  recLoss: { backgroundColor: COLORS.error },
+  recBoxText: { fontSize: wxMs(10), fontWeight: "900", color: "#fff" },
+  recordEmpty: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  outTag: {
+    fontSize: wxMs(9),
+    fontWeight: "900",
+    color: COLORS.error,
+    letterSpacing: 0.5,
+    marginLeft: wxSc(2),
+  },
+
+  // Right-side Fargo / Group pills
+  playerRight: { alignItems: "flex-end", gap: wxSc(4) },
   statPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -424,11 +551,4 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   statPillValGroup: { color: COLORS.primary },
-  statusChip: {
-    paddingHorizontal: wxSc(SPACING.sm),
-    paddingVertical: wxSc(4),
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-  },
-  statusChipText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.text },
 });

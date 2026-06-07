@@ -15,12 +15,14 @@ import { groupForFargo, RaceConfig } from "../utils/bracket.utils";
 import { buildLiveMatches } from "../utils/match.utils";
 
 export interface SpectatorPlayer {
-  id: number;
+  id: number; // registration id
   name: string;
   fargo: number | null;
   group: string | null; // race-group label (groups mode only)
   seed: number | null;
   status: RegistrationStatus;
+  record: ("W" | "L")[]; // completed matches in order (byes excluded)
+  eliminated: boolean; // out of the tournament
 }
 
 const playerName = (r: {
@@ -82,14 +84,40 @@ export const useTournamentSpectator = (tournamentId?: number) => {
     [tournament, tablesQuery.data, raceConfig],
   );
 
-  // Trimmed player list (no payment / contact / check-in details). Cancelled
-  // registrations are dropped; sorted by seed then name.
+  // Per-player W/L record from the bracket (keyed by registration id). Byes are
+  // excluded — they advance a player without a played result.
+  const recordByReg = useMemo(() => {
+    const map = new Map<number, ("W" | "L")[]>();
+    for (const m of matches) {
+      if (m.bye || m.empty || m.status !== "completed" || m.winner == null) continue;
+      if (m.p1RegId != null) {
+        const arr = map.get(m.p1RegId) ?? [];
+        arr.push(m.winner === 1 ? "W" : "L");
+        map.set(m.p1RegId, arr);
+      }
+      if (m.p2RegId != null) {
+        const arr = map.get(m.p2RegId) ?? [];
+        arr.push(m.winner === 2 ? "W" : "L");
+        map.set(m.p2RegId, arr);
+      }
+    }
+    return map;
+  }, [matches]);
+
+  const doubleElim = tournament?.live_settings?.bracket?.doubleElim ?? false;
+
+  // Trimmed player list (no payment / contact details). Cancelled registrations
+  // are dropped; base-sorted by seed then name (the screen applies the chosen sort).
   const players: SpectatorPlayer[] = useMemo(() => {
     const rows = registrationsQuery.data ?? [];
     return rows
       .filter((r) => r.status !== "cancelled")
       .map((r) => {
         const fargo = r.fargo_rating ?? null;
+        const record = recordByReg.get(r.id) ?? [];
+        const losses = record.filter((x) => x === "L").length;
+        const eliminated =
+          r.status === "no_show" || losses >= (doubleElim ? 2 : 1);
         return {
           id: r.id,
           name: playerName(r),
@@ -100,6 +128,8 @@ export const useTournamentSpectator = (tournamentId?: number) => {
               : null,
           seed: r.seed ?? null,
           status: r.status,
+          record,
+          eliminated,
         };
       })
       .sort((a, b) => {
@@ -108,7 +138,7 @@ export const useTournamentSpectator = (tournamentId?: number) => {
         if (b.seed != null) return 1;
         return a.name.localeCompare(b.name);
       });
-  }, [registrationsQuery.data, raceConfig.mode, groups]);
+  }, [registrationsQuery.data, raceConfig.mode, groups, recordByReg, doubleElim]);
 
   return {
     tournament,
