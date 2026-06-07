@@ -119,38 +119,36 @@ export const MatchCard = ({
       </View>
 
       {/* Actions */}
-      {!m.bye && (
-        <View style={styles.actions}>
-          {m.status === "scheduled" && (
-            <>
-              <Btn label="Start Match" primary onPress={() => onAction(m, "table")} busy={busy} />
-              <Btn label="Assign Table" onPress={() => onAction(m, "table")} busy={busy} />
-            </>
-          )}
-          {running && (
-            <>
-              <Btn label="End Match" primary onPress={() => onAction(m, "winner")} busy={busy} />
-              <Btn label="Edit Score" onPress={() => onAction(m, "score")} busy={busy} />
-            </>
-          )}
-          {m.status === "completed" && (
-            <>
-              <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
-              <Btn label="Reopen" onPress={() => onAction(m, "menu")} busy={busy} />
-            </>
-          )}
-          <TouchableOpacity
-            style={styles.overflow}
-            onPress={() => onAction(m, "menu")}
-            disabled={busy}
-            hitSlop={6}
-          >
-            <Text allowFontScaling={false} style={styles.overflowText}>
-              ⋯
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.actions}>
+        {m.bye ? (
+          <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
+        ) : m.status === "scheduled" ? (
+          <>
+            <Btn label="Start Match" primary onPress={() => onAction(m, "table")} busy={busy} />
+            <Btn label="Assign Table" onPress={() => onAction(m, "table")} busy={busy} />
+          </>
+        ) : running ? (
+          <>
+            <Btn label="End Match" primary onPress={() => onAction(m, "winner")} busy={busy} />
+            <Btn label="Edit Score" onPress={() => onAction(m, "score")} busy={busy} />
+          </>
+        ) : (
+          <>
+            <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
+            <Btn label="Reopen" onPress={() => onAction(m, "menu")} busy={busy} />
+          </>
+        )}
+        <TouchableOpacity
+          style={styles.overflow}
+          onPress={() => onAction(m, "menu")}
+          disabled={busy}
+          hitSlop={6}
+        >
+          <Text allowFontScaling={false} style={styles.overflowText}>
+            ⋯
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };

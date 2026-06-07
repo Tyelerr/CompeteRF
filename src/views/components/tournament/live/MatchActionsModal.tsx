@@ -94,7 +94,10 @@ export const MatchActionsModal = ({
   // ---- menu items by status ----
   type Item = { label: string; danger?: boolean; onPress: () => void };
   const items: Item[] = [];
-  if (m.status === "scheduled") {
+  // A bye auto-advances; start/score/table/timer don't apply.
+  if (m.bye) {
+    items.push({ label: "View Match Details", onPress: () => setStep("details") });
+  } else if (m.status === "scheduled") {
     items.push({
       label: "Start Match",
       onPress: () => {
@@ -135,7 +138,7 @@ export const MatchActionsModal = ({
         ]),
     });
   }
-  items.push({ label: "View Match Details", onPress: () => setStep("details") });
+  if (!m.bye) items.push({ label: "View Match Details", onPress: () => setStep("details") });
 
   const Header = ({ title }: { title: string }) => (
     <View style={styles.sheetHeader}>
