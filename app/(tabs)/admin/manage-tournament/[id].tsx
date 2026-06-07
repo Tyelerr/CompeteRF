@@ -2615,16 +2615,22 @@ export default function ManageTournamentScreen() {
   );
 
   const renderReview = () => {
+    const started = hub.phase === "running";
+    const finished = hub.phase === "completed" || hub.phase === "archived";
     const checks = [
       { key: "settings" as TabKey, label: "Settings completed", ok: stepComplete.settings },
-      { key: "players" as TabKey, label: "Players ready (2+)", ok: stepComplete.players },
+      {
+        key: "players" as TabKey,
+        label: `Players ready (${readyPlayers.length}) — need 2+`,
+        ok: stepComplete.players,
+      },
       { key: "tables" as TabKey, label: "Tables configured", ok: stepComplete.tables },
       { key: "bracket" as TabKey, label: "Bracket generated", ok: stepComplete.bracket },
     ];
     const allOk = checks.every((c) => c.ok);
     return (
       <View>
-        <Section title="Review & Start">
+        <Section title={started || finished ? "Review" : "Review & Start"}>
           <Text allowFontScaling={false} style={styles.hint}>
             Settings define the rules · Players define the field · Tables define
             the room · Bracket builds the draw.
@@ -2640,7 +2646,7 @@ export default function ManageTournamentScreen() {
               <Text allowFontScaling={false} style={styles.reviewLabel}>
                 {c.label}
               </Text>
-              {!c.ok && (
+              {!c.ok && !started && !finished && (
                 <TouchableOpacity onPress={() => setActiveTab(c.key)}>
                   <Text allowFontScaling={false} style={styles.reviewGo}>
                     Go to {TAB_LABELS[c.key]}
@@ -2650,22 +2656,45 @@ export default function ManageTournamentScreen() {
             </View>
           ))}
         </Section>
-        <TouchableOpacity
-          style={[
-            styles.startBtn,
-            (!allOk || hub.isMutatingLive) && styles.btnDisabled,
-          ]}
-          onPress={handleStartTournament}
-          disabled={!allOk || hub.isMutatingLive}
-        >
-          <Text allowFontScaling={false} style={styles.startBtnText}>
-            Start Tournament
+
+        {started ? (
+          <>
+            <Text allowFontScaling={false} style={styles.reviewStatus}>
+              Tournament is running.
+            </Text>
+            <TouchableOpacity
+              style={styles.startBtn}
+              onPress={() => setActiveTab("matches")}
+            >
+              <Text allowFontScaling={false} style={styles.startBtnText}>
+                Go to Matches
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : finished ? (
+          <Text allowFontScaling={false} style={styles.reviewStatus}>
+            Tournament completed.
           </Text>
-        </TouchableOpacity>
-        {!allOk && (
-          <Text allowFontScaling={false} style={styles.startHint}>
-            Finish the unchecked steps above to start the tournament.
-          </Text>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.startBtn,
+                (!allOk || hub.isMutatingLive) && styles.btnDisabled,
+              ]}
+              onPress={handleStartTournament}
+              disabled={!allOk || hub.isMutatingLive}
+            >
+              <Text allowFontScaling={false} style={styles.startBtnText}>
+                Start Tournament
+              </Text>
+            </TouchableOpacity>
+            {!allOk && (
+              <Text allowFontScaling={false} style={styles.startHint}>
+                Finish the unchecked steps above to start the tournament.
+              </Text>
+            )}
+          </>
         )}
       </View>
     );
@@ -3601,6 +3630,13 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontStyle: "italic",
     marginTop: webSc(SPACING.sm),
+  },
+  reviewStatus: {
+    fontSize: webMs(FONT_SIZES.md),
+    color: COLORS.success,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: webSc(SPACING.md),
   },
 
   // Close registration / lock players
