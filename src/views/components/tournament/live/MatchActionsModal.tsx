@@ -119,6 +119,7 @@ export const MatchActionsModal = ({
     });
     items.push({ label: "Assign Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
     items.push({ label: "Set Timer", onPress: () => setStep("timer") });
+    items.push({ label: "Forfeit", danger: true, onPress: () => setStep("forfeit") });
     items.push({ label: "Withdraw", danger: true, onPress: () => setStep("withdraw") });
   } else if (m.status === "in_progress") {
     items.push({ label: "End Match", onPress: () => setStep("winner") });
