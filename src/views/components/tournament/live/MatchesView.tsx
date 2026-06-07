@@ -60,6 +60,7 @@ export const MatchesView = ({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return matches.filter((m) => {
+      if (m.empty) return false; // dead slots (both feeders were byes)
       if (filter === "bye") {
         if (!m.bye) return false;
       } else if (filter !== "all" && (m.bye || m.status !== filter)) {

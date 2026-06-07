@@ -13,8 +13,8 @@ import { webMs, webSc } from "../../../../utils/scaling";
 import { formatClock, LiveMatch } from "../../../../utils/match.utils";
 import { LiveDot } from "./LiveDot";
 
-export const NODE_WIDTH = 204;
-export const NODE_HEIGHT = 124;
+export const NODE_WIDTH = 230;
+export const NODE_HEIGHT = 130;
 
 const MatchNodeBase = ({
   match,
@@ -62,7 +62,6 @@ const MatchNodeBase = ({
       <View style={styles.top}>
         <Text allowFontScaling={false} style={styles.num} numberOfLines={1}>
           {m.label}
-          {m.tableLabel ? `  ·  ${m.tableLabel}` : ""}
         </Text>
         <View style={styles.topRight}>
           {m.isLiveActive && (

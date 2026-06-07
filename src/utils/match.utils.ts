@@ -27,7 +27,7 @@ export type MatchActionStep =
 
 export interface LiveMatch {
   id: string; // match id, e.g. "W1M1", "L2M1", "GF", "GF2"
-  label: string; // display label
+  label: string; // friendly display label, e.g. "Winners Side Match 27"
   side: BracketSide; // winners | losers | grand
   round: number; // round within its side
   p1Name: string | null;
@@ -37,6 +37,7 @@ export interface LiveMatch {
   raceTo: number | null; // common race when both sides match
   raceLabel: string; // compact, e.g. "Race 7"
   bye: boolean;
+  empty: boolean; // no players will ever arrive (both feeders were byes)
   pending: boolean; // players not all known yet (TBD)
   status: MatchStatus;
   tableId: number | null;
@@ -72,10 +73,27 @@ export const allowedSecondsForRace = (
   return games * minutesPerGameForType(gameType) * 60;
 };
 
+// Friendly, side-local match labels computed once from the graph (in graph
+// order), so the same name is used everywhere (cards, nodes, modal).
+const buildLabelMap = (
+  graph: NonNullable<GeneratedBracket["graph"]>,
+): Record<string, string> => {
+  const map: Record<string, string> = {};
+  let w = 0;
+  let l = 0;
+  for (const n of graph) {
+    if (n.side === "winners") map[n.id] = `Winners Side Match ${++w}`;
+    else if (n.side === "losers") map[n.id] = `Losers Side Match ${++l}`;
+    else map[n.id] = n.id === "GF2" ? "Grand Final Reset" : "Grand Final";
+  }
+  return map;
+};
+
 // Build the screen-ready match list from the bracket graph + seeds + live state.
 // The resolver flows players through the graph (winners advance, losers drop),
-// and we layer the live state (status/score/timer/table) on top. Empty/skipped
-// matches (e.g. an unneeded GF2 reset) are dropped.
+// and we layer the live state (status/score/timer/table) on top. Skipped matches
+// (an unneeded GF2 reset) are dropped; empty matches (both feeders were byes) are
+// kept with empty=true so the bracket can lay out the tree without gaps.
 export const buildLiveMatches = (
   bracket: GeneratedBracket | null,
   matchState: Record<string, MatchLiveState>,
@@ -94,10 +112,11 @@ export const buildLiveMatches = (
     };
   }
   const resolved = resolveBracket(bracket.graph, bracket.seeds, results, cfg);
+  const labelMap = buildLabelMap(bracket.graph);
 
   const out: LiveMatch[] = [];
   for (const rm of resolved.matches) {
-    if (rm.skipped || rm.isEmpty) continue;
+    if (rm.skipped) continue;
     const st = matchState[rm.id];
     const table = tables.find((t) => t.id === st?.tableId);
     const status = (st?.status ?? "scheduled") as MatchStatus;
@@ -131,9 +150,10 @@ export const buildLiveMatches = (
 
     out.push({
       id: rm.id,
-      label: rm.id,
+      label: labelMap[rm.id] ?? rm.id,
       side: rm.side,
       round: rm.round,
+      empty: rm.isEmpty,
       p1Name,
       p2Name,
       p1Race,

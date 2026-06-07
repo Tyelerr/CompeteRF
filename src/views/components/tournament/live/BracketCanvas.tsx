@@ -514,18 +514,29 @@ export const BracketCanvas = ({
                           {lb.text}
                         </Text>
                       ))}
-                      {positioned.map((p) => (
-                        <View
-                          key={p.match.id}
-                          style={{ position: "absolute", left: p.x, top: p.y }}
-                        >
-                          <MatchNode
-                            match={p.match}
-                            highlighted={highlight === p.match.id}
-                            onPress={handleNodePress}
-                          />
-                        </View>
-                      ))}
+                      {positioned.map((p) =>
+                        p.match.empty ? (
+                          <View
+                            key={p.match.id}
+                            style={[styles.emptyNode, { left: p.x, top: p.y }]}
+                          >
+                            <Text allowFontScaling={false} style={styles.emptyNodeText}>
+                              —
+                            </Text>
+                          </View>
+                        ) : (
+                          <View
+                            key={p.match.id}
+                            style={{ position: "absolute", left: p.x, top: p.y }}
+                          >
+                            <MatchNode
+                              match={p.match}
+                              highlighted={highlight === p.match.id}
+                              onPress={handleNodePress}
+                            />
+                          </View>
+                        ),
+                      )}
                     </Animated.View>
                   </Animated.View>
                 </PanGestureHandler>
@@ -640,6 +651,19 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  emptyNode: {
+    position: "absolute",
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.4,
+  },
+  emptyNodeText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
   summary: {
     position: "absolute",
     left: webSc(SPACING.sm),
