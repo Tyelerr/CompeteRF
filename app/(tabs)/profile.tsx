@@ -24,6 +24,7 @@ import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
 import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.tournaments";
+import { usePlayerLiveMatch } from "../../src/viewmodels/hooks/use.player.live.match";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
 import { Button } from "../../src/views/components/common/button";
@@ -31,6 +32,7 @@ import { Loading } from "../../src/views/components/common/loading";
 import { NotificationsModal } from "../../src/views/components/notifications/NotificationsModal";
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
+import { ProfileMatchCenter } from "../../src/views/components/profile/ProfileMatchCenter";
 import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
@@ -184,6 +186,7 @@ export default function ProfileScreen() {
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
+  const { liveMatch } = usePlayerLiveMatch(storeProfile?.id_auto);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -404,9 +407,15 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Match Center \u2014 only when you're in a live tournament (placeholder
-              card for now; full live-match details come later). */}
-          {live.length > 0 && (
+          {/* Match Center \u2014 shows the player's current/next live match. Falls
+              back to a simple "in a live tournament" card when no match resolves
+              (e.g. awaiting the draw, between rounds, or eliminated). */}
+          {liveMatch ? (
+            <ProfileMatchCenter
+              data={liveMatch}
+              onPress={() => openDetailModal(liveMatch.tournamentId)}
+            />
+          ) : live.length > 0 ? (
             <TouchableOpacity
               style={styles.matchCenter}
               activeOpacity={0.85}
@@ -425,7 +434,7 @@ export default function ProfileScreen() {
                 You&apos;re in a live tournament. Tap to view.
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           <MyTournaments
             live={live}
