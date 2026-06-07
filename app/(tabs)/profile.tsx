@@ -432,7 +432,7 @@ export default function ProfileScreen() {
                       profileTab === tab && styles.topToggleTextActive,
                     ]}
                   >
-                    {tab === "tournament" ? "Tournament" : "Profile"}
+                    {tab === "tournament" ? "Tournament View" : "Profile View"}
                   </Text>
                 </TouchableOpacity>
               ))}
