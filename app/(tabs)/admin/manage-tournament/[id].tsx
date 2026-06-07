@@ -2628,8 +2628,54 @@ export default function ManageTournamentScreen() {
       { key: "bracket" as TabKey, label: "Bracket generated", ok: stepComplete.bracket },
     ];
     const allOk = checks.every((c) => c.ok);
+
+    const t = hub.tournament;
+    const raceSummary =
+      raceConfig.mode === "fixed"
+        ? `Fixed · Race to ${raceConfig.fixedWinners}`
+        : raceConfig.mode === "groups"
+          ? `Groups · ${raceConfig.groups.length} group${raceConfig.groups.length === 1 ? "" : "s"}`
+          : `Fargo differential · min ${raceConfig.diffMin}`;
+    const entryFee = Number(t?.entry_fee) || 0;
+    const addedMoney = Number(t?.added_money) || 0;
+    const potCount = (t?.side_pots ?? []).length;
+    const tablesCount = hub.tables.length;
+    const bracket = hub.bracket;
+
     return (
       <View>
+        <Section title="Overview">
+          <BracketCalc label="Tournament" value={t?.name ?? "—"} />
+          <BracketCalc label="Game" value={t?.game_type ?? "—"} />
+          <BracketCalc label="Format" value={prettyFormat(t?.tournament_format ?? "—")} />
+          <BracketCalc
+            label="Date"
+            value={`${t?.tournament_date ?? "—"}${t?.start_time ? ` · ${t.start_time}` : ""}`}
+          />
+          <BracketCalc label="Venue" value={t?.venues?.venue ?? "—"} />
+          <BracketCalc label="Race" value={raceSummary} />
+          <BracketCalc
+            label="Entry / Added"
+            value={`$${entryFee}${addedMoney ? ` · +$${addedMoney}` : ""}`}
+          />
+          {potCount > 0 && (
+            <BracketCalc label="Side pots" value={potCount} />
+          )}
+          <BracketCalc
+            label="Players"
+            value={`${readyPlayers.length} ready · ${statusCounts.prereg} pre-reg · ${statusCounts.no_show} no-show`}
+          />
+          <BracketCalc label="Tables" value={tablesCount} />
+          <BracketCalc
+            label="Bracket"
+            value={
+              bracket
+                ? `${bracket.bracketSize}-player · ${bracket.byes} bye${bracket.byes === 1 ? "" : "s"} · Draw #${bracket.drawNumber}`
+                : "Not drawn"
+            }
+          />
+        </Section>
+
         <Section title={started || finished ? "Review" : "Review & Start"}>
           <Text allowFontScaling={false} style={styles.hint}>
             Settings define the rules · Players define the field · Tables define
