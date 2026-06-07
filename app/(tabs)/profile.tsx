@@ -2,14 +2,13 @@
 
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { useWindowDimensions, Animated,
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated,
   Easing,
   Image,
   Platform,
   RefreshControl,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -17,22 +16,19 @@ import { useWindowDimensions, Animated,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
 import { authService } from "../../src/models/services/auth.service";
-import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
 import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
-import { usePagination } from "../../src/viewmodels/hooks/use.pagination";
+import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.tournaments";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
 import { Button } from "../../src/views/components/common/button";
-import { FullScreenImageViewer } from "../../src/views/components/common/FullScreenImageViewer";
 import { Loading } from "../../src/views/components/common/loading";
-import { Pagination } from "../../src/views/components/common/pagination";
 import { NotificationsModal } from "../../src/views/components/notifications/NotificationsModal";
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
-import { FavoriteTournamentCard } from "../../src/views/components/profile/FavoriteTournamentCard";
+import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
 import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
@@ -150,11 +146,11 @@ const LoggedOutView = ({ router }: { router: any }) => {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
-  const { width } = useWindowDimensions();
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
+  const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -167,13 +163,21 @@ export default function ProfileScreen() {
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showImageViewer, setShowImageViewer] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
-  const [currentImageTitle, setCurrentImageTitle] = useState<string>("");
 
-  const { paginatedItems: paginatedFavorites, currentPage, totalPages, totalCount, displayRange, nextPage, prevPage, canGoNext, canGoPrev } = usePagination(favorites, { itemsPerPage: 5 });
+  const favoritedIds = useMemo(
+    () => new Set(favorites.map((f) => f.tournament_id)),
+    [favorites],
+  );
 
-  useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: true }); }, [currentPage]);
+  const handleToggleFavorite = async (tournamentId: number) => {
+    try {
+      await toggleFav(tournamentId);
+    } catch {
+      /* ignore */
+    }
+    if (profile?.id_auto) loadFavorites(profile.id_auto);
+  };
+
   useEffect(() => { if (storeProfile) setProfile(storeProfile); }, [storeProfile]);
 
   useEffect(() => {
@@ -254,41 +258,10 @@ export default function ProfileScreen() {
   };
   const closeDetailModal = () => { setShowDetailModal(false); setDetailTournamentId(null); };
 
-  const getTournamentImageUrl = (tournament: any) => {
-    const map: Record<string, string> = {
-      "8-ball": "8-ball.jpeg", "9-ball": "9-ball.jpeg", "10-ball": "10-ball.jpeg",
-      "one-pocket": "One-Pocket.jpeg", "straight-pool": "Straight-Pool.jpeg",
-      banks: "Banks.jpeg",
-    };
-    if (tournament.thumbnail) {
-      if (tournament.thumbnail.startsWith("custom:")) return tournament.thumbnail.replace("custom:", "");
-      const f = map[tournament.thumbnail];
-      if (f) return "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f;
-    }
-    const f = map[tournament.game_type];
-    return f ? "https://fnbzfgmsamegbkeyhngn.supabase.co/storage/v1/object/public/tournament-images/" + f : null;
-  };
-
-  const handleViewImage = (tournament: any) => {
-    const url = getTournamentImageUrl(tournament);
-    if (url) { setCurrentImageUrl(url); setCurrentImageTitle(tournament.name); setShowImageViewer(true); }
-  };
-
   const formatMemberSince = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
   const generatePlayerID = (idAuto: number) => "PL-" + String(idAuto).padStart(6, "0");
-
-  const handleRemoveFavorite = (favId: number) => {
-    const run = async () => {
-      const fav = favorites.find((f) => f.id === favId);
-      await supabase.from("favorites").delete().eq("id", favId);
-      const updated = favorites.filter((f) => f.id !== favId);
-      setFavorites(updated);
-      if (currentPage > Math.ceil(updated.length / 5) && Math.ceil(updated.length / 5) > 0) prevPage();
-    };
-    run();
-  };
 
   if (loading && !profile) return <Loading fullScreen message="Loading..." />;
   if (!user) return <LoggedOutView router={router} />;
@@ -396,71 +369,63 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          <View style={styles.bottomNavigation}>
-            <TouchableOpacity style={[styles.navButton, styles.favoritesButton]} onPress={() => {}}>
-              <Text allowFontScaling={false} style={styles.navButtonText}>{"\u2764\uFE0F"} Favorite Tournaments</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.navButton, styles.alertsButton]} onPress={() => setSearchAlertsVisible(true)}>
-              <Text allowFontScaling={false} style={styles.alertsButtonText}>{"\uD83D\uDD0D"} Search Alerts</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.favoritesSection}>
-            {favorites.length === 0 ? (
-              <View style={styles.emptyFavorites}>
-                <Text allowFontScaling={false} style={styles.emptyText}>No favorites yet</Text>
-                <Text allowFontScaling={false} style={styles.emptySubtext}>Tap the heart on tournaments to save them here!</Text>
+          {/* Match Center \u2014 only when you're in a live tournament (placeholder
+              card for now; full live-match details come later). */}
+          {live.length > 0 && (
+            <TouchableOpacity
+              style={styles.matchCenter}
+              activeOpacity={0.85}
+              onPress={() => openDetailModal(live[0].tournament!.id)}
+            >
+              <View style={styles.matchCenterHead}>
+                <View style={styles.liveDot} />
+                <Text allowFontScaling={false} style={styles.matchCenterTitle}>
+                  LIVE STATUS
+                </Text>
               </View>
-            ) : (
-              <>
-                <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />
-                {paginatedFavorites.map((fav) => {
-                  const t = {
-                    id: fav.tournament_id,
-                    name: fav.tournaments?.name || "Unknown Tournament",
-                    game_type: fav.tournaments?.game_type || "Unknown",
-                    tournament_date: fav.tournaments?.tournament_date || "",
-                    thumbnail: fav.tournaments?.thumbnail,
-                    venues: {
-                      venue: fav.tournaments?.venues?.venue || "Unknown Venue",
-                      city: fav.tournaments?.venues?.city || "Unknown City",
-                      state: fav.tournaments?.venues?.state || "Unknown State",
-                    },
-                  };
-                  return (
-                    <FavoriteTournamentCard
-                      key={fav.id}
-                      tournament={t}
-                      onPress={() => openDetailModal(fav.tournament_id)}
-                      onToggleFavorite={() => handleRemoveFavorite(fav.id)}
-                      onShare={async () => {
-                        try {
-                          const t = fav.tournaments;
-                          if (!t) return;
-                          const deepLink = "competerf://tournament/" + t.id;
-                          const date = new Date(t.tournament_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                          const message = "\uD83C\uDFB1 " + t.name + "\n\uD83D\uDCC5 " + date + "\n\uD83D\uDCCD " + (t.venues?.venue || "") + ", " + (t.venues?.city || "") + ", " + (t.venues?.state || "") + "\n\n" + deepLink;
-                          await Share.share({ message });
-                        } catch (e) { console.error("Share error:", e); }
-                      }}
-                      onViewImage={() => handleViewImage(t)}
-                      getTournamentImageUrl={getTournamentImageUrl}
-                    />
-                  );
-                })}
-                <Pagination totalCount={totalCount} displayStart={displayRange.start} displayEnd={displayRange.end} currentPage={currentPage} totalPages={totalPages} onPrevPage={prevPage} onNextPage={nextPage} canGoPrev={canGoPrev} canGoNext={canGoNext} />
-              </>
-            )}
+              <Text allowFontScaling={false} style={styles.matchCenterName} numberOfLines={1}>
+                {live[0].tournament!.name}
+              </Text>
+              <Text allowFontScaling={false} style={styles.matchCenterSub}>
+                You&apos;re in a live tournament \u00B7 tap to view
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <MyTournaments
+            live={live}
+            registered={registered}
+            completed={completed}
+            favorites={favorites}
+            favoritedIds={favoritedIds}
+            onOpenTournament={(id) => openDetailModal(id)}
+            onToggleFavorite={handleToggleFavorite}
+            onSearchAlerts={() => setSearchAlertsVisible(true)}
+          />
+
+          {/* Placeholder sections (built out later) */}
+          <View style={styles.placeholderSection}>
+            <Text allowFontScaling={false} style={styles.placeholderTitle}>
+              PERFORMANCE SNAPSHOT
+            </Text>
+            <View style={styles.placeholderCard}>
+              <Text allowFontScaling={false} style={styles.placeholderText}>
+                Coming soon
+              </Text>
+            </View>
+          </View>
+          <View style={styles.placeholderSection}>
+            <Text allowFontScaling={false} style={styles.placeholderTitle}>
+              RECENT ACTIVITY
+            </Text>
+            <View style={styles.placeholderCard}>
+              <Text allowFontScaling={false} style={styles.placeholderText}>
+                Coming soon
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
-
-      <FullScreenImageViewer
-        visible={showImageViewer}
-        imageUrl={currentImageUrl}
-        title={currentImageTitle}
-        onClose={() => { setShowImageViewer(false); setCurrentImageUrl(null); setCurrentImageTitle(""); }}
-      />
 
       {editProfileVisible && (
         <EditProfileModal visible={editProfileVisible} onClose={() => setEditProfileVisible(false)} />
@@ -484,8 +449,53 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollView: { flex: 1 },
-  pageWrapper: { flex: 1 },
+  pageWrapper: { flex: 1, paddingBottom: wxSc(SPACING.xl) },
   pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+
+  // Match Center (conditional placeholder)
+  matchCenter: {
+    marginHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.sm),
+    backgroundColor: COLORS.backgroundCard,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    borderRadius: RADIUS.lg,
+    padding: wxSc(SPACING.md),
+  },
+  matchCenterHead: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.xs) },
+  liveDot: { width: wxSc(8), height: wxSc(8), borderRadius: wxSc(4), backgroundColor: COLORS.error },
+  matchCenterTitle: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    color: COLORS.error,
+    letterSpacing: 1,
+  },
+  matchCenterName: {
+    fontSize: wxMs(FONT_SIZES.lg),
+    fontWeight: "800",
+    color: COLORS.text,
+    marginTop: wxSc(SPACING.xs),
+  },
+  matchCenterSub: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: wxSc(2) },
+
+  // Placeholder sections
+  placeholderSection: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.lg) },
+  placeholderTitle: {
+    fontSize: wxMs(FONT_SIZES.md),
+    fontWeight: "800",
+    color: COLORS.text,
+    letterSpacing: 0.5,
+    marginBottom: wxSc(SPACING.sm),
+  },
+  placeholderCard: {
+    backgroundColor: COLORS.backgroundCard,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    paddingVertical: wxSc(SPACING.xl),
+    alignItems: "center",
+  },
+  placeholderText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
 
   header: {
     padding: wxSc(SPACING.md),

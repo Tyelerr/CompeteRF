@@ -47,6 +47,24 @@ export interface RegistrationInsert {
   paid_side_pots?: string[];
 }
 
+// A player's registration joined to its tournament + venue (profile tabs).
+export interface PlayerTournament {
+  id: number; // registration id
+  status: RegistrationStatus;
+  registered_at: string;
+  tournament: {
+    id: number;
+    name: string;
+    game_type: string;
+    tournament_date: string;
+    start_time?: string | null;
+    status: string; // tournament status (active/completed/archived/...)
+    live_state?: string | null; // not_started/registration_open/in_progress/finished
+    thumbnail?: string | null;
+    venues?: { venue: string; city: string; state: string } | null;
+  } | null;
+}
+
 export interface RegistrationUpdate {
   status?: RegistrationStatus;
   queue_position?: number | null;

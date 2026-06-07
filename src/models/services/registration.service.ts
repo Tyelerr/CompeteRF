@@ -11,6 +11,7 @@
 
 import { supabase } from "../../lib/supabase";
 import {
+  PlayerTournament,
   Registration,
   RegistrationInsert,
   RegistrationUpdate,
@@ -56,6 +57,20 @@ export const registrationService = {
       .order("registered_at", { ascending: false });
     if (error) throw error;
     return (data || []) as unknown as Registration[];
+  },
+
+  // A player's registrations joined to tournament + venue, for the profile
+  // "My Tournaments" tabs (Live / Registered / Completed are derived from these).
+  async getPlayerTournaments(playerId: number): Promise<PlayerTournament[]> {
+    const { data, error } = await supabase
+      .from("tournament_players")
+      .select(
+        "id, status, registered_at, tournament:tournament_id (id, name, game_type, tournament_date, start_time, status, live_state, thumbnail, venues:venue_id (venue, city, state))",
+      )
+      .eq("player_id", playerId)
+      .order("registered_at", { ascending: false });
+    if (error) throw error;
+    return (data || []) as unknown as PlayerTournament[];
   },
 
   // One registration by id (optional record -> maybeSingle).
