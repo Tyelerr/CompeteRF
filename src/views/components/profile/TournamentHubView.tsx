@@ -8,6 +8,8 @@
 // view reflect them. (The write currently needs tournament-update rights — a
 // participant-scoped RPC is the production path for non-TD players.)
 
+import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -17,6 +19,7 @@ import {
   PlayerMatchResult,
   PlayerTournamentHub,
 } from "../../../viewmodels/hooks/use.player.live.match";
+import { MatchHistoryDetailModal } from "./MatchHistoryDetailModal";
 import { ProfileMatchCenter } from "./ProfileMatchCenter";
 
 const isWeb = Platform.OS === "web";
@@ -37,10 +40,20 @@ const resultNote = (r: PlayerMatchResult): string | null => {
   return null;
 };
 
-const HistoryRow = ({ r }: { r: PlayerMatchResult }) => {
+const HistoryRow = ({
+  r,
+  onPress,
+}: {
+  r: PlayerMatchResult;
+  onPress: () => void;
+}) => {
   const note = resultNote(r);
   return (
-    <View style={styles.histRow}>
+    <TouchableOpacity
+      style={styles.histRow}
+      activeOpacity={0.7}
+      onPress={onPress}
+    >
       <View style={[styles.wl, r.won ? styles.wlWin : styles.wlLoss]}>
         <Text allowFontScaling={false} style={styles.wlText}>
           {r.won ? "W" : "L"}
@@ -58,7 +71,8 @@ const HistoryRow = ({ r }: { r: PlayerMatchResult }) => {
       <Text allowFontScaling={false} style={styles.histScore}>
         {r.myScore}-{r.oppScore}
       </Text>
-    </View>
+      <Ionicons name="chevron-forward" size={wxMs(16)} color={COLORS.textMuted} />
+    </TouchableOpacity>
   );
 };
 
@@ -70,6 +84,7 @@ export const TournamentHubView = ({
 }: TournamentHubViewProps) => {
   const open = () => onOpenTournament(hub.tournamentId);
   const current = hub.current;
+  const [detail, setDetail] = useState<PlayerMatchResult | null>(null);
 
   return (
     <View style={styles.root}>
@@ -112,12 +127,14 @@ export const TournamentHubView = ({
             {hub.history.map((r, i) => (
               <View key={r.id}>
                 {i > 0 && <View style={styles.histDivider} />}
-                <HistoryRow r={r} />
+                <HistoryRow r={r} onPress={() => setDetail(r)} />
               </View>
             ))}
           </View>
         )}
       </View>
+
+      <MatchHistoryDetailModal result={detail} onClose={() => setDetail(null)} />
     </View>
   );
 };

@@ -14,7 +14,7 @@ import {
   MatchLiveState,
   MatchResult,
 } from "../../models/types/tournament-settings.types";
-import { RaceConfig } from "../../utils/bracket.utils";
+import { groupForFargo, RaceConfig } from "../../utils/bracket.utils";
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
 
@@ -33,7 +33,7 @@ export interface PlayerLiveMatch {
   roundLabel: string; // e.g. "Winners Round 4", "Finals"
 }
 
-// A completed match in the player's path (Match History).
+// A completed match in the player's path (Match History + its detail summary).
 export interface PlayerMatchResult {
   id: string;
   roundLabel: string;
@@ -42,6 +42,12 @@ export interface PlayerMatchResult {
   oppScore: number;
   won: boolean;
   result: MatchResult | null; // forfeit / withdraw / normal
+  myFargo: number | null;
+  oppFargo: number | null;
+  myGroup: string | null; // race-group label (e.g. "A") when in groups mode, else null
+  oppGroup: string | null;
+  myRace: number | null;
+  oppRace: number | null;
 }
 
 // Everything the profile "Tournament View" hub needs for the player's one live event.
@@ -210,6 +216,12 @@ export const usePlayerLiveMatch = (playerId?: number) => {
       )
       .map((mm) => {
         const iAmP1 = mm.p1RegId === myRegId;
+        const myFargo = iAmP1 ? mm.p1Fargo : mm.p2Fargo;
+        const oppFargo = iAmP1 ? mm.p2Fargo : mm.p1Fargo;
+        const grp = (f: number | null) =>
+          raceConfig.mode === "groups"
+            ? (groupForFargo(f, raceConfig.groups)?.label ?? null)
+            : null;
         return {
           id: mm.id,
           roundLabel: roundLabelFor(mm),
@@ -218,6 +230,12 @@ export const usePlayerLiveMatch = (playerId?: number) => {
           oppScore: (iAmP1 ? mm.p2Score : mm.p1Score) ?? 0,
           won: mm.winner === (iAmP1 ? 1 : 2),
           result: mm.result,
+          myFargo,
+          oppFargo,
+          myGroup: grp(myFargo),
+          oppGroup: grp(oppFargo),
+          myRace: iAmP1 ? mm.p1Race : mm.p2Race,
+          oppRace: iAmP1 ? mm.p2Race : mm.p1Race,
         };
       });
 

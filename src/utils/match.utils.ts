@@ -34,6 +34,8 @@ export interface LiveMatch {
   p2Name: string | null;
   p1RegId: number | null; // registration id of each side's player (for "my match")
   p2RegId: number | null;
+  p1Fargo: number | null; // each side's Fargo (for match detail summaries)
+  p2Fargo: number | null;
   p1Race: number | null;
   p2Race: number | null;
   raceTo: number | null; // common race when both sides match
@@ -139,14 +141,18 @@ export const buildLiveMatches = (
     let p2Race: number | null;
     let p1RegId: number | null;
     let p2RegId: number | null;
+    let p1Fargo: number | null;
+    let p2Fargo: number | null;
     if (rm.isBye) {
       const present = rm.autoWinnerSlot === 1 ? rm.s1 : rm.s2;
       p1Name = present.player?.name ?? null;
       p1Race = present.raceTo;
       p1RegId = present.player?.registrationId ?? null;
+      p1Fargo = present.player?.fargo ?? null;
       p2Name = null;
       p2Race = null;
       p2RegId = null;
+      p2Fargo = null;
     } else {
       p1Name = rm.s1.player?.name ?? null;
       p2Name = rm.s2.player?.name ?? null;
@@ -154,6 +160,8 @@ export const buildLiveMatches = (
       p2Race = rm.s2.raceTo;
       p1RegId = rm.s1.player?.registrationId ?? null;
       p2RegId = rm.s2.player?.registrationId ?? null;
+      p1Fargo = rm.s1.player?.fargo ?? null;
+      p2Fargo = rm.s2.player?.fargo ?? null;
     }
 
     const raceForEst =
@@ -175,6 +183,8 @@ export const buildLiveMatches = (
       p2Name,
       p1RegId,
       p2RegId,
+      p1Fargo,
+      p2Fargo,
       p1Race,
       p2Race,
       raceTo: rm.commonRace,

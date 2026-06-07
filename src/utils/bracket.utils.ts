@@ -52,7 +52,7 @@ export const minutesPerGameForType = (gameType: string): number => {
 };
 
 // ── Race assignment ──────────────────────────────────────────────────────────
-const groupForFargo = (
+export const groupForFargo = (
   fargo: number | null,
   groups: RaceGroup[],
 ): RaceGroup | null => {
