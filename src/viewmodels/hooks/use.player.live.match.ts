@@ -49,6 +49,8 @@ export interface PlayerMatchResult {
   oppGroup: string | null;
   myRace: number | null;
   oppRace: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 // Everything the profile "Tournament View" hub needs for the player's one live event.
@@ -252,6 +254,8 @@ export const usePlayerLiveMatch = (playerId?: number) => {
           oppGroup: grp(oppFargo),
           myRace: iAmP1 ? mm.p1Race : mm.p2Race,
           oppRace: iAmP1 ? mm.p2Race : mm.p1Race,
+          startedAt: mm.startedAt,
+          completedAt: mm.completedAt,
         };
       });
 

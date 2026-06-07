@@ -24,6 +24,13 @@ const wxSc = (v: number) => (isWeb ? v : scale(v));
 const DASH = "–"; // en dash for the score separator
 const EMDASH = "—"; // placeholder for missing values
 
+const fmtClockTime = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+};
+
 interface MatchHistoryDetailModalProps {
   result: PlayerMatchResult | null;
   myName?: string | null;
@@ -139,6 +146,23 @@ export const MatchHistoryDetailModal = ({
               race={r.oppRace}
             />
           </View>
+
+          {(fmtClockTime(r.startedAt) || fmtClockTime(r.completedAt)) && (
+            <View style={styles.times}>
+              <View style={styles.timeCell}>
+                <Text allowFontScaling={false} style={styles.timeLabel}>STARTED</Text>
+                <Text allowFontScaling={false} style={styles.timeVal}>
+                  {fmtClockTime(r.startedAt) ?? EMDASH}
+                </Text>
+              </View>
+              <View style={styles.timeCell}>
+                <Text allowFontScaling={false} style={styles.timeLabel}>ENDED</Text>
+                <Text allowFontScaling={false} style={styles.timeVal}>
+                  {fmtClockTime(r.completedAt) ?? EMDASH}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <Pressable style={styles.closeBtn} onPress={onClose}>
             <Text allowFontScaling={false} style={styles.closeText}>
@@ -259,6 +283,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
+  times: {
+    flexDirection: "row",
+    alignSelf: "stretch",
+    marginTop: wxSc(SPACING.lg),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: wxSc(SPACING.sm),
+  },
+  timeCell: { flex: 1, alignItems: "center", gap: wxSc(2) },
+  timeLabel: {
+    fontSize: wxMs(9),
+    fontWeight: "800",
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+  },
+  timeVal: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   closeBtn: {
     marginTop: wxSc(SPACING.lg),
     alignSelf: "stretch",

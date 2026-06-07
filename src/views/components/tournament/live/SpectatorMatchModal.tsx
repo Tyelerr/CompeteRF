@@ -36,6 +36,13 @@ const statusText = (m: LiveMatch): string => {
   return "Not started";
 };
 
+const fmtClockTime = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+};
+
 const PlayerLine = ({
   name,
   fargo,
@@ -171,6 +178,23 @@ export const SpectatorMatchModal = ({
             </Text>
           )}
 
+          {!m.bye && (fmtClockTime(m.startedAt) || fmtClockTime(m.completedAt)) && (
+            <View style={styles.times}>
+              <View style={styles.timeCell}>
+                <Text allowFontScaling={false} style={styles.timeLabel}>STARTED</Text>
+                <Text allowFontScaling={false} style={styles.timeVal}>
+                  {fmtClockTime(m.startedAt) ?? "—"}
+                </Text>
+              </View>
+              <View style={styles.timeCell}>
+                <Text allowFontScaling={false} style={styles.timeLabel}>ENDED</Text>
+                <Text allowFontScaling={false} style={styles.timeVal}>
+                  {fmtClockTime(m.completedAt) ?? "—"}
+                </Text>
+              </View>
+            </View>
+          )}
+
           <Pressable style={styles.closeBtn} onPress={onClose}>
             <Text allowFontScaling={false} style={styles.closeText}>
               Close
@@ -281,6 +305,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textTransform: "capitalize",
   },
+  times: {
+    flexDirection: "row",
+    marginTop: wxSc(SPACING.md),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: wxSc(SPACING.sm),
+  },
+  timeCell: { flex: 1, alignItems: "center", gap: wxSc(2) },
+  timeLabel: {
+    fontSize: wxMs(9),
+    fontWeight: "800",
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+  },
+  timeVal: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   closeBtn: {
     marginTop: wxSc(SPACING.lg),
     paddingVertical: wxSc(SPACING.md),
