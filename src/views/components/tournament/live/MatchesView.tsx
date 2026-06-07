@@ -3,7 +3,7 @@
 // and a Bracket View (pinch/pan visual navigation). Both share one match action
 // sheet (MatchActionsModal). Fills available height; Card View scrolls itself.
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -50,6 +50,10 @@ export const MatchesView = ({
   }) => Promise<unknown>;
 }) => {
   const [mode, setMode] = useState<ViewMode>("cards"); // Card View is the default
+  // The toggle highlight uses `mode` (instant); the heavy view content uses the
+  // deferred value, so tapping the toggle updates the button immediately while the
+  // bracket mounts a beat later (no "stuck/greyed" highlight during the render).
+  const viewMode = useDeferredValue(mode);
   const [sheet, setSheet] = useState<{ match: LiveMatch; step: MatchActionStep } | null>(
     null,
   );
@@ -107,6 +111,7 @@ export const MatchesView = ({
         {(["cards", "bracket"] as ViewMode[]).map((m) => (
           <TouchableOpacity
             key={m}
+            activeOpacity={1}
             style={[styles.toggleBtn, mode === m && styles.toggleBtnActive]}
             onPress={() => {
               Keyboard.dismiss();
@@ -123,7 +128,7 @@ export const MatchesView = ({
         ))}
       </View>
 
-      {mode === "cards" ? (
+      {viewMode === "cards" ? (
         <View style={styles.cardsWrap}>
           <View style={styles.searchRow}>
             <TextInput
