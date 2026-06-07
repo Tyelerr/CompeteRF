@@ -30,10 +30,10 @@ import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
 import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
-const GAP_X = 56;
-const GAP_Y = 22;
+const GAP_X = 76;
+const GAP_Y = 34;
 const LABEL_H = 30;
-const DIVIDER_GAP = 64;
+const DIVIDER_GAP = 90;
 const LINE_W = 2.5; // connector thickness (plain View; stays visible to MIN_SCALE)
 const MIN_SCALE = 0.42;
 const MAX_SCALE = 2.5;

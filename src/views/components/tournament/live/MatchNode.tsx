@@ -104,11 +104,18 @@ const MatchNodeBase = ({
         >
           {m.bye ? "Advances (bye)" : timerText}
         </Text>
-        {!m.bye && m.result && m.result !== "normal" && (
-          <Text allowFontScaling={false} style={styles.resultTag}>
-            {m.result}
-          </Text>
-        )}
+        <View style={styles.bottomRight}>
+          {!m.bye && m.tableLabel && (
+            <Text allowFontScaling={false} style={styles.tableTag} numberOfLines={1}>
+              {m.tableLabel}
+            </Text>
+          )}
+          {!m.bye && m.result && m.result !== "normal" && (
+            <Text allowFontScaling={false} style={styles.resultTag}>
+              {m.result}
+            </Text>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -225,7 +232,14 @@ const styles = StyleSheet.create({
   },
   scoreNumWon: { color: COLORS.success },
   byeName: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "600" },
-  bottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  bottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.xs) },
+  bottomRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), flexShrink: 1 },
+  tableTag: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
   timer: {
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
