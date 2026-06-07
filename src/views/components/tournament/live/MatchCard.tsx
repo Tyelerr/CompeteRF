@@ -109,7 +109,13 @@ export const MatchCard = ({
           allowFontScaling={false}
           style={m.bye ? [styles.timer, styles.timerIdle] : timerStyle}
         >
-          {m.bye ? "Advances (bye)" : timerText}
+          {m.bye
+            ? m.result === "withdraw"
+              ? "Withdrew (bye)"
+              : m.result === "forfeit"
+                ? "Forfeited (bye)"
+                : "Advances (bye)"
+            : timerText}
         </Text>
         {!m.bye && m.result && m.result !== "normal" && (
           <Text allowFontScaling={false} style={styles.resultTag}>

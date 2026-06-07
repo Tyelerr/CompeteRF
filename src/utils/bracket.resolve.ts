@@ -60,8 +60,14 @@ export const resolveBracket = (
 
   const winnerOf = (rm: ResolvedMatch): { player: DrawPlayer | null; decided: boolean } => {
     if (rm.skipped || rm.isEmpty) return { player: null, decided: true };
-    if (rm.isBye)
+    if (rm.isBye) {
+      // A bye normally auto-advances its one player, unless the TD has forfeited
+      // or withdrawn them — then nobody advances (their next opponent walks over).
+      const br = results[rm.id];
+      if (br?.completed && (br.result === "forfeit" || br.result === "withdraw"))
+        return { player: null, decided: true };
       return { player: rm.autoWinnerSlot === 1 ? rm.s1.player : rm.s2.player, decided: true };
+    }
     if (rm.pending) return { player: null, decided: false };
     const r = results[rm.id];
     if (r?.completed && (r.winner === 1 || r.winner === 2))

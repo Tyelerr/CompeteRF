@@ -94,9 +94,21 @@ export const MatchActionsModal = ({
   // ---- menu items by status ----
   type Item = { label: string; danger?: boolean; onPress: () => void };
   const items: Item[] = [];
-  // A bye auto-advances; start/score/table/timer don't apply.
+  // A bye auto-advances; start/score/table/timer don't apply. The advancing
+  // player can still forfeit or withdraw (both remove them — a bye has no
+  // opponent to award a loss to, so the player simply doesn't advance).
   if (m.bye) {
     items.push({ label: "View Match Details", onPress: () => setStep("details") });
+    items.push({
+      label: "Forfeit",
+      danger: true,
+      onPress: () => apply({ status: "completed", winner: null, result: "forfeit", completedAt: now() }),
+    });
+    items.push({
+      label: "Withdraw",
+      danger: true,
+      onPress: () => apply({ status: "completed", winner: null, result: "withdraw", completedAt: now() }),
+    });
   } else if (m.status === "scheduled") {
     items.push({
       label: "Start Match",
@@ -256,6 +268,7 @@ export const MatchActionsModal = ({
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+              <CloseBtn />
             </>
           )}
 
