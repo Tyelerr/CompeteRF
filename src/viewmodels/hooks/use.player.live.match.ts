@@ -10,7 +10,10 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
-import { MatchResult } from "../../models/types/tournament-settings.types";
+import {
+  MatchLiveState,
+  MatchResult,
+} from "../../models/types/tournament-settings.types";
 import { RaceConfig } from "../../utils/bracket.utils";
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
@@ -84,6 +87,10 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     queryKey: ["tournament", tournamentId],
     queryFn: () => tournamentService.getTournament(tournamentId!),
     enabled: !!tournamentId,
+    // Poll while live so both players' Tournament Views stay in sync when either
+    // side scores (no realtime subscription wired yet).
+    refetchInterval: tournamentId ? 5000 : false,
+    refetchOnWindowFocus: true,
   });
 
   const tablesQuery = useQuery({
@@ -96,31 +103,29 @@ export const usePlayerLiveMatch = (playerId?: number) => {
   const tournament = tournamentQuery.data ?? null;
   const queryClient = useQueryClient();
 
-  // Adjust one side's score by +/-1 and persist into the shared matchState
-  // (live_settings.matchState[matchId]). Invalidating ["tournament", id] makes
-  // the bracket, the Matches tab and this hub all reflect the change.
+  // Merge a patch into one match's live state and persist into the shared
+  // matchState (live_settings.matchState[matchId]). Invalidating ["tournament", id]
+  // makes the bracket, the Matches tab and this hub all reflect the change.
   //
   // NOTE: writes go through updateTournament, so today this only succeeds for a
   // user who can update the tournament row (the TD / owner). A participant-scoped
   // RPC is the production path for players scoring their own match.
-  const scoreMutation = useMutation({
-    mutationFn: async (vars: { matchId: string; slot: 1 | 2; delta: number }) => {
+  const matchStateMutation = useMutation({
+    mutationFn: async (vars: {
+      matchId: string;
+      patch: Partial<MatchLiveState>;
+    }) => {
       if (!tournamentId) throw new Error("No live tournament.");
       const ls = tournament?.live_settings ?? {};
       const prev = ls.matchState ?? {};
       const existing = prev[vars.matchId] ?? {};
-      const clamp = (n: number) => Math.max(0, Math.min(999, n));
-      const p1 = existing.p1Score ?? 0;
-      const p2 = existing.p2Score ?? 0;
-      const next = {
+      const merged: MatchLiveState = {
         ...existing,
-        // The steppers only show while the match is live, so keep it in progress.
-        status: existing.status ?? "in_progress",
-        p1Score: vars.slot === 1 ? clamp(p1 + vars.delta) : p1,
-        p2Score: vars.slot === 2 ? clamp(p2 + vars.delta) : p2,
+        ...vars.patch,
+        status: vars.patch.status ?? existing.status ?? "in_progress",
       };
       return tournamentService.updateTournament(tournamentId, {
-        live_settings: { ...ls, matchState: { ...prev, [vars.matchId]: next } },
+        live_settings: { ...ls, matchState: { ...prev, [vars.matchId]: merged } },
       });
     },
     onSuccess: () =>
@@ -201,15 +206,46 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     };
   }, [tournament, myRegId, tablesQuery.data, raceConfig]);
 
-  const adjustScore = (matchId: string, slot: 1 | 2, delta: number) =>
-    scoreMutation.mutateAsync({ matchId, slot, delta });
+  // Adjust one side's score by +/-1. The score is capped at that side's race, and
+  // when a side reaches its race the match auto-completes (winner set) so the
+  // resolver advances the player into the next bracket. Lowering a side back below
+  // its race re-opens the match (correction path).
+  const adjustScore = (matchId: string, slot: 1 | 2, delta: number) => {
+    const m = hub?.current?.match;
+    if (!m) return Promise.resolve(undefined);
+
+    const r1 = m.p1Race ?? m.raceTo ?? null;
+    const r2 = m.p2Race ?? m.raceTo ?? null;
+    const cap = (n: number, race: number | null) =>
+      Math.max(0, Math.min(n, race ?? 999));
+
+    const p1 = m.p1Score ?? 0;
+    const p2 = m.p2Score ?? 0;
+    const newP1 = slot === 1 ? cap(p1 + delta, r1) : p1;
+    const newP2 = slot === 2 ? cap(p2 + delta, r2) : p2;
+    if (newP1 === p1 && newP2 === p2) return Promise.resolve(undefined); // no-op (at cap)
+
+    const reach1 = r1 != null && newP1 >= r1;
+    const reach2 = r2 != null && newP2 >= r2;
+    const done = reach1 || reach2;
+
+    const patch: Partial<MatchLiveState> = {
+      p1Score: newP1,
+      p2Score: newP2,
+      status: done ? "completed" : "in_progress",
+      winner: done ? (reach1 ? 1 : 2) : null,
+      completedAt: done ? new Date().toISOString() : null,
+      result: done ? "normal" : m.result ?? null,
+    };
+    return matchStateMutation.mutateAsync({ matchId, patch });
+  };
 
   return {
     hub,
     // Back-compat: the standalone Match Center card reads the current match.
     liveMatch: hub?.current ?? null,
     adjustScore,
-    isScoring: scoreMutation.isPending,
+    isScoring: matchStateMutation.isPending,
     isLoading: tournamentQuery.isLoading,
   };
 };
