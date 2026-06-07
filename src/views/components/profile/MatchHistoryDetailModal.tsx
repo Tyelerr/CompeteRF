@@ -121,7 +121,7 @@ export const MatchHistoryDetailModal = ({
 
           <View style={styles.compare}>
             <PlayerCol
-              name={myName ? `${myName} (you)` : "You"}
+              name={myName ?? "You"}
               fargo={r.myFargo}
               group={r.myGroup}
               race={r.myRace}

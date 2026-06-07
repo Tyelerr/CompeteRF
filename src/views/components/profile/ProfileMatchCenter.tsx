@@ -134,7 +134,7 @@ export const ProfileMatchCenter = ({
 
       <View style={styles.matchup}>
         <Avatar
-          label={data.myName ? `${data.myName} (you)` : "You"}
+          label={data.myName ?? "You"}
           mine
           score={editable ? myScore : undefined}
           onMinus={editable ? () => onAdjustScore!(data.mySlot, -1) : undefined}
