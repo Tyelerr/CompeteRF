@@ -73,11 +73,14 @@ export type BracketSlotRef =
 export type BracketSide = "winners" | "losers" | "grand";
 
 export interface BracketGraphNode {
-  id: string; // "W1M1", "L2M3", "GF"
+  id: string; // "W1M1", "L2M3", "GF", "GF2"
   side: BracketSide;
   round: number; // 1-based within its side
   slot1: BracketSlotRef;
   slot2: BracketSlotRef;
+  // Grand-final reset: only played if the losers-bracket finalist wins GF (the
+  // winners finalist must be beaten twice). Skipped if the WB finalist wins GF.
+  conditional?: boolean;
 }
 
 // One entry in the draw history (append-only) — stored in live_settings.drawLog.

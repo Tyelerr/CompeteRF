@@ -76,18 +76,29 @@ export const buildLosersGraph = (bracketSize: number): BracketGraphNode[] => {
   return nodes;
 };
 
-// Grand final: winners-bracket champion vs losers-bracket champion.
-// (Single grand final; bracket reset can be added later.)
-export const buildGrandFinal = (bracketSize: number): BracketGraphNode => {
+// Grand final (true double elim): GF is winners champ vs losers champ. Because
+// the winners finalist arrives undefeated, the losers finalist must win twice —
+// so GF2 (a reset) is played only if the losers finalist wins GF. If the winners
+// finalist wins GF, the tournament is over and GF2 is skipped.
+export const buildGrandFinal = (bracketSize: number): BracketGraphNode[] => {
   const k = log2(bracketSize);
   const lbRounds = 2 * (k - 1);
-  return {
+  const gf: BracketGraphNode = {
     id: "GF",
     side: "grand",
     round: 1,
-    slot1: { kind: "winner", matchId: winnersId(k, 1) },
-    slot2: { kind: "winner", matchId: losersId(lbRounds, 1) },
+    slot1: { kind: "winner", matchId: winnersId(k, 1) }, // WB finalist (slot1)
+    slot2: { kind: "winner", matchId: losersId(lbRounds, 1) }, // LB finalist (slot2)
   };
+  const gf2: BracketGraphNode = {
+    id: "GF2",
+    side: "grand",
+    round: 2,
+    slot1: { kind: "winner", matchId: "GF" }, // GF winner (the LB finalist, when reset happens)
+    slot2: { kind: "loser", matchId: "GF" }, // GF loser (the WB finalist)
+    conditional: true,
+  };
+  return [gf, gf2];
 };
 
 export const buildBracketGraph = (
@@ -96,5 +107,5 @@ export const buildBracketGraph = (
 ): BracketGraphNode[] => {
   const winners = buildWinnersGraph(bracketSize);
   if (!doubleElim) return winners;
-  return [...winners, ...buildLosersGraph(bracketSize), buildGrandFinal(bracketSize)];
+  return [...winners, ...buildLosersGraph(bracketSize), ...buildGrandFinal(bracketSize)];
 };
