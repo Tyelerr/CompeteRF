@@ -2794,7 +2794,9 @@ export default function ManageTournamentScreen() {
       tablesAvail,
       minPerGame,
     );
-    const locked = hub.phase === "bracket_drawn";
+    // Locked whenever a bracket exists (drawn / running / completed). Drawing is
+    // only available pre-bracket; after that, redraw goes through Reopen & Redraw.
+    const locked = settingsLocked;
     const bracket = hub.bracket;
     const sizeOptions = STANDARD_SIZES.filter((s) => s >= ready.length);
     const fmtHours = (h: number) => `${h.toFixed(1)} hr`;
@@ -2979,7 +2981,11 @@ export default function ManageTournamentScreen() {
             disabled={hub.isDrawing}
           >
             <Text allowFontScaling={false} style={styles.startBtnText}>
-              {hub.isDrawing ? "Drawing..." : "Draw Bracket"}
+              {hub.isDrawing
+                ? "Drawing..."
+                : bracket
+                  ? "Redraw Bracket"
+                  : "Draw Bracket"}
             </Text>
           </TouchableOpacity>
         ) : (
@@ -2995,15 +3001,17 @@ export default function ManageTournamentScreen() {
                 Reopen &amp; Redraw
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
-              onPress={handleStartTournament}
-              disabled={hub.isMutatingLive}
-            >
-              <Text allowFontScaling={false} style={styles.startBtnText}>
-                Start Tournament
-              </Text>
-            </TouchableOpacity>
+            {hub.phase === "bracket_drawn" && (
+              <TouchableOpacity
+                style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
+                onPress={handleStartTournament}
+                disabled={hub.isMutatingLive}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  Start Tournament
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
@@ -3079,8 +3087,12 @@ export default function ManageTournamentScreen() {
               </Text>
               <Text allowFontScaling={false} style={styles.gateBody}>
                 This reopens registration so you can change the field, then
-                rebuild the bracket. The current draw stays visible until you
-                draw again. This is logged and requires a reason.
+                rebuild the bracket. Redrawing replaces the seeding and{" "}
+                <Text style={{ fontWeight: "800", color: COLORS.warning }}>
+                  clears all match results, scores, and timers
+                </Text>
+                . The current draw stays visible until you draw again. This is
+                logged and requires a reason.
               </Text>
               <Text
                 allowFontScaling={false}

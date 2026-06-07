@@ -127,6 +127,10 @@ export const useManageTournament = (tournamentId?: number) => {
           ...ls,
           bracket: vars.bracket,
           drawLog: [...(ls.drawLog ?? []), vars.logEntry],
+          // A (re)draw replaces the field/seeding, so any prior live match state
+          // (winners/scores/timers, keyed by match id) must be cleared — otherwise
+          // old results stick to the new bracket.
+          matchState: {},
         },
       });
     },
