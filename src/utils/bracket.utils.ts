@@ -83,7 +83,7 @@ export const averageRace = (players: DrawPlayer[], cfg: RaceConfig): number => {
 };
 
 // Race for each side of a match (handicap-aware for differential).
-const matchRaces = (
+export const matchRaces = (
   p1: DrawPlayer | null,
   p2: DrawPlayer | null,
   cfg: RaceConfig,
