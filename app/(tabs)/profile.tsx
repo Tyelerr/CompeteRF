@@ -32,7 +32,7 @@ import { Loading } from "../../src/views/components/common/loading";
 import { NotificationsModal } from "../../src/views/components/notifications/NotificationsModal";
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
-import { ProfileMatchCenter } from "../../src/views/components/profile/ProfileMatchCenter";
+import { TournamentHubView } from "../../src/views/components/profile/TournamentHubView";
 import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
@@ -40,6 +40,9 @@ import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/We
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
+
+// Profile top-level view when the player is in a live tournament.
+type ProfileTab = "tournament" | "profile";
 
 interface Favorite {
   id: number;
@@ -186,7 +189,9 @@ export default function ProfileScreen() {
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
-  const { liveMatch } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const { hub } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const inLiveTournament = live.length > 0;
+  const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -407,68 +412,74 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Match Center \u2014 shows the player's current/next live match. Falls
-              back to a simple "in a live tournament" card when no match resolves
-              (e.g. awaiting the draw, between rounds, or eliminated). */}
-          {liveMatch ? (
-            <ProfileMatchCenter
-              data={liveMatch}
-              onPress={() => openDetailModal(liveMatch.tournamentId)}
-            />
-          ) : live.length > 0 ? (
-            <TouchableOpacity
-              style={styles.matchCenter}
-              activeOpacity={0.85}
-              onPress={() => openDetailModal(live[0].tournament!.id)}
-            >
-              <View style={styles.matchCenterHead}>
-                <View style={styles.liveDot} />
-                <Text allowFontScaling={false} style={styles.matchCenterTitle}>
-                  LIVE STATUS
+          {/* When the player is in a live tournament, the profile becomes a hub
+              for that event: a Tournament | Profile toggle picks between the live
+              match hub and the normal profile. Off the live path, the normal
+              profile content sits directly under the card. */}
+          {inLiveTournament && (
+            <View style={styles.topToggle}>
+              {(["tournament", "profile"] as ProfileTab[]).map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  activeOpacity={1}
+                  style={[styles.topToggleBtn, profileTab === tab && styles.topToggleBtnActive]}
+                  onPress={() => setProfileTab(tab)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.topToggleText,
+                      profileTab === tab && styles.topToggleTextActive,
+                    ]}
+                  >
+                    {tab === "tournament" ? "Tournament" : "Profile"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {inLiveTournament && profileTab === "tournament" ? (
+            hub ? (
+              <TournamentHubView hub={hub} onOpenTournament={openDetailModal} />
+            ) : null
+          ) : (
+            <>
+              <MyTournaments
+                live={live}
+                registered={registered}
+                completed={completed}
+                favorites={favorites}
+                favoritedIds={favoritedIds}
+                onOpenTournament={(id) => openDetailModal(id)}
+                onToggleFavorite={handleToggleFavorite}
+                alertsOpen={searchAlertsVisible}
+                onToggleAlerts={setSearchAlertsVisible}
+              />
+
+              {/* Placeholder sections (built out later) */}
+              <View style={styles.placeholderSection}>
+                <Text allowFontScaling={false} style={styles.placeholderTitle}>
+                  PERFORMANCE SNAPSHOT
                 </Text>
+                <View style={styles.placeholderCard}>
+                  <Text allowFontScaling={false} style={styles.placeholderText}>
+                    Coming soon
+                  </Text>
+                </View>
               </View>
-              <Text allowFontScaling={false} style={styles.matchCenterName} numberOfLines={1}>
-                {live[0].tournament!.name}
-              </Text>
-              <Text allowFontScaling={false} style={styles.matchCenterSub}>
-                You&apos;re in a live tournament. Tap to view.
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
-          <MyTournaments
-            live={live}
-            registered={registered}
-            completed={completed}
-            favorites={favorites}
-            favoritedIds={favoritedIds}
-            onOpenTournament={(id) => openDetailModal(id)}
-            onToggleFavorite={handleToggleFavorite}
-            alertsOpen={searchAlertsVisible}
-            onToggleAlerts={setSearchAlertsVisible}
-          />
-
-          {/* Placeholder sections (built out later) */}
-          <View style={styles.placeholderSection}>
-            <Text allowFontScaling={false} style={styles.placeholderTitle}>
-              PERFORMANCE SNAPSHOT
-            </Text>
-            <View style={styles.placeholderCard}>
-              <Text allowFontScaling={false} style={styles.placeholderText}>
-                Coming soon
-              </Text>
-            </View>
-          </View>
-          <View style={styles.placeholderSection}>
-            <Text allowFontScaling={false} style={styles.placeholderTitle}>
-              RECENT ACTIVITY
-            </Text>
-            <View style={styles.placeholderCard}>
-              <Text allowFontScaling={false} style={styles.placeholderText}>
-                Coming soon
-              </Text>
-            </View>
-          </View>
+              <View style={styles.placeholderSection}>
+                <Text allowFontScaling={false} style={styles.placeholderTitle}>
+                  RECENT ACTIVITY
+                </Text>
+                <View style={styles.placeholderCard}>
+                  <Text allowFontScaling={false} style={styles.placeholderText}>
+                    Coming soon
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -496,6 +507,29 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   pageWrapper: { flex: 1, paddingBottom: wxSc(SPACING.xl) },
   pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+
+  // Tournament | Profile top toggle (shown only when in a live tournament)
+  topToggle: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: wxSc(SPACING.xs),
+    marginHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.md),
+  },
+  topToggleBtn: {
+    flex: 1,
+    paddingVertical: wxSc(SPACING.sm),
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+  },
+  topToggleBtnActive: { backgroundColor: COLORS.primary },
+  topToggleText: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  topToggleTextActive: { color: "#fff" },
 
   // Match Center (conditional placeholder)
   matchCenter: {

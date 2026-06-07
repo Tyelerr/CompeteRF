@@ -10,6 +10,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
+import { MatchResult } from "../../models/types/tournament-settings.types";
 import { RaceConfig } from "../../utils/bracket.utils";
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
@@ -25,6 +26,25 @@ export interface PlayerLiveMatch {
   table: string | null;
   raceTo: number | null;
   roundLabel: string; // e.g. "Winners Round 4", "Finals"
+}
+
+// A completed match in the player's path (Match History).
+export interface PlayerMatchResult {
+  id: string;
+  roundLabel: string;
+  opponentName: string | null;
+  myScore: number;
+  oppScore: number;
+  won: boolean;
+  result: MatchResult | null; // forfeit / withdraw / normal
+}
+
+// Everything the profile "Tournament View" hub needs for the player's one live event.
+export interface PlayerTournamentHub {
+  tournamentId: number;
+  tournamentName: string;
+  current: PlayerLiveMatch | null; // the match that matters now (or null between rounds / eliminated)
+  history: PlayerMatchResult[]; // completed matches, earliest first
 }
 
 const roundLabelFor = (m: LiveMatch): string => {
@@ -85,7 +105,7 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     };
   }, [tournament]);
 
-  const result: PlayerLiveMatch | null = useMemo(() => {
+  const hub: PlayerTournamentHub | null = useMemo(() => {
     if (!tournament || !myRegId) return null;
     const matches = buildLiveMatches(
       tournament.live_settings?.bracket ?? null,
@@ -94,31 +114,61 @@ export const usePlayerLiveMatch = (playerId?: number) => {
       tournament.game_type ?? "",
       raceConfig,
     );
-    const m = pickMatch(matches, myRegId);
-    if (!m) return null;
 
-    const iAmP1 = m.p1RegId === myRegId;
-    const opponentName = iAmP1 ? m.p2Name : m.p1Name;
-    const myScore = (iAmP1 ? m.p1Score : m.p2Score) ?? 0;
-    const oppScore = (iAmP1 ? m.p2Score : m.p1Score) ?? 0;
-    const myRace = (iAmP1 ? m.p1Race : m.p2Race) ?? m.raceTo;
+    // The match that matters now (in-progress > scheduled-with-opponent).
+    const m = pickMatch(matches, myRegId);
+    let current: PlayerLiveMatch | null = null;
+    if (m) {
+      const iAmP1 = m.p1RegId === myRegId;
+      const myRace = (iAmP1 ? m.p1Race : m.p2Race) ?? m.raceTo;
+      current = {
+        tournamentId: tournament.id,
+        tournamentName: tournament.name,
+        match: m,
+        isPlaying: m.status === "in_progress",
+        opponentName: iAmP1 ? m.p2Name : m.p1Name,
+        myScore: (iAmP1 ? m.p1Score : m.p2Score) ?? 0,
+        oppScore: (iAmP1 ? m.p2Score : m.p1Score) ?? 0,
+        table: m.tableLabel,
+        raceTo: myRace,
+        roundLabel: roundLabelFor(m),
+      };
+    }
+
+    // Completed matches the player took part in, earliest first (graph order).
+    const history: PlayerMatchResult[] = matches
+      .filter(
+        (mm) =>
+          !mm.empty &&
+          !mm.bye &&
+          mm.status === "completed" &&
+          (mm.p1RegId === myRegId || mm.p2RegId === myRegId),
+      )
+      .map((mm) => {
+        const iAmP1 = mm.p1RegId === myRegId;
+        return {
+          id: mm.id,
+          roundLabel: roundLabelFor(mm),
+          opponentName: iAmP1 ? mm.p2Name : mm.p1Name,
+          myScore: (iAmP1 ? mm.p1Score : mm.p2Score) ?? 0,
+          oppScore: (iAmP1 ? mm.p2Score : mm.p1Score) ?? 0,
+          won: mm.winner === (iAmP1 ? 1 : 2),
+          result: mm.result,
+        };
+      });
 
     return {
       tournamentId: tournament.id,
       tournamentName: tournament.name,
-      match: m,
-      isPlaying: m.status === "in_progress",
-      opponentName,
-      myScore,
-      oppScore,
-      table: m.tableLabel,
-      raceTo: myRace,
-      roundLabel: roundLabelFor(m),
+      current,
+      history,
     };
   }, [tournament, myRegId, tablesQuery.data, raceConfig]);
 
   return {
-    liveMatch: result,
+    hub,
+    // Back-compat: the standalone Match Center card reads the current match.
+    liveMatch: hub?.current ?? null,
     isLoading: tournamentQuery.isLoading,
   };
 };
