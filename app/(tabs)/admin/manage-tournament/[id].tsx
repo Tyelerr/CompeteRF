@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -3080,8 +3081,14 @@ export default function ManageTournamentScreen() {
           animationType="fade"
           onRequestClose={() => setRedrawVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.flexOne}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                  <View style={styles.modalContent}>
               <Text allowFontScaling={false} style={styles.redrawTitle}>
                 Reopen &amp; Redraw?
               </Text>
@@ -3133,8 +3140,11 @@ export default function ManageTournamentScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
         </Modal>
       )}
 
@@ -4303,6 +4313,7 @@ const styles = StyleSheet.create({
   },
 
   // Modal
+  flexOne: { flex: 1 },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
