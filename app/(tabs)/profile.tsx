@@ -307,6 +307,10 @@ export default function ProfileScreen() {
   };
   const closeDetailModal = () => { setShowDetailModal(false); setDetailTournamentId(null); };
 
+  // Tournament View "View Bracket" → open the spectator view straight to the bracket.
+  const openBracket = (tournamentId: number) =>
+    router.push(`/live-tournament/${tournamentId}?tab=matches&view=bracket` as any);
+
   const formatMemberSince = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
@@ -443,7 +447,7 @@ export default function ProfileScreen() {
             hub ? (
               <TournamentHubView
                 hub={hub}
-                onOpenTournament={openDetailModal}
+                onOpenTournament={openBracket}
                 onAdjustScore={(matchId, slot, delta) => {
                   adjustScore(matchId, slot, delta).catch(() =>
                     Alert.alert(

@@ -47,6 +47,7 @@ export const MatchesView = ({
   onSetMatchState,
   readOnly,
   groups,
+  initialMode,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
@@ -58,8 +59,9 @@ export const MatchesView = ({
   // detail. `groups` feeds the detail's race-group labels (groups mode only).
   readOnly?: boolean;
   groups?: RaceGroup[];
+  initialMode?: ViewMode; // open straight to "bracket" or "cards"
 }) => {
-  const [mode, setMode] = useState<ViewMode>("cards"); // Card View is the default
+  const [mode, setMode] = useState<ViewMode>(initialMode ?? "cards"); // Card View is the default
   // The toggle highlight uses `mode` (instant); the heavy view content uses the
   // deferred value, so tapping the toggle updates the button immediately while the
   // bracket mounts a beat later (no "stuck/greyed" highlight during the render).

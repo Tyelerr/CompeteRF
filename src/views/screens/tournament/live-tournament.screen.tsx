@@ -158,12 +158,24 @@ const Row = ({ label, value }: { label: string; value: string }) => (
   </View>
 );
 
-export const LiveTournamentScreen = ({ id }: { id: string }) => {
+export const LiveTournamentScreen = ({
+  id,
+  initialTab,
+  initialView,
+}: {
+  id: string;
+  initialTab?: string;
+  initialView?: string;
+}) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tournamentId = id ? Number(id) : undefined;
   const sp = useTournamentSpectator(tournamentId);
-  const [tab, setTab] = useState<Tab>("overview");
+  const validTab = TABS.some((t) => t.key === initialTab)
+    ? (initialTab as Tab)
+    : "overview";
+  const [tab, setTab] = useState<Tab>(validTab);
+  const matchesInitialMode = initialView === "bracket" ? "bracket" : "cards";
   const [playerQuery, setPlayerQuery] = useState("");
   const [playerSort, setPlayerSort] = useState<PlayerSort>("active");
 
@@ -239,7 +251,13 @@ export const LiveTournamentScreen = ({ id }: { id: string }) => {
         </View>
       ) : tab === "matches" ? (
         <View style={styles.matchesWrap}>
-          <MatchesView matches={sp.matches} tables={sp.tables} readOnly groups={sp.groups} />
+          <MatchesView
+            matches={sp.matches}
+            tables={sp.tables}
+            readOnly
+            groups={sp.groups}
+            initialMode={matchesInitialMode}
+          />
         </View>
       ) : tab === "players" ? (
         <ScrollView
