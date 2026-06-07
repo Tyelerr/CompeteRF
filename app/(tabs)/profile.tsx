@@ -161,13 +161,7 @@ const DetailCell = ({
   <View style={styles.detailCell}>
     <View style={styles.detailCellHead}>
       <Ionicons name={icon} size={wxMs(13)} color={color} />
-      <Text
-        allowFontScaling={false}
-        style={styles.detailCellLabel}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-      >
+      <Text allowFontScaling={false} style={styles.detailCellLabel} numberOfLines={1}>
         {label}
       </Text>
     </View>
