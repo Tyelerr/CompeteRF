@@ -215,7 +215,7 @@ export const MatchActionsModal = ({
     actionLabel,
   }: {
     onPick: (slot: 1 | 2) => void;
-    actionLabel: string;
+    actionLabel?: string;
   }) => (
     <>
       <TouchableOpacity
@@ -224,7 +224,8 @@ export const MatchActionsModal = ({
         disabled={busy}
       >
         <Text allowFontScaling={false} style={styles.bigBtnText}>
-          {actionLabel}: {m.p1Name ?? "Player 1"}
+          {actionLabel ? `${actionLabel}: ` : ""}
+          {m.p1Name ?? "Player 1"}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -233,7 +234,8 @@ export const MatchActionsModal = ({
         disabled={busy}
       >
         <Text allowFontScaling={false} style={styles.bigBtnText}>
-          {actionLabel}: {m.p2Name ?? "Player 2"}
+          {actionLabel ? `${actionLabel}: ` : ""}
+          {m.p2Name ?? "Player 2"}
         </Text>
       </TouchableOpacity>
     </>
@@ -391,9 +393,8 @@ export const MatchActionsModal = ({
 
           {step === "forfeit" && (
             <>
-              <Header title="Forfeit — who forfeits?" />
+              <Header title="Who forfeits?" />
               <PlayerPick
-                actionLabel="Forfeits"
                 onPick={(slot) =>
                   apply({
                     status: "completed",
@@ -409,9 +410,8 @@ export const MatchActionsModal = ({
 
           {step === "withdraw" && (
             <>
-              <Header title="Withdraw — who withdraws?" />
+              <Header title="Who withdraws?" />
               <PlayerPick
-                actionLabel="Withdraws"
                 onPick={(slot) =>
                   apply({
                     status: "completed",
