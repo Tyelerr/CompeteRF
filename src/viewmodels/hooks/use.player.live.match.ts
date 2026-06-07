@@ -24,6 +24,7 @@ export interface PlayerLiveMatch {
   match: LiveMatch;
   matchId: string; // id in the bracket/matchState (e.g. "W1M1", "GF")
   mySlot: 1 | 2; // which side of the match the player is on
+  myName: string | null; // the player's own display name in this tournament
   isPlaying: boolean; // true while the match is actually in progress
   opponentName: string | null; // null when the opponent is still TBD
   myScore: number;
@@ -54,6 +55,7 @@ export interface PlayerMatchResult {
 export interface PlayerTournamentHub {
   tournamentId: number;
   tournamentName: string;
+  myName: string | null; // the player's own display name in this tournament
   current: PlayerLiveMatch | null; // the match that matters now (or null between rounds / eliminated)
   history: PlayerMatchResult[]; // completed matches, earliest first
 }
@@ -183,6 +185,19 @@ export const usePlayerLiveMatch = (playerId?: number) => {
       raceConfig,
     );
 
+    // The player's own display name, taken from any match they appear in.
+    let myName: string | null = null;
+    for (const mm of matches) {
+      if (mm.p1RegId === myRegId && mm.p1Name) {
+        myName = mm.p1Name;
+        break;
+      }
+      if (mm.p2RegId === myRegId && mm.p2Name) {
+        myName = mm.p2Name;
+        break;
+      }
+    }
+
     // The match that matters now (in-progress > scheduled-with-opponent).
     const m = pickMatch(matches, myRegId);
     let current: PlayerLiveMatch | null = null;
@@ -195,6 +210,7 @@ export const usePlayerLiveMatch = (playerId?: number) => {
         match: m,
         matchId: m.id,
         mySlot: iAmP1 ? 1 : 2,
+        myName,
         isPlaying: m.status === "in_progress",
         opponentName: iAmP1 ? m.p2Name : m.p1Name,
         myScore: (iAmP1 ? m.p1Score : m.p2Score) ?? 0,
@@ -242,6 +258,7 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     return {
       tournamentId: tournament.id,
       tournamentName: tournament.name,
+      myName,
       current,
       history,
     };

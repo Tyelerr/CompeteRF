@@ -26,6 +26,7 @@ const EMDASH = "—"; // placeholder for missing values
 
 interface MatchHistoryDetailModalProps {
   result: PlayerMatchResult | null;
+  myName?: string | null;
   onClose: () => void;
 }
 
@@ -69,6 +70,7 @@ const PlayerCol = ({
 
 export const MatchHistoryDetailModal = ({
   result,
+  myName,
   onClose,
 }: MatchHistoryDetailModalProps) => {
   if (!result) return null;
@@ -119,7 +121,7 @@ export const MatchHistoryDetailModal = ({
 
           <View style={styles.compare}>
             <PlayerCol
-              name="You"
+              name={myName ? `${myName} (you)` : "You"}
               fargo={r.myFargo}
               group={r.myGroup}
               race={r.myRace}

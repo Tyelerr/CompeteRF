@@ -134,7 +134,11 @@ export const TournamentHubView = ({
         )}
       </View>
 
-      <MatchHistoryDetailModal result={detail} onClose={() => setDetail(null)} />
+      <MatchHistoryDetailModal
+        result={detail}
+        myName={hub.myName}
+        onClose={() => setDetail(null)}
+      />
     </View>
   );
 };
