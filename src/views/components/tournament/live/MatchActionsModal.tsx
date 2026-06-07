@@ -242,13 +242,17 @@ export const MatchActionsModal = ({
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           {step === "menu" && (
             <>
               <Header title={`${matchTitle} actions`} />
               <Text allowFontScaling={false} style={styles.sub} numberOfLines={1}>
                 {namesLine}
               </Text>
-              <ScrollView style={styles.menuScroll}>
+              <View>
                 {items.map((it) => (
                   <TouchableOpacity
                     key={it.label}
@@ -267,7 +271,7 @@ export const MatchActionsModal = ({
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
               <CloseBtn />
             </>
           )}
@@ -455,6 +459,7 @@ export const MatchActionsModal = ({
               <CloseBtn />
             </>
           )}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
