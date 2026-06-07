@@ -136,10 +136,10 @@ export const useManageTournament = (tournamentId?: number) => {
   // Merge a patch into one match's live state (Matches tab). Stored in
   // live_settings.matchState keyed by match number.
   const setMatchStateMutation = useMutation({
-    mutationFn: (vars: { matchNumber: number; patch: Partial<MatchLiveState> }) => {
+    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) => {
       const ls = tournamentQuery.data?.live_settings ?? {};
       const prev = ls.matchState ?? {};
-      const key = String(vars.matchNumber);
+      const key = vars.matchId;
       const existing = prev[key];
       const merged: MatchLiveState = {
         ...existing,

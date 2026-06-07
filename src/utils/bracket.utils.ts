@@ -158,21 +158,26 @@ const slotOf = (
       }
     : null;
 
-// Random Round-1 draw: shuffle players into standard seed slots, fill the rest
-// with byes, pair into matches and assign races.
-export const generateRound1 = (
+// Random seeding: shuffle players into standard seed slots, byes fill the rest.
+// Returns an array indexed by round-1 slot position (0..bracketSize-1), where
+// slots [2m, 2m+1] are the two players of round-1 match m. This is the seed order
+// the graph's seedIndex references.
+export const seedPlayers = (
   players: DrawPlayer[],
   bracketSize: number,
+): (DrawPlayer | null)[] => {
+  const shuffled = shuffle(players);
+  const order = seedOrder(bracketSize);
+  return order.map((seed) => (seed <= shuffled.length ? shuffled[seed - 1] : null));
+};
+
+// Round-1 matches from an already-seeded slot array (pairs + races).
+export const round1FromSeeds = (
+  filled: (DrawPlayer | null)[],
   cfg: RaceConfig,
 ): BracketMatch[] => {
-  const shuffled = shuffle(players);
-  const seeds = seedOrder(bracketSize);
-  const filled: (DrawPlayer | null)[] = seeds.map((seed) =>
-    seed <= shuffled.length ? shuffled[seed - 1] : null,
-  );
-
   const matches: BracketMatch[] = [];
-  for (let m = 0; m < bracketSize / 2; m++) {
+  for (let m = 0; m < filled.length / 2; m++) {
     const a = filled[m * 2];
     const b = filled[m * 2 + 1];
     const { p1Race, p2Race, common } = matchRaces(a, b, cfg);
@@ -186,6 +191,12 @@ export const generateRound1 = (
   }
   return matches;
 };
+
+export const generateRound1 = (
+  players: DrawPlayer[],
+  bracketSize: number,
+  cfg: RaceConfig,
+): BracketMatch[] => round1FromSeeds(seedPlayers(players, bracketSize), cfg);
 
 // ── Planning calculation summary ─────────────────────────────────────────────
 export interface BracketStats {

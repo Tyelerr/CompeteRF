@@ -59,10 +59,12 @@ import {
   STANDARD_SIZES,
   averageRace,
   computeBracketStats,
-  generateRound1,
   minutesPerGameForType,
   recommendedBracketSize,
+  round1FromSeeds,
+  seedPlayers,
 } from "../../../../src/utils/bracket.utils";
+import { buildBracketGraph } from "../../../../src/utils/bracket.double";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
@@ -1579,17 +1581,6 @@ export default function ManageTournamentScreen() {
   );
 
   // Live matches for the Matches tab: bracket round 1 + per-match state + tables.
-  const liveMatches = useMemo(
-    () =>
-      buildLiveMatches(
-        hub.bracket,
-        hub.matchState,
-        hub.tables,
-        hub.tournament?.game_type ?? "",
-      ),
-    [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type],
-  );
-
   const raceConfig: RaceConfig = useMemo(() => {
     const ls = hub.tournament?.live_settings ?? {};
     return {
@@ -1602,6 +1593,18 @@ export default function ManageTournamentScreen() {
     };
   }, [hub.tournament]);
 
+  const liveMatches = useMemo(
+    () =>
+      buildLiveMatches(
+        hub.bracket,
+        hub.matchState,
+        hub.tables,
+        hub.tournament?.game_type ?? "",
+        raceConfig,
+      ),
+    [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
+  );
+
   const handleDrawBracket = (reason: string) => {
     if (readyPlayers.length < 2) {
       Alert.alert(
@@ -1611,18 +1614,34 @@ export default function ManageTournamentScreen() {
       return;
     }
     const size = bracketSizeSel ?? recommendedBracketSize(readyPlayers.length);
-    const round1 = generateRound1(readyPlayers, size, raceConfig);
+    const format = hub.tournament?.tournament_format ?? "single-elimination";
+    const doubleElim = format.toLowerCase().includes("double");
+    const seeds = seedPlayers(readyPlayers, size);
+    const round1 = round1FromSeeds(seeds, raceConfig);
+    const graph = buildBracketGraph(size, doubleElim);
     const drawNumber = (hub.drawLog?.length ?? 0) + 1;
     const now = new Date().toISOString();
     const bracket: GeneratedBracket = {
       generatedAt: now,
       drawType: "random",
-      format: hub.tournament?.tournament_format ?? "single-elimination",
+      format,
       drawNumber,
       players: readyPlayers.length,
       bracketSize: size,
       byes: Math.max(0, size - readyPlayers.length),
       round1,
+      doubleElim,
+      graph,
+      seeds: seeds.map((p) =>
+        p
+          ? {
+              registrationId: p.registrationId,
+              name: p.name,
+              fargo: p.fargo,
+              raceOverride: p.raceOverride ?? null,
+            }
+          : null,
+      ),
     };
     const logEntry: DrawLogEntry = {
       drawNumber,
@@ -3008,8 +3027,6 @@ export default function ManageTournamentScreen() {
           <MatchesView
             matches={liveMatches}
             tables={hub.tables}
-            bracketSize={hub.bracket?.bracketSize ?? 0}
-            format={hub.bracket?.format ?? hub.tournament?.tournament_format ?? ""}
             onSetMatchState={hub.setMatchState}
           />
         );

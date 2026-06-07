@@ -40,16 +40,12 @@ const FILTERS = [
 export const MatchesView = ({
   matches,
   tables,
-  bracketSize,
-  format,
   onSetMatchState,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
-  bracketSize: number;
-  format?: string;
   onSetMatchState: (vars: {
-    matchNumber: number;
+    matchId: string;
     patch: Partial<MatchLiveState>;
   }) => Promise<unknown>;
 }) => {
@@ -70,7 +66,7 @@ export const MatchesView = ({
         return false;
       }
       if (q) {
-        const hay = `${m.p1Name ?? ""} ${m.p2Name ?? ""} m${m.matchNumber} ${m.matchNumber} ${m.tableLabel ?? ""}`.toLowerCase();
+        const hay = `${m.p1Name ?? ""} ${m.p2Name ?? ""} ${m.label} ${m.tableLabel ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -79,10 +75,10 @@ export const MatchesView = ({
 
   const openSheet = (m: LiveMatch, step: MatchActionStep) => setSheet({ match: m, step });
 
-  const onPatch = async (matchNumber: number, patch: Partial<MatchLiveState>) => {
+  const onPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
     setBusy(true);
     try {
-      await onSetMatchState({ matchNumber, patch });
+      await onSetMatchState({ matchId, patch });
     } catch {
       Alert.alert("Error", "Could not update the match. Please try again.");
     } finally {
@@ -159,7 +155,7 @@ export const MatchesView = ({
               </Text>
             ) : (
               filtered.map((m) => (
-                <MatchCard key={m.matchNumber} match={m} onAction={openSheet} busy={busy} />
+                <MatchCard key={m.id} match={m} onAction={openSheet} busy={busy} />
               ))
             )}
           </ScrollView>
@@ -167,9 +163,7 @@ export const MatchesView = ({
       ) : (
         <View style={styles.bracketWrap}>
           <BracketCanvas
-            round1={matches}
-            bracketSize={bracketSize}
-            format={format}
+            matches={matches}
             onNodePress={(m) => openSheet(m, "menu")}
           />
         </View>

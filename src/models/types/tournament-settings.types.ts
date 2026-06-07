@@ -34,6 +34,14 @@ export interface BracketMatch {
   bye: boolean;
   raceTo: number | null; // common race (fixed mode); per-slot otherwise
 }
+// Players placed into round-1 seed positions (length = bracketSize; null = bye).
+export interface BracketSeed {
+  registrationId: number;
+  name: string;
+  fargo: number | null;
+  raceOverride?: number | null;
+}
+
 export interface GeneratedBracket {
   generatedAt: string;
   drawType: "random"; // V1: random only
@@ -43,6 +51,11 @@ export interface GeneratedBracket {
   bracketSize: number;
   byes: number;
   round1: BracketMatch[];
+  // V2 engine: full match graph + seeded players. The resolver flows players
+  // through the graph as matches complete (winners advance, losers drop).
+  doubleElim?: boolean;
+  graph?: BracketGraphNode[];
+  seeds?: (BracketSeed | null)[];
 }
 
 // Live per-match state (Phase 2). Stored in live_settings.matchState keyed by

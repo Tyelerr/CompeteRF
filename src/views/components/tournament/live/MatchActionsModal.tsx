@@ -49,7 +49,7 @@ export const MatchActionsModal = ({
   match: LiveMatch | null;
   initialStep?: Step;
   tables: TournamentTable[];
-  onPatch: (matchNumber: number, patch: Partial<MatchLiveState>) => Promise<unknown>;
+  onPatch: (matchId: string, patch: Partial<MatchLiveState>) => Promise<unknown>;
   onClose: () => void;
   busy: boolean;
 }) => {
@@ -75,7 +75,7 @@ export const MatchActionsModal = ({
   const m = match;
 
   const apply = async (patch: Partial<MatchLiveState>) => {
-    await onPatch(m.matchNumber, patch);
+    await onPatch(m.id, patch);
     onClose();
   };
 
@@ -119,7 +119,7 @@ export const MatchActionsModal = ({
     items.push({
       label: "Reopen Match",
       onPress: () =>
-        Alert.alert("Reopen Match", `Reopen M${m.matchNumber}? It returns to in-progress.`, [
+        Alert.alert("Reopen Match", `Reopen ${m.label}? It returns to in-progress.`, [
           { text: "Cancel", style: "cancel" },
           {
             text: "Reopen",
@@ -189,7 +189,7 @@ export const MatchActionsModal = ({
     </TouchableOpacity>
   );
 
-  const matchTitle = `M${m.matchNumber}`;
+  const matchTitle = m.label;
   const namesLine = m.bye
     ? `${m.p1Name ?? m.p2Name ?? "TBD"} (bye)`
     : `${m.p1Name ?? "TBD"} vs ${m.p2Name ?? "TBD"}`;

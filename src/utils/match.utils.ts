@@ -4,13 +4,15 @@
 // and the tournament tables (for stream flags + table labels). Pure functions.
 
 import {
+  BracketSide,
   GeneratedBracket,
   MatchLiveState,
   MatchResult,
   MatchStatus,
 } from "../models/types/tournament-settings.types";
 import { TournamentTable } from "../models/types/tournament-table.types";
-import { minutesPerGameForType } from "./bracket.utils";
+import { minutesPerGameForType, RaceConfig } from "./bracket.utils";
+import { MatchResult as ResolverResult, resolveBracket } from "./bracket.resolve";
 
 // Steps the match action sheet can open to (shared by cards, nodes, and the modal).
 export type MatchActionStep =
@@ -24,7 +26,10 @@ export type MatchActionStep =
   | "details";
 
 export interface LiveMatch {
-  matchNumber: number;
+  id: string; // match id, e.g. "W1M1", "L2M1", "GF", "GF2"
+  label: string; // display label
+  side: BracketSide; // winners | losers | grand
+  round: number; // round within its side
   p1Name: string | null;
   p2Name: string | null;
   p1Race: number | null;
@@ -32,6 +37,7 @@ export interface LiveMatch {
   raceTo: number | null; // common race when both sides match
   raceLabel: string; // compact, e.g. "Race 7"
   bye: boolean;
+  pending: boolean; // players not all known yet (TBD)
   status: MatchStatus;
   tableId: number | null;
   tableLabel: string | null;
@@ -66,34 +72,72 @@ export const allowedSecondsForRace = (
   return games * minutesPerGameForType(gameType) * 60;
 };
 
+// Build the screen-ready match list from the bracket graph + seeds + live state.
+// The resolver flows players through the graph (winners advance, losers drop),
+// and we layer the live state (status/score/timer/table) on top. Empty/skipped
+// matches (e.g. an unneeded GF2 reset) are dropped.
 export const buildLiveMatches = (
   bracket: GeneratedBracket | null,
   matchState: Record<string, MatchLiveState>,
   tables: TournamentTable[],
   gameType: string,
+  cfg: RaceConfig,
 ): LiveMatch[] => {
-  if (!bracket) return [];
-  return bracket.round1.map((m) => {
-    const st = matchState[String(m.matchNumber)];
+  if (!bracket?.graph || !bracket.seeds) return [];
+
+  const results: Record<string, ResolverResult> = {};
+  for (const [id, st] of Object.entries(matchState)) {
+    results[id] = { completed: st.status === "completed", winner: st.winner ?? null };
+  }
+  const resolved = resolveBracket(bracket.graph, bracket.seeds, results, cfg);
+
+  const out: LiveMatch[] = [];
+  for (const rm of resolved.matches) {
+    if (rm.skipped || rm.isEmpty) continue;
+    const st = matchState[rm.id];
     const table = tables.find((t) => t.id === st?.tableId);
-    const raceForEst =
-      m.raceTo ?? (Math.max(m.p1?.raceTo ?? 0, m.p2?.raceTo ?? 0) || null);
-    const raceLabel = m.bye
-      ? "Bye"
-      : m.raceTo != null
-        ? `Race ${m.raceTo}`
-        : `${m.p1?.raceTo ?? "?"} / ${m.p2?.raceTo ?? "?"}`;
-    const hasCustomTimer = st?.timerSeconds != null && st.timerSeconds > 0;
     const status = (st?.status ?? "scheduled") as MatchStatus;
-    return {
-      matchNumber: m.matchNumber,
-      p1Name: m.p1?.name ?? null,
-      p2Name: m.p2?.name ?? null,
-      p1Race: m.p1?.raceTo ?? null,
-      p2Race: m.p2?.raceTo ?? null,
-      raceTo: m.raceTo,
+
+    // For a bye, show the advancing player on top and a dash opponent.
+    let p1Name: string | null;
+    let p2Name: string | null;
+    let p1Race: number | null;
+    let p2Race: number | null;
+    if (rm.isBye) {
+      const present = rm.autoWinnerSlot === 1 ? rm.s1 : rm.s2;
+      p1Name = present.player?.name ?? null;
+      p1Race = present.raceTo;
+      p2Name = null;
+      p2Race = null;
+    } else {
+      p1Name = rm.s1.player?.name ?? null;
+      p2Name = rm.s2.player?.name ?? null;
+      p1Race = rm.s1.raceTo;
+      p2Race = rm.s2.raceTo;
+    }
+
+    const raceForEst =
+      rm.commonRace ?? (Math.max(rm.s1.raceTo ?? 0, rm.s2.raceTo ?? 0) || null);
+    const raceLabel = rm.isBye
+      ? "Bye"
+      : rm.commonRace != null
+        ? `Race ${rm.commonRace}`
+        : `${rm.s1.raceTo ?? "?"} / ${rm.s2.raceTo ?? "?"}`;
+    const hasCustomTimer = st?.timerSeconds != null && st.timerSeconds > 0;
+
+    out.push({
+      id: rm.id,
+      label: rm.id,
+      side: rm.side,
+      round: rm.round,
+      p1Name,
+      p2Name,
+      p1Race,
+      p2Race,
+      raceTo: rm.commonRace,
       raceLabel,
-      bye: m.bye,
+      bye: rm.isBye,
+      pending: rm.pending,
       status,
       tableId: st?.tableId ?? null,
       tableLabel: tableLabelOf(table),
@@ -107,11 +151,12 @@ export const buildLiveMatches = (
       p2Score: st?.p2Score ?? null,
       result: st?.result ?? null,
       allowedSeconds: hasCustomTimer
-        ? (st?.timerSeconds as number)
+        ? (st.timerSeconds as number)
         : allowedSecondsForRace(raceForEst, gameType),
       hasCustomTimer,
-    };
-  });
+    });
+  }
+  return out;
 };
 
 // mm:ss (or h:mm:ss) for a positive seconds count.

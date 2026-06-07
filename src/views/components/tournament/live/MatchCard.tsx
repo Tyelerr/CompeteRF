@@ -64,7 +64,7 @@ export const MatchCard = ({
       <View style={styles.topRow}>
         <View style={styles.topLeft}>
           <Text allowFontScaling={false} style={styles.matchNum}>
-            M{m.matchNumber}
+            {m.label}
           </Text>
           {m.tableLabel && (
             <Text allowFontScaling={false} style={styles.table} numberOfLines={1}>
