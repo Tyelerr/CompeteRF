@@ -2449,7 +2449,7 @@ export default function ManageTournamentScreen() {
               onUndo={() => handleUndoReady(item)}
               onRestore={() => handleRestore(item)}
               isProcessing={processingId === item.id}
-              locked={hub.phase === "bracket_drawn"}
+              locked={settingsLocked}
             />
           ))
         )}

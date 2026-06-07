@@ -37,6 +37,10 @@ export interface ResolvedMatch {
 export interface MatchResult {
   winner?: 1 | 2 | null;
   completed: boolean;
+  // "withdraw" removes the loser from the tournament — they do NOT drop to the
+  // losers bracket. "forfeit"/"normal" are ordinary losses (winners-side losers
+  // still drop).
+  result?: "normal" | "forfeit" | "withdraw" | null;
 }
 
 export interface ResolvedBracket {
@@ -70,8 +74,11 @@ export const resolveBracket = (
     if (rm.isBye) return { player: null, decided: true }; // a bye has no loser
     if (rm.pending) return { player: null, decided: false };
     const r = results[rm.id];
-    if (r?.completed && (r.winner === 1 || r.winner === 2))
+    if (r?.completed && (r.winner === 1 || r.winner === 2)) {
+      // A withdrawal removes the player entirely — no drop to the losers bracket.
+      if (r.result === "withdraw") return { player: null, decided: true };
       return { player: r.winner === 1 ? rm.s2.player : rm.s1.player, decided: true };
+    }
     return { player: null, decided: false };
   };
 

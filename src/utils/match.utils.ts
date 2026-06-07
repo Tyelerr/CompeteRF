@@ -87,7 +87,11 @@ export const buildLiveMatches = (
 
   const results: Record<string, ResolverResult> = {};
   for (const [id, st] of Object.entries(matchState)) {
-    results[id] = { completed: st.status === "completed", winner: st.winner ?? null };
+    results[id] = {
+      completed: st.status === "completed",
+      winner: st.winner ?? null,
+      result: st.result ?? null,
+    };
   }
   const resolved = resolveBracket(bracket.graph, bracket.seeds, results, cfg);
 
