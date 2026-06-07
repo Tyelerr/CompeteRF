@@ -70,7 +70,8 @@ export const MyTournaments = ({
   favoritedIds,
   onOpenTournament,
   onToggleFavorite,
-  onSearchAlerts,
+  alertsOpen,
+  onToggleAlerts,
 }: {
   live: PlayerTournament[];
   registered: PlayerTournament[];
@@ -79,7 +80,8 @@ export const MyTournaments = ({
   favoritedIds: Set<number>;
   onOpenTournament: (id: number) => void;
   onToggleFavorite: (tournamentId: number) => void;
-  onSearchAlerts: () => void;
+  alertsOpen: boolean;
+  onToggleAlerts: (open: boolean) => void;
 }) => {
   const [tab, setTab] = useState<TabKey>(live.length > 0 ? "live" : "registered");
 
@@ -114,12 +116,29 @@ export const MyTournaments = ({
 
   return (
     <View style={styles.section}>
-      <View style={styles.headerRow}>
-        <Text allowFontScaling={false} style={styles.sectionTitle}>
-          MY TOURNAMENTS
-        </Text>
-        <TouchableOpacity style={styles.alertsBtn} onPress={onSearchAlerts}>
-          <Text allowFontScaling={false} style={styles.alertsBtnText}>
+      {/* My Tournaments / Search Alerts toggle (Search Alerts opens its panel) */}
+      <View style={styles.viewToggle}>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[styles.viewSeg, !alertsOpen && styles.viewSegActive]}
+          onPress={() => onToggleAlerts(false)}
+        >
+          <Text
+            allowFontScaling={false}
+            style={[styles.viewSegText, !alertsOpen && styles.viewSegTextActive]}
+          >
+            My Tournaments
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[styles.viewSeg, alertsOpen && styles.viewSegActive]}
+          onPress={() => onToggleAlerts(true)}
+        >
+          <Text
+            allowFontScaling={false}
+            style={[styles.viewSegText, alertsOpen && styles.viewSegTextActive]}
+          >
             {"🔍"} Search Alerts
           </Text>
         </TouchableOpacity>
@@ -234,29 +253,22 @@ export const MyTournaments = ({
 
 const styles = StyleSheet.create({
   section: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.lg) },
-  headerRow: {
+  viewToggle: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: wxSc(SPACING.sm),
-  },
-  sectionTitle: {
-    fontSize: wxMs(FONT_SIZES.md),
-    fontWeight: "800",
-    color: COLORS.text,
-    letterSpacing: 0.5,
-  },
-  alertsBtn: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: wxSc(RADIUS.md),
-    paddingHorizontal: wxSc(SPACING.sm),
-    paddingVertical: wxSc(SPACING.xs),
+    borderRadius: wxSc(RADIUS.lg),
+    padding: wxSc(SPACING.xs),
+    marginBottom: wxSc(SPACING.md),
   },
-  alertsBtnText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
+  viewSeg: {
+    flex: 1,
+    paddingVertical: wxSc(SPACING.sm),
+    borderRadius: wxSc(RADIUS.md),
+    alignItems: "center",
+  },
+  viewSegActive: { backgroundColor: COLORS.primary },
+  viewSegText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textSecondary },
+  viewSegTextActive: { color: "#fff" },
   tabsRow: { flexDirection: "row", gap: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.md) },
   tab: {
     flex: 1,

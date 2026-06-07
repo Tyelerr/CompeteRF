@@ -432,7 +432,8 @@ export default function ProfileScreen() {
             favoritedIds={favoritedIds}
             onOpenTournament={(id) => openDetailModal(id)}
             onToggleFavorite={handleToggleFavorite}
-            onSearchAlerts={() => setSearchAlertsVisible(true)}
+            alertsOpen={searchAlertsVisible}
+            onToggleAlerts={setSearchAlertsVisible}
           />
 
           {/* Placeholder sections (built out later) */}
@@ -620,7 +621,7 @@ const styles = StyleSheet.create({
   },
   messagesUnreadText: { fontSize: wxMs(10), fontWeight: "700", color: COLORS.white },
 
-  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: wxSc(SPACING.lg), marginTop: wxSc(28) },
+  profileHeader: { flexDirection: "row", alignItems: "center", marginBottom: wxSc(SPACING.sm), marginTop: wxSc(20) },
   avatarContainer: { width: wxSc(80), height: wxSc(80), marginRight: wxSc(SPACING.md) },
   profileImage: { width: wxSc(80), height: wxSc(80), borderRadius: wxSc(40), borderWidth: 2, borderColor: COLORS.border },
   avatar: { width: wxSc(80), height: wxSc(80) },
@@ -657,8 +658,8 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: wxSc(SPACING.md),
-    paddingTop: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.xs),
+    paddingTop: wxSc(SPACING.sm),
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
