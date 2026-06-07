@@ -34,6 +34,7 @@ const GAP_X = 56;
 const GAP_Y = 22;
 const LABEL_H = 30;
 const DIVIDER_GAP = 64;
+const LINE_W = 1.5; // connector thickness in content px (counter-scaled on screen)
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 2.5;
 const START_SCALE = 0.7;
@@ -113,7 +114,12 @@ const layout = (matches: LiveMatch[]) => {
 
   const winHeight = LABEL_H + Math.max(1, winR1Count) * rowStride;
   const winWidth = Math.max(1, winMaxR) * colStride;
-  const lines: { left: number; top: number; w: number; h: number }[] = [];
+  // vert = the thin axis is width (a vertical line); else the thin axis is height.
+  const lines: { left: number; top: number; w: number; h: number; vert: boolean }[] = [];
+  const hLine = (left: number, top: number, w: number) =>
+    lines.push({ left, top, w, h: LINE_W, vert: false });
+  const vLine = (left: number, top: number, h: number) =>
+    lines.push({ left, top, w: LINE_W, h, vert: true });
 
   // Tree connectors between a parent and its (1 or 2) children, both already
   // positioned. childIdx maps a parent index to its child indices in round r-1.
@@ -137,11 +143,9 @@ const layout = (matches: LiveMatch[]) => {
         const midX = (childRight + parent.x) / 2;
         const cys = kids.map((k) => k.y + NODE_HEIGHT / 2);
         const py = parent.y + NODE_HEIGHT / 2;
-        kids.forEach((k) =>
-          lines.push({ left: childRight, top: k.y + NODE_HEIGHT / 2, w: midX - childRight, h: 1 }),
-        );
-        lines.push({ left: midX, top: Math.min(...cys), w: 1, h: Math.abs(cys[cys.length - 1] - cys[0]) || 1 });
-        lines.push({ left: midX, top: py, w: parent.x - midX, h: 1 });
+        kids.forEach((k) => hLine(childRight, k.y + NODE_HEIGHT / 2, midX - childRight));
+        vLine(midX, Math.min(...cys), Math.abs(cys[cys.length - 1] - cys[0]) || 1);
+        hLine(midX, py, parent.x - midX);
       }
     }
   };
@@ -208,10 +212,7 @@ const layout = (matches: LiveMatch[]) => {
     const pos = { x, y: gfY, match: m };
     positioned.push(pos);
     labels.push({ x, y: 4, text: m.round === 1 ? "Grand Final" : "Reset" });
-    if (gfPrev) {
-      const childRight = gfPrev.x + NODE_WIDTH;
-      lines.push({ left: childRight, top: gfY + NODE_HEIGHT / 2, w: x - childRight, h: 1 });
-    }
+    if (gfPrev) hLine(gfPrev.x + NODE_WIDTH, gfY + NODE_HEIGHT / 2, x - gfPrev.x - NODE_WIDTH);
     gfPrev = pos;
   });
 
@@ -246,6 +247,9 @@ export const BracketCanvas = ({
   const { positioned, labels, lines, width, height, hasLosers, dividerY } = built;
 
   const scaleA = useRef(new Animated.Value(START_SCALE)).current;
+  // Inverse scale: lines counter-scale their thin axis by this so they keep a
+  // constant on-screen thickness and never drop out when zoomed far out.
+  const invScaleA = useRef(new Animated.Value(1 / START_SCALE)).current;
   const txA = useRef(new Animated.Value(PAD)).current;
   const tyA = useRef(new Animated.Value(PAD)).current;
   const scale = useRef(START_SCALE);
@@ -270,6 +274,7 @@ export const BracketCanvas = ({
     tx.current = x;
     ty.current = y;
     scaleA.setValue(s);
+    invScaleA.setValue(1 / s);
     txA.setValue(x);
     tyA.setValue(y);
   };
@@ -302,6 +307,7 @@ export const BracketCanvas = ({
     ty.current = y;
     Animated.parallel([
       Animated.timing(scaleA, { toValue: s, duration: 220, useNativeDriver: false }),
+      Animated.timing(invScaleA, { toValue: 1 / s, duration: 220, useNativeDriver: false }),
       Animated.timing(txA, { toValue: x, duration: 220, useNativeDriver: false }),
       Animated.timing(tyA, { toValue: y, duration: 220, useNativeDriver: false }),
     ]).start();
@@ -470,7 +476,7 @@ export const BracketCanvas = ({
                       }}
                     >
                       {lines.map((l, i) => (
-                        <View
+                        <Animated.View
                           key={`ln-${i}`}
                           style={{
                             position: "absolute",
@@ -479,11 +485,12 @@ export const BracketCanvas = ({
                             width: l.w,
                             height: l.h,
                             backgroundColor: COLORS.border,
+                            transform: [l.vert ? { scaleX: invScaleA } : { scaleY: invScaleA }],
                           }}
                         />
                       ))}
                       {hasLosers && (
-                        <View
+                        <Animated.View
                           style={{
                             position: "absolute",
                             left: 0,
@@ -491,6 +498,7 @@ export const BracketCanvas = ({
                             width,
                             height: 2,
                             backgroundColor: COLORS.borderLight,
+                            transform: [{ scaleY: invScaleA }],
                           }}
                         />
                       )}
