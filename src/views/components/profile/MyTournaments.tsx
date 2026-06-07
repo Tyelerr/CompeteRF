@@ -6,7 +6,7 @@
 // Following is a placeholder for now.
 
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -144,8 +144,14 @@ export const MyTournaments = ({
         </TouchableOpacity>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsRow}>
+      {/* Tabs — content-sized + horizontally scrollable so the longer labels
+          (Registered / Completed) never truncate. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
+        contentContainerStyle={styles.tabsRow}
+      >
         {tabs.map((t) => {
           const active = tab === t.key;
           return (
@@ -173,7 +179,7 @@ export const MyTournaments = ({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {/* List */}
       {tab === "following" ? (
@@ -269,17 +275,17 @@ const styles = StyleSheet.create({
   viewSegActive: { backgroundColor: COLORS.primary },
   viewSegText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textSecondary },
   viewSegTextActive: { color: "#fff" },
-  tabsRow: { flexDirection: "row", gap: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.md) },
+  tabsScroll: { marginBottom: wxSc(SPACING.md) },
+  tabsRow: { flexDirection: "row", gap: wxSc(SPACING.xs), paddingRight: wxSc(SPACING.xs) },
   tab: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: wxSc(4),
+    gap: wxSc(SPACING.xs),
     backgroundColor: COLORS.surface,
     borderRadius: wxSc(RADIUS.full),
-    paddingVertical: wxSc(SPACING.xs),
-    paddingHorizontal: wxSc(SPACING.xs),
+    paddingVertical: wxSc(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
   },
   tabText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.textSecondary },
   tabTextActive: { color: "#fff" },
