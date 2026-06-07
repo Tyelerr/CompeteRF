@@ -212,7 +212,7 @@ const layout = (matches: LiveMatch[]) => {
     const x = winWidth + (m.round - 1) * colStride;
     const pos = { x, y: gfY, match: m };
     positioned.push(pos);
-    labels.push({ x, y: 4, text: m.round === 1 ? "Grand Final" : "Reset" });
+    labels.push({ x, y: 4, text: m.round === 1 ? "Finals" : "Finals (2nd Set)" });
     if (gfPrev) hLine(gfPrev.x + NODE_WIDTH, gfY + NODE_HEIGHT / 2, x - gfPrev.x - NODE_WIDTH);
     gfPrev = pos;
   });

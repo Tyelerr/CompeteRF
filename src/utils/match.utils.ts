@@ -93,7 +93,7 @@ const buildLabelMap = (
       if (hasLosers && n.round === maxWinRound) map[n.id] = "Hotseat Match";
       else map[n.id] = `Winners Side Match ${++w}`;
     } else if (n.side === "losers") map[n.id] = `Losers Side Match ${++l}`;
-    else map[n.id] = n.id === "GF2" ? "Grand Final Reset" : "Grand Final";
+    else map[n.id] = n.id === "GF2" ? "Finals (2nd Set)" : "Finals";
   }
   return map;
 };
