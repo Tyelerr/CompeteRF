@@ -1,9 +1,11 @@
 ﻿// app/(tabs)/profile.tsx
 
 import * as AppleAuthentication from "expo-apple-authentication";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated,
+import { ComponentProps, useEffect, useMemo, useRef, useState } from "react";
+import { Alert,
+  Animated,
   Easing,
   Image,
   Platform,
@@ -144,6 +146,31 @@ const LoggedOutView = ({ router }: { router: any }) => {
   );
 };
 
+// One Home State / Favorite Player / Favorite Game cell in the profile card.
+const DetailCell = ({
+  icon,
+  color,
+  label,
+  value,
+}: {
+  icon: ComponentProps<typeof Ionicons>["name"];
+  color: string;
+  label: string;
+  value: string;
+}) => (
+  <View style={styles.detailCell}>
+    <View style={styles.detailCellHead}>
+      <Ionicons name={icon} size={wxMs(13)} color={color} />
+      <Text allowFontScaling={false} style={styles.detailCellLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+    <Text allowFontScaling={false} style={styles.detailCellValue} numberOfLines={1}>
+      {value}
+    </Text>
+  </View>
+);
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const router = useRouter();
@@ -252,6 +279,14 @@ export default function ProfileScreen() {
     router.replace("/(tabs)" as any);
   };
 
+  const handleSettings = () => {
+    Alert.alert("Settings", undefined, [
+      { text: "Edit Profile", onPress: () => setEditProfileVisible(true) },
+      { text: "Sign Out", style: "destructive", onPress: handleLogout },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const openDetailModal = (tournamentId: number | string) => {
     setDetailTournamentId(String(tournamentId));
     setShowDetailModal(true);
@@ -278,14 +313,23 @@ export default function ProfileScreen() {
         }
       >
         <View style={[styles.pageWrapper, isWeb && styles.pageWrapperWeb]}>
-          <View style={[styles.header, isWeb && styles.headerWeb]}>
+          <View style={[styles.topBar, isWeb && styles.headerWeb]}>
+            <View style={styles.topBarSide} />
             <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
-            <Text allowFontScaling={false} style={styles.headerSubtitle}>View and manage your tournament history</Text>
+            <View style={styles.topBarSide}>
+              <TouchableOpacity style={styles.iconBtn} onPress={handleSettings} hitSlop={8}>
+                <Ionicons name="settings-outline" size={wxMs(22)} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => setInboxVisible(true)} hitSlop={8}>
+                <Ionicons name="notifications-outline" size={wxMs(22)} color={COLORS.textSecondary} />
+                {unreadCount > 0 && <View style={styles.bellBadge} />}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.profileCard}>
             <TouchableOpacity style={styles.messagesFloatingButton} onPress={() => setInboxVisible(true)}>
-              <Text allowFontScaling={false} style={styles.messagesFloatingIcon}>{"\u2709\uFE0F"}</Text>
+              <Ionicons name="mail" size={wxMs(15)} color={COLORS.white} />
               <Text allowFontScaling={false} style={styles.messagesFloatingText}>Messages</Text>
               {unreadCount > 0 && (
                 <View style={styles.messagesUnreadBadge}>
@@ -317,56 +361,50 @@ export default function ProfileScreen() {
                     </View>
                   </View>
                 )}
+                <View style={styles.statusDot} />
               </View>
               <View style={styles.profileInfo}>
-                <Text allowFontScaling={false} style={styles.name}>
-                  {profile?.user_name
-                    ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
-                    : user.email?.split("@")[0] || "Player"}
-                </Text>
-                <Text allowFontScaling={false} style={styles.playerID}>
+                <View style={styles.nameRow}>
+                  <Text allowFontScaling={false} style={styles.name} numberOfLines={1}>
+                    {profile?.user_name
+                      ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
+                      : user.email?.split("@")[0] || "Player"}
+                  </Text>
+                  <TouchableOpacity style={styles.editInline} onPress={() => setEditProfileVisible(true)} hitSlop={6}>
+                    <Text allowFontScaling={false} style={styles.editInlineText}>Edit Profile</Text>
+                    <Ionicons name="pencil" size={wxMs(12)} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
+                <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
                   {profile?.id_auto ? generatePlayerID(profile.id_auto) : "Loading..."}
-                </Text>
-                <Text allowFontScaling={false} style={styles.memberSince}>
-                  Member since {formatMemberSince(profile?.created_at || user.created_at)}
+                  {"  \u00B7  Member since "}
+                  {formatMemberSince(profile?.created_at || user.created_at)}
                 </Text>
               </View>
             </View>
 
-            <View style={[styles.actionButtons, isWeb && styles.actionButtonsWeb]}>
-              <TouchableOpacity style={[styles.actionButton, styles.editButton, isWeb && styles.actionButtonWeb]} onPress={() => setEditProfileVisible(true)}>
-                <Text allowFontScaling={false} style={styles.editButtonText}>Edit Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, styles.notificationButton, isWeb && styles.actionButtonWeb]} onPress={() => setInboxVisible(true)}>
-                <Text allowFontScaling={false} style={styles.notificationButtonText}>Notifications</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, styles.signOutButton, isWeb && styles.actionButtonWeb]} onPress={handleLogout}>
-                <Text allowFontScaling={false} style={styles.signOutButtonText}>Sign Out</Text>
-              </TouchableOpacity>
+            <View style={styles.detailRow}>
+              <DetailCell
+                icon="location-outline"
+                color={COLORS.error}
+                label="Home State"
+                value={profile?.home_state || "\u2014"}
+              />
+              <View style={styles.detailDivider} />
+              <DetailCell
+                icon="star"
+                color={COLORS.warning}
+                label="Favorite Player"
+                value={profile?.favorite_player || "\u2014"}
+              />
+              <View style={styles.detailDivider} />
+              <DetailCell
+                icon="ellipse"
+                color={COLORS.primary}
+                label="Favorite Game"
+                value={profile?.preferred_game ? formatGameName(profile.preferred_game) : "\u2014"}
+              />
             </View>
-
-            {profile && (
-              <View style={styles.userDetails}>
-                {profile.home_state && (
-                  <View style={styles.detailItem}>
-                    <Text allowFontScaling={false} style={styles.detailLabel}>Home State</Text>
-                    <Text allowFontScaling={false} style={styles.detailValue}>{profile.home_state}</Text>
-                  </View>
-                )}
-                {profile.favorite_player && (
-                  <View style={styles.detailItem}>
-                    <Text allowFontScaling={false} style={styles.detailLabel}>Favorite Player</Text>
-                    <Text allowFontScaling={false} style={styles.detailValue}>{profile.favorite_player}</Text>
-                  </View>
-                )}
-                {profile.preferred_game && (
-                  <View style={styles.detailItem}>
-                    <Text allowFontScaling={false} style={styles.detailLabel}>Favorite Game</Text>
-                    <Text allowFontScaling={false} style={styles.detailValue}>{formatGameName(profile.preferred_game)}</Text>
-                  </View>
-                )}
-              </View>
-            )}
           </View>
 
           {/* Match Center \u2014 only when you're in a live tournament (placeholder
@@ -387,7 +425,7 @@ export default function ProfileScreen() {
                 {live[0].tournament!.name}
               </Text>
               <Text allowFontScaling={false} style={styles.matchCenterSub}>
-                You&apos;re in a live tournament \u00B7 tap to view
+                You&apos;re in a live tournament. Tap to view.
               </Text>
             </TouchableOpacity>
           )}
@@ -503,6 +541,26 @@ const styles = StyleSheet.create({
     paddingBottom: wxSc(SPACING.sm),
     alignItems: "center",
   },
+  // New top bar: PROFILE centered with settings + bell on the right.
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.xl + SPACING.md),
+    paddingBottom: wxSc(SPACING.sm),
+  },
+  topBarSide: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), minWidth: wxSc(60) },
+  iconBtn: { padding: wxSc(2) },
+  bellBadge: {
+    position: "absolute",
+    top: wxSc(1),
+    right: wxSc(1),
+    width: wxSc(8),
+    height: wxSc(8),
+    borderRadius: wxSc(4),
+    backgroundColor: COLORS.error,
+  },
   headerWeb: { paddingTop: SPACING.lg },
   headerTitle: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, textAlign: "center" },
   headerSubtitle: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center", marginTop: wxSc(SPACING.xs) },
@@ -561,6 +619,17 @@ const styles = StyleSheet.create({
   avatarContainer: { width: wxSc(80), height: wxSc(80), marginRight: wxSc(SPACING.md) },
   profileImage: { width: wxSc(80), height: wxSc(80), borderRadius: wxSc(40), borderWidth: 2, borderColor: COLORS.border },
   avatar: { width: wxSc(80), height: wxSc(80) },
+  statusDot: {
+    position: "absolute",
+    right: wxSc(2),
+    bottom: wxSc(2),
+    width: wxSc(16),
+    height: wxSc(16),
+    borderRadius: wxSc(8),
+    backgroundColor: COLORS.success,
+    borderWidth: 2,
+    borderColor: COLORS.backgroundCard,
+  },
   ballRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: wxSc(2) },
   ball: { width: wxSc(24), height: wxSc(24), borderRadius: wxSc(12), marginHorizontal: wxSc(1) },
   ball1: { backgroundColor: "#FFD700" },
@@ -573,9 +642,26 @@ const styles = StyleSheet.create({
   ball12: { backgroundColor: "#800080" },
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
   profileInfo: { flex: 1 },
-  name: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "600", color: COLORS.text, marginBottom: wxSc(SPACING.xs) },
-  playerID: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.xs) },
-  memberSince: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), flexWrap: "wrap" },
+  name: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "800", color: COLORS.text, flexShrink: 1 },
+  editInline: { flexDirection: "row", alignItems: "center", gap: wxSc(3) },
+  editInlineText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
+  metaLine: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: wxSc(SPACING.xs) },
+
+  // Home State / Favorite Player / Favorite Game row
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.md),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  detailCell: { flex: 1, gap: wxSc(2) },
+  detailCellHead: { flexDirection: "row", alignItems: "center", gap: wxSc(4) },
+  detailCellLabel: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, flexShrink: 1 },
+  detailCellValue: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "700" },
+  detailDivider: { width: 1, alignSelf: "stretch", backgroundColor: COLORS.border, marginHorizontal: wxSc(SPACING.sm) },
 
   actionButtons: { flexDirection: "row", gap: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.sm) },
   actionButtonsWeb: { flexDirection: "row" },
