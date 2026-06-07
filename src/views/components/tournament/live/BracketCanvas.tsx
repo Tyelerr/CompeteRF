@@ -477,8 +477,6 @@ export const BracketCanvas = ({
                 >
                   <Animated.View style={styles.fill}>
                     <Animated.View
-                      shouldRasterizeIOS
-                      renderToHardwareTextureAndroid
                       style={{
                         width,
                         height,
