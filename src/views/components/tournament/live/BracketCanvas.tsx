@@ -34,8 +34,8 @@ const GAP_X = 56;
 const GAP_Y = 22;
 const LABEL_H = 30;
 const DIVIDER_GAP = 64;
-const LINE_W = 1.5; // connector thickness in content px (counter-scaled on screen)
-const MIN_SCALE = 0.3;
+const LINE_W = 2.5; // connector thickness (plain View; stays visible to MIN_SCALE)
+const MIN_SCALE = 0.42;
 const MAX_SCALE = 2.5;
 const START_SCALE = 0.7;
 const PAD = SPACING.md;
@@ -247,9 +247,6 @@ export const BracketCanvas = ({
   const { positioned, labels, lines, width, height, hasLosers, dividerY } = built;
 
   const scaleA = useRef(new Animated.Value(START_SCALE)).current;
-  // Inverse scale: lines counter-scale their thin axis by this so they keep a
-  // constant on-screen thickness and never drop out when zoomed far out.
-  const invScaleA = useRef(new Animated.Value(1 / START_SCALE)).current;
   const txA = useRef(new Animated.Value(PAD)).current;
   const tyA = useRef(new Animated.Value(PAD)).current;
   const scale = useRef(START_SCALE);
@@ -274,7 +271,6 @@ export const BracketCanvas = ({
     tx.current = x;
     ty.current = y;
     scaleA.setValue(s);
-    invScaleA.setValue(1 / s);
     txA.setValue(x);
     tyA.setValue(y);
   };
@@ -307,7 +303,6 @@ export const BracketCanvas = ({
     ty.current = y;
     Animated.parallel([
       Animated.timing(scaleA, { toValue: s, duration: 220, useNativeDriver: false }),
-      Animated.timing(invScaleA, { toValue: 1 / s, duration: 220, useNativeDriver: false }),
       Animated.timing(txA, { toValue: x, duration: 220, useNativeDriver: false }),
       Animated.timing(tyA, { toValue: y, duration: 220, useNativeDriver: false }),
     ]).start();
@@ -485,7 +480,7 @@ export const BracketCanvas = ({
                       }}
                     >
                       {lines.map((l, i) => (
-                        <Animated.View
+                        <View
                           key={`ln-${i}`}
                           style={{
                             position: "absolute",
@@ -494,12 +489,11 @@ export const BracketCanvas = ({
                             width: l.w,
                             height: l.h,
                             backgroundColor: COLORS.border,
-                            transform: [l.vert ? { scaleX: invScaleA } : { scaleY: invScaleA }],
                           }}
                         />
                       ))}
                       {hasLosers && (
-                        <Animated.View
+                        <View
                           style={{
                             position: "absolute",
                             left: 0,
@@ -507,7 +501,6 @@ export const BracketCanvas = ({
                             width,
                             height: 2,
                             backgroundColor: COLORS.borderLight,
-                            transform: [{ scaleY: invScaleA }],
                           }}
                         />
                       )}
