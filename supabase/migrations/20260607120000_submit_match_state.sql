@@ -30,6 +30,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_uid      bigint;
+  v_is_td    boolean;
   v_allowed  boolean;
   v_ls       jsonb;
   v_existing jsonb;
@@ -46,11 +47,14 @@ begin
 
   -- 2. Authorize: the tournament director, or an active (non-cancelled / non
   --    no-show) participant of this tournament.
+  select exists (
+    select 1 from public.tournaments t
+    where t.id = p_tournament_id and t.director_id = v_uid
+  )
+  into v_is_td;
+
   select
-    exists (
-      select 1 from public.tournaments t
-      where t.id = p_tournament_id and t.director_id = v_uid
-    )
+    v_is_td
     or exists (
       select 1 from public.tournament_players tp
       where tp.tournament_id = p_tournament_id
@@ -86,6 +90,13 @@ begin
 
   v_ls := jsonb_set(v_ls, '{matchState}', coalesce(v_ls -> 'matchState', '{}'::jsonb), true);
   v_existing := coalesce(v_ls #> array['matchState', p_match_id], '{}'::jsonb);
+
+  -- 4a. Once a match is final it is LOCKED for players: only the TD may change a
+  --     completed match (corrections). Players cannot edit a final score.
+  if not v_is_td and (v_existing ->> 'status') = 'completed' then
+    raise exception 'Match is final and locked' using errcode = '42501';
+  end if;
+
   v_ls := jsonb_set(v_ls, array['matchState', p_match_id], v_existing || v_clean, true);
 
   update public.tournaments
