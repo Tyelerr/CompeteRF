@@ -59,8 +59,9 @@ interface Label {
 
 const winnersRoundName = (r: number, maxR: number, prefix: boolean): string => {
   const fromEnd = maxR - r;
-  const base =
-    fromEnd === 0 ? "Final" : fromEnd === 1 ? "Semifinal" : fromEnd === 2 ? "Quarterfinal" : `Round ${r}`;
+  // prefix = double elim: the winners final is the Hotseat round.
+  if (fromEnd === 0) return prefix ? "Hotseat" : "Final";
+  const base = fromEnd === 1 ? "Semifinal" : fromEnd === 2 ? "Quarterfinal" : `Round ${r}`;
   return prefix ? `Winners ${base}` : base;
 };
 

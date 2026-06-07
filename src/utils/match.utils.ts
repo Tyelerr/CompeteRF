@@ -79,11 +79,20 @@ const buildLabelMap = (
   graph: NonNullable<GeneratedBracket["graph"]>,
 ): Record<string, string> => {
   const map: Record<string, string> = {};
+  // In double elim the winners-bracket final is the "Hotseat" — its winner is
+  // locked into the grand final (guaranteed 1st or 2nd).
+  const hasLosers = graph.some((n) => n.side === "losers");
+  const maxWinRound = graph.reduce(
+    (a, n) => (n.side === "winners" ? Math.max(a, n.round) : a),
+    0,
+  );
   let w = 0;
   let l = 0;
   for (const n of graph) {
-    if (n.side === "winners") map[n.id] = `Winners Side Match ${++w}`;
-    else if (n.side === "losers") map[n.id] = `Losers Side Match ${++l}`;
+    if (n.side === "winners") {
+      if (hasLosers && n.round === maxWinRound) map[n.id] = "Hotseat Match";
+      else map[n.id] = `Winners Side Match ${++w}`;
+    } else if (n.side === "losers") map[n.id] = `Losers Side Match ${++l}`;
     else map[n.id] = n.id === "GF2" ? "Grand Final Reset" : "Grand Final";
   }
   return map;
