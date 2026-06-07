@@ -493,7 +493,7 @@ const ScoreCol = ({
       {name}
     </Text>
     <View style={styles.stepperRow}>
-      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, -1))}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, -1, 0, 999))}>
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           −
         </Text>
@@ -504,11 +504,11 @@ const ScoreCol = ({
         value={value}
         onChangeText={(v) => onChange(v.replace(/[^0-9]/g, ""))}
         keyboardType="numeric"
-        maxLength={2}
+        maxLength={3}
         placeholder="0"
         placeholderTextColor={COLORS.textMuted}
       />
-      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, 1))}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, 1, 0, 999))}>
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           +
         </Text>
@@ -624,10 +624,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     color: COLORS.primary,
-    fontSize: webMs(FONT_SIZES.xxl),
+    fontSize: webMs(FONT_SIZES.xl),
     fontWeight: "900",
     textAlign: "center",
-    width: webSc(54),
+    width: webSc(66),
     paddingVertical: webSc(SPACING.sm),
   },
   stepInput: {

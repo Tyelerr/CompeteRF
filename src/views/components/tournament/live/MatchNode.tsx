@@ -83,6 +83,7 @@ export const MatchNode = ({
           race={m.p1Race}
           score={m.p1Score}
           dash={m.bye}
+          result={m.result}
           won={m.winner === 1}
           lost={m.winner === 2}
         />
@@ -91,6 +92,7 @@ export const MatchNode = ({
           race={m.bye ? null : m.p2Race}
           score={m.p2Score}
           dash={m.bye}
+          result={m.result}
           won={m.winner === 2}
           lost={m.winner === 1}
         />
@@ -114,11 +116,24 @@ export const MatchNode = ({
   );
 };
 
+const scoreText = (
+  score: number | null,
+  dash: boolean | undefined,
+  lost: boolean,
+  result: "normal" | "forfeit" | "withdraw" | null,
+): string => {
+  if (dash) return "–";
+  if (lost && result === "forfeit") return "FF";
+  if (lost && result === "withdraw") return "WD";
+  return String(score ?? 0);
+};
+
 const PlayerRow = ({
   name,
   race,
   score,
   dash,
+  result,
   won,
   lost,
 }: {
@@ -126,6 +141,7 @@ const PlayerRow = ({
   race: number | null;
   score: number | null;
   dash?: boolean;
+  result?: "normal" | "forfeit" | "withdraw" | null;
   won: boolean;
   lost: boolean;
 }) => (
@@ -142,8 +158,12 @@ const PlayerRow = ({
       {won ? "  ✓" : ""}
     </Text>
     <View style={[styles.scoreBox, won && styles.scoreBoxWon]}>
-      <Text allowFontScaling={false} style={[styles.scoreNum, won && styles.scoreNumWon]}>
-        {dash ? "–" : (score ?? 0)}
+      <Text
+        allowFontScaling={false}
+        style={[styles.scoreNum, won && styles.scoreNumWon]}
+        numberOfLines={1}
+      >
+        {scoreText(score, dash, lost, result ?? null)}
       </Text>
     </View>
   </View>
