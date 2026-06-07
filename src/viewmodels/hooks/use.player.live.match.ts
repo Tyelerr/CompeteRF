@@ -52,6 +52,18 @@ export interface PlayerTournamentHub {
   history: PlayerMatchResult[]; // completed matches, earliest first
 }
 
+// True when a Supabase error means the RPC isn't deployed yet (PostgREST can't
+// find the function), so the caller can fall back to a direct update.
+const isMissingFunction = (e: unknown): boolean => {
+  const err = e as { code?: string; message?: string } | null;
+  if (!err) return false;
+  if (err.code === "PGRST202") return true;
+  const msg = err.message ?? "";
+  return /submit_match_state|could not find the function|schema cache|does not exist/i.test(
+    msg,
+  );
+};
+
 const roundLabelFor = (m: LiveMatch): string => {
   if (m.side === "winners") return `Winners Round ${m.round}`;
   if (m.side === "losers") return `Losers Round ${m.round}`;
@@ -107,26 +119,37 @@ export const usePlayerLiveMatch = (playerId?: number) => {
   // matchState (live_settings.matchState[matchId]). Invalidating ["tournament", id]
   // makes the bracket, the Matches tab and this hub all reflect the change.
   //
-  // NOTE: writes go through updateTournament, so today this only succeeds for a
-  // user who can update the tournament row (the TD / owner). A participant-scoped
-  // RPC is the production path for players scoring their own match.
+  // Preferred path: the submit_match_state RPC, which lets an active PARTICIPANT
+  // (not just the TD) score their own match. If that function isn't deployed yet,
+  // we fall back to a direct tournaments UPDATE (works for the TD / owner only), so
+  // scoring keeps working before the migration is applied.
   const matchStateMutation = useMutation({
     mutationFn: async (vars: {
       matchId: string;
       patch: Partial<MatchLiveState>;
     }) => {
       if (!tournamentId) throw new Error("No live tournament.");
-      const ls = tournament?.live_settings ?? {};
-      const prev = ls.matchState ?? {};
-      const existing = prev[vars.matchId] ?? {};
-      const merged: MatchLiveState = {
-        ...existing,
-        ...vars.patch,
-        status: vars.patch.status ?? existing.status ?? "in_progress",
-      };
-      return tournamentService.updateTournament(tournamentId, {
-        live_settings: { ...ls, matchState: { ...prev, [vars.matchId]: merged } },
-      });
+      try {
+        await tournamentService.submitMatchState(
+          tournamentId,
+          vars.matchId,
+          vars.patch as Record<string, unknown>,
+        );
+      } catch (e) {
+        if (!isMissingFunction(e)) throw e;
+        // RPC not deployed — fall back to a direct update (TD / owner).
+        const ls = tournament?.live_settings ?? {};
+        const prev = ls.matchState ?? {};
+        const existing = prev[vars.matchId] ?? {};
+        const merged: MatchLiveState = {
+          ...existing,
+          ...vars.patch,
+          status: vars.patch.status ?? existing.status ?? "in_progress",
+        };
+        await tournamentService.updateTournament(tournamentId, {
+          live_settings: { ...ls, matchState: { ...prev, [vars.matchId]: merged } },
+        });
+      }
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] }),

@@ -177,6 +177,24 @@ export const tournamentService = {
   // These drive the runtime engine state, separate from `status` (lifecycle).
   // .select().single() + null guard catches silent RLS failures.
 
+  // Participant-scoped live match scoring (see migration
+  // 20260607120000_submit_match_state.sql). Merges a small whitelisted patch into
+  // tournaments.live_settings.matchState[matchId] for a single match. Unlike a
+  // direct tournaments UPDATE, this is callable by an active participant (not just
+  // the TD), so a player can score their own match. Returns the new live_settings.
+  async submitMatchState(
+    tournamentId: number,
+    matchId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    const { error } = await supabase.rpc("submit_match_state", {
+      p_tournament_id: tournamentId,
+      p_match_id: matchId,
+      p_patch: patch,
+    });
+    if (error) throw error;
+  },
+
   async setLiveState(
     id: number,
     liveState: TournamentLiveState,
