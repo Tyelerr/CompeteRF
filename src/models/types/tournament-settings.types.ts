@@ -61,6 +61,25 @@ export interface MatchLiveState {
   result?: MatchResult | null; // how the match ended
 }
 
+// ── Full bracket graph (winners + losers + grand final) ───────────────────────
+// Every match's slots reference where their player comes from, so winners/losers
+// flow automatically as matches complete. Round-1 winners slots are seeds.
+export type BracketSlotRef =
+  | { kind: "seed"; seedIndex: number } // position in the round-1 seed order
+  | { kind: "winner"; matchId: string } // winner of another match advances here
+  | { kind: "loser"; matchId: string } // loser of a winners match drops here
+  | { kind: "empty" }; // unfilled / bye
+
+export type BracketSide = "winners" | "losers" | "grand";
+
+export interface BracketGraphNode {
+  id: string; // "W1M1", "L2M3", "GF"
+  side: BracketSide;
+  round: number; // 1-based within its side
+  slot1: BracketSlotRef;
+  slot2: BracketSlotRef;
+}
+
 // One entry in the draw history (append-only) — stored in live_settings.drawLog.
 export interface DrawLogEntry {
   drawNumber: number;
