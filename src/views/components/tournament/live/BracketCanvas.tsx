@@ -113,59 +113,110 @@ const layout = (matches: LiveMatch[]) => {
 
   const winHeight = LABEL_H + Math.max(1, winR1Count) * rowStride;
   const winWidth = Math.max(1, winMaxR) * colStride;
-
-  // Grand final column, to the right of the winners final.
-  grand.forEach((m, j) => {
-    positioned.push({
-      x: winWidth,
-      y: LABEL_H + (Math.max(1, winR1Count) / 2 - 0.5) * rowStride + j * rowStride,
-      match: m,
-    });
-  });
-  if (grand.length) labels.push({ x: winWidth, y: 4, text: "Grand Final" });
-
-  // Losers — stacked columns beneath the winners bracket.
-  const losBaseY = hasLosers ? winHeight + DIVIDER_GAP : winHeight;
-  let losHeight = 0;
-  for (let r = 1; r <= losMaxR; r++) {
-    const arr = losRounds.get(r) || [];
-    const x = (r - 1) * colStride;
-    const last = r === losMaxR;
-    labels.push({ x, y: losBaseY + 4, text: last ? "Losers Final" : `Losers Round ${r}` });
-    arr.forEach((m, j) => {
-      positioned.push({ x, y: losBaseY + LABEL_H + j * rowStride, match: m });
-    });
-    losHeight = Math.max(losHeight, LABEL_H + arr.length * rowStride);
-  }
-
-  // Winners-bracket connectors (tree).
   const lines: { left: number; top: number; w: number; h: number }[] = [];
+
+  // Tree connectors between a parent and its (1 or 2) children, both already
+  // positioned. childIdx maps a parent index to its child indices in round r-1.
+  const treeConnect = (
+    posOf: Map<string, Pos>,
+    rounds: Map<number, LiveMatch[]>,
+    maxR: number,
+    childIdx: (i: number) => number[],
+  ) => {
+    for (let r = 2; r <= maxR; r++) {
+      for (const m of rounds.get(r) || []) {
+        const parent = posOf.get(m.id);
+        if (!parent) continue;
+        const kids = childIdx(idxOf(m))
+          .map((ci) => (rounds.get(r - 1) || []).find((x) => idxOf(x) === ci))
+          .filter((c): c is LiveMatch => !!c)
+          .map((c) => posOf.get(c.id))
+          .filter((p): p is Pos => !!p);
+        if (kids.length === 0) continue;
+        const childRight = kids[0].x + NODE_WIDTH;
+        const midX = (childRight + parent.x) / 2;
+        const cys = kids.map((k) => k.y + NODE_HEIGHT / 2);
+        const py = parent.y + NODE_HEIGHT / 2;
+        kids.forEach((k) =>
+          lines.push({ left: childRight, top: k.y + NODE_HEIGHT / 2, w: midX - childRight, h: 1 }),
+        );
+        lines.push({ left: midX, top: Math.min(...cys), w: 1, h: Math.abs(cys[cys.length - 1] - cys[0]) || 1 });
+        lines.push({ left: midX, top: py, w: parent.x - midX, h: 1 });
+      }
+    }
+  };
+
+  // Winners-bracket connectors (binary tree).
   const winPos = new Map<string, Pos>();
   positioned.forEach((p) => {
     if (p.match.side === "winners") winPos.set(p.match.id, p);
   });
-  for (let r = 2; r <= winMaxR; r++) {
-    for (const m of winRounds.get(r) || []) {
-      const parent = winPos.get(m.id);
+  treeConnect(winPos, winRounds, winMaxR, (i) => [i * 2 - 1, i * 2]);
+
+  // Losers — also a left-to-right tree. Major rounds (same count as the prior
+  // round) align with their single LB child; minor rounds (half the count) center
+  // between two. Round 1 is stacked.
+  const losBaseY = hasLosers ? winHeight + DIVIDER_GAP : winHeight;
+  let prevLY = new Map<number, number>();
+  for (let r = 1; r <= losMaxR; r++) {
+    const arr = losRounds.get(r) || [];
+    const prevCount = (losRounds.get(r - 1) || []).length;
+    const major = r > 1 && arr.length === prevCount;
+    const x = (r - 1) * colStride;
+    labels.push({ x, y: losBaseY + 4, text: r === losMaxR ? "Losers Final" : `Losers Round ${r}` });
+    const curLY = new Map<number, number>();
+    arr.forEach((m, j) => {
       const i = idxOf(m);
-      const c1 = (winRounds.get(r - 1) || []).find((x) => idxOf(x) === i * 2 - 1);
-      const c2 = (winRounds.get(r - 1) || []).find((x) => idxOf(x) === i * 2);
-      if (!parent || !c1) continue;
-      const p1 = winPos.get(c1.id)!;
-      const p2 = c2 ? winPos.get(c2.id)! : p1;
-      const childRight = p1.x + NODE_WIDTH;
-      const midX = (childRight + parent.x) / 2;
-      const cy1 = p1.y + NODE_HEIGHT / 2;
-      const cy2 = p2.y + NODE_HEIGHT / 2;
-      const py = parent.y + NODE_HEIGHT / 2;
-      lines.push({ left: childRight, top: cy1, w: midX - childRight, h: 1 });
-      if (c2) lines.push({ left: childRight, top: cy2, w: midX - childRight, h: 1 });
-      lines.push({ left: midX, top: Math.min(cy1, cy2), w: 1, h: Math.abs(cy2 - cy1) || 1 });
-      lines.push({ left: midX, top: py, w: parent.x - midX, h: 1 });
-    }
+      let y: number;
+      if (r === 1) y = losBaseY + LABEL_H + j * rowStride;
+      else if (major) y = prevLY.get(i) ?? losBaseY + LABEL_H + j * rowStride;
+      else {
+        const y1 = prevLY.get(i * 2 - 1) ?? prevLY.get(i * 2) ?? losBaseY + LABEL_H;
+        const y2 = prevLY.get(i * 2) ?? y1;
+        y = (y1 + y2) / 2;
+      }
+      positioned.push({ x, y, match: m });
+      curLY.set(i, y);
+    });
+    prevLY = curLY;
+  }
+  const losPos = new Map<string, Pos>();
+  positioned.forEach((p) => {
+    if (p.match.side === "losers") losPos.set(p.match.id, p);
+  });
+  // Losers connectors: major rounds feed L(r-1)M(i); minor rounds L(r-1)M(2i-1/2i).
+  for (let r = 2; r <= losMaxR; r++) {
+    const arr = losRounds.get(r) || [];
+    const major = arr.length === (losRounds.get(r - 1) || []).length;
+    treeConnect(
+      losPos,
+      new Map([
+        [r - 1, losRounds.get(r - 1) || []],
+        [r, arr],
+      ]),
+      r,
+      (i) => (major ? [i] : [i * 2 - 1, i * 2]),
+    );
   }
 
-  const width = Math.max(winWidth + colStride, losMaxR * colStride) + GAP_X;
+  // Grand final flows left-to-right: GF, then GF2 (reset) to its right.
+  const losHeight = hasLosers ? LABEL_H + (losRounds.get(1) || []).length * rowStride : 0;
+  const gfY = LABEL_H + (Math.max(1, winR1Count) / 2 - 0.5) * rowStride;
+  let gfPrev: Pos | null = null;
+  grand.forEach((m) => {
+    const x = winWidth + (m.round - 1) * colStride;
+    const pos = { x, y: gfY, match: m };
+    positioned.push(pos);
+    labels.push({ x, y: 4, text: m.round === 1 ? "Grand Final" : "Reset" });
+    if (gfPrev) {
+      const childRight = gfPrev.x + NODE_WIDTH;
+      lines.push({ left: childRight, top: gfY + NODE_HEIGHT / 2, w: x - childRight, h: 1 });
+    }
+    gfPrev = pos;
+  });
+
+  const grandCols = grand.length;
+  const width = Math.max(winWidth + grandCols * colStride, losMaxR * colStride) + GAP_X;
   const height = hasLosers ? losBaseY + losHeight : winHeight;
   const dividerY = hasLosers ? winHeight + DIVIDER_GAP / 2 : 0;
   return { positioned, labels, lines, width, height, hasLosers, dividerY, winWidth };
