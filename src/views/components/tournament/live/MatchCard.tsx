@@ -14,7 +14,6 @@ import {
   MatchActionStep,
 } from "../../../../utils/match.utils";
 import { LiveDot } from "./LiveDot";
-import { useMatchTimer } from "./useMatchTimer";
 
 // Built at runtime so no raw emoji lives in source (toolchain-safe).
 const GLYPH = { cam: String.fromCodePoint(0x1f4f9) };
@@ -30,25 +29,24 @@ export const MatchCard = ({
 }) => {
   const m = match;
   const running = m.status === "in_progress";
-  const { elapsedSeconds, isOvertime } = useMatchTimer(
-    m.startedAt,
-    m.allowedSeconds,
-    running,
-    m.completedAt,
-  );
-
+  // No per-card live timer (the ticking happens in the match modal). Completed
+  // matches show their final elapsed time, computed once (no interval).
+  const finalSeconds =
+    m.startedAt && m.completedAt
+      ? Math.max(0, (new Date(m.completedAt).getTime() - new Date(m.startedAt).getTime()) / 1000)
+      : 0;
   const timerText =
     m.status === "scheduled"
       ? "Not started"
       : running
-        ? formatClock(elapsedSeconds)
+        ? "Live"
         : m.startedAt
-          ? formatClock(elapsedSeconds)
+          ? `Final ${formatClock(finalSeconds)}`
           : "Completed";
   const timerStyle = [
     styles.timer,
     m.status === "scheduled" && styles.timerIdle,
-    running && isOvertime && styles.timerOver,
+    running && styles.timerLive,
     m.status === "completed" && styles.timerDone,
   ];
 
@@ -321,7 +319,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   timerIdle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
-  timerOver: { color: COLORS.error },
+  timerLive: { color: COLORS.success },
   timerDone: { fontSize: webMs(FONT_SIZES.md), color: COLORS.success },
   resultTag: {
     fontSize: webMs(FONT_SIZES.xs),

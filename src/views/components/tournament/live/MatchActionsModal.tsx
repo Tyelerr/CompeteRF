@@ -27,6 +27,7 @@ import {
 import { MatchLiveState } from "../../../../models/types/tournament-settings.types";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { Dropdown } from "../../common/dropdown";
+import { useMatchTimer } from "./useMatchTimer";
 
 type Step = MatchActionStep;
 
@@ -70,6 +71,14 @@ export const MatchActionsModal = ({
       match.hasCustomTimer ? String(Math.round(match.allowedSeconds / 60)) : "",
     );
   }, [match, initialStep]);
+
+  // Live ticking timer lives here (a single instance) rather than on every card.
+  const timer = useMatchTimer(
+    match?.startedAt ?? null,
+    match?.allowedSeconds ?? 0,
+    match?.status === "in_progress",
+    match?.completedAt ?? null,
+  );
 
   if (!match) return null;
   const m = match;
@@ -428,6 +437,20 @@ export const MatchActionsModal = ({
           {step === "details" && (
             <>
               <Header title={`${matchTitle} details`} />
+              {m.status === "in_progress" && (
+                <View style={styles.liveTimerBox}>
+                  <Text allowFontScaling={false} style={styles.liveTimerLabel}>
+                    LIVE
+                  </Text>
+                  <Text
+                    allowFontScaling={false}
+                    style={[styles.liveTimer, timer.isOvertime && styles.liveTimerOver]}
+                  >
+                    {formatClock(timer.elapsedSeconds)}
+                    {timer.isOvertime ? "  • OVER" : ""}
+                  </Text>
+                </View>
+              )}
               <View style={styles.detailBox}>
                 <Detail label="Players" value={namesLine} />
                 <Detail label="Race" value={m.raceLabel} />
@@ -659,6 +682,24 @@ const styles = StyleSheet.create({
   btnGhost: { borderWidth: 1, borderColor: COLORS.border },
   btnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) },
   closeBtn: { marginTop: webSc(SPACING.md) },
+  liveTimerBox: {
+    alignItems: "center",
+    paddingVertical: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.xs),
+  },
+  liveTimerLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    color: COLORS.error,
+    letterSpacing: 1,
+  },
+  liveTimer: {
+    fontSize: webMs(FONT_SIZES.xxxl),
+    fontWeight: "900",
+    color: COLORS.text,
+    fontVariant: ["tabular-nums"],
+  },
+  liveTimerOver: { color: COLORS.error },
   detailBox: { marginTop: webSc(SPACING.xs) },
   detailRow: {
     flexDirection: "row",
