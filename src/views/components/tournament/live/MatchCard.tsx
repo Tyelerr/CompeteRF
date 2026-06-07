@@ -22,10 +22,16 @@ export const MatchCard = ({
   match,
   onAction,
   busy,
+  readOnly,
+  onPress,
 }: {
   match: LiveMatch;
-  onAction: (m: LiveMatch, step: MatchActionStep) => void;
+  onAction?: (m: LiveMatch, step: MatchActionStep) => void;
   busy?: boolean;
+  // Spectator mode: no management actions; the whole card is tappable (onPress)
+  // to open a read-only detail.
+  readOnly?: boolean;
+  onPress?: () => void;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
@@ -50,13 +56,18 @@ export const MatchCard = ({
     m.status === "completed" && styles.timerDone,
   ];
 
+  const Container: typeof View | typeof TouchableOpacity = readOnly
+    ? TouchableOpacity
+    : View;
+
   return (
-    <View
+    <Container
       style={[
         styles.card,
         running && styles.cardLive,
         m.isLiveActive && styles.cardStream,
       ]}
+      {...(readOnly ? { activeOpacity: 0.85, onPress } : {})}
     >
       {/* Top meta row */}
       <View style={styles.topRow}>
@@ -124,38 +135,40 @@ export const MatchCard = ({
         )}
       </View>
 
-      {/* Actions */}
-      <View style={styles.actions}>
-        {m.bye ? (
-          <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
-        ) : m.status === "scheduled" ? (
-          <>
-            <Btn label="Start Match" primary onPress={() => onAction(m, "table")} busy={busy} />
-            <Btn label="Assign Table" onPress={() => onAction(m, "table")} busy={busy} />
-          </>
-        ) : running ? (
-          <>
-            <Btn label="End Match" primary onPress={() => onAction(m, "winner")} busy={busy} />
-            <Btn label="Edit Score" onPress={() => onAction(m, "score")} busy={busy} />
-          </>
-        ) : (
-          <>
-            <Btn label="View Details" primary onPress={() => onAction(m, "details")} busy={busy} />
-            <Btn label="Reopen" onPress={() => onAction(m, "menu")} busy={busy} />
-          </>
-        )}
-        <TouchableOpacity
-          style={styles.overflow}
-          onPress={() => onAction(m, "menu")}
-          disabled={busy}
-          hitSlop={6}
-        >
-          <Text allowFontScaling={false} style={styles.overflowText}>
-            ⋯
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* Actions (management only — hidden in spectator/read-only mode) */}
+      {!readOnly && (
+        <View style={styles.actions}>
+          {m.bye ? (
+            <Btn label="View Details" primary onPress={() => onAction?.(m, "details")} busy={busy} />
+          ) : m.status === "scheduled" ? (
+            <>
+              <Btn label="Start Match" primary onPress={() => onAction?.(m, "table")} busy={busy} />
+              <Btn label="Assign Table" onPress={() => onAction?.(m, "table")} busy={busy} />
+            </>
+          ) : running ? (
+            <>
+              <Btn label="End Match" primary onPress={() => onAction?.(m, "winner")} busy={busy} />
+              <Btn label="Edit Score" onPress={() => onAction?.(m, "score")} busy={busy} />
+            </>
+          ) : (
+            <>
+              <Btn label="View Details" primary onPress={() => onAction?.(m, "details")} busy={busy} />
+              <Btn label="Reopen" onPress={() => onAction?.(m, "menu")} busy={busy} />
+            </>
+          )}
+          <TouchableOpacity
+            style={styles.overflow}
+            onPress={() => onAction?.(m, "menu")}
+            disabled={busy}
+            hitSlop={6}
+          >
+            <Text allowFontScaling={false} style={styles.overflowText}>
+              ⋯
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Container>
   );
 };
 

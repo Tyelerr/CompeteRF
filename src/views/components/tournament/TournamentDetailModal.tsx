@@ -1,4 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet,
@@ -27,6 +28,7 @@ interface TournamentDetailModalProps {
 }
 
 export function TournamentDetailModal({ id, visible, onClose }: TournamentDetailModalProps) {
+  const router = useRouter();
   const vm = useTournamentDetail(id ?? "");
   const { session, isAdmin } = useAuth();
   const { isModalVisible, openReportModal, closeReportModal, reason, setReason, details, setDetails, handleSubmit, isSubmitting, contentType } = useReport({ userId: session?.user?.id });
@@ -115,6 +117,18 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const directorId = getDirectorId(director);
   // Registration is open through Compete (players self-register as preregistered).
   const canRegister = tournament?.live_state === "registration_open";
+  // Once a tournament has started (or finished), anyone can open the read-only
+  // spectator view (bracket / matches / players).
+  const hasStarted =
+    tournament?.live_state === "in_progress" ||
+    tournament?.live_state === "finished" ||
+    tournament?.status === "completed";
+
+  const handleViewTournament = () => {
+    if (!tournament) return;
+    handleClose();
+    router.push(`/live-tournament/${tournament.id}` as any);
+  };
 
   const innerContent = (
     <>
@@ -250,6 +264,15 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
               This tournament is organized by {tournament.venues?.venue || "an independent venue"}. Compete is not the organizer and is not responsible for tournament operations.
             </Text>
           </ScrollView>
+
+          {hasStarted && (
+            <View style={s.registerContainer}>
+              <TouchableOpacity style={s.viewTournamentButton} onPress={handleViewTournament}>
+                <Ionicons name="eye-outline" size={18} color="#fff" />
+                <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {canRegister && (
             <View style={s.registerContainer}>
@@ -387,6 +410,8 @@ const s = StyleSheet.create({
   chipLineCount: { fontWeight: "800", color: COLORS.primary },
   disclaimerText: { fontSize: moderateScale(11), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.md), lineHeight: moderateScale(16), opacity: 0.6 },
   registerContainer: { paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.md) },
+  viewTournamentButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
+  viewTournamentText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   registerButton: { backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center" },
   registerButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   registeredPill: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.success + "20", borderColor: COLORS.success, borderWidth: 1, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },

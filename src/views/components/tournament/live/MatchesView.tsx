@@ -19,12 +19,16 @@ import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch, MatchActionStep } from "../../../../utils/match.utils";
-import { MatchLiveState } from "../../../../models/types/tournament-settings.types";
+import {
+  MatchLiveState,
+  RaceGroup,
+} from "../../../../models/types/tournament-settings.types";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { Dropdown } from "../../common/dropdown";
 import { MatchCard } from "./MatchCard";
 import { BracketCanvas } from "./BracketCanvas";
 import { MatchActionsModal } from "./MatchActionsModal";
+import { SpectatorMatchModal } from "./SpectatorMatchModal";
 
 type ViewMode = "cards" | "bracket";
 type CardFilter = "all" | "scheduled" | "in_progress" | "completed" | "bye";
@@ -41,13 +45,19 @@ export const MatchesView = ({
   matches,
   tables,
   onSetMatchState,
+  readOnly,
+  groups,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
-  onSetMatchState: (vars: {
+  onSetMatchState?: (vars: {
     matchId: string;
     patch: Partial<MatchLiveState>;
   }) => Promise<unknown>;
+  // Spectator mode: no management actions; tapping a card/node opens a read-only
+  // detail. `groups` feeds the detail's race-group labels (groups mode only).
+  readOnly?: boolean;
+  groups?: RaceGroup[];
 }) => {
   const [mode, setMode] = useState<ViewMode>("cards"); // Card View is the default
   // The toggle highlight uses `mode` (instant); the heavy view content uses the
@@ -57,6 +67,7 @@ export const MatchesView = ({
   const [sheet, setSheet] = useState<{ match: LiveMatch; step: MatchActionStep } | null>(
     null,
   );
+  const [detail, setDetail] = useState<LiveMatch | null>(null); // read-only popup
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<CardFilter>("all");
@@ -81,6 +92,7 @@ export const MatchesView = ({
   const openSheet = (m: LiveMatch, step: MatchActionStep) => setSheet({ match: m, step });
 
   const onPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
+    if (!onSetMatchState) return;
     setBusy(true);
     try {
       await onSetMatchState({ matchId, patch });
@@ -160,9 +172,18 @@ export const MatchesView = ({
                 No matches for this search / filter.
               </Text>
             ) : (
-              filtered.map((m) => (
-                <MatchCard key={m.id} match={m} onAction={openSheet} busy={busy} />
-              ))
+              filtered.map((m) =>
+                readOnly ? (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    readOnly
+                    onPress={() => setDetail(m)}
+                  />
+                ) : (
+                  <MatchCard key={m.id} match={m} onAction={openSheet} busy={busy} />
+                ),
+              )
             )}
           </ScrollView>
         </View>
@@ -170,12 +191,12 @@ export const MatchesView = ({
         <View style={styles.bracketWrap}>
           <BracketCanvas
             matches={matches}
-            onNodePress={(m) => openSheet(m, "menu")}
+            onNodePress={(m) => (readOnly ? setDetail(m) : openSheet(m, "menu"))}
           />
         </View>
       )}
 
-      {sheet && (
+      {!readOnly && sheet && (
         <MatchActionsModal
           match={sheet.match}
           initialStep={sheet.step}
@@ -183,6 +204,14 @@ export const MatchesView = ({
           onPatch={onPatch}
           onClose={() => setSheet(null)}
           busy={busy}
+        />
+      )}
+
+      {readOnly && (
+        <SpectatorMatchModal
+          match={detail}
+          groups={groups}
+          onClose={() => setDetail(null)}
         />
       )}
     </View>
