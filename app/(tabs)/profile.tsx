@@ -313,30 +313,24 @@ export default function ProfileScreen() {
         }
       >
         <View style={[styles.pageWrapper, isWeb && styles.pageWrapperWeb]}>
-          <View style={[styles.topBar, isWeb && styles.headerWeb]}>
-            <View style={styles.topBarSide} />
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
             <Text allowFontScaling={false} style={styles.headerTitle}>PROFILE</Text>
-            <View style={styles.topBarSide}>
-              <TouchableOpacity style={styles.iconBtn} onPress={handleSettings} hitSlop={8}>
-                <Ionicons name="settings-outline" size={wxMs(22)} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn} onPress={() => setInboxVisible(true)} hitSlop={8}>
-                <Ionicons name="notifications-outline" size={wxMs(22)} color={COLORS.textSecondary} />
-                {unreadCount > 0 && <View style={styles.bellBadge} />}
-              </TouchableOpacity>
-            </View>
           </View>
 
           <View style={styles.profileCard}>
-            <TouchableOpacity style={styles.messagesFloatingButton} onPress={() => setInboxVisible(true)}>
-              <Ionicons name="mail" size={wxMs(15)} color={COLORS.white} />
-              <Text allowFontScaling={false} style={styles.messagesFloatingText}>Messages</Text>
-              {unreadCount > 0 && (
-                <View style={styles.messagesUnreadBadge}>
-                  <Text allowFontScaling={false} style={styles.messagesUnreadText}>{unreadCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            <View style={styles.cardIcons}>
+              <TouchableOpacity style={styles.cardIconBtn} onPress={() => setInboxVisible(true)} hitSlop={6}>
+                <Ionicons name="mail-outline" size={wxMs(20)} color={COLORS.text} />
+                {unreadCount > 0 && <View style={styles.bellBadge} />}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cardIconBtn} onPress={handleSettings} hitSlop={6}>
+                <Ionicons name="settings-outline" size={wxMs(20)} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cardIconBtn} onPress={() => setInboxVisible(true)} hitSlop={6}>
+                <Ionicons name="notifications-outline" size={wxMs(20)} color={COLORS.textSecondary} />
+                {unreadCount > 0 && <View style={styles.bellBadge} />}
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.profileHeader}>
               <View style={styles.avatarContainer}>
@@ -603,6 +597,17 @@ const styles = StyleSheet.create({
   },
   messagesFloatingIcon: { fontSize: wxMs(14) },
   messagesFloatingText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.white },
+  // Top-right card icon group: messages (envelope), settings, notifications.
+  cardIcons: {
+    position: "absolute",
+    top: wxSc(10),
+    right: wxSc(SPACING.md),
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wxSc(SPACING.md),
+    zIndex: 1,
+  },
+  cardIconBtn: { padding: wxSc(2) },
   messagesUnreadBadge: {
     backgroundColor: COLORS.error,
     borderRadius: wxSc(10),
