@@ -3,9 +3,10 @@
 // Focuses on the match that matters now (the player's current/next match) plus a
 // read-only history of their completed matches in this event.
 //
-// Read-only for now: the score steppers (so a player can score their own match)
-// hang off a future write path (a participant-scoped RPC) — see the scoring slot
-// below. Until that lands the hub just reflects the live bracket.
+// While the current match is live, the match card shows +/- score steppers under
+// each player; changes persist to the shared matchState so the bracket and every
+// view reflect them. (The write currently needs tournament-update rights — a
+// participant-scoped RPC is the production path for non-TD players.)
 
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
@@ -25,6 +26,9 @@ const wxSc = (v: number) => (isWeb ? v : scale(v));
 interface TournamentHubViewProps {
   hub: PlayerTournamentHub;
   onOpenTournament: (tournamentId: number) => void;
+  // Adjust a side's score by +/-1 (only used while the match is live).
+  onAdjustScore: (matchId: string, slot: 1 | 2, delta: number) => void;
+  isScoring: boolean;
 }
 
 const resultNote = (r: PlayerMatchResult): string | null => {
@@ -58,13 +62,24 @@ const HistoryRow = ({ r }: { r: PlayerMatchResult }) => {
   );
 };
 
-export const TournamentHubView = ({ hub, onOpenTournament }: TournamentHubViewProps) => {
+export const TournamentHubView = ({
+  hub,
+  onOpenTournament,
+  onAdjustScore,
+  isScoring,
+}: TournamentHubViewProps) => {
   const open = () => onOpenTournament(hub.tournamentId);
+  const current = hub.current;
 
   return (
     <View style={styles.root}>
-      {hub.current ? (
-        <ProfileMatchCenter data={hub.current} onPress={open} />
+      {current ? (
+        <ProfileMatchCenter
+          data={current}
+          onPress={open}
+          onAdjustScore={(slot, delta) => onAdjustScore(current.matchId, slot, delta)}
+          busy={isScoring}
+        />
       ) : (
         <TouchableOpacity style={styles.idle} activeOpacity={0.85} onPress={open}>
           <View style={styles.idleHead}>
@@ -81,9 +96,6 @@ export const TournamentHubView = ({ hub, onOpenTournament }: TournamentHubViewPr
           </Text>
         </TouchableOpacity>
       )}
-
-      {/* Scoring slot: once the participant-scoring write path lands, the score
-          steppers for the current match render here so the player can score live. */}
 
       <View style={styles.section}>
         <Text allowFontScaling={false} style={styles.sectionTitle}>

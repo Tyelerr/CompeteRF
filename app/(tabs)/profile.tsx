@@ -189,7 +189,7 @@ export default function ProfileScreen() {
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
-  const { hub } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const { hub, adjustScore, isScoring } = usePlayerLiveMatch(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
@@ -441,7 +441,19 @@ export default function ProfileScreen() {
 
           {inLiveTournament && profileTab === "tournament" ? (
             hub ? (
-              <TournamentHubView hub={hub} onOpenTournament={openDetailModal} />
+              <TournamentHubView
+                hub={hub}
+                onOpenTournament={openDetailModal}
+                onAdjustScore={(matchId, slot, delta) => {
+                  adjustScore(matchId, slot, delta).catch(() =>
+                    Alert.alert(
+                      "Couldn't update score",
+                      "You may not have permission to score this match yet.",
+                    ),
+                  );
+                }}
+                isScoring={isScoring}
+              />
             ) : null
           ) : (
             <>

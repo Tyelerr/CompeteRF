@@ -19,6 +19,9 @@ const wxSc = (v: number) => (isWeb ? v : scale(v));
 interface ProfileMatchCenterProps {
   data: PlayerLiveMatch;
   onPress: () => void;
+  // When provided and the match is live, score steppers render under each player.
+  onAdjustScore?: (slot: 1 | 2, delta: number) => void;
+  busy?: boolean;
 }
 
 // "You lead 3-2" / "Carlo leads 3-2" / "Tied 2-2"
@@ -37,7 +40,21 @@ const scoreLine = (
   return `${opp} leads ${hi}-${lo}`;
 };
 
-const Avatar = ({ label, mine }: { label: string; mine?: boolean }) => (
+const Avatar = ({
+  label,
+  mine,
+  score,
+  onMinus,
+  onPlus,
+  busy,
+}: {
+  label: string;
+  mine?: boolean;
+  score?: number;
+  onMinus?: () => void;
+  onPlus?: () => void;
+  busy?: boolean;
+}) => (
   <View style={styles.player}>
     <View style={[styles.avatar, mine && styles.avatarMine]}>
       <Ionicons
@@ -49,12 +66,44 @@ const Avatar = ({ label, mine }: { label: string; mine?: boolean }) => (
     <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
       {label}
     </Text>
+    {onMinus && onPlus && (
+      <View style={styles.stepper}>
+        <TouchableOpacity
+          style={styles.stepBtn}
+          activeOpacity={0.7}
+          disabled={busy}
+          onPress={onMinus}
+        >
+          <Ionicons name="remove" size={wxMs(18)} color={COLORS.text} />
+        </TouchableOpacity>
+        <View style={styles.stepScoreBox}>
+          <Text allowFontScaling={false} style={styles.stepScore}>
+            {score ?? 0}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.stepBtn}
+          activeOpacity={0.7}
+          disabled={busy}
+          onPress={onPlus}
+        >
+          <Ionicons name="add" size={wxMs(18)} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
+    )}
   </View>
 );
 
-export const ProfileMatchCenter = ({ data, onPress }: ProfileMatchCenterProps) => {
+export const ProfileMatchCenter = ({
+  data,
+  onPress,
+  onAdjustScore,
+  busy,
+}: ProfileMatchCenterProps) => {
   const { isPlaying, opponentName, myScore, oppScore, table, raceTo, roundLabel } =
     data;
+  const editable = isPlaying && !!onAdjustScore;
+  const oppSlot: 1 | 2 = data.mySlot === 1 ? 2 : 1;
   const score = scoreLine(isPlaying, myScore, oppScore, opponentName);
   const progress =
     raceTo && raceTo > 0
@@ -84,13 +133,26 @@ export const ProfileMatchCenter = ({ data, onPress }: ProfileMatchCenterProps) =
       </View>
 
       <View style={styles.matchup}>
-        <Avatar label="You" mine />
+        <Avatar
+          label="You"
+          mine
+          score={editable ? myScore : undefined}
+          onMinus={editable ? () => onAdjustScore!(data.mySlot, -1) : undefined}
+          onPlus={editable ? () => onAdjustScore!(data.mySlot, 1) : undefined}
+          busy={busy}
+        />
         <View style={styles.vsWrap}>
           <Text allowFontScaling={false} style={styles.vs}>
             VS
           </Text>
         </View>
-        <Avatar label={opponentName ?? "TBD"} />
+        <Avatar
+          label={opponentName ?? "TBD"}
+          score={editable ? oppScore : undefined}
+          onMinus={editable ? () => onAdjustScore!(oppSlot, -1) : undefined}
+          onPlus={editable ? () => onAdjustScore!(oppSlot, 1) : undefined}
+          busy={busy}
+        />
       </View>
 
       <Text allowFontScaling={false} style={styles.meta} numberOfLines={1}>
@@ -188,6 +250,28 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
     maxWidth: "100%",
+  },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wxSc(SPACING.xs),
+    marginTop: wxSc(SPACING.xs),
+  },
+  stepBtn: {
+    width: wxSc(30),
+    height: wxSc(30),
+    borderRadius: wxSc(8),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepScoreBox: { minWidth: wxSc(34), alignItems: "center" },
+  stepScore: {
+    fontSize: wxMs(FONT_SIZES.xl),
+    fontWeight: "900",
+    color: COLORS.text,
   },
   vsWrap: { flexShrink: 0, paddingHorizontal: wxSc(SPACING.xs) },
   vs: {

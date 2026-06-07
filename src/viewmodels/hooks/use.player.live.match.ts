@@ -7,7 +7,7 @@
 // the player view stays in lock-step with the live bracket. Read-only.
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import { MatchResult } from "../../models/types/tournament-settings.types";
@@ -19,6 +19,8 @@ export interface PlayerLiveMatch {
   tournamentId: number;
   tournamentName: string;
   match: LiveMatch;
+  matchId: string; // id in the bracket/matchState (e.g. "W1M1", "GF")
+  mySlot: 1 | 2; // which side of the match the player is on
   isPlaying: boolean; // true while the match is actually in progress
   opponentName: string | null; // null when the opponent is still TBD
   myScore: number;
@@ -92,6 +94,38 @@ export const usePlayerLiveMatch = (playerId?: number) => {
   });
 
   const tournament = tournamentQuery.data ?? null;
+  const queryClient = useQueryClient();
+
+  // Adjust one side's score by +/-1 and persist into the shared matchState
+  // (live_settings.matchState[matchId]). Invalidating ["tournament", id] makes
+  // the bracket, the Matches tab and this hub all reflect the change.
+  //
+  // NOTE: writes go through updateTournament, so today this only succeeds for a
+  // user who can update the tournament row (the TD / owner). A participant-scoped
+  // RPC is the production path for players scoring their own match.
+  const scoreMutation = useMutation({
+    mutationFn: async (vars: { matchId: string; slot: 1 | 2; delta: number }) => {
+      if (!tournamentId) throw new Error("No live tournament.");
+      const ls = tournament?.live_settings ?? {};
+      const prev = ls.matchState ?? {};
+      const existing = prev[vars.matchId] ?? {};
+      const clamp = (n: number) => Math.max(0, Math.min(999, n));
+      const p1 = existing.p1Score ?? 0;
+      const p2 = existing.p2Score ?? 0;
+      const next = {
+        ...existing,
+        // The steppers only show while the match is live, so keep it in progress.
+        status: existing.status ?? "in_progress",
+        p1Score: vars.slot === 1 ? clamp(p1 + vars.delta) : p1,
+        p2Score: vars.slot === 2 ? clamp(p2 + vars.delta) : p2,
+      };
+      return tournamentService.updateTournament(tournamentId, {
+        live_settings: { ...ls, matchState: { ...prev, [vars.matchId]: next } },
+      });
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] }),
+  });
 
   const raceConfig: RaceConfig = useMemo(() => {
     const ls = tournament?.live_settings ?? {};
@@ -125,6 +159,8 @@ export const usePlayerLiveMatch = (playerId?: number) => {
         tournamentId: tournament.id,
         tournamentName: tournament.name,
         match: m,
+        matchId: m.id,
+        mySlot: iAmP1 ? 1 : 2,
         isPlaying: m.status === "in_progress",
         opponentName: iAmP1 ? m.p2Name : m.p1Name,
         myScore: (iAmP1 ? m.p1Score : m.p2Score) ?? 0,
@@ -165,10 +201,15 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     };
   }, [tournament, myRegId, tablesQuery.data, raceConfig]);
 
+  const adjustScore = (matchId: string, slot: 1 | 2, delta: number) =>
+    scoreMutation.mutateAsync({ matchId, slot, delta });
+
   return {
     hub,
     // Back-compat: the standalone Match Center card reads the current match.
     liveMatch: hub?.current ?? null,
+    adjustScore,
+    isScoring: scoreMutation.isPending,
     isLoading: tournamentQuery.isLoading,
   };
 };
