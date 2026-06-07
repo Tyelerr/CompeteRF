@@ -296,7 +296,7 @@ export default function ProfileScreen() {
   const formatMemberSince = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
-  const generatePlayerID = (idAuto: number) => "PL-" + String(idAuto).padStart(6, "0");
+  const generatePlayerID = (idAuto: number) => "ID-" + String(idAuto).padStart(6, "0");
 
   if (loading && !profile) return <Loading fullScreen message="Loading..." />;
   if (!user) return <LoggedOutView router={router} />;
@@ -324,10 +324,10 @@ export default function ProfileScreen() {
                 {unreadCount > 0 && <View style={styles.bellBadge} />}
               </TouchableOpacity>
               <TouchableOpacity style={styles.cardIconBtn} onPress={handleSettings} hitSlop={6}>
-                <Ionicons name="settings-outline" size={wxMs(20)} color={COLORS.textSecondary} />
+                <Ionicons name="settings-outline" size={wxMs(20)} color={COLORS.text} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.cardIconBtn} onPress={() => setInboxVisible(true)} hitSlop={6}>
-                <Ionicons name="notifications-outline" size={wxMs(20)} color={COLORS.textSecondary} />
+                <Ionicons name="notifications-outline" size={wxMs(20)} color={COLORS.text} />
                 {unreadCount > 0 && <View style={styles.bellBadge} />}
               </TouchableOpacity>
             </View>
@@ -358,22 +358,19 @@ export default function ProfileScreen() {
                 <View style={styles.statusDot} />
               </View>
               <View style={styles.profileInfo}>
-                <View style={styles.nameRow}>
-                  <Text allowFontScaling={false} style={styles.name} numberOfLines={1}>
-                    {profile?.user_name
-                      ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
-                      : user.email?.split("@")[0] || "Player"}
-                  </Text>
-                  <TouchableOpacity style={styles.editInline} onPress={() => setEditProfileVisible(true)} hitSlop={6}>
-                    <Text allowFontScaling={false} style={styles.editInlineText}>Edit Profile</Text>
-                    <Ionicons name="pencil" size={wxMs(12)} color={COLORS.primary} />
-                  </TouchableOpacity>
-                </View>
-                <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
-                  {profile?.id_auto ? generatePlayerID(profile.id_auto) : "Loading..."}
-                  {"  \u00B7  Member since "}
-                  {formatMemberSince(profile?.created_at || user.created_at)}
+                <Text allowFontScaling={false} style={styles.name} numberOfLines={1}>
+                  {profile?.user_name
+                    ? "@" + profile.user_name.charAt(0).toUpperCase() + profile.user_name.slice(1).toLowerCase()
+                    : user.email?.split("@")[0] || "Player"}
                 </Text>
+                <Text allowFontScaling={false} style={styles.memberSince} numberOfLines={1}>
+                  Member since {formatMemberSince(profile?.created_at || user.created_at)}
+                </Text>
+                <View style={styles.idChip}>
+                  <Text allowFontScaling={false} style={styles.idChipText}>
+                    {profile?.id_auto ? generatePlayerID(profile.id_auto) : "Loading..."}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -648,11 +645,22 @@ const styles = StyleSheet.create({
   ball12: { backgroundColor: "#800080" },
   ball15: { backgroundColor: "#8B0000", borderWidth: 2, borderColor: "#FFF" },
   profileInfo: { flex: 1 },
-  nameRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), flexWrap: "wrap" },
-  name: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "800", color: COLORS.text, flexShrink: 1 },
-  editInline: { flexDirection: "row", alignItems: "center", gap: wxSc(3) },
-  editInlineText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
-  metaLine: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: wxSc(SPACING.xs) },
+  name: { fontSize: wxMs(FONT_SIZES.xl), fontWeight: "800", color: COLORS.text },
+  memberSince: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    marginTop: wxSc(2),
+  },
+  idChip: {
+    alignSelf: "flex-start",
+    marginTop: wxSc(SPACING.xs),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: wxSc(RADIUS.sm),
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(2),
+  },
+  idChipText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700", letterSpacing: 0.5 },
 
   // Home State / Favorite Player / Favorite Game row
   detailRow: {
