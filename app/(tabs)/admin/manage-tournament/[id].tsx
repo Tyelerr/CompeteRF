@@ -2621,7 +2621,7 @@ export default function ManageTournamentScreen() {
       { key: "settings" as TabKey, label: "Settings completed", ok: stepComplete.settings },
       {
         key: "players" as TabKey,
-        label: `Players ready (${readyPlayers.length}) — need 2+`,
+        label: `Players ready (${readyPlayers.length})`,
         ok: stepComplete.players,
       },
       { key: "tables" as TabKey, label: "Tables configured", ok: stepComplete.tables },
@@ -2706,7 +2706,7 @@ export default function ManageTournamentScreen() {
         {started ? (
           <>
             <Text allowFontScaling={false} style={styles.reviewStatus}>
-              Tournament is running.
+              Tournament is running
             </Text>
             <TouchableOpacity
               style={styles.startBtn}
@@ -2719,7 +2719,7 @@ export default function ManageTournamentScreen() {
           </>
         ) : finished ? (
           <Text allowFontScaling={false} style={styles.reviewStatus}>
-            Tournament completed.
+            Tournament completed
           </Text>
         ) : (
           <>
