@@ -5,7 +5,7 @@
 // search centers + highlights a player's current match with a quick summary, and
 // session favorites allow fast jumps. Nodes are the card-styled MatchNode.
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Keyboard,
@@ -374,6 +374,15 @@ export const BracketCanvas = ({
   const toggleFav = (name: string) =>
     setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 
+  // Stable so memoized nodes don't re-render on every parent render.
+  const handleNodePress = useCallback(
+    (mm: LiveMatch) => {
+      Keyboard.dismiss();
+      onNodePress(mm);
+    },
+    [onNodePress],
+  );
+
   return (
     <View style={styles.root}>
       <View style={styles.searchRow}>
@@ -468,6 +477,8 @@ export const BracketCanvas = ({
                 >
                   <Animated.View style={styles.fill}>
                     <Animated.View
+                      shouldRasterizeIOS
+                      renderToHardwareTextureAndroid
                       style={{
                         width,
                         height,
@@ -520,10 +531,7 @@ export const BracketCanvas = ({
                           <MatchNode
                             match={p.match}
                             highlighted={highlight === p.match.id}
-                            onPress={(mm) => {
-                              Keyboard.dismiss();
-                              onNodePress(mm);
-                            }}
+                            onPress={handleNodePress}
                           />
                         </View>
                       ))}

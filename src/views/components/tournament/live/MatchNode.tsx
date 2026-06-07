@@ -4,6 +4,7 @@
 // time), green pulsing dot when live, LIVE badge + red border only for an
 // actively-streamed match, result tags, and the bye display. Tap opens the modal.
 
+import { memo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
@@ -16,7 +17,7 @@ import { useMatchTimer } from "./useMatchTimer";
 export const NODE_WIDTH = 204;
 export const NODE_HEIGHT = 124;
 
-export const MatchNode = ({
+const MatchNodeBase = ({
   match,
   highlighted,
   onPress,
@@ -115,6 +116,10 @@ export const MatchNode = ({
     </TouchableOpacity>
   );
 };
+
+// Memoized so panning/zooming (and another node's timer tick) doesn't re-render
+// every node.
+export const MatchNode = memo(MatchNodeBase);
 
 const scoreText = (
   score: number | null,
