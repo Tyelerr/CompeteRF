@@ -99,7 +99,8 @@ type TabKey =
   | "standings"
   | "payouts"
   | "history"
-  | "summary";
+  | "summary"
+  | "actions";
 
 const TAB_LABELS: Record<TabKey, string> = {
   settings: "Settings",
@@ -113,6 +114,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   payouts: "Payouts",
   history: "Match History",
   summary: "Summary",
+  actions: "Actions",
 };
 
 // The ordered setup flow the TD must complete in sequence. A later step can't
@@ -160,6 +162,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "bracket", label: "Bracket" },
       { tab: "matches", label: "Matches" },
       { tab: "tables", label: "Tables" },
+      { tab: "actions", label: "Actions", lead: "⚡", divider: true },
     ],
   },
   results: {
@@ -1640,6 +1643,11 @@ export default function ManageTournamentScreen() {
   });
 
   const handleSelectPage = (phaseKey: string, pageKey: string) => {
+    // "Actions" is an operation, not a page — it opens the control-center modal.
+    if (pageKey === "actions") {
+      setActionsOpen(true);
+      return;
+    }
     setSelectedPhase(phaseKey as PhaseKey);
     handleTabPress(pageKey as TabKey);
   };
@@ -3556,19 +3564,7 @@ export default function ManageTournamentScreen() {
             </Text>
           </View>
         </View>
-        {hub.phase === "running" || hub.phase === "bracket_drawn" ? (
-          <TouchableOpacity
-            style={styles.actionsBtn}
-            onPress={() => setActionsOpen(true)}
-            hitSlop={8}
-          >
-            <Text allowFontScaling={false} style={styles.actionsBtnText}>
-              {GLYPH.bolt}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.placeholderSpace} />
-        )}
+        <View style={styles.placeholderSpace} />
       </View>
 
       <TournamentActionsModal
