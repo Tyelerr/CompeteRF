@@ -3229,46 +3229,6 @@ export default function ManageTournamentScreen() {
           </TouchableOpacity>
         )}
 
-        {!locked ? (
-          <TouchableOpacity
-            style={[styles.startBtn, hub.isDrawing && styles.btnDisabled]}
-            onPress={handleDrawPress}
-            disabled={hub.isDrawing}
-          >
-            <Text allowFontScaling={false} style={styles.startBtnText}>
-              {hub.isDrawing
-                ? "Drawing..."
-                : bracket
-                  ? "Redraw Bracket"
-                  : "Draw Bracket"}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.bracketActions}>
-            <TouchableOpacity
-              style={styles.reopenBtn}
-              onPress={() => {
-                setRedrawReason("");
-                setRedrawVisible(true);
-              }}
-            >
-              <Text allowFontScaling={false} style={styles.reopenBtnText}>
-                Reopen &amp; Redraw
-              </Text>
-            </TouchableOpacity>
-            {hub.phase === "bracket_drawn" && (
-              <TouchableOpacity
-                style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
-                onPress={handleStartTournament}
-                disabled={hub.isMutatingLive}
-              >
-                <Text allowFontScaling={false} style={styles.startBtnText}>
-                  Start Tournament
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
       </View>
     );
   };
@@ -3654,6 +3614,54 @@ export default function ManageTournamentScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
+      )}
+
+      {/* Fixed footer: Draw / Reopen & Redraw / Start Tournament (bracket tab) */}
+      {activeTab === "bracket" && readyPlayers.length >= 2 && (
+        <View style={styles.settingsFooter}>
+          {!settingsLocked ? (
+            <View style={styles.settingsFooterInner}>
+              <TouchableOpacity
+                style={[styles.startBtn, hub.isDrawing && styles.btnDisabled]}
+                onPress={handleDrawPress}
+                disabled={hub.isDrawing}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  {hub.isDrawing
+                    ? "Drawing..."
+                    : hub.bracket
+                      ? "Redraw Bracket"
+                      : "Draw Bracket"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.saveRow, styles.settingsFooterInner]}>
+              <TouchableOpacity
+                style={[styles.reopenBtn, { flex: 1 }]}
+                onPress={() => {
+                  setRedrawReason("");
+                  setRedrawVisible(true);
+                }}
+              >
+                <Text allowFontScaling={false} style={styles.reopenBtnText}>
+                  Reopen &amp; Redraw
+                </Text>
+              </TouchableOpacity>
+              {hub.phase === "bracket_drawn" && (
+                <TouchableOpacity
+                  style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
+                  onPress={handleStartTournament}
+                  disabled={hub.isMutatingLive}
+                >
+                  <Text allowFontScaling={false} style={styles.startBtnText}>
+                    Start Tournament
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       )}
     </View>
