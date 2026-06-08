@@ -19,6 +19,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -72,7 +73,7 @@ import { ToggleSwitch } from "../../../../src/views/components/common/toggle-swi
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
-import { buildLiveMatches } from "../../../../src/utils/match.utils";
+import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import {
   ManagePhase,
@@ -1606,18 +1607,25 @@ export default function ManageTournamentScreen() {
     [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
   );
 
-  // Which table each active (assigned or in-progress, not yet completed) match is
-  // on (tableId -> match label). A table is "in use" while such a match sits on it;
-  // this is the source of truth for the Tables tab badge and the assign-table guard
-  // (so a table can't be double-booked). Completing/moving a match frees its table.
-  const tableOccupancy = useMemo(() => {
-    const map: Record<number, string> = {};
+  // Which active (assigned or in-progress, not yet completed) match each table is
+  // on (tableId -> match). A table is "in use" while such a match sits on it; this
+  // is the source of truth for the Tables tab status + the assign-table guard (so a
+  // table can't be double-booked). Completing/moving a match frees its table.
+  const tableMatch = useMemo(() => {
+    const map: Record<number, LiveMatch> = {};
     for (const m of liveMatches) {
       if (m.tableId != null && m.status !== "completed" && !m.bye && !m.empty)
-        map[m.tableId] = m.label;
+        map[m.tableId] = m;
     }
     return map;
   }, [liveMatches]);
+  const tableOccupancy = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const id of Object.keys(tableMatch)) map[Number(id)] = tableMatch[Number(id)].label;
+    return map;
+  }, [tableMatch]);
+  // The match shown in the "table in use" info popup (tap a locked status button).
+  const [tableInfoMatch, setTableInfoMatch] = useState<LiveMatch | null>(null);
 
   const handleDrawBracket = (reason: string) => {
     if (readyPlayers.length < 2) {
@@ -2577,7 +2585,7 @@ export default function ManageTournamentScreen() {
             const draft = streamDrafts[tbl.id] ?? tbl.stream_link ?? "";
             // A table with a live/assigned match on it reads as In Use regardless
             // of the manual status, so the button reflects real occupancy.
-            const occupiedBy = tableOccupancy[tbl.id];
+            const occupiedBy = tableMatch[tbl.id] ?? null;
             const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
             return (
               <View key={tbl.id} style={styles.tableCard}>
@@ -2592,13 +2600,17 @@ export default function ManageTournamentScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {tableOccupancy[tbl.id] && (
-                  <View style={styles.tableInUseBadge}>
+                {occupiedBy && (
+                  <TouchableOpacity
+                    style={styles.tableInUseBadge}
+                    activeOpacity={0.7}
+                    onPress={() => setTableInfoMatch(occupiedBy)}
+                  >
                     <View style={styles.tableInUseDot} />
                     <Text allowFontScaling={false} style={styles.tableInUseText} numberOfLines={1}>
-                      In use · {tableOccupancy[tbl.id]}
+                      In use · {occupiedBy.label}  ›
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 )}
                 <View style={styles.tableStatusRow}>
                   {(
@@ -2613,8 +2625,15 @@ export default function ManageTournamentScreen() {
                       style={[
                         styles.tableStatusBtn,
                         effStatus === o.s && styles.tableStatusBtnActive,
+                        // While a match is on the table, the other statuses are
+                        // locked (you must finish/move the match first).
+                        occupiedBy && o.s !== "in_use" && styles.tableStatusBtnLocked,
                       ]}
-                      onPress={() => handleSetTableStatus(tbl.id, o.s)}
+                      onPress={() =>
+                        occupiedBy
+                          ? setTableInfoMatch(occupiedBy)
+                          : handleSetTableStatus(tbl.id, o.s)
+                      }
                     >
                       <Text
                         allowFontScaling={false}
@@ -2656,6 +2675,70 @@ export default function ManageTournamentScreen() {
           })
         )}
       </Section>
+
+      {/* "Table in use" info popup — opened by tapping a locked status button or
+          the In use badge. Read-only match summary + a jump to the Matches tab. */}
+      <Modal
+        transparent
+        visible={!!tableInfoMatch}
+        animationType="fade"
+        onRequestClose={() => setTableInfoMatch(null)}
+      >
+        <Pressable style={styles.tableInfoBackdrop} onPress={() => setTableInfoMatch(null)}>
+          <Pressable style={styles.tableInfoCard} onPress={() => {}}>
+            {tableInfoMatch && (
+              <>
+                <Text allowFontScaling={false} style={styles.tableInfoTitle}>
+                  {tableInfoMatch.tableLabel ?? "Table"} · In use
+                </Text>
+                <Text allowFontScaling={false} style={styles.tableInfoLabel}>
+                  {tableInfoMatch.label}
+                </Text>
+                <Text allowFontScaling={false} style={styles.tableInfoNames}>
+                  {(tableInfoMatch.p1Name ?? "TBD")} vs {(tableInfoMatch.p2Name ?? "TBD")}
+                </Text>
+                <View style={styles.tableInfoRow}>
+                  <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Status</Text>
+                  <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
+                    {tableInfoMatch.status === "in_progress" ? "In progress" : "Assigned (not started)"}
+                  </Text>
+                </View>
+                {(tableInfoMatch.p1Score != null || tableInfoMatch.p2Score != null) && (
+                  <View style={styles.tableInfoRow}>
+                    <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Score</Text>
+                    <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
+                      {tableInfoMatch.p1Score ?? 0} – {tableInfoMatch.p2Score ?? 0}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.tableInfoRow}>
+                  <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Race</Text>
+                  <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
+                    {tableInfoMatch.raceLabel}
+                  </Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.tableInfoHint}>
+                  Finish or move this match to change the table.
+                </Text>
+                <View style={styles.tableInfoBtns}>
+                  <TouchableOpacity
+                    style={[styles.tableInfoBtn, styles.tableInfoBtnGhost]}
+                    onPress={() => setTableInfoMatch(null)}
+                  >
+                    <Text allowFontScaling={false} style={styles.tableInfoBtnGhostText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary]}
+                    onPress={() => { setTableInfoMatch(null); setActiveTab("matches"); }}
+                  >
+                    <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>View in Matches</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 
@@ -3863,6 +3946,68 @@ const styles = StyleSheet.create({
     gap: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.xs),
   },
+  tableStatusBtnLocked: { opacity: 0.4 },
+  tableInfoBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: webSc(SPACING.lg),
+  },
+  tableInfoCard: {
+    width: "100%",
+    maxWidth: webSc(420),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.lg),
+  },
+  tableInfoTitle: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    color: COLORS.success,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  tableInfoLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "800",
+    color: COLORS.primary,
+    marginTop: webSc(SPACING.xs),
+  },
+  tableInfoNames: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "800",
+    color: COLORS.text,
+    marginTop: webSc(2),
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.xs),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  tableInfoRowLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  tableInfoRowVal: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
+  tableInfoHint: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    marginTop: webSc(SPACING.sm),
+  },
+  tableInfoBtns: { flexDirection: "row", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.md) },
+  tableInfoBtn: {
+    flex: 1,
+    paddingVertical: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    alignItems: "center",
+  },
+  tableInfoBtnGhost: { borderWidth: 1, borderColor: COLORS.border },
+  tableInfoBtnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.sm) },
+  tableInfoBtnPrimary: { backgroundColor: COLORS.primary },
+  tableInfoBtnPrimaryText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
   tableStatusBtn: {
     flex: 1,
     paddingVertical: webSc(SPACING.xs),
