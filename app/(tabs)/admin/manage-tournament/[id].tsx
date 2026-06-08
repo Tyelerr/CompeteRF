@@ -3621,7 +3621,7 @@ export default function ManageTournamentScreen() {
       {activeTab === "bracket" && readyPlayers.length >= 2 && (
         <View style={styles.settingsFooter}>
           {!settingsLocked ? (
-            <View style={styles.settingsFooterInner}>
+            <View style={[styles.saveRow, styles.settingsFooterInner]}>
               <TouchableOpacity
                 style={[styles.startBtn, hub.isDrawing && styles.btnDisabled]}
                 onPress={handleDrawPress}
