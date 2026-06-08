@@ -116,15 +116,6 @@ const SETUP_ORDER: TabKey[] = [
   "review",
 ];
 
-// Which tabs are visible for a phase. No lock icons: the live tabs simply
-// aren't shown until usable. Matches appears once Running; Results once Completed.
-const visibleTabs = (phase: ManagePhase): TabKey[] => {
-  const tabs: TabKey[] = [...SETUP_ORDER];
-  if (phase === "running") tabs.push("matches");
-  if (phase === "completed") tabs.push("matches", "results");
-  return tabs;
-};
-
 // ── Phase presentation ───────────────────────────────────────────────────────
 const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
   setup_incomplete: { label: "Setup Incomplete", color: COLORS.warning },
@@ -136,6 +127,47 @@ const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
   completed: { label: "Completed", color: COLORS.textSecondary },
   archived: { label: "Archived", color: COLORS.textSecondary },
 };
+
+// ── Lifecycle phases (Setup / Live / Results) ────────────────────────────────
+// Top-level navigation groups the per-phase sub-tabs so the bar never grows past
+// three items. A tab can appear in two phases (Bracket = "Draw" in Setup and the
+// live bracket in Live; Tables is configured in Setup, assigned in Live).
+type PhaseKey = "setup" | "live" | "results";
+const PHASE_ORDER: PhaseKey[] = ["setup", "live", "results"];
+const PHASE_DEFS: Record<
+  PhaseKey,
+  { label: string; tabs: { tab: TabKey; label: string }[] }
+> = {
+  setup: {
+    label: "Setup",
+    tabs: [
+      { tab: "settings", label: "Settings" },
+      { tab: "players", label: "Players" },
+      { tab: "tables", label: "Tables" },
+      { tab: "bracket", label: "Draw Bracket" },
+    ],
+  },
+  live: {
+    label: "Live",
+    tabs: [
+      { tab: "bracket", label: "Bracket" },
+      { tab: "matches", label: "Matches" },
+      { tab: "tables", label: "Tables" },
+    ],
+  },
+  results: {
+    label: "Results",
+    tabs: [{ tab: "results", label: "Results" }],
+  },
+};
+
+// Which lifecycle phase the tournament is currently in.
+const phaseGroupOf = (phase: ManagePhase): PhaseKey =>
+  phase === "completed" || phase === "archived"
+    ? "results"
+    : phase === "running" || phase === "bracket_drawn"
+      ? "live"
+      : "setup";
 
 // ── Registration presentation ────────────────────────────────────────────────
 // The DB has six raw statuses; the Players tab collapses them to four display
@@ -1236,6 +1268,9 @@ export default function ManageTournamentScreen() {
 
   const hub = useManageTournament(tournamentId);
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
+  // Top-level lifecycle phase currently shown (Setup / Live / Results).
+  const [selectedPhase, setSelectedPhase] = useState<PhaseKey>("setup");
+  const lastGroupRef = useRef<PhaseKey | null>(null);
 
   // Settings form (seeded once from the record). savedSnapshot tracks the
   // last-saved form so we can warn about unsaved changes when leaving.
@@ -1537,6 +1572,64 @@ export default function ManageTournamentScreen() {
 
   const tournamentName = hub.tournament?.name || paramName || "Tournament";
   const phaseMeta = PHASE_META[hub.phase];
+
+  // ── Lifecycle phase navigation ──────────────────────────────────────────────
+  const tournamentGroup = phaseGroupOf(hub.phase);
+  const liveUnlocked = (
+    ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
+  ).includes(hub.phase);
+  const resultsUnlocked = (["completed", "archived"] as ManagePhase[]).includes(
+    hub.phase,
+  );
+  const phaseUnlocked = (p: PhaseKey) =>
+    p === "setup" ||
+    (p === "live" && liveUnlocked) ||
+    (p === "results" && resultsUnlocked);
+  // Progress glyph for each phase pill: ✓ done · ● current · ⏺ live · 🔒 locked.
+  const phaseStateOf = (p: PhaseKey): "done" | "current" | "live" | "locked" => {
+    const i = PHASE_ORDER.indexOf(p);
+    const cur = PHASE_ORDER.indexOf(tournamentGroup);
+    if (i < cur) return "done";
+    if (i === cur) return p === "live" && hub.phase === "running" ? "live" : "current";
+    return "locked";
+  };
+  const defaultTabForPhase = (p: PhaseKey): TabKey =>
+    p === "live"
+      ? hub.phase === "running"
+        ? "matches"
+        : "bracket"
+      : p === "results"
+        ? "results"
+        : "settings";
+
+  // Auto-advance the selected phase when the tournament's lifecycle moves
+  // (e.g. drawing the bracket flips Setup → Live and lands on the bracket).
+  useEffect(() => {
+    if (lastGroupRef.current === tournamentGroup) return;
+    lastGroupRef.current = tournamentGroup;
+    setSelectedPhase(tournamentGroup);
+    setActiveTab(defaultTabForPhase(tournamentGroup));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournamentGroup]);
+
+  const handlePhasePress = (p: PhaseKey) => {
+    if (!phaseUnlocked(p)) {
+      Alert.alert(
+        "Not yet",
+        p === "live"
+          ? "Draw the bracket to move the tournament into Live."
+          : "Finish the tournament to view Results.",
+      );
+      return;
+    }
+    if (p === selectedPhase) return;
+    const proceed = () => {
+      setSelectedPhase(p);
+      setActiveTab(defaultTabForPhase(p));
+    };
+    if (activeTab === "settings" && settingsDirty) confirmLeaveSettings(proceed);
+    else proceed();
+  };
 
   // Settings lock once the bracket is drawn — editing format/race/entry after a
   // draw would desync the bracket. Editing requires undoing the draw (reopen).
@@ -3416,26 +3509,78 @@ export default function ManageTournamentScreen() {
         onClose={() => setActionsOpen(false)}
       />
 
-      {/* Tabs */}
+      {/* Phase row — Setup · Live · Results (lifecycle progress + selector) */}
+      <View style={styles.phaseRow}>
+        {PHASE_ORDER.map((p) => {
+          const st = phaseStateOf(p);
+          const sel = selectedPhase === p;
+          const locked = st === "locked";
+          const glyph =
+            st === "done" ? "✓" : st === "live" ? "⏺" : locked ? GLYPH.lock : "●";
+          return (
+            <TouchableOpacity
+              key={p}
+              style={[
+                styles.phasePill,
+                sel && styles.phasePillActive,
+                locked && styles.phasePillLocked,
+              ]}
+              onPress={() => handlePhasePress(p)}
+              activeOpacity={0.85}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[
+                  styles.phaseGlyph,
+                  sel && styles.phaseOnPrimary,
+                  !sel && st === "done" && styles.phaseGlyphDone,
+                  !sel && st === "live" && styles.phaseGlyphLive,
+                ]}
+              >
+                {glyph}
+              </Text>
+              <Text
+                allowFontScaling={false}
+                style={[styles.phaseText, sel && styles.phaseOnPrimary]}
+                numberOfLines={1}
+              >
+                {PHASE_DEFS[p].label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Sub-tab row — the selected phase's pages */}
       <View style={styles.tabBarWrap}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabBar}
         >
-          {visibleTabs(hub.phase).map((tab) => {
+          {PHASE_DEFS[selectedPhase].tabs.map(({ tab, label }) => {
             const active = tab === activeTab;
+            const setup = selectedPhase === "setup";
+            const done = setup && (stepComplete as Record<string, boolean>)[tab];
             return (
               <TouchableOpacity
-                key={tab}
+                key={`${tab}-${label}`}
                 style={[styles.tab, active && styles.tabActive]}
                 onPress={() => handleTabPress(tab)}
               >
+                {setup && (
+                  <Text
+                    allowFontScaling={false}
+                    style={[styles.subGlyph, active && styles.tabTextActive]}
+                  >
+                    {done ? "✓" : active ? "●" : "○"}
+                  </Text>
+                )}
                 <Text
                   allowFontScaling={false}
                   style={[styles.tabText, active && styles.tabTextActive]}
                 >
-                  {TAB_LABELS[tab]}
+                  {label}
                 </Text>
               </TouchableOpacity>
             );
@@ -3588,7 +3733,34 @@ const styles = StyleSheet.create({
   },
   actionsBtnText: { fontSize: webMs(FONT_SIZES.xl) },
 
-  // Tabs
+  // Phase row (Setup / Live / Results)
+  phaseRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+  },
+  phasePill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: webSc(SPACING.xs),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  phasePillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  phasePillLocked: { opacity: 0.55 },
+  phaseGlyph: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "900" },
+  phaseGlyphDone: { color: COLORS.success },
+  phaseGlyphLive: { color: COLORS.error },
+  phaseOnPrimary: { color: COLORS.white },
+  phaseText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textSecondary },
+
+  // Tabs (sub-tab row)
   tabBarWrap: {
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
@@ -3600,12 +3772,16 @@ const styles = StyleSheet.create({
     gap: webSc(SPACING.xs),
   },
   tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(4),
     paddingHorizontal: webSc(SPACING.md),
     paddingVertical: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.full),
     backgroundColor: COLORS.background,
   },
   tabActive: { backgroundColor: COLORS.primary },
+  subGlyph: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "800" },
   tabText: {
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "600",
