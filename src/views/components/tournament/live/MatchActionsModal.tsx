@@ -43,6 +43,7 @@ export const MatchActionsModal = ({
   match,
   initialStep = "menu",
   tables,
+  occupancy,
   onPatch,
   onClose,
   busy,
@@ -50,6 +51,8 @@ export const MatchActionsModal = ({
   match: LiveMatch | null;
   initialStep?: Step;
   tables: TournamentTable[];
+  // tableId -> label of the match currently on it (to block double-booking).
+  occupancy?: Record<number, string>;
   onPatch: (matchId: string, patch: Partial<MatchLiveState>) => Promise<unknown>;
   onClose: () => void;
   busy: boolean;
@@ -88,17 +91,46 @@ export const MatchActionsModal = ({
     onClose();
   };
 
+  // A table is "busy" if a DIFFERENT in-progress match is on it.
+  const busyByOther = (tableId: number): string | null => {
+    const occ = occupancy?.[tableId];
+    return occ && occ !== m.label ? occ : null;
+  };
+
   const tableOptions = [
     { label: "No table", value: "" },
     ...tables
       .filter((t) => t.status !== "unavailable")
-      .map((t) => ({
-        label:
-          (t.label ? `${t.label} ${t.table_number}` : `Table ${t.table_number}`) +
-          (t.is_streaming ? " · LIVE" : ""),
-        value: String(t.id),
-      })),
+      .map((t) => {
+        const taken = busyByOther(t.id);
+        return {
+          label:
+            (t.label ? `${t.label} ${t.table_number}` : `Table ${t.table_number}`) +
+            (t.is_streaming ? " · LIVE" : "") +
+            (taken ? ` · In use (${taken})` : ""),
+          value: String(t.id),
+        };
+      }),
   ];
+
+  // Guard the table assignment: refuse a table already in use by another match.
+  const saveTable = () => {
+    if (tableId != null) {
+      const taken = busyByOther(tableId);
+      if (taken) {
+        Alert.alert(
+          "Table in use",
+          `That table is already in use by ${taken}. Free it or pick another table.`,
+        );
+        return;
+      }
+    }
+    apply(
+      tableMode === "start"
+        ? { status: "in_progress", tableId, startedAt: m.startedAt ?? now() }
+        : { tableId },
+    );
+  };
 
   // ---- menu items by status ----
   type Item = { label: string; danger?: boolean; onPress: () => void };
@@ -301,13 +333,7 @@ export const MatchActionsModal = ({
               />
               <Footer
                 saveLabel={tableMode === "start" ? "Start Match" : "Save Changes"}
-                onSave={() =>
-                  apply(
-                    tableMode === "start"
-                      ? { status: "in_progress", tableId, startedAt: m.startedAt ?? now() }
-                      : { tableId },
-                  )
-                }
+                onSave={saveTable}
               />
             </>
           )}

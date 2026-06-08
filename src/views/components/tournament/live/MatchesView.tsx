@@ -48,6 +48,7 @@ export const MatchesView = ({
   readOnly,
   groups,
   initialMode,
+  occupancy,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
@@ -60,6 +61,8 @@ export const MatchesView = ({
   readOnly?: boolean;
   groups?: RaceGroup[];
   initialMode?: ViewMode; // open straight to "bracket" or "cards"
+  // tableId -> match label currently on it (blocks double-booking in the picker).
+  occupancy?: Record<number, string>;
 }) => {
   const [mode, setMode] = useState<ViewMode>(initialMode ?? "cards"); // Card View is the default
   // The toggle highlight uses `mode` (instant); the heavy view content uses the
@@ -203,6 +206,7 @@ export const MatchesView = ({
           match={sheet.match}
           initialStep={sheet.step}
           tables={tables}
+          occupancy={occupancy}
           onPatch={onPatch}
           onClose={() => setSheet(null)}
           busy={busy}

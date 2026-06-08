@@ -1606,6 +1606,19 @@ export default function ManageTournamentScreen() {
     [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
   );
 
+  // Which table each active (assigned or in-progress, not yet completed) match is
+  // on (tableId -> match label). A table is "in use" while such a match sits on it;
+  // this is the source of truth for the Tables tab badge and the assign-table guard
+  // (so a table can't be double-booked). Completing/moving a match frees its table.
+  const tableOccupancy = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const m of liveMatches) {
+      if (m.tableId != null && m.status !== "completed" && !m.bye && !m.empty)
+        map[m.tableId] = m.label;
+    }
+    return map;
+  }, [liveMatches]);
+
   const handleDrawBracket = (reason: string) => {
     if (readyPlayers.length < 2) {
       Alert.alert(
@@ -2575,6 +2588,14 @@ export default function ManageTournamentScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+                {tableOccupancy[tbl.id] && (
+                  <View style={styles.tableInUseBadge}>
+                    <View style={styles.tableInUseDot} />
+                    <Text allowFontScaling={false} style={styles.tableInUseText} numberOfLines={1}>
+                      In use · {tableOccupancy[tbl.id]}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.tableStatusRow}>
                   {(
                     [
@@ -3037,6 +3058,7 @@ export default function ManageTournamentScreen() {
             matches={liveMatches}
             tables={hub.tables}
             onSetMatchState={hub.setMatchState}
+            occupancy={tableOccupancy}
           />
         );
       case "results":
@@ -3812,6 +3834,26 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontWeight: "600",
   },
+  tableInUseBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.success + "22",
+    borderColor: COLORS.success,
+    borderWidth: 1,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    marginBottom: webSc(SPACING.xs),
+  },
+  tableInUseDot: {
+    width: webSc(7),
+    height: webSc(7),
+    borderRadius: webSc(4),
+    backgroundColor: COLORS.success,
+  },
+  tableInUseText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "800" },
   tableStatusRow: {
     flexDirection: "row",
     gap: webSc(SPACING.xs),
