@@ -2575,6 +2575,10 @@ export default function ManageTournamentScreen() {
         ) : (
           hub.tables.map((tbl) => {
             const draft = streamDrafts[tbl.id] ?? tbl.stream_link ?? "";
+            // A table with a live/assigned match on it reads as In Use regardless
+            // of the manual status, so the button reflects real occupancy.
+            const occupiedBy = tableOccupancy[tbl.id];
+            const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
             return (
               <View key={tbl.id} style={styles.tableCard}>
                 <View style={styles.tableCardHead}>
@@ -2608,7 +2612,7 @@ export default function ManageTournamentScreen() {
                       key={o.s}
                       style={[
                         styles.tableStatusBtn,
-                        tbl.status === o.s && styles.tableStatusBtnActive,
+                        effStatus === o.s && styles.tableStatusBtnActive,
                       ]}
                       onPress={() => handleSetTableStatus(tbl.id, o.s)}
                     >
@@ -2616,7 +2620,7 @@ export default function ManageTournamentScreen() {
                         allowFontScaling={false}
                         style={[
                           styles.tableStatusBtnText,
-                          tbl.status === o.s && styles.tableStatusBtnTextActive,
+                          effStatus === o.s && styles.tableStatusBtnTextActive,
                         ]}
                       >
                         {o.label}
