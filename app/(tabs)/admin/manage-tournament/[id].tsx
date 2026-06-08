@@ -73,6 +73,7 @@ import { ToggleSwitch } from "../../../../src/views/components/common/toggle-swi
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
+import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
@@ -94,7 +95,11 @@ type TabKey =
   | "bracket"
   | "review"
   | "matches"
-  | "results";
+  | "results"
+  | "standings"
+  | "payouts"
+  | "history"
+  | "summary";
 
 const TAB_LABELS: Record<TabKey, string> = {
   settings: "Settings",
@@ -104,6 +109,10 @@ const TAB_LABELS: Record<TabKey, string> = {
   review: "Review",
   matches: "Matches",
   results: "Results",
+  standings: "Standings",
+  payouts: "Payouts",
+  history: "Match History",
+  summary: "Summary",
 };
 
 // The ordered setup flow the TD must complete in sequence. A later step can't
@@ -134,17 +143,15 @@ const PHASE_META: Record<ManagePhase, { label: string; color: string }> = {
 // live bracket in Live; Tables is configured in Setup, assigned in Live).
 type PhaseKey = "setup" | "live" | "results";
 const PHASE_ORDER: PhaseKey[] = ["setup", "live", "results"];
-const PHASE_DEFS: Record<
-  PhaseKey,
-  { label: string; tabs: { tab: TabKey; label: string }[] }
-> = {
+type PhasePage = { tab: TabKey; label: string; lead?: string; divider?: boolean };
+const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
   setup: {
     label: "Setup",
     tabs: [
       { tab: "settings", label: "Settings" },
       { tab: "players", label: "Players" },
       { tab: "tables", label: "Tables" },
-      { tab: "bracket", label: "Draw Bracket" },
+      { tab: "bracket", label: "Draw Bracket", lead: "⚡", divider: true },
     ],
   },
   live: {
@@ -157,7 +164,12 @@ const PHASE_DEFS: Record<
   },
   results: {
     label: "Results",
-    tabs: [{ tab: "results", label: "Results" }],
+    tabs: [
+      { tab: "standings", label: "Standings" },
+      { tab: "payouts", label: "Payouts" },
+      { tab: "history", label: "Match History" },
+      { tab: "summary", label: "Summary" },
+    ],
   },
 };
 
@@ -1599,8 +1611,38 @@ export default function ManageTournamentScreen() {
         ? "matches"
         : "bracket"
       : p === "results"
-        ? "results"
+        ? "standings"
         : "settings";
+
+  // Build the lifecycle nav model (phase buttons + their page menus).
+  const navPhases = PHASE_ORDER.map((pk) => {
+    const def = PHASE_DEFS[pk];
+    const st = phaseStateOf(pk);
+    return {
+      key: pk,
+      label: def.label,
+      glyph: st === "done" ? "✓" : st === "live" ? "⏺" : st === "locked" ? GLYPH.lock : "●",
+      state: st,
+      locked: st === "locked",
+      pages: def.tabs.map((t) => ({
+        key: t.tab,
+        label: t.label,
+        divider: t.divider,
+        glyph:
+          t.lead ??
+          (pk === "setup"
+            ? (stepComplete as Record<string, boolean>)[t.tab]
+              ? "✓"
+              : "○"
+            : undefined),
+      })),
+    };
+  });
+
+  const handleSelectPage = (phaseKey: string, pageKey: string) => {
+    setSelectedPhase(phaseKey as PhaseKey);
+    handleTabPress(pageKey as TabKey);
+  };
 
   // Auto-advance the selected phase when the tournament's lifecycle moves
   // (e.g. drawing the bracket flips Setup → Live and lands on the bracket).
@@ -3245,11 +3287,36 @@ export default function ManageTournamentScreen() {
           />
         );
       case "results":
+      case "standings":
         return (
           <TabPlaceholder
             locked={false}
-            title="Results"
-            body="Final placements and payouts appear here after play completes (Phase 3)."
+            title="Standings"
+            body="Final placements appear here after play completes (Phase 3)."
+          />
+        );
+      case "payouts":
+        return (
+          <TabPlaceholder
+            locked={false}
+            title="Payouts"
+            body="Prize pool breakdown and payouts will appear here (Phase 3)."
+          />
+        );
+      case "history":
+        return (
+          <TabPlaceholder
+            locked={false}
+            title="Match History"
+            body="A full record of every completed match will appear here (Phase 3)."
+          />
+        );
+      case "summary":
+        return (
+          <TabPlaceholder
+            locked={false}
+            title="Tournament Summary"
+            body="A recap of the event — entries, duration, and key stats (Phase 3)."
           />
         );
       default:
@@ -3509,68 +3576,14 @@ export default function ManageTournamentScreen() {
         onClose={() => setActionsOpen(false)}
       />
 
-      {/* Phase row — Setup · Live · Results (lifecycle progress + selector) */}
-      <View style={styles.phaseRow}>
-        {PHASE_ORDER.map((p) => {
-          const st = phaseStateOf(p);
-          const sel = selectedPhase === p;
-          const locked = st === "locked";
-          const glyph =
-            st === "done" ? "✓" : st === "live" ? "⏺" : locked ? GLYPH.lock : "●";
-          return (
-            <TouchableOpacity
-              key={p}
-              style={[
-                styles.phasePill,
-                sel && styles.phasePillActive,
-                locked && styles.phasePillLocked,
-              ]}
-              onPress={() => handlePhasePress(p)}
-              activeOpacity={0.85}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[
-                  styles.phaseGlyph,
-                  sel && styles.phaseOnPrimary,
-                  !sel && st === "done" && styles.phaseGlyphDone,
-                  !sel && st === "live" && styles.phaseGlyphLive,
-                ]}
-              >
-                {glyph}
-              </Text>
-              <Text
-                allowFontScaling={false}
-                style={[styles.phaseText, sel && styles.phaseOnPrimary]}
-                numberOfLines={1}
-              >
-                {PHASE_DEFS[p].label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Page selector — the selected phase's pages as a dropdown */}
-      <View style={styles.pageNavWrap}>
-        <Text allowFontScaling={false} style={styles.pageNavLabel}>
-          {PHASE_DEFS[selectedPhase].label.toUpperCase()} PAGE
-        </Text>
-        <View style={styles.pageDropdown}>
-          <Dropdown
-            compact
-            options={PHASE_DEFS[selectedPhase].tabs.map(({ tab, label }) => ({
-              value: tab,
-              label:
-                selectedPhase === "setup"
-                  ? `${(stepComplete as Record<string, boolean>)[tab] ? "✓ " : "○ "}${label}`
-                  : label,
-            }))}
-            value={activeTab}
-            onSelect={(v) => handleTabPress(v as TabKey)}
-          />
-        </View>
-      </View>
+      {/* Lifecycle navigation — Setup / Live / Results phase dropdowns */}
+      <PhaseNav
+        phases={navPhases}
+        selectedKey={selectedPhase}
+        activePageKey={activeTab}
+        onSelectPage={handleSelectPage}
+        onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
+      />
 
       {activeTab === "matches" ? (
         // Matches owns its own scrolling (cards) / gestures (bracket) and fills
