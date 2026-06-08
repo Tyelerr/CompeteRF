@@ -73,6 +73,7 @@ import { ToggleSwitch } from "../../../../src/views/components/common/toggle-swi
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
+import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import {
@@ -83,7 +84,7 @@ import {
 const isWeb = Platform.OS === "web";
 
 // Unicode-escaped glyphs (raw emoji in the source corrupt under our toolchain).
-const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12" };
+const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1" };
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 type TabKey =
@@ -1626,6 +1627,8 @@ export default function ManageTournamentScreen() {
   }, [tableMatch]);
   // The match shown in the "table in use" info popup (tap a locked status button).
   const [tableInfoMatch, setTableInfoMatch] = useState<LiveMatch | null>(null);
+  // ⚡ Tournament Actions modal (Live phase). Placeholder UI for now.
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   const handleDrawBracket = (reason: string) => {
     if (readyPlayers.length < 2) {
@@ -3393,8 +3396,25 @@ export default function ManageTournamentScreen() {
             </Text>
           </View>
         </View>
-        <View style={styles.placeholderSpace} />
+        {hub.phase === "running" || hub.phase === "bracket_drawn" ? (
+          <TouchableOpacity
+            style={styles.actionsBtn}
+            onPress={() => setActionsOpen(true)}
+            hitSlop={8}
+          >
+            <Text allowFontScaling={false} style={styles.actionsBtnText}>
+              {GLYPH.bolt}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholderSpace} />
+        )}
       </View>
+
+      <TournamentActionsModal
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+      />
 
       {/* Tabs */}
       <View style={styles.tabBarWrap}>
@@ -3560,6 +3580,13 @@ const styles = StyleSheet.create({
   },
   phaseBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   placeholderSpace: { width: webSc(50) },
+  actionsBtn: {
+    width: webSc(50),
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  actionsBtnText: { fontSize: webMs(FONT_SIZES.xl) },
 
   // Tabs
   tabBarWrap: {
