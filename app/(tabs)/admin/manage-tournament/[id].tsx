@@ -3551,41 +3551,25 @@ export default function ManageTournamentScreen() {
         })}
       </View>
 
-      {/* Sub-tab row — the selected phase's pages */}
-      <View style={styles.tabBarWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabBar}
-        >
-          {PHASE_DEFS[selectedPhase].tabs.map(({ tab, label }) => {
-            const active = tab === activeTab;
-            const setup = selectedPhase === "setup";
-            const done = setup && (stepComplete as Record<string, boolean>)[tab];
-            return (
-              <TouchableOpacity
-                key={`${tab}-${label}`}
-                style={[styles.tab, active && styles.tabActive]}
-                onPress={() => handleTabPress(tab)}
-              >
-                {setup && (
-                  <Text
-                    allowFontScaling={false}
-                    style={[styles.subGlyph, active && styles.tabTextActive]}
-                  >
-                    {done ? "✓" : active ? "●" : "○"}
-                  </Text>
-                )}
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.tabText, active && styles.tabTextActive]}
-                >
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+      {/* Page selector — the selected phase's pages as a dropdown */}
+      <View style={styles.pageNavWrap}>
+        <Text allowFontScaling={false} style={styles.pageNavLabel}>
+          {PHASE_DEFS[selectedPhase].label.toUpperCase()} PAGE
+        </Text>
+        <View style={styles.pageDropdown}>
+          <Dropdown
+            compact
+            options={PHASE_DEFS[selectedPhase].tabs.map(({ tab, label }) => ({
+              value: tab,
+              label:
+                selectedPhase === "setup"
+                  ? `${(stepComplete as Record<string, boolean>)[tab] ? "✓ " : "○ "}${label}`
+                  : label,
+            }))}
+            value={activeTab}
+            onSelect={(v) => handleTabPress(v as TabKey)}
+          />
+        </View>
       </View>
 
       {activeTab === "matches" ? (
@@ -3759,6 +3743,25 @@ const styles = StyleSheet.create({
   phaseGlyphLive: { color: COLORS.error },
   phaseOnPrimary: { color: COLORS.white },
   phaseText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textSecondary },
+
+  // Page selector (dropdown of the selected phase's pages)
+  pageNavWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  pageNavLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "800",
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+  },
+  pageDropdown: { flex: 1, maxWidth: webSc(280) },
 
   // Tabs (sub-tab row)
   tabBarWrap: {
