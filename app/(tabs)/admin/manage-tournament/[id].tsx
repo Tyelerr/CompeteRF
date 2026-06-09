@@ -2795,9 +2795,14 @@ export default function ManageTournamentScreen() {
                     {tbl.label ? ` — ${tbl.label}` : ""}
                   </Text>
                   {occupiedBy && (
-                    <Text allowFontScaling={false} style={styles.tableRowSub} numberOfLines={1}>
-                      In use · {occupiedBy.label}
-                    </Text>
+                    <>
+                      <Text allowFontScaling={false} style={styles.tableRowSub} numberOfLines={1}>
+                        In use · {occupiedBy.label}
+                      </Text>
+                      <Text allowFontScaling={false} style={styles.tableRowNames} numberOfLines={1}>
+                        {occupiedBy.p1Name ?? "TBD"} vs {occupiedBy.p2Name ?? "TBD"}
+                      </Text>
+                    </>
                   )}
                 </View>
                 <View style={styles.tableRowRight}>
@@ -4340,6 +4345,7 @@ const styles = StyleSheet.create({
   tableRowLeft: { flex: 1, gap: webSc(2) },
   tableRowName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   tableRowSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
+  tableRowNames: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
   tableRowRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   statusChip: {
     paddingHorizontal: webSc(SPACING.sm),
