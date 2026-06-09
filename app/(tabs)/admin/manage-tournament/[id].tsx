@@ -184,6 +184,14 @@ const phaseGroupOf = (phase: ManagePhase): PhaseKey =>
       ? "live"
       : "setup";
 
+const TABLE_STATUS_LABEL: Record<TableStatus, string> = {
+  available: "Available",
+  in_use: "In Use",
+  unavailable: "Unavailable",
+};
+const tableStatusColor = (s: TableStatus): string =>
+  s === "available" ? COLORS.success : s === "in_use" ? COLORS.primary : COLORS.error;
+
 // ── Registration presentation ────────────────────────────────────────────────
 // The DB has six raw statuses; the Players tab collapses them to four display
 // states. "Ready" = checked_in (confirmed + paid -> eligible for the bracket).
@@ -1768,10 +1776,23 @@ export default function ManageTournamentScreen() {
     for (const id of Object.keys(tableMatch)) map[Number(id)] = tableMatch[Number(id)].label;
     return map;
   }, [tableMatch]);
-  // The match shown in the "table in use" info popup (tap a locked status button).
-  const [tableInfoMatch, setTableInfoMatch] = useState<LiveMatch | null>(null);
+  // The table being edited in the table edit sheet (status / streaming / remove).
+  const [editingTableId, setEditingTableId] = useState<number | null>(null);
+  // "Add Tables" collapses once the tournament is live (you rarely add mid-event).
+  const [addTablesOpen, setAddTablesOpen] = useState(true);
+  const tablesAutoCollapsedRef = useRef(false);
   // ⚡ Tournament Actions modal (Live phase). Placeholder UI for now.
   const [actionsOpen, setActionsOpen] = useState(false);
+
+  // Auto-collapse "Add Tables" once the tournament leaves Setup (re-expandable).
+  useEffect(() => {
+    const live = tournamentGroup !== "setup";
+    if (live && !tablesAutoCollapsedRef.current) {
+      tablesAutoCollapsedRef.current = true;
+      setAddTablesOpen(false);
+    }
+    if (!live) tablesAutoCollapsedRef.current = false;
+  }, [tournamentGroup]);
 
   const handleDrawBracket = (reason: string) => {
     if (readyPlayers.length < 2) {
@@ -2625,7 +2646,20 @@ export default function ManageTournamentScreen() {
     );
   };
 
-  const renderTables = () => (
+  const renderTables = () => {
+    const editingTable =
+      editingTableId != null
+        ? (hub.tables.find((t) => t.id === editingTableId) ?? null)
+        : null;
+    const editOcc = editingTable ? (tableMatch[editingTable.id] ?? null) : null;
+    const editStatus: TableStatus = editOcc
+      ? "in_use"
+      : (editingTable?.status ?? "available");
+    const editDraft = editingTable
+      ? (streamDrafts[editingTable.id] ?? editingTable.stream_link ?? "")
+      : "";
+
+    return (
     <View>
       <View style={styles.readyBanner}>
         <Text allowFontScaling={false} style={styles.readyBannerNum}>
@@ -2644,8 +2678,23 @@ export default function ManageTournamentScreen() {
         </View>
       )}
 
-      <Section title="Add Tables">
-        <View style={styles.tableAddRow}>
+      {/* Add Tables — collapsible (auto-minimized once the tournament is live) */}
+      <View style={styles.section}>
+        <TouchableOpacity
+          style={styles.collapseHead}
+          activeOpacity={0.7}
+          onPress={() => setAddTablesOpen((o) => !o)}
+        >
+          <Text allowFontScaling={false} style={styles.sectionTitle}>
+            Add Tables
+          </Text>
+          <Text allowFontScaling={false} style={styles.collapseCaret}>
+            {addTablesOpen ? "▾" : "▸"}
+          </Text>
+        </TouchableOpacity>
+        {addTablesOpen && (
+          <>
+          <View style={styles.tableAddRow}>
           <TextInput
             allowFontScaling={false}
             style={[styles.input, { flex: 1 }]}
@@ -2719,7 +2768,9 @@ export default function ManageTournamentScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </Section>
+          </>
+        )}
+      </View>
 
       <Section title={`Tables (${hub.tables.length})`}>
         {hub.tables.length === 0 ? (
@@ -2728,36 +2779,103 @@ export default function ManageTournamentScreen() {
           </Text>
         ) : (
           hub.tables.map((tbl) => {
-            const draft = streamDrafts[tbl.id] ?? tbl.stream_link ?? "";
-            // A table with a live/assigned match on it reads as In Use regardless
-            // of the manual status, so the button reflects real occupancy.
             const occupiedBy = tableMatch[tbl.id] ?? null;
             const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
+            const color = tableStatusColor(effStatus);
             return (
-              <View key={tbl.id} style={styles.tableCard}>
-                <View style={styles.tableCardHead}>
-                  <Text allowFontScaling={false} style={styles.tableName}>
+              <TouchableOpacity
+                key={tbl.id}
+                style={styles.tableRow}
+                activeOpacity={0.75}
+                onPress={() => setEditingTableId(tbl.id)}
+              >
+                <View style={styles.tableRowLeft}>
+                  <Text allowFontScaling={false} style={styles.tableRowName} numberOfLines={1}>
                     Table {tbl.table_number}
                     {tbl.label ? ` — ${tbl.label}` : ""}
                   </Text>
-                  <TouchableOpacity onPress={() => handleDeleteTable(tbl.id)}>
-                    <Text allowFontScaling={false} style={styles.tableDelete}>
-                      Remove
+                  {occupiedBy && (
+                    <Text allowFontScaling={false} style={styles.tableRowSub} numberOfLines={1}>
+                      In use · {occupiedBy.label}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.tableRowRight}>
+                  {tbl.is_streaming && (
+                    <View style={styles.streamBadge}>
+                      <Text allowFontScaling={false} style={styles.streamBadgeText}>
+                        LIVE
+                      </Text>
+                    </View>
+                  )}
+                  <View
+                    style={[
+                      styles.statusChip,
+                      { backgroundColor: color + "22", borderColor: color },
+                    ]}
+                  >
+                    <Text allowFontScaling={false} style={[styles.statusChipText, { color }]}>
+                      {TABLE_STATUS_LABEL[effStatus]}
+                    </Text>
+                  </View>
+                  <Text allowFontScaling={false} style={styles.tableRowChevron}>
+                    ›
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </Section>
+
+      {/* Table edit sheet — tap a table card to change status / streaming / remove */}
+      <Modal
+        transparent
+        visible={editingTable != null}
+        animationType="fade"
+        onRequestClose={() => setEditingTableId(null)}
+      >
+        <Pressable style={styles.tableInfoBackdrop} onPress={() => setEditingTableId(null)}>
+          <Pressable style={styles.tableInfoCard} onPress={() => {}}>
+            {editingTable && (
+              <>
+                <View style={styles.editHead}>
+                  <Text allowFontScaling={false} style={styles.editTitle} numberOfLines={1}>
+                    Table {editingTable.table_number}
+                    {editingTable.label ? ` — ${editingTable.label}` : ""}
+                  </Text>
+                  <TouchableOpacity onPress={() => setEditingTableId(null)} hitSlop={10}>
+                    <Text allowFontScaling={false} style={styles.editClose}>
+                      ✕
                     </Text>
                   </TouchableOpacity>
                 </View>
-                {occupiedBy && (
-                  <TouchableOpacity
-                    style={styles.tableInUseBadge}
-                    activeOpacity={0.7}
-                    onPress={() => setTableInfoMatch(occupiedBy)}
-                  >
-                    <View style={styles.tableInUseDot} />
-                    <Text allowFontScaling={false} style={styles.tableInUseText} numberOfLines={1}>
-                      In use · {occupiedBy.label}  ›
+
+                {editOcc && (
+                  <View style={styles.editOccBanner}>
+                    <Text allowFontScaling={false} style={styles.editOccLabel} numberOfLines={1}>
+                      In use · {editOcc.label}
                     </Text>
-                  </TouchableOpacity>
+                    <Text allowFontScaling={false} style={styles.editOccNames} numberOfLines={1}>
+                      {(editOcc.p1Name ?? "TBD")} vs {(editOcc.p2Name ?? "TBD")}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setEditingTableId(null);
+                        setSelectedPhase("live");
+                        setActiveTab("matches");
+                      }}
+                    >
+                      <Text allowFontScaling={false} style={styles.editOccLink}>
+                        View in Matches ›
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
+
+                <Text allowFontScaling={false} style={styles.fieldLabel}>
+                  Status
+                </Text>
                 <View style={styles.tableStatusRow}>
                   {(
                     [
@@ -2770,22 +2888,19 @@ export default function ManageTournamentScreen() {
                       key={o.s}
                       style={[
                         styles.tableStatusBtn,
-                        effStatus === o.s && styles.tableStatusBtnActive,
-                        // While a match is on the table, the other statuses are
-                        // locked (you must finish/move the match first).
-                        occupiedBy && o.s !== "in_use" && styles.tableStatusBtnLocked,
+                        editStatus === o.s && styles.tableStatusBtnActive,
+                        editOcc && o.s !== "in_use" && styles.tableStatusBtnLocked,
                       ]}
-                      onPress={() =>
-                        occupiedBy
-                          ? setTableInfoMatch(occupiedBy)
-                          : handleSetTableStatus(tbl.id, o.s)
-                      }
+                      disabled={!!editOcc && o.s !== "in_use"}
+                      onPress={() => {
+                        if (!editOcc) handleSetTableStatus(editingTable.id, o.s);
+                      }}
                     >
                       <Text
                         allowFontScaling={false}
                         style={[
                           styles.tableStatusBtnText,
-                          effStatus === o.s && styles.tableStatusBtnTextActive,
+                          editStatus === o.s && styles.tableStatusBtnTextActive,
                         ]}
                       >
                         {o.label}
@@ -2793,91 +2908,58 @@ export default function ManageTournamentScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <ToggleSwitch
-                  label="Streaming Table"
-                  value={tbl.is_streaming}
-                  onValueChange={(on) =>
-                    handleToggleStreaming(tbl.id, on, draft)
-                  }
-                />
-                {tbl.is_streaming && (
-                  <TextInput
-                    allowFontScaling={false}
-                    style={[styles.input, { marginTop: webSc(SPACING.sm) }]}
-                    value={draft}
-                    onChangeText={(v) =>
-                      setStreamDrafts((m) => ({ ...m, [tbl.id]: v }))
-                    }
-                    onEndEditing={() =>
-                      handleToggleStreaming(tbl.id, true, draft)
-                    }
-                    placeholder="Stream link URL"
-                    placeholderTextColor={COLORS.textMuted}
-                    autoCapitalize="none"
-                  />
+                {editOcc && (
+                  <Text allowFontScaling={false} style={styles.editLockHint}>
+                    Finish or move this match to change the status.
+                  </Text>
                 )}
-              </View>
-            );
-          })
-        )}
-      </Section>
 
-      {/* "Table in use" info popup — opened by tapping a locked status button or
-          the In use badge. Read-only match summary + a jump to the Matches tab. */}
-      <Modal
-        transparent
-        visible={!!tableInfoMatch}
-        animationType="fade"
-        onRequestClose={() => setTableInfoMatch(null)}
-      >
-        <Pressable style={styles.tableInfoBackdrop} onPress={() => setTableInfoMatch(null)}>
-          <Pressable style={styles.tableInfoCard} onPress={() => {}}>
-            {tableInfoMatch && (
-              <>
-                <Text allowFontScaling={false} style={styles.tableInfoTitle}>
-                  {tableInfoMatch.tableLabel ?? "Table"} · In use
-                </Text>
-                <Text allowFontScaling={false} style={styles.tableInfoLabel}>
-                  {tableInfoMatch.label}
-                </Text>
-                <Text allowFontScaling={false} style={styles.tableInfoNames}>
-                  {(tableInfoMatch.p1Name ?? "TBD")} vs {(tableInfoMatch.p2Name ?? "TBD")}
-                </Text>
-                <View style={styles.tableInfoRow}>
-                  <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Status</Text>
-                  <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
-                    {tableInfoMatch.status === "in_progress" ? "In progress" : "Assigned (not started)"}
-                  </Text>
+                <View style={styles.editStreamWrap}>
+                  <ToggleSwitch
+                    label="Streaming Table"
+                    value={editingTable.is_streaming}
+                    onValueChange={(on) =>
+                      handleToggleStreaming(editingTable.id, on, editDraft)
+                    }
+                  />
+                  {editingTable.is_streaming && (
+                    <TextInput
+                      allowFontScaling={false}
+                      style={[styles.input, { marginTop: webSc(SPACING.sm) }]}
+                      value={editDraft}
+                      onChangeText={(v) =>
+                        setStreamDrafts((m) => ({ ...m, [editingTable.id]: v }))
+                      }
+                      onEndEditing={() =>
+                        handleToggleStreaming(editingTable.id, true, editDraft)
+                      }
+                      placeholder="Stream link URL"
+                      placeholderTextColor={COLORS.textMuted}
+                      autoCapitalize="none"
+                    />
+                  )}
                 </View>
-                {(tableInfoMatch.p1Score != null || tableInfoMatch.p2Score != null) && (
-                  <View style={styles.tableInfoRow}>
-                    <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Score</Text>
-                    <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
-                      {tableInfoMatch.p1Score ?? 0} – {tableInfoMatch.p2Score ?? 0}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.tableInfoRow}>
-                  <Text allowFontScaling={false} style={styles.tableInfoRowLabel}>Race</Text>
-                  <Text allowFontScaling={false} style={styles.tableInfoRowVal}>
-                    {tableInfoMatch.raceLabel}
-                  </Text>
-                </View>
-                <Text allowFontScaling={false} style={styles.tableInfoHint}>
-                  Finish or move this match to change the table.
-                </Text>
+
                 <View style={styles.tableInfoBtns}>
                   <TouchableOpacity
-                    style={[styles.tableInfoBtn, styles.tableInfoBtnGhost]}
-                    onPress={() => setTableInfoMatch(null)}
+                    style={[styles.tableInfoBtn, styles.editRemoveBtn]}
+                    onPress={() => {
+                      const id = editingTable.id;
+                      setEditingTableId(null);
+                      handleDeleteTable(id);
+                    }}
                   >
-                    <Text allowFontScaling={false} style={styles.tableInfoBtnGhostText}>Close</Text>
+                    <Text allowFontScaling={false} style={styles.editRemoveText}>
+                      Remove Table
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary]}
-                    onPress={() => { setTableInfoMatch(null); setActiveTab("matches"); }}
+                    onPress={() => setEditingTableId(null)}
                   >
-                    <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>View in Matches</Text>
+                    <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>
+                      Done
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -2886,7 +2968,8 @@ export default function ManageTournamentScreen() {
         </Pressable>
       </Modal>
     </View>
-  );
+    );
+  };
 
   const renderReview = () => {
     const started = hub.phase === "running";
@@ -4231,6 +4314,84 @@ const styles = StyleSheet.create({
   tableInfoBtnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.sm) },
   tableInfoBtnPrimary: { backgroundColor: COLORS.primary },
   tableInfoBtnPrimaryText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
+
+  // Collapsible "Add Tables" header
+  collapseHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  collapseCaret: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "900" },
+
+  // Compact table card (tap to edit)
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableRowLeft: { flex: 1, gap: webSc(2) },
+  tableRowName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  tableRowSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
+  tableRowRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  statusChip: {
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(3),
+    borderRadius: webSc(RADIUS.full),
+    borderWidth: 1,
+  },
+  statusChipText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  tableRowChevron: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.textMuted, fontWeight: "700" },
+  streamBadge: {
+    backgroundColor: COLORS.error,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.xs),
+    paddingVertical: 1,
+  },
+  streamBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
+
+  // Table edit sheet
+  editHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: webSc(SPACING.sm),
+  },
+  editTitle: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text, flex: 1 },
+  editClose: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.textSecondary },
+  editOccBanner: {
+    backgroundColor: COLORS.success + "18",
+    borderWidth: 1,
+    borderColor: COLORS.success,
+    borderRadius: webSc(RADIUS.md),
+    padding: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
+    gap: webSc(2),
+  },
+  editOccLabel: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.success },
+  editOccNames: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  editOccLink: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "800",
+    color: COLORS.primary,
+    marginTop: webSc(SPACING.xs),
+  },
+  editLockHint: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    marginTop: webSc(SPACING.xs),
+  },
+  editStreamWrap: { marginTop: webSc(SPACING.md) },
+  editRemoveBtn: { borderWidth: 1, borderColor: COLORS.error },
+  editRemoveText: { color: COLORS.error, fontWeight: "800", fontSize: webMs(FONT_SIZES.sm) },
+
   tableStatusBtn: {
     flex: 1,
     paddingVertical: webSc(SPACING.xs),
