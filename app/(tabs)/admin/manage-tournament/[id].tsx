@@ -4345,7 +4345,7 @@ const styles = StyleSheet.create({
   tableRowLeft: { flex: 1, gap: webSc(2) },
   tableRowName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   tableRowSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
-  tableRowNames: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
+  tableRowNames: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
   tableRowRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   statusChip: {
     paddingHorizontal: webSc(SPACING.sm),
