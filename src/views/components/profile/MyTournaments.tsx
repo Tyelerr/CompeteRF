@@ -6,14 +6,31 @@
 // Following is a placeholder for now.
 
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { PlayerTournament } from "../../../models/types/registration.types";
+import { Dropdown } from "../common/dropdown";
 import { SearchAlertsInline } from "./SearchAlertsInline";
 import { StatusFilter } from "./StatusFilter";
+
+const MORE_SORTS = [
+  { label: "Newest first", value: "date_desc" },
+  { label: "Oldest first", value: "date_asc" },
+  { label: "Name A–Z", value: "name" },
+];
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -64,6 +81,58 @@ const rowFromPlayerTournament = (t: PlayerTournament, chip?: Row["chip"]): Row =
   chip,
 });
 
+// One tournament row card (reused inline and in the "View more" modal).
+const RowCard = ({
+  row,
+  fav,
+  onOpen,
+  onToggleFav,
+}: {
+  row: Row;
+  fav: boolean;
+  onOpen: (id: number) => void;
+  onToggleFav: (id: number) => void;
+}) => (
+  <TouchableOpacity
+    style={styles.card}
+    activeOpacity={0.85}
+    onPress={() => onOpen(row.tournamentId)}
+  >
+    <View style={styles.cardLeft}>
+      <View style={styles.gameBadge}>
+        <Text allowFontScaling={false} style={styles.gameBadgeText} numberOfLines={1}>
+          {prettyGame(row.game)}
+        </Text>
+      </View>
+      <Text allowFontScaling={false} style={styles.cardName} numberOfLines={1}>
+        {row.name}
+      </Text>
+      {!!row.venueLine && (
+        <Text allowFontScaling={false} style={styles.cardMeta} numberOfLines={1}>
+          {row.venueLine}
+        </Text>
+      )}
+      <Text allowFontScaling={false} style={styles.cardMeta}>
+        {fmtDate(row.date)}
+      </Text>
+    </View>
+    <View style={styles.cardRight}>
+      {row.chip && (
+        <View style={[styles.chip, { backgroundColor: row.chip.color }]}>
+          <Text allowFontScaling={false} style={styles.chipText}>
+            {row.chip.label}
+          </Text>
+        </View>
+      )}
+      <TouchableOpacity hitSlop={8} onPress={() => onToggleFav(row.tournamentId)}>
+        <Text allowFontScaling={false} style={styles.heart}>
+          {fav ? "❤️" : "🤍"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+);
+
 export const MyTournaments = ({
   live,
   registered,
@@ -88,6 +157,10 @@ export const MyTournaments = ({
   userId?: number;
 }) => {
   const [tab, setTab] = useState<TabKey>(live.length > 0 ? "live" : "registered");
+  // "View more" modal for the current filter (full list + search + sort).
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreQuery, setMoreQuery] = useState("");
+  const [moreSort, setMoreSort] = useState("date_desc");
 
   const tabs: { key: TabKey; label: string; count: number; color: string }[] = [
     { key: "live", label: "Live", count: live.length, color: COLORS.error },
@@ -117,6 +190,30 @@ export const MyTournaments = ({
         }));
     return [];
   }, [tab, live, registered, completed, favorites]);
+
+  const currentLabel = `${tabs.find((t) => t.key === tab)?.label ?? ""} Tournaments`;
+
+  // Full list for the "View more" modal — filtered by search + sorted.
+  const moreRows = useMemo(() => {
+    const q = moreQuery.trim().toLowerCase();
+    const list = q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : [...rows];
+    if (moreSort === "name") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      list.sort((a, b) => {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        return moreSort === "date_asc" ? da - db : db - da;
+      });
+    }
+    return list;
+  }, [rows, moreQuery, moreSort]);
+
+  const openMore = () => {
+    setMoreQuery("");
+    setMoreSort("date_desc");
+    setMoreOpen(true);
+  };
 
   return (
     <View style={styles.section}>
@@ -192,56 +289,91 @@ export const MyTournaments = ({
           </Text>
         </View>
       ) : (
-        rows.map((r) => {
-          const fav = favoritedIds.has(r.tournamentId);
-          return (
-            <TouchableOpacity
+        <>
+          {rows.slice(0, 3).map((r) => (
+            <RowCard
               key={r.tournamentId}
-              style={styles.card}
-              activeOpacity={0.85}
-              onPress={() => onOpenTournament(r.tournamentId)}
-            >
-              <View style={styles.cardLeft}>
-                <View style={styles.gameBadge}>
-                  <Text allowFontScaling={false} style={styles.gameBadgeText} numberOfLines={1}>
-                    {prettyGame(r.game)}
-                  </Text>
-                </View>
-                <Text allowFontScaling={false} style={styles.cardName} numberOfLines={1}>
-                  {r.name}
-                </Text>
-                {!!r.venueLine && (
-                  <Text allowFontScaling={false} style={styles.cardMeta} numberOfLines={1}>
-                    {r.venueLine}
-                  </Text>
-                )}
-                <Text allowFontScaling={false} style={styles.cardMeta}>
-                  {fmtDate(r.date)}
-                </Text>
-              </View>
-              <View style={styles.cardRight}>
-                {r.chip && (
-                  <View style={[styles.chip, { backgroundColor: r.chip.color }]}>
-                    <Text allowFontScaling={false} style={styles.chipText}>
-                      {r.chip.label}
-                    </Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  hitSlop={8}
-                  onPress={() => onToggleFavorite(r.tournamentId)}
-                >
-                  <Text allowFontScaling={false} style={styles.heart}>
-                    {fav ? "❤️" : "🤍"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              row={r}
+              fav={favoritedIds.has(r.tournamentId)}
+              onOpen={onOpenTournament}
+              onToggleFav={onToggleFavorite}
+            />
+          ))}
+          {rows.length > 3 && (
+            <TouchableOpacity style={styles.viewMore} activeOpacity={0.7} onPress={openMore}>
+              <Text allowFontScaling={false} style={styles.viewMoreText}>
+                View more ({rows.length})
+              </Text>
             </TouchableOpacity>
-          );
-        })
+          )}
+        </>
       )}
         </>
       )}
+
+      {/* "View more" modal — full list for the current filter, with search + sort */}
+      <Modal
+        transparent
+        visible={moreOpen}
+        animationType="slide"
+        onRequestClose={() => setMoreOpen(false)}
+      >
+        <View style={styles.moreBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMoreOpen(false)} />
+          <View style={styles.moreSheet}>
+            <View style={styles.moreHeader}>
+              <Text allowFontScaling={false} style={styles.moreTitle} numberOfLines={1}>
+                {currentLabel}
+              </Text>
+              <TouchableOpacity onPress={() => setMoreOpen(false)} hitSlop={10}>
+                <Text allowFontScaling={false} style={styles.moreClose}>
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.moreSearchRow}>
+              <TextInput
+                allowFontScaling={false}
+                style={styles.moreSearch}
+                placeholder="Search"
+                placeholderTextColor={COLORS.textMuted}
+                value={moreQuery}
+                onChangeText={setMoreQuery}
+              />
+              <View style={styles.moreSortWrap}>
+                <Dropdown compact options={MORE_SORTS} value={moreSort} onSelect={setMoreSort} />
+              </View>
+            </View>
+            <ScrollView
+              style={styles.moreList}
+              contentContainerStyle={styles.moreListContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              {moreRows.length === 0 ? (
+                <Text allowFontScaling={false} style={styles.moreEmpty}>
+                  No tournaments match your search.
+                </Text>
+              ) : (
+                moreRows.map((r) => (
+                  <RowCard
+                    key={r.tournamentId}
+                    row={r}
+                    fav={favoritedIds.has(r.tournamentId)}
+                    onOpen={(id) => {
+                      setMoreOpen(false);
+                      // Let this sheet dismiss before the detail modal presents.
+                      setTimeout(() => onOpenTournament(id), 250);
+                    }}
+                    onToggleFav={onToggleFavorite}
+                  />
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -336,4 +468,52 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 9, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
   heart: { fontSize: wxMs(FONT_SIZES.lg) },
+
+  // "View more"
+  viewMore: { alignItems: "center", paddingVertical: wxSc(SPACING.sm) },
+  viewMoreText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.primary },
+
+  // "View more" modal
+  moreBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  moreSheet: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: wxSc(20),
+    borderTopRightRadius: wxSc(20),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    height: "82%",
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingTop: wxSc(SPACING.md),
+    paddingBottom: Platform.OS === "ios" ? wxSc(SPACING.xl) : wxSc(SPACING.md),
+  },
+  moreHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: wxSc(SPACING.md),
+  },
+  moreTitle: { flex: 1, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
+  moreClose: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.textSecondary },
+  moreSearchRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.md) },
+  moreSearch: {
+    flex: 1,
+    height: wxSc(44),
+    backgroundColor: COLORS.surface,
+    borderRadius: wxSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: 0,
+    fontSize: wxMs(FONT_SIZES.sm),
+  },
+  moreSortWrap: { width: wxSc(150) },
+  moreList: { flex: 1 },
+  moreListContent: { paddingBottom: wxSc(SPACING.lg) },
+  moreEmpty: {
+    textAlign: "center",
+    color: COLORS.textMuted,
+    fontSize: wxMs(FONT_SIZES.sm),
+    paddingVertical: wxSc(SPACING.xl),
+  },
 });

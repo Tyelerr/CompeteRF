@@ -206,6 +206,7 @@ export default function ProfileScreen() {
   const favorites = favRows as unknown as Favorite[];
   const [unreadCount, setUnreadCount] = useState(0);
   const [inboxVisible, setInboxVisible] = useState(false);
+  const [inboxTab, setInboxTab] = useState<"conversations" | "notifications">("conversations");
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
@@ -341,14 +342,21 @@ export default function ProfileScreen() {
 
           <View style={styles.profileCard}>
             <View style={styles.cardIcons}>
-              <TouchableOpacity style={styles.cardIconBtn} onPress={() => setInboxVisible(true)} hitSlop={6}>
+              <TouchableOpacity
+                style={styles.cardIconBtn}
+                onPress={() => { setInboxTab("conversations"); setInboxVisible(true); }}
+                hitSlop={6}
+              >
                 <Ionicons name="mail-outline" size={wxMs(20)} color={COLORS.text} />
-                {unreadCount > 0 && <View style={styles.bellBadge} />}
               </TouchableOpacity>
               <TouchableOpacity style={styles.cardIconBtn} onPress={handleSettings} hitSlop={6}>
                 <Ionicons name="settings-outline" size={wxMs(20)} color={COLORS.text} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cardIconBtn} onPress={() => setInboxVisible(true)} hitSlop={6}>
+              <TouchableOpacity
+                style={styles.cardIconBtn}
+                onPress={() => { setInboxTab("notifications"); setInboxVisible(true); }}
+                hitSlop={6}
+              >
                 <Ionicons name="notifications-outline" size={wxMs(20)} color={COLORS.text} />
                 {unreadCount > 0 && <View style={styles.bellBadge} />}
               </TouchableOpacity>
@@ -517,6 +525,7 @@ export default function ProfileScreen() {
         onClose={() => setInboxVisible(false)}
         userId={user?.id}
         userIdAuto={profile?.id_auto}
+        initialTab={inboxTab}
         onViewTournament={(id) => { setInboxVisible(false); setTimeout(() => openDetailModal(id), 150); }}
       />
 

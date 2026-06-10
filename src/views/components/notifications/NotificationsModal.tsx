@@ -1,5 +1,5 @@
 ﻿import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
 import { ConversationPreview, RecipientOption, conversationService } from "../../../models/services/conversation.service";
@@ -311,12 +311,19 @@ const ConversationCard = ({ convo, onPress, onDelete }: { convo: ConversationPre
 interface NotificationsModalProps {
   visible: boolean; onClose: () => void; userId: string | undefined;
   userIdAuto: number | undefined; onViewTournament?: (id: string) => void;
+  initialTab?: "conversations" | "notifications";
 }
 
-export function NotificationsModal({ visible, onClose, userId, userIdAuto, onViewTournament }: NotificationsModalProps) {
+export function NotificationsModal({ visible, onClose, userId, userIdAuto, onViewTournament, initialTab = "conversations" }: NotificationsModalProps) {
   const router = useRouter();
   const [showCompose, setShowCompose] = useState(false);
-  const [activeTab, setActiveTab] = useState<"conversations" | "notifications">("conversations");
+  const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(initialTab);
+
+  // Open to the requested tab each time the inbox is shown (message icon ->
+  // conversations, bell -> notifications).
+  useEffect(() => {
+    if (visible) setActiveTab(initialTab);
+  }, [visible, initialTab]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [unifiedNotifications, setUnifiedNotifications] = useState<UnifiedNotification[]>([]);
