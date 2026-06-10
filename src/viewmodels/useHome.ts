@@ -39,9 +39,9 @@ export function useHome() {
   // ----- Derived -----
   const firstName = profile?.name?.split(" ")[0] || "Player";
 
-  // Track whether the initial load has already run so useFocusEffect
-  // doesn't re-fetch on the very first mount (useEffect handles that).
-  const initialLoadDone = useRef(false);
+  // The initial mount fetch is handled by useEffect, so skip the first focus
+  // event; subsequent focuses may re-fetch (see the focus effect below).
+  const skipFirstFocus = useRef(true);
 
   // ----- Data Fetching -----
 
@@ -83,24 +83,26 @@ export function useHome() {
 
   // ----- Initial Load -----
   useEffect(() => {
-    initialLoadDone.current = true;
     fetchNews();
     fetchFeaturedContent();
   }, [fetchNews, fetchFeaturedContent]);
 
   // ----- Focus Refresh ─────────────────────────────────────────────────────
-  // Re-fetch news when the user navigates back to the Home tab.
-  // Matches the pattern used in useGiveaways.ts.
-  // Skips the very first focus event since useEffect already handles that.
+  // Re-fetch news when the user returns to the Home tab AND there's nothing to
+  // show — i.e. the last load failed or came back empty (getLatestNews never
+  // throws, it returns [] on failure, so newsError alone never recovered the
+  // "No news available" state). Once news is loaded we don't re-fetch on focus,
+  // avoiding unnecessary calls on every tab switch.
   useFocusEffect(
     useCallback(() => {
-      if (!initialLoadDone.current) return;
-      // Only re-fetch if the last attempt failed — avoids unnecessary
-      // network calls every time the user switches tabs.
-      if (newsError) {
+      if (skipFirstFocus.current) {
+        skipFirstFocus.current = false;
+        return;
+      }
+      if (newsError || newsItems.length === 0) {
         fetchNews();
       }
-    }, [newsError, fetchNews]),
+    }, [newsError, newsItems.length, fetchNews]),
   );
 
   // ----- Event Handlers -----

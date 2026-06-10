@@ -71,7 +71,22 @@ export default function HomeScreen() {
     if (newsItems.length === 0) {
       return (
         <View style={styles.loadingContainer}>
-          <Text allowFontScaling={false} style={styles.emptyText}>No news available.</Text>
+          <Text allowFontScaling={false} style={[styles.emptyText, { marginBottom: scale(SPACING.md) }]}>
+            No news available.
+          </Text>
+          <TouchableOpacity
+            onPress={retryNews}
+            style={{
+              backgroundColor: COLORS.primary,
+              paddingHorizontal: scale(SPACING.lg),
+              paddingVertical: scale(SPACING.sm),
+              borderRadius: 8,
+            }}
+          >
+            <Text allowFontScaling={false} style={{ color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" }}>
+              Refresh
+            </Text>
+          </TouchableOpacity>
         </View>
       );
     }
