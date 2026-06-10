@@ -159,7 +159,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
   live: {
     label: "Live",
     tabs: [
-      { tab: "matches", label: "Matches" },
+      { tab: "matches", label: "Matches / Bracket" },
       { tab: "tables", label: "Tables" },
       { tab: "actions", label: "Actions", lead: "⚡", divider: true },
     ],
