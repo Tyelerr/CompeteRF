@@ -186,7 +186,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   const scrollRef = useScrollToTopOnFocus();
   const storeProfile = useAuthStore((s) => s.profile);
-  const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
+  const {
+    favorites: favRows,
+    toggleFavorite: toggleFav,
+    refetch: refetchFavorites,
+  } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
   const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
@@ -196,7 +200,10 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(storeProfile ?? null);
-  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  // Favorites come from the shared useFavorites React Query cache (single source
+  // of truth) so favoriting on Billiards reflects here instantly. The cast keeps
+  // the local shape that includes the joined tournament/venue data.
+  const favorites = favRows as unknown as Favorite[];
   const [unreadCount, setUnreadCount] = useState(0);
   const [inboxVisible, setInboxVisible] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
@@ -213,9 +220,8 @@ export default function ProfileScreen() {
     try {
       await toggleFav(tournamentId);
     } catch {
-      /* ignore */
+      /* ignore — useFavorites rolls back + alerts on failure */
     }
-    if (profile?.id_auto) loadFavorites(profile.id_auto);
   };
 
   useEffect(() => { if (storeProfile) setProfile(storeProfile); }, [storeProfile]);
@@ -229,7 +235,6 @@ export default function ProfileScreen() {
         loadUnreadCount(session.user.id);
       } else {
         setProfile(null);
-        setFavorites([]);
         setUnreadCount(0);
         setLoading(false);
       }
@@ -243,7 +248,6 @@ export default function ProfileScreen() {
     if (session?.user) {
       if (storeProfile) {
         setLoading(false);
-        loadFavorites(storeProfile.id_auto);
         loadUnreadCount(session.user.id);
       } else {
         await loadProfile(session.user.id);
@@ -256,17 +260,8 @@ export default function ProfileScreen() {
 
   const loadProfile = async (userId: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
-    if (data) { setProfile(data); await loadFavorites(data.id_auto); }
+    if (data) setProfile(data);
     setLoading(false);
-  };
-
-  const loadFavorites = async (userIdAuto: number) => {
-    const { data } = await supabase
-      .from("favorites")
-      .select("id, tournament_id, tournaments (id, name, game_type, tournament_date, thumbnail, venues (venue, city, state))")
-      .eq("user_id", userIdAuto)
-      .not("tournament_id", "is", null);
-    if (data) setFavorites(data as unknown as Favorite[]);
   };
 
   const loadUnreadCount = async (userId: string) => {
@@ -283,12 +278,13 @@ export default function ProfileScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     if (user) { await loadProfile(user.id); await loadUnreadCount(user.id); }
+    await refetchFavorites();
     setRefreshing(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setUser(null); setProfile(null); setFavorites([]); setUnreadCount(0);
+    setUser(null); setProfile(null); setUnreadCount(0);
     router.replace("/(tabs)" as any);
   };
 
