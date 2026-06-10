@@ -32,6 +32,19 @@ const MORE_SORTS = [
   { label: "Name A–Z", value: "name" },
 ];
 
+// Normalize for forgiving search: lowercases, maps number words to digits, and
+// strips everything but letters/digits — so "8ball", "8 Ball", "8-Ball" and
+// "eight ball" all collapse to "8ball" and match each other.
+const NUM_WORDS: Record<string, string> = {
+  one: "1", two: "2", three: "3", four: "4", five: "5",
+  six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
+};
+const normalizeSearch = (s: string): string =>
+  (s || "")
+    .toLowerCase()
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/g, (w) => NUM_WORDS[w])
+    .replace(/[^a-z0-9]/g, "");
+
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
@@ -193,10 +206,18 @@ export const MyTournaments = ({
 
   const currentLabel = `${tabs.find((t) => t.key === tab)?.label ?? ""} Tournaments`;
 
-  // Full list for the "View more" modal — filtered by search + sorted.
+  // Full list for the "View more" modal — searched (name / city / state / game,
+  // game-variant tolerant) + sorted.
   const moreRows = useMemo(() => {
-    const q = moreQuery.trim().toLowerCase();
-    const list = q ? rows.filter((r) => r.name.toLowerCase().includes(q)) : [...rows];
+    const nq = normalizeSearch(moreQuery);
+    const list = nq
+      ? rows.filter(
+          (r) =>
+            normalizeSearch(r.name).includes(nq) ||
+            normalizeSearch(r.venueLine).includes(nq) ||
+            normalizeSearch(r.game).includes(nq),
+        )
+      : [...rows];
     if (moreSort === "name") {
       list.sort((a, b) => a.name.localeCompare(b.name));
     } else {
@@ -335,7 +356,7 @@ export const MyTournaments = ({
               <TextInput
                 allowFontScaling={false}
                 style={styles.moreSearch}
-                placeholder="Search"
+                placeholder="Search name, city, state, game"
                 placeholderTextColor={COLORS.textMuted}
                 value={moreQuery}
                 onChangeText={setMoreQuery}
