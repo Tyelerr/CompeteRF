@@ -34,8 +34,8 @@ const GAP_X = 76;
 const GAP_Y = 34;
 const LABEL_H = 30;
 const DIVIDER_GAP = 90;
-const LINE_W = 2.5; // connector thickness (plain View; stays visible to MIN_SCALE)
-const MIN_SCALE = 0.42;
+const LINE_W = 3; // connector thickness (plain View; stays visible to MIN_SCALE)
+const MIN_SCALE = 0.22; // how far you can zoom out (lower = see more of the bracket)
 const MAX_SCALE = 2.5;
 const START_SCALE = 0.7;
 const PAD = SPACING.md;
@@ -241,11 +241,15 @@ export const BracketCanvas = ({
   matches,
   onNodePress,
   focusMatchId,
+  focusKey,
 }: {
   matches: LiveMatch[];
   onNodePress: (m: LiveMatch) => void;
   // When set, the canvas opens centered on this match (e.g. the viewer's own match).
   focusMatchId?: string | null;
+  // Changing this re-triggers the centering even to the same match (so a repeat
+  // "View Bracket" re-centers instead of keeping the last pan/zoom).
+  focusKey?: string | number;
 }) => {
   const built = useMemo(() => layout(matches), [matches]);
   const { positioned, labels, lines, width, height, hasLosers, dividerY } = built;
@@ -387,7 +391,7 @@ export const BracketCanvas = ({
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
     highlightTimer.current = setTimeout(() => setHighlight(null), 2600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMatchId, viewport.w, viewport.h, positioned]);
+  }, [focusMatchId, focusKey, viewport.w, viewport.h, positioned]);
   const toggleFav = (name: string) =>
     setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 

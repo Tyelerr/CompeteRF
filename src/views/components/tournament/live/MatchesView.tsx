@@ -50,6 +50,7 @@ export const MatchesView = ({
   initialMode,
   occupancy,
   focusMatchId,
+  focusKey,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
@@ -66,6 +67,7 @@ export const MatchesView = ({
   occupancy?: Record<number, string>;
   // When set, the bracket opens centered on this match.
   focusMatchId?: string | null;
+  focusKey?: string | number; // changing this re-centers on the focus match
 }) => {
   const [mode, setMode] = useState<ViewMode>(initialMode ?? "cards"); // Card View is the default
   // The toggle highlight uses `mode` (instant); the heavy view content uses the
@@ -201,6 +203,7 @@ export const MatchesView = ({
             matches={matches}
             onNodePress={(m) => (readOnly ? setDetail(m) : openSheet(m, "menu"))}
             focusMatchId={focusMatchId}
+            focusKey={focusKey}
           />
         </View>
       )}

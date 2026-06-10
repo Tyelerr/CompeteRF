@@ -311,7 +311,9 @@ export default function ProfileScreen() {
   // player's current/next match.
   const openBracket = (tournamentId: number) => {
     const focus = hub?.current?.matchId;
-    const q = `tab=matches&view=bracket${focus ? `&focus=${focus}` : ""}`;
+    // fk changes every tap so the (kept-mounted) spectator screen re-centers + resets.
+    const fk = Date.now();
+    const q = `tab=matches&view=bracket&fk=${fk}${focus ? `&focus=${focus}` : ""}`;
     router.push(`/live-tournament/${tournamentId}?${q}` as any);
   };
 

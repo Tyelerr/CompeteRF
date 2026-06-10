@@ -6,7 +6,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -163,11 +163,13 @@ export const LiveTournamentScreen = ({
   initialTab,
   initialView,
   focusMatchId,
+  focusKey,
 }: {
   id: string;
   initialTab?: string;
   initialView?: string;
   focusMatchId?: string;
+  focusKey?: string;
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -178,6 +180,14 @@ export const LiveTournamentScreen = ({
     : "overview";
   const [tab, setTab] = useState<Tab>(validTab);
   const matchesInitialMode = initialView === "bracket" ? "bracket" : "cards";
+
+  // This screen stays mounted (it's a tab route), so re-opening it from "View
+  // Bracket" must reset the tab to the requested one each time (focusKey changes
+  // per navigation). The Matches view itself is remounted via key={focusKey}.
+  useEffect(() => {
+    setTab(validTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, initialTab]);
   const [playerQuery, setPlayerQuery] = useState("");
   const [playerSort, setPlayerSort] = useState<PlayerSort>("active");
 
@@ -254,12 +264,14 @@ export const LiveTournamentScreen = ({
       ) : tab === "matches" ? (
         <View style={styles.matchesWrap}>
           <MatchesView
+            key={focusKey ?? "matches"}
             matches={sp.matches}
             tables={sp.tables}
             readOnly
             groups={sp.groups}
             initialMode={matchesInitialMode}
             focusMatchId={focusMatchId}
+            focusKey={focusKey}
           />
         </View>
       ) : tab === "players" ? (
