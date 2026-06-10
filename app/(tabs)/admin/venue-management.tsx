@@ -20,6 +20,7 @@ import {
   View,
 } from "react-native";
 import { supabase } from "../../../src/lib/supabase";
+import { roleService } from "../../../src/models/services/role.service";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
@@ -426,28 +427,15 @@ export default function VenueManagementScreen() {
         });
         if (insertError) throw insertError;
 
-        const { data: newOwnerProfile } = await supabase
-          .from("profiles").select("role").eq("id_auto", newOwnerId).single();
-        if (newOwnerProfile && newOwnerProfile.role === "basic_user") {
-          await supabase.from("profiles").update({ role: "bar_owner" }).eq("id_auto", newOwnerId);
-        }
+        // New owner now holds a venue -> bar_owner (recompute is admin-safe).
+        await roleService.recomputeUserRole(newOwnerId);
 
+        // Re-derive each prior owner's role from their remaining relationships.
         if (currentOwners) {
           for (const oldOwner of currentOwners) {
             const oid = oldOwner.owner_id;
             if (oid === newOwnerId) continue;
-            const { count: remainingVenues } = await supabase
-              .from("venue_owners").select("id", { count: "exact", head: true })
-              .eq("owner_id", oid).is("archived_at", null);
-            const { count: activeTournaments } = await supabase
-              .from("tournaments").select("id", { count: "exact", head: true })
-              .eq("director_id", oid).eq("status", "active");
-            const { count: directedVenues } = await supabase
-              .from("venue_directors").select("id", { count: "exact", head: true })
-              .eq("director_id", oid).is("archived_at", null);
-            if ((remainingVenues || 0) === 0 && (activeTournaments || 0) === 0 && (directedVenues || 0) === 0) {
-              await supabase.from("profiles").update({ role: "basic_user" }).eq("id_auto", oid);
-            }
+            await roleService.recomputeUserRole(oid);
           }
         }
 

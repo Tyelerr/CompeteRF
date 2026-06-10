@@ -2,6 +2,7 @@
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { SUPABASE_URL } from "../lib/supabase";
+import { roleService } from "../models/services/role.service";
 import { useAuthContext } from "../providers/AuthProvider";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";
 
@@ -339,6 +340,9 @@ export const useCreateVenue = () => {
       if (ownerError) {
         console.error("Error adding venue owner:", ownerError);
         // Don't fail completely, venue was created
+      } else {
+        // Creator now owns this venue — make sure their role reflects it.
+        await roleService.recomputeUserRole(profile!.id_auto);
       }
 
       // 3. Insert venue_tables

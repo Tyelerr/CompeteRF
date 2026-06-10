@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { roleService } from "../models/services/role.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export interface DirectorWithVenue {
@@ -219,38 +220,11 @@ export const useMyDirectors = () => {
     }
   };
 
-  // FIX: Added .select().single() to catch RLS failures on downgrade
+  // Recompute the user's role from ALL their relationships (ownership +
+  // directorship + active tournaments), so removing them as a director here never
+  // wrongly demotes someone who still owns a venue or directs elsewhere.
   const checkAndDowngradeIfNeeded = async (directorId: number) => {
-    try {
-      // Check if director has any remaining active venue assignments
-      const { count } = await supabase
-        .from("venue_directors")
-        .select("id", { count: "exact", head: true })
-        .eq("director_id", directorId)
-        .is("archived_at", null);
-
-      // Only downgrade if NO remaining assignments anywhere
-      if (count === 0) {
-        const { data, error } = await supabase
-          .from("profiles")
-          .update({ role: "basic_user" })
-          .eq("id_auto", directorId)
-          .select("id_auto, role")
-          .single();
-
-        if (error) {
-          console.error("Error downgrading user role:", error);
-          return;
-        }
-
-        if (!data) {
-          console.error("Role downgrade returned null — likely RLS block");
-          return;
-        }
-      }
-    } catch (error) {
-      console.error("Error in checkAndDowngradeIfNeeded:", error);
-    }
+    await roleService.recomputeUserRole(directorId);
   };
 
   const onRefresh = () => {
