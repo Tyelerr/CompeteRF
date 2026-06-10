@@ -6,12 +6,13 @@
 // Following is a placeholder for now.
 
 import { useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { PlayerTournament } from "../../../models/types/registration.types";
+import { Dropdown } from "../common/dropdown";
 import { SearchAlertsInline } from "./SearchAlertsInline";
 
 const isWeb = Platform.OS === "web";
@@ -153,42 +154,14 @@ export const MyTournaments = ({
         ) : null
       ) : (
         <>
-      {/* Tabs — content-sized + horizontally scrollable so the longer labels
-          (Registered / Completed) never truncate. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsScroll}
-        contentContainerStyle={styles.tabsRow}
-      >
-        {tabs.map((t) => {
-          const active = tab === t.key;
-          return (
-            <TouchableOpacity
-              key={t.key}
-              activeOpacity={0.8}
-              style={[styles.tab, active && { backgroundColor: t.color }]}
-              onPress={() => setTab(t.key)}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.tabText, active && styles.tabTextActive]}
-                numberOfLines={1}
-              >
-                {t.label}
-              </Text>
-              <View style={[styles.tabCount, active && styles.tabCountActive]}>
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.tabCountText, active && styles.tabCountTextActive]}
-                >
-                  {t.count}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {/* Filter dropdown (Live / Registered / Favorites / Following / Completed) */}
+      <View style={styles.filterRow}>
+        <Dropdown
+          options={tabs.map((t) => ({ value: t.key, label: `${t.label} (${t.count})` }))}
+          value={tab}
+          onSelect={(v) => setTab(v as TabKey)}
+        />
+      </View>
 
       {/* List */}
       {tab === "following" ? (
@@ -270,6 +243,7 @@ export const MyTournaments = ({
 
 const styles = StyleSheet.create({
   section: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.lg) },
+  filterRow: { marginBottom: wxSc(SPACING.md) },
   viewToggle: {
     flexDirection: "row",
     backgroundColor: COLORS.surface,
