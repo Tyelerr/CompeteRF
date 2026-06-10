@@ -1,25 +1,20 @@
-﻿import { Platform } from "react-native";
+﻿import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { RSSItem } from "../types/home.types";
 
 const RSS_FEED_URL = "https://www.azbilliards.com/feed/";
+const CACHE_KEY = "cached_rss_news_v1";
 const MAX_ITEMS = 10;
 const DESCRIPTION_LIMIT = 200;
-// Increased from 12s — Expo Go on device can be slower than simulator
-const FETCH_TIMEOUT_MS = 20000;
+// Direct (azbilliards) gets a longer budget; the proxies are quicker to fail over.
+const FETCH_TIMEOUT_MS = 15000;
 const WEB_FETCH_TIMEOUT_MS = 8000;
-// Single retry only — the feed is either reachable or not
-const MAX_RETRIES = 1;
-const RETRY_DELAY_MS = 2000;
 
 const CORS_PROXIES = [
   "https://corsproxy.io/?" + encodeURIComponent(RSS_FEED_URL),
   "https://api.allorigins.win/raw?url=" + encodeURIComponent(RSS_FEED_URL),
   "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(RSS_FEED_URL),
 ];
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -33,48 +28,58 @@ async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Prom
 }
 
 class RSSService {
+  // Tries several sources in order so a single blocked/slow request doesn't blank
+  // the feed: native fetches the feed directly first, then falls back to the CORS
+  // proxies (which fetch it server-side, bypassing device/network quirks). Web
+  // uses the proxies only. The last successful result is cached and returned if
+  // every source fails, so news stays available across flaky networks.
   async getLatestNews(): Promise<RSSItem[]> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) await sleep(RETRY_DELAY_MS);
-      try {
-        const items = Platform.OS !== "web"
-          ? await this.fetchNative()
-          : await this.fetchWeb();
-        if (items.length > 0) return items;
-        if (attempt === MAX_RETRIES) return [];
-        lastError = new Error("Feed returned 0 items");
-      } catch (err) {
-        lastError = err;
-        // Downgraded to warn — RSS is non-critical content; AbortErrors
-        // from slow networks are expected and should not appear as red
-        // errors in the console.
-        console.warn("[RSS] Attempt " + (attempt + 1) + " failed:", (err as Error)?.message ?? err);
-      }
+    const isNative = Platform.OS !== "web";
+    const sources = isNative ? [RSS_FEED_URL, ...CORS_PROXIES] : [...CORS_PROXIES];
+
+    // Race every source — the first one to return articles wins, so a blocked or
+    // slow source (e.g. a direct fetch that one network refuses) never delays the
+    // others. A source that errors or returns nothing simply drops out.
+    const attempts = sources.map((url) =>
+      this.fetchFromUrl(url, url === RSS_FEED_URL ? FETCH_TIMEOUT_MS : WEB_FETCH_TIMEOUT_MS).then(
+        (items) => {
+          if (items.length === 0) throw new Error("empty feed");
+          return items;
+        },
+      ),
+    );
+
+    try {
+      const items = await Promise.any(attempts);
+      this.cacheNews(items); // fire-and-forget
+      return items;
+    } catch {
+      // Every source failed — fall back to the last cached news so the feed stays
+      // available even when the network/source is down.
+      return this.getCachedNews();
     }
-    // Silently return empty rather than throwing — the home screen shows
-    // a retry button when newsError is true, but this is non-critical.
-    return [];
   }
 
-  private async fetchNative(): Promise<RSSItem[]> {
-    const response = await fetchWithTimeout(RSS_FEED_URL);
-    if (!response.ok) throw new Error("[RSS] Native fetch status " + response.status);
+  private async fetchFromUrl(url: string, timeoutMs: number): Promise<RSSItem[]> {
+    const response = await fetchWithTimeout(url, timeoutMs);
+    if (!response.ok) throw new Error("status " + response.status);
     const xmlText = await response.text();
     return this.parseRSSFeed(xmlText);
   }
 
-  private async fetchWeb(): Promise<RSSItem[]> {
-    const tryProxy = async (proxyUrl: string): Promise<RSSItem[]> => {
-      const response = await fetchWithTimeout(proxyUrl, WEB_FETCH_TIMEOUT_MS);
-      if (!response.ok) throw new Error("Proxy status " + response.status);
-      const xmlText = await response.text();
-      const items = this.parseRSSFeed(xmlText);
-      if (items.length === 0) throw new Error("Proxy returned 0 items");
-      return items;
-    };
+  private async cacheNews(items: RSSItem[]): Promise<void> {
     try {
-      return await Promise.any(CORS_PROXIES.map(tryProxy));
+      await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(items));
+    } catch {
+      // ignore cache write failures
+    }
+  }
+
+  private async getCachedNews(): Promise<RSSItem[]> {
+    try {
+      const raw = await AsyncStorage.getItem(CACHE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as RSSItem[]) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
