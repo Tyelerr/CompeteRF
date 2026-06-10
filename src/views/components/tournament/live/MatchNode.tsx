@@ -19,14 +19,19 @@ export const NODE_HEIGHT = 130;
 const MatchNodeBase = ({
   match,
   highlighted,
+  mine,
   onPress,
 }: {
   match: LiveMatch;
   highlighted?: boolean;
+  // The viewer's own matches: "win" / "loss" border their card; "mine" is a
+  // not-yet-decided match of theirs.
+  mine?: "win" | "loss" | "mine" | null;
   onPress: (m: LiveMatch) => void;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
+  const completed = m.status === "completed";
   // No per-node ticking timer (it lives in the match modal). Completed shows its
   // final elapsed time, computed once.
   const finalSeconds =
@@ -55,8 +60,12 @@ const MatchNodeBase = ({
       style={[
         styles.node,
         running && styles.nodeLive,
+        completed && styles.nodeDone,
         m.isLiveActive && styles.nodeStream,
         highlighted && styles.nodeHighlight,
+        mine === "mine" && styles.nodeMine,
+        mine === "win" && styles.nodeMineWin,
+        mine === "loss" && styles.nodeMineLoss,
       ]}
     >
       <View style={styles.top}>
@@ -191,8 +200,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   nodeLive: { backgroundColor: "#16241B" },
+  // Finished matches recede (winner stays green); the viewer's own matches keep a
+  // colored border on top so their path is easy to follow.
+  nodeDone: { backgroundColor: COLORS.background, borderColor: COLORS.border },
   nodeStream: { borderColor: COLORS.error, borderWidth: 2 },
   nodeHighlight: { borderColor: COLORS.primary, borderWidth: 2 },
+  nodeMine: { borderColor: COLORS.primary, borderWidth: 2 },
+  nodeMineWin: { borderColor: COLORS.success, borderWidth: 2 },
+  nodeMineLoss: { borderColor: COLORS.error, borderWidth: 2 },
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   topRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   num: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary, flex: 1 },

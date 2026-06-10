@@ -189,7 +189,7 @@ export default function ProfileScreen() {
   const storeProfile = useAuthStore((s) => s.profile);
   const { toggleFavorite: toggleFav } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
-  const { hub, adjustScore, isScoring } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
@@ -313,7 +313,10 @@ export default function ProfileScreen() {
     const focus = hub?.current?.matchId;
     // fk changes every tap so the (kept-mounted) spectator screen re-centers + resets.
     const fk = Date.now();
-    const q = `tab=matches&view=bracket&fk=${fk}${focus ? `&focus=${focus}` : ""}`;
+    const q =
+      `tab=matches&view=bracket&fk=${fk}` +
+      `${focus ? `&focus=${focus}` : ""}` +
+      `${myRegId ? `&me=${myRegId}` : ""}`;
     router.push(`/live-tournament/${tournamentId}?${q}` as any);
   };
 

@@ -306,6 +306,7 @@ export const usePlayerLiveMatch = (playerId?: number) => {
     hub,
     // Back-compat: the standalone Match Center card reads the current match.
     liveMatch: hub?.current ?? null,
+    myRegId: myRegId ?? null, // the viewer's registration id (for bracket highlight)
     adjustScore,
     isScoring: matchStateMutation.isPending,
     isLoading: tournamentQuery.isLoading,

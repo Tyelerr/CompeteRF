@@ -242,9 +242,13 @@ export const BracketCanvas = ({
   onNodePress,
   focusMatchId,
   focusKey,
+  highlightRegId,
 }: {
   matches: LiveMatch[];
   onNodePress: (m: LiveMatch) => void;
+  // Registration id of the viewer — their matches get a green (win) / red (loss)
+  // border so they can follow their path.
+  highlightRegId?: number | null;
   // When set, the canvas opens centered on this match (e.g. the viewer's own match).
   focusMatchId?: string | null;
   // Changing this re-triggers the centering even to the same match (so a repeat
@@ -396,6 +400,18 @@ export const BracketCanvas = ({
     setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 
   // Stable so memoized nodes don't re-render on every parent render.
+  // The viewer's relationship to a match: win / loss (completed) or "mine" (pending).
+  const mineFor = (m: LiveMatch): "win" | "loss" | "mine" | null => {
+    if (highlightRegId == null || m.empty || m.bye) return null;
+    const isP1 = m.p1RegId === highlightRegId;
+    const isP2 = m.p2RegId === highlightRegId;
+    if (!isP1 && !isP2) return null;
+    if (m.status === "completed" && m.winner) {
+      return m.winner === (isP1 ? 1 : 2) ? "win" : "loss";
+    }
+    return "mine";
+  };
+
   const handleNodePress = useCallback(
     (mm: LiveMatch) => {
       Keyboard.dismiss();
@@ -558,6 +574,7 @@ export const BracketCanvas = ({
                             <MatchNode
                               match={p.match}
                               highlighted={highlight === p.match.id}
+                              mine={mineFor(p.match)}
                               onPress={handleNodePress}
                             />
                           </View>

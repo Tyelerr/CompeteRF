@@ -164,12 +164,14 @@ export const LiveTournamentScreen = ({
   initialView,
   focusMatchId,
   focusKey,
+  highlightRegId,
 }: {
   id: string;
   initialTab?: string;
   initialView?: string;
   focusMatchId?: string;
   focusKey?: string;
+  highlightRegId?: number | null;
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -272,6 +274,7 @@ export const LiveTournamentScreen = ({
             initialMode={matchesInitialMode}
             focusMatchId={focusMatchId}
             focusKey={focusKey}
+            highlightRegId={highlightRegId}
           />
         </View>
       ) : tab === "players" ? (
