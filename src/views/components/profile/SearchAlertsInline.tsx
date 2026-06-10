@@ -9,6 +9,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Platform,
   StyleSheet,
   Text,
@@ -25,6 +26,10 @@ import { moderateScale, scale } from "../../../utils/scaling";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
+
+// Keep the inline area roughly as tall as the My Tournaments view so toggling
+// between them doesn't shrink the page and jump the scroll position.
+const MIN_HEIGHT = Math.round(Dimensions.get("window").height * 0.7);
 
 const formatDate = (d: string) =>
   new Date(d).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
@@ -214,7 +219,7 @@ export const SearchAlertsInline = ({ userId }: { userId: number }) => {
 };
 
 const styles = StyleSheet.create({
-  root: { marginTop: wxSc(SPACING.sm) },
+  root: { marginTop: wxSc(SPACING.sm), minHeight: MIN_HEIGHT },
   statsBar: {
     flexDirection: "row",
     justifyContent: "space-around",
