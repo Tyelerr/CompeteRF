@@ -1,7 +1,6 @@
 ﻿import { useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
-import { SUPABASE_URL } from "../lib/supabase";
 import { roleService } from "../models/services/role.service";
 import { useAuthContext } from "../providers/AuthProvider";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";

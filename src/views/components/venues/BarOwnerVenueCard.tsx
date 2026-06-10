@@ -19,6 +19,7 @@ interface BarOwnerVenueCardProps {
   onPress: () => void;
   onManageTables?: () => void;
   onManageTeam?: () => void;
+  onManageDirectors?: () => void;
 }
 
 export const BarOwnerVenueCard = ({
@@ -26,6 +27,7 @@ export const BarOwnerVenueCard = ({
   onPress,
   onManageTables,
   onManageTeam,
+  onManageDirectors,
 }: BarOwnerVenueCardProps) => {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -83,6 +85,14 @@ export const BarOwnerVenueCard = ({
             onPress={(e) => { e.stopPropagation(); onManageTeam(); }}
           >
             <Text style={styles.actionText}>{"\uD83D\uDC65"} Manage Team</Text>
+          </TouchableOpacity>
+        )}
+        {onManageDirectors && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={(e) => { e.stopPropagation(); onManageDirectors(); }}
+          >
+            <Text style={styles.actionText}>Manage Directors</Text>
           </TouchableOpacity>
         )}
       </View>
