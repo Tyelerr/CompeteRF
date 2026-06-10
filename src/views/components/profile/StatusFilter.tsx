@@ -132,6 +132,7 @@ const styles = StyleSheet.create({
   trigger: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: wxSc(SPACING.sm),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
@@ -141,7 +142,7 @@ const styles = StyleSheet.create({
     paddingVertical: wxSc(SPACING.sm),
   },
   dot: { width: wxSc(8), height: wxSc(8), borderRadius: wxSc(4) },
-  triggerLabel: { flex: 1, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
+  triggerLabel: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   triggerCount: {
     fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "700",
