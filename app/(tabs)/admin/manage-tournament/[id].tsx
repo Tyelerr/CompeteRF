@@ -159,7 +159,6 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
   live: {
     label: "Live",
     tabs: [
-      { tab: "bracket", label: "Bracket" },
       { tab: "matches", label: "Matches" },
       { tab: "tables", label: "Tables" },
       { tab: "actions", label: "Actions", lead: "⚡", divider: true },
@@ -176,11 +175,12 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
   },
 };
 
-// Which lifecycle phase the tournament is currently in.
+// Which lifecycle phase the tournament is currently in. Drawing the bracket is the
+// last Setup step; the tournament enters Live only when it actually starts.
 const phaseGroupOf = (phase: ManagePhase): PhaseKey =>
   phase === "completed" || phase === "archived"
     ? "results"
-    : phase === "running" || phase === "bracket_drawn"
+    : phase === "running"
       ? "live"
       : "setup";
 
@@ -1614,16 +1614,19 @@ export default function ManageTournamentScreen() {
     const cur = PHASE_ORDER.indexOf(tournamentGroup);
     if (i < cur) return "done";
     if (i === cur) return p === "live" && hub.phase === "running" ? "live" : "current";
+    // An unlocked future phase (e.g. Live once the bracket is drawn) reads as
+    // available rather than locked.
+    if (phaseUnlocked(p)) return "current";
     return "locked";
   };
   const defaultTabForPhase = (p: PhaseKey): TabKey =>
     p === "live"
-      ? hub.phase === "running"
-        ? "matches"
-        : "bracket"
+      ? "matches"
       : p === "results"
         ? "standings"
-        : "settings";
+        : hub.phase === "bracket_drawn"
+          ? "bracket" // land on Draw Bracket (where Start lives) once drawn
+          : "settings";
 
   // Build the lifecycle nav model (phase buttons + their page menus).
   const navPhases = PHASE_ORDER.map((pk) => {
