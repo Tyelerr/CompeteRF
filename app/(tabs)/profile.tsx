@@ -495,7 +495,7 @@ export default function ProfileScreen() {
                     </Text>
                     <View style={styles.placeholderCard}>
                       <Text allowFontScaling={false} style={styles.placeholderText}>
-                        Coming soon
+                        Play in a tournament to see your stats.
                       </Text>
                     </View>
                   </View>
@@ -505,7 +505,7 @@ export default function ProfileScreen() {
                     </Text>
                     <View style={styles.placeholderCard}>
                       <Text allowFontScaling={false} style={styles.placeholderText}>
-                        Coming soon
+                        Your matches and results will show up here.
                       </Text>
                     </View>
                   </View>
