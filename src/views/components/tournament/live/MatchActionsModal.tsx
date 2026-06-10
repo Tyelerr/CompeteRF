@@ -364,20 +364,38 @@ export const MatchActionsModal = ({
                   name={m.p1Name ?? "P1"}
                   value={p1Score}
                   onChange={setP1Score}
+                  max={(m.p1Race ?? m.raceTo) ?? 999}
                 />
                 <ScoreCol
                   name={m.p2Name ?? "P2"}
                   value={p2Score}
                   onChange={setP2Score}
+                  max={(m.p2Race ?? m.raceTo) ?? 999}
                 />
               </View>
               <Footer
-                onSave={() =>
+                onSave={() => {
+                  const r1 = m.p1Race ?? m.raceTo ?? null;
+                  const r2 = m.p2Race ?? m.raceTo ?? null;
+                  const cap = (s: string, race: number | null) =>
+                    Math.max(0, Math.min(s === "" ? 0 : Number(s), race ?? 999));
+                  const np1 = cap(p1Score, r1);
+                  const np2 = cap(p2Score, r2);
+                  const reach1 = r1 != null && np1 >= r1;
+                  const reach2 = r2 != null && np2 >= r2;
+                  const done = reach1 || reach2;
                   apply({
-                    p1Score: p1Score === "" ? null : Number(p1Score),
-                    p2Score: p2Score === "" ? null : Number(p2Score),
-                  })
-                }
+                    p1Score: np1,
+                    p2Score: np2,
+                    // Reaching the race closes the match with that player as winner;
+                    // otherwise it's an in-progress score.
+                    status: done ? "completed" : "in_progress",
+                    startedAt: m.startedAt ?? now(),
+                    winner: done ? (reach1 ? 1 : 2) : null,
+                    completedAt: done ? now() : null,
+                    result: done ? "normal" : null,
+                  });
+                }}
               />
             </>
           )}
@@ -532,17 +550,19 @@ const ScoreCol = ({
   name,
   value,
   onChange,
+  max = 999,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
+  max?: number; // the race for this side — score can't exceed it
 }) => (
   <View style={styles.scoreCol}>
     <Text allowFontScaling={false} style={styles.scoreName} numberOfLines={1}>
       {name}
     </Text>
     <View style={styles.stepperRow}>
-      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, -1, 0, 999))}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, -1, 0, max))}>
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           −
         </Text>
@@ -551,13 +571,16 @@ const ScoreCol = ({
         allowFontScaling={false}
         style={styles.scoreInput}
         value={value}
-        onChangeText={(v) => onChange(v.replace(/[^0-9]/g, ""))}
+        onChangeText={(v) => {
+          const n = v.replace(/[^0-9]/g, "");
+          onChange(n === "" ? "" : String(Math.min(max, Number(n))));
+        }}
         keyboardType="numeric"
         maxLength={3}
         placeholder="0"
         placeholderTextColor={COLORS.textMuted}
       />
-      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, 1, 0, 999))}>
+      <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(bump(value, 1, 0, max))}>
         <Text allowFontScaling={false} style={styles.stepBtnText}>
           +
         </Text>
