@@ -293,7 +293,7 @@ export const MyTournaments = ({
             Following is coming soon
           </Text>
           <Text allowFontScaling={false} style={styles.emptyBody}>
-            You&apos;ll be able to follow venues and directors to see their events here.
+            You&apos;ll be able to follow venues and directors to see their events here
           </Text>
         </View>
       ) : rows.length === 0 ? (
@@ -303,10 +303,10 @@ export const MyTournaments = ({
           </Text>
           <Text allowFontScaling={false} style={styles.emptyBody}>
             {tab === "favorites"
-              ? "Tap the heart on a tournament to save it."
+              ? "Tap the heart on a tournament to save it"
               : tab === "live"
-                ? "No tournaments you're in are live right now."
-                : "Tournaments you join will show up here."}
+                ? "No tournaments you're in are live right now"
+                : "Tournaments you join will show up here"}
           </Text>
         </View>
       ) : (
@@ -374,7 +374,7 @@ export const MyTournaments = ({
             >
               {moreRows.length === 0 ? (
                 <Text allowFontScaling={false} style={styles.moreEmpty}>
-                  No tournaments match your search.
+                  No tournaments match your search
                 </Text>
               ) : (
                 moreRows.map((r) => (
