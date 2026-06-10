@@ -12,6 +12,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { PlayerTournament } from "../../../models/types/registration.types";
+import { SearchAlertsInline } from "./SearchAlertsInline";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -72,6 +73,7 @@ export const MyTournaments = ({
   onToggleFavorite,
   alertsOpen,
   onToggleAlerts,
+  userId,
 }: {
   live: PlayerTournament[];
   registered: PlayerTournament[];
@@ -82,6 +84,7 @@ export const MyTournaments = ({
   onToggleFavorite: (tournamentId: number) => void;
   alertsOpen: boolean;
   onToggleAlerts: (open: boolean) => void;
+  userId?: number;
 }) => {
   const [tab, setTab] = useState<TabKey>(live.length > 0 ? "live" : "registered");
 
@@ -144,6 +147,12 @@ export const MyTournaments = ({
         </TouchableOpacity>
       </View>
 
+      {alertsOpen ? (
+        userId != null ? (
+          <SearchAlertsInline userId={userId} />
+        ) : null
+      ) : (
+        <>
       {/* Tabs — content-sized + horizontally scrollable so the longer labels
           (Registered / Completed) never truncate. */}
       <ScrollView
@@ -252,6 +261,8 @@ export const MyTournaments = ({
             </TouchableOpacity>
           );
         })
+      )}
+        </>
       )}
     </View>
   );

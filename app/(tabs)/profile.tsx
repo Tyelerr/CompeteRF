@@ -33,7 +33,6 @@ import { NotificationsModal } from "../../src/views/components/notifications/Not
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
 import { TournamentHubView } from "../../src/views/components/profile/TournamentHubView";
-import { SearchAlertsModal } from "../../src/views/components/profile/SearchAlertsModal";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
 
@@ -480,6 +479,7 @@ export default function ProfileScreen() {
                 onToggleFavorite={handleToggleFavorite}
                 alertsOpen={searchAlertsVisible}
                 onToggleAlerts={setSearchAlertsVisible}
+                userId={storeProfile?.id_auto}
               />
 
               {/* Placeholder sections (built out later) */}
@@ -522,7 +522,6 @@ export default function ProfileScreen() {
 
       {isWeb && showDetailModal && detailTournamentId && <WebTournamentDetailOverlay id={detailTournamentId} onClose={closeDetailModal} />}
       {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal} onClose={closeDetailModal} />}
-      <SearchAlertsModal visible={searchAlertsVisible} onClose={() => setSearchAlertsVisible(false)} />
     </View>
   );
 }
