@@ -86,7 +86,7 @@ export const StatusFilter = ({ options, value, onChange }: StatusFilterProps) =>
             <View
               style={[
                 styles.menu,
-                { top: anchor.y + anchor.h + wxSc(6), left: anchor.x, minWidth: Math.max(anchor.w, wxSc(180)) },
+                { top: anchor.y + anchor.h + wxSc(6), left: anchor.x, width: Math.max(anchor.w, wxSc(180)) },
               ]}
             >
               {options.map((o, i) => {
@@ -130,7 +130,6 @@ export const StatusFilter = ({ options, value, onChange }: StatusFilterProps) =>
 
 const styles = StyleSheet.create({
   trigger: {
-    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: wxSc(SPACING.sm),
@@ -139,10 +138,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: RADIUS.full,
     paddingHorizontal: wxSc(SPACING.md),
-    paddingVertical: wxSc(SPACING.xs),
+    paddingVertical: wxSc(SPACING.sm),
   },
   dot: { width: wxSc(8), height: wxSc(8), borderRadius: wxSc(4) },
-  triggerLabel: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
+  triggerLabel: { flex: 1, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   triggerCount: {
     fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "700",
@@ -159,7 +158,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingVertical: wxSc(SPACING.xs),
-    maxWidth: wxSc(260),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,

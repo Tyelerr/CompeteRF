@@ -157,7 +157,12 @@ export const MyTournaments = ({
       {/* Pill-style status filter (Live / Registered / Favorites / Following / Completed) */}
       <View style={styles.filterRow}>
         <StatusFilter
-          options={tabs.map((t) => ({ key: t.key, label: t.label, count: t.count, color: t.color }))}
+          options={tabs.map((t) => ({
+            key: t.key,
+            label: `${t.label} Tournaments`,
+            count: t.count,
+            color: t.color,
+          }))}
           value={tab}
           onChange={(k) => setTab(k as TabKey)}
         />
