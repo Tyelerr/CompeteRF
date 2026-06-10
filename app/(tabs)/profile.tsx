@@ -482,27 +482,31 @@ export default function ProfileScreen() {
                 userId={storeProfile?.id_auto}
               />
 
-              {/* Placeholder sections (built out later) */}
-              <View style={styles.placeholderSection}>
-                <Text allowFontScaling={false} style={styles.placeholderTitle}>
-                  PERFORMANCE SNAPSHOT
-                </Text>
-                <View style={styles.placeholderCard}>
-                  <Text allowFontScaling={false} style={styles.placeholderText}>
-                    Coming soon
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.placeholderSection}>
-                <Text allowFontScaling={false} style={styles.placeholderTitle}>
-                  RECENT ACTIVITY
-                </Text>
-                <View style={styles.placeholderCard}>
-                  <Text allowFontScaling={false} style={styles.placeholderText}>
-                    Coming soon
-                  </Text>
-                </View>
-              </View>
+              {/* Placeholder sections — only with My Tournaments, not Search Alerts */}
+              {!searchAlertsVisible && (
+                <>
+                  <View style={styles.placeholderSection}>
+                    <Text allowFontScaling={false} style={styles.placeholderTitle}>
+                      PERFORMANCE SNAPSHOT
+                    </Text>
+                    <View style={styles.placeholderCard}>
+                      <Text allowFontScaling={false} style={styles.placeholderText}>
+                        Coming soon
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.placeholderSection}>
+                    <Text allowFontScaling={false} style={styles.placeholderTitle}>
+                      RECENT ACTIVITY
+                    </Text>
+                    <View style={styles.placeholderCard}>
+                      <Text allowFontScaling={false} style={styles.placeholderText}>
+                        Coming soon
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </>
           )}
         </View>
