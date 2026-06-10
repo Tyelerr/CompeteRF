@@ -12,8 +12,8 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { PlayerTournament } from "../../../models/types/registration.types";
-import { Dropdown } from "../common/dropdown";
 import { SearchAlertsInline } from "./SearchAlertsInline";
+import { StatusFilter } from "./StatusFilter";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -154,12 +154,12 @@ export const MyTournaments = ({
         ) : null
       ) : (
         <>
-      {/* Filter dropdown (Live / Registered / Favorites / Following / Completed) */}
+      {/* Pill-style status filter (Live / Registered / Favorites / Following / Completed) */}
       <View style={styles.filterRow}>
-        <Dropdown
-          options={tabs.map((t) => ({ value: t.key, label: `${t.label} (${t.count})` }))}
+        <StatusFilter
+          options={tabs.map((t) => ({ key: t.key, label: t.label, count: t.count, color: t.color }))}
           value={tab}
-          onSelect={(v) => setTab(v as TabKey)}
+          onChange={(k) => setTab(k as TabKey)}
         />
       </View>
 
