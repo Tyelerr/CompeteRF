@@ -49,6 +49,7 @@ export const MatchesView = ({
   groups,
   initialMode,
   occupancy,
+  focusMatchId,
 }: {
   matches: LiveMatch[];
   tables: TournamentTable[];
@@ -63,6 +64,8 @@ export const MatchesView = ({
   initialMode?: ViewMode; // open straight to "bracket" or "cards"
   // tableId -> match label currently on it (blocks double-booking in the picker).
   occupancy?: Record<number, string>;
+  // When set, the bracket opens centered on this match.
+  focusMatchId?: string | null;
 }) => {
   const [mode, setMode] = useState<ViewMode>(initialMode ?? "cards"); // Card View is the default
   // The toggle highlight uses `mode` (instant); the heavy view content uses the
@@ -197,6 +200,7 @@ export const MatchesView = ({
           <BracketCanvas
             matches={matches}
             onNodePress={(m) => (readOnly ? setDetail(m) : openSheet(m, "menu"))}
+            focusMatchId={focusMatchId}
           />
         </View>
       )}

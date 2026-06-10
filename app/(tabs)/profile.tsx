@@ -307,9 +307,13 @@ export default function ProfileScreen() {
   };
   const closeDetailModal = () => { setShowDetailModal(false); setDetailTournamentId(null); };
 
-  // Tournament View "View Bracket" → open the spectator view straight to the bracket.
-  const openBracket = (tournamentId: number) =>
-    router.push(`/live-tournament/${tournamentId}?tab=matches&view=bracket` as any);
+  // Tournament View "View Bracket" → open the spectator bracket centered on the
+  // player's current/next match.
+  const openBracket = (tournamentId: number) => {
+    const focus = hub?.current?.matchId;
+    const q = `tab=matches&view=bracket${focus ? `&focus=${focus}` : ""}`;
+    router.push(`/live-tournament/${tournamentId}?${q}` as any);
+  };
 
   const formatMemberSince = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });

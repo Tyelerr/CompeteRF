@@ -5,7 +5,7 @@
 // search centers + highlights a player's current match with a quick summary, and
 // session favorites allow fast jumps. Nodes are the card-styled MatchNode.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Keyboard,
@@ -240,9 +240,12 @@ const statusText = (m: LiveMatch) =>
 export const BracketCanvas = ({
   matches,
   onNodePress,
+  focusMatchId,
 }: {
   matches: LiveMatch[];
   onNodePress: (m: LiveMatch) => void;
+  // When set, the canvas opens centered on this match (e.g. the viewer's own match).
+  focusMatchId?: string | null;
 }) => {
   const built = useMemo(() => layout(matches), [matches]);
   const { positioned, labels, lines, width, height, hasLosers, dividerY } = built;
@@ -367,6 +370,24 @@ export const BracketCanvas = ({
     const m = currentMatchFor(name);
     if (m) focusOnMatch(name, m);
   };
+
+  // Open centered on the requested match (the viewer's own match). Re-centers
+  // whenever the target or the viewport changes, so each "View Bracket" resets here.
+  useEffect(() => {
+    if (!focusMatchId || viewport.w === 0) return;
+    const node = positioned.find((p) => p.match.id === focusMatchId);
+    if (!node) return;
+    const target = 1;
+    animateTo(
+      target,
+      viewport.w / 2 - (node.x + NODE_WIDTH / 2) * target,
+      viewport.h / 2 - (node.y + NODE_HEIGHT / 2) * target,
+    );
+    setHighlight(focusMatchId);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlight(null), 2600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMatchId, viewport.w, viewport.h, positioned]);
   const toggleFav = (name: string) =>
     setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 

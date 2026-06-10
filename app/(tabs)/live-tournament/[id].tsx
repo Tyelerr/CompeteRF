@@ -6,10 +6,18 @@ import { useLocalSearchParams } from "expo-router";
 import { LiveTournamentScreen } from "../../../src/views/screens/tournament/live-tournament.screen";
 
 export default function LiveTournamentRoute() {
-  const { id, tab, view } = useLocalSearchParams<{
+  const { id, tab, view, focus } = useLocalSearchParams<{
     id: string;
     tab?: string;
     view?: string;
+    focus?: string;
   }>();
-  return <LiveTournamentScreen id={id ?? ""} initialTab={tab} initialView={view} />;
+  return (
+    <LiveTournamentScreen
+      id={id ?? ""}
+      initialTab={tab}
+      initialView={view}
+      focusMatchId={focus}
+    />
+  );
 }

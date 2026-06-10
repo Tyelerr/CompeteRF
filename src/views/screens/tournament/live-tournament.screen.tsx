@@ -162,10 +162,12 @@ export const LiveTournamentScreen = ({
   id,
   initialTab,
   initialView,
+  focusMatchId,
 }: {
   id: string;
   initialTab?: string;
   initialView?: string;
+  focusMatchId?: string;
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -257,6 +259,7 @@ export const LiveTournamentScreen = ({
             readOnly
             groups={sp.groups}
             initialMode={matchesInitialMode}
+            focusMatchId={focusMatchId}
           />
         </View>
       ) : tab === "players" ? (
