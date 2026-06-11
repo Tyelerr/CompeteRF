@@ -47,6 +47,11 @@ export interface PrizePoolSidePot {
   players: number; // entrants who bought into this pot
 }
 
+export interface PrizePoolFee {
+  name: string;
+  perPlayer: number; // per-player slice carved from the entry fee
+}
+
 interface PrizePoolViewProps {
   config: PrizePoolConfig;
   onChange: (next: PrizePoolConfig) => void;
@@ -55,6 +60,7 @@ interface PrizePoolViewProps {
   entryFee: number;
   addedMoney: number;
   sidePots: PrizePoolSidePot[];
+  fees: PrizePoolFee[]; // built-in entry-fee deductions (defined in Settings)
 }
 
 const money = (n: number): string => {
@@ -356,15 +362,21 @@ export const PrizePoolView = ({
   entryFee,
   addedMoney,
   sidePots,
+  fees,
 }: PrizePoolViewProps) => {
-  const entryBase = Math.max(0, players) * Math.max(0, entryFee);
+  const grossEntry = Math.max(0, players) * Math.max(0, entryFee);
+  const feePerPlayer = fees.reduce((s, f) => s + Math.max(0, f.perPlayer), 0);
+  const totalFees = Math.max(0, players) * feePerPlayer;
   const includedAdded = config.includeAddedMoney ? Math.max(0, addedMoney) : 0;
+  // Net entry payout pool: entry minus the built-in fees, plus added money.
   const entryPool = entryPoolTotal(
     players,
     entryFee,
+    feePerPlayer,
     config.includeAddedMoney,
     addedMoney,
   );
+  const netEntryBeforeAdded = Math.max(0, entryPool - includedAdded);
   const entryBreakdown = computeBreakdown(entryPool, config.entryPlaces);
 
   const sidePotRows = sidePots.map((sp) => {
@@ -375,7 +387,8 @@ export const PrizePoolView = ({
   });
 
   const sidePotsTotal = sidePotRows.reduce((s, r) => s + r.pool, 0);
-  const totalPrizePool = entryBase + includedAdded + sidePotsTotal;
+  const totalCollected = grossEntry + sidePotsTotal + includedAdded;
+  const totalPrizePool = entryPool + sidePotsTotal; // net of fees
   const totalPayout =
     entryBreakdown.payoutTotal +
     sidePotRows.reduce((s, r) => s + r.breakdown.payoutTotal, 0);
@@ -402,14 +415,26 @@ export const PrizePoolView = ({
         </View>
       )}
 
-      {/* Summary */}
+      {/* Money collected + fees → net pool */}
       <Card title="Prize Pool Summary">
         <Row label="Players entered" value={String(players)} />
         <Row label="Entry fee" value={money(entryFee)} />
         <Row
-          label="Entry pool"
-          value={`${players} × ${money(entryFee)} = ${money(entryBase)}`}
+          label="Gross entry"
+          value={`${players} × ${money(entryFee)} = ${money(grossEntry)}`}
         />
+        {fees.map((f, i) => (
+          <Row
+            key={i}
+            label={`− ${f.name || "Fee"}`}
+            value={`${players} × ${money(f.perPlayer)} = ${money(
+              Math.max(0, players) * Math.max(0, f.perPlayer),
+            )}`}
+          />
+        ))}
+        {fees.length > 0 && (
+          <Row label="Net entry" value={money(netEntryBeforeAdded)} />
+        )}
         {addedMoney > 0 && (
           <ToggleSwitch
             label={`Added money (${money(addedMoney)})`}
@@ -423,13 +448,15 @@ export const PrizePoolView = ({
         <Row label="Total prize pool" value={money(totalPrizePool)} strong />
       </Card>
 
-      {/* Entry payouts */}
+      {/* Entry payouts (over the NET pool) */}
       <PayoutCard
         title="Entry Payouts"
         pool={entryPool}
         poolNote={
-          includedAdded > 0
-            ? `${money(entryBase)} entry + ${money(includedAdded)} added`
+          fees.length > 0 || includedAdded > 0
+            ? `${money(grossEntry)} entry${
+                totalFees > 0 ? ` − ${money(totalFees)} fees` : ""
+              }${includedAdded > 0 ? ` + ${money(includedAdded)} added` : ""}`
             : undefined
         }
         places={config.entryPlaces}
@@ -450,9 +477,9 @@ export const PrizePoolView = ({
         />
       ))}
 
-      {/* Final summary */}
+      {/* Final summary: collected → fees → net pool → payouts */}
       <Card title="Summary">
-        <Row label="Entry pool" value={money(entryPool)} />
+        <Row label="Gross entry collected" value={money(grossEntry)} />
         {sidePotRows.map((r) => (
           <Row
             key={r.sp.name}
@@ -470,8 +497,10 @@ export const PrizePoolView = ({
               : money(0)
           }
         />
-        <Row label="Total prize pool" value={money(totalPrizePool)} strong />
-        <Row label="Total payout" value={money(totalPayout)} strong />
+        <Row label="Total collected" value={money(totalCollected)} strong />
+        <Row label="Total fees / deductions" value={money(totalFees)} />
+        <Row label="Net payout pool" value={money(totalPrizePool)} strong />
+        <Row label="Total payouts assigned" value={money(totalPayout)} strong />
         <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
       </Card>
     </View>

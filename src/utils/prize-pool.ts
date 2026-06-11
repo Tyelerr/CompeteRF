@@ -227,17 +227,34 @@ export const setPercent = (
   return result;
 };
 
+// ── Fee helpers ───────────────────────────────────────────────────────────────
+// Built-in fees are per-player slices of the entry fee, the same for everyone.
+export const feesPerPlayer = (fees: { amount: number }[]): number =>
+  round2(fees.reduce((s, f) => s + Math.max(0, f.amount || 0), 0));
+
+export const feesTotal = (fees: { amount: number }[], players: number): number =>
+  round2(feesPerPlayer(fees) * Math.max(0, players));
+
+// True when the fees don't carve out more than the entry fee per player.
+export const feesValid = (entryFee: number, fees: { amount: number }[]): boolean =>
+  feesPerPlayer(fees) <= Math.max(0, entryFee) + EPS;
+
 // ── Pool helpers ──────────────────────────────────────────────────────────────
+// Net entry payout pool: the entry fee MINUS the built-in per-player fees, times
+// players, plus added money when included. Payouts are split over this.
 export const entryPoolTotal = (
   players: number,
   entryFee: number,
+  feePerPlayer: number,
   includeAddedMoney: boolean,
   addedMoney: number,
-): number =>
-  round2(
-    Math.max(0, players) * Math.max(0, entryFee) +
+): number => {
+  const perPlayerToPool = Math.max(0, Math.max(0, entryFee) - Math.max(0, feePerPlayer));
+  return round2(
+    Math.max(0, players) * perPlayerToPool +
       (includeAddedMoney ? Math.max(0, addedMoney) : 0),
   );
+};
 
 export const sidePotTotal = (players: number, amountPerPlayer: number): number =>
   round2(Math.max(0, players) * Math.max(0, amountPerPlayer));

@@ -108,6 +108,19 @@ export interface DrawLogEntry {
   drawType: "random";
 }
 
+// ── Entry-fee breakdown (built-in fees) ───────────────────────────────────────
+// A fee is a per-player slice carved OUT of the entry fee — the same for every
+// player (e.g. $25 entry → $5 green to the bar, $2 to the TD, $18 to the prize
+// pool). It is NOT prize money: it reduces the entry payout pool. category drives
+// the venue-analytics buckets later (green → venue, td → director, etc.).
+export type FeeCategory = "green" | "td" | "admin" | "custom";
+export interface TournamentFee {
+  id: string; // stable client id
+  category: FeeCategory;
+  name: string; // display name (preset for green/td/admin, user-set for custom)
+  amount: number; // dollars per player, carved out of the entry fee
+}
+
 // ── Prize Pool (Setup phase) ──────────────────────────────────────────────────
 // Configured before the bracket is drawn and locked with it. Dollar pools are
 // derived live from the player count × entry/side-pot amounts (which live on the
@@ -163,4 +176,8 @@ export interface TournamentLiveSettings {
   // Prize pool payout configuration (Setup phase). Pools are derived live from
   // the player count; only the split is stored. See PrizePoolConfig.
   prizePool?: PrizePoolConfig | null;
+
+  // Built-in entry-fee deductions (green/td/admin/custom). Per-player slices of
+  // the entry fee that reduce the entry payout pool. Defined in Settings.
+  fees?: TournamentFee[];
 }

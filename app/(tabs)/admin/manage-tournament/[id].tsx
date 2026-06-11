@@ -51,6 +51,7 @@ import { Tournament } from "../../../../src/models/types/tournament.types";
 import {
   BracketMatch,
   DrawLogEntry,
+  FeeCategory,
   GeneratedBracket,
   PrizePoolConfig,
   RaceGroup,
@@ -59,6 +60,8 @@ import {
 import {
   defaultPrizePoolConfig,
   entryPoolTotal,
+  feesPerPlayer,
+  feesValid,
   isPrizePoolComplete,
   reconcileSidePots,
   sidePotTotal,
@@ -250,6 +253,21 @@ interface SidePotForm {
   name: string;
   amount: string;
 }
+interface FeeForm {
+  id: string;
+  category: FeeCategory;
+  name: string;
+  amount: string;
+}
+// Preset (single-instance) fee categories shown as checkboxes under the entry
+// fee. "custom" is excluded — custom fees are added/removed individually.
+const FEE_PRESETS: { category: FeeCategory; label: string }[] = [
+  { category: "green", label: "Green fee" },
+  { category: "td", label: "TD fee" },
+  { category: "admin", label: "Admin fee" },
+];
+const feePresetLabel = (c: FeeCategory): string =>
+  FEE_PRESETS.find((p) => p.category === c)?.label ?? "Fee";
 interface RaceGroupForm {
   id: string;
   label: string;
@@ -284,6 +302,7 @@ interface SettingsForm {
   diffMaxRace: number;
   diffMaxEnabled: boolean;
   sidePots: SidePotForm[];
+  fees: FeeForm[];
 }
 
 const numOrNull = (s: string): number | null => {
@@ -374,6 +393,12 @@ const toForm = (t: Tournament): SettingsForm => {
       maxFargo: numStr(g.maxFargo),
       raceTo: numStr(g.raceTo),
     })),
+    fees: (ls.fees ?? []).map((f) => ({
+      id: f.id,
+      category: f.category,
+      name: f.name ?? "",
+      amount: numStr(f.amount),
+    })),
   };
 };
 
@@ -429,6 +454,14 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     fargoDiffPerGame: f.diffPerGame,
     fargoDiffMaxRace: f.diffMaxEnabled ? f.diffMaxRace : null,
     fargoDiffRounding: "down",
+    fees: f.fees
+      .map((fee) => ({
+        id: fee.id,
+        category: fee.category,
+        name: fee.name.trim() || feePresetLabel(fee.category),
+        amount: numOrNull(fee.amount) ?? 0,
+      }))
+      .filter((fee) => fee.amount > 0),
   },
   };
 };
@@ -1468,6 +1501,24 @@ export default function ManageTournamentScreen() {
   const prizeEntryFee = Number(hub.tournament?.entry_fee) || 0;
   const prizeAddedMoney = Number(hub.tournament?.added_money) || 0;
 
+  // Built-in entry fees come from the SAVED tournament (defined in Settings).
+  const prizeFees = useMemo(
+    () =>
+      (hub.tournament?.live_settings?.fees ?? []).map((f) => ({
+        name: f.name || "Fee",
+        perPlayer: Number(f.amount) || 0,
+      })),
+    [hub.tournament],
+  );
+  const prizeFeePerPlayer = feesPerPlayer(
+    prizeFees.map((f) => ({ amount: f.perPlayer })),
+  );
+  // Fees can't carve out more than the entry fee per player.
+  const prizeFeesOk = feesValid(
+    prizeEntryFee,
+    prizeFees.map((f) => ({ amount: f.perPlayer })),
+  );
+
   // Side pots come from the tournament; entrant counts from paid_side_pots.
   const prizeSidePots = useMemo(() => {
     const pots = hub.tournament?.side_pots ?? [];
@@ -1525,6 +1576,7 @@ export default function ManageTournamentScreen() {
   const prizeEntryPool = entryPoolTotal(
     prizePlayers,
     prizeEntryFee,
+    prizeFeePerPlayer,
     prizeForm?.includeAddedMoney ?? true,
     prizeAddedMoney,
   );
@@ -1533,11 +1585,9 @@ export default function ManageTournamentScreen() {
     for (const s of prizeSidePots) map[s.name] = sidePotTotal(s.players, s.amount);
     return map;
   }, [prizeSidePots]);
-  const prizeComplete = isPrizePoolComplete(
-    prizeForm,
-    prizeEntryPool,
-    prizeSidePotPools,
-  );
+  const prizeComplete =
+    prizeFeesOk &&
+    isPrizePoolComplete(prizeForm, prizeEntryPool, prizeSidePotPools);
 
   const handleSavePrizePool = async () => {
     if (!prizeForm) return;
@@ -2095,6 +2145,41 @@ export default function ManageTournamentScreen() {
   const removeSidePot = (i: number) =>
     patchForm({ sidePots: (form?.sidePots ?? []).filter((_, idx) => idx !== i) });
 
+  // Built-in entry fees (Settings). Preset categories (green/td/admin) are
+  // single-instance checkboxes; custom fees are added/removed individually.
+  const feeIdFor = (cat: FeeCategory) =>
+    `fee-${cat}-${tournamentId}-${(form?.fees?.length ?? 0) + 1}`;
+  const hasFeePreset = (cat: FeeCategory) =>
+    (form?.fees ?? []).some((f) => f.category === cat);
+  const toggleFeePreset = (cat: FeeCategory) => {
+    const fees = form?.fees ?? [];
+    if (fees.some((f) => f.category === cat)) {
+      patchForm({ fees: fees.filter((f) => f.category !== cat) });
+    } else {
+      patchForm({
+        fees: [
+          ...fees,
+          { id: feeIdFor(cat), category: cat, name: feePresetLabel(cat), amount: "" },
+        ],
+      });
+    }
+  };
+  const addCustomFee = () =>
+    patchForm({
+      fees: [
+        ...(form?.fees ?? []),
+        { id: feeIdFor("custom"), category: "custom", name: "", amount: "" },
+      ],
+    });
+  const updateFee = (id: string, key: "name" | "amount", value: string) =>
+    patchForm({
+      fees: (form?.fees ?? []).map((f) =>
+        f.id === id ? { ...f, [key]: value } : f,
+      ),
+    });
+  const removeFee = (id: string) =>
+    patchForm({ fees: (form?.fees ?? []).filter((f) => f.id !== id) });
+
   // Race groups
   const addRaceGroup = () =>
     patchForm({
@@ -2306,6 +2391,16 @@ export default function ManageTournamentScreen() {
     // Max Fargo and Open Tournament are mutually exclusive — each greys the other.
     const maxFargoDisabled = form.openTournament;
     const openTournamentDisabled = !!form.maxFargo.trim();
+
+    // Live entry-fee breakdown: fees are per-player slices of the entry fee.
+    const feeEntryNum = parseFloat(form.entryFee) || 0;
+    const feeSum = (form.fees ?? []).reduce(
+      (s, f) => s + (parseFloat(f.amount) || 0),
+      0,
+    );
+    const feePerPlayerToPool = feeEntryNum - feeSum;
+    const feeOver = feeSum > feeEntryNum + 0.001;
+    const customFees = (form.fees ?? []).filter((f) => f.category === "custom");
 
     return (
       <View>
@@ -2609,6 +2704,108 @@ export default function ManageTournamentScreen() {
             placeholder="$0.00"
             keyboardType="decimal-pad"
           />
+
+          {/* Built-in fees: per-player slices of the entry fee */}
+          <View style={styles.feeBlock}>
+            <FieldLabel label="Built-in fees (per player, from the entry fee)" />
+            {FEE_PRESETS.map((p) => {
+              const on = hasFeePreset(p.category);
+              const fee = (form.fees ?? []).find(
+                (f) => f.category === p.category,
+              );
+              return (
+                <View key={p.category} style={styles.feeRow}>
+                  <TouchableOpacity
+                    style={styles.feeCheckRow}
+                    onPress={() => toggleFeePreset(p.category)}
+                  >
+                    <View style={[styles.feeBox, on && styles.feeBoxOn]}>
+                      {on && (
+                        <Text allowFontScaling={false} style={styles.feeBoxCheck}>
+                          {"✓"}
+                        </Text>
+                      )}
+                    </View>
+                    <Text allowFontScaling={false} style={styles.feeLabel}>
+                      {p.label}
+                    </Text>
+                  </TouchableOpacity>
+                  {on && fee && (
+                    <View style={styles.feeAmtWrap}>
+                      <Text allowFontScaling={false} style={styles.feeDollar}>
+                        $
+                      </Text>
+                      <TextInput
+                        allowFontScaling={false}
+                        style={[styles.input, styles.feeAmtInput]}
+                        value={fee.amount}
+                        onChangeText={(v) => updateFee(fee.id, "amount", v)}
+                        placeholder="0"
+                        placeholderTextColor={COLORS.textMuted}
+                        keyboardType="decimal-pad"
+                      />
+                      <Text allowFontScaling={false} style={styles.feePer}>
+                        /player
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {customFees.map((fee) => (
+              <View key={fee.id} style={styles.feeCustomRow}>
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.input, styles.feeCustomName]}
+                  value={fee.name}
+                  onChangeText={(v) => updateFee(fee.id, "name", v)}
+                  placeholder="Custom fee name"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <View style={styles.feeAmtWrap}>
+                  <Text allowFontScaling={false} style={styles.feeDollar}>
+                    $
+                  </Text>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.feeAmtInput]}
+                    value={fee.amount}
+                    onChangeText={(v) => updateFee(fee.id, "amount", v)}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.groupRemove}
+                  onPress={() => removeFee(fee.id)}
+                >
+                  <Text allowFontScaling={false} style={styles.groupRemoveText}>
+                    {"✕"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.addRowBtnSm} onPress={addCustomFee}>
+              <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                + Add custom fee
+              </Text>
+            </TouchableOpacity>
+
+            {feeEntryNum > 0 && (
+              <Text
+                allowFontScaling={false}
+                style={[styles.feeRemainder, feeOver && styles.feeRemainderWarn]}
+              >
+                {feeOver
+                  ? "Fees exceed the entry fee"
+                  : `→ $${feePerPlayerToPool % 1 === 0 ? feePerPlayerToPool : feePerPlayerToPool.toFixed(2)}/player to prize pool`}
+              </Text>
+            )}
+          </View>
+
           <LabeledInput
             label="Money Added"
             value={form.addedMoney}
@@ -3509,6 +3706,7 @@ export default function ManageTournamentScreen() {
             entryFee={prizeEntryFee}
             addedMoney={prizeAddedMoney}
             sidePots={prizeSidePots}
+            fees={prizeFees}
           />
         ) : null;
       case "bracket":
@@ -4295,6 +4493,74 @@ const styles = StyleSheet.create({
   },
   sidePotName: { flex: 2 },
   sidePotAmount: { flex: 1 },
+
+  // Built-in fees (entry-fee breakdown)
+  feeBlock: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    padding: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  feeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: webSc(SPACING.xs),
+  },
+  feeCheckRow: { flexDirection: "row", alignItems: "center", flex: 1 },
+  feeBox: {
+    width: webSc(22),
+    height: webSc(22),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: webSc(SPACING.sm),
+  },
+  feeBoxOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  feeBoxCheck: {
+    color: COLORS.white,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "800",
+  },
+  feeLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  feeAmtWrap: { flexDirection: "row", alignItems: "center" },
+  feeDollar: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    marginRight: webSc(2),
+  },
+  feeAmtInput: {
+    minWidth: webSc(64),
+    textAlign: "right",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  feePer: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginLeft: webSc(SPACING.xs),
+  },
+  feeCustomRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    alignItems: "center",
+    marginTop: webSc(SPACING.xs),
+  },
+  feeCustomName: { flex: 1 },
+  feeRemainder: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.primary,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
+  },
+  feeRemainderWarn: { color: COLORS.error },
 
   // Read-only cards (venue)
   readOnlyCard: {
