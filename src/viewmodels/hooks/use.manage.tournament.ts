@@ -16,6 +16,7 @@ import {
   DrawLogEntry,
   GeneratedBracket,
   MatchLiveState,
+  PrizePoolConfig,
 } from "../../models/types/tournament-settings.types";
 import {
   TournamentLiveState,
@@ -90,9 +91,30 @@ export const useManageTournament = (tournamentId?: number) => {
 
   // ---- Mutations ---------------------------------------------------------
 
+  // Settings save MERGES live_settings into the existing blob so it never
+  // clobbers sibling keys (bracket, drawLog, matchState, prizePool) that the
+  // Settings form's toPatch() doesn't know about.
   const saveSettingsMutation = useMutation({
-    mutationFn: (patch: Partial<Tournament>) =>
-      tournamentService.updateTournament(tournamentId!, patch),
+    mutationFn: (patch: Partial<Tournament>) => {
+      let next = patch;
+      if (patch.live_settings) {
+        const ls = tournamentQuery.data?.live_settings ?? {};
+        next = { ...patch, live_settings: { ...ls, ...patch.live_settings } };
+      }
+      return tournamentService.updateTournament(tournamentId!, next);
+    },
+    onSuccess: invalidateTournament,
+  });
+
+  // Persist the prize-pool payout config (Setup phase). Merges into live_settings
+  // so it survives a Settings save and rides along when the bracket is drawn.
+  const savePrizePoolMutation = useMutation({
+    mutationFn: (config: PrizePoolConfig) => {
+      const ls = tournamentQuery.data?.live_settings ?? {};
+      return tournamentService.updateTournament(tournamentId!, {
+        live_settings: { ...ls, prizePool: config },
+      });
+    },
     onSuccess: invalidateTournament,
   });
 
@@ -236,6 +258,11 @@ export const useManageTournament = (tournamentId?: number) => {
     // Settings
     saveSettings: saveSettingsMutation.mutateAsync,
     isSaving: saveSettingsMutation.isPending,
+
+    // Prize pool (Setup phase)
+    prizePool: tournament?.live_settings?.prizePool ?? null,
+    savePrizePool: savePrizePoolMutation.mutateAsync,
+    isSavingPrizePool: savePrizePoolMutation.isPending,
 
     // Live-state transitions (Pause/Resume drive is_paused, not live_state)
     startRegistration: () => liveStateMutation.mutateAsync("registration_open"),

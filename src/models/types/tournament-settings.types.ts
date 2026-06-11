@@ -108,6 +108,26 @@ export interface DrawLogEntry {
   drawType: "random";
 }
 
+// ── Prize Pool (Setup phase) ──────────────────────────────────────────────────
+// Configured before the bracket is drawn and locked with it. Dollar pools are
+// derived live from the player count × entry/side-pot amounts (which live on the
+// tournament row), so only the PAYOUT SPLIT is persisted here. A place's payout
+// is percent-of-pool unless the TD sets amountOverride (then it reads "custom").
+export interface PrizePlace {
+  percent: number; // 0..100 share of the pool for this place
+  amountOverride?: number | null; // manual $ override; when set, payout is "custom"
+}
+// Payout split for one named side pot (name matches a tournaments.side_pots entry).
+export interface SidePotPayout {
+  name: string;
+  places: PrizePlace[];
+}
+export interface PrizePoolConfig {
+  entryPlaces: PrizePlace[]; // payout split for the main entry pool
+  sidePots: SidePotPayout[]; // payout split per side pot, by name
+  includeAddedMoney: boolean; // fold venue added money into the entry payout pool
+}
+
 export interface TournamentLiveSettings {
   // NOTE: bracket size is NOT configured here — it's derived on the Bracket /
   // Draw page from the checked-in player count (next power of two, with byes)
@@ -139,4 +159,8 @@ export interface TournamentLiveSettings {
   drawLog?: DrawLogEntry[];
   // Live per-match state keyed by match number (Matches tab). See MatchLiveState.
   matchState?: Record<string, MatchLiveState>;
+
+  // Prize pool payout configuration (Setup phase). Pools are derived live from
+  // the player count; only the split is stored. See PrizePoolConfig.
+  prizePool?: PrizePoolConfig | null;
 }

@@ -52,9 +52,17 @@ import {
   BracketMatch,
   DrawLogEntry,
   GeneratedBracket,
+  PrizePoolConfig,
   RaceGroup,
   RaceMode,
 } from "../../../../src/models/types/tournament-settings.types";
+import {
+  defaultPrizePoolConfig,
+  entryPoolTotal,
+  isPrizePoolComplete,
+  reconcileSidePots,
+  sidePotTotal,
+} from "../../../../src/utils/prize-pool";
 import {
   DrawPlayer,
   RaceConfig,
@@ -73,6 +81,7 @@ import { ToggleSwitch } from "../../../../src/views/components/common/toggle-swi
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
+import { PrizePoolView } from "../../../../src/views/components/tournament/live/PrizePoolView";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -92,6 +101,7 @@ type TabKey =
   | "settings"
   | "players"
   | "tables"
+  | "prizepool"
   | "bracket"
   | "review"
   | "matches"
@@ -106,6 +116,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   settings: "Settings",
   players: "Players",
   tables: "Tables",
+  prizepool: "Prize Pool",
   bracket: "Bracket / Draw",
   review: "Review",
   matches: "Matches",
@@ -153,6 +164,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "settings", label: "Settings" },
       { tab: "players", label: "Players" },
       { tab: "tables", label: "Tables" },
+      { tab: "prizepool", label: "Prize Pool" },
       { tab: "bracket", label: "Draw Bracket", lead: "⚡", divider: true },
     ],
   },
@@ -1437,6 +1449,132 @@ export default function ManageTournamentScreen() {
     };
   }, [hub.tournament, hub.registrations, hub.tablesReady, hub.tables]);
 
+  // ---- Prize Pool (Setup phase) ------------------------------------------
+  // Locked once the bracket is drawn (mirrors settingsLocked, computed inline to
+  // avoid referencing a const declared later in the component body).
+  const prizeLocked = (
+    ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
+  ).includes(hub.phase);
+
+  const readyCount = useMemo(
+    () => hub.registrations.filter((r) => r.status === "checked_in").length,
+    [hub.registrations],
+  );
+  // Live Ready count while open; the drawn field once locked (so a closed
+  // field's pool stops moving).
+  const prizePlayers = prizeLocked
+    ? hub.bracket?.players ?? readyCount
+    : readyCount;
+  const prizeEntryFee = Number(hub.tournament?.entry_fee) || 0;
+  const prizeAddedMoney = Number(hub.tournament?.added_money) || 0;
+
+  // Side pots come from the tournament; entrant counts from paid_side_pots.
+  const prizeSidePots = useMemo(() => {
+    const pots = hub.tournament?.side_pots ?? [];
+    const active = hub.registrations.filter(
+      (r) => r.status !== "cancelled" && r.status !== "no_show",
+    );
+    return pots
+      .filter((p) => (p.name ?? "").trim())
+      .map((p) => ({
+        name: p.name.trim(),
+        amount: Number(p.amount) || 0,
+        players: active.filter((r) =>
+          safePaidSidePots(r.paid_side_pots).includes(p.name.trim()),
+        ).length,
+      }));
+  }, [hub.tournament, hub.registrations]);
+  const sidePotNames = useMemo(
+    () => prizeSidePots.map((s) => s.name),
+    [prizeSidePots],
+  );
+
+  // Working copy of the payout config, seeded from live_settings (or a fresh
+  // default) and reconciled to the CURRENT side pots.
+  const [prizeForm, setPrizeForm] = useState<PrizePoolConfig | null>(null);
+  const prizeSeededRef = useRef(false);
+  const prizeSavedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prizeSeededRef.current || !hub.tournament) return;
+    const base = hub.prizePool ?? defaultPrizePoolConfig(sidePotNames);
+    const seeded: PrizePoolConfig = {
+      ...base,
+      sidePots: reconcileSidePots(base, sidePotNames),
+    };
+    setPrizeForm(seeded);
+    prizeSavedRef.current = JSON.stringify(seeded);
+    prizeSeededRef.current = true;
+  }, [hub.tournament, hub.prizePool, sidePotNames]);
+
+  // Keep side-pot payouts aligned if the TD edits side pots in Settings after
+  // the prize form was seeded (add / remove / rename pots).
+  useEffect(() => {
+    setPrizeForm((f) => {
+      if (!f) return f;
+      if (f.sidePots.map((s) => s.name).join("|") === sidePotNames.join("|"))
+        return f;
+      return { ...f, sidePots: reconcileSidePots(f, sidePotNames) };
+    });
+  }, [sidePotNames]);
+
+  const prizeDirty =
+    !!prizeForm &&
+    prizeSavedRef.current !== null &&
+    JSON.stringify(prizeForm) !== prizeSavedRef.current;
+
+  const prizeEntryPool = entryPoolTotal(
+    prizePlayers,
+    prizeEntryFee,
+    prizeForm?.includeAddedMoney ?? true,
+    prizeAddedMoney,
+  );
+  const prizeSidePotPools = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of prizeSidePots) map[s.name] = sidePotTotal(s.players, s.amount);
+    return map;
+  }, [prizeSidePots]);
+  const prizeComplete = isPrizePoolComplete(
+    prizeForm,
+    prizeEntryPool,
+    prizeSidePotPools,
+  );
+
+  const handleSavePrizePool = async () => {
+    if (!prizeForm) return;
+    try {
+      await hub.savePrizePool(prizeForm);
+      prizeSavedRef.current = JSON.stringify(prizeForm);
+      Alert.alert("Saved", "Prize pool updated.");
+    } catch {
+      Alert.alert("Error", "Failed to save the prize pool.");
+    }
+  };
+
+  const confirmLeavePrize = (proceed: () => void) =>
+    Alert.alert(
+      "Unsaved Prize Pool",
+      "You have unsaved prize pool changes. Save them before leaving?",
+      [
+        { text: "Keep Editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            if (prizeSavedRef.current)
+              setPrizeForm(JSON.parse(prizeSavedRef.current));
+            proceed();
+          },
+        },
+        {
+          text: "Save",
+          onPress: async () => {
+            await handleSavePrizePool();
+            proceed();
+          },
+        },
+      ],
+    );
+
   // Gate forward navigation: a setup step can't open until earlier ones are done.
   const goToTab = (target: TabKey) => {
     if (!SETUP_ORDER.includes(target)) {
@@ -1500,12 +1638,18 @@ export default function ManageTournamentScreen() {
       confirmLeaveSettings(() => goToTab(target));
       return;
     }
+    if (activeTab === "prizepool" && target !== "prizepool" && prizeDirty) {
+      confirmLeavePrize(() => goToTab(target));
+      return;
+    }
     goToTab(target);
   };
 
   const handleBack = () => {
     if (activeTab === "settings" && settingsDirty) {
       confirmLeaveSettings(() => router.back());
+    } else if (activeTab === "prizepool" && prizeDirty) {
+      confirmLeavePrize(() => router.back());
     } else {
       router.back();
     }
@@ -1645,7 +1789,11 @@ export default function ManageTournamentScreen() {
         glyph:
           t.lead ??
           (pk === "setup"
-            ? (stepComplete as Record<string, boolean>)[t.tab]
+            ? (
+                t.tab === "prizepool"
+                  ? prizeComplete
+                  : (stepComplete as Record<string, boolean>)[t.tab]
+              )
               ? "✓"
               : "○"
             : undefined),
@@ -1855,14 +2003,30 @@ export default function ManageTournamentScreen() {
 
   const handleDrawPress = () => {
     const reason = pendingRedrawReason.current ?? "Initial draw";
-    Alert.alert(
-      "Draw Bracket",
-      "This closes registration and locks the player field. Continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
-      ],
-    );
+    const confirmDraw = () =>
+      Alert.alert(
+        "Draw Bracket",
+        "This closes registration and locks the player field and prize pool. Continue?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
+        ],
+      );
+    // Prize setup incomplete: warn before locking it in (requirement: Draw is
+    // allowed but flags an incomplete prize pool).
+    if (!prizeComplete) {
+      Alert.alert(
+        "Prize Pool Incomplete",
+        "The prize pool payouts don't total 100% or exceed the available pool. You can still draw, but the prize setup locks with the bracket as-is.",
+        [
+          { text: "Review Prize Pool", onPress: () => setActiveTab("prizepool") },
+          { text: "Draw Anyway", style: "destructive", onPress: confirmDraw },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+      return;
+    }
+    confirmDraw();
   };
 
   const handleConfirmReopen = () => {
@@ -3027,6 +3191,10 @@ export default function ManageTournamentScreen() {
             <BracketCalc label="Side pots" value={potCount} />
           )}
           <BracketCalc
+            label="Prize payouts"
+            value={prizeComplete ? "Set" : "Incomplete"}
+          />
+          <BracketCalc
             label="Players"
             value={`${readyPlayers.length} ready · ${statusCounts.prereg} pre-reg · ${statusCounts.no_show} no-show`}
           />
@@ -3332,6 +3500,18 @@ export default function ManageTournamentScreen() {
         return renderPlayers();
       case "tables":
         return renderTables();
+      case "prizepool":
+        return prizeForm ? (
+          <PrizePoolView
+            config={prizeForm}
+            onChange={setPrizeForm}
+            locked={prizeLocked}
+            players={prizePlayers}
+            entryFee={prizeEntryFee}
+            addedMoney={prizeAddedMoney}
+            sidePots={prizeSidePots}
+          />
+        ) : null;
       case "bracket":
         return renderBracket();
       case "review":
@@ -3702,6 +3882,33 @@ export default function ManageTournamentScreen() {
             >
               <Text allowFontScaling={false} style={styles.startBtnText}>
                 Start Registration
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Fixed footer: Save Prize Pool (prizepool tab, pre-lock) */}
+      {activeTab === "prizepool" && prizeForm && !prizeLocked && (
+        <View style={styles.settingsFooter}>
+          {!prizeComplete && (
+            <Text allowFontScaling={false} style={styles.startHintFooter}>
+              Payouts should total 100% and stay within each pool before drawing
+              the bracket.
+            </Text>
+          )}
+          <View style={[styles.saveRow, styles.settingsFooterInner]}>
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                { flex: 1 },
+                hub.isSavingPrizePool && styles.btnDisabled,
+              ]}
+              onPress={handleSavePrizePool}
+              disabled={hub.isSavingPrizePool}
+            >
+              <Text allowFontScaling={false} style={styles.saveBtnText}>
+                {hub.isSavingPrizePool ? "Saving..." : "Save Prize Pool"}
               </Text>
             </TouchableOpacity>
           </View>
