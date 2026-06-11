@@ -119,6 +119,7 @@ export interface TournamentFee {
   category: FeeCategory;
   name: string; // display name (preset for green/td/admin, user-set for custom)
   amount: number; // dollars per player, carved out of the entry fee
+  enabled: boolean; // whether the fee is currently applied (checkbox state)
 }
 
 // ── Prize Pool (Setup phase) ──────────────────────────────────────────────────
