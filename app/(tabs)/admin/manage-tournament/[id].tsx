@@ -2003,30 +2003,29 @@ export default function ManageTournamentScreen() {
 
   const handleDrawPress = () => {
     const reason = pendingRedrawReason.current ?? "Initial draw";
-    const confirmDraw = () =>
-      Alert.alert(
-        "Draw Bracket",
-        "This closes registration and locks the player field and prize pool. Continue?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
-        ],
-      );
-    // Prize setup incomplete: warn before locking it in (requirement: Draw is
-    // allowed but flags an incomplete prize pool).
+    // Prize pool must be completed before the bracket can be drawn.
     if (!prizeComplete) {
       Alert.alert(
-        "Prize Pool Incomplete",
-        "The prize pool payouts don't total 100% or exceed the available pool. You can still draw, but the prize setup locks with the bracket as-is.",
+        "Finish the Prize Pool",
+        "Complete the prize pool payouts before drawing the bracket.",
         [
-          { text: "Review Prize Pool", onPress: () => setActiveTab("prizepool") },
-          { text: "Draw Anyway", style: "destructive", onPress: confirmDraw },
           { text: "Cancel", style: "cancel" },
+          {
+            text: "Go to Prize Pool",
+            onPress: () => handleTabPress("prizepool"),
+          },
         ],
       );
       return;
     }
-    confirmDraw();
+    Alert.alert(
+      "Draw Bracket",
+      "This closes registration and locks the player field and prize pool. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
+      ],
+    );
   };
 
   const handleConfirmReopen = () => {
@@ -3893,8 +3892,7 @@ export default function ManageTournamentScreen() {
         <View style={styles.settingsFooter}>
           {!prizeComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
-              Payouts should total 100% and stay within each pool before drawing
-              the bracket.
+              Keep each pool&apos;s payouts within the available money to save.
             </Text>
           )}
           <View style={[styles.saveRow, styles.settingsFooterInner]}>
@@ -3902,10 +3900,10 @@ export default function ManageTournamentScreen() {
               style={[
                 styles.saveBtn,
                 { flex: 1 },
-                hub.isSavingPrizePool && styles.btnDisabled,
+                (hub.isSavingPrizePool || !prizeComplete) && styles.btnDisabled,
               ]}
               onPress={handleSavePrizePool}
-              disabled={hub.isSavingPrizePool}
+              disabled={hub.isSavingPrizePool || !prizeComplete}
             >
               <Text allowFontScaling={false} style={styles.saveBtnText}>
                 {hub.isSavingPrizePool ? "Saving..." : "Save Prize Pool"}
@@ -3919,21 +3917,31 @@ export default function ManageTournamentScreen() {
       {activeTab === "bracket" && readyPlayers.length >= 2 && (
         <View style={styles.settingsFooter}>
           {!settingsLocked ? (
-            <View style={[styles.saveRow, styles.settingsFooterInner]}>
-              <TouchableOpacity
-                style={[styles.startBtn, hub.isDrawing && styles.btnDisabled]}
-                onPress={handleDrawPress}
-                disabled={hub.isDrawing}
-              >
-                <Text allowFontScaling={false} style={styles.startBtnText}>
-                  {hub.isDrawing
-                    ? "Drawing..."
-                    : hub.bracket
-                      ? "Redraw Bracket"
-                      : "Draw Bracket"}
+            <>
+              {!prizeComplete && (
+                <Text allowFontScaling={false} style={styles.startHintFooter}>
+                  Complete the prize pool before drawing the bracket.
                 </Text>
-              </TouchableOpacity>
-            </View>
+              )}
+              <View style={[styles.saveRow, styles.settingsFooterInner]}>
+                <TouchableOpacity
+                  style={[
+                    styles.startBtn,
+                    (hub.isDrawing || !prizeComplete) && styles.btnDisabled,
+                  ]}
+                  onPress={handleDrawPress}
+                  disabled={hub.isDrawing || !prizeComplete}
+                >
+                  <Text allowFontScaling={false} style={styles.startBtnText}>
+                    {hub.isDrawing
+                      ? "Drawing..."
+                      : hub.bracket
+                        ? "Redraw Bracket"
+                        : "Draw Bracket"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
             <View style={[styles.saveRow, styles.settingsFooterInner]}>
               <TouchableOpacity

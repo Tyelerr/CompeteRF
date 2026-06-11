@@ -1,15 +1,14 @@
 // src/views/components/tournament/live/PrizePoolView.tsx
-// Prize Pool setup section for the Manage Tournament hub (Setup phase, before the
-// bracket is drawn). Configures and previews the tournament money: entry pool,
-// side pots, optional added money, and the payout split per pool with manual
-// dollar overrides ("custom"), live validation, and a full prize summary.
+// Prize Pool setup for the Manage Tournament hub (Setup phase, before the bracket
+// is drawn). Compact card layout: a summary card, a payout card for the entry
+// pool, one per side pot, and a final totals card.
 //
-// Presentational + self-contained: the parent owns the working PrizePoolConfig
-// and persistence; this component renders the UI and emits config changes. All
-// dollar figures are derived live from the player count, so reopening the
-// bracket and re-drawing recalculates automatically.
+// Payout percentages ALWAYS total 100 — the +/- steppers redistribute on every
+// nudge and presets are normalized — so there is no percent-error state. Manual
+// dollar editing lives behind a "Custom Edit" toggle and is clamped to the pool.
+// The parent owns the working config + persistence; this component emits changes.
 
-import { useMemo } from "react";
+import { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -27,15 +26,20 @@ import {
   PrizePoolConfig,
 } from "../../../../models/types/tournament-settings.types";
 import {
+  MAX_PLACES,
+  PRESETS,
+  PresetKey,
+  activePreset,
+  adjustPercents,
+  canDecrease,
+  canIncrease,
+  clampOverride,
   computeBreakdown,
-  defaultEntrySplit,
-  defaultSidePotSplit,
   entryPoolTotal,
   placesFromPercents,
+  presetSplit,
   sidePotTotal,
 } from "../../../../utils/prize-pool";
-
-const MAX_PLACES = 16;
 
 export interface PrizePoolSidePot {
   name: string;
@@ -57,52 +61,52 @@ const money = (n: number): string => {
   const r = Math.round((n + Number.EPSILON) * 100) / 100;
   return Number.isInteger(r) ? `$${r}` : `$${r.toFixed(2)}`;
 };
-const pctStr = (n: number): string => {
-  const r = Math.round((n + Number.EPSILON) * 100) / 100;
-  return Number.isInteger(r) ? String(r) : r.toFixed(2);
+const ordinal = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-// ── Small building blocks ─────────────────────────────────────────────────────
-const Section = ({
+// ── Building blocks ───────────────────────────────────────────────────────────
+const Card = ({
   title,
+  right,
   children,
 }: {
   title: string;
+  right?: React.ReactNode;
   children: React.ReactNode;
 }) => (
-  <View style={styles.section}>
-    <Text allowFontScaling={false} style={styles.sectionTitle}>
-      {title}
-    </Text>
+  <View style={styles.card}>
+    <View style={styles.cardHead}>
+      <Text allowFontScaling={false} style={styles.cardTitle}>
+        {title}
+      </Text>
+      {right}
+    </View>
     {children}
   </View>
 );
 
-const SummaryRow = ({
+const Row = ({
   label,
   value,
   strong,
-  warn,
 }: {
   label: string;
   value: string;
   strong?: boolean;
-  warn?: boolean;
 }) => (
-  <View style={styles.sumRow}>
+  <View style={styles.row}>
     <Text
       allowFontScaling={false}
-      style={[styles.sumLabel, strong && styles.sumLabelStrong]}
+      style={[styles.rowLabel, strong && styles.rowLabelStrong]}
     >
       {label}
     </Text>
     <Text
       allowFontScaling={false}
-      style={[
-        styles.sumValue,
-        strong && styles.sumValueStrong,
-        warn && styles.sumValueWarn,
-      ]}
+      style={[styles.rowValue, strong && styles.rowValueStrong]}
     >
       {value}
     </Text>
@@ -126,7 +130,7 @@ const Stepper = ({
     <TouchableOpacity
       style={[styles.stepBtn, (disabled || value <= min) && styles.stepBtnOff]}
       disabled={disabled || value <= min}
-      onPress={() => onChange(Math.max(min, value - 1))}
+      onPress={() => onChange(value - 1)}
     >
       <Text allowFontScaling={false} style={styles.stepBtnText}>
         {"−"}
@@ -138,7 +142,7 @@ const Stepper = ({
     <TouchableOpacity
       style={[styles.stepBtn, (disabled || value >= max) && styles.stepBtnOff]}
       disabled={disabled || value >= max}
-      onPress={() => onChange(Math.min(max, value + 1))}
+      onPress={() => onChange(value + 1)}
     >
       <Text allowFontScaling={false} style={styles.stepBtnText}>
         +
@@ -147,189 +151,200 @@ const Stepper = ({
   </View>
 );
 
-// ── Payout table (entry pool or a single side pot) ────────────────────────────
-const PayoutTable = ({
+// ── Payout card (entry pool or a single side pot) ─────────────────────────────
+const PayoutCard = ({
+  title,
   pool,
+  poolNote,
   places,
   locked,
-  defaultSplit,
   onPlaces,
 }: {
+  title: string;
   pool: number;
+  poolNote?: string;
   places: PrizePlace[];
   locked: boolean;
-  defaultSplit: (n: number) => number[];
   onPlaces: (next: PrizePlace[]) => void;
 }) => {
-  const breakdown = useMemo(
-    () => computeBreakdown(pool, places),
-    [pool, places],
-  );
+  const [editing, setEditing] = useState(false);
+  const breakdown = computeBreakdown(pool, places);
+  const percents = places.map((p) => p.percent);
+  const preset = activePreset(places);
   const count = places.length;
 
   const setCount = (n: number) => {
-    if (n === count) return;
-    // Changing the number of paid places resets to a clean default split.
-    onPlaces(placesFromPercents(defaultSplit(n)));
+    const clamped = Math.max(1, Math.min(MAX_PLACES, n));
+    if (clamped === count) return;
+    // Reset to a clean preset that totals 100 (keep the chosen shape if named).
+    const key: PresetKey = preset === "custom" ? "topHeavy" : preset;
+    onPlaces(placesFromPercents(presetSplit(key, clamped)));
   };
 
-  const editPercent = (i: number, text: string) => {
-    const v = parseFloat(text);
-    const pct = isNaN(v) ? 0 : v;
-    onPlaces(
-      places.map((p, idx) =>
-        idx === i ? { percent: pct, amountOverride: null } : p,
-      ),
-    );
+  const applyPreset = (key: PresetKey) => {
+    if (key === "custom") return; // Custom is a state, not an action
+    setEditing(false);
+    onPlaces(placesFromPercents(presetSplit(key, count)));
   };
+
+  const bump = (i: number, delta: number) =>
+    onPlaces(placesFromPercents(adjustPercents(percents, i, delta)));
 
   const editAmount = (i: number, text: string) => {
     const v = parseFloat(text);
+    const clamped = clampOverride(pool, places, i, isNaN(v) ? 0 : v);
     onPlaces(
       places.map((p, idx) =>
-        idx === i ? { ...p, amountOverride: isNaN(v) ? 0 : v } : p,
+        idx === i ? { ...p, amountOverride: clamped } : p,
       ),
     );
   };
 
-  const clearOverride = (i: number) =>
-    onPlaces(
-      places.map((p, idx) =>
-        idx === i ? { ...p, amountOverride: null } : p,
-      ),
-    );
-
   return (
-    <View>
-      <View style={styles.placesHeader}>
-        <Text allowFontScaling={false} style={styles.hint}>
-          Paying {count} place{count === 1 ? "" : "s"}
+    <Card
+      title={title}
+      right={
+        <View style={styles.poolTag}>
+          <Text allowFontScaling={false} style={styles.poolTagText}>
+            {money(pool)}
+          </Text>
+        </View>
+      }
+    >
+      {poolNote ? (
+        <Text allowFontScaling={false} style={styles.note}>
+          {poolNote}
         </Text>
-        {!locked && (
+      ) : null}
+
+      {/* Paid places */}
+      <View style={styles.controlRow}>
+        <Text allowFontScaling={false} style={styles.controlLabel}>
+          Paid places
+        </Text>
+        {locked ? (
+          <Text allowFontScaling={false} style={styles.controlValue}>
+            {count}
+          </Text>
+        ) : (
           <Stepper value={count} min={1} max={MAX_PLACES} onChange={setCount} />
         )}
       </View>
 
-      <View style={styles.tableHeadRow}>
-        <Text allowFontScaling={false} style={[styles.th, styles.thPlace]}>
-          Place
-        </Text>
-        <Text allowFontScaling={false} style={[styles.th, styles.thPct]}>
-          %
-        </Text>
-        <Text allowFontScaling={false} style={[styles.th, styles.thAmt]}>
-          Payout
-        </Text>
-      </View>
+      {/* Presets */}
+      {!locked && (
+        <View style={styles.presets}>
+          {PRESETS.map((p) => {
+            const active = preset === p.key;
+            return (
+              <TouchableOpacity
+                key={p.key}
+                style={[styles.presetChip, active && styles.presetChipActive]}
+                disabled={p.key === "custom"}
+                onPress={() => applyPreset(p.key)}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.presetText,
+                    active && styles.presetTextActive,
+                    p.key === "custom" && !active && styles.presetTextMuted,
+                  ]}
+                >
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
-      {breakdown.places.map((row, i) => (
-        <View key={i} style={styles.placeRow}>
-          <View style={styles.thPlace}>
-            <Text allowFontScaling={false} style={styles.placeLabel}>
-              {ordinal(row.place)}
-            </Text>
-            {row.custom && (
-              <Text allowFontScaling={false} style={styles.customBadge}>
-                custom
-              </Text>
-            )}
-          </View>
+      {/* Payout rows */}
+      {breakdown.places.map((r, i) => (
+        <View key={i} style={styles.payRow}>
+          <Text allowFontScaling={false} style={styles.payPlace}>
+            {ordinal(r.place)}
+          </Text>
 
-          <View style={styles.thPct}>
-            {locked ? (
-              <Text allowFontScaling={false} style={styles.cellStatic}>
-                {pctStr(row.percent)}%
+          {editing && !locked ? (
+            <View style={styles.payAmtEdit}>
+              <Text allowFontScaling={false} style={styles.dollar}>
+                $
               </Text>
-            ) : (
               <TextInput
                 allowFontScaling={false}
-                style={[styles.cellInput, row.custom && styles.cellInputMuted]}
-                value={pctStr(row.percent)}
-                onChangeText={(t) => editPercent(i, t)}
+                style={styles.amtInput}
+                value={String(r.amount)}
+                onChangeText={(t) => editAmount(i, t)}
                 keyboardType="decimal-pad"
                 selectTextOnFocus
               />
-            )}
-          </View>
-
-          <View style={[styles.thAmt, styles.amtCell]}>
-            {locked ? (
-              <Text allowFontScaling={false} style={styles.cellStatic}>
-                {money(row.amount)}
-              </Text>
-            ) : (
-              <>
-                <Text allowFontScaling={false} style={styles.amtDollar}>
-                  $
-                </Text>
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.cellInput, styles.amtInput]}
-                  value={pctStr(row.amount)}
-                  onChangeText={(t) => editAmount(i, t)}
-                  keyboardType="decimal-pad"
-                  selectTextOnFocus
-                />
-                {row.custom && (
+            </View>
+          ) : (
+            <>
+              <View style={styles.payPctGroup}>
+                {!locked && (
                   <TouchableOpacity
-                    onPress={() => clearOverride(i)}
-                    style={styles.resetBtn}
+                    style={[
+                      styles.pctBtn,
+                      !canDecrease(percents, i) && styles.pctBtnOff,
+                    ]}
+                    disabled={!canDecrease(percents, i)}
+                    onPress={() => bump(i, -1)}
                   >
-                    <Text allowFontScaling={false} style={styles.resetText}>
-                      {"↺"}
+                    <Text allowFontScaling={false} style={styles.pctBtnText}>
+                      {"−"}
                     </Text>
                   </TouchableOpacity>
                 )}
-              </>
-            )}
-          </View>
+                <Text allowFontScaling={false} style={styles.payPct}>
+                  {r.percent}%
+                </Text>
+                {!locked && (
+                  <TouchableOpacity
+                    style={[
+                      styles.pctBtn,
+                      !canIncrease(percents, i) && styles.pctBtnOff,
+                    ]}
+                    disabled={!canIncrease(percents, i)}
+                    onPress={() => bump(i, 1)}
+                  >
+                    <Text allowFontScaling={false} style={styles.pctBtnText}>
+                      +
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text
+                allowFontScaling={false}
+                style={[styles.payAmt, r.custom && styles.payAmtCustom]}
+              >
+                {money(r.amount)}
+              </Text>
+            </>
+          )}
         </View>
       ))}
 
-      <View style={styles.totalsRow}>
-        <Text allowFontScaling={false} style={styles.totalsLabel}>
-          Totals
-        </Text>
-        <Text
-          allowFontScaling={false}
-          style={[
-            styles.totalsPct,
-            !breakdown.percentValid && styles.totalsWarn,
-          ]}
-        >
-          {pctStr(breakdown.percentTotal)}%
-        </Text>
-        <Text
-          allowFontScaling={false}
-          style={[
-            styles.totalsAmt,
-            !breakdown.amountValid && styles.totalsWarn,
-          ]}
-        >
-          {money(breakdown.payoutTotal)}
-        </Text>
-      </View>
-
-      {!breakdown.percentValid && (
-        <Text allowFontScaling={false} style={styles.warn}>
-          Percentages total {pctStr(breakdown.percentTotal)}% — they should add up
-          to 100%.
-        </Text>
+      {/* Custom edit + remaining */}
+      {!locked && (
+        <View style={styles.cardFootRow}>
+          <TouchableOpacity
+            style={styles.customBtn}
+            onPress={() => setEditing((e) => !e)}
+          >
+            <Text allowFontScaling={false} style={styles.customBtnText}>
+              {editing ? "Done Editing" : "Custom Edit"}
+            </Text>
+          </TouchableOpacity>
+          {(editing || breakdown.remaining > 0.01) && (
+            <Text allowFontScaling={false} style={styles.remaining}>
+              {money(breakdown.remaining)} unassigned
+            </Text>
+          )}
+        </View>
       )}
-      {!breakdown.amountValid && (
-        <Text allowFontScaling={false} style={styles.warn}>
-          Payouts exceed the {money(breakdown.pool)} pool by{" "}
-          {money(Math.abs(breakdown.remaining))}.
-        </Text>
-      )}
-      {breakdown.percentValid &&
-        breakdown.amountValid &&
-        breakdown.remaining > 0.01 && (
-          <Text allowFontScaling={false} style={styles.hint}>
-            {money(breakdown.remaining)} unassigned.
-          </Text>
-        )}
-    </View>
+    </Card>
   );
 };
 
@@ -343,6 +358,8 @@ export const PrizePoolView = ({
   addedMoney,
   sidePots,
 }: PrizePoolViewProps) => {
+  const entryBase = Math.max(0, players) * Math.max(0, entryFee);
+  const includedAdded = config.includeAddedMoney ? Math.max(0, addedMoney) : 0;
   const entryPool = entryPoolTotal(
     players,
     entryFee,
@@ -351,18 +368,15 @@ export const PrizePoolView = ({
   );
   const entryBreakdown = computeBreakdown(entryPool, config.entryPlaces);
 
-  // Per side pot: pool + payout config (config.sidePots is kept aligned by name
-  // by the parent before this renders).
   const sidePotRows = sidePots.map((sp) => {
     const cfg = config.sidePots.find((s) => s.name === sp.name);
-    const places = cfg?.places ?? placesFromPercents(defaultSidePotSplit(2));
+    const places = cfg?.places ?? placesFromPercents(presetSplit("topHeavy", 2));
     const pool = sidePotTotal(sp.players, sp.amount);
     return { sp, places, pool, breakdown: computeBreakdown(pool, places) };
   });
 
   const sidePotsTotal = sidePotRows.reduce((s, r) => s + r.pool, 0);
-  const includedAdded = config.includeAddedMoney ? addedMoney : 0;
-  const totalPrizePool = entryPool + sidePotsTotal;
+  const totalPrizePool = entryBase + includedAdded + sidePotsTotal;
   const totalPayout =
     entryBreakdown.payoutTotal +
     sidePotRows.reduce((s, r) => s + r.breakdown.payoutTotal, 0);
@@ -371,7 +385,6 @@ export const PrizePoolView = ({
 
   const setEntryPlaces = (next: PrizePlace[]) =>
     onChange({ ...config, entryPlaces: next });
-
   const setSidePotPlaces = (name: string, next: PrizePlace[]) =>
     onChange({
       ...config,
@@ -385,19 +398,22 @@ export const PrizePoolView = ({
       {locked && (
         <View style={styles.lockBanner}>
           <Text allowFontScaling={false} style={styles.lockBannerText}>
-            {"🔒"} Prize pool is locked with the bracket. Reopen the
-            draw to edit it.
+            {"🔒"} Prize pool is locked with the bracket. Reopen the draw to edit.
           </Text>
         </View>
       )}
 
-      {/* Entry Pool */}
-      <Section title="Entry Pool">
-        <SummaryRow label="Players entered" value={String(players)} />
-        <SummaryRow label="Entry fee" value={money(entryFee)} />
+      {/* Summary */}
+      <Card title="Prize Pool Summary">
+        <Row label="Players entered" value={String(players)} />
+        <Row label="Entry fee" value={money(entryFee)} />
+        <Row
+          label="Entry pool"
+          value={`${players} × ${money(entryFee)} = ${money(entryBase)}`}
+        />
         {addedMoney > 0 && (
           <ToggleSwitch
-            label={`Include added money (${money(addedMoney)})`}
+            label={`Added money (${money(addedMoney)})`}
             value={config.includeAddedMoney}
             onValueChange={(v) =>
               !locked && onChange({ ...config, includeAddedMoney: v })
@@ -405,75 +421,47 @@ export const PrizePoolView = ({
             disabled={locked}
           />
         )}
-        <SummaryRow
-          label={`Entry pool${
-            config.includeAddedMoney && addedMoney > 0 ? " (incl. added)" : ""
-          }`}
-          value={`${players} × ${money(entryFee)}${
-            includedAdded > 0 ? ` + ${money(includedAdded)}` : ""
-          } = ${money(entryPool)}`}
-          strong
-        />
-      </Section>
+        <Row label="Total prize pool" value={money(totalPrizePool)} strong />
+      </Card>
 
-      {/* Entry payout split */}
-      <Section title="Entry Payouts">
-        <PayoutTable
-          pool={entryPool}
-          places={config.entryPlaces}
-          locked={locked}
-          defaultSplit={defaultEntrySplit}
-          onPlaces={setEntryPlaces}
-        />
-      </Section>
+      {/* Entry payouts */}
+      <PayoutCard
+        title="Entry Payouts"
+        pool={entryPool}
+        poolNote={
+          includedAdded > 0
+            ? `${money(entryBase)} entry + ${money(includedAdded)} added`
+            : undefined
+        }
+        places={config.entryPlaces}
+        locked={locked}
+        onPlaces={setEntryPlaces}
+      />
 
       {/* Side pots */}
-      {sidePotRows.length > 0 && (
-        <Section title="Side Pots">
-          {sidePotRows.map((r) => (
-            <View key={r.sp.name} style={styles.sidePotBlock}>
-              <Text allowFontScaling={false} style={styles.sidePotName}>
-                {r.sp.name || "Unnamed pot"}
-              </Text>
-              <SummaryRow
-                label="Buy-in / players"
-                value={`${r.sp.players} × ${money(r.sp.amount)} = ${money(
-                  r.pool,
-                )}`}
-                strong
-              />
-              {r.sp.players === 0 ? (
-                <Text allowFontScaling={false} style={styles.hint}>
-                  No entries recorded yet. Players are counted as they buy in at
-                  check-in.
-                </Text>
-              ) : (
-                <PayoutTable
-                  pool={r.pool}
-                  places={r.places}
-                  locked={locked}
-                  defaultSplit={defaultSidePotSplit}
-                  onPlaces={(next) => setSidePotPlaces(r.sp.name, next)}
-                />
-              )}
-            </View>
-          ))}
-        </Section>
-      )}
+      {sidePotRows.map((r) => (
+        <PayoutCard
+          key={r.sp.name}
+          title={`Side Pot · ${r.sp.name || "Unnamed"}`}
+          pool={r.pool}
+          poolNote={`${r.sp.players} × ${money(r.sp.amount)} buy-in`}
+          places={r.places}
+          locked={locked}
+          onPlaces={(next) => setSidePotPlaces(r.sp.name, next)}
+        />
+      ))}
 
-      {/* Prize summary */}
-      <Section title="Prize Summary">
-        <SummaryRow label="Players entered" value={String(players)} />
-        <SummaryRow label="Entry fee" value={money(entryFee)} />
-        <SummaryRow label="Entry pool" value={money(entryPool)} />
+      {/* Final summary */}
+      <Card title="Summary">
+        <Row label="Entry pool" value={money(entryPool)} />
         {sidePotRows.map((r) => (
-          <SummaryRow
+          <Row
             key={r.sp.name}
             label={`Side pot · ${r.sp.name || "Unnamed"}`}
             value={money(r.pool)}
           />
         ))}
-        <SummaryRow
+        <Row
           label="Added money"
           value={
             addedMoney > 0
@@ -483,30 +471,17 @@ export const PrizePoolView = ({
               : money(0)
           }
         />
-        <SummaryRow
-          label="Total prize pool"
-          value={money(totalPrizePool)}
-          strong
-        />
-        <SummaryRow label="Total payout" value={money(totalPayout)} strong />
-        <SummaryRow
-          label={totalRemaining < 0 ? "Over-allocated" : "Unassigned"}
-          value={money(Math.abs(totalRemaining))}
-          warn={Math.abs(totalRemaining) > 0.01}
-        />
-      </Section>
+        <Row label="Total prize pool" value={money(totalPrizePool)} strong />
+        <Row label="Total payout" value={money(totalPayout)} strong />
+        <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
+      </Card>
     </View>
   );
 };
 
-const ordinal = (n: number): string => {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
-
 const styles = StyleSheet.create({
-  section: {
+  // Card
+  card: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     padding: webSc(SPACING.md),
@@ -514,65 +489,81 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  sectionTitle: {
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: webSc(SPACING.sm),
+  },
+  cardTitle: {
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-    marginBottom: webSc(SPACING.sm),
   },
-  hint: {
+  poolTag: {
+    backgroundColor: COLORS.primary + "18",
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+  },
+  poolTagText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  note: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-    marginTop: webSc(2),
-  },
-  warn: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.error,
-    marginTop: webSc(SPACING.xs),
-    fontWeight: "600",
+    marginBottom: webSc(SPACING.sm),
   },
   // Summary rows
-  sumRow: {
+  row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: webSc(SPACING.xs),
   },
-  sumLabel: {
+  rowLabel: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     flex: 1,
     marginRight: webSc(SPACING.sm),
   },
-  sumLabelStrong: { color: COLORS.text, fontWeight: "600" },
-  sumValue: {
+  rowLabelStrong: { color: COLORS.text, fontWeight: "700" },
+  rowValue: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
     textAlign: "right",
   },
-  sumValueStrong: {
-    fontWeight: "700",
-    color: COLORS.primary,
-  },
-  sumValueWarn: { color: COLORS.error, fontWeight: "700" },
-  // Stepper
-  placesHeader: {
+  rowValueStrong: { color: COLORS.primary, fontWeight: "700" },
+  // Stepper (places)
+  controlRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: webSc(SPACING.xs),
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  controlLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  controlValue: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
   },
   stepper: { flexDirection: "row", alignItems: "center" },
   stepBtn: {
     width: webSc(30),
     height: webSc(30),
     borderRadius: webSc(RADIUS.sm),
-    backgroundColor: COLORS.primary + "20",
+    backgroundColor: COLORS.primary + "18",
     alignItems: "center",
     justifyContent: "center",
   },
-  stepBtnOff: { opacity: 0.4 },
+  stepBtnOff: { opacity: 0.35 },
   stepBtnText: {
     fontSize: webMs(FONT_SIZES.lg),
     color: COLORS.primary,
@@ -582,113 +573,133 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
     fontWeight: "700",
-    minWidth: webSc(34),
+    minWidth: webSc(32),
     textAlign: "center",
   },
-  // Payout table
-  tableHeadRow: {
+  // Presets
+  presets: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingBottom: webSc(SPACING.xs),
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    flexWrap: "wrap",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.sm),
   },
-  th: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.textMuted,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  thPlace: { flex: 1.2, flexDirection: "row", alignItems: "center" },
-  thPct: { flex: 1, alignItems: "flex-start" },
-  thAmt: { flex: 1.4 },
-  placeRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  presetChip: {
+    paddingHorizontal: webSc(SPACING.sm),
     paddingVertical: webSc(SPACING.xs),
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border + "60",
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  placeLabel: {
+  presetChipActive: {
+    backgroundColor: COLORS.primary + "18",
+    borderColor: COLORS.primary,
+  },
+  presetText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  presetTextActive: { color: COLORS.primary, fontWeight: "700" },
+  presetTextMuted: { color: COLORS.textMuted },
+  // Payout rows
+  payRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.xs),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border + "60",
+  },
+  payPlace: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+    width: webSc(44),
+  },
+  payPctGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  pctBtn: {
+    width: webSc(28),
+    height: webSc(28),
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.primary + "18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pctBtnOff: { opacity: 0.3 },
+  pctBtnText: {
+    fontSize: webMs(FONT_SIZES.md),
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  payPct: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+    minWidth: webSc(48),
+    textAlign: "center",
+  },
+  payAmt: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+    width: webSc(80),
+    textAlign: "right",
+  },
+  payAmtCustom: { color: COLORS.warning },
+  payAmtEdit: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  dollar: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    marginRight: webSc(2),
+  },
+  amtInput: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "600",
-  },
-  customBadge: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.warning,
-    fontWeight: "700",
-    marginLeft: webSc(SPACING.xs),
-  },
-  cellStatic: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  cellInput: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: webSc(RADIUS.sm),
     paddingVertical: webSc(SPACING.xs),
     paddingHorizontal: webSc(SPACING.sm),
-    minWidth: webSc(48),
+    minWidth: webSc(90),
+    textAlign: "right",
   },
-  cellInputMuted: { color: COLORS.textMuted },
-  amtCell: { flexDirection: "row", alignItems: "center" },
-  amtDollar: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    marginRight: webSc(2),
-  },
-  amtInput: { flex: 1 },
-  resetBtn: {
-    marginLeft: webSc(SPACING.xs),
-    padding: webSc(SPACING.xs),
-  },
-  resetText: {
-    fontSize: webMs(FONT_SIZES.md),
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
-  totalsRow: {
+  // Card footer
+  cardFootRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: webSc(SPACING.sm),
+    justifyContent: "space-between",
+    marginTop: webSc(SPACING.sm),
   },
-  totalsLabel: {
-    flex: 1.2,
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "700",
+  customBtn: {
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
-  totalsPct: {
-    flex: 1,
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "700",
-  },
-  totalsAmt: {
-    flex: 1.4,
-    fontSize: webMs(FONT_SIZES.sm),
+  customBtnText: {
+    fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "700",
   },
-  totalsWarn: { color: COLORS.error },
-  // Side pots
-  sidePotBlock: {
-    marginBottom: webSc(SPACING.md),
-    paddingBottom: webSc(SPACING.sm),
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  sidePotName: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "700",
-    marginBottom: webSc(SPACING.xs),
+  remaining: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
   },
   // Lock banner
   lockBanner: {

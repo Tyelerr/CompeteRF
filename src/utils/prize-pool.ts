@@ -1,11 +1,13 @@
 // src/utils/prize-pool.ts
 // Pure money math for the Prize Pool setup (Manage Tournament hub) and the
-// later read-only payouts view. No React, no Supabase — just numbers in/out so
-// the same logic can drive setup, the summary, and Phase 3 payouts.
+// later read-only payouts view. No React, no Supabase — numbers in/out.
 //
 // Model: dollar pools are derived live (player count × entry/side-pot amounts),
-// so only the PAYOUT SPLIT is stored (PrizePoolConfig). Each place pays
-// percent-of-pool unless the TD sets an amount override (then it's "custom").
+// so only the PAYOUT SPLIT is stored (PrizePoolConfig). Percentages ALWAYS total
+// 100 — the steppers redistribute on every nudge and presets are normalized to
+// 100 — so there is no "percent error" state. A place pays percent-of-pool
+// unless the TD sets a dollar override via Custom Edit (then it reads "custom"),
+// and overrides are clamped so the payout can never exceed the pool.
 
 import {
   PrizePlace,
@@ -21,57 +23,171 @@ export interface PlaceBreakdown {
 }
 
 export interface PoolBreakdown {
-  pool: number; // total dollars in this pool
+  pool: number;
   places: PlaceBreakdown[];
-  percentTotal: number; // sum of place percents
-  payoutTotal: number; // sum of place dollar amounts
-  remaining: number; // pool - payoutTotal (negative => over-allocated)
+  percentTotal: number;
+  payoutTotal: number;
+  remaining: number; // pool - payoutTotal
   percentValid: boolean; // percents total ~100
   amountValid: boolean; // payout does not exceed the pool
 }
 
+// Stepper granularity and the floor for any single paid place.
+export const PCT_STEP = 5;
+export const PCT_MIN = 1;
+export const MAX_PLACES = 12;
+
 const EPS = 0.01;
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 const clampPct = (n: number): number => (n < 0 ? 0 : n > 100 ? 100 : n);
+const sum = (a: number[]): number => a.reduce((s, n) => s + n, 0);
 
-// ── Default payout splits ─────────────────────────────────────────────────────
-// Common decreasing distributions; each totals 100. Editable by the TD. Side
-// pots usually pay fewer places, so they get their own (steeper) table.
-const ENTRY_SPLITS: Record<number, number[]> = {
-  1: [100],
-  2: [65, 35],
-  3: [50, 30, 20],
-  4: [45, 25, 18, 12],
-  5: [40, 24, 16, 12, 8],
-  6: [36, 22, 15, 11, 9, 7],
-  7: [33, 21, 14, 10, 8, 8, 6],
-  8: [30, 20, 13, 10, 8, 7, 6, 6],
-};
-const SIDE_SPLITS: Record<number, number[]> = {
-  1: [100],
-  2: [70, 30],
-  3: [60, 25, 15],
-  4: [50, 25, 15, 10],
+// ── Preset payout splits ──────────────────────────────────────────────────────
+export type PresetKey = "balanced" | "topHeavy" | "winnerHeavy" | "custom";
+
+export const PRESETS: { key: PresetKey; label: string }[] = [
+  { key: "balanced", label: "Balanced" },
+  { key: "topHeavy", label: "Top Heavy" },
+  { key: "winnerHeavy", label: "Winner Heavy" },
+  { key: "custom", label: "Custom" },
+];
+
+// Normalize arbitrary weights into integer percents that sum to EXACTLY 100
+// (largest-remainder method), so every preset is valid by construction.
+const normalizeTo100 = (weights: number[]): number[] => {
+  const n = weights.length;
+  if (n === 0) return [];
+  if (n === 1) return [100];
+  const total = sum(weights);
+  if (total <= 0) return evenSplit(n);
+  const raw = weights.map((w) => (w / total) * 100);
+  const floor = raw.map(Math.floor);
+  let rem = 100 - sum(floor);
+  const order = raw
+    .map((v, i) => ({ i, f: v - Math.floor(v) }))
+    .sort((a, b) => b.f - a.f);
+  for (let k = 0; k < rem && k < order.length; k++) floor[order[k].i] += 1;
+  // Any leftover (rem > n) wraps around.
+  rem -= Math.min(rem, order.length);
+  let j = 0;
+  while (rem > 0) {
+    floor[order[j % order.length].i] += 1;
+    rem -= 1;
+    j += 1;
+  }
+  return floor;
 };
 
-// Evenly distribute 100 across n places (remainder to the top place) so any
-// place count produces a valid (sum-100) default even beyond the tables above.
+// Even split with the remainder going to the top place(s).
 const evenSplit = (n: number): number[] => {
   if (n <= 0) return [];
   const base = Math.floor(100 / n);
   const arr = Array(n).fill(base);
-  arr[0] += 100 - base * n;
+  let rem = 100 - base * n;
+  for (let i = 0; rem > 0; i++, rem--) arr[i] += 1;
   return arr;
 };
 
-export const defaultEntrySplit = (places: number): number[] =>
-  ENTRY_SPLITS[places] ?? evenSplit(places);
-
-export const defaultSidePotSplit = (places: number): number[] =>
-  SIDE_SPLITS[places] ?? evenSplit(places);
+// Preset generators (all total 100 for any place count).
+export const presetSplit = (key: PresetKey, places: number): number[] => {
+  const n = Math.max(1, places);
+  if (n === 1) return [100];
+  switch (key) {
+    case "balanced":
+      return evenSplit(n);
+    case "winnerHeavy":
+      // Steep: weight (n-k)^2 → winner takes a large share.
+      return normalizeTo100(Array.from({ length: n }, (_, k) => (n - k) ** 2));
+    case "topHeavy":
+    case "custom":
+    default:
+      // Gentle decline: weight (n-k) → e.g. 4 places → 40/30/20/10.
+      return normalizeTo100(Array.from({ length: n }, (_, k) => n - k));
+  }
+};
 
 export const placesFromPercents = (percents: number[]): PrizePlace[] =>
-  percents.map((p) => ({ percent: clampPct(p), amountOverride: null }));
+  percents.map((p) => ({ percent: clampPct(Math.round(p)), amountOverride: null }));
+
+// Which named preset (if any) the current percents match; else "custom". Any
+// dollar override also reads as custom.
+export const activePreset = (places: PrizePlace[]): PresetKey => {
+  if (places.some((p) => p.amountOverride != null)) return "custom";
+  const current = places.map((p) => Math.round(p.percent));
+  for (const key of ["balanced", "topHeavy", "winnerHeavy"] as PresetKey[]) {
+    const split = presetSplit(key, places.length);
+    if (split.length === current.length && split.every((v, i) => v === current[i]))
+      return key;
+  }
+  return "custom";
+};
+
+// ── Stepper redistribution (always keeps the total at 100) ────────────────────
+// Increasing place i pulls PCT_STEP from the other places (round-robin, evenly,
+// never below PCT_MIN). Decreasing distributes PCT_STEP back to the others.
+export const adjustPercents = (
+  percents: number[],
+  i: number,
+  delta: number,
+): number[] => {
+  const n = percents.length;
+  if (n <= 1) return percents;
+  const arr = percents.map((p) => Math.round(p));
+  const others = arr.map((_, j) => j).filter((j) => j !== i);
+
+  if (delta > 0) {
+    // Capacity the others can give up (down to PCT_MIN).
+    const capacity = others.reduce((s, j) => s + Math.max(0, arr[j] - PCT_MIN), 0);
+    if (capacity < PCT_STEP || arr[i] + PCT_STEP > 100) return percents;
+    arr[i] += PCT_STEP;
+    let toRemove = PCT_STEP;
+    let guard = 10000;
+    while (toRemove > 0 && guard-- > 0) {
+      let movedThisPass = 0;
+      for (const j of others) {
+        if (toRemove <= 0) break;
+        if (arr[j] > PCT_MIN) {
+          arr[j] -= 1;
+          toRemove -= 1;
+          movedThisPass += 1;
+        }
+      }
+      if (movedThisPass === 0) break;
+    }
+    return arr;
+  }
+
+  // Decrease: i must stay at/above PCT_MIN.
+  if (arr[i] - PCT_STEP < PCT_MIN) return percents;
+  arr[i] -= PCT_STEP;
+  let toAdd = PCT_STEP;
+  let guard = 10000;
+  while (toAdd > 0 && guard-- > 0) {
+    let movedThisPass = 0;
+    for (const j of others) {
+      if (toAdd <= 0) break;
+      if (arr[j] < 100) {
+        arr[j] += 1;
+        toAdd -= 1;
+        movedThisPass += 1;
+      }
+    }
+    if (movedThisPass === 0) break;
+  }
+  return arr;
+};
+
+export const canIncrease = (percents: number[], i: number): boolean => {
+  if (percents.length <= 1) return false;
+  const cap = percents.reduce(
+    (s, p, j) => (j === i ? s : s + Math.max(0, Math.round(p) - PCT_MIN)),
+    0,
+  );
+  return cap >= PCT_STEP && Math.round(percents[i]) + PCT_STEP <= 100;
+};
+
+export const canDecrease = (percents: number[], i: number): boolean =>
+  percents.length > 1 && Math.round(percents[i]) - PCT_STEP >= PCT_MIN;
 
 // ── Pool helpers ──────────────────────────────────────────────────────────────
 export const entryPoolTotal = (
@@ -89,7 +205,6 @@ export const sidePotTotal = (players: number, amountPerPlayer: number): number =
   round2(Math.max(0, players) * Math.max(0, amountPerPlayer));
 
 // ── Breakdown ─────────────────────────────────────────────────────────────────
-// Resolve a list of places against a pool: percent → dollars unless overridden.
 export const computeBreakdown = (
   pool: number,
   places: PrizePlace[],
@@ -114,22 +229,39 @@ export const computeBreakdown = (
   };
 };
 
+// Clamp a dollar override for place i so the pool's total payout can never
+// exceed the pool (the override is capped at pool − sum(other amounts)).
+export const clampOverride = (
+  pool: number,
+  places: PrizePlace[],
+  i: number,
+  desired: number,
+): number => {
+  const others = places.reduce((s, pl, j) => {
+    if (j === i) return s;
+    const amt =
+      pl.amountOverride != null
+        ? Math.max(0, pl.amountOverride)
+        : (clampPct(pl.percent) / 100) * pool;
+    return s + amt;
+  }, 0);
+  const room = Math.max(0, pool - others);
+  return round2(Math.min(Math.max(0, desired), room));
+};
+
 // ── Config defaults / validation ──────────────────────────────────────────────
-// A fresh config: pay a sensible number of places for the field, one entry per
-// side pot. Used when the TD opens Prize Pool for the first time.
 export const defaultPrizePoolConfig = (
   sidePotNames: string[],
 ): PrizePoolConfig => ({
-  entryPlaces: placesFromPercents(defaultEntrySplit(3)),
+  entryPlaces: placesFromPercents(presetSplit("topHeavy", 3)),
   sidePots: sidePotNames.map((name) => ({
     name,
-    places: placesFromPercents(defaultSidePotSplit(2)),
+    places: placesFromPercents(presetSplit("topHeavy", 2)),
   })),
   includeAddedMoney: true,
 });
 
-// Reconcile a stored config against the tournament's CURRENT side pots: keep
-// payouts for pots that still exist, add defaults for new ones, drop removed.
+// Keep payouts for pots that still exist, default new ones, drop removed.
 export const reconcileSidePots = (
   config: PrizePoolConfig,
   sidePotNames: string[],
@@ -137,12 +269,14 @@ export const reconcileSidePots = (
   sidePotNames.map((name) => {
     const existing = config.sidePots.find((sp) => sp.name === name);
     return (
-      existing ?? { name, places: placesFromPercents(defaultSidePotSplit(2)) }
+      existing ?? {
+        name,
+        places: placesFromPercents(presetSplit("topHeavy", 2)),
+      }
     );
   });
 
-// True when the whole prize setup is valid (entry + every side pot total 100%
-// and no pool is over-allocated). Drives the Draw Bracket warning + nav glyph.
+// Valid when every pool's percents total 100 and no pool is over-allocated.
 export const isPrizePoolComplete = (
   config: PrizePoolConfig | null | undefined,
   entryPool: number,
