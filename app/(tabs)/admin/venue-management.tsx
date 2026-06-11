@@ -41,6 +41,7 @@ interface UserSearchResult {
   id: number;
   name: string;
   email: string;
+  user_name: string | null;
 }
 
 const ReassignOwnerModal = ({
@@ -69,15 +70,16 @@ const ReassignOwnerModal = ({
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id_auto, name, email")
-        .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
-        .limit(10);
+        .select("id_auto, name, email, user_name")
+        .or(`name.ilike.%${q}%,email.ilike.%${q}%,user_name.ilike.%${q}%`)
+        .limit(25);
       if (error) { setResults([]); return; }
       setResults(
         (data || []).map((u: any) => ({
           id: u.id_auto,
-          name: u.name || u.email,
+          name: u.name || u.user_name || u.email,
           email: u.email,
+          user_name: u.user_name || null,
         })),
       );
     } catch {
@@ -138,16 +140,18 @@ const ReassignOwnerModal = ({
             />
             {results.length > 0 && (
               <View style={ms.resultsBox}>
-                {results.slice(0, 10).map((item) => (
+                {results.map((item) => (
                   <TouchableOpacity
                     key={item.id}
                     style={[ms.resultItem, selected?.id === item.id && ms.resultItemActive]}
-                    onPress={() => setSelected(item)}
+                    onPress={() => { setSelected(item); setQuery(""); setResults([]); }}
                   >
                     <Text allowFontScaling={false} style={[ms.resultName, selected?.id === item.id && ms.resultNameActive]}>
                       {item.name}
                     </Text>
-                    <Text allowFontScaling={false} style={ms.resultDetail}>{item.email}</Text>
+                    <Text allowFontScaling={false} style={ms.resultDetail}>
+                      {item.user_name ? `@${item.user_name} · ${item.email}` : item.email}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
