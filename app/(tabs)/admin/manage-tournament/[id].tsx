@@ -309,6 +309,12 @@ const RACE_MODE_OPTIONS = [
   { label: "Fargo Differential", value: "differential" },
 ];
 
+// paid_side_pots should always be a string[], but legacy/seed rows may store a
+// non-array value (e.g. an empty JSONB object). Coerce defensively so the UI
+// never crashes on `.filter`/`.length`/`.map`.
+const safePaidSidePots = (value: unknown): string[] =>
+  Array.isArray(value) ? (value as string[]) : [];
+
 // A Postgres `time` column reads back as "HH:MM:SS", but the START_TIMES
 // dropdown matches "HH:MM". Trim to HH:MM so the saved time pre-fills.
 const toStartTime = (t: string | null | undefined): string => {
@@ -927,7 +933,7 @@ const RegistrationRow = ({
   // Filter to pots that still exist AND drop duplicates (stale data could hold
   // the same pot name twice). Self-heals on the next edit/save.
   const livePaidPots = () => [
-    ...new Set((registration.paid_side_pots ?? []).filter(potExists)),
+    ...new Set(safePaidSidePots(registration.paid_side_pots).filter(potExists)),
   ];
 
   const [editing, setEditing] = useState(false);
@@ -1338,7 +1344,7 @@ export default function ManageTournamentScreen() {
     };
     const tasks = hub.registrations
       .map((reg) => {
-        const current = reg.paid_side_pots ?? [];
+        const current = safePaidSidePots(reg.paid_side_pots);
         const next = reconcile(current);
         const changed =
           next.length !== current.length ||
