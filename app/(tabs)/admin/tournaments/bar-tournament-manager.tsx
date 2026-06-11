@@ -32,7 +32,6 @@ import { Pagination } from "../../../../src/views/components/common/pagination";
 import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
-import { TournamentDetailModal } from "../../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -105,9 +104,6 @@ export default function BarTournamentManagerScreen() {
   const vm = useBarTournamentManager();
   const { profile } = useAuthContext();
 
-  // Tournament detail modal
-  const [detailId, setDetailId] = useState<string | null>(null);
-
   // Cancel modal state
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [tournamentToCancel, setTournamentToCancel] = useState<BarTournamentWithStats | null>(null);
@@ -150,6 +146,14 @@ export default function BarTournamentManagerScreen() {
     router.push({
       pathname: "/(tabs)/admin/edit-tournament/[id]",
       params: { id: tournamentId.toString() },
+    } as any);
+  };
+
+  // Tapping the card opens the full Manage Tournament hub (same screen TDs use).
+  const handleTournamentPress = (tournament: BarTournamentWithStats) => {
+    router.push({
+      pathname: "/(tabs)/admin/manage-tournament/[id]",
+      params: { id: String(tournament.id), name: tournament.name },
     } as any);
   };
 
@@ -293,13 +297,6 @@ export default function BarTournamentManagerScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Tournament Detail Modal */}
-      <TournamentDetailModal
-        id={detailId}
-        visible={detailId !== null}
-        onClose={() => setDetailId(null)}
-      />
-
       {/* Delete Modal */}
       <DeleteModal
         visible={cancelModalVisible}
@@ -426,7 +423,7 @@ export default function BarTournamentManagerScreen() {
           <View>
             <TournamentCard
               tournament={item}
-              onPress={() => setDetailId(String(item.id))}
+              onPress={() => handleTournamentPress(item)}
               onEdit={() => handleEditTournament(item.id)}
               onArchive={() => handleArchiveTournament(item)}
               onCancel={() => handleDeleteTournament(item)}
