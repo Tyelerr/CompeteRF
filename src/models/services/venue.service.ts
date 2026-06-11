@@ -58,6 +58,24 @@ export const venueService = {
     return data?.map((d) => d.venues as unknown as Venue) || [];
   },
 
+  // Venues a user is tied to as EITHER an owner or a director (deduped, active
+  // only). Used to scope the tournament-submission venue picker so a user only
+  // sees venues they actually run — supports users assigned to multiple venues
+  // and users who both own and direct venues.
+  async getVenuesForUser(userId: number): Promise<Venue[]> {
+    const [owned, directed] = await Promise.all([
+      this.getVenuesByOwner(userId),
+      this.getVenuesByDirector(userId),
+    ]);
+    const byId = new Map<number, Venue>();
+    for (const v of [...owned, ...directed]) {
+      if (v && !byId.has(v.id)) byId.set(v.id, v);
+    }
+    return [...byId.values()].sort((a, b) =>
+      (a.venue || "").localeCompare(b.venue || ""),
+    );
+  },
+
   async getVenueOwners(venueId: number): Promise<VenueOwner[]> {
     const { data, error } = await supabase
       .from("venue_owners")

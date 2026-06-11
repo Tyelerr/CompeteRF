@@ -189,12 +189,14 @@ export const useSubmitTournament = () => {
 
   const loadFormData = async () => {
     try {
-      // Tournament directors only see their assigned venues.
-      // All other roles see all venues.
-      const venuesData =
-        (profile as any)?.role === "tournament_director"
-          ? await venueService.getVenuesByDirector(profile!.id_auto)
-          : await venueService.getVenues();
+      // Only compete_admin / super_admin can submit for any venue. Everyone
+      // else (tournament_director, bar_owner — including those tied to multiple
+      // venues) sees ONLY the venues they own or direct.
+      const role = (profile as any)?.role;
+      const isAdminRole = role === "compete_admin" || role === "super_admin";
+      const venuesData = isAdminRole
+        ? await venueService.getVenues()
+        : await venueService.getVenuesForUser(profile!.id_auto);
 
       setVenues(venuesData);
 
@@ -311,11 +313,15 @@ export const useSubmitTournament = () => {
   const isChipTournament = formData.tournamentFormat === "chip-tournament";
   const venueHasTables = venueTables.length > 0;
 
-  // True when a tournament director has no venues assigned yet.
+  // True when a non-admin submitter (tournament_director or bar_owner) has no
+  // venues they own or direct yet. Admins always see all venues, so they never
+  // hit this locked gate.
+  const submitterRole = (profile as any)?.role;
   const isTDWithNoVenues =
     !dataLoading &&
     !authLoading &&
-    (profile as any)?.role === "tournament_director" &&
+    submitterRole !== "compete_admin" &&
+    submitterRole !== "super_admin" &&
     venues.length === 0;
 
   // -- Venue selection --------------------------------------------------------
