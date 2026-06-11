@@ -189,6 +189,44 @@ export const canIncrease = (percents: number[], i: number): boolean => {
 export const canDecrease = (percents: number[], i: number): boolean =>
   percents.length > 1 && Math.round(percents[i]) - PCT_STEP >= PCT_MIN;
 
+// Set place i to an exact percent (typed by the TD) and rebalance the OTHER
+// places so the total stays exactly 100 — distributed proportionally to their
+// current shares, every place kept at or above PCT_MIN. Integer result.
+export const setPercent = (
+  percents: number[],
+  i: number,
+  value: number,
+): number[] => {
+  const n = percents.length;
+  if (n === 0) return percents;
+  if (n === 1) return [100];
+  const maxForI = 100 - (n - 1) * PCT_MIN; // leave PCT_MIN for each other place
+  const vi = Math.max(PCT_MIN, Math.min(maxForI, Math.round(value)));
+  const others = percents
+    .map((p, j) => ({ j, v: Math.round(p) }))
+    .filter((o) => o.j !== i);
+  const remainder = 100 - vi;
+  const otherSum = others.reduce((s, o) => s + o.v, 0);
+  const extra = remainder - others.length * PCT_MIN; // >= 0 since vi <= maxForI
+  const raw = others.map((o) => {
+    const share = otherSum > 0 ? o.v / otherSum : 1 / others.length;
+    return PCT_MIN + share * extra;
+  });
+  const floors = raw.map(Math.floor);
+  let rem = remainder - floors.reduce((s, x) => s + x, 0);
+  const order = raw
+    .map((v, idx) => ({ idx, f: v - Math.floor(v) }))
+    .sort((a, b) => b.f - a.f);
+  for (let k = 0; rem > 0 && order.length > 0; k++, rem--)
+    floors[order[k % order.length].idx] += 1;
+  const result = percents.map((p) => Math.round(p));
+  result[i] = vi;
+  others.forEach((o, idx) => {
+    result[o.j] = floors[idx];
+  });
+  return result;
+};
+
 // ── Pool helpers ──────────────────────────────────────────────────────────────
 export const entryPoolTotal = (
   players: number,
@@ -227,26 +265,6 @@ export const computeBreakdown = (
     percentValid: Math.abs(percentTotal - 100) < EPS,
     amountValid: payoutTotal <= pool + EPS,
   };
-};
-
-// Clamp a dollar override for place i so the pool's total payout can never
-// exceed the pool (the override is capped at pool − sum(other amounts)).
-export const clampOverride = (
-  pool: number,
-  places: PrizePlace[],
-  i: number,
-  desired: number,
-): number => {
-  const others = places.reduce((s, pl, j) => {
-    if (j === i) return s;
-    const amt =
-      pl.amountOverride != null
-        ? Math.max(0, pl.amountOverride)
-        : (clampPct(pl.percent) / 100) * pool;
-    return s + amt;
-  }, 0);
-  const room = Math.max(0, pool - others);
-  return round2(Math.min(Math.max(0, desired), room));
 };
 
 // ── Config defaults / validation ──────────────────────────────────────────────

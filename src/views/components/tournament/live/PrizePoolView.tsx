@@ -8,7 +8,7 @@
 // dollar editing lives behind a "Custom Edit" toggle and is clamped to the pool.
 // The parent owns the working config + persistence; this component emits changes.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -33,11 +33,11 @@ import {
   adjustPercents,
   canDecrease,
   canIncrease,
-  clampOverride,
   computeBreakdown,
   entryPoolTotal,
   placesFromPercents,
   presetSplit,
+  setPercent,
   sidePotTotal,
 } from "../../../../utils/prize-pool";
 
@@ -151,6 +151,53 @@ const Stepper = ({
   </View>
 );
 
+// Editable percent cell: typed value commits on blur and rebalances the others
+// so the total stays 100. Local draft keeps typing smooth; it resyncs when the
+// committed value changes (via steppers, presets, or a sibling row's edit).
+const PercentCell = ({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled: boolean;
+  onCommit: (v: number) => void;
+}) => {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  if (disabled) {
+    return (
+      <Text allowFontScaling={false} style={styles.payPct}>
+        {value}%
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.pctInputWrap}>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.pctInput}
+        value={draft}
+        onChangeText={(t) => setDraft(t.replace(/[^0-9]/g, ""))}
+        onEndEditing={() => {
+          const v = parseInt(draft, 10);
+          if (isNaN(v)) setDraft(String(value));
+          else onCommit(v);
+        }}
+        keyboardType="number-pad"
+        maxLength={3}
+        selectTextOnFocus
+      />
+      <Text allowFontScaling={false} style={styles.pctSign}>
+        %
+      </Text>
+    </View>
+  );
+};
+
 // ── Payout card (entry pool or a single side pot) ─────────────────────────────
 const PayoutCard = ({
   title,
@@ -167,7 +214,6 @@ const PayoutCard = ({
   locked: boolean;
   onPlaces: (next: PrizePlace[]) => void;
 }) => {
-  const [editing, setEditing] = useState(false);
   const breakdown = computeBreakdown(pool, places);
   const percents = places.map((p) => p.percent);
   const preset = activePreset(places);
@@ -183,22 +229,14 @@ const PayoutCard = ({
 
   const applyPreset = (key: PresetKey) => {
     if (key === "custom") return; // Custom is a state, not an action
-    setEditing(false);
     onPlaces(placesFromPercents(presetSplit(key, count)));
   };
 
   const bump = (i: number, delta: number) =>
     onPlaces(placesFromPercents(adjustPercents(percents, i, delta)));
 
-  const editAmount = (i: number, text: string) => {
-    const v = parseFloat(text);
-    const clamped = clampOverride(pool, places, i, isNaN(v) ? 0 : v);
-    onPlaces(
-      places.map((p, idx) =>
-        idx === i ? { ...p, amountOverride: clamped } : p,
-      ),
-    );
-  };
+  const commitPercent = (i: number, v: number) =>
+    onPlaces(placesFromPercents(setPercent(percents, i, v)));
 
   return (
     <Card
@@ -259,91 +297,52 @@ const PayoutCard = ({
         </View>
       )}
 
-      {/* Payout rows */}
+      {/* Payout rows: place · [−] percent [+] · amount */}
       {breakdown.places.map((r, i) => (
         <View key={i} style={styles.payRow}>
           <Text allowFontScaling={false} style={styles.payPlace}>
             {ordinal(r.place)}
           </Text>
-
-          {editing && !locked ? (
-            <View style={styles.payAmtEdit}>
-              <Text allowFontScaling={false} style={styles.dollar}>
-                $
-              </Text>
-              <TextInput
-                allowFontScaling={false}
-                style={styles.amtInput}
-                value={String(r.amount)}
-                onChangeText={(t) => editAmount(i, t)}
-                keyboardType="decimal-pad"
-                selectTextOnFocus
-              />
-            </View>
-          ) : (
-            <>
-              <View style={styles.payPctGroup}>
-                {!locked && (
-                  <TouchableOpacity
-                    style={[
-                      styles.pctBtn,
-                      !canDecrease(percents, i) && styles.pctBtnOff,
-                    ]}
-                    disabled={!canDecrease(percents, i)}
-                    onPress={() => bump(i, -1)}
-                  >
-                    <Text allowFontScaling={false} style={styles.pctBtnText}>
-                      {"−"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                <Text allowFontScaling={false} style={styles.payPct}>
-                  {r.percent}%
-                </Text>
-                {!locked && (
-                  <TouchableOpacity
-                    style={[
-                      styles.pctBtn,
-                      !canIncrease(percents, i) && styles.pctBtnOff,
-                    ]}
-                    disabled={!canIncrease(percents, i)}
-                    onPress={() => bump(i, 1)}
-                  >
-                    <Text allowFontScaling={false} style={styles.pctBtnText}>
-                      +
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <Text
-                allowFontScaling={false}
-                style={[styles.payAmt, r.custom && styles.payAmtCustom]}
+          <View style={styles.payPctGroup}>
+            {!locked && (
+              <TouchableOpacity
+                style={[
+                  styles.pctBtn,
+                  !canDecrease(percents, i) && styles.pctBtnOff,
+                ]}
+                disabled={!canDecrease(percents, i)}
+                onPress={() => bump(i, -1)}
               >
-                {money(r.amount)}
-              </Text>
-            </>
-          )}
+                <Text allowFontScaling={false} style={styles.pctBtnText}>
+                  {"−"}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <PercentCell
+              value={r.percent}
+              disabled={locked}
+              onCommit={(v) => commitPercent(i, v)}
+            />
+            {!locked && (
+              <TouchableOpacity
+                style={[
+                  styles.pctBtn,
+                  !canIncrease(percents, i) && styles.pctBtnOff,
+                ]}
+                disabled={!canIncrease(percents, i)}
+                onPress={() => bump(i, 1)}
+              >
+                <Text allowFontScaling={false} style={styles.pctBtnText}>
+                  +
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text allowFontScaling={false} style={styles.payAmt}>
+            {money(r.amount)}
+          </Text>
         </View>
       ))}
-
-      {/* Custom edit + remaining */}
-      {!locked && (
-        <View style={styles.cardFootRow}>
-          <TouchableOpacity
-            style={styles.customBtn}
-            onPress={() => setEditing((e) => !e)}
-          >
-            <Text allowFontScaling={false} style={styles.customBtnText}>
-              {editing ? "Done Editing" : "Custom Edit"}
-            </Text>
-          </TouchableOpacity>
-          {(editing || breakdown.remaining > 0.01) && (
-            <Text allowFontScaling={false} style={styles.remaining}>
-              {money(breakdown.remaining)} unassigned
-            </Text>
-          )}
-        </View>
-      )}
     </Card>
   );
 };
@@ -645,61 +644,35 @@ const styles = StyleSheet.create({
     minWidth: webSc(48),
     textAlign: "center",
   },
+  pctInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.xs),
+    marginHorizontal: webSc(SPACING.xs),
+  },
+  pctInput: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+    paddingVertical: webSc(SPACING.xs),
+    minWidth: webSc(34),
+    textAlign: "center",
+  },
+  pctSign: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+  },
   payAmt: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "700",
     width: webSc(80),
     textAlign: "right",
-  },
-  payAmtCustom: { color: COLORS.warning },
-  payAmtEdit: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  dollar: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    marginRight: webSc(2),
-  },
-  amtInput: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.text,
-    fontWeight: "600",
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: webSc(RADIUS.sm),
-    paddingVertical: webSc(SPACING.xs),
-    paddingHorizontal: webSc(SPACING.sm),
-    minWidth: webSc(90),
-    textAlign: "right",
-  },
-  // Card footer
-  cardFootRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: webSc(SPACING.sm),
-  },
-  customBtn: {
-    paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.xs),
-    borderRadius: webSc(RADIUS.sm),
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  customBtnText: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
-  remaining: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.textSecondary,
-    fontWeight: "600",
   },
   // Lock banner
   lockBanner: {
