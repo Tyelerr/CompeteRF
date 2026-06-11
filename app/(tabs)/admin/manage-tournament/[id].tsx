@@ -303,14 +303,6 @@ const SINGLE_ELIM_FORMATS = ["single-elimination", "single-elim"];
 const formatHasLosersSide = (format: string): boolean =>
   !SINGLE_ELIM_FORMATS.includes((format || "").toLowerCase());
 
-// Pull the first number out of a legacy free-text race (e.g. "Race to 5" -> 5)
-// so existing tournaments pre-fill the Winners race.
-const parseRaceNumber = (race: string | null | undefined): number | null => {
-  if (!race) return null;
-  const m = race.match(/\d+/);
-  return m ? parseInt(m[0], 10) : null;
-};
-
 const RACE_MODE_OPTIONS = [
   { label: "Fixed Race", value: "fixed" },
   { label: "A/B/C Race Groups", value: "groups" },
@@ -343,7 +335,9 @@ const toForm = (t: Tournament): SettingsForm => {
     isRecurring: !!t.is_recurring,
     tournamentDate: t.tournament_date ?? "",
     startTime: toStartTime(t.start_time),
-    raceWinners: ls.fixedRaceWinners ?? parseRaceNumber(t.race) ?? 5,
+    // Race is configured fresh in the hub — do NOT inherit the free-text race
+    // entered on the submit page. Only a previously-saved live setting pre-fills.
+    raceWinners: ls.fixedRaceWinners ?? 5,
     raceLosers: ls.fixedRaceLosers ?? 4,
     raceFinals: ls.fixedRaceFinals ?? 7,
     diffMinRace: ls.fargoDiffMinRace ?? 0,
