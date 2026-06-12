@@ -505,16 +505,13 @@ const styles = StyleSheet.create({
   },
   onTableText: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
   liveBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.xs),
-    paddingVertical: webSc(1),
     marginRight: webSc(SPACING.sm),
   },
   liveBadgeText: {
     fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.white,
-    fontWeight: "800",
+    color: COLORS.error,
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
   onTableTable: {
     fontSize: webMs(FONT_SIZES.xs),

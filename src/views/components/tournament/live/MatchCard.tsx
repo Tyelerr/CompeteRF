@@ -269,13 +269,13 @@ const styles = StyleSheet.create({
   race: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
   table: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, flexShrink: 1 },
   topRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
-  liveBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.xs),
-    paddingVertical: 1,
+  liveBadge: {},
+  liveBadgeText: {
+    color: COLORS.error,
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
-  liveBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
   bye: {
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.textSecondary,

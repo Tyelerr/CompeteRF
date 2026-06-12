@@ -55,13 +55,15 @@ export interface LiveMatch {
   p1Score: number | null;
   p2Score: number | null;
   result: MatchResult | null;
-  // Global match number (play order across the whole event) + where this match's
-  // winner/loser flow, for the bracket routing labels ("L to 25", "W to 28").
+  // Per-side match number + label for the bracket routing labels. Winners and
+  // losers are numbered separately (W1, W2 … / L1, L2 …; grand = F1, F2), so a
+  // winners match's loser reads "L to L34" and a losers winner reads "W to L73".
   // number is 0 for empty placeholder matches (both feeders were byes).
-  number: number;
-  winnerToNumber: number | null; // match the winner advances into
-  loserToNumber: number | null; // match the loser drops into (winners side only)
-  loserFromNumbers: number[]; // winners-match numbers whose loser drops into this match
+  number: number; // per-side sequence (also the "is a real match" check)
+  numberLabel: string; // badge text, e.g. "W32" / "L1" / "F1"
+  winnerToLabel: string | null; // where the winner advances, e.g. "L73"
+  loserToLabel: string | null; // where the loser drops (winners side only), e.g. "L34"
+  loserFromLabels: string[]; // winners-match labels whose loser drops in, e.g. ["W48"]
   allowedSeconds: number; // overtime threshold (timer turns red past this)
   hasCustomTimer: boolean;
   // True only while a match is actually being played on a stream table — drives
@@ -112,16 +114,18 @@ const buildLabelMap = (
 
 interface MatchRouting {
   number: number;
-  winnerToNumber: number | null;
-  loserToNumber: number | null;
-  loserFromNumbers: number[];
+  numberLabel: string;
+  winnerToLabel: string | null;
+  loserToLabel: string | null;
+  loserFromLabels: string[];
 }
 
-// Assigns a global match number (rough play order — earliest playable first, with
-// winners before losers before grand within the same depth) to every "real" match
-// (byes count; empty placeholders don't), then derives where each match's winner
-// and loser flow. Flows resolve forward through bye/empty placeholders to the first
-// real match, so the routing labels always point at a numbered match.
+// Numbers winners and losers (and the grand final) separately — W1, W2 … within
+// the winners side, L1, L2 … within the losers side, F1/F2 for the grand final —
+// each in play order (earliest playable first). Then derives where each match's
+// winner and loser flow, as side-prefixed labels. Flows resolve forward through
+// bye/empty placeholders to the first real match, so a label always points at a
+// numbered match.
 const computeRouting = (
   graph: NonNullable<GeneratedBracket["graph"]>,
   flags: Map<string, { isEmpty: boolean; skipped: boolean }>,
@@ -135,8 +139,8 @@ const computeRouting = (
     const m = id.match(/M(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
   };
-  const sideRank = (s: BracketSide): number =>
-    s === "winners" ? 0 : s === "losers" ? 1 : 2;
+  const prefixOf = (s: BracketSide): string =>
+    s === "winners" ? "W" : s === "losers" ? "L" : "F";
 
   // Topological depth = 1 + max(feeder depth); seeds/empties contribute 0.
   const depthMemo = new Map<string, number>();
@@ -156,17 +160,22 @@ const computeRouting = (
     return res;
   };
 
-  const numbered = graph
-    .filter((n) => isReal(n.id))
-    .sort(
-      (a, b) =>
-        depthOf(a.id) - depthOf(b.id) ||
-        sideRank(a.side) - sideRank(b.side) ||
-        a.round - b.round ||
-        indexOf(a.id) - indexOf(b.id),
-    );
+  // Per-side sequence numbers + labels, each side in its own play order.
   const number = new Map<string, number>();
-  numbered.forEach((n, i) => number.set(n.id, i + 1));
+  const label = new Map<string, string>();
+  const real = graph.filter((n) => isReal(n.id));
+  for (const side of ["winners", "losers", "grand"] as const) {
+    const ns = real
+      .filter((n) => n.side === side)
+      .sort(
+        (a, b) =>
+          depthOf(a.id) - depthOf(b.id) || a.round - b.round || indexOf(a.id) - indexOf(b.id),
+      );
+    ns.forEach((n, i) => {
+      number.set(n.id, i + 1);
+      label.set(n.id, `${prefixOf(side)}${i + 1}`);
+    });
+  }
 
   // Who consumes each match's winner / loser.
   const winnerConsumer = new Map<string, string>();
@@ -179,11 +188,11 @@ const computeRouting = (
   }
   // Follow a flow forward through empty/skipped placeholders (which auto-advance
   // their one player as a "winner") to the first real, numbered match.
-  const numAt = (start: string | undefined): number | null => {
+  const labelAt = (start: string | undefined): string | null => {
     let cur = start;
     let guard = 64;
     while (cur && guard-- > 0) {
-      if (isReal(cur)) return number.get(cur) ?? null;
+      if (isReal(cur)) return label.get(cur) ?? null;
       cur = winnerConsumer.get(cur);
     }
     return null;
@@ -192,18 +201,19 @@ const computeRouting = (
   const out: Record<string, MatchRouting> = {};
   for (const n of graph) {
     if (!isReal(n.id)) continue;
-    const loserFromNumbers: number[] = [];
+    const loserFromLabels: string[] = [];
     for (const s of [n.slot1, n.slot2]) {
       if (s.kind === "loser") {
-        const src = number.get(s.matchId);
-        if (src) loserFromNumbers.push(src);
+        const src = label.get(s.matchId);
+        if (src) loserFromLabels.push(src);
       }
     }
     out[n.id] = {
       number: number.get(n.id) ?? 0,
-      winnerToNumber: numAt(winnerConsumer.get(n.id)),
-      loserToNumber: numAt(loserConsumer.get(n.id)),
-      loserFromNumbers,
+      numberLabel: label.get(n.id) ?? "",
+      winnerToLabel: labelAt(winnerConsumer.get(n.id)),
+      loserToLabel: labelAt(loserConsumer.get(n.id)),
+      loserFromLabels,
     };
   }
   return out;
@@ -315,9 +325,10 @@ export const buildLiveMatches = (
       p2Score: st?.p2Score ?? null,
       result: st?.result ?? null,
       number: route?.number ?? 0,
-      winnerToNumber: route?.winnerToNumber ?? null,
-      loserToNumber: route?.loserToNumber ?? null,
-      loserFromNumbers: route?.loserFromNumbers ?? [],
+      numberLabel: route?.numberLabel ?? "",
+      winnerToLabel: route?.winnerToLabel ?? null,
+      loserToLabel: route?.loserToLabel ?? null,
+      loserFromLabels: route?.loserFromLabels ?? [],
       allowedSeconds: hasCustomTimer
         ? (st.timerSeconds as number)
         : allowedSecondsForRace(raceForEst, gameType),

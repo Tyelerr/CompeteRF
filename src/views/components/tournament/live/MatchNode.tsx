@@ -211,13 +211,13 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   topRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   num: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary, flex: 1 },
-  liveBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.xs),
-    paddingVertical: 1,
+  liveBadge: {},
+  liveBadgeText: {
+    color: COLORS.error,
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
-  liveBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
   players: { gap: webSc(SPACING.xs) },
   playerRow: {
     flexDirection: "row",

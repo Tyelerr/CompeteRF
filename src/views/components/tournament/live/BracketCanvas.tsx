@@ -33,7 +33,7 @@ import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 const GAP_X = 76;
 const GAP_Y = 34;
 const LABEL_H = 30;
-const DIVIDER_GAP = 90;
+const DIVIDER_GAP = 150;
 const LINE_W = 3; // connector thickness (plain View; stays visible to MIN_SCALE)
 const MIN_SCALE = 0.22; // how far you can zoom out (lower = see more of the bracket)
 const MAX_SCALE = 2.5;
@@ -110,13 +110,38 @@ const layout = (matches: LiveMatch[]) => {
   const positioned: Pos[] = [];
   const labels: Label[] = [];
 
+  // What place each winners round plays for. Single elimination: the final is
+  // 1st/2nd and each earlier round eliminates a block below it (3-4th, 5-8th …).
+  // Double elimination: winners-side losses don't eliminate, so only the winners
+  // final (Hotseat) carries a fixed placement — its winner is guaranteed a finals
+  // berth (1st/2nd).
+  const winPlace = new Map<number, string>();
+  if (winMaxR > 0) {
+    if (hasLosers) {
+      winPlace.set(winMaxR, "1st / 2nd");
+    } else {
+      let place = 3;
+      for (let r = winMaxR; r >= 1; r--) {
+        const count = (winRounds.get(r) || []).length;
+        if (count <= 0) continue;
+        if (r === winMaxR) {
+          winPlace.set(r, "1st / 2nd");
+          continue;
+        }
+        const hi = place + count - 1;
+        winPlace.set(r, placeLabel(place, hi));
+        place = hi + 1;
+      }
+    }
+  }
+
   // Winners — tree centering.
   let prevY = new Map<number, number>();
   for (let r = 1; r <= winMaxR; r++) {
     const arr = winRounds.get(r) || [];
     const curY = new Map<number, number>();
     const x = (r - 1) * colStride;
-    labels.push({ x, y: 4, text: winnersRoundName(r, winMaxR, hasLosers) });
+    labels.push({ x, y: 4, text: winnersRoundName(r, winMaxR, hasLosers), sub: winPlace.get(r) });
     arr.forEach((m, j) => {
       let y: number;
       if (r === 1) y = LABEL_H + j * rowStride;
@@ -273,13 +298,13 @@ const layout = (matches: LiveMatch[]) => {
 const routingText = (m: LiveMatch): string => {
   if (m.empty) return "";
   const parts: string[] = [];
-  if (!m.bye && m.side === "losers" && m.loserFromNumbers.length === 1)
-    parts.push(`L of ${m.loserFromNumbers[0]}`);
+  if (!m.bye && m.side === "losers" && m.loserFromLabels.length === 1)
+    parts.push(`L of ${m.loserFromLabels[0]}`);
   if (!m.bye && m.side === "winners") {
-    if (m.loserToNumber) parts.push(`L to ${m.loserToNumber}`);
-  } else if (m.winnerToNumber) {
+    if (m.loserToLabel) parts.push(`L to ${m.loserToLabel}`);
+  } else if (m.winnerToLabel) {
     // Losers/grand matches — and byes on any side — show where the winner advances.
-    parts.push(`W to ${m.winnerToNumber}`);
+    parts.push(`W to ${m.winnerToLabel}`);
   }
   return parts.join("  ·  ");
 };
@@ -643,10 +668,12 @@ export const BracketCanvas = ({
                             style={{ position: "absolute", left: p.x, top: p.y, width: NODE_WIDTH }}
                           >
                             {p.match.number > 0 && (
-                              <View style={styles.matchNumBadge} pointerEvents="none">
-                                <Text allowFontScaling={false} style={styles.matchNumText}>
-                                  {p.match.number}
-                                </Text>
+                              <View style={styles.matchNumWrap} pointerEvents="none">
+                                <View style={styles.matchNumBadge}>
+                                  <Text allowFontScaling={false} style={styles.matchNumText}>
+                                    {p.match.numberLabel}
+                                  </Text>
+                                </View>
                               </View>
                             )}
                             <MatchNode
@@ -790,15 +817,22 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  // Global match number, sat just left of the node and vertically centered.
-  matchNumBadge: {
+  // Per-side match number (W32 / L1), sat just left of the node and vertically
+  // centered on it via a full-height wrapper.
+  matchNumWrap: {
     position: "absolute",
-    left: -webSc(34),
-    top: NODE_HEIGHT / 2 - webSc(11),
-    minWidth: webSc(26),
-    paddingHorizontal: webSc(4),
-    paddingVertical: webSc(2),
-    borderRadius: webSc(RADIUS.sm),
+    left: -webSc(42),
+    top: 0,
+    height: NODE_HEIGHT,
+    width: webSc(38),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  matchNumBadge: {
+    minWidth: webSc(28),
+    paddingHorizontal: webSc(5),
+    paddingVertical: webSc(3),
+    borderRadius: webSc(RADIUS.full),
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
@@ -808,6 +842,7 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.xs),
     fontWeight: "900",
     color: COLORS.textSecondary,
+    textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
   // Routing line ("L to 25" / "W to 28") under the node.
