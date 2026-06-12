@@ -1,4 +1,5 @@
 ﻿import { Stack } from "expo-router";
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Platform, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -6,8 +7,24 @@ import * as SplashScreen from "expo-splash-screen";
 import { analyticsService } from "../src/models/services/analytics.service";
 import { AuthProvider } from "../src/providers/AuthProvider";
 import { QueryProvider } from "../src/providers/QueryProvider";
+import { COLORS } from "../src/theme/colors";
 
 SplashScreen.preventAutoHideAsync();
+
+// Dark navigation theme so the background BEHIND screen transitions is dark, not
+// the React Navigation default white (which flashes at the top during the card
+// animation before the screen paints).
+const NAV_THEME = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: COLORS.background,
+    card: COLORS.background,
+    border: COLORS.border,
+    text: COLORS.text,
+    primary: COLORS.primary,
+  },
+};
 
 function AnimatedSplash({ onComplete }: { onComplete: () => void }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -63,15 +80,23 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={styles.root}>
       <QueryProvider>
         <AuthProvider>
-          <Stack screenOptions={{ headerShown: false }} initialRouteName="(tabs)">
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth" />
-            <Stack.Screen name="legal" />
-            <Stack.Screen name="account-deletion" />
-          </Stack>
+          <ThemeProvider value={NAV_THEME}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: COLORS.background },
+              }}
+              initialRouteName="(tabs)"
+            >
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="auth" />
+              <Stack.Screen name="legal" />
+              <Stack.Screen name="account-deletion" />
+            </Stack>
+          </ThemeProvider>
         </AuthProvider>
       </QueryProvider>
       {appReady && !splashDone && (
@@ -82,6 +107,7 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: COLORS.background },
   splash: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000000",
