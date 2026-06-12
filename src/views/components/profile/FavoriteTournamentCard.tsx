@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   gameTypeBadge: { flexShrink: 1, maxWidth: "75%", backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: wxSc(SPACING.sm + 1), borderRadius: RADIUS.sm },
   gameTypeText: { color: COLORS.white, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", textTransform: "uppercase" },
   favoriteButton: { padding: wxSc(SPACING.xs), alignSelf: "flex-start" },
-  heartIcon: { fontSize: isWeb ? 36 : wxMs(20), color: COLORS.error },
+  heartIcon: { fontSize: isWeb ? 36 : wxMs(20), color: COLORS.primary },
   tournamentName: { fontSize: wxMs(FONT_SIZES.md + 1), fontWeight: "600", color: COLORS.text, marginBottom: wxSc(SPACING.sm), lineHeight: wxMs((FONT_SIZES.md + 1) * 1.2) },
   venueInfo: { fontSize: wxMs(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.sm) },
   dateTimeInfo: { fontSize: wxMs(FONT_SIZES.sm + 1), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.sm) },

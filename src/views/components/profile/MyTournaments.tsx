@@ -139,7 +139,7 @@ const RowCard = ({
       )}
       <TouchableOpacity hitSlop={8} onPress={() => onToggleFav(row.tournamentId)}>
         <Text allowFontScaling={false} style={styles.heart}>
-          {fav ? "❤️" : "🤍"}
+          {fav ? "💙" : "🤍"}
         </Text>
       </TouchableOpacity>
     </View>
