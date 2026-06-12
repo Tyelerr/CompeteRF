@@ -821,14 +821,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  // Per-side match number (W32 / L1), in a small square box sat just left of the
-  // node and vertically centered on it via a full-height wrapper.
+  // Per-side match number (W32 / L1), in a small square box centered in the gap to
+  // the left of the node — i.e. sat on the incoming connector line, so it reads
+  // ———[ W34 ]——— into the card. Spans the full column gap and node height so it
+  // lands on the connector's vertical center.
   matchNumWrap: {
     position: "absolute",
-    left: -webSc(52),
+    left: -GAP_X,
     top: 0,
     height: NODE_HEIGHT,
-    width: webSc(48),
+    width: GAP_X,
     alignItems: "center",
     justifyContent: "center",
   },
