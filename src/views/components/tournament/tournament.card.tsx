@@ -126,19 +126,6 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
         </View>
       )}
 
-      <View style={styles.bottomRow}>
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>{tournament.views_count}</Text>
-            <Text allowFontScaling={false} style={styles.statLabel}>Views</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text allowFontScaling={false} style={[styles.statValue, isArchived && styles.textArchived]}>{tournament.favorites_count}</Text>
-            <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
-          </View>
-        </View>
-      </View>
-
       {showActions && (
         <View style={styles.cardActions}>
           <TouchableOpacity
@@ -178,15 +165,10 @@ const styles = StyleSheet.create({
   statusInfoTitle: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, marginBottom: 4 },
   statusInfoText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
   statusInfoReason: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
-  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: wxSc(SPACING.sm), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  statsRow: { flexDirection: "row", gap: wxSc(SPACING.lg) },
-  cardActions: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm) },
+  cardActions: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   openManagerBtn: { flex: 1, backgroundColor: COLORS.primary, paddingVertical: wxSc(SPACING.sm), borderRadius: wxSc(8), alignItems: "center", justifyContent: "center" },
   openManagerText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.white },
   btnDisabled: { opacity: 0.6 },
-  stat: { alignItems: "center" },
-  statValue: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  statLabel: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
 });
 
 
