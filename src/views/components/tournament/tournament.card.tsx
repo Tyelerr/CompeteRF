@@ -5,6 +5,7 @@ import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
@@ -26,6 +27,7 @@ interface TournamentCardProps {
   onArchive?: () => void;
   onCancel?: () => void;
   onRestore?: () => void;
+  onReassign?: () => void;
   isProcessing?: boolean;
   showActions?: boolean;
 }
@@ -56,12 +58,23 @@ const getStatusColor = (status: string): string => {
   }
 };
 
-export const TournamentCard = ({ tournament, onPress, onEdit, onDelete, onArchive, onCancel, onRestore, isProcessing = false, showActions = true }: TournamentCardProps) => {
+export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCancel, onRestore, onReassign, isProcessing = false, showActions = true }: TournamentCardProps) => {
   const statusColor = getStatusColor(tournament.status);
   const isArchived = tournament.status === "archived";
   const isCancelled = tournament.status === "cancelled";
   const isActive = tournament.status === "active";
   const isCompleted = tournament.status === "completed";
+
+  const actions: ActionMenuItem[] = [];
+  if (showActions) {
+    if (tournament.can_edit && onEdit) actions.push({ label: "Edit", onPress: onEdit });
+    if (onReassign) actions.push({ label: "Reassign Director", onPress: onReassign });
+    if (tournament.can_delete) {
+      if (isActive && onCancel) actions.push({ label: "Delete", destructive: true, onPress: onCancel });
+      if ((isActive || isCompleted) && onArchive) actions.push({ label: "Archive", onPress: onArchive });
+      if ((isCancelled || isArchived) && onRestore) actions.push({ label: "Restore", onPress: onRestore });
+    }
+  }
 
   return (
     <TouchableOpacity style={[styles.card, isArchived && styles.cardArchived]} onPress={onPress} activeOpacity={0.8}>
@@ -124,34 +137,7 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onDelete, onArchiv
             <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
           </View>
         </View>
-        {showActions && (
-          <View style={styles.bottomActionIcons}>
-            {tournament.can_edit && onEdit && (
-              <TouchableOpacity style={[styles.bottomActionIcon, styles.editButton]} onPress={(e) => { e.stopPropagation(); onEdit(); }} disabled={isProcessing}>
-                <Text allowFontScaling={false} style={[styles.actionButtonText, styles.editButtonText]}>Edit</Text>
-              </TouchableOpacity>
-            )}
-            {tournament.can_delete && (
-              <>
-                {isActive && onCancel && (
-                  <TouchableOpacity style={[styles.bottomActionIcon, styles.deleteButton]} onPress={(e) => { e.stopPropagation(); onCancel(); }} disabled={isProcessing}>
-                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
-                  </TouchableOpacity>
-                )}
-                {(isActive || isCompleted) && onArchive && (
-                  <TouchableOpacity style={[styles.bottomActionIcon, styles.archiveButton]} onPress={(e) => { e.stopPropagation(); onArchive(); }} disabled={isProcessing}>
-                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.archiveButtonText]}>Archive</Text>
-                  </TouchableOpacity>
-                )}
-                {(isCancelled || isArchived) && onRestore && (
-                  <TouchableOpacity style={[styles.bottomActionIcon, styles.restoreButton]} onPress={(e) => { e.stopPropagation(); onRestore(); }} disabled={isProcessing}>
-                    <Text allowFontScaling={false} style={[styles.actionButtonText, styles.restoreButtonText]}>Restore</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-          </View>
-        )}
+        {actions.length > 0 && <ActionMenu items={actions} disabled={isProcessing} />}
       </View>
     </TouchableOpacity>
   );
@@ -179,17 +165,6 @@ const styles = StyleSheet.create({
   statusInfoReason: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
   bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: wxSc(SPACING.sm), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   statsRow: { flexDirection: "row", gap: wxSc(SPACING.lg) },
-  bottomActionIcons: { flexDirection: "row", gap: wxSc(SPACING.md), alignItems: "center" },
-  bottomActionIcon: { padding: wxSc(SPACING.sm), borderRadius: wxSc(8), borderWidth: 1, minWidth: wxSc(60), minHeight: wxSc(36), alignItems: "center", justifyContent: "center" },
-  actionButtonText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
-  editButton: { backgroundColor: "#22c55e", borderColor: "#16a34a" },
-  editButtonText: { color: "#ffffff" },
-  deleteButton: { backgroundColor: "#ef4444", borderColor: "#dc2626" },
-  deleteButtonText: { color: "#ffffff" },
-  archiveButton: { backgroundColor: "#3b82f6", borderColor: "#2563eb" },
-  archiveButtonText: { color: "#ffffff" },
-  restoreButton: { backgroundColor: "#10b981", borderColor: "#059669" },
-  restoreButtonText: { color: "#ffffff" },
   stat: { alignItems: "center" },
   statValue: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   statLabel: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },

@@ -6,7 +6,6 @@ import {
   FlatList,
   Modal,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -32,15 +31,12 @@ import { Pagination } from "../../../../src/views/components/common/pagination";
 import { ReassignDirectorModal } from "../../../../src/views/components/common/reassign-director-modal";
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+import { AdminHeader, AdminSearchBar, AdminFilterRow } from "../../../../src/views/components/admin/AdminControls";
+import { Dropdown } from "../../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
-
-const SORT_OPTIONS: { key: SortOption; label: string }[] = [
-  { key: "date", label: "Date" },
-  { key: "name", label: "A-Z" },
-];
 
 const DeleteModal = ({
   visible,
@@ -127,13 +123,10 @@ export default function BarTournamentManagerScreen() {
     pagination.resetPage();
   };
 
-  const handleSortOption = (sort: SortOption) => {
-    if (vm.sortOption === sort) {
-      vm.setSortDirection(vm.sortDirection === "desc" ? "asc" : "desc");
-    } else {
-      vm.setSortOption(sort);
-      vm.setSortDirection(sort === "date" ? "desc" : "asc");
-    }
+  const handleSortSelect = (v: string) => {
+    const [opt, dir] = v.split("-") as [SortOption, "asc" | "desc"];
+    vm.setSortOption(opt);
+    vm.setSortDirection(dir);
     pagination.resetPage();
   };
 
@@ -317,83 +310,43 @@ export default function BarTournamentManagerScreen() {
         onConfirm={handleConfirmReassign}
       />
 
-      {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text allowFontScaling={false} style={styles.headerTitle}>Tournament Manager</Text>
-          <Text allowFontScaling={false} style={styles.headerSubtitle}>Managing tournaments at your venues</Text>
-        </View>
-        <View style={styles.placeholder} />
-      </View>
+      <AdminHeader
+        title="Tournament Manager"
+        subtitle="Managing tournaments at your venues"
+        onBack={() => router.back()}
+      />
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputWrapper}>
-          <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search name, game type, venue, or director..."
-            placeholderTextColor={COLORS.textSecondary}
-            value={vm.searchQuery}
-            onChangeText={handleSearch}
-          />
-        </View>
-      </View>
+      <AdminSearchBar
+        value={vm.searchQuery}
+        onChangeText={handleSearch}
+        placeholder="Search name, game type, venue, or director..."
+      />
 
-      {/* Status Tabs */}
-      <View style={styles.tabsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContent}>
-          {[
-            { key: "active" as const, label: "Active", count: vm.statusCounts.active },
-            { key: "completed" as const, label: "Completed", count: vm.statusCounts.completed },
-            { key: "cancelled" as const, label: "Cancelled", count: vm.statusCounts.cancelled },
-            { key: "archived" as const, label: "Archived", count: vm.statusCounts.archived },
-            { key: "all" as const, label: "All", count: vm.statusCounts.all },
-          ].map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, vm.statusFilter === tab.key && styles.tabActive]}
-              onPress={() => handleStatusFilter(tab.key)}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.tabText, vm.statusFilter === tab.key && styles.tabTextActive]}
-              >
-                {tab.label}{tab.count > 0 ? ` (${tab.count})` : ""}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Sort Options */}
-      <View style={styles.sortContainer}>
-        <Text allowFontScaling={false} style={styles.sortLabel}>Sort:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortOptions}>
-          {SORT_OPTIONS.map((option) => (
-            <TouchableOpacity
-              key={option.key}
-              style={[styles.sortPill, vm.sortOption === option.key && styles.sortPillActive]}
-              onPress={() => handleSortOption(option.key)}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.sortPillText, vm.sortOption === option.key && styles.sortPillTextActive]}
-              >
-                {vm.sortOption === option.key && option.key === "name"
-                  ? (vm.sortDirection === "asc" ? "A-Z" : "Z-A")
-                  : option.label}
-                {vm.sortOption === option.key && option.key === "date"
-                  ? (vm.sortDirection === "desc" ? " \u25BC" : " \u25B2")
-                  : ""}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      <AdminFilterRow>
+        <Dropdown
+          placeholder="Status"
+          value={vm.statusFilter}
+          onSelect={(v) => handleStatusFilter(v as TournamentStatusFilter)}
+          options={[
+            { label: `Active (${vm.statusCounts.active})`, value: "active" },
+            { label: `Completed (${vm.statusCounts.completed})`, value: "completed" },
+            { label: `Cancelled (${vm.statusCounts.cancelled})`, value: "cancelled" },
+            { label: `Archived (${vm.statusCounts.archived})`, value: "archived" },
+            { label: `All (${vm.statusCounts.all})`, value: "all" },
+          ]}
+        />
+        <Dropdown
+          placeholder="Sort"
+          value={`${vm.sortOption}-${vm.sortDirection}`}
+          onSelect={handleSortSelect}
+          options={[
+            { label: "Newest", value: "date-desc" },
+            { label: "Oldest", value: "date-asc" },
+            { label: "A\u2013Z", value: "name-asc" },
+            { label: "Z\u2013A", value: "name-desc" },
+          ]}
+        />
+      </AdminFilterRow>
 
       {/* Pagination */}
       <Pagination
@@ -420,26 +373,17 @@ export default function BarTournamentManagerScreen() {
           )
         }
         renderItem={({ item }) => (
-          <View>
-            <TournamentCard
-              tournament={item}
-              onPress={() => handleTournamentPress(item)}
-              onEdit={() => handleEditTournament(item.id)}
-              onArchive={() => handleArchiveTournament(item)}
-              onCancel={() => handleDeleteTournament(item)}
-              onRestore={() => handleRestoreTournament(item)}
-              isProcessing={vm.processing === item.id}
-              showActions={true}
-            />
-            <TouchableOpacity
-              style={styles.reassignBtn}
-              onPress={() => { setTournamentToReassign(item); setReassignModalVisible(true); }}
-            >
-              <Text allowFontScaling={false} style={styles.reassignBtnText}>
-                {"\uD83D\uDD04"} Reassign Director
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TournamentCard
+            tournament={item}
+            onPress={() => handleTournamentPress(item)}
+            onEdit={() => handleEditTournament(item.id)}
+            onArchive={() => handleArchiveTournament(item)}
+            onCancel={() => handleDeleteTournament(item)}
+            onRestore={() => handleRestoreTournament(item)}
+            onReassign={() => { setTournamentToReassign(item); setReassignModalVisible(true); }}
+            isProcessing={vm.processing === item.id}
+            showActions={true}
+          />
         )}
         ListEmptyComponent={
           <EmptyState
