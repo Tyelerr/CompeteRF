@@ -2,7 +2,8 @@
 // Queue Manager — the TD's live operations screen. Shows ready-to-play matches
 // with wait time + bracket location, lets the TD reorder the queue and assign a
 // match to a specific table, and runs Auto Assign (preview → apply) to fill free
-// tables using the selected mode. Assigning a table starts the match.
+// tables using the selected mode. Assigning a table PARKS the match on it; the TD
+// then starts it from the On Tables list (or uses Assign & Start to do both).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -46,7 +47,9 @@ interface QueueViewProps {
   occupancy: Record<number, string>; // tableId -> occupying match label
   mode: AutoAssignMode;
   queueOrder: string[];
-  onAssign: (matchId: string, tableId: number) => void;
+  onAssign: (matchId: string, tableId: number) => void; // park on a table (not started)
+  onAssignStart: (matchId: string, tableId: number) => void; // park + start
+  onStart: (matchId: string) => void; // start a match already parked on a table
   onUnassign: (matchId: string) => void;
   onSetMode: (mode: AutoAssignMode) => void;
   onSetQueueOrder: (ids: string[]) => void;
@@ -71,6 +74,8 @@ export const QueueView = ({
   mode,
   queueOrder,
   onAssign,
+  onAssignStart,
+  onStart,
   onUnassign,
   onSetMode,
   onSetQueueOrder,
@@ -104,9 +109,14 @@ export const QueueView = ({
     () => freeTables(tables, occupancy),
     [tables, occupancy],
   );
+  // Every match sitting on a table — parked (assigned, not started) or in progress.
+  // Parked matches get a Start button; in-progress ones show their live status.
   const onTables = useMemo(
     () =>
-      matches.filter((m) => m.status === "in_progress" && m.tableId != null),
+      matches.filter(
+        (m) =>
+          m.tableId != null && m.status !== "completed" && !m.bye && !m.empty,
+      ),
     [matches],
   );
   const assignableCount = tables.filter((t) => t.status !== "unavailable").length;
@@ -144,8 +154,12 @@ export const QueueView = ({
     setAutoOpen(true);
   };
   // Assign ALL planned matches at once; they drop into Recently Applied below.
-  const applyAll = (plan: AssignmentPlan[]) => {
-    for (const p of plan) onAssign(p.matchId, p.tableId);
+  // start = also begin the matches (Assign & Start), otherwise just park them.
+  const applyAll = (plan: AssignmentPlan[], start: boolean) => {
+    for (const p of plan) {
+      if (start) onAssignStart(p.matchId, p.tableId);
+      else onAssign(p.matchId, p.tableId);
+    }
     setAppliedIds((prev) => [...prev, ...plan.map((p) => p.matchId)]);
   };
   const sendBackToQueue = (matchId: string) => {
@@ -201,31 +215,60 @@ export const QueueView = ({
               onPress={() => setShowOnTables((s) => !s)}
             >
               <Text allowFontScaling={false} style={styles.sectionTitle}>
-                {showOnTables ? "▾" : "▸"} On Tables Now ({onTables.length})
+                {showOnTables ? "▾" : "▸"} On Tables ({onTables.length})
               </Text>
             </TouchableOpacity>
             {showOnTables &&
-              onTables.map((m) => (
-                <View key={m.id} style={styles.onTableRow}>
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.onTableText}
-                    numberOfLines={1}
-                  >
-                    {players(m)}
-                  </Text>
-                  {m.isStream && (
-                    <View style={styles.liveBadge}>
-                      <Text allowFontScaling={false} style={styles.liveBadgeText}>
-                        {"● LIVE"}
+              onTables.map((m) => {
+                const playing = m.status === "in_progress";
+                return (
+                  <View key={m.id} style={styles.onTableRow}>
+                    <View style={styles.onTableInfo}>
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.onTableText}
+                        numberOfLines={1}
+                      >
+                        {players(m)}
+                      </Text>
+                      <Text allowFontScaling={false} style={styles.onTableTable}>
+                        {m.tableLabel ?? "Table"}
+                        {!playing ? " · Not started" : ""}
                       </Text>
                     </View>
-                  )}
-                  <Text allowFontScaling={false} style={styles.onTableTable}>
-                    {m.tableLabel ?? "Table"}
-                  </Text>
-                </View>
-              ))}
+                    {playing ? (
+                      m.isStream ? (
+                        <Text allowFontScaling={false} style={styles.liveBadgeText}>
+                          {"● LIVE"}
+                        </Text>
+                      ) : (
+                        <Text allowFontScaling={false} style={styles.playingTag}>
+                          Playing
+                        </Text>
+                      )
+                    ) : (
+                      <View style={styles.onTableActions}>
+                        <TouchableOpacity
+                          style={styles.startBtn}
+                          onPress={() => onStart(m.id)}
+                        >
+                          <Text allowFontScaling={false} style={styles.startBtnText}>
+                            {"▶ Start"}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.backBtn}
+                          onPress={() => onUnassign(m.id)}
+                        >
+                          <Text allowFontScaling={false} style={styles.backBtnText}>
+                            {"↩"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
           </View>
         )}
 
@@ -297,13 +340,22 @@ export const QueueView = ({
 
               <View style={styles.assignCol}>
                 {available.length > 0 ? (
-                  <ActionMenu
-                    label="Assign"
-                    items={available.map<ActionMenuItem>((t) => ({
-                      label: tableLabelOf(t),
-                      onPress: () => onAssign(e.match.id, t.id),
-                    }))}
-                  />
+                  <>
+                    <ActionMenu
+                      label="Assign"
+                      items={available.map<ActionMenuItem>((t) => ({
+                        label: tableLabelOf(t),
+                        onPress: () => onAssign(e.match.id, t.id),
+                      }))}
+                    />
+                    <ActionMenu
+                      label="Assign & Start"
+                      items={available.map<ActionMenuItem>((t) => ({
+                        label: tableLabelOf(t),
+                        onPress: () => onAssignStart(e.match.id, t.id),
+                      }))}
+                    />
+                  </>
                 ) : (
                   <Text allowFontScaling={false} style={styles.noTable}>
                     No table free
@@ -357,10 +409,18 @@ export const QueueView = ({
                 </ScrollView>
                 <TouchableOpacity
                   style={styles.previewApply}
-                  onPress={() => applyAll(autoPlan)}
+                  onPress={() => applyAll(autoPlan, false)}
                 >
                   <Text allowFontScaling={false} style={styles.previewApplyText}>
                     Assign All ({autoPlan.length})
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.previewApplyStart}
+                  onPress={() => applyAll(autoPlan, true)}
+                >
+                  <Text allowFontScaling={false} style={styles.previewApplyStartText}>
+                    {"▶ Assign & Start All"} ({autoPlan.length})
                   </Text>
                 </TouchableOpacity>
               </>
@@ -404,6 +464,16 @@ export const QueueView = ({
                           </Text>
                         </View>
                         <View style={styles.appliedActions}>
+                          {m?.status !== "in_progress" && (
+                            <TouchableOpacity
+                              style={styles.startBtn}
+                              onPress={() => onStart(id)}
+                            >
+                              <Text allowFontScaling={false} style={styles.startBtnText}>
+                                {"▶ Start"}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
                           {available.length > 0 && (
                             <ActionMenu
                               label="Move"
@@ -499,14 +569,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: webSc(SPACING.xs),
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.sm),
     borderTopWidth: 1,
     borderTopColor: COLORS.border + "60",
   },
-  onTableText: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
-  liveBadge: {
-    marginRight: webSc(SPACING.sm),
+  onTableInfo: { flex: 1 },
+  onTableActions: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  onTableText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
+  playingTag: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
+  startBtn: {
+    paddingVertical: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.success,
   },
+  startBtnText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "800" },
   liveBadgeText: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.error,
@@ -517,7 +595,7 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.primary,
     fontWeight: "700",
-    marginLeft: webSc(SPACING.sm),
+    marginTop: webSc(2),
   },
   upNextLabel: {
     fontSize: webMs(FONT_SIZES.md),
@@ -588,7 +666,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   wait: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
-  assignCol: { minWidth: webSc(96), alignItems: "flex-end" },
+  assignCol: { minWidth: webSc(96), alignItems: "flex-end", gap: webSc(SPACING.xs) },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
@@ -677,6 +755,14 @@ const styles = StyleSheet.create({
     marginTop: webSc(SPACING.sm),
   },
   previewApplyText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "700" },
+  previewApplyStart: {
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.success,
+    alignItems: "center",
+    marginTop: webSc(SPACING.xs),
+  },
+  previewApplyStartText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "800" },
   // Recently applied
   appliedEmpty: {
     fontSize: webMs(FONT_SIZES.sm),

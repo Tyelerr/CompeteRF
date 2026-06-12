@@ -2045,14 +2045,32 @@ export default function ManageTournamentScreen() {
   }, [tableMatch]);
 
   // ---- Queue Manager handlers --------------------------------------------
-  // Assigning a table starts the match (sets table + in_progress + startedAt).
+  // Assigning a table PARKS the match on it (table set, still "scheduled") — the
+  // TD then starts it separately. This keeps a table reserved without the clock
+  // running until play actually begins.
   const handleQueueAssign = (matchId: string, tableId: number) =>
+    hub
+      .setMatchState({
+        matchId,
+        patch: { tableId, status: "scheduled", startedAt: null },
+      })
+      .catch(() => Alert.alert("Error", "Failed to assign the table."));
+  // Assign + start in one step (table set + in_progress + startedAt).
+  const handleQueueAssignStart = (matchId: string, tableId: number) =>
     hub
       .setMatchState({
         matchId,
         patch: { tableId, status: "in_progress", startedAt: new Date().toISOString() },
       })
-      .catch(() => Alert.alert("Error", "Failed to assign the table."));
+      .catch(() => Alert.alert("Error", "Failed to assign and start the match."));
+  // Start a match already parked on a table (keeps its table).
+  const handleQueueStart = (matchId: string) =>
+    hub
+      .setMatchState({
+        matchId,
+        patch: { status: "in_progress", startedAt: new Date().toISOString() },
+      })
+      .catch(() => Alert.alert("Error", "Failed to start the match."));
   // Send a match back to the queue: clear its table and revert to scheduled.
   const handleQueueUnassign = (matchId: string) =>
     hub
@@ -3958,6 +3976,8 @@ export default function ManageTournamentScreen() {
             mode={hub.autoAssignMode as AutoAssignMode}
             queueOrder={hub.queueOrder}
             onAssign={handleQueueAssign}
+            onAssignStart={handleQueueAssignStart}
+            onStart={handleQueueStart}
             onUnassign={handleQueueUnassign}
             onSetMode={handleSetAutoMode}
             onSetQueueOrder={handleSetQueueOrder}
