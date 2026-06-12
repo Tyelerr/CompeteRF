@@ -20,6 +20,14 @@ export interface RaceGroup {
 
 export type RaceMode = "fixed" | "groups" | "differential";
 
+// Queue Manager auto-assign strategy.
+export type AutoAssignMode =
+  | "balanced"
+  | "winnersFirst"
+  | "losersFirst"
+  | "longestWait"
+  | "manual";
+
 // ── Generated bracket (V1: Round 1 only, stored in live_settings.bracket) ─────
 export interface BracketSlot {
   registrationId?: number | null; // null for a bye slot
@@ -181,6 +189,11 @@ export interface TournamentLiveSettings {
   // Built-in entry-fee deductions (green/td/admin/custom). Per-player slices of
   // the entry fee that reduce the entry payout pool. Defined in Settings.
   fees?: TournamentFee[];
+
+  // Queue Manager (Live phase): the TD's chosen auto-assign strategy and their
+  // manual queue order (match ids). queueOrder takes precedence in manual mode.
+  autoAssignMode?: AutoAssignMode;
+  queueOrder?: string[];
   // How fees relate to the entry fee. false (default) = included in the entry
   // (fees reduce the pool). true = collected on top of the entry (fees are
   // separate; the full entry goes to the pool).
