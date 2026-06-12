@@ -61,6 +61,7 @@ interface PrizePoolViewProps {
   addedMoney: number;
   sidePots: PrizePoolSidePot[];
   fees: PrizePoolFee[]; // built-in entry-fee deductions (defined in Settings)
+  feesAddedOnTop: boolean; // true = fees collected on top of entry, not deducted
 }
 
 const money = (n: number): string => {
@@ -363,16 +364,19 @@ export const PrizePoolView = ({
   addedMoney,
   sidePots,
   fees,
+  feesAddedOnTop,
 }: PrizePoolViewProps) => {
   const grossEntry = Math.max(0, players) * Math.max(0, entryFee);
   const feePerPlayer = fees.reduce((s, f) => s + Math.max(0, f.perPlayer), 0);
   const totalFees = Math.max(0, players) * feePerPlayer;
   const includedAdded = config.includeAddedMoney ? Math.max(0, addedMoney) : 0;
-  // Net entry payout pool: entry minus the built-in fees, plus added money.
+  // Net entry payout pool. Included mode: entry minus fees. On-top mode: full
+  // entry to the pool (fees collected separately). Plus added money.
   const entryPool = entryPoolTotal(
     players,
     entryFee,
     feePerPlayer,
+    feesAddedOnTop,
     config.includeAddedMoney,
     addedMoney,
   );
@@ -387,7 +391,10 @@ export const PrizePoolView = ({
   });
 
   const sidePotsTotal = sidePotRows.reduce((s, r) => s + r.pool, 0);
-  const totalCollected = grossEntry + sidePotsTotal + includedAdded;
+  // On-top fees are extra money collected from players; included fees are part
+  // of the entry already counted in grossEntry.
+  const totalCollected =
+    grossEntry + sidePotsTotal + includedAdded + (feesAddedOnTop ? totalFees : 0);
   const totalPrizePool = entryPool + sidePotsTotal; // net of fees
   const totalPayout =
     entryBreakdown.payoutTotal +
@@ -426,14 +433,17 @@ export const PrizePoolView = ({
         {fees.map((f, i) => (
           <Row
             key={i}
-            label={`− ${f.name || "Fee"}`}
+            label={`${feesAddedOnTop ? "+" : "−"} ${f.name || "Fee"}`}
             value={`${players} × ${money(f.perPlayer)} = ${money(
               Math.max(0, players) * Math.max(0, f.perPlayer),
             )}`}
           />
         ))}
         {fees.length > 0 && (
-          <Row label="Net entry" value={money(netEntryBeforeAdded)} />
+          <Row
+            label={feesAddedOnTop ? "Entry to pool" : "Net entry"}
+            value={money(netEntryBeforeAdded)}
+          />
         )}
         {addedMoney > 0 && (
           <ToggleSwitch
@@ -455,7 +465,7 @@ export const PrizePoolView = ({
         poolNote={
           fees.length > 0 || includedAdded > 0
             ? `${money(grossEntry)} entry${
-                totalFees > 0 ? ` − ${money(totalFees)} fees` : ""
+                !feesAddedOnTop && totalFees > 0 ? ` − ${money(totalFees)} fees` : ""
               }${includedAdded > 0 ? ` + ${money(includedAdded)} added` : ""}`
             : undefined
         }

@@ -181,4 +181,8 @@ export interface TournamentLiveSettings {
   // Built-in entry-fee deductions (green/td/admin/custom). Per-player slices of
   // the entry fee that reduce the entry payout pool. Defined in Settings.
   fees?: TournamentFee[];
+  // How fees relate to the entry fee. false (default) = included in the entry
+  // (fees reduce the pool). true = collected on top of the entry (fees are
+  // separate; the full entry goes to the pool).
+  feesAddedOnTop?: boolean;
 }

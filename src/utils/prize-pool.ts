@@ -235,21 +235,32 @@ export const feesPerPlayer = (fees: { amount: number }[]): number =>
 export const feesTotal = (fees: { amount: number }[], players: number): number =>
   round2(feesPerPlayer(fees) * Math.max(0, players));
 
-// True when the fees don't carve out more than the entry fee per player.
-export const feesValid = (entryFee: number, fees: { amount: number }[]): boolean =>
-  feesPerPlayer(fees) <= Math.max(0, entryFee) + EPS;
+// True when the fees fit the entry. In "added on top" mode fees are collected
+// separately, so any amount is valid; in "included" mode they can't carve out
+// more than the entry fee per player.
+export const feesValid = (
+  entryFee: number,
+  fees: { amount: number }[],
+  feesAddedOnTop: boolean,
+): boolean =>
+  feesAddedOnTop || feesPerPlayer(fees) <= Math.max(0, entryFee) + EPS;
 
 // ── Pool helpers ──────────────────────────────────────────────────────────────
-// Net entry payout pool: the entry fee MINUS the built-in per-player fees, times
-// players, plus added money when included. Payouts are split over this.
+// Net entry payout pool. Two fee models:
+//   included  → fees come OUT of the entry: per-player to pool = entry − fees.
+//   on top    → fees collected separately: per-player to pool = entry (full).
+// Plus added money when included. Payouts are split over this.
 export const entryPoolTotal = (
   players: number,
   entryFee: number,
   feePerPlayer: number,
+  feesAddedOnTop: boolean,
   includeAddedMoney: boolean,
   addedMoney: number,
 ): number => {
-  const perPlayerToPool = Math.max(0, Math.max(0, entryFee) - Math.max(0, feePerPlayer));
+  const perPlayerToPool = feesAddedOnTop
+    ? Math.max(0, entryFee)
+    : Math.max(0, Math.max(0, entryFee) - Math.max(0, feePerPlayer));
   return round2(
     Math.max(0, players) * perPlayerToPool +
       (includeAddedMoney ? Math.max(0, addedMoney) : 0),

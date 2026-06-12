@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -96,6 +97,9 @@ import {
 } from "../../../../src/viewmodels/hooks/use.manage.tournament";
 
 const isWeb = Platform.OS === "web";
+// iOS numeric keypads have no return key — attach this accessory's Done bar so
+// the keyboard can be dismissed.
+const KB_DONE = "kbDoneAccessory";
 
 // Unicode-escaped glyphs (raw emoji in the source corrupt under our toolchain).
 const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1" };
@@ -306,6 +310,7 @@ interface SettingsForm {
   diffMaxEnabled: boolean;
   sidePots: SidePotForm[];
   fees: FeeForm[];
+  feesOnTop: boolean;
 }
 
 const numOrNull = (s: string): number | null => {
@@ -397,6 +402,7 @@ const toForm = (t: Tournament): SettingsForm => {
       raceTo: numStr(g.raceTo),
     })),
     fees: feesToForm(ls.fees ?? []),
+    feesOnTop: !!ls.feesAddedOnTop,
   };
 };
 
@@ -490,6 +496,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
         amount: numOrNull(fee.amount) ?? 0,
         enabled: fee.enabled,
       })),
+    feesAddedOnTop: f.feesOnTop,
   },
   };
 };
@@ -521,6 +528,7 @@ const LabeledInput = ({
   maxLength,
   disabled,
   hint,
+  accessoryId,
 }: {
   label: string;
   value: string;
@@ -532,6 +540,7 @@ const LabeledInput = ({
   maxLength?: number;
   disabled?: boolean;
   hint?: string;
+  accessoryId?: string; // iOS keyboard Done bar
 }) => (
   <View style={styles.field}>
     <Text
@@ -556,6 +565,7 @@ const LabeledInput = ({
       keyboardType={keyboardType ?? "default"}
       multiline={multiline}
       maxLength={maxLength}
+      inputAccessoryViewID={Platform.OS === "ios" ? accessoryId : undefined}
     />
     {hint ? (
       <Text allowFontScaling={false} style={styles.hint}>
@@ -1547,13 +1557,15 @@ export default function ManageTournamentScreen() {
         })),
     [hub.tournament],
   );
+  const prizeFeesOnTop = !!hub.tournament?.live_settings?.feesAddedOnTop;
   const prizeFeePerPlayer = feesPerPlayer(
     prizeFees.map((f) => ({ amount: f.perPlayer })),
   );
-  // Fees can't carve out more than the entry fee per player.
+  // Included fees can't carve out more than the entry fee; on-top fees are fine.
   const prizeFeesOk = feesValid(
     prizeEntryFee,
     prizeFees.map((f) => ({ amount: f.perPlayer })),
+    prizeFeesOnTop,
   );
 
   // Side pots come from the tournament; entrant counts from paid_side_pots.
@@ -1614,6 +1626,7 @@ export default function ManageTournamentScreen() {
     prizePlayers,
     prizeEntryFee,
     prizeFeePerPlayer,
+    prizeFeesOnTop,
     prizeForm?.includeAddedMoney ?? true,
     prizeAddedMoney,
   );
@@ -2422,14 +2435,20 @@ export default function ManageTournamentScreen() {
     const maxFargoDisabled = form.openTournament;
     const openTournamentDisabled = !!form.maxFargo.trim();
 
-    // Live entry-fee breakdown: only CHECKED fees deduct from the entry fee.
+    // Live entry-fee breakdown. Only CHECKED fees count. Included mode subtracts
+    // them from the entry; on-top mode collects them in addition to the entry.
     const feeEntryNum = parseFloat(form.entryFee) || 0;
-    const feeSum = (form.fees ?? []).reduce(
-      (s, f) => s + (f.enabled ? parseFloat(f.amount) || 0 : 0),
+    const enabledFees = (form.fees ?? []).filter((f) => f.enabled);
+    const feeSum = enabledFees.reduce(
+      (s, f) => s + (parseFloat(f.amount) || 0),
       0,
     );
-    const feePerPlayerToPool = feeEntryNum - feeSum;
-    const feeOver = feeSum > feeEntryNum + 0.001;
+    const feesOnTop = form.feesOnTop;
+    const feePerPlayerToPool = feesOnTop ? feeEntryNum : feeEntryNum - feeSum;
+    const feeCollectedPerPlayer = feesOnTop ? feeEntryNum + feeSum : feeEntryNum;
+    const feeOver = !feesOnTop && feeSum > feeEntryNum + 0.001;
+    const fmtMoney = (n: number) =>
+      n % 1 === 0 ? `$${n}` : `$${n.toFixed(2)}`;
 
     return (
       <View>
@@ -2732,11 +2751,51 @@ export default function ManageTournamentScreen() {
             onChangeText={(v) => patchForm({ entryFee: v })}
             placeholder="$0.00"
             keyboardType="decimal-pad"
+            accessoryId={KB_DONE}
           />
 
-          {/* Fees Deducted From Entry — built-in + custom, one uniform list */}
+          {/* Fees — built-in + custom, one uniform list */}
           <View style={styles.feeBlock}>
-            <FieldLabel label="Fees Deducted From Entry (per player)" />
+            <FieldLabel label="Fees (per player)" />
+
+            {/* How fees relate to the entry fee */}
+            <View style={styles.feeModeRow}>
+              <TouchableOpacity
+                style={[
+                  styles.feeModePill,
+                  !form.feesOnTop && styles.feeModePillOn,
+                ]}
+                onPress={() => patchForm({ feesOnTop: false })}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.feeModeText,
+                    !form.feesOnTop && styles.feeModeTextOn,
+                  ]}
+                >
+                  Included in entry
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.feeModePill,
+                  form.feesOnTop && styles.feeModePillOn,
+                ]}
+                onPress={() => patchForm({ feesOnTop: true })}
+              >
+                <Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.feeModeText,
+                    form.feesOnTop && styles.feeModeTextOn,
+                  ]}
+                >
+                  Added on top
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {(form.fees ?? []).map((fee) => {
               const isCustom = fee.category === "custom";
               return (
@@ -2787,6 +2846,9 @@ export default function ManageTournamentScreen() {
                         placeholder="0"
                         placeholderTextColor={COLORS.textMuted}
                         keyboardType="decimal-pad"
+                        inputAccessoryViewID={
+                          Platform.OS === "ios" ? KB_DONE : undefined
+                        }
                       />
                     </View>
                   )}
@@ -2818,15 +2880,47 @@ export default function ManageTournamentScreen() {
               </Text>
             </TouchableOpacity>
 
+            {/* Breakdown: entry ± each enabled fee = per-player to pool */}
             {feeEntryNum > 0 && (
-              <Text
-                allowFontScaling={false}
-                style={[styles.feeRemainder, feeOver && styles.feeRemainderWarn]}
-              >
-                {feeOver
-                  ? "Fees exceed the entry fee"
-                  : `→ $${feePerPlayerToPool % 1 === 0 ? feePerPlayerToPool : feePerPlayerToPool.toFixed(2)}/player to prize pool`}
-              </Text>
+              <View style={styles.feeBreakdown}>
+                <View style={styles.feeBreakRow}>
+                  <Text allowFontScaling={false} style={styles.feeBreakLabel}>
+                    Entry
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.feeBreakValue}>
+                    {fmtMoney(feeEntryNum)}
+                  </Text>
+                </View>
+                {enabledFees.map((f) => (
+                  <View key={f.id} style={styles.feeBreakRow}>
+                    <Text allowFontScaling={false} style={styles.feeBreakLabel}>
+                      {feesOnTop ? "+" : "−"} {f.name || "Fee"}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.feeBreakValue}>
+                      {fmtMoney(parseFloat(f.amount) || 0)}
+                    </Text>
+                  </View>
+                ))}
+                {feeOver ? (
+                  <Text
+                    allowFontScaling={false}
+                    style={[styles.feeRemainder, styles.feeRemainderWarn]}
+                  >
+                    Fees exceed the entry fee
+                  </Text>
+                ) : (
+                  <View style={[styles.feeBreakRow, styles.feeBreakTotalRow]}>
+                    <Text allowFontScaling={false} style={styles.feeRemainder}>
+                      = {fmtMoney(feePerPlayerToPool)}/player to prize pool
+                    </Text>
+                  </View>
+                )}
+                {feesOnTop && !feeOver && (
+                  <Text allowFontScaling={false} style={styles.feeBreakSub}>
+                    {fmtMoney(feeCollectedPerPlayer)}/player collected total
+                  </Text>
+                )}
+              </View>
             )}
           </View>
 
@@ -2836,6 +2930,7 @@ export default function ManageTournamentScreen() {
             onChangeText={(v) => patchForm({ addedMoney: v })}
             placeholder="$0.00"
             keyboardType="decimal-pad"
+            accessoryId={KB_DONE}
           />
           <View style={styles.sidePotHeader}>
             <FieldLabel label="Side Pots" />
@@ -2863,6 +2958,7 @@ export default function ManageTournamentScreen() {
                 placeholder="$"
                 placeholderTextColor={COLORS.textMuted}
                 keyboardType="decimal-pad"
+                inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
               />
               <TouchableOpacity
                 style={styles.groupRemove}
@@ -3731,6 +3827,7 @@ export default function ManageTournamentScreen() {
             addedMoney={prizeAddedMoney}
             sidePots={prizeSidePots}
             fees={prizeFees}
+            feesAddedOnTop={prizeFeesOnTop}
           />
         ) : null;
       case "bracket":
@@ -3797,6 +3894,18 @@ export default function ManageTournamentScreen() {
 
   return (
     <View style={styles.container}>
+      {Platform.OS === "ios" && (
+        <InputAccessoryView nativeID={KB_DONE}>
+          <View style={styles.kbDoneBar}>
+            <TouchableOpacity onPress={() => Keyboard.dismiss()}>
+              <Text allowFontScaling={false} style={styles.kbDoneText}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
+
       <AddPlayerModal
         visible={addModalVisible}
         onClose={() => setAddModalVisible(false)}
@@ -3850,6 +3959,9 @@ export default function ManageTournamentScreen() {
                       placeholder="$0.00"
                       placeholderTextColor={COLORS.textMuted}
                       keyboardType="decimal-pad"
+                      inputAccessoryViewID={
+                        Platform.OS === "ios" ? KB_DONE : undefined
+                      }
                     />
                     <View style={styles.modalButtons}>
                       <TouchableOpacity
@@ -4603,6 +4715,22 @@ const styles = StyleSheet.create({
   sidePotName: { flex: 2 },
   sidePotAmount: { flex: 1 },
 
+  // Keyboard Done accessory (iOS)
+  kbDoneBar: {
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    alignItems: "flex-end",
+  },
+  kbDoneText: {
+    fontSize: webMs(FONT_SIZES.md),
+    color: COLORS.primary,
+    fontWeight: "700",
+    paddingHorizontal: webSc(SPACING.sm),
+  },
+
   // Built-in fees (entry-fee breakdown)
   feeBlock: {
     backgroundColor: COLORS.background,
@@ -4662,6 +4790,63 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "700",
+  },
+  // Fee mode segmented control
+  feeModeRow: {
+    flexDirection: "row",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.sm),
+  },
+  feeModePill: {
+    flex: 1,
+    paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+  },
+  feeModePillOn: {
+    backgroundColor: COLORS.primary + "20",
+    borderColor: COLORS.primary,
+  },
+  feeModeText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  feeModeTextOn: { color: COLORS.primary, fontWeight: "700" },
+  // Fee breakdown
+  feeBreakdown: {
+    marginTop: webSc(SPACING.sm),
+    paddingTop: webSc(SPACING.sm),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  feeBreakRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: webSc(2),
+  },
+  feeBreakLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+  },
+  feeBreakValue: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "500",
+  },
+  feeBreakTotalRow: {
+    marginTop: webSc(SPACING.xs),
+    paddingTop: webSc(SPACING.xs),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border + "80",
+  },
+  feeBreakSub: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: webSc(2),
   },
   feeRemainder: {
     fontSize: webMs(FONT_SIZES.xs),
