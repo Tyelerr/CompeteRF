@@ -6,12 +6,13 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   FlatList, Platform, RefreshControl, StyleSheet,
-  Text, TextInput, TouchableOpacity, View,
+  Text, TouchableOpacity, View,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { useBarOwnerDirectors } from "../../../../src/viewmodels/useBarOwnerDirectors";
+import { AdminHeader, AdminSearchBar } from "../../../../src/views/components/admin/AdminControls";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { DirectorCard } from "../../../../src/views/components/directors/DirectorCard";
 import { EditDirectorVenuesModal } from "../../../../src/views/components/directors/EditDirectorVenuesModal";
@@ -32,30 +33,17 @@ export default function BarOwnerDirectorsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text allowFontScaling={false} style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.headerTitle}>My Directors</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <AdminHeader
+        title="My Directors"
+        subtitle={`${vm.stats.totalDirectors} director${vm.stats.totalDirectors !== 1 ? "s" : ""} across ${vm.stats.venuesWithDirectors} venue${vm.stats.venuesWithDirectors !== 1 ? "s" : ""}`}
+        onBack={() => router.back()}
+      />
 
-      <View style={styles.statsContainer}>
-        <Text allowFontScaling={false} style={styles.statsText}>
-          {vm.stats.totalDirectors} director{vm.stats.totalDirectors !== 1 ? "s" : ""} across {vm.stats.venuesWithDirectors} venue{vm.stats.venuesWithDirectors !== 1 ? "s" : ""}
-        </Text>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <TextInput
-          allowFontScaling={false}
-          style={styles.searchInput}
-          placeholder="Search by name, email, venue, or ID..."
-          placeholderTextColor={COLORS.textMuted}
-          value={vm.filters.search}
-          onChangeText={vm.updateSearch}
-        />
-      </View>
+      <AdminSearchBar
+        value={vm.filters.search}
+        onChangeText={vm.updateSearch}
+        placeholder="Search by name, email, venue, or ID..."
+      />
 
       {vm.canAddDirectors && (
         <TouchableOpacity
@@ -155,46 +143,9 @@ const styles = StyleSheet.create({
   },
   centerContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center" },
   loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: wxSc(SPACING.md),
-    paddingTop: wxSc(SPACING.xl + SPACING.lg),
-    paddingBottom: wxSc(SPACING.md),
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerWeb: { paddingTop: wxSc(SPACING.lg) },
-  backButton: { padding: wxSc(SPACING.xs) },
-  backText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.primary, fontWeight: "600" },
-  headerTitle: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
-  placeholder: { width: wxSc(50) },
-  statsContainer: {
-    paddingHorizontal: wxSc(SPACING.md),
-    paddingVertical: wxSc(SPACING.sm),
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  statsText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
-  searchContainer: {
-    paddingHorizontal: wxSc(SPACING.md),
-    paddingTop: wxSc(SPACING.md),
-    paddingBottom: wxSc(SPACING.sm),
-  },
-  searchInput: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: wxSc(8),
-    paddingHorizontal: wxSc(SPACING.md),
-    paddingVertical: wxSc(SPACING.sm),
-    fontSize: wxMs(FONT_SIZES.md),
-    color: COLORS.text,
-  },
   addButton: {
     marginHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.sm),
     marginBottom: wxSc(SPACING.sm),
     backgroundColor: COLORS.primary,
     paddingVertical: wxSc(SPACING.sm),

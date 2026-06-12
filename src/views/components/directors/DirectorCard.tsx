@@ -6,6 +6,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
@@ -118,6 +119,14 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
   const activeAssignments = director.assignments.filter((a) => a.status === "active");
   const isFullyArchived = director.active_venue_count === 0;
 
+  const actions: ActionMenuItem[] = [];
+  if (showActions && canEditVenues && onEditVenues && !isFullyArchived)
+    actions.push({ label: "Edit Venues", onPress: onEditVenues });
+  if (showActions && canRemove && onRemove && !isFullyArchived)
+    actions.push({ label: "Remove Director", destructive: true, onPress: onRemove });
+  if (showActions && canRestore && onRestore && isFullyArchived)
+    actions.push({ label: "Restore Director", onPress: onRestore });
+
   return (
     <TouchableOpacity
       style={[styles.card, isFullyArchived && styles.cardArchived]}
@@ -139,47 +148,15 @@ export const DirectorCard: React.FC<DirectorCardProps> = ({
           <Text allowFontScaling={false} style={styles.directorEmail}>{director.profile.email}</Text>
           <Text allowFontScaling={false} style={styles.directorId}>ID: {director.profile.id_auto}</Text>
         </View>
-        {showActions && canEditVenues && onEditVenues && !isFullyArchived && (
-          <TouchableOpacity
-            style={styles.editVenuesButton}
-            onPress={(e) => { e.stopPropagation(); onEditVenues(); }}
-            disabled={isProcessing}
-          >
-            <Text allowFontScaling={false} style={styles.editVenuesButtonText}>Edit Venues</Text>
-          </TouchableOpacity>
+        {actions.length > 0 && (
+          <View style={styles.headerAction}>
+            <ActionMenu items={actions} disabled={isProcessing} />
+          </View>
         )}
       </View>
 
       {/* ── Venue assignments ── */}
       <VenueList assignments={isFullyArchived ? director.assignments : activeAssignments} isFullyArchived={isFullyArchived} />
-
-      {/* ── Action buttons ── */}
-      {showActions && (
-        <View style={styles.actionsRow}>
-          {canRemove && !isFullyArchived && onRemove && (
-            <TouchableOpacity
-              style={styles.removeButton}
-              onPress={(e) => { e.stopPropagation(); onRemove(); }}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.removeButtonText}>
-                {isProcessing ? "Removing..." : "Remove Director"}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {canRestore && isFullyArchived && onRestore && (
-            <TouchableOpacity
-              style={styles.restoreButton}
-              onPress={(e) => { e.stopPropagation(); onRestore(); }}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.restoreButtonText}>
-                {isProcessing ? "Restoring..." : "Restore Director"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
     </TouchableOpacity>
   );
 };
@@ -231,22 +208,7 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
   },
   textMuted: { color: COLORS.textSecondary },
-  editVenuesButton: {
-    backgroundColor: COLORS.primary + "20",
-    borderWidth: 1,
-    borderColor: COLORS.primary + "60",
-    borderRadius: wxSc(8),
-    paddingHorizontal: wxSc(SPACING.sm),
-    paddingVertical: wxSc(SPACING.xs),
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  editVenuesButtonText: {
-    fontSize: wxMs(FONT_SIZES.xs),
-    fontWeight: "600",
-    color: COLORS.primary,
-  },
+  headerAction: { flexShrink: 0, marginLeft: wxSc(SPACING.sm) },
   venuesBox: {
     backgroundColor: COLORS.background,
     borderRadius: wxSc(8),
@@ -271,35 +233,6 @@ const styles = StyleSheet.create({
   venueMetaText: {
     fontSize: wxMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
-  },
-  actionsRow: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: wxSc(SPACING.sm),
-  },
-  removeButton: {
-    backgroundColor: "#ef4444",
-    borderRadius: wxSc(8),
-    paddingVertical: wxSc(SPACING.sm),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  removeButtonText: {
-    fontSize: wxMs(FONT_SIZES.sm),
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  restoreButton: {
-    backgroundColor: "#10b981",
-    borderRadius: wxSc(8),
-    paddingVertical: wxSc(SPACING.sm),
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  restoreButtonText: {
-    fontSize: wxMs(FONT_SIZES.sm),
-    fontWeight: "600",
-    color: "#ffffff",
   },
   venueFooterRow: {
     flexDirection: "row",
