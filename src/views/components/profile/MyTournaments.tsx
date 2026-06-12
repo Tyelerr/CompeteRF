@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -138,9 +139,11 @@ const RowCard = ({
         </View>
       )}
       <TouchableOpacity hitSlop={8} onPress={() => onToggleFav(row.tournamentId)}>
-        <Text allowFontScaling={false} style={styles.heart}>
-          {fav ? "💙" : "🤍"}
-        </Text>
+        <Ionicons
+          name={fav ? "heart" : "heart-outline"}
+          size={wxMs(22)}
+          color={fav ? COLORS.primary : COLORS.textMuted}
+        />
       </TouchableOpacity>
     </View>
   </TouchableOpacity>

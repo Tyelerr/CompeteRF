@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -54,7 +55,11 @@ export const FavoriteTournamentCard: React.FC<FavoriteTournamentCardProps> = ({ 
               <Text allowFontScaling={false} style={styles.gameTypeText} numberOfLines={1}>{tournament.game_type}</Text>
             </View>
             <TouchableOpacity style={styles.favoriteButton} onPress={handleUnfavorite}>
-              <Text allowFontScaling={false} style={styles.heartIcon}>♥</Text>
+              <Ionicons
+                name={isFavorited ? "heart" : "heart-outline"}
+                size={isWeb ? 36 : wxMs(24)}
+                color={isFavorited ? COLORS.primary : COLORS.white}
+              />
             </TouchableOpacity>
           </View>
           <Text allowFontScaling={false} style={styles.tournamentName} numberOfLines={2}>{tournament.name}</Text>
