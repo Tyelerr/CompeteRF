@@ -137,8 +137,23 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
             <Text allowFontScaling={false} style={styles.statLabel}>Favorites</Text>
           </View>
         </View>
-        {actions.length > 0 && <ActionMenu items={actions} disabled={isProcessing} />}
       </View>
+
+      {showActions && (
+        <View style={styles.cardActions}>
+          <TouchableOpacity
+            style={[styles.openManagerBtn, isProcessing && styles.btnDisabled]}
+            onPress={(e) => { e.stopPropagation(); onPress(); }}
+            disabled={isProcessing}
+            activeOpacity={0.8}
+          >
+            <Text allowFontScaling={false} style={styles.openManagerText}>Open Manager</Text>
+          </TouchableOpacity>
+          {actions.length > 0 && (
+            <ActionMenu items={actions} label="Actions" disabled={isProcessing} />
+          )}
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
@@ -165,6 +180,10 @@ const styles = StyleSheet.create({
   statusInfoReason: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.text, marginTop: 4, fontStyle: "italic" },
   bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: wxSc(SPACING.sm), paddingTop: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   statsRow: { flexDirection: "row", gap: wxSc(SPACING.lg) },
+  cardActions: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm) },
+  openManagerBtn: { flex: 1, backgroundColor: COLORS.primary, paddingVertical: wxSc(SPACING.sm), borderRadius: wxSc(8), alignItems: "center", justifyContent: "center" },
+  openManagerText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.white },
+  btnDisabled: { opacity: 0.6 },
   stat: { alignItems: "center" },
   statValue: { fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   statLabel: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
