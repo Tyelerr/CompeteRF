@@ -1,8 +1,11 @@
-﻿// app/(tabs)/admin/bar-owner-analytics.tsx
+// app/(tabs)/admin/bar-owner-analytics.tsx
+// Bar-owner Venue Analytics. Business-first: attendance + tournament money flow
+// up top, then a drill-down to per-tournament analytics, the money breakdown,
+// top-tournament lists, and discovery/engagement metrics lower down.
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useState } from "react";
+import { useCallback } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -15,30 +18,49 @@ import {
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
-import { useBarOwnerAnalytics } from "../../../src/viewmodels/useBarOwnerAnalytics";
+import { useVenueAnalytics } from "../../../src/viewmodels/useVenueAnalytics";
+import { TournamentSeriesStats } from "../../../src/models/types/venue-analytics.types";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
-import { TournamentDetailModal } from "../../../src/views/components/tournament/TournamentDetailModal";
 
 const isWeb = Platform.OS === "web";
-const wxMs = (v: number) => isWeb ? v : moderateScale(v);
-const wxSc = (v: number) => isWeb ? v : scale(v);
+const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
+const wxSc = (v: number) => (isWeb ? v : scale(v));
+
+const money = (n: number): string =>
+  `$${Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const moneyShort = (n: number): string => {
+  if (n >= 10000) return `$${Math.round(n / 1000)}k`;
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${Math.round(n)}`;
+};
 
 export default function BarOwnerAnalyticsScreen() {
   const router = useRouter();
-  const vm = useBarOwnerAnalytics();
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const vm = useVenueAnalytics();
 
   useFocusEffect(
-    require("react").useCallback(() => {
+    useCallback(() => {
       vm.onRefresh();
-    }, [])
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
   );
+
+  const s = vm.venueStats;
+  const f = s.feesByCategory;
+
+  const openDetail = (series: TournamentSeriesStats) =>
+    router.push({
+      pathname: "/(tabs)/admin/tournament-analytics/[id]",
+      params: { id: series.seriesId, name: series.name },
+    } as any);
 
   if (vm.loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text allowFontScaling={false} style={styles.loadingText}>Loading analytics...</Text>
+        <Text allowFontScaling={false} style={styles.loadingText}>
+          Loading analytics...
+        </Text>
       </View>
     );
   }
@@ -48,180 +70,270 @@ export default function BarOwnerAnalyticsScreen() {
       style={styles.container}
       refreshControl={
         isWeb ? undefined : (
-          <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
+          <RefreshControl
+            refreshing={vm.refreshing}
+            onRefresh={vm.onRefresh}
+            tintColor={COLORS.primary}
+          />
         )
       }
     >
-      {/* Tournament Detail Modal */}
-      <TournamentDetailModal
-        id={detailId}
-        visible={detailId !== null}
-        onClose={() => setDetailId(null)}
-      />
-
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, isWeb && styles.backBtnWeb]}>
-          <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backBtn, isWeb && styles.backBtnWeb]}
+        >
+          <Text allowFontScaling={false} style={styles.backText}>
+            {"←"} Back
+          </Text>
         </TouchableOpacity>
-        <Text allowFontScaling={false} style={styles.headerTitle}>{"\uD83D\uDCCA"} VENUE ANALYTICS</Text>
-        <Text allowFontScaling={false} style={styles.headerSubtitle}>Performance across your venues</Text>
+        <Text allowFontScaling={false} style={styles.headerTitle}>
+          {"📊"} VENUE ANALYTICS
+        </Text>
+        <Text allowFontScaling={false} style={styles.headerSubtitle}>
+          How your venue is doing overall
+        </Text>
       </View>
 
-      {/* Time Period Filter */}
+      {/* 1. Period filter */}
       <View style={styles.filterSection}>
-        <Text allowFontScaling={false} style={styles.filterLabel}>Period</Text>
+        <Text allowFontScaling={false} style={styles.filterLabel}>
+          Period
+        </Text>
         <View style={styles.filterDropdown}>
           <Dropdown
-            options={vm.timePeriodOptions}
-            value={vm.timePeriod.value}
-            onSelect={vm.handleTimePeriodChange}
+            options={vm.periodOptions}
+            value={vm.period}
+            onSelect={(v) => vm.setPeriod(v as typeof vm.period)}
             placeholder="Select Period"
           />
         </View>
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text allowFontScaling={false} style={styles.sectionTitle}>Overview</Text>
-      </View>
+      {/* 2. Overview cards */}
+      <SectionHeader title="Overview" />
       <View style={styles.statsGrid}>
-        <MiniStatCard icon={"\uD83D\uDC41\uFE0F"} value={vm.summaryStats.totalViews} label="Views" />
-        <MiniStatCard icon={"\uD83D\uDDFA\uFE0F"} value={vm.summaryStats.totalDirections} label="Directions" />
-        <MiniStatCard icon={"\uD83D\uDCDE"} value={vm.summaryStats.totalCalls} label="Venue Calls" />
-        <MiniStatCard icon={"\u2764\uFE0F"} value={vm.summaryStats.totalFavorites} label="Favorites" />
-        <MiniStatCard icon={"\uD83D\uDCE4"} value={vm.summaryStats.totalShares} label="Shares" />
-        <MiniStatCard icon={"\uD83D\uDCC8"} value={vm.summaryStats.totalEvents} label="Total Events" />
+        <StatCard icon={"👥"} value={s.totalPlayers.toLocaleString()} label="Total Players" />
+        <StatCard icon={"📅"} value={String(s.totalEvents)} label="Total Events" />
+        <StatCard icon={"📊"} value={String(s.avgAttendance)} label="Avg Attendance" />
+        <StatCard icon={"🏆"} value={String(s.largestEvent)} label="Largest Event" />
+        <StatCard icon={"💵"} value={moneyShort(s.entryCollected)} label="Entry Fees" />
+        <StatCard icon={"🎱"} value={moneyShort(s.netPrizePool)} label="Prize Pools" />
       </View>
 
-      {vm.eventBreakdown.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <Text allowFontScaling={false} style={styles.sectionTitle}>Event Breakdown</Text>
-          </View>
-          <View style={styles.card}>
-            {vm.eventBreakdown.map((item, index) => {
-              const maxVal = Math.max(...vm.eventBreakdown.map((e) => e.value));
-              const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
-              return (
-                <View key={item.label} style={styles.barRow}>
-                  <Text allowFontScaling={false} style={styles.barLabel}>{item.label}</Text>
-                  <AnimatedBar widthPercent={barWidth} color={item.color} delay={index * 80} />
-                  <Text allowFontScaling={false} style={styles.barValue}>{item.value}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </>
-      )}
+      {/* 3. Tournament Analytics drill-down */}
+      <TouchableOpacity
+        style={styles.drillCard}
+        onPress={() => router.push("/(tabs)/admin/tournament-analytics" as any)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.drillTextWrap}>
+          <Text allowFontScaling={false} style={styles.drillTitle}>
+            Tournament Analytics {"→"}
+          </Text>
+          <Text allowFontScaling={false} style={styles.drillSub}>
+            View performance by tournament
+          </Text>
+        </View>
+        <Text allowFontScaling={false} style={styles.drillChevron}>
+          {"›"}
+        </Text>
+      </TouchableOpacity>
 
-      {/* Top Viewed Tournaments */}
-      <View style={styles.sectionHeader}>
-        <Text allowFontScaling={false} style={styles.sectionTitle}>Top Viewed Tournaments</Text>
-      </View>
-      {vm.topViewedTournaments.length > 0 ? (
-        <View style={styles.card}>
-          {vm.topViewedTournaments.map((item, index) => (
-            <TouchableOpacity
-              key={item.entity_id}
-              style={[
-                styles.rankRow,
-                index < vm.topViewedTournaments.length - 1 && styles.rankRowBorder,
-              ]}
-              onPress={() => setDetailId(String(item.entity_id))}
-              activeOpacity={0.7}
-            >
-              <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
-              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
-              <Text allowFontScaling={false} style={styles.rankCount}>{item.count} views</Text>
-              <Text allowFontScaling={false} style={styles.rankChevron}>{"\u203A"}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : (
-        <View style={styles.card}>
-          <Text allowFontScaling={false} style={styles.emptyText}>No view data yet</Text>
-        </View>
-      )}
-
-      {/* Top Favorited Tournaments */}
-      <View style={styles.sectionHeader}>
-        <Text allowFontScaling={false} style={styles.sectionTitle}>Top Favorited Tournaments</Text>
-      </View>
-      {vm.topFavoritedTournaments.length > 0 ? (
-        <View style={styles.card}>
-          {vm.topFavoritedTournaments.map((item, index) => (
-            <TouchableOpacity
-              key={item.entity_id}
-              style={[
-                styles.rankRow,
-                index < vm.topFavoritedTournaments.length - 1 && styles.rankRowBorder,
-              ]}
-              onPress={() => setDetailId(String(item.entity_id))}
-              activeOpacity={0.7}
-            >
-              <Text allowFontScaling={false} style={styles.rankNumber}>#{index + 1}</Text>
-              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>{item.name}</Text>
-              <Text allowFontScaling={false} style={styles.rankCount}>{item.count} {"\u2764\uFE0F"}</Text>
-              <Text allowFontScaling={false} style={styles.rankChevron}>{"\u203A"}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : (
-        <View style={styles.card}>
-          <Text allowFontScaling={false} style={styles.emptyText}>No favorite data yet</Text>
-        </View>
-      )}
-
-      {/* Views by Period */}
-      <View style={styles.sectionHeader}>
-        <Text allowFontScaling={false} style={styles.sectionTitle}>Views by Period</Text>
-      </View>
+      {/* 4. Money Overview */}
+      <SectionHeader title="Money Overview" />
       <View style={styles.card}>
-        <PeriodRow label="Today" value={vm.rawStats.tournamentViews.today} />
-        <PeriodRow label="This Week" value={vm.rawStats.tournamentViews.thisWeek} />
-        <PeriodRow label="This Month" value={vm.rawStats.tournamentViews.thisMonth} />
-        <PeriodRow label="All Time" value={vm.rawStats.tournamentViews.total} isLast />
+        <GroupLabel text="Gross Collected" />
+        <MoneyRow label="Entry fees" value={money(s.entryCollected)} />
+        <MoneyRow label="Side pots" value={money(s.sidePotsCollected)} />
+        <MoneyRow label="Added money" value={money(s.addedMoney)} />
+
+        <GroupLabel text="Fees / Deductions" />
+        <MoneyRow label="TD fees" value={money(f.td)} />
+        <MoneyRow label="Green fees" value={money(f.green)} />
+        <MoneyRow label="Admin fees" value={money(f.admin)} />
+        <MoneyRow label="Custom fees" value={money(f.custom)} />
+        <MoneyRow label="Total fees" value={money(s.totalFees)} strong />
+
+        <GroupLabel text="Net Payout" />
+        <MoneyRow label="Net prize pool" value={money(s.netPrizePool)} strong />
+        <MoneyRow label="Prize money paid out" value={money(s.prizePaidOut)} />
       </View>
+
+      {/* 5-7. Top tournaments */}
+      <TopList
+        title="Top Attendance"
+        series={vm.topAttendance}
+        stat={(x) => `${x.totalPlayers} players`}
+        onPress={openDetail}
+      />
+      <TopList
+        title="Top Revenue"
+        series={vm.topRevenue}
+        stat={(x) => `${money(x.entryCollected)} entry`}
+        onPress={openDetail}
+      />
+      <TopList
+        title="Top Prize Pools"
+        series={vm.topPrizePool}
+        stat={(x) => `${money(x.netPrizePool)} pool`}
+        onPress={openDetail}
+      />
+
+      {/* 8. Activity / Discovery */}
+      <SectionHeader title="Activity Breakdown" />
+      {vm.discoveryBreakdown.length > 0 ? (
+        <View style={styles.card}>
+          {vm.discoveryBreakdown.map((item, index) => {
+            const maxVal = Math.max(...vm.discoveryBreakdown.map((e) => e.value));
+            const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
+            return (
+              <View key={item.label} style={styles.barRow}>
+                <Text allowFontScaling={false} style={styles.barLabel}>
+                  {item.label}
+                </Text>
+                <AnimatedBar widthPercent={barWidth} color={item.color} delay={index * 80} />
+                <Text allowFontScaling={false} style={styles.barValue}>
+                  {item.value}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text allowFontScaling={false} style={styles.emptyText}>
+            No engagement data for this period yet
+          </Text>
+        </View>
+      )}
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
 }
 
-interface MiniStatCardProps {
-  icon: string;
-  value: number;
-  label: string;
-}
-
-const MiniStatCard = ({ icon, value, label }: MiniStatCardProps) => (
-  <View style={styles.miniCard}>
-    <Text allowFontScaling={false} style={styles.miniIcon}>{icon}</Text>
-    <Text allowFontScaling={false} style={styles.miniValue}>{value.toLocaleString()}</Text>
-    <Text allowFontScaling={false} style={styles.miniLabel}>{label}</Text>
+// ── Building blocks ───────────────────────────────────────────────────────────
+const SectionHeader = ({ title }: { title: string }) => (
+  <View style={styles.sectionHeader}>
+    <Text allowFontScaling={false} style={styles.sectionTitle}>
+      {title}
+    </Text>
   </View>
 );
 
-interface PeriodRowProps {
+const StatCard = ({
+  icon,
+  value,
+  label,
+}: {
+  icon: string;
+  value: string;
   label: string;
-  value: number;
-  isLast?: boolean;
-}
-
-const PeriodRow = ({ label, value, isLast }: PeriodRowProps) => (
-  <View style={[styles.periodRow, !isLast && styles.periodRowBorder]}>
-    <Text allowFontScaling={false} style={styles.periodLabel}>{label}</Text>
-    <Text allowFontScaling={false} style={styles.periodValue}>{value.toLocaleString()}</Text>
+}) => (
+  <View style={styles.miniCard}>
+    <Text allowFontScaling={false} style={styles.miniIcon}>
+      {icon}
+    </Text>
+    <Text allowFontScaling={false} style={styles.miniValue}>
+      {value}
+    </Text>
+    <Text allowFontScaling={false} style={styles.miniLabel}>
+      {label}
+    </Text>
   </View>
+);
+
+const GroupLabel = ({ text }: { text: string }) => (
+  <Text allowFontScaling={false} style={styles.groupLabel}>
+    {text}
+  </Text>
+);
+
+const MoneyRow = ({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) => (
+  <View style={styles.moneyRow}>
+    <Text
+      allowFontScaling={false}
+      style={[styles.moneyLabel, strong && styles.moneyLabelStrong]}
+    >
+      {label}
+    </Text>
+    <Text
+      allowFontScaling={false}
+      style={[styles.moneyValue, strong && styles.moneyValueStrong]}
+    >
+      {value}
+    </Text>
+  </View>
+);
+
+const TopList = ({
+  title,
+  series,
+  stat,
+  onPress,
+}: {
+  title: string;
+  series: TournamentSeriesStats[];
+  stat: (s: TournamentSeriesStats) => string;
+  onPress: (s: TournamentSeriesStats) => void;
+}) => (
+  <>
+    <SectionHeader title={title} />
+    {series.length > 0 ? (
+      <View style={styles.card}>
+        {series.map((item, index) => (
+          <TouchableOpacity
+            key={item.seriesId}
+            style={[styles.rankRow, index < series.length - 1 && styles.rankRowBorder]}
+            onPress={() => onPress(item)}
+            activeOpacity={0.7}
+          >
+            <Text allowFontScaling={false} style={styles.rankNumber}>
+              #{index + 1}
+            </Text>
+            <View style={styles.rankNameWrap}>
+              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text allowFontScaling={false} style={styles.rankSub}>
+                {item.events} {item.events === 1 ? "event" : "events"} {"·"}{" "}
+                {item.avgAttendance} avg
+              </Text>
+            </View>
+            <Text allowFontScaling={false} style={styles.rankStat}>
+              {stat(item)}
+            </Text>
+            <Text allowFontScaling={false} style={styles.rankChevron}>
+              {"›"}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    ) : (
+      <View style={styles.card}>
+        <Text allowFontScaling={false} style={styles.emptyText}>
+          No tournament data for this period yet
+        </Text>
+      </View>
+    )}
+  </>
 );
 
 const styles = StyleSheet.create({
-  scrollContentWeb: {
-    alignItems: "center",
-    paddingBottom: SPACING.xl,
-  },
   container: {
-    ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
+    ...Platform.select({
+      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+    }),
     flex: 1,
     backgroundColor: COLORS.background,
   },
@@ -232,10 +344,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: SPACING.lg,
   },
-  loadingText: {
-    fontSize: wxMs(FONT_SIZES.md),
-    color: COLORS.textSecondary,
-  },
+  loadingText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.textSecondary },
   header: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl + SPACING.lg,
@@ -244,9 +353,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: {
-    paddingTop: SPACING.lg,
-  },
+  headerWeb: { paddingTop: SPACING.lg },
   backBtn: {
     position: "absolute",
     left: SPACING.md,
@@ -282,11 +389,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
-  filterDropdown: {
-    flex: 1,
-    maxWidth: wxSc(160),
-    marginLeft: SPACING.md,
-  },
+  filterDropdown: { flex: 1, maxWidth: wxSc(180), marginLeft: SPACING.md },
   sectionHeader: {
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
@@ -305,7 +408,8 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.xs,
   },
   miniCard: {
-    width: "48%",
+    width: "31%",
+    flexGrow: 1,
     backgroundColor: COLORS.surface,
     borderRadius: wxSc(12),
     padding: SPACING.sm,
@@ -313,14 +417,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    minHeight: wxSc(80),
+    minHeight: wxSc(86),
   },
-  miniIcon: {
-    fontSize: wxMs(20),
-    marginBottom: wxSc(2),
-  },
+  miniIcon: { fontSize: wxMs(20), marginBottom: wxSc(2) },
   miniValue: {
-    fontSize: wxMs(FONT_SIZES.md),
+    fontSize: wxMs(FONT_SIZES.lg),
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -329,7 +430,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: COLORS.textSecondary,
     marginTop: wxSc(2),
+    textAlign: "center",
   },
+  // Drill-down card
+  drillCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary + "15",
+    borderRadius: wxSc(12),
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  drillTextWrap: { flex: 1 },
+  drillTitle: {
+    fontSize: wxMs(FONT_SIZES.md),
+    fontWeight: "700",
+    color: COLORS.primary,
+  },
+  drillSub: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: wxSc(2),
+  },
+  drillChevron: { fontSize: wxMs(FONT_SIZES.xl), color: COLORS.primary },
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: wxSc(12),
@@ -339,28 +465,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  barRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.sm,
+  // Money rows
+  groupLabel: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: SPACING.sm,
+    marginBottom: wxSc(2),
   },
+  moneyRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: wxSc(5),
+  },
+  moneyLabel: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  moneyLabelStrong: { color: COLORS.text, fontWeight: "700" },
+  moneyValue: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  moneyValueStrong: { color: COLORS.primary, fontWeight: "700" },
+  // Bars
+  barRow: { flexDirection: "row", alignItems: "center", marginBottom: SPACING.sm },
   barLabel: {
     width: wxSc(80),
     fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
-  },
-  barTrack: {
-    flex: 1,
-    height: wxSc(8),
-    backgroundColor: COLORS.border,
-    borderRadius: wxSc(4),
-    marginHorizontal: SPACING.sm,
-    overflow: "hidden",
-  },
-  barFill: {
-    height: "100%",
-    borderRadius: wxSc(4),
   },
   barValue: {
     width: wxSc(40),
@@ -369,57 +504,35 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: "right",
   },
-  rankRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: SPACING.sm,
-  },
-  rankRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
+  // Rank rows
+  rankRow: { flexDirection: "row", alignItems: "center", paddingVertical: SPACING.sm },
+  rankRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
   rankNumber: {
-    width: wxSc(30),
+    width: wxSc(28),
     fontSize: wxMs(FONT_SIZES.sm),
     fontWeight: "700",
     color: COLORS.primary,
   },
+  rankNameWrap: { flex: 1, marginRight: SPACING.sm },
   rankName: {
-    flex: 1,
     fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.text,
-    fontWeight: "500",
-  },
-  rankCount: {
-    fontSize: wxMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
     fontWeight: "600",
-    marginLeft: SPACING.sm,
+  },
+  rankSub: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: wxSc(1),
+  },
+  rankStat: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
   },
   rankChevron: {
     fontSize: wxMs(FONT_SIZES.lg),
     color: COLORS.textMuted,
     marginLeft: SPACING.xs,
-  },
-  periodRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: SPACING.sm,
-  },
-  periodRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  periodLabel: {
-    fontSize: wxMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  periodValue: {
-    fontSize: wxMs(FONT_SIZES.md),
-    fontWeight: "700",
-    color: COLORS.text,
   },
   emptyText: {
     fontSize: wxMs(FONT_SIZES.sm),
@@ -427,7 +540,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: SPACING.md,
   },
-  bottomSpacer: {
-    height: SPACING.xl * 2,
-  },
+  bottomSpacer: { height: SPACING.xl * 2 },
 });
