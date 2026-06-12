@@ -670,7 +670,11 @@ export const BracketCanvas = ({
                             {p.match.number > 0 && (
                               <View style={styles.matchNumWrap} pointerEvents="none">
                                 <View style={styles.matchNumBadge}>
-                                  <Text allowFontScaling={false} style={styles.matchNumText}>
+                                  <Text
+                                    allowFontScaling={false}
+                                    style={styles.matchNumText}
+                                    numberOfLines={1}
+                                  >
                                     {p.match.numberLabel}
                                   </Text>
                                 </View>
@@ -817,30 +821,30 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  // Per-side match number (W32 / L1), sat just left of the node and vertically
-  // centered on it via a full-height wrapper.
+  // Per-side match number (W32 / L1), in a small square box sat just left of the
+  // node and vertically centered on it via a full-height wrapper.
   matchNumWrap: {
     position: "absolute",
-    left: -webSc(42),
+    left: -webSc(52),
     top: 0,
     height: NODE_HEIGHT,
-    width: webSc(38),
+    width: webSc(48),
     alignItems: "center",
     justifyContent: "center",
   },
   matchNumBadge: {
-    minWidth: webSc(28),
-    paddingHorizontal: webSc(5),
-    paddingVertical: webSc(3),
-    borderRadius: webSc(RADIUS.full),
+    paddingHorizontal: webSc(6),
+    height: webSc(22),
+    borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
     alignItems: "center",
+    justifyContent: "center",
   },
   matchNumText: {
     fontSize: webMs(FONT_SIZES.xs),
-    fontWeight: "900",
+    fontWeight: "800",
     color: COLORS.textSecondary,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
