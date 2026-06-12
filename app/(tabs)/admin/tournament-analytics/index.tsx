@@ -264,8 +264,6 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.xl + SPACING.lg,
     paddingBottom: SPACING.md,
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   headerWeb: { paddingTop: SPACING.lg },
   backBtn: {
