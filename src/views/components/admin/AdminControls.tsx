@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { COLORS } from "../../../theme/colors";
@@ -18,6 +19,10 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 
 const isWeb = Platform.OS === "web";
+
+// Push the search bar (and everything below it) down by this fraction of the
+// screen height. Tune this one number to raise/lower the page content.
+const SEARCH_TOP_FRACTION = 0.18;
 
 // ── Header ────────────────────────────────────────────────────────────────────
 export const AdminHeader = ({
@@ -58,8 +63,10 @@ export const AdminSearchBar = ({
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
-}) => (
-  <View style={styles.searchWrap}>
+}) => {
+  const { height } = useWindowDimensions();
+  return (
+  <View style={[styles.searchWrap, { marginTop: Math.round(height * SEARCH_TOP_FRACTION) }]}>
     <Text allowFontScaling={false} style={styles.searchIcon}>
       {"🔍"}
     </Text>
@@ -79,7 +86,8 @@ export const AdminSearchBar = ({
       </TouchableOpacity>
     )}
   </View>
-);
+  );
+};
 
 // ── Filter row ────────────────────────────────────────────────────────────────
 // Lays out its children (typically <Dropdown>s) evenly across one row.
