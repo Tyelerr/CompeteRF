@@ -21,6 +21,7 @@ import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { useVenueAnalytics } from "../../../../src/viewmodels/useVenueAnalytics";
 import { TournamentSeriesStats } from "../../../../src/models/types/venue-analytics.types";
+import { groupIntoSeries } from "../../../../src/utils/venue-analytics";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
@@ -32,11 +33,20 @@ const money = (n: number): string =>
 
 type SortKey = "attendance" | "revenue" | "prize" | "recent" | "name";
 const SORT_OPTIONS: { label: string; value: SortKey }[] = [
-  { label: "Attendance", value: "attendance" },
-  { label: "Revenue", value: "revenue" },
-  { label: "Prize Pool", value: "prize" },
-  { label: "Most Recent", value: "recent" },
-  { label: "A–Z", value: "name" },
+  { label: "Sort: Attendance", value: "attendance" },
+  { label: "Sort: Revenue", value: "revenue" },
+  { label: "Sort: Prize Pool", value: "prize" },
+  { label: "Sort: Most Recent", value: "recent" },
+  { label: "Sort: A–Z", value: "name" },
+];
+
+type StatusFilter = "all" | "active" | "completed" | "cancelled" | "archived";
+const STATUS_OPTIONS: { label: string; value: StatusFilter }[] = [
+  { label: "All Statuses", value: "all" },
+  { label: "Active", value: "active" },
+  { label: "Completed", value: "completed" },
+  { label: "Cancelled", value: "cancelled" },
+  { label: "Archived", value: "archived" },
 ];
 
 const sortSeries = (
@@ -65,14 +75,22 @@ export default function TournamentAnalyticsScreen() {
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("attendance");
+  const [status, setStatus] = useState<StatusFilter>("all");
 
   const series = useMemo(() => {
+    // Status filter applies to the underlying runs, then we re-group: a series'
+    // stats reflect only the runs in the chosen status.
+    const runs =
+      status === "all"
+        ? vm.runs
+        : vm.runs.filter((r) => r.status === status);
+    const grouped = groupIntoSeries(runs);
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? vm.series.filter((s) => s.name.toLowerCase().includes(q))
-      : vm.series;
+      ? grouped.filter((s) => s.name.toLowerCase().includes(q))
+      : grouped;
     return sortSeries(filtered, sortKey);
-  }, [vm.series, query, sortKey]);
+  }, [vm.runs, status, query, sortKey]);
 
   const openDetail = (item: TournamentSeriesStats) =>
     router.push({
@@ -148,32 +166,24 @@ export default function TournamentAnalyticsScreen() {
         )}
       </View>
 
-      {/* Sort */}
-      <View style={styles.sortRow}>
-        <Text allowFontScaling={false} style={styles.sortLabel}>
-          Sort
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortPills}
-          keyboardShouldPersistTaps="handled"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <TouchableOpacity
-              key={o.value}
-              style={[styles.sortPill, sortKey === o.value && styles.sortPillOn]}
-              onPress={() => setSortKey(o.value)}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.sortPillText, sortKey === o.value && styles.sortPillTextOn]}
-              >
-                {o.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Status + Sort, one row under the search */}
+      <View style={styles.controlsRow}>
+        <View style={styles.controlCol}>
+          <Dropdown
+            options={STATUS_OPTIONS}
+            value={status}
+            onSelect={(v) => setStatus(v as StatusFilter)}
+            placeholder="Status"
+          />
+        </View>
+        <View style={styles.controlCol}>
+          <Dropdown
+            options={SORT_OPTIONS}
+            value={sortKey}
+            onSelect={(v) => setSortKey(v as SortKey)}
+            placeholder="Sort"
+          />
+        </View>
       </View>
 
       {vm.loading ? (
@@ -314,31 +324,15 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     paddingHorizontal: SPACING.xs,
   },
-  // Sort
-  sortRow: {
+  // Status + Sort dropdown row
+  controlsRow: {
     flexDirection: "row",
-    alignItems: "center",
+    gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
+    zIndex: 10,
   },
-  sortLabel: {
-    fontSize: wxMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    marginRight: SPACING.sm,
-  },
-  sortPills: { flexDirection: "row", gap: SPACING.xs, paddingRight: SPACING.md },
-  sortPill: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: wxSc(6),
-    borderRadius: wxSc(16),
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sortPillOn: { backgroundColor: COLORS.primary + "20", borderColor: COLORS.primary },
-  sortPillText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary },
-  sortPillTextOn: { color: COLORS.primary, fontWeight: "700" },
+  controlCol: { flex: 1 },
   loadingText: {
     fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,

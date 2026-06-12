@@ -115,6 +115,7 @@ export function useVenueAnalytics() {
     setPeriod,
     periodOptions: ANALYTICS_PERIODS,
 
+    runs,
     venueStats,
     series,
     topAttendance,
