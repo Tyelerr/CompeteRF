@@ -83,10 +83,10 @@ export const QueueView = ({
   }, []);
 
   const [showOnTables, setShowOnTables] = useState(true);
-  const [preview, setPreview] = useState<AssignmentPlan[] | null>(null);
-  // Match ids assigned by the last Apply — shown in the "Recently Applied" view
-  // so the TD can move them or send them back to the queue.
-  const [appliedIds, setAppliedIds] = useState<string[] | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
+  // Match ids assigned during this Auto Assign session — listed under the
+  // preview as "Recently Applied" so the TD can move them or send them back.
+  const [appliedIds, setAppliedIds] = useState<string[]>([]);
 
   const readyAtMap = useMemo(
     () => computeReadyAtMap(bracket, matchState),
@@ -133,25 +133,28 @@ export const QueueView = ({
     reorderRef.current(ids);
   };
 
+  // The pending plan, recomputed live from the current queue + free tables.
+  const autoPlan = useMemo(
+    () => planAutoAssign(ordered, available),
+    [ordered, available],
+  );
+
   const runAutoAssign = () => {
-    const plan = planAutoAssign(ordered, available);
-    if (plan.length === 0) return;
-    setPreview(plan);
+    setAppliedIds([]);
+    setAutoOpen(true);
   };
-  // Apply assigns ALL planned matches at once, then shows them in Recently Applied.
-  const applyPlan = () => {
-    if (!preview) return;
-    for (const p of preview) onAssign(p.matchId, p.tableId);
-    setAppliedIds(preview.map((p) => p.matchId));
-    setPreview(null);
+  // Assign ALL planned matches at once; they drop into Recently Applied below.
+  const applyAll = (plan: AssignmentPlan[]) => {
+    for (const p of plan) onAssign(p.matchId, p.tableId);
+    setAppliedIds((prev) => [...prev, ...plan.map((p) => p.matchId)]);
   };
   const sendBackToQueue = (matchId: string) => {
     onUnassign(matchId);
-    setAppliedIds((ids) => (ids ? ids.filter((id) => id !== matchId) : ids));
+    setAppliedIds((ids) => ids.filter((id) => id !== matchId));
   };
   const undoAll = () => {
-    if (appliedIds) for (const id of appliedIds) onUnassign(id);
-    setAppliedIds(null);
+    for (const id of appliedIds) onUnassign(id);
+    setAppliedIds([]);
   };
 
   const players = (m: LiveMatch | undefined): string =>
@@ -305,26 +308,27 @@ export const QueueView = ({
         )}
       </ScrollView>
 
-      {/* Auto Assign: preview → recently applied */}
+      {/* Auto Assign — preview on top, Recently Applied stacked below */}
       <Modal
-        visible={preview !== null || appliedIds !== null}
+        visible={autoOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setPreview(null);
-          setAppliedIds(null);
-        }}
+        onRequestClose={() => setAutoOpen(false)}
       >
         <View style={styles.overlay}>
           <View style={styles.previewCard}>
-            {/* Preview phase */}
-            {preview !== null && (
+            <Text allowFontScaling={false} style={styles.previewTitle}>
+              {"⚡"} Auto Assign
+            </Text>
+
+            {/* Pending plan */}
+            {autoPlan.length > 0 ? (
               <>
-                <Text allowFontScaling={false} style={styles.previewTitle}>
-                  Auto Assign will place:
+                <Text allowFontScaling={false} style={styles.sectionLabel}>
+                  Will place:
                 </Text>
                 <ScrollView style={styles.previewList} bounces={false}>
-                  {preview.map((p) => (
+                  {autoPlan.map((p) => (
                     <View key={p.matchId} style={styles.previewRow}>
                       <Text
                         allowFontScaling={false}
@@ -344,95 +348,88 @@ export const QueueView = ({
                     </View>
                   ))}
                 </ScrollView>
-                <View style={styles.previewBtns}>
-                  <TouchableOpacity
-                    style={styles.previewCancel}
-                    onPress={() => setPreview(null)}
-                  >
-                    <Text allowFontScaling={false} style={styles.previewCancelText}>
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.previewApply} onPress={applyPlan}>
-                    <Text allowFontScaling={false} style={styles.previewApplyText}>
-                      Assign All ({preview.length})
+                <TouchableOpacity
+                  style={styles.previewApply}
+                  onPress={() => applyAll(autoPlan)}
+                >
+                  <Text allowFontScaling={false} style={styles.previewApplyText}>
+                    Assign All ({autoPlan.length})
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text allowFontScaling={false} style={styles.appliedEmpty}>
+                {available.length === 0
+                  ? "No tables free."
+                  : "No matches ready to assign."}
+              </Text>
+            )}
+
+            {/* Recently applied (below the preview) */}
+            {appliedIds.length > 0 && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.appliedHeader}>
+                  <Text allowFontScaling={false} style={styles.sectionLabel}>
+                    Recently Applied
+                  </Text>
+                  <TouchableOpacity onPress={undoAll}>
+                    <Text allowFontScaling={false} style={styles.undoLink}>
+                      Undo All
                     </Text>
                   </TouchableOpacity>
                 </View>
+                <ScrollView style={styles.appliedList} bounces={false}>
+                  {appliedIds.map((id) => {
+                    const m = matchById[id];
+                    return (
+                      <View key={id} style={styles.appliedRow}>
+                        <View style={styles.appliedInfo}>
+                          <Text
+                            allowFontScaling={false}
+                            style={styles.previewMatch}
+                            numberOfLines={1}
+                          >
+                            {players(m)}
+                          </Text>
+                          <Text allowFontScaling={false} style={styles.appliedTable}>
+                            {m?.tableLabel ?? "—"}
+                          </Text>
+                        </View>
+                        <View style={styles.appliedActions}>
+                          {available.length > 0 && (
+                            <ActionMenu
+                              label="Move"
+                              items={available.map<ActionMenuItem>((t) => ({
+                                label: tableLabelOf(t),
+                                onPress: () => onAssign(id, t.id),
+                              }))}
+                            />
+                          )}
+                          <TouchableOpacity
+                            style={styles.backBtn}
+                            onPress={() => sendBackToQueue(id)}
+                          >
+                            <Text allowFontScaling={false} style={styles.backBtnText}>
+                              {"↩"} Queue
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
               </>
             )}
 
-            {/* Recently applied phase */}
-            {appliedIds !== null && (
-              <>
-                <Text allowFontScaling={false} style={styles.previewTitle}>
-                  Recently Applied
-                </Text>
-                {appliedIds.length === 0 ? (
-                  <Text allowFontScaling={false} style={styles.appliedEmpty}>
-                    All sent back to the queue.
-                  </Text>
-                ) : (
-                  <ScrollView style={styles.previewList} bounces={false}>
-                    {appliedIds.map((id) => {
-                      const m = matchById[id];
-                      return (
-                        <View key={id} style={styles.appliedRow}>
-                          <View style={styles.appliedInfo}>
-                            <Text
-                              allowFontScaling={false}
-                              style={styles.previewMatch}
-                              numberOfLines={1}
-                            >
-                              {players(m)}
-                            </Text>
-                            <Text allowFontScaling={false} style={styles.appliedTable}>
-                              {m?.tableLabel ?? "—"}
-                            </Text>
-                          </View>
-                          <View style={styles.appliedActions}>
-                            {available.length > 0 && (
-                              <ActionMenu
-                                label="Move"
-                                items={available.map<ActionMenuItem>((t) => ({
-                                  label: tableLabelOf(t),
-                                  onPress: () => onAssign(id, t.id),
-                                }))}
-                              />
-                            )}
-                            <TouchableOpacity
-                              style={styles.backBtn}
-                              onPress={() => sendBackToQueue(id)}
-                            >
-                              <Text allowFontScaling={false} style={styles.backBtnText}>
-                                {"↩"} Queue
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-                <View style={styles.previewBtns}>
-                  {appliedIds.length > 0 && (
-                    <TouchableOpacity style={styles.previewCancel} onPress={undoAll}>
-                      <Text allowFontScaling={false} style={styles.previewCancelText}>
-                        Undo All
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={styles.previewApply}
-                    onPress={() => setAppliedIds(null)}
-                  >
-                    <Text allowFontScaling={false} style={styles.previewApplyText}>
-                      Done
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+            <TouchableOpacity
+              style={styles.previewCancel}
+              onPress={() => setAutoOpen(false)}
+            >
+              <Text allowFontScaling={false} style={styles.previewCancelText}>
+                Close
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -623,26 +620,45 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: "700",
   },
-  previewBtns: {
-    flexDirection: "row",
-    gap: webSc(SPACING.sm),
-    marginTop: webSc(SPACING.md),
+  sectionLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: webSc(SPACING.xs),
   },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: webSc(SPACING.md),
+  },
+  appliedHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  undoLink: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    fontWeight: "700",
+  },
+  appliedList: { maxHeight: webSc(200) },
   previewCancel: {
-    flex: 1,
     paddingVertical: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: "center",
+    marginTop: webSc(SPACING.md),
   },
   previewCancelText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
   previewApply: {
-    flex: 1,
     paddingVertical: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.sm),
     backgroundColor: COLORS.primary,
     alignItems: "center",
+    marginTop: webSc(SPACING.sm),
   },
   previewApplyText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "700" },
   // Recently applied
