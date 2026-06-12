@@ -47,6 +47,7 @@ interface QueueViewProps {
   mode: AutoAssignMode;
   queueOrder: string[];
   onAssign: (matchId: string, tableId: number) => void;
+  onUnassign: (matchId: string) => void;
   onSetMode: (mode: AutoAssignMode) => void;
   onSetQueueOrder: (ids: string[]) => void;
 }
@@ -70,6 +71,7 @@ export const QueueView = ({
   mode,
   queueOrder,
   onAssign,
+  onUnassign,
   onSetMode,
   onSetQueueOrder,
 }: QueueViewProps) => {
@@ -82,6 +84,9 @@ export const QueueView = ({
 
   const [showOnTables, setShowOnTables] = useState(true);
   const [preview, setPreview] = useState<AssignmentPlan[] | null>(null);
+  // Match ids assigned by the last Apply — shown in the "Recently Applied" view
+  // so the TD can move them or send them back to the queue.
+  const [appliedIds, setAppliedIds] = useState<string[] | null>(null);
 
   const readyAtMap = useMemo(
     () => computeReadyAtMap(bracket, matchState),
@@ -133,9 +138,20 @@ export const QueueView = ({
     if (plan.length === 0) return;
     setPreview(plan);
   };
+  // Apply assigns ALL planned matches at once, then shows them in Recently Applied.
   const applyPlan = () => {
-    if (preview) for (const p of preview) onAssign(p.matchId, p.tableId);
+    if (!preview) return;
+    for (const p of preview) onAssign(p.matchId, p.tableId);
+    setAppliedIds(preview.map((p) => p.matchId));
     setPreview(null);
+  };
+  const sendBackToQueue = (matchId: string) => {
+    onUnassign(matchId);
+    setAppliedIds((ids) => (ids ? ids.filter((id) => id !== matchId) : ids));
+  };
+  const undoAll = () => {
+    if (appliedIds) for (const id of appliedIds) onUnassign(id);
+    setAppliedIds(null);
   };
 
   const players = (m: LiveMatch | undefined): string =>
@@ -289,62 +305,134 @@ export const QueueView = ({
         )}
       </ScrollView>
 
-      {/* Auto Assign preview */}
+      {/* Auto Assign: preview → recently applied */}
       <Modal
-        visible={preview !== null}
+        visible={preview !== null || appliedIds !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setPreview(null)}
+        onRequestClose={() => {
+          setPreview(null);
+          setAppliedIds(null);
+        }}
       >
         <View style={styles.overlay}>
           <View style={styles.previewCard}>
-            <Text allowFontScaling={false} style={styles.previewTitle}>
-              Auto Assign will place:
-            </Text>
-            <ScrollView style={styles.previewList} bounces={false}>
-              {(preview ?? []).map((p) => (
-                <View key={p.matchId} style={styles.previewRow}>
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.previewMatch}
-                    numberOfLines={1}
+            {/* Preview phase */}
+            {preview !== null && (
+              <>
+                <Text allowFontScaling={false} style={styles.previewTitle}>
+                  Auto Assign will place:
+                </Text>
+                <ScrollView style={styles.previewList} bounces={false}>
+                  {preview.map((p) => (
+                    <View key={p.matchId} style={styles.previewRow}>
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.previewMatch}
+                        numberOfLines={1}
+                      >
+                        {players(matchById[p.matchId])}
+                      </Text>
+                      <Text allowFontScaling={false} style={styles.previewArrow}>
+                        {"→"}
+                      </Text>
+                      <Text allowFontScaling={false} style={styles.previewTable}>
+                        {tableById[p.tableId]
+                          ? tableLabelOf(tableById[p.tableId])
+                          : "Table"}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+                <View style={styles.previewBtns}>
+                  <TouchableOpacity
+                    style={styles.previewCancel}
+                    onPress={() => setPreview(null)}
                   >
-                    {players(matchById[p.matchId])}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.previewArrow}>
-                    {"→"}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.previewTable}>
-                    {tableById[p.tableId]
-                      ? tableLabelOf(tableById[p.tableId])
-                      : "Table"}
-                  </Text>
+                    <Text allowFontScaling={false} style={styles.previewCancelText}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.previewApply} onPress={applyPlan}>
+                    <Text allowFontScaling={false} style={styles.previewApplyText}>
+                      Assign All ({preview.length})
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ))}
-            </ScrollView>
-            <View style={styles.previewBtns}>
-              <TouchableOpacity
-                style={styles.previewCancel}
-                onPress={() => setPreview(null)}
-              >
-                <Text allowFontScaling={false} style={styles.previewCancelText}>
-                  Cancel
+              </>
+            )}
+
+            {/* Recently applied phase */}
+            {appliedIds !== null && (
+              <>
+                <Text allowFontScaling={false} style={styles.previewTitle}>
+                  Recently Applied
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.previewAdjust}
-                onPress={() => setPreview(null)}
-              >
-                <Text allowFontScaling={false} style={styles.previewAdjustText}>
-                  Adjust
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.previewApply} onPress={applyPlan}>
-                <Text allowFontScaling={false} style={styles.previewApplyText}>
-                  Apply
-                </Text>
-              </TouchableOpacity>
-            </View>
+                {appliedIds.length === 0 ? (
+                  <Text allowFontScaling={false} style={styles.appliedEmpty}>
+                    All sent back to the queue.
+                  </Text>
+                ) : (
+                  <ScrollView style={styles.previewList} bounces={false}>
+                    {appliedIds.map((id) => {
+                      const m = matchById[id];
+                      return (
+                        <View key={id} style={styles.appliedRow}>
+                          <View style={styles.appliedInfo}>
+                            <Text
+                              allowFontScaling={false}
+                              style={styles.previewMatch}
+                              numberOfLines={1}
+                            >
+                              {players(m)}
+                            </Text>
+                            <Text allowFontScaling={false} style={styles.appliedTable}>
+                              {m?.tableLabel ?? "—"}
+                            </Text>
+                          </View>
+                          <View style={styles.appliedActions}>
+                            {available.length > 0 && (
+                              <ActionMenu
+                                label="Move"
+                                items={available.map<ActionMenuItem>((t) => ({
+                                  label: tableLabelOf(t),
+                                  onPress: () => onAssign(id, t.id),
+                                }))}
+                              />
+                            )}
+                            <TouchableOpacity
+                              style={styles.backBtn}
+                              onPress={() => sendBackToQueue(id)}
+                            >
+                              <Text allowFontScaling={false} style={styles.backBtnText}>
+                                {"↩"} Queue
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+                <View style={styles.previewBtns}>
+                  {appliedIds.length > 0 && (
+                    <TouchableOpacity style={styles.previewCancel} onPress={undoAll}>
+                      <Text allowFontScaling={false} style={styles.previewCancelText}>
+                        Undo All
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.previewApply}
+                    onPress={() => setAppliedIds(null)}
+                  >
+                    <Text allowFontScaling={false} style={styles.previewApplyText}>
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -549,19 +637,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   previewCancelText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
-  previewAdjust: {
-    flex: 1,
-    paddingVertical: webSc(SPACING.sm),
-    borderRadius: webSc(RADIUS.sm),
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    alignItems: "center",
-  },
-  previewAdjustText: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
   previewApply: {
     flex: 1,
     paddingVertical: webSc(SPACING.sm),
@@ -570,4 +645,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   previewApplyText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "700" },
+  // Recently applied
+  appliedEmpty: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    paddingVertical: webSc(SPACING.md),
+  },
+  appliedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.sm),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border + "60",
+  },
+  appliedInfo: { flex: 1, marginRight: webSc(SPACING.sm) },
+  appliedTable: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.primary,
+    fontWeight: "700",
+    marginTop: webSc(2),
+  },
+  appliedActions: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  backBtn: {
+    paddingVertical: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  backBtnText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.text, fontWeight: "600" },
 });

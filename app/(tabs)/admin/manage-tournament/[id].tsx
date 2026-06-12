@@ -2053,6 +2053,14 @@ export default function ManageTournamentScreen() {
         patch: { tableId, status: "in_progress", startedAt: new Date().toISOString() },
       })
       .catch(() => Alert.alert("Error", "Failed to assign the table."));
+  // Send a match back to the queue: clear its table and revert to scheduled.
+  const handleQueueUnassign = (matchId: string) =>
+    hub
+      .setMatchState({
+        matchId,
+        patch: { tableId: null, status: "scheduled", startedAt: null },
+      })
+      .catch(() => Alert.alert("Error", "Failed to update the match."));
   const handleSetAutoMode = (m: AutoAssignMode) =>
     hub.saveQueueSettings({ autoAssignMode: m }).catch(() => {});
   // A manual reorder takes the TD into Manual mode with the new order.
@@ -3934,6 +3942,7 @@ export default function ManageTournamentScreen() {
             mode={hub.autoAssignMode as AutoAssignMode}
             queueOrder={hub.queueOrder}
             onAssign={handleQueueAssign}
+            onUnassign={handleQueueUnassign}
             onSetMode={handleSetAutoMode}
             onSetQueueOrder={handleSetQueueOrder}
           />
