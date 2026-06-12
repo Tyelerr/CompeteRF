@@ -19,6 +19,7 @@ export type MatchActionStep =
   | "menu"
   | "table"
   | "winner"
+  | "winnerScore"
   | "score"
   | "timer"
   | "forfeit"

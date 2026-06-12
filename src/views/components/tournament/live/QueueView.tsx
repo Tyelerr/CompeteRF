@@ -214,6 +214,13 @@ export const QueueView = ({
                   >
                     {players(m)}
                   </Text>
+                  {m.isStream && (
+                    <View style={styles.liveBadge}>
+                      <Text allowFontScaling={false} style={styles.liveBadgeText}>
+                        {"● LIVE"}
+                      </Text>
+                    </View>
+                  )}
                   <Text allowFontScaling={false} style={styles.onTableTable}>
                     {m.tableLabel ?? "Table"}
                   </Text>
@@ -497,6 +504,18 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border + "60",
   },
   onTableText: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  liveBadge: {
+    backgroundColor: COLORS.error,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.xs),
+    paddingVertical: webSc(1),
+    marginRight: webSc(SPACING.sm),
+  },
+  liveBadgeText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.white,
+    fontWeight: "800",
+  },
   onTableTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.primary,

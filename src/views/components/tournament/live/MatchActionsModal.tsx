@@ -63,6 +63,7 @@ export const MatchActionsModal = ({
   const [p1Score, setP1Score] = useState("");
   const [p2Score, setP2Score] = useState("");
   const [timerMin, setTimerMin] = useState("");
+  const [winnerSlot, setWinnerSlot] = useState<1 | 2 | null>(null);
 
   useEffect(() => {
     if (!match) return;
@@ -70,6 +71,7 @@ export const MatchActionsModal = ({
     setTableId(match.tableId);
     setP1Score(match.p1Score != null ? String(match.p1Score) : "");
     setP2Score(match.p2Score != null ? String(match.p2Score) : "");
+    setWinnerSlot(null);
     setTimerMin(
       match.hasCustomTimer ? String(Math.round(match.allowedSeconds / 60)) : "",
     );
@@ -343,16 +345,60 @@ export const MatchActionsModal = ({
               <Header title="Set winner" />
               <PlayerPick
                 actionLabel="Winner"
-                onPick={(slot) =>
+                onPick={(slot) => {
+                  // Pick the winner, then collect the score. Pre-fill the
+                  // winner's score to their race so the TD just sets the loser.
+                  setWinnerSlot(slot);
+                  const wRace =
+                    (slot === 1 ? m.p1Race ?? m.raceTo : m.p2Race ?? m.raceTo) ??
+                    null;
+                  if (slot === 1) {
+                    if (wRace != null) setP1Score(String(wRace));
+                    if (p2Score === "") setP2Score("0");
+                  } else {
+                    if (wRace != null) setP2Score(String(wRace));
+                    if (p1Score === "") setP1Score("0");
+                  }
+                  setStep("winnerScore");
+                }}
+              />
+              <CloseBtn />
+            </>
+          )}
+
+          {step === "winnerScore" && winnerSlot != null && (
+            <>
+              <Header title="Match score" />
+              <Text allowFontScaling={false} style={styles.sub}>
+                Winner: {(winnerSlot === 1 ? m.p1Name : m.p2Name) ?? "Player"}
+              </Text>
+              <View style={styles.scoreRow}>
+                <ScoreCol
+                  name={m.p1Name ?? "P1"}
+                  value={p1Score}
+                  onChange={setP1Score}
+                  max={(m.p1Race ?? m.raceTo) ?? 999}
+                />
+                <ScoreCol
+                  name={m.p2Name ?? "P2"}
+                  value={p2Score}
+                  onChange={setP2Score}
+                  max={(m.p2Race ?? m.raceTo) ?? 999}
+                />
+              </View>
+              <Footer
+                saveLabel="Set Winner"
+                onSave={() =>
                   apply({
                     status: "completed",
-                    winner: slot,
+                    winner: winnerSlot,
+                    p1Score: p1Score === "" ? 0 : Number(p1Score),
+                    p2Score: p2Score === "" ? 0 : Number(p2Score),
                     completedAt: m.completedAt ?? now(),
                     result: m.result ?? "normal",
                   })
                 }
               />
-              <CloseBtn />
             </>
           )}
 

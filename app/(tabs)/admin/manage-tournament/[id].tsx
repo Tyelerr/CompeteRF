@@ -3249,7 +3249,7 @@ export default function ManageTournamentScreen() {
           onPress={() => setAddTablesOpen((o) => !o)}
         >
           <Text allowFontScaling={false} style={styles.sectionTitle}>
-            Add Tables
+            Add and Remove Tables
           </Text>
           <Text allowFontScaling={false} style={styles.collapseCaret}>
             {addTablesOpen ? "▾" : "▸"}
@@ -3333,9 +3333,11 @@ export default function ManageTournamentScreen() {
         </View>
           </>
         )}
-      </View>
 
-      <Section title={`Tables (${hub.tables.length})`}>
+        {/* Tables list — always visible. Tap a row to edit; X to remove. */}
+        <Text allowFontScaling={false} style={styles.tablesListLabel}>
+          Tables ({hub.tables.length})
+        </Text>
         {hub.tables.length === 0 ? (
           <Text allowFontScaling={false} style={styles.hint}>
             No tables yet. Add tables above.
@@ -3346,55 +3348,69 @@ export default function ManageTournamentScreen() {
             const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
             const color = tableStatusColor(effStatus);
             return (
-              <TouchableOpacity
-                key={tbl.id}
-                style={styles.tableRow}
-                activeOpacity={0.75}
-                onPress={() => setEditingTableId(tbl.id)}
-              >
-                <View style={styles.tableRowLeft}>
-                  <Text allowFontScaling={false} style={styles.tableRowName} numberOfLines={1}>
-                    Table {tbl.table_number}
-                    {tbl.label ? ` — ${tbl.label}` : ""}
-                  </Text>
-                  {occupiedBy && (
-                    <>
-                      <Text allowFontScaling={false} style={styles.tableRowSub} numberOfLines={1}>
-                        In use · {occupiedBy.label}
-                      </Text>
-                      <Text allowFontScaling={false} style={styles.tableRowNames} numberOfLines={1}>
-                        {occupiedBy.p1Name ?? "TBD"} vs {occupiedBy.p2Name ?? "TBD"}
-                      </Text>
-                    </>
-                  )}
-                </View>
-                <View style={styles.tableRowRight}>
-                  {tbl.is_streaming && (
-                    <View style={styles.streamBadge}>
-                      <Text allowFontScaling={false} style={styles.streamBadgeText}>
-                        LIVE
+              <View key={tbl.id} style={styles.tableRow}>
+                <TouchableOpacity
+                  style={styles.tableRowMain}
+                  activeOpacity={0.75}
+                  onPress={() => setEditingTableId(tbl.id)}
+                >
+                  <View style={styles.tableRowLeft}>
+                    <Text allowFontScaling={false} style={styles.tableRowName} numberOfLines={1}>
+                      Table {tbl.table_number}
+                      {tbl.label ? ` — ${tbl.label}` : ""}
+                    </Text>
+                    {occupiedBy && (
+                      <>
+                        <Text allowFontScaling={false} style={styles.tableRowSub} numberOfLines={1}>
+                          In use · {occupiedBy.label}
+                        </Text>
+                        <Text allowFontScaling={false} style={styles.tableRowNames} numberOfLines={1}>
+                          {occupiedBy.p1Name ?? "TBD"} vs {occupiedBy.p2Name ?? "TBD"}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                  <View style={styles.tableRowRight}>
+                    {tbl.is_streaming && (
+                      <View style={styles.streamBadge}>
+                        <Text allowFontScaling={false} style={styles.streamBadgeText}>
+                          LIVE
+                        </Text>
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        styles.statusChip,
+                        { backgroundColor: color + "22", borderColor: color },
+                      ]}
+                    >
+                      <Text allowFontScaling={false} style={[styles.statusChipText, { color }]}>
+                        {TABLE_STATUS_LABEL[effStatus]}
                       </Text>
                     </View>
-                  )}
-                  <View
-                    style={[
-                      styles.statusChip,
-                      { backgroundColor: color + "22", borderColor: color },
-                    ]}
-                  >
-                    <Text allowFontScaling={false} style={[styles.statusChipText, { color }]}>
-                      {TABLE_STATUS_LABEL[effStatus]}
+                    <Text allowFontScaling={false} style={styles.tableRowChevron}>
+                      ›
                     </Text>
                   </View>
-                  <Text allowFontScaling={false} style={styles.tableRowChevron}>
-                    ›
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.tableRemoveBtn}
+                  onPress={() => handleDeleteTable(tbl.id)}
+                  disabled={!!occupiedBy}
+                  hitSlop={8}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[styles.tableRemoveText, occupiedBy && styles.tableRemoveOff]}
+                  >
+                    ✕
                   </Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             );
           })
         )}
-      </Section>
+      </View>
 
       {/* Table edit sheet — tap a table card to change status / streaming / remove */}
       <Modal
@@ -5214,8 +5230,7 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: webSc(SPACING.sm),
+    gap: webSc(SPACING.xs),
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
@@ -5224,6 +5239,23 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
   },
+  tableRowMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+  },
+  tablesListLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginTop: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.sm),
+  },
+  tableRemoveBtn: { paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
+  tableRemoveText: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.error, fontWeight: "800" },
+  tableRemoveOff: { color: COLORS.textMuted, opacity: 0.4 },
   tableRowLeft: { flex: 1, gap: webSc(2) },
   tableRowName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   tableRowSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
