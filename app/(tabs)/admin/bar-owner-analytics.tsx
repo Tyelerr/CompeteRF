@@ -5,7 +5,7 @@
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -35,9 +35,22 @@ const moneyShort = (n: number): string => {
   return `$${Math.round(n)}`;
 };
 
+type TopMetric = "attendance" | "revenue" | "prize";
+const TOP_METRICS: { key: TopMetric; label: string }[] = [
+  { key: "attendance", label: "Attendance" },
+  { key: "revenue", label: "Revenue" },
+  { key: "prize", label: "Prize Pool" },
+];
+
 export default function BarOwnerAnalyticsScreen() {
   const router = useRouter();
   const vm = useVenueAnalytics();
+
+  // Collapsible sections: Money open by default; Top + Activity closed.
+  const [open, setOpen] = useState({ money: true, top: false, activity: false });
+  const toggle = (k: keyof typeof open) =>
+    setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const [topMetric, setTopMetric] = useState<TopMetric>("attendance");
 
   useFocusEffect(
     useCallback(() => {
@@ -48,6 +61,22 @@ export default function BarOwnerAnalyticsScreen() {
 
   const s = vm.venueStats;
   const f = s.feesByCategory;
+
+  const totalCollected = s.entryCollected + s.sidePotsCollected + s.addedMoney;
+  const totalActions =
+    vm.discovery.views +
+    vm.discovery.directions +
+    vm.discovery.calls +
+    vm.discovery.favorites +
+    vm.discovery.shares +
+    vm.discovery.giveawayViews;
+
+  const top =
+    topMetric === "revenue"
+      ? { list: vm.topRevenue, stat: (x: TournamentSeriesStats) => `${money(x.entryCollected)} entry` }
+      : topMetric === "prize"
+        ? { list: vm.topPrizePool, stat: (x: TournamentSeriesStats) => `${money(x.netPrizePool)} pool` }
+        : { list: vm.topAttendance, stat: (x: TournamentSeriesStats) => `${x.totalPlayers} players` };
 
   const openDetail = (series: TournamentSeriesStats) =>
     router.push({
@@ -141,73 +170,127 @@ export default function BarOwnerAnalyticsScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* 4. Money Overview */}
-      <SectionHeader title="Money Overview" />
-      <View style={styles.card}>
-        <GroupLabel text="Gross Collected" />
-        <MoneyRow label="Entry fees" value={money(s.entryCollected)} />
-        <MoneyRow label="Side pots" value={money(s.sidePotsCollected)} />
-        <MoneyRow label="Added money" value={money(s.addedMoney)} />
-
-        <GroupLabel text="Fees / Deductions" />
-        <MoneyRow label="TD fees" value={money(f.td)} />
-        <MoneyRow label="Green fees" value={money(f.green)} />
-        <MoneyRow label="Admin fees" value={money(f.admin)} />
-        <MoneyRow label="Custom fees" value={money(f.custom)} />
-        <MoneyRow label="Total fees" value={money(s.totalFees)} strong />
-
-        <GroupLabel text="Net Payout" />
-        <MoneyRow label="Net prize pool" value={money(s.netPrizePool)} strong />
-        <MoneyRow label="Prize money paid out" value={money(s.prizePaidOut)} />
-      </View>
-
-      {/* 5-7. Top tournaments */}
-      <TopList
-        title="Top Attendance"
-        series={vm.topAttendance}
-        stat={(x) => `${x.totalPlayers} players`}
-        onPress={openDetail}
-      />
-      <TopList
-        title="Top Revenue"
-        series={vm.topRevenue}
-        stat={(x) => `${money(x.entryCollected)} entry`}
-        onPress={openDetail}
-      />
-      <TopList
-        title="Top Prize Pools"
-        series={vm.topPrizePool}
-        stat={(x) => `${money(x.netPrizePool)} pool`}
-        onPress={openDetail}
-      />
-
-      {/* 8. Activity / Discovery */}
-      <SectionHeader title="Activity Breakdown" />
-      {vm.discoveryBreakdown.length > 0 ? (
+      {/* 4. Money Overview (open by default) */}
+      <CollapsibleSection
+        title="Money Overview"
+        expanded={open.money}
+        onToggle={() => toggle("money")}
+        summary={`${money(totalCollected)} collected`}
+      >
         <View style={styles.card}>
-          {vm.discoveryBreakdown.map((item, index) => {
-            const maxVal = Math.max(...vm.discoveryBreakdown.map((e) => e.value));
-            const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
-            return (
-              <View key={item.label} style={styles.barRow}>
-                <Text allowFontScaling={false} style={styles.barLabel}>
-                  {item.label}
-                </Text>
-                <AnimatedBar widthPercent={barWidth} color={item.color} delay={index * 80} />
-                <Text allowFontScaling={false} style={styles.barValue}>
-                  {item.value}
-                </Text>
-              </View>
-            );
-          })}
+          <GroupLabel text="Gross Collected" />
+          <MoneyRow label="Entry fees" value={money(s.entryCollected)} />
+          <MoneyRow label="Side pots" value={money(s.sidePotsCollected)} />
+          <MoneyRow label="Added money" value={money(s.addedMoney)} />
+
+          <GroupLabel text="Fees / Deductions" />
+          <MoneyRow label="TD fees" value={money(f.td)} />
+          <MoneyRow label="Green fees" value={money(f.green)} />
+          <MoneyRow label="Admin fees" value={money(f.admin)} />
+          <MoneyRow label="Custom fees" value={money(f.custom)} />
+          <MoneyRow label="Total fees" value={money(s.totalFees)} strong />
+
+          <GroupLabel text="Net Payout" />
+          <MoneyRow label="Net prize pool" value={money(s.netPrizePool)} strong />
+          <MoneyRow label="Prize money paid out" value={money(s.prizePaidOut)} />
         </View>
-      ) : (
-        <View style={styles.card}>
-          <Text allowFontScaling={false} style={styles.emptyText}>
-            No engagement data for this period yet
-          </Text>
+      </CollapsibleSection>
+
+      {/* 5. Top Tournaments (collapsed; segmented metric switch) */}
+      <CollapsibleSection
+        title="Top Tournaments"
+        expanded={open.top}
+        onToggle={() => toggle("top")}
+        summary={`${vm.series.length} ${vm.series.length === 1 ? "tournament" : "tournaments"}`}
+      >
+        <View style={styles.segmentRow}>
+          {TOP_METRICS.map((m) => (
+            <TouchableOpacity
+              key={m.key}
+              style={[styles.segment, topMetric === m.key && styles.segmentOn]}
+              onPress={() => setTopMetric(m.key)}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.segmentText, topMetric === m.key && styles.segmentTextOn]}
+              >
+                {m.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      )}
+        {top.list.length > 0 ? (
+          <View style={styles.card}>
+            {top.list.map((item, index) => (
+              <TouchableOpacity
+                key={item.seriesId}
+                style={[styles.rankRow, index < top.list.length - 1 && styles.rankRowBorder]}
+                onPress={() => openDetail(item)}
+                activeOpacity={0.7}
+              >
+                <Text allowFontScaling={false} style={styles.rankNumber}>
+                  #{index + 1}
+                </Text>
+                <View style={styles.rankNameWrap}>
+                  <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.rankSub}>
+                    {item.events} {item.events === 1 ? "event" : "events"} {"·"}{" "}
+                    {item.avgAttendance} avg
+                  </Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.rankStat}>
+                  {top.stat(item)}
+                </Text>
+                <Text allowFontScaling={false} style={styles.rankChevron}>
+                  {"›"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text allowFontScaling={false} style={styles.emptyText}>
+              No tournament data for this period yet
+            </Text>
+          </View>
+        )}
+      </CollapsibleSection>
+
+      {/* 6. Activity Breakdown (collapsed; horizontal bars) */}
+      <CollapsibleSection
+        title="Activity Breakdown"
+        expanded={open.activity}
+        onToggle={() => toggle("activity")}
+        summary={`${totalActions.toLocaleString()} ${totalActions === 1 ? "action" : "actions"}`}
+      >
+        {vm.discoveryBreakdown.length > 0 ? (
+          <View style={styles.card}>
+            {vm.discoveryBreakdown.map((item, index) => {
+              const maxVal = Math.max(...vm.discoveryBreakdown.map((e) => e.value));
+              const barWidth = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
+              return (
+                <View key={item.label} style={styles.barRow}>
+                  <Text allowFontScaling={false} style={styles.barLabel}>
+                    {item.label}
+                  </Text>
+                  <AnimatedBar widthPercent={barWidth} color={item.color} delay={index * 80} />
+                  <Text allowFontScaling={false} style={styles.barValue}>
+                    {item.value}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text allowFontScaling={false} style={styles.emptyText}>
+              No engagement data for this period yet
+            </Text>
+          </View>
+        )}
+      </CollapsibleSection>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -276,57 +359,42 @@ const MoneyRow = ({
   </View>
 );
 
-const TopList = ({
+// Accordion section: a tappable header (chevron + title + collapsed teaser) that
+// shows/hides its content. No LayoutAnimation (flaky under New Arch) — clean
+// conditional render.
+const CollapsibleSection = ({
   title,
-  series,
-  stat,
-  onPress,
+  expanded,
+  onToggle,
+  summary,
+  children,
 }: {
   title: string;
-  series: TournamentSeriesStats[];
-  stat: (s: TournamentSeriesStats) => string;
-  onPress: (s: TournamentSeriesStats) => void;
+  expanded: boolean;
+  onToggle: () => void;
+  summary?: string;
+  children: React.ReactNode;
 }) => (
-  <>
-    <SectionHeader title={title} />
-    {series.length > 0 ? (
-      <View style={styles.card}>
-        {series.map((item, index) => (
-          <TouchableOpacity
-            key={item.seriesId}
-            style={[styles.rankRow, index < series.length - 1 && styles.rankRowBorder]}
-            onPress={() => onPress(item)}
-            activeOpacity={0.7}
-          >
-            <Text allowFontScaling={false} style={styles.rankNumber}>
-              #{index + 1}
-            </Text>
-            <View style={styles.rankNameWrap}>
-              <Text allowFontScaling={false} style={styles.rankName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text allowFontScaling={false} style={styles.rankSub}>
-                {item.events} {item.events === 1 ? "event" : "events"} {"·"}{" "}
-                {item.avgAttendance} avg
-              </Text>
-            </View>
-            <Text allowFontScaling={false} style={styles.rankStat}>
-              {stat(item)}
-            </Text>
-            <Text allowFontScaling={false} style={styles.rankChevron}>
-              {"›"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    ) : (
-      <View style={styles.card}>
-        <Text allowFontScaling={false} style={styles.emptyText}>
-          No tournament data for this period yet
+  <View>
+    <TouchableOpacity
+      style={styles.collapseHeader}
+      onPress={onToggle}
+      activeOpacity={0.7}
+    >
+      <Text allowFontScaling={false} style={styles.collapseChevron}>
+        {expanded ? "▾" : "▸"}
+      </Text>
+      <Text allowFontScaling={false} style={styles.sectionTitle}>
+        {title}
+      </Text>
+      {!expanded && summary ? (
+        <Text allowFontScaling={false} style={styles.collapseSummary}>
+          {summary}
         </Text>
-      </View>
-    )}
-  </>
+      ) : null}
+    </TouchableOpacity>
+    {expanded ? children : null}
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -400,6 +468,49 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
   },
+  // Collapsible section header
+  collapseHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
+  },
+  collapseChevron: {
+    fontSize: wxMs(FONT_SIZES.md),
+    color: COLORS.textSecondary,
+    width: wxSc(20),
+  },
+  collapseSummary: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  // Segmented control (Top Tournaments metric)
+  segmentRow: {
+    flexDirection: "row",
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.xs,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: SPACING.xs,
+    borderRadius: wxSc(8),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+  },
+  segmentOn: { backgroundColor: COLORS.primary + "20", borderColor: COLORS.primary },
+  segmentText: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  segmentTextOn: { color: COLORS.primary, fontWeight: "700" },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
