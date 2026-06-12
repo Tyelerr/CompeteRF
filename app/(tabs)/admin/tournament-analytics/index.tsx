@@ -205,8 +205,10 @@ export default function TournamentAnalyticsScreen() {
               </Text>
             </View>
             <Text allowFontScaling={false} style={styles.cardMeta}>
-              {item.events} {item.events === 1 ? "event" : "events"} {"·"}{" "}
-              {item.avgAttendance} avg players {"·"} {item.totalPlayers} total
+              <Text style={styles.cardMetaStrong}>{item.avgAttendance}</Text> avg
+              players {"·"}{" "}
+              <Text style={styles.cardMetaStrong}>{item.events}</Text>{" "}
+              {item.events === 1 ? "event" : "events"}
             </Text>
             <View style={styles.cardStatsRow}>
               <View style={styles.cardStat}>
@@ -214,7 +216,7 @@ export default function TournamentAnalyticsScreen() {
                   {money(item.entryCollected)}
                 </Text>
                 <Text allowFontScaling={false} style={styles.cardStatLabel}>
-                  Entry fees
+                  Entry Fees
                 </Text>
               </View>
               <View style={styles.cardStatDivider} />
@@ -223,10 +225,13 @@ export default function TournamentAnalyticsScreen() {
                   {money(item.netPrizePool)}
                 </Text>
                 <Text allowFontScaling={false} style={styles.cardStatLabel}>
-                  Prize pool
+                  Prize Pool
                 </Text>
               </View>
             </View>
+            <Text allowFontScaling={false} style={styles.cardLargest}>
+              Largest event: {item.largestAttendance} players
+            </Text>
           </TouchableOpacity>
         ))
       )}
@@ -366,9 +371,15 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.sm,
   },
   cardMeta: {
-    fontSize: wxMs(FONT_SIZES.xs),
+    fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     marginTop: wxSc(2),
+  },
+  cardMetaStrong: { color: COLORS.text, fontWeight: "700" },
+  cardLargest: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
   },
   cardStatsRow: {
     flexDirection: "row",
