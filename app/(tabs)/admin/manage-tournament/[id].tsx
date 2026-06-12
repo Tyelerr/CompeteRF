@@ -971,6 +971,7 @@ const RegistrationRow = ({
   raceGroups,
   onReady,
   onSaveEdit,
+  onTogglePaidPot,
   onNoShow,
   onRemove,
   onUndo,
@@ -997,6 +998,7 @@ const RegistrationRow = ({
     paidPots: string[],
     raceOverride: number | null,
   ) => void;
+  onTogglePaidPot: (name: string, paid: boolean) => void;
   onNoShow: () => void;
   onRemove: () => void;
   onUndo: () => void;
@@ -1261,15 +1263,23 @@ const RegistrationRow = ({
                 checked={!!registration.paid_entry}
                 readOnly
               />
-              {livePaidPots().map((name, i) => {
-                const pot = sidePots.find((p) => p.name === name);
-                if (!pot) return null;
+              {/* All current side pots, tappable: a newly added pot shows up
+                  here instantly so the TD can add a player with one tap, no
+                  edit cycle. */}
+              {sidePots.map((pot, i) => {
+                const paid = safePaidSidePots(registration.paid_side_pots).includes(
+                  pot.name,
+                );
                 return (
                   <PayCheckbox
-                    key={`${name}-${i}`}
-                    label={`${potLabel(pot)} Entered`}
-                    checked
-                    readOnly
+                    key={`${pot.name}-${i}`}
+                    label={paid ? `${potLabel(pot)} Entered` : potLabel(pot)}
+                    checked={paid}
+                    onToggle={
+                      isProcessing
+                        ? undefined
+                        : () => onTogglePaidPot(pot.name, !paid)
+                    }
                   />
                 );
               })}
@@ -2354,6 +2364,20 @@ export default function ManageTournamentScreen() {
       "Failed to save changes.",
     );
 
+  // Quick-toggle a single side pot on a Ready player (no full edit needed). Lets
+  // a newly added side pot be applied to players with one tap.
+  const handleTogglePaidPot = (r: Registration, name: string, paid: boolean) => {
+    const current = safePaidSidePots(r.paid_side_pots);
+    const next = paid
+      ? [...new Set([...current, name])]
+      : current.filter((n) => n !== name);
+    return withProcessing(
+      r.id,
+      () => hub.updateRegistration({ id: r.id, updates: { paid_side_pots: next } }),
+      "Failed to update side pots.",
+    );
+  };
+
   const handleNoShow = (r: Registration) =>
     withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show.");
 
@@ -3115,6 +3139,9 @@ export default function ManageTournamentScreen() {
               }
               onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
                 handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
+              }
+              onTogglePaidPot={(name, paid) =>
+                handleTogglePaidPot(item, name, paid)
               }
               onNoShow={() => handleNoShow(item)}
               onRemove={() => handleRemove(item)}
