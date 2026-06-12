@@ -2,6 +2,7 @@
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
 
 interface BarOwnerVenueCardProps {
   venue: {
@@ -38,6 +39,11 @@ export const BarOwnerVenueCard = ({
     }
   };
 
+  const actions: ActionMenuItem[] = [];
+  if (onManageTables) actions.push({ label: "Manage Tables", onPress: onManageTables });
+  if (onManageTeam) actions.push({ label: "Manage Team", onPress: onManageTeam });
+  if (onManageDirectors) actions.push({ label: "Manage Directors", onPress: onManageDirectors });
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
@@ -70,32 +76,11 @@ export const BarOwnerVenueCard = ({
         </View>
       </View>
 
-      <View style={styles.actions}>
-        {onManageTables && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => { e.stopPropagation(); onManageTables(); }}
-          >
-            <Text style={styles.actionText}>Manage Tables</Text>
-          </TouchableOpacity>
-        )}
-        {onManageTeam && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => { e.stopPropagation(); onManageTeam(); }}
-          >
-            <Text style={styles.actionText}>{"\uD83D\uDC65"} Manage Team</Text>
-          </TouchableOpacity>
-        )}
-        {onManageDirectors && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => { e.stopPropagation(); onManageDirectors(); }}
-          >
-            <Text style={styles.actionText}>Manage Directors</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {actions.length > 0 && (
+        <View style={styles.actions}>
+          <ActionMenu items={actions} />
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
@@ -139,13 +124,5 @@ const styles = StyleSheet.create({
   statValue: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: COLORS.primary },
   statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
   statDivider: { width: 1, height: 30, backgroundColor: COLORS.border },
-  actions: { flexDirection: "row", gap: SPACING.sm },
-  actionButton: {
-    flex: 1,
-    backgroundColor: COLORS.primary + "15",
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  actionText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.primary },
+  actions: {},
 });

@@ -5,7 +5,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   Platform,
@@ -15,6 +14,7 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { useBarOwnerVenues } from "../../../src/viewmodels/useBarOwnerVenues";
+import { AdminHeader, AdminSearchBar } from "../../../src/views/components/admin/AdminControls";
 import { EmptyState } from "../../../src/views/components/dashboard";
 import { BarOwnerVenueCard } from "../../../src/views/components/venues";
 import { VenueTeamModal } from "../../../src/views/components/venues/VenueTeamModal";
@@ -64,28 +64,21 @@ export default function BarOwnerVenuesScreen() {
         onClose={() => { setTeamModalVenueId(null); vm.onRefresh(); }}
       />
 
-      {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>{"\u2190"} Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Venues</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <AdminHeader
+        title="My Venues"
+        subtitle={`${vm.venues.length} venue${vm.venues.length === 1 ? "" : "s"}`}
+        onBack={() => router.back()}
+      />
 
-      {/* Search & Add Row */}
-      <View style={styles.controlsRow}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search venues..."
-          placeholderTextColor={COLORS.textSecondary}
-          value={vm.searchQuery}
-          onChangeText={vm.setSearchQuery}
-        />
-        <TouchableOpacity style={styles.addButton} onPress={handleCreateVenue}>
-          <Text style={styles.addButtonText}>+ Add Venue</Text>
-        </TouchableOpacity>
-      </View>
+      <AdminSearchBar
+        value={vm.searchQuery}
+        onChangeText={vm.setSearchQuery}
+        placeholder="Search venues..."
+      />
+
+      <TouchableOpacity style={styles.addButton} onPress={handleCreateVenue}>
+        <Text style={styles.addButtonText}>+ Add Venue</Text>
+      </TouchableOpacity>
 
       {/* Venue List */}
       <FlatList
@@ -130,46 +123,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xl + SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerWeb: { paddingTop: SPACING.lg },
-  backButton: { padding: SPACING.xs },
-  backText: { fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: "600" },
-  headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: "700", color: COLORS.text },
-  placeholder: { width: 50 },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.md,
-    marginTop: isWeb ? SPACING.md : SPACING.xl * 3,
-    marginBottom: SPACING.lg,
-  },
-  searchInput: {
-    flex: 0.7,
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.text,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
   addButton: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.sm,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
+    alignItems: "center",
   },
-  addButtonText: { fontSize: FONT_SIZES.sm, fontWeight: "600", color: COLORS.surface },
+  addButtonText: { fontSize: FONT_SIZES.md, fontWeight: "600", color: COLORS.white },
   listContent: { padding: SPACING.md, paddingBottom: SPACING.xl * 2 },
 });
