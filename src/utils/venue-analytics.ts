@@ -127,6 +127,7 @@ export const groupIntoSeries = (
       seriesId,
       templateId: list[0].templateId,
       name: newest?.name ?? "Tournament",
+      lastDate: newest?.tournamentDate ?? "",
       tournamentIds: list.map((r) => r.tournamentId),
       events,
       totalPlayers,

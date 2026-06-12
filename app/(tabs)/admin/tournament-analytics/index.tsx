@@ -1,25 +1,27 @@
-// app/(tabs)/admin/tournament-analytics.tsx
+// app/(tabs)/admin/tournament-analytics/index.tsx
 // Tournament Analytics list: every tournament series (recurring template or
-// one-off) the owner runs, with quick attendance + money stats. Tap a row to
-// open its detail. Answers "how is each individual tournament performing?"
+// one-off) the owner runs, with quick attendance + money stats, plus name search
+// and sort. Tap a row to open its detail.
 
-import { moderateScale, scale } from "../../../src/utils/scaling";
+import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { COLORS } from "../../../src/theme/colors";
-import { SPACING } from "../../../src/theme/spacing";
-import { FONT_SIZES } from "../../../src/theme/typography";
-import { useVenueAnalytics } from "../../../src/viewmodels/useVenueAnalytics";
-import { TournamentSeriesStats } from "../../../src/models/types/venue-analytics.types";
-import { Dropdown } from "../../../src/views/components/common/dropdown";
+import { COLORS } from "../../../../src/theme/colors";
+import { SPACING } from "../../../../src/theme/spacing";
+import { FONT_SIZES } from "../../../../src/theme/typography";
+import { useVenueAnalytics } from "../../../../src/viewmodels/useVenueAnalytics";
+import { TournamentSeriesStats } from "../../../../src/models/types/venue-analytics.types";
+import { Dropdown } from "../../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -28,12 +30,49 @@ const wxSc = (v: number) => (isWeb ? v : scale(v));
 const money = (n: number): string =>
   `$${Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
+type SortKey = "attendance" | "revenue" | "prize" | "recent" | "name";
+const SORT_OPTIONS: { label: string; value: SortKey }[] = [
+  { label: "Attendance", value: "attendance" },
+  { label: "Revenue", value: "revenue" },
+  { label: "Prize Pool", value: "prize" },
+  { label: "Most Recent", value: "recent" },
+  { label: "A–Z", value: "name" },
+];
+
+const sortSeries = (
+  list: TournamentSeriesStats[],
+  key: SortKey,
+): TournamentSeriesStats[] => {
+  const arr = [...list];
+  switch (key) {
+    case "revenue":
+      return arr.sort((a, b) => b.entryCollected - a.entryCollected);
+    case "prize":
+      return arr.sort((a, b) => b.netPrizePool - a.netPrizePool);
+    case "recent":
+      return arr.sort((a, b) => (b.lastDate || "").localeCompare(a.lastDate || ""));
+    case "name":
+      return arr.sort((a, b) => a.name.localeCompare(b.name));
+    case "attendance":
+    default:
+      return arr.sort((a, b) => b.totalPlayers - a.totalPlayers);
+  }
+};
+
 export default function TournamentAnalyticsScreen() {
   const router = useRouter();
   const vm = useVenueAnalytics();
 
-  // Default to highest attendance so the busiest tournaments lead.
-  const series = [...vm.series].sort((a, b) => b.totalPlayers - a.totalPlayers);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("attendance");
+
+  const series = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? vm.series.filter((s) => s.name.toLowerCase().includes(q))
+      : vm.series;
+    return sortSeries(filtered, sortKey);
+  }, [vm.series, query, sortKey]);
 
   const openDetail = (item: TournamentSeriesStats) =>
     router.push({
@@ -44,6 +83,7 @@ export default function TournamentAnalyticsScreen() {
   return (
     <ScrollView
       style={styles.container}
+      keyboardShouldPersistTaps="handled"
       refreshControl={
         isWeb ? undefined : (
           <RefreshControl
@@ -71,6 +111,7 @@ export default function TournamentAnalyticsScreen() {
         </Text>
       </View>
 
+      {/* Period */}
       <View style={styles.filterSection}>
         <Text allowFontScaling={false} style={styles.filterLabel}>
           Period
@@ -85,6 +126,56 @@ export default function TournamentAnalyticsScreen() {
         </View>
       </View>
 
+      {/* Search */}
+      <View style={styles.searchWrap}>
+        <Text allowFontScaling={false} style={styles.searchIcon}>
+          {"🔍"}
+        </Text>
+        <TextInput
+          allowFontScaling={false}
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search tournaments..."
+          placeholderTextColor={COLORS.textMuted}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => setQuery("")}>
+            <Text allowFontScaling={false} style={styles.searchClear}>
+              {"✕"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Sort */}
+      <View style={styles.sortRow}>
+        <Text allowFontScaling={false} style={styles.sortLabel}>
+          Sort
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortPills}
+          keyboardShouldPersistTaps="handled"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <TouchableOpacity
+              key={o.value}
+              style={[styles.sortPill, sortKey === o.value && styles.sortPillOn]}
+              onPress={() => setSortKey(o.value)}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.sortPillText, sortKey === o.value && styles.sortPillTextOn]}
+              >
+                {o.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       {vm.loading ? (
         <Text allowFontScaling={false} style={styles.loadingText}>
           Loading...
@@ -92,8 +183,9 @@ export default function TournamentAnalyticsScreen() {
       ) : series.length === 0 ? (
         <View style={styles.card}>
           <Text allowFontScaling={false} style={styles.emptyText}>
-            No tournaments with players in this period yet. Stats appear once
-            tournaments are run on Compete.
+            {query
+              ? "No tournaments match your search."
+              : "No tournaments with players in this period yet. Stats appear once tournaments are run on Compete."}
           </Text>
         </View>
       ) : (
@@ -189,7 +281,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingTop: SPACING.sm,
   },
   filterLabel: {
     fontSize: wxMs(FONT_SIZES.sm),
@@ -197,6 +289,51 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   filterDropdown: { flex: 1, maxWidth: wxSc(180), marginLeft: SPACING.md },
+  // Search
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: wxSc(8),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    height: wxSc(40),
+  },
+  searchIcon: { fontSize: wxMs(14), marginRight: SPACING.sm, opacity: 0.6 },
+  searchInput: { flex: 1, fontSize: wxMs(FONT_SIZES.sm), color: COLORS.text },
+  searchClear: {
+    fontSize: wxMs(FONT_SIZES.md),
+    color: COLORS.textMuted,
+    paddingHorizontal: SPACING.xs,
+  },
+  // Sort
+  sortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+  },
+  sortLabel: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginRight: SPACING.sm,
+  },
+  sortPills: { flexDirection: "row", gap: SPACING.xs, paddingRight: SPACING.md },
+  sortPill: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: wxSc(6),
+    borderRadius: wxSc(16),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  sortPillOn: { backgroundColor: COLORS.primary + "20", borderColor: COLORS.primary },
+  sortPillText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  sortPillTextOn: { color: COLORS.primary, fontWeight: "700" },
   loadingText: {
     fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.textSecondary,

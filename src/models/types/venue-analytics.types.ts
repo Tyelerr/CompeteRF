@@ -60,6 +60,7 @@ export interface TournamentSeriesStats {
   seriesId: string; // `tpl-<templateId>` or `one-<tournamentId>`
   templateId: number | null;
   name: string;
+  lastDate: string; // most recent run's tournament_date (for "Most Recent" sort)
   tournamentIds: number[]; // for discovery (app_events) scoping
 
   // Attendance
