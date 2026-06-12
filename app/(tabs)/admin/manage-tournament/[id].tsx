@@ -50,6 +50,7 @@ import { Profile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
 import { Tournament } from "../../../../src/models/types/tournament.types";
 import {
+  AutoAssignMode,
   BracketMatch,
   DrawLogEntry,
   FeeCategory,
@@ -87,6 +88,7 @@ import { DatePicker } from "../../../../src/views/components/common/date-picker"
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
 import { PrizePoolView } from "../../../../src/views/components/tournament/live/PrizePoolView";
+import { QueueView } from "../../../../src/views/components/tournament/live/QueueView";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -113,6 +115,7 @@ type TabKey =
   | "bracket"
   | "review"
   | "matches"
+  | "queue"
   | "results"
   | "standings"
   | "payouts"
@@ -128,6 +131,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   bracket: "Bracket / Draw",
   review: "Review",
   matches: "Matches",
+  queue: "Queue",
   results: "Results",
   standings: "Standings",
   payouts: "Payouts",
@@ -181,6 +185,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
     tabs: [
       { tab: "matches", label: "Matches / Bracket" },
       { tab: "tables", label: "Tables" },
+      { tab: "queue", label: "Queue" },
       { tab: "actions", label: "Actions", lead: "⚡", divider: true },
     ],
   },
@@ -2037,6 +2042,23 @@ export default function ManageTournamentScreen() {
     for (const id of Object.keys(tableMatch)) map[Number(id)] = tableMatch[Number(id)].label;
     return map;
   }, [tableMatch]);
+
+  // ---- Queue Manager handlers --------------------------------------------
+  // Assigning a table starts the match (sets table + in_progress + startedAt).
+  const handleQueueAssign = (matchId: string, tableId: number) =>
+    hub
+      .setMatchState({
+        matchId,
+        patch: { tableId, status: "in_progress", startedAt: new Date().toISOString() },
+      })
+      .catch(() => Alert.alert("Error", "Failed to assign the table."));
+  const handleSetAutoMode = (m: AutoAssignMode) =>
+    hub.saveQueueSettings({ autoAssignMode: m }).catch(() => {});
+  // A manual reorder takes the TD into Manual mode with the new order.
+  const handleSetQueueOrder = (ids: string[]) =>
+    hub
+      .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual" })
+      .catch(() => {});
   // The table being edited in the table edit sheet (status / streaming / remove).
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
   // "Add Tables" collapses once the tournament is live (you rarely add mid-event).
@@ -3870,6 +3892,21 @@ export default function ManageTournamentScreen() {
             occupancy={tableOccupancy}
           />
         );
+      case "queue":
+        return (
+          <QueueView
+            matches={liveMatches}
+            tables={hub.tables}
+            bracket={hub.bracket}
+            matchState={hub.matchState}
+            occupancy={tableOccupancy}
+            mode={hub.autoAssignMode as AutoAssignMode}
+            queueOrder={hub.queueOrder}
+            onAssign={handleQueueAssign}
+            onSetMode={handleSetAutoMode}
+            onSetQueueOrder={handleSetQueueOrder}
+          />
+        );
       case "results":
       case "standings":
         return (
@@ -4257,9 +4294,9 @@ export default function ManageTournamentScreen() {
         onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
       />
 
-      {activeTab === "matches" ? (
-        // Matches owns its own scrolling (cards) / gestures (bracket) and fills
-        // the available height, so it lives outside the page ScrollView.
+      {activeTab === "matches" || activeTab === "queue" ? (
+        // Matches/Queue own their scrolling and fill the available height, so
+        // they live outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : (
         <ScrollView

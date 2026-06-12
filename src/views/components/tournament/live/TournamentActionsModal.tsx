@@ -33,7 +33,6 @@ const SECTIONS: { title: string; items: ActionItem[] }[] = [
     items: [
       { label: "Start All Ready Matches" },
       { label: "Auto Run Tournament" },
-      { label: "Recalculate Queue" },
     ],
   },
   {

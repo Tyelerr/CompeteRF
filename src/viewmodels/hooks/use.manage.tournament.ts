@@ -13,6 +13,7 @@ import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import { Tournament } from "../../models/types/tournament.types";
 import {
+  AutoAssignMode,
   DrawLogEntry,
   GeneratedBracket,
   MatchLiveState,
@@ -159,6 +160,18 @@ export const useManageTournament = (tournamentId?: number) => {
     onSuccess: invalidateTournament,
   });
 
+  // Persist Queue Manager settings (auto-assign mode + manual queue order),
+  // merged into live_settings.
+  const saveQueueSettingsMutation = useMutation({
+    mutationFn: (vars: { autoAssignMode?: AutoAssignMode; queueOrder?: string[] }) => {
+      const ls = tournamentQuery.data?.live_settings ?? {};
+      return tournamentService.updateTournament(tournamentId!, {
+        live_settings: { ...ls, ...vars },
+      });
+    },
+    onSuccess: invalidateTournament,
+  });
+
   // Merge a patch into one match's live state (Matches tab). Stored in
   // live_settings.matchState keyed by match number.
   const setMatchStateMutation = useMutation({
@@ -281,6 +294,11 @@ export const useManageTournament = (tournamentId?: number) => {
     // Live matches (Matches tab)
     matchState: tournament?.live_settings?.matchState ?? {},
     setMatchState: setMatchStateMutation.mutateAsync,
+
+    // Queue Manager
+    autoAssignMode: tournament?.live_settings?.autoAssignMode ?? "balanced",
+    queueOrder: tournament?.live_settings?.queueOrder ?? [],
+    saveQueueSettings: saveQueueSettingsMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,
     isDrawing: drawBracketMutation.isPending,
     // Reopen registration to change the field before a redraw.
