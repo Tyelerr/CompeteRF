@@ -22,7 +22,7 @@ const isWeb = Platform.OS === "web";
 
 // Push the search bar (and everything below it) down by this fraction of the
 // screen height. Tune this one number to raise/lower the page content.
-const SEARCH_TOP_FRACTION = 0.18;
+const SEARCH_TOP_FRACTION = 0.09;
 
 // ── Header ────────────────────────────────────────────────────────────────────
 export const AdminHeader = ({
