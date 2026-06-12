@@ -236,18 +236,18 @@ export const QueueView = ({
                         {!playing ? " · Not started" : ""}
                       </Text>
                     </View>
-                    {playing ? (
-                      m.isStream ? (
-                        <Text allowFontScaling={false} style={styles.liveBadgeText}>
-                          {"● LIVE"}
-                        </Text>
+                    <View style={styles.onTableActions}>
+                      {playing ? (
+                        m.isStream ? (
+                          <Text allowFontScaling={false} style={styles.liveBadgeText}>
+                            {"● LIVE"}
+                          </Text>
+                        ) : (
+                          <Text allowFontScaling={false} style={styles.playingTag}>
+                            Playing
+                          </Text>
+                        )
                       ) : (
-                        <Text allowFontScaling={false} style={styles.playingTag}>
-                          Playing
-                        </Text>
-                      )
-                    ) : (
-                      <View style={styles.onTableActions}>
                         <TouchableOpacity
                           style={styles.startBtn}
                           onPress={() => onStart(m.id)}
@@ -256,16 +256,17 @@ export const QueueView = ({
                             {"▶ Start"}
                           </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.backBtn}
-                          onPress={() => onUnassign(m.id)}
-                        >
-                          <Text allowFontScaling={false} style={styles.backBtnText}>
-                            {"↩"}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
+                      )}
+                      {/* Undo — send back to the queue (parked or just-started). */}
+                      <TouchableOpacity
+                        style={styles.backBtn}
+                        onPress={() => onUnassign(m.id)}
+                      >
+                        <Text allowFontScaling={false} style={styles.backBtnText}>
+                          {"↩"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}

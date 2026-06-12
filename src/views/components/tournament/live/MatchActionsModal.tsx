@@ -170,6 +170,35 @@ export const MatchActionsModal = ({
     items.push({ label: "Set Winner", onPress: () => setStep("winner") });
     items.push({ label: "Change Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
     items.push({ label: "Change Timer", onPress: () => setStep("timer") });
+    // Started by mistake? Reset clears the table, score and start so the match
+    // goes back to the queue as not-started and can be re-assigned.
+    items.push({
+      label: "Reset Match",
+      danger: true,
+      onPress: () =>
+        Alert.alert(
+          "Reset Match",
+          `Reset ${m.label}? It returns to the queue as not started — the table, score and start time are cleared.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Reset",
+              style: "destructive",
+              onPress: () =>
+                apply({
+                  status: "scheduled",
+                  tableId: null,
+                  startedAt: null,
+                  completedAt: null,
+                  winner: null,
+                  p1Score: null,
+                  p2Score: null,
+                  result: null,
+                }),
+            },
+          ],
+        ),
+    });
     items.push({ label: "Forfeit", danger: true, onPress: () => setStep("forfeit") });
     items.push({ label: "Withdraw", danger: true, onPress: () => setStep("withdraw") });
   } else {
