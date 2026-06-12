@@ -375,9 +375,9 @@ const styles = StyleSheet.create({
   },
   autoBtn: {
     flex: 1,
+    height: webSc(44),
     backgroundColor: COLORS.primary,
     borderRadius: webSc(RADIUS.sm),
-    paddingVertical: webSc(SPACING.sm),
     alignItems: "center",
     justifyContent: "center",
   },
