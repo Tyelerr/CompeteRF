@@ -55,7 +55,26 @@ interface Label {
   x: number;
   y: number;
   text: string;
+  sub?: string; // placement subtitle, e.g. "13-16TH" (what losers here play for)
 }
+
+const ordSuffix = (n: number): string => {
+  const t = n % 100;
+  if (t >= 11 && t <= 13) return "th";
+  switch (n % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+};
+// "3rd" for a single place, "5-6th" / "13-16th" for a range (style upcases it).
+const placeLabel = (lo: number, hi: number): string =>
+  lo === hi ? `${lo}${ordSuffix(lo)}` : `${lo}-${hi}${ordSuffix(hi)}`;
 
 const winnersRoundName = (r: number, maxR: number, prefix: boolean): string => {
   const fromEnd = maxR - r;
@@ -162,13 +181,32 @@ const layout = (matches: LiveMatch[]) => {
   // round) align with their single LB child; minor rounds (half the count) center
   // between two. Round 1 is stacked.
   const losBaseY = hasLosers ? winHeight + DIVIDER_GAP : winHeight;
+  // Placement each losers round plays for: the losers-final loser is 3rd, and each
+  // earlier round eliminates a (bracket-position) block below that. Counting from
+  // the final back assigns 3rd, 4th, 5-6th, 7-8th, 9-12th, … to the rounds.
+  const losPlace = new Map<number, string>();
+  {
+    let place = 3;
+    for (let r = losMaxR; r >= 1; r--) {
+      const count = (losRounds.get(r) || []).length;
+      if (count <= 0) continue;
+      const hi = place + count - 1;
+      losPlace.set(r, placeLabel(place, hi));
+      place = hi + 1;
+    }
+  }
   let prevLY = new Map<number, number>();
   for (let r = 1; r <= losMaxR; r++) {
     const arr = losRounds.get(r) || [];
     const prevCount = (losRounds.get(r - 1) || []).length;
     const major = r > 1 && arr.length === prevCount;
     const x = (r - 1) * colStride;
-    labels.push({ x, y: losBaseY + 4, text: r === losMaxR ? "Losers Final" : `Losers Round ${r}` });
+    labels.push({
+      x,
+      y: losBaseY + 4,
+      text: r === losMaxR ? "Losers Final" : `Losers Round ${r}`,
+      sub: losPlace.get(r),
+    });
     const curLY = new Map<number, number>();
     arr.forEach((m, j) => {
       const i = idxOf(m);
@@ -212,7 +250,12 @@ const layout = (matches: LiveMatch[]) => {
     const x = winWidth + (m.round - 1) * colStride;
     const pos = { x, y: gfY, match: m };
     positioned.push(pos);
-    labels.push({ x, y: 4, text: m.round === 1 ? "Finals" : "Finals (2nd Set)" });
+    labels.push({
+      x,
+      y: 4,
+      text: m.round === 1 ? "Finals" : "Finals (2nd Set)",
+      sub: m.round === 1 ? "1st / 2nd" : undefined,
+    });
     if (gfPrev) hLine(gfPrev.x + NODE_WIDTH, gfY + NODE_HEIGHT / 2, x - gfPrev.x - NODE_WIDTH);
     gfPrev = pos;
   });
@@ -222,6 +265,23 @@ const layout = (matches: LiveMatch[]) => {
   const height = hasLosers ? losBaseY + losHeight : winHeight;
   const dividerY = hasLosers ? winHeight + DIVIDER_GAP / 2 : 0;
   return { positioned, labels, lines, width, height, hasLosers, dividerY, winWidth };
+};
+
+// Routing line under a node: a winners match shows where its LOSER drops ("L to
+// 25"); a losers/grand match shows where its WINNER advances ("W to 28"), and a
+// losers match fed by a single dropped winner also shows its source ("L of 21").
+const routingText = (m: LiveMatch): string => {
+  if (m.empty) return "";
+  const parts: string[] = [];
+  if (!m.bye && m.side === "losers" && m.loserFromNumbers.length === 1)
+    parts.push(`L of ${m.loserFromNumbers[0]}`);
+  if (!m.bye && m.side === "winners") {
+    if (m.loserToNumber) parts.push(`L to ${m.loserToNumber}`);
+  } else if (m.winnerToNumber) {
+    // Losers/grand matches — and byes on any side — show where the winner advances.
+    parts.push(`W to ${m.winnerToNumber}`);
+  }
+  return parts.join("  ·  ");
 };
 
 const statusText = (m: LiveMatch) =>
@@ -547,39 +607,67 @@ export const BracketCanvas = ({
                         />
                       )}
                       {labels.map((lb, i) => (
-                        <Text
+                        <View
                           key={`lb-${i}`}
-                          allowFontScaling={false}
-                          style={[styles.roundLabel, { left: lb.x, top: lb.y }]}
-                          numberOfLines={1}
+                          style={[styles.roundLabelWrap, { left: lb.x, top: lb.y }]}
+                          pointerEvents="none"
                         >
-                          {lb.text}
-                        </Text>
-                      ))}
-                      {positioned.map((p) =>
-                        p.match.empty ? (
-                          <View
-                            key={p.match.id}
-                            style={[styles.emptyNode, { left: p.x, top: p.y }]}
-                          >
-                            <Text allowFontScaling={false} style={styles.emptyNodeText}>
-                              —
+                          <Text allowFontScaling={false} style={styles.roundLabel} numberOfLines={1}>
+                            {lb.text}
+                          </Text>
+                          {lb.sub ? (
+                            <Text allowFontScaling={false} style={styles.roundSub} numberOfLines={1}>
+                              {lb.sub}
                             </Text>
-                          </View>
-                        ) : (
+                          ) : null}
+                        </View>
+                      ))}
+                      {positioned.map((p) => {
+                        if (p.match.empty) {
+                          return (
+                            <View
+                              key={p.match.id}
+                              style={[styles.emptyNode, { left: p.x, top: p.y }]}
+                              pointerEvents="none"
+                            >
+                              <Text allowFontScaling={false} style={styles.emptyNodeText}>
+                                No Match
+                              </Text>
+                            </View>
+                          );
+                        }
+                        const route = routingText(p.match);
+                        return (
                           <View
                             key={p.match.id}
-                            style={{ position: "absolute", left: p.x, top: p.y }}
+                            style={{ position: "absolute", left: p.x, top: p.y, width: NODE_WIDTH }}
                           >
+                            {p.match.number > 0 && (
+                              <View style={styles.matchNumBadge} pointerEvents="none">
+                                <Text allowFontScaling={false} style={styles.matchNumText}>
+                                  {p.match.number}
+                                </Text>
+                              </View>
+                            )}
                             <MatchNode
                               match={p.match}
                               highlighted={highlight === p.match.id}
                               mine={mineFor(p.match)}
                               onPress={handleNodePress}
                             />
+                            {route ? (
+                              <Text
+                                allowFontScaling={false}
+                                style={styles.routeLabel}
+                                numberOfLines={1}
+                                pointerEvents="none"
+                              >
+                                {route}
+                              </Text>
+                            ) : null}
                           </View>
-                        ),
-                      )}
+                        );
+                      })}
                     </Animated.View>
                   </Animated.View>
                 </PanGestureHandler>
@@ -684,15 +772,51 @@ const styles = StyleSheet.create({
   favEmpty: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, padding: webSc(SPACING.md) },
   viewport: { flex: 1, overflow: "hidden", backgroundColor: COLORS.background },
   fill: { flex: 1 },
+  roundLabelWrap: { position: "absolute", width: NODE_WIDTH, alignItems: "center" },
   roundLabel: {
-    position: "absolute",
-    width: NODE_WIDTH,
     textAlign: "center",
     fontSize: webMs(FONT_SIZES.xs),
     fontWeight: "800",
     color: COLORS.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  roundSub: {
+    marginTop: 1,
+    textAlign: "center",
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    color: COLORS.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  // Global match number, sat just left of the node and vertically centered.
+  matchNumBadge: {
+    position: "absolute",
+    left: -webSc(34),
+    top: NODE_HEIGHT / 2 - webSc(11),
+    minWidth: webSc(26),
+    paddingHorizontal: webSc(4),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+  },
+  matchNumText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    color: COLORS.textSecondary,
+    fontVariant: ["tabular-nums"],
+  },
+  // Routing line ("L to 25" / "W to 28") under the node.
+  routeLabel: {
+    marginTop: webSc(3),
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "700",
+    color: COLORS.textMuted,
+    letterSpacing: 0.3,
   },
   emptyNode: {
     position: "absolute",
@@ -701,12 +825,16 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.lg),
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderStyle: "dashed",
+    backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
-    opacity: 0.4,
+    opacity: 0.55,
   },
-  emptyNodeText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
+  emptyNodeText: {
+    color: COLORS.textMuted,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
   summary: {
     position: "absolute",
     left: webSc(SPACING.sm),

@@ -55,6 +55,13 @@ export interface LiveMatch {
   p1Score: number | null;
   p2Score: number | null;
   result: MatchResult | null;
+  // Global match number (play order across the whole event) + where this match's
+  // winner/loser flow, for the bracket routing labels ("L to 25", "W to 28").
+  // number is 0 for empty placeholder matches (both feeders were byes).
+  number: number;
+  winnerToNumber: number | null; // match the winner advances into
+  loserToNumber: number | null; // match the loser drops into (winners side only)
+  loserFromNumbers: number[]; // winners-match numbers whose loser drops into this match
   allowedSeconds: number; // overtime threshold (timer turns red past this)
   hasCustomTimer: boolean;
   // True only while a match is actually being played on a stream table — drives
@@ -103,6 +110,105 @@ const buildLabelMap = (
   return map;
 };
 
+interface MatchRouting {
+  number: number;
+  winnerToNumber: number | null;
+  loserToNumber: number | null;
+  loserFromNumbers: number[];
+}
+
+// Assigns a global match number (rough play order — earliest playable first, with
+// winners before losers before grand within the same depth) to every "real" match
+// (byes count; empty placeholders don't), then derives where each match's winner
+// and loser flow. Flows resolve forward through bye/empty placeholders to the first
+// real match, so the routing labels always point at a numbered match.
+const computeRouting = (
+  graph: NonNullable<GeneratedBracket["graph"]>,
+  flags: Map<string, { isEmpty: boolean; skipped: boolean }>,
+): Record<string, MatchRouting> => {
+  const nodeById = new Map(graph.map((n) => [n.id, n]));
+  const isReal = (id: string): boolean => {
+    const f = flags.get(id);
+    return !!f && !f.isEmpty && !f.skipped;
+  };
+  const indexOf = (id: string): number => {
+    const m = id.match(/M(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const sideRank = (s: BracketSide): number =>
+    s === "winners" ? 0 : s === "losers" ? 1 : 2;
+
+  // Topological depth = 1 + max(feeder depth); seeds/empties contribute 0.
+  const depthMemo = new Map<string, number>();
+  const depthOf = (id: string): number => {
+    const cached = depthMemo.get(id);
+    if (cached != null) return cached;
+    depthMemo.set(id, 0); // cycle guard (graph is a DAG, so this never sticks)
+    const n = nodeById.get(id);
+    let d = 0;
+    if (n) {
+      for (const s of [n.slot1, n.slot2]) {
+        if (s.kind === "winner" || s.kind === "loser") d = Math.max(d, depthOf(s.matchId));
+      }
+    }
+    const res = d + 1;
+    depthMemo.set(id, res);
+    return res;
+  };
+
+  const numbered = graph
+    .filter((n) => isReal(n.id))
+    .sort(
+      (a, b) =>
+        depthOf(a.id) - depthOf(b.id) ||
+        sideRank(a.side) - sideRank(b.side) ||
+        a.round - b.round ||
+        indexOf(a.id) - indexOf(b.id),
+    );
+  const number = new Map<string, number>();
+  numbered.forEach((n, i) => number.set(n.id, i + 1));
+
+  // Who consumes each match's winner / loser.
+  const winnerConsumer = new Map<string, string>();
+  const loserConsumer = new Map<string, string>();
+  for (const n of graph) {
+    for (const s of [n.slot1, n.slot2]) {
+      if (s.kind === "winner") winnerConsumer.set(s.matchId, n.id);
+      else if (s.kind === "loser") loserConsumer.set(s.matchId, n.id);
+    }
+  }
+  // Follow a flow forward through empty/skipped placeholders (which auto-advance
+  // their one player as a "winner") to the first real, numbered match.
+  const numAt = (start: string | undefined): number | null => {
+    let cur = start;
+    let guard = 64;
+    while (cur && guard-- > 0) {
+      if (isReal(cur)) return number.get(cur) ?? null;
+      cur = winnerConsumer.get(cur);
+    }
+    return null;
+  };
+
+  const out: Record<string, MatchRouting> = {};
+  for (const n of graph) {
+    if (!isReal(n.id)) continue;
+    const loserFromNumbers: number[] = [];
+    for (const s of [n.slot1, n.slot2]) {
+      if (s.kind === "loser") {
+        const src = number.get(s.matchId);
+        if (src) loserFromNumbers.push(src);
+      }
+    }
+    out[n.id] = {
+      number: number.get(n.id) ?? 0,
+      winnerToNumber: numAt(winnerConsumer.get(n.id)),
+      loserToNumber: numAt(loserConsumer.get(n.id)),
+      loserFromNumbers,
+    };
+  }
+  return out;
+};
+
 // Build the screen-ready match list from the bracket graph + seeds + live state.
 // The resolver flows players through the graph (winners advance, losers drop),
 // and we layer the live state (status/score/timer/table) on top. Skipped matches
@@ -127,10 +233,14 @@ export const buildLiveMatches = (
   }
   const resolved = resolveBracket(bracket.graph, bracket.seeds, results, cfg);
   const labelMap = buildLabelMap(bracket.graph);
+  const flags = new Map<string, { isEmpty: boolean; skipped: boolean }>();
+  for (const rm of resolved.matches) flags.set(rm.id, { isEmpty: rm.isEmpty, skipped: rm.skipped });
+  const routing = computeRouting(bracket.graph, flags);
 
   const out: LiveMatch[] = [];
   for (const rm of resolved.matches) {
     if (rm.skipped) continue;
+    const route = routing[rm.id];
     const st = matchState[rm.id];
     const table = tables.find((t) => t.id === st?.tableId);
     const status = (st?.status ?? "scheduled") as MatchStatus;
@@ -204,6 +314,10 @@ export const buildLiveMatches = (
       p1Score: st?.p1Score ?? null,
       p2Score: st?.p2Score ?? null,
       result: st?.result ?? null,
+      number: route?.number ?? 0,
+      winnerToNumber: route?.winnerToNumber ?? null,
+      loserToNumber: route?.loserToNumber ?? null,
+      loserFromNumbers: route?.loserFromNumbers ?? [],
       allowedSeconds: hasCustomTimer
         ? (st.timerSeconds as number)
         : allowedSecondsForRace(raceForEst, gameType),
