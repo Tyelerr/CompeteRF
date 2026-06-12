@@ -90,16 +90,31 @@ export const useVenueAudit = () => {
         const venue = (vo as any).venues;
         if (!venue) continue;
 
-        const { data: lastAudit } = await supabase
-          .from("venue_audits")
-          .select("completed_at")
-          .eq("venue_id", venue.id)
-          .eq("owner_id", profile.id_auto)
-          .order("completed_at", { ascending: false })
-          .limit(1)
+        // Prefer the venue's own last_audited_at — an owner-readable field that
+        // submitAudit stamps — so the check can't be tripped up by venue_audits
+        // RLS or a partial migration. Tolerant of the column not existing yet.
+        let lastVerified: string | null = null;
+        const { data: stamp } = await supabase
+          .from("venues")
+          .select("last_audited_at")
+          .eq("id", venue.id)
           .maybeSingle();
+        lastVerified = (stamp as any)?.last_audited_at ?? null;
 
-        const isOverdue = !lastAudit || new Date(lastAudit.completed_at) < cutoff;
+        // Fallback: latest venue_audits record (legacy data with no stamp yet).
+        if (!lastVerified) {
+          const { data: lastAudit } = await supabase
+            .from("venue_audits")
+            .select("completed_at")
+            .eq("venue_id", venue.id)
+            .eq("owner_id", profile.id_auto)
+            .order("completed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          lastVerified = lastAudit?.completed_at ?? null;
+        }
+
+        const isOverdue = !lastVerified || new Date(lastVerified) < cutoff;
         if (!isOverdue) continue;
 
         let website = "";
@@ -232,6 +247,14 @@ export const useVenueAudit = () => {
               has_leagues: d.hasLeagues,
               has_tournaments: d.hasTournaments,
             })
+            .eq("id", d.venueId);
+
+          // Stamp the verification time on the venue itself — the reliable source
+          // of truth for the periodic check. Separate update so a missing column
+          // (pre-migration) can't fail the main save.
+          await supabase
+            .from("venues")
+            .update({ last_audited_at: new Date().toISOString() })
             .eq("id", d.venueId);
         }
 
