@@ -160,6 +160,22 @@ export const useManageTournament = (tournamentId?: number) => {
     onSuccess: invalidateTournament,
   });
 
+  // DEV/test: replace the whole matchState at once (used by the bracket
+  // simulator), optionally moving the tournament to in_progress.
+  const bulkSetMatchStateMutation = useMutation({
+    mutationFn: (vars: {
+      matchState: Record<string, MatchLiveState>;
+      start?: boolean;
+    }) => {
+      const ls = tournamentQuery.data?.live_settings ?? {};
+      return tournamentService.updateTournament(tournamentId!, {
+        ...(vars.start ? { live_state: "in_progress" as TournamentLiveState } : {}),
+        live_settings: { ...ls, matchState: vars.matchState },
+      });
+    },
+    onSuccess: invalidateTournament,
+  });
+
   // Persist Queue Manager settings (auto-assign mode + manual queue order),
   // merged into live_settings.
   const saveQueueSettingsMutation = useMutation({
@@ -294,6 +310,7 @@ export const useManageTournament = (tournamentId?: number) => {
     // Live matches (Matches tab)
     matchState: tournament?.live_settings?.matchState ?? {},
     setMatchState: setMatchStateMutation.mutateAsync,
+    bulkSetMatchState: bulkSetMatchStateMutation.mutateAsync,
 
     // Queue Manager
     autoAssignMode: tournament?.live_settings?.autoAssignMode ?? "balanced",

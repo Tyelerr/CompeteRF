@@ -81,6 +81,7 @@ import {
   seedPlayers,
 } from "../../../../src/utils/bracket.utils";
 import { buildBracketGraph } from "../../../../src/utils/bracket.double";
+import { simulateBracket } from "../../../../src/utils/bracket.simulate";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
@@ -2160,6 +2161,28 @@ export default function ManageTournamentScreen() {
     );
   };
 
+  // DEV-only: play the drawn bracket to ~50% (both sides) and start it, so a mock
+  // tournament lands in a realistic mid-event state for testing Queue/Matches.
+  const handleSimulateHalf = () => {
+    if (!hub.bracket) return;
+    Alert.alert(
+      "Simulate ~50%",
+      "Play this bracket to about halfway on both sides and start the tournament? (dev/testing)",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Simulate",
+          onPress: () => {
+            const ms = simulateBracket(hub.bracket!, raceConfig, 0.5, Date.now());
+            hub
+              .bulkSetMatchState({ matchState: ms, start: true })
+              .catch(() => Alert.alert("Error", "Simulation failed."));
+          },
+        },
+      ],
+    );
+  };
+
   const handleConfirmReopen = () => {
     if (!redrawReason.trim()) {
       Alert.alert("Reason Required", "Enter a reason to reopen and redraw.");
@@ -3849,6 +3872,14 @@ export default function ManageTournamentScreen() {
           >
             <Text allowFontScaling={false} style={styles.historyBtnText}>
               View Draw History ({hub.drawLog.length})
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {__DEV__ && hub.bracket && (
+          <TouchableOpacity style={styles.simBtn} onPress={handleSimulateHalf}>
+            <Text allowFontScaling={false} style={styles.simBtnText}>
+              {"🧪"} Simulate ~50% &amp; Start (dev)
             </Text>
           </TouchableOpacity>
         )}
@@ -5596,6 +5627,20 @@ const styles = StyleSheet.create({
   historyBtnText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.primary,
+    fontWeight: "700",
+  },
+  simBtn: {
+    alignItems: "center",
+    paddingVertical: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    backgroundColor: COLORS.warning + "12",
+  },
+  simBtnText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.warning,
     fontWeight: "700",
   },
   bracketActions: { gap: webSc(SPACING.sm) },
