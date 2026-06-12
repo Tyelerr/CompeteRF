@@ -22,6 +22,10 @@ const safeArray = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 export const getSinceISO = (period: AnalyticsPeriod): string | null => {
   const now = new Date();
   switch (period) {
+    case "today":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    case "7d":
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
     case "30d":
       return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
     case "90d":

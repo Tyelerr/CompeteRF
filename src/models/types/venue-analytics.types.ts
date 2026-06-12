@@ -4,7 +4,7 @@
 // scale by player count, so an event with no engine registrations contributes
 // nothing — analytics naturally reflects only tournaments run on Compete.
 
-export type AnalyticsPeriod = "30d" | "90d" | "year" | "lifetime";
+export type AnalyticsPeriod = "today" | "7d" | "30d" | "90d" | "year" | "lifetime";
 
 export interface AnalyticsPeriodOption {
   label: string;
@@ -12,6 +12,8 @@ export interface AnalyticsPeriodOption {
 }
 
 export const ANALYTICS_PERIODS: AnalyticsPeriodOption[] = [
+  { label: "Today", value: "today" },
+  { label: "Last 7 Days", value: "7d" },
   { label: "Last 30 Days", value: "30d" },
   { label: "Last 90 Days", value: "90d" },
   { label: "This Year", value: "year" },
