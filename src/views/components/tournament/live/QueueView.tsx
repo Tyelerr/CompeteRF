@@ -326,19 +326,20 @@ export const QueueView = ({
                 </Text>
               </Text>
 
-              {/* Line 3: one primary action — start on a table (or assign only). */}
+              {/* Line 3: one Assign button → a dropdown with Assign (park) on top
+                  and Assign & Start under it, one entry per free table. */}
               <View style={styles.actionRow}>
                 {available.length > 0 ? (
                   <ActionMenu
-                    label="Start on Table"
+                    label="Assign"
                     items={[
                       ...available.map<ActionMenuItem>((t) => ({
-                        label: `Start on ${tableLabelOf(t)}`,
-                        onPress: () => onAssignStart(e.match.id, t.id),
+                        label: `Assign — ${tableLabelOf(t)}`,
+                        onPress: () => onAssign(e.match.id, t.id),
                       })),
                       ...available.map<ActionMenuItem>((t) => ({
-                        label: `Assign ${tableLabelOf(t)} · no start`,
-                        onPress: () => onAssign(e.match.id, t.id),
+                        label: `Assign & Start — ${tableLabelOf(t)}`,
+                        onPress: () => onAssignStart(e.match.id, t.id),
                       })),
                     ]}
                   />
