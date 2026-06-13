@@ -293,75 +293,76 @@ export const QueueView = ({
         ) : (
           ordered.map((e, i) => (
             <View key={e.match.id} style={styles.queueCard}>
-              {/* Line 1: queue position + who's up, with a quiet reorder menu. */}
-              <View style={styles.cardHead}>
-                <Text allowFontScaling={false} style={styles.rankNum}>
-                  {`#${i + 1}`}
-                </Text>
-                <Text
-                  allowFontScaling={false}
-                  style={styles.matchPlayers}
-                  numberOfLines={1}
-                >
-                  {players(e.match)}
-                </Text>
-                <View style={styles.reorder}>
-                  <TouchableOpacity
-                    onPress={() => move(i, -1)}
-                    disabled={i === 0}
-                    style={[styles.reorderBtn, i === 0 && styles.reorderOff]}
-                    hitSlop={6}
-                  >
-                    <Text allowFontScaling={false} style={styles.reorderText}>
-                      ▲
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => move(i, 1)}
-                    disabled={i === ordered.length - 1}
-                    style={[
-                      styles.reorderBtn,
-                      i === ordered.length - 1 && styles.reorderOff,
-                    ]}
-                    hitSlop={6}
-                  >
-                    <Text allowFontScaling={false} style={styles.reorderText}>
-                      ▼
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Line 2: bracket location + wait (wait colors up as it grows). */}
-              <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
-                {`${e.location}  ·  `}
-                <Text style={{ color: waitColor(e.waitMs), fontWeight: "700" }}>
-                  {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
-                </Text>
-              </Text>
-
-              {/* Line 3: one Assign button → a dropdown with Assign (park) on top
-                  and Assign & Start under it, one entry per free table. */}
-              <View style={styles.actionRow}>
-                {available.length > 0 ? (
-                  <ActionMenu
-                    label="Assign"
-                    items={[
-                      ...available.map<ActionMenuItem>((t) => ({
-                        label: `Assign — ${tableLabelOf(t)}`,
-                        onPress: () => onAssign(e.match.id, t.id),
-                      })),
-                      ...available.map<ActionMenuItem>((t) => ({
-                        label: `Assign & Start — ${tableLabelOf(t)}`,
-                        onPress: () => onAssignStart(e.match.id, t.id),
-                      })),
-                    ]}
-                  />
-                ) : (
-                  <Text allowFontScaling={false} style={styles.noTable}>
-                    No table free
+              <View style={styles.cardRow}>
+                {/* Left: queue position with the up/down arrows under it. */}
+                <View style={styles.rankCol}>
+                  <Text allowFontScaling={false} style={styles.rankNum}>
+                    {`#${i + 1}`}
                   </Text>
-                )}
+                  <View style={styles.reorder}>
+                    <TouchableOpacity
+                      onPress={() => move(i, -1)}
+                      disabled={i === 0}
+                      style={[styles.reorderBtn, i === 0 && styles.reorderOff]}
+                      hitSlop={6}
+                    >
+                      <Text allowFontScaling={false} style={styles.reorderText}>
+                        ▲
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => move(i, 1)}
+                      disabled={i === ordered.length - 1}
+                      style={[
+                        styles.reorderBtn,
+                        i === ordered.length - 1 && styles.reorderOff,
+                      ]}
+                      hitSlop={6}
+                    >
+                      <Text allowFontScaling={false} style={styles.reorderText}>
+                        ▼
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Right: players, then location + wait, then Assign (right-aligned). */}
+                <View style={styles.cardBody}>
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.matchPlayers}
+                    numberOfLines={1}
+                  >
+                    {players(e.match)}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
+                    {`${e.location}  ·  `}
+                    <Text style={{ color: waitColor(e.waitMs), fontWeight: "700" }}>
+                      {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
+                    </Text>
+                  </Text>
+                  <View style={styles.actionRow}>
+                    {available.length > 0 ? (
+                      <ActionMenu
+                        label="Assign"
+                        items={[
+                          ...available.map<ActionMenuItem>((t) => ({
+                            label: `Assign — ${tableLabelOf(t)}`,
+                            onPress: () => onAssign(e.match.id, t.id),
+                          })),
+                          ...available.map<ActionMenuItem>((t) => ({
+                            label: `Assign & Start — ${tableLabelOf(t)}`,
+                            onPress: () => onAssignStart(e.match.id, t.id),
+                          })),
+                        ]}
+                      />
+                    ) : (
+                      <Text allowFontScaling={false} style={styles.noTable}>
+                        No table free
+                      </Text>
+                    )}
+                  </View>
+                </View>
               </View>
             </View>
           ))
@@ -625,11 +626,22 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
   },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
-  reorder: { flexDirection: "row", gap: webSc(SPACING.xs) },
+  cardRow: { flexDirection: "row", alignItems: "flex-start" },
+  rankCol: {
+    alignItems: "center",
+    minWidth: webSc(36),
+    marginRight: webSc(SPACING.md),
+  },
+  cardBody: { flex: 1 },
+  reorder: {
+    flexDirection: "column",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+  },
   reorderBtn: {
-    width: webSc(30),
-    height: webSc(30),
+    width: webSc(28),
+    height: webSc(24),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -646,7 +658,6 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   matchPlayers: {
-    flex: 1,
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "800",
     color: COLORS.text,
@@ -658,7 +669,7 @@ const styles = StyleSheet.create({
     marginTop: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.sm),
   },
-  actionRow: { flexDirection: "row" },
+  actionRow: { flexDirection: "row", justifyContent: "flex-end" },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
