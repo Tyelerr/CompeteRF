@@ -119,7 +119,15 @@ export const QueueView = ({
       ),
     [matches],
   );
-  const assignableCount = tables.filter((t) => t.status !== "unavailable").length;
+  // Longest current wait among ready matches — surfaced in the top summary so the
+  // TD can spot anyone sitting too long at a glance.
+  const longestWaitMs = useMemo(
+    () => ordered.reduce((a, e) => Math.max(a, e.waitMs), 0),
+    [ordered],
+  );
+  const summaryText =
+    `${ordered.length} Ready  ·  ${available.length} Table${available.length === 1 ? "" : "s"} Free` +
+    (ordered.length > 0 ? `  ·  Longest Wait ${formatWait(longestWaitMs)}` : "");
 
   const matchById = useMemo(() => {
     const map: Record<string, LiveMatch> = {};
@@ -180,12 +188,10 @@ export const QueueView = ({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Controls */}
-        <View style={styles.headRow}>
-          <Text allowFontScaling={false} style={styles.tablesChip}>
-            {available.length} of {assignableCount} tables free
-          </Text>
-        </View>
+        {/* Quick status summary */}
+        <Text allowFontScaling={false} style={styles.summary} numberOfLines={1} adjustsFontSizeToFit>
+          {summaryText}
+        </Text>
         <View style={styles.controls}>
           <TouchableOpacity
             style={[styles.autoBtn, available.length === 0 && styles.btnDisabled]}
@@ -287,80 +293,55 @@ export const QueueView = ({
         ) : (
           ordered.map((e, i) => (
             <View key={e.match.id} style={styles.queueCard}>
-              <View style={styles.queueTop}>
-                <View style={styles.rankCol}>
-                  <Text allowFontScaling={false} style={styles.rankNum}>
-                    {i + 1}
-                  </Text>
-                  <View style={styles.arrows}>
-                    <TouchableOpacity
-                      onPress={() => move(i, -1)}
-                      disabled={i === 0}
-                      style={[styles.arrowBtn, i === 0 && styles.arrowOff]}
-                    >
-                      <Text allowFontScaling={false} style={styles.arrowText}>
-                        ▲
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => move(i, 1)}
-                      disabled={i === ordered.length - 1}
-                      style={[
-                        styles.arrowBtn,
-                        i === ordered.length - 1 && styles.arrowOff,
-                      ]}
-                    >
-                      <Text allowFontScaling={false} style={styles.arrowText}>
-                        ▼
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.matchCol}>
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.matchPlayers}
-                    numberOfLines={1}
-                  >
-                    {players(e.match)}
-                  </Text>
-                  <View style={styles.metaRow}>
-                    <View style={styles.locChip}>
-                      <Text allowFontScaling={false} style={styles.locText}>
-                        {e.location}
-                      </Text>
-                    </View>
-                    <Text
-                      allowFontScaling={false}
-                      style={[styles.wait, { color: waitColor(e.waitMs) }]}
-                    >
-                      {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
-                    </Text>
-                  </View>
-                </View>
+              {/* Line 1: queue position + who's up, with a quiet reorder menu. */}
+              <View style={styles.cardHead}>
+                <Text allowFontScaling={false} style={styles.rankNum}>
+                  {`#${i + 1}`}
+                </Text>
+                <Text
+                  allowFontScaling={false}
+                  style={styles.matchPlayers}
+                  numberOfLines={1}
+                >
+                  {players(e.match)}
+                </Text>
+                <ActionMenu
+                  label="Move"
+                  items={[
+                    { label: "Move Up", disabled: i === 0, onPress: () => move(i, -1) },
+                    {
+                      label: "Move Down",
+                      disabled: i === ordered.length - 1,
+                      onPress: () => move(i, 1),
+                    },
+                  ]}
+                />
               </View>
 
-              {/* Assign actions sit on their own row so the menus never crowd the
-                  wait time. */}
-              <View style={styles.assignRow}>
+              {/* Line 2: bracket location + wait (wait colors up as it grows). */}
+              <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
+                {`${e.location}  ·  `}
+                <Text style={{ color: waitColor(e.waitMs), fontWeight: "700" }}>
+                  {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
+                </Text>
+              </Text>
+
+              {/* Line 3: one primary action — start on a table (or assign only). */}
+              <View style={styles.actionRow}>
                 {available.length > 0 ? (
-                  <>
-                    <ActionMenu
-                      label="Assign"
-                      items={available.map<ActionMenuItem>((t) => ({
-                        label: tableLabelOf(t),
-                        onPress: () => onAssign(e.match.id, t.id),
-                      }))}
-                    />
-                    <ActionMenu
-                      label="Assign & Start"
-                      items={available.map<ActionMenuItem>((t) => ({
-                        label: tableLabelOf(t),
+                  <ActionMenu
+                    label="Start on Table"
+                    items={[
+                      ...available.map<ActionMenuItem>((t) => ({
+                        label: `Start on ${tableLabelOf(t)}`,
                         onPress: () => onAssignStart(e.match.id, t.id),
-                      }))}
-                    />
-                  </>
+                      })),
+                      ...available.map<ActionMenuItem>((t) => ({
+                        label: `Assign ${tableLabelOf(t)} · no start`,
+                        onPress: () => onAssign(e.match.id, t.id),
+                      })),
+                    ]}
+                  />
                 ) : (
                   <Text allowFontScaling={false} style={styles.noTable}>
                     No table free
@@ -528,11 +509,11 @@ const styles = StyleSheet.create({
       web: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
     }),
   },
-  headRow: { alignItems: "flex-end", marginBottom: webSc(SPACING.xs) },
-  tablesChip: {
-    fontSize: webMs(FONT_SIZES.xs),
+  summary: {
+    fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
-    fontWeight: "600",
+    fontWeight: "700",
+    marginBottom: webSc(SPACING.sm),
   },
   controls: {
     flexDirection: "row",
@@ -620,66 +601,36 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: "center",
   },
-  // Queue card
+  // Queue card — three clean lines: who's up, where + wait, one action.
   queueCard: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: webSc(SPACING.sm),
+    padding: webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
   },
-  queueTop: { flexDirection: "row", alignItems: "center" },
-  rankCol: { alignItems: "center", width: webSc(34), marginRight: webSc(SPACING.xs) },
+  cardHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   rankNum: {
-    fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "700",
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "900",
     color: COLORS.primary,
-    marginBottom: webSc(2),
+    fontVariant: ["tabular-nums"],
   },
-  arrows: { gap: webSc(2) },
-  arrowBtn: {
-    width: webSc(28),
-    height: webSc(22),
-    borderRadius: webSc(RADIUS.sm),
-    backgroundColor: COLORS.primary + "15",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  arrowOff: { opacity: 0.3 },
-  arrowText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
-  matchCol: { flex: 1, marginRight: webSc(SPACING.sm) },
   matchPlayers: {
-    fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "700",
+    flex: 1,
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "800",
     color: COLORS.text,
-    marginBottom: webSc(4),
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
-  locChip: {
-    backgroundColor: COLORS.background,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.sm),
-    paddingVertical: webSc(2),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  locText: {
-    fontSize: webMs(FONT_SIZES.xs),
+  metaLine: {
+    fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     fontWeight: "600",
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.sm),
   },
-  wait: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
-  assignRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: webSc(SPACING.sm),
-    marginTop: webSc(SPACING.sm),
-    paddingTop: webSc(SPACING.sm),
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border + "60",
-  },
+  actionRow: { flexDirection: "row" },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
