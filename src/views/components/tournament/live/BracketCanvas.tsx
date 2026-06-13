@@ -833,7 +833,9 @@ const styles = StyleSheet.create({
     width: GAP_X,
     alignItems: "flex-end",
     justifyContent: "center",
-    paddingRight: webSc(6),
+    // Leave a visible stub of connector between the badge and the card so the
+    // badge reads as sitting between the line and the card, not on top of it.
+    paddingRight: webSc(18),
   },
   matchNumBadge: {
     paddingHorizontal: webSc(6),
