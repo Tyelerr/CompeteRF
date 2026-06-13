@@ -90,6 +90,7 @@ import { EmptyState } from "../../../../src/views/components/dashboard/empty-sta
 import { MatchesView } from "../../../../src/views/components/tournament/live/MatchesView";
 import { PrizePoolView } from "../../../../src/views/components/tournament/live/PrizePoolView";
 import { QueueView } from "../../../../src/views/components/tournament/live/QueueView";
+import { StatsView } from "../../../../src/views/components/tournament/live/StatsView";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -117,6 +118,7 @@ type TabKey =
   | "review"
   | "matches"
   | "queue"
+  | "stats"
   | "results"
   | "standings"
   | "payouts"
@@ -133,6 +135,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   review: "Review",
   matches: "Matches",
   queue: "Queue",
+  stats: "Stats",
   results: "Results",
   standings: "Standings",
   payouts: "Payouts",
@@ -187,6 +190,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "matches", label: "Matches / Bracket" },
       { tab: "tables", label: "Tables" },
       { tab: "queue", label: "Queue" },
+      { tab: "stats", label: "Stats" },
       { tab: "actions", label: "Actions", lead: "⚡", divider: true },
     ],
   },
@@ -195,6 +199,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
     tabs: [
       { tab: "standings", label: "Standings" },
       { tab: "payouts", label: "Payouts" },
+      { tab: "stats", label: "Stats" },
       { tab: "history", label: "Match History" },
       { tab: "summary", label: "Summary" },
     ],
@@ -3983,6 +3988,8 @@ export default function ManageTournamentScreen() {
             onSetQueueOrder={handleSetQueueOrder}
           />
         );
+      case "stats":
+        return <StatsView matches={liveMatches} />;
       case "results":
       case "standings":
         return (
@@ -4370,8 +4377,8 @@ export default function ManageTournamentScreen() {
         onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
       />
 
-      {activeTab === "matches" || activeTab === "queue" ? (
-        // Matches/Queue own their scrolling and fill the available height, so
+      {activeTab === "matches" || activeTab === "queue" || activeTab === "stats" ? (
+        // Matches/Queue/Stats own their scrolling and fill the available height, so
         // they live outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : (

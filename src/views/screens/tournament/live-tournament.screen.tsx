@@ -29,16 +29,18 @@ import {
 import { Dropdown } from "../../components/common/dropdown";
 import { Loading } from "../../components/common/loading";
 import { MatchesView } from "../../components/tournament/live/MatchesView";
+import { StatsView } from "../../components/tournament/live/StatsView";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
 
-type Tab = "overview" | "matches" | "players";
+type Tab = "overview" | "matches" | "players" | "stats";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "matches", label: "Matches" },
   { key: "players", label: "Players" },
+  { key: "stats", label: "Stats" },
 ];
 
 type PlayerSort = "active" | "seed" | "fargo" | "name";
@@ -262,6 +264,10 @@ export const LiveTournamentScreen = ({
           <Text allowFontScaling={false} style={styles.empty}>
             Tournament not found.
           </Text>
+        </View>
+      ) : tab === "stats" ? (
+        <View style={styles.matchesWrap}>
+          <StatsView matches={sp.matches} />
         </View>
       ) : tab === "matches" ? (
         <View style={styles.matchesWrap}>
