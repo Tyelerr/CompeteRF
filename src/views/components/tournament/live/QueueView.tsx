@@ -335,7 +335,7 @@ export const QueueView = ({
                       allowFontScaling={false}
                       style={[styles.wait, { color: waitColor(e.waitMs) }]}
                     >
-                      Waiting {formatWait(e.waitMs)}
+                      {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
                     </Text>
                   </View>
                 </View>
