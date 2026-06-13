@@ -56,7 +56,7 @@ export interface LiveMatch {
   p2Score: number | null;
   result: MatchResult | null;
   // Per-side match number + label for the bracket routing labels. Winners and
-  // losers are numbered separately (W1, W2 … / L1, L2 …; grand = F1, F2), so a
+  // losers are numbered separately (W1, W2 … / L1, L2 …; grand = GF1, GF2), so a
   // winners match's loser reads "L to L34" and a losers winner reads "W to L73".
   // number is 0 for empty placeholder matches (both feeders were byes).
   number: number; // per-side sequence (also the "is a real match" check)
@@ -121,7 +121,7 @@ interface MatchRouting {
 }
 
 // Numbers winners and losers (and the grand final) separately — W1, W2 … within
-// the winners side, L1, L2 … within the losers side, F1/F2 for the grand final —
+// the winners side, L1, L2 … within the losers side, GF1/GF2 for the grand final —
 // each in play order (earliest playable first). Then derives where each match's
 // winner and loser flow, as side-prefixed labels. Flows resolve forward through
 // bye/empty placeholders to the first real match, so a label always points at a
@@ -140,7 +140,7 @@ const computeRouting = (
     return m ? parseInt(m[1], 10) : 0;
   };
   const prefixOf = (s: BracketSide): string =>
-    s === "winners" ? "W" : s === "losers" ? "L" : "F";
+    s === "winners" ? "W" : s === "losers" ? "L" : "GF";
 
   // Topological depth = 1 + max(feeder depth); seeds/empties contribute 0.
   const depthMemo = new Map<string, number>();

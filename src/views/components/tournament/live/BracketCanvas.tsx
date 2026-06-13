@@ -30,7 +30,11 @@ import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
 import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
-const GAP_X = 76;
+const GAP_X = 140;
+// Clear space reserved just left of each card for its route label (W6 / L3 / GF1).
+// The incoming connector stops this far short of the card, so the label sits in
+// open space between the line and the card rather than on top of the line.
+const LABEL_ZONE = 64;
 const GAP_Y = 34;
 const LABEL_H = 30;
 const DIVIDER_GAP = 150;
@@ -190,7 +194,8 @@ const layout = (matches: LiveMatch[]) => {
         const py = parent.y + NODE_HEIGHT / 2;
         kids.forEach((k) => hLine(childRight, k.y + NODE_HEIGHT / 2, midX - childRight));
         vLine(midX, Math.min(...cys), Math.abs(cys[cys.length - 1] - cys[0]) || 1);
-        hLine(midX, py, parent.x - midX);
+        // Stop short of the card to leave the label zone clear.
+        hLine(midX, py, Math.max(LINE_W, parent.x - midX - LABEL_ZONE));
       }
     }
   };
@@ -281,7 +286,12 @@ const layout = (matches: LiveMatch[]) => {
       text: m.round === 1 ? "Finals" : "Finals (2nd Set)",
       sub: m.round === 1 ? "1st / 2nd" : undefined,
     });
-    if (gfPrev) hLine(gfPrev.x + NODE_WIDTH, gfY + NODE_HEIGHT / 2, x - gfPrev.x - NODE_WIDTH);
+    if (gfPrev)
+      hLine(
+        gfPrev.x + NODE_WIDTH,
+        gfY + NODE_HEIGHT / 2,
+        Math.max(LINE_W, x - gfPrev.x - NODE_WIDTH - LABEL_ZONE),
+      );
     gfPrev = pos;
   });
 
@@ -821,21 +831,18 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  // Per-side match number (W32 / L1), in a small square box sat just before the
-  // node — right where the incoming connector meets the card's left edge — and
-  // vertically centered on the connector. Spans the column gap and node height,
-  // right-aligned with a small gap so it hugs the card rather than the middle.
+  // Per-side route label (W32 / L1 / GF1) — an annotation that sits in the cleared
+  // LABEL_ZONE between where the connector stops and the card, vertically centered
+  // on the connector. Centered in the zone so it clears both the line (to its left)
+  // and the card (to its right) by ~10px.
   matchNumWrap: {
     position: "absolute",
-    left: -GAP_X,
+    left: -LABEL_ZONE,
     top: 0,
     height: NODE_HEIGHT,
-    width: GAP_X,
-    alignItems: "flex-end",
+    width: LABEL_ZONE,
+    alignItems: "center",
     justifyContent: "center",
-    // Leave a visible stub of connector between the badge and the card so the
-    // badge reads as sitting between the line and the card, not on top of it.
-    paddingRight: webSc(18),
   },
   matchNumBadge: {
     paddingHorizontal: webSc(6),
