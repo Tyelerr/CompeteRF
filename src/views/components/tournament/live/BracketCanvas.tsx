@@ -35,6 +35,9 @@ const GAP_X = 140;
 // The incoming connector stops this far short of the card, so the label sits in
 // open space between the line and the card rather than on top of the line.
 const LABEL_ZONE = 64;
+// Visible horizontal run from the connector's vertical bar up to the label zone,
+// so the line clearly leads into the label instead of stopping right at the bar.
+const PARENT_RUN = 40;
 const GAP_Y = 34;
 const LABEL_H = 30;
 const DIVIDER_GAP = 150;
@@ -189,13 +192,16 @@ const layout = (matches: LiveMatch[]) => {
           .filter((p): p is Pos => !!p);
         if (kids.length === 0) continue;
         const childRight = kids[0].x + NODE_WIDTH;
-        const midX = (childRight + parent.x) / 2;
+        // Vertical bar sits a fixed run left of the label zone, so the line into
+        // the card stays clearly visible, then a gap, then the label, then the card.
+        const barX = parent.x - LABEL_ZONE - PARENT_RUN;
         const cys = kids.map((k) => k.y + NODE_HEIGHT / 2);
         const py = parent.y + NODE_HEIGHT / 2;
-        kids.forEach((k) => hLine(childRight, k.y + NODE_HEIGHT / 2, midX - childRight));
-        vLine(midX, Math.min(...cys), Math.abs(cys[cys.length - 1] - cys[0]) || 1);
-        // Stop short of the card to leave the label zone clear.
-        hLine(midX, py, Math.max(LINE_W, parent.x - midX - LABEL_ZONE));
+        kids.forEach((k) =>
+          hLine(childRight, k.y + NODE_HEIGHT / 2, Math.max(LINE_W, barX - childRight)),
+        );
+        vLine(barX, Math.min(...cys), Math.abs(cys[cys.length - 1] - cys[0]) || 1);
+        hLine(barX, py, PARENT_RUN);
       }
     }
   };
