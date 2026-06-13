@@ -56,7 +56,7 @@ export interface LiveMatch {
   p2Score: number | null;
   result: MatchResult | null;
   // Per-side match number + label for the bracket routing labels. Winners and
-  // losers are numbered separately (W1, W2 … / L1, L2 …; grand = Finals/Reset), so a
+  // losers are numbered separately (W1, W2 … / L1, L2 …; grand = Finals), so a
   // winners match's loser reads "L to L34" and a losers winner reads "W to L73".
   // number is 0 for empty placeholder matches (both feeders were byes).
   number: number; // per-side sequence (also the "is a real match" check)
@@ -121,7 +121,7 @@ interface MatchRouting {
 }
 
 // Numbers winners and losers (and the grand final) separately — W1, W2 … within
-// the winners side, L1, L2 … within the losers side, Finals/Reset for the grand —
+// the winners side, L1, L2 … within the losers side, Finals for the grand —
 // each in play order (earliest playable first). Then derives where each match's
 // winner and loser flow, as side-prefixed labels. Flows resolve forward through
 // bye/empty placeholders to the first real match, so a label always points at a
@@ -173,16 +173,9 @@ const computeRouting = (
       );
     ns.forEach((n, i) => {
       number.set(n.id, i + 1);
-      // The grand final is named, not numbered — "Finals" (and "Reset" for the
-      // conditional second set) read better than GF1 / GF2.
-      label.set(
-        n.id,
-        side === "grand"
-          ? n.id === "GF2"
-            ? "Reset"
-            : "Finals"
-          : `${prefixOf(side)}${i + 1}`,
-      );
+      // The grand final is named, not numbered — both the final and its conditional
+      // reset read as "Finals" rather than GF1 / GF2.
+      label.set(n.id, side === "grand" ? "Finals" : `${prefixOf(side)}${i + 1}`);
     });
   }
 
