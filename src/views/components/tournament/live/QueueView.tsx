@@ -305,17 +305,31 @@ export const QueueView = ({
                 >
                   {players(e.match)}
                 </Text>
-                <ActionMenu
-                  label="Move"
-                  items={[
-                    { label: "Move Up", disabled: i === 0, onPress: () => move(i, -1) },
-                    {
-                      label: "Move Down",
-                      disabled: i === ordered.length - 1,
-                      onPress: () => move(i, 1),
-                    },
-                  ]}
-                />
+                <View style={styles.reorder}>
+                  <TouchableOpacity
+                    onPress={() => move(i, -1)}
+                    disabled={i === 0}
+                    style={[styles.reorderBtn, i === 0 && styles.reorderOff]}
+                    hitSlop={6}
+                  >
+                    <Text allowFontScaling={false} style={styles.reorderText}>
+                      ▲
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => move(i, 1)}
+                    disabled={i === ordered.length - 1}
+                    style={[
+                      styles.reorderBtn,
+                      i === ordered.length - 1 && styles.reorderOff,
+                    ]}
+                    hitSlop={6}
+                  >
+                    <Text allowFontScaling={false} style={styles.reorderText}>
+                      ▼
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Line 2: bracket location + wait (wait colors up as it grows). */}
@@ -612,6 +626,19 @@ const styles = StyleSheet.create({
     marginBottom: webSc(SPACING.sm),
   },
   cardHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  reorder: { flexDirection: "row", gap: webSc(SPACING.xs) },
+  reorderBtn: {
+    width: webSc(30),
+    height: webSc(30),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reorderOff: { opacity: 0.3 },
+  reorderText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
   rankNum: {
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "900",

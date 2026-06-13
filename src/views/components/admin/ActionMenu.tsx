@@ -36,6 +36,7 @@ interface ActionMenuProps {
 }
 
 const MENU_WIDTH = 200;
+const MENU_MAX_HEIGHT = 320; // keep in sync with styles.menu maxHeight
 
 export const ActionMenu = ({
   items,
@@ -62,7 +63,13 @@ export const ActionMenu = ({
     SPACING.md,
     Math.min(anchor.x + anchor.w - MENU_WIDTH, winW - MENU_WIDTH - SPACING.md),
   );
-  const estHeight = visibleItems.length * webSc(46) + webSc(8);
+  // The menu scrolls past MENU_MAX_HEIGHT, so cap the estimate at it — otherwise a
+  // long list (e.g. one row per table) reads as taller than it renders and the
+  // flip-up math throws the menu off the top of the screen.
+  const estHeight = Math.min(
+    visibleItems.length * webSc(46) + webSc(8),
+    webSc(MENU_MAX_HEIGHT),
+  );
   const below = anchor.y + anchor.h + 4;
   const openUp = below + estHeight > winH - webSc(40);
   const top = openUp ? Math.max(webSc(40), anchor.y - estHeight - 4) : below;
@@ -166,7 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
-    maxHeight: webSc(320),
+    maxHeight: webSc(MENU_MAX_HEIGHT),
     overflow: "hidden",
     ...Platform.select({
       ios: {
