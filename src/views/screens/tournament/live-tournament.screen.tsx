@@ -267,7 +267,7 @@ export const LiveTournamentScreen = ({
         </View>
       ) : tab === "stats" ? (
         <View style={styles.matchesWrap}>
-          <StatsView matches={sp.matches} />
+          <StatsView matches={sp.matches} highlightRegId={highlightRegId} />
         </View>
       ) : tab === "matches" ? (
         <View style={styles.matchesWrap}>

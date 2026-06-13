@@ -121,6 +121,149 @@ export const computeTournamentStats = (matches: LiveMatch[]): TournamentStats =>
   };
 };
 
+// ── Per-player tournament performance ─────────────────────────────────────────
+// Tournament Performance Rating (TPR) estimates how a player performed in THIS
+// event relative to the strength of who they played. Game-level (rack) stats and
+// the weighted opponent Fargo only count completed matches where the opponent's
+// Fargo is known; the match win/loss record counts every completed match.
+export interface PlayerTournamentStats {
+  key: string;
+  name: string;
+  fargo: number | null; // the player's own current Fargo
+  matchWins: number;
+  matchLosses: number;
+  gamesWon: number; // racks won (rated matches)
+  gamesLost: number; // racks lost (rated matches)
+  totalGames: number;
+  winPct: number | null; // gamesWon / totalGames (null when no rated games)
+  avgOpponentFargo: number | null; // games-weighted opponent Fargo, rounded
+  performanceRating: number | null; // TPR, rounded (null when not computable)
+  performanceDelta: number | null; // TPR − own Fargo
+}
+
+interface PlayerAcc {
+  key: string;
+  name: string;
+  fargo: number | null;
+  matchWins: number;
+  matchLosses: number;
+  gamesWon: number;
+  gamesLost: number;
+  totalGames: number;
+  weightedFargoNum: number; // Σ opponentFargo × gamesInMatch
+}
+
+// −100 / ln(2): converts a game win-rate into a Fargo-point swing.
+const TPR_K = -100 / Math.log(2);
+
+export const computeAllPlayerStats = (
+  matches: LiveMatch[],
+): PlayerTournamentStats[] => {
+  const real = matches.filter((m) => !m.bye && !m.empty);
+  const map = new Map<string, PlayerAcc>();
+  const keyOf = (regId: number | null, name: string | null) =>
+    regId != null ? `r${regId}` : `n${name ?? "?"}`;
+  const ensure = (
+    regId: number | null,
+    name: string | null,
+    fargo: number | null,
+  ): PlayerAcc | null => {
+    if (!name) return null;
+    const key = keyOf(regId, name);
+    let a = map.get(key);
+    if (!a) {
+      a = {
+        key,
+        name,
+        fargo,
+        matchWins: 0,
+        matchLosses: 0,
+        gamesWon: 0,
+        gamesLost: 0,
+        totalGames: 0,
+        weightedFargoNum: 0,
+      };
+      map.set(key, a);
+    }
+    if (fargo != null) a.fargo = fargo;
+    return a;
+  };
+
+  for (const m of real) {
+    // Register both players up front so the picker lists them before they've played.
+    const a1 = ensure(m.p1RegId, m.p1Name, m.p1Fargo);
+    const a2 = ensure(m.p2RegId, m.p2Name, m.p2Fargo);
+    if (m.status !== "completed" || !(m.winner === 1 || m.winner === 2)) continue;
+
+    if (a1) {
+      if (m.winner === 1) a1.matchWins += 1;
+      else a1.matchLosses += 1;
+    }
+    if (a2) {
+      if (m.winner === 2) a2.matchWins += 1;
+      else a2.matchLosses += 1;
+    }
+
+    const p1 = m.p1Score ?? 0;
+    const p2 = m.p2Score ?? 0;
+    const g = p1 + p2;
+    if (g <= 0) continue;
+    // Each side's opponent Fargo must be valid to weight by; ignore otherwise.
+    if (a1 && m.p2Fargo != null) {
+      a1.gamesWon += p1;
+      a1.gamesLost += p2;
+      a1.totalGames += g;
+      a1.weightedFargoNum += m.p2Fargo * g;
+    }
+    if (a2 && m.p1Fargo != null) {
+      a2.gamesWon += p2;
+      a2.gamesLost += p1;
+      a2.totalGames += g;
+      a2.weightedFargoNum += m.p1Fargo * g;
+    }
+  }
+
+  const out: PlayerTournamentStats[] = [...map.values()].map((a) => {
+    const winPct = a.totalGames > 0 ? a.gamesWon / a.totalGames : null;
+    const avgRaw = a.totalGames > 0 ? a.weightedFargoNum / a.totalGames : null;
+    let performanceRating: number | null = null;
+    if (winPct != null && avgRaw != null) {
+      // Cap the win-rate off 0/1 so the log term stays finite.
+      const cap = Math.min(0.99, Math.max(0.01, winPct));
+      performanceRating = Math.round(avgRaw + TPR_K * Math.log((1 - cap) / cap));
+    }
+    return {
+      key: a.key,
+      name: a.name,
+      fargo: a.fargo,
+      matchWins: a.matchWins,
+      matchLosses: a.matchLosses,
+      gamesWon: a.gamesWon,
+      gamesLost: a.gamesLost,
+      totalGames: a.totalGames,
+      winPct,
+      avgOpponentFargo: avgRaw != null ? Math.round(avgRaw) : null,
+      performanceRating,
+      performanceDelta:
+        performanceRating != null && a.fargo != null
+          ? performanceRating - a.fargo
+          : null,
+    };
+  });
+
+  out.sort(
+    (a, b) =>
+      (b.performanceRating ?? -Infinity) - (a.performanceRating ?? -Infinity) ||
+      b.matchWins - a.matchWins ||
+      a.name.localeCompare(b.name),
+  );
+  return out;
+};
+
+// "58.3%" / "N/A" for a 0–1 win fraction.
+export const winFractionLabel = (p: number | null): string =>
+  p == null ? "N/A" : `${(p * 100).toFixed(1)}%`;
+
 // "12m" / "1h 5m" / "<1m" / "—" for a played-duration in ms.
 export const formatDurationMs = (ms: number | null): string => {
   if (ms == null) return "—";
