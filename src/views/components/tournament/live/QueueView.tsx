@@ -287,59 +287,63 @@ export const QueueView = ({
         ) : (
           ordered.map((e, i) => (
             <View key={e.match.id} style={styles.queueCard}>
-              <View style={styles.rankCol}>
-                <Text allowFontScaling={false} style={styles.rankNum}>
-                  {i + 1}
-                </Text>
-                <View style={styles.arrows}>
-                  <TouchableOpacity
-                    onPress={() => move(i, -1)}
-                    disabled={i === 0}
-                    style={[styles.arrowBtn, i === 0 && styles.arrowOff]}
-                  >
-                    <Text allowFontScaling={false} style={styles.arrowText}>
-                      ▲
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => move(i, 1)}
-                    disabled={i === ordered.length - 1}
-                    style={[
-                      styles.arrowBtn,
-                      i === ordered.length - 1 && styles.arrowOff,
-                    ]}
-                  >
-                    <Text allowFontScaling={false} style={styles.arrowText}>
-                      ▼
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.matchCol}>
-                <Text
-                  allowFontScaling={false}
-                  style={styles.matchPlayers}
-                  numberOfLines={1}
-                >
-                  {players(e.match)}
-                </Text>
-                <View style={styles.metaRow}>
-                  <View style={styles.locChip}>
-                    <Text allowFontScaling={false} style={styles.locText}>
-                      {e.location}
-                    </Text>
+              <View style={styles.queueTop}>
+                <View style={styles.rankCol}>
+                  <Text allowFontScaling={false} style={styles.rankNum}>
+                    {i + 1}
+                  </Text>
+                  <View style={styles.arrows}>
+                    <TouchableOpacity
+                      onPress={() => move(i, -1)}
+                      disabled={i === 0}
+                      style={[styles.arrowBtn, i === 0 && styles.arrowOff]}
+                    >
+                      <Text allowFontScaling={false} style={styles.arrowText}>
+                        ▲
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => move(i, 1)}
+                      disabled={i === ordered.length - 1}
+                      style={[
+                        styles.arrowBtn,
+                        i === ordered.length - 1 && styles.arrowOff,
+                      ]}
+                    >
+                      <Text allowFontScaling={false} style={styles.arrowText}>
+                        ▼
+                      </Text>
+                    </TouchableOpacity>
                   </View>
+                </View>
+
+                <View style={styles.matchCol}>
                   <Text
                     allowFontScaling={false}
-                    style={[styles.wait, { color: waitColor(e.waitMs) }]}
+                    style={styles.matchPlayers}
+                    numberOfLines={1}
                   >
-                    Waiting {formatWait(e.waitMs)}
+                    {players(e.match)}
                   </Text>
+                  <View style={styles.metaRow}>
+                    <View style={styles.locChip}>
+                      <Text allowFontScaling={false} style={styles.locText}>
+                        {e.location}
+                      </Text>
+                    </View>
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.wait, { color: waitColor(e.waitMs) }]}
+                    >
+                      Waiting {formatWait(e.waitMs)}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.assignCol}>
+              {/* Assign actions sit on their own row so the menus never crowd the
+                  wait time. */}
+              <View style={styles.assignRow}>
                 {available.length > 0 ? (
                   <>
                     <ActionMenu
@@ -618,8 +622,6 @@ const styles = StyleSheet.create({
   },
   // Queue card
   queueCard: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
@@ -627,6 +629,7 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.sm),
     marginBottom: webSc(SPACING.sm),
   },
+  queueTop: { flexDirection: "row", alignItems: "center" },
   rankCol: { alignItems: "center", width: webSc(34), marginRight: webSc(SPACING.xs) },
   rankNum: {
     fontSize: webMs(FONT_SIZES.sm),
@@ -667,7 +670,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   wait: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
-  assignCol: { minWidth: webSc(96), alignItems: "flex-end", gap: webSc(SPACING.xs) },
+  assignRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.sm),
+    paddingTop: webSc(SPACING.sm),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border + "60",
+  },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
