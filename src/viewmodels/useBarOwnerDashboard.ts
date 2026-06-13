@@ -119,13 +119,14 @@ export const useBarOwnerDashboard = () => {
       .in("venue_id", venueIds)
       .is("archived_at", null);
 
-    // Count active tournaments across all venues
+    // Count active tournaments across all venues. Matches the Tournament Manager
+    // list (status = active, any date) — a running/past-dated active event still
+    // counts, so the card total agrees with what the manager shows.
     const { count: tournamentCount } = await supabase
       .from("tournaments")
       .select("id", { count: "exact", head: true })
       .in("venue_id", venueIds)
-      .eq("status", "active")
-      .gte("tournament_date", new Date().toISOString().split("T")[0]);
+      .eq("status", "active");
 
     // Get tournament IDs for owned venues
     const { data: venueTournaments } = await supabase
@@ -229,13 +230,12 @@ export const useBarOwnerDashboard = () => {
       venueOwners.map(async (vo: any) => {
         const venue = vo.venues;
 
-        // Count active tournaments
+        // Count active tournaments (status = active, any date — see loadStats).
         const { count: tournamentCount } = await supabase
           .from("tournaments")
           .select("id", { count: "exact", head: true })
           .eq("venue_id", venue.id)
-          .eq("status", "active")
-          .gte("tournament_date", new Date().toISOString().split("T")[0]);
+          .eq("status", "active");
 
         // Count directors
         const { count: directorCount } = await supabase
