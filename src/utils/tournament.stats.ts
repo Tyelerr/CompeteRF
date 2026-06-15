@@ -349,33 +349,40 @@ export const computeStandings = (matches: LiveMatch[]): StandingEntry[] => {
     add(loserOf(finalMatch), 2, "2nd");
   }
 
-  // 2) Everyone else, by elimination round (best place first).
+  // 2) Everyone else places by the round they were knocked out in. The place
+  // BLOCK for each round is fixed by the bracket structure (counting positions
+  // from the final down), so a player shows their place the moment they lose —
+  // independent of which other rounds have finished — and it matches the bracket
+  // headers (LB final = 3rd, then 4th, 5-6th …).
   const elimSide = hasLosers ? "losers" : "winners";
-  const elim = real.filter(
-    (m) => m.side === elimSide && decided(m) && !m.bye,
-  );
-  const maxElimRound = elim.reduce((a, m) => Math.max(a, m.round), 0);
-  const byRound = new Map<number, LiveMatch[]>();
-  for (const m of elim) {
-    // For single elim the top winners round IS the final (already 1st/2nd).
-    if (!hasLosers && m.round === maxElimRound) continue;
-    if (!byRound.has(m.round)) byRound.set(m.round, []);
-    byRound.get(m.round)!.push(m);
+  const roundCount = new Map<number, number>();
+  let maxElimRound = 0;
+  for (const m of matches) {
+    if (m.side !== elimSide || m.empty) continue;
+    roundCount.set(m.round, (roundCount.get(m.round) ?? 0) + 1);
+    maxElimRound = Math.max(maxElimRound, m.round);
   }
-  const rounds = [...byRound.keys()].sort((a, b) => b - a);
+  // Double elim: the LB final (top round) is 3rd. Single elim: the top winners
+  // round is the final (1st/2nd), so blocks start one round below it.
+  const topBlockRound = hasLosers ? maxElimRound : maxElimRound - 1;
+  const block = new Map<number, { lo: number; label: string }>();
   let place = 3;
-  for (const r of rounds) {
-    const losers = byRound
-      .get(r)!
-      .map(loserOf)
-      .filter((l) => l.name && !used.has(keyOf(l.regId, l.name)));
-    if (losers.length === 0) continue;
-    const lo = place;
-    const hi = place + losers.length - 1;
-    const label = placeRangeLabel(lo, hi);
-    losers.sort((a, b) => (b.fargo ?? -1) - (a.fargo ?? -1));
-    for (const l of losers) add(l, lo, label);
-    place = hi + 1;
+  for (let r = topBlockRound; r >= 1; r--) {
+    const count = roundCount.get(r) ?? 0;
+    if (count <= 0) continue;
+    block.set(r, { lo: place, label: placeRangeLabel(place, place + count - 1) });
+    place += count;
+  }
+
+  const eliminated = real
+    .filter((m) => m.side === elimSide && decided(m) && !m.bye)
+    .map((m) => ({ ...loserOf(m), round: m.round }))
+    .filter((l) => l.name);
+  // Best round (deepest run) first, then Fargo, so higher places fill in first.
+  eliminated.sort((a, b) => b.round - a.round || (b.fargo ?? -1) - (a.fargo ?? -1));
+  for (const l of eliminated) {
+    const b = block.get(l.round);
+    if (b) add(l, b.lo, b.label);
   }
 
   entries.sort(

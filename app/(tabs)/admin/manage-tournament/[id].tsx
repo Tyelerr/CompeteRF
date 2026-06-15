@@ -92,6 +92,9 @@ import { PrizePoolView } from "../../../../src/views/components/tournament/live/
 import { QueueView } from "../../../../src/views/components/tournament/live/QueueView";
 import { StatsView } from "../../../../src/views/components/tournament/live/StatsView";
 import { StandingsView } from "../../../../src/views/components/tournament/live/StandingsView";
+import { MatchHistoryView } from "../../../../src/views/components/tournament/live/MatchHistoryView";
+import { SummaryView } from "../../../../src/views/components/tournament/live/SummaryView";
+import { PayoutsView } from "../../../../src/views/components/tournament/live/PayoutsView";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -1867,9 +1870,9 @@ export default function ManageTournamentScreen() {
   const liveUnlocked = (
     ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
   ).includes(hub.phase);
-  const resultsUnlocked = (["completed", "archived"] as ManagePhase[]).includes(
-    hub.phase,
-  );
+  // Results is read-only (standings / payouts / stats / history / summary), so it
+  // is viewable as soon as there's a bracket to report on — not gated on finishing.
+  const resultsUnlocked = liveUnlocked;
   const phaseUnlocked = (p: PhaseKey) =>
     p === "setup" ||
     (p === "live" && liveUnlocked) ||
@@ -4027,28 +4030,17 @@ export default function ManageTournamentScreen() {
         );
       case "payouts":
         return (
-          <TabPlaceholder
-            locked={false}
-            title="Payouts"
-            body="Prize pool breakdown and payouts will appear here (Phase 3)."
+          <PayoutsView
+            matches={liveMatches}
+            config={hub.prizePool}
+            entryPool={prizeEntryPool}
+            sidePotPools={prizeSidePotPools}
           />
         );
       case "history":
-        return (
-          <TabPlaceholder
-            locked={false}
-            title="Match History"
-            body="A full record of every completed match will appear here (Phase 3)."
-          />
-        );
+        return <MatchHistoryView matches={liveMatches} />;
       case "summary":
-        return (
-          <TabPlaceholder
-            locked={false}
-            title="Tournament Summary"
-            body="A recap of the event — entries, duration, and key stats (Phase 3)."
-          />
-        );
+        return <SummaryView matches={liveMatches} tournament={hub.tournament} />;
       default:
         return null;
     }
@@ -4408,7 +4400,10 @@ export default function ManageTournamentScreen() {
       {activeTab === "matches" ||
       activeTab === "queue" ||
       activeTab === "stats" ||
-      activeTab === "standings" ? (
+      activeTab === "standings" ||
+      activeTab === "payouts" ||
+      activeTab === "history" ||
+      activeTab === "summary" ? (
         // These own their scrolling and fill the available height, so they live
         // outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
