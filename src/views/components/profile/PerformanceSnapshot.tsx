@@ -1,9 +1,18 @@
 // src/views/components/profile/PerformanceSnapshot.tsx
-// Profile "Performance Snapshot": time-filtered stat cards in a responsive grid
-// (2 columns on mobile, more on wider screens). Dark-mode native. No Fargo stats.
+// Profile "Performance Snapshot": a dense, sports-app-style dashboard. Pill time
+// filters, compact stat cards where the value is the hero (value → label →
+// supporting text), small low-opacity corner icons, primary stats slightly
+// larger. Responsive grid: 2 columns on mobile, 3–4 on wider screens.
 
 import { ComponentProps, useState } from "react";
-import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import {
+  LayoutChangeEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -14,7 +23,6 @@ import {
   PeriodKey,
   PlayerPerformance,
 } from "../../../utils/player.performance";
-import { Dropdown } from "../common/dropdown";
 
 const ordinal = (n: number): string => {
   const t = n % 100;
@@ -39,30 +47,37 @@ interface CardDef {
   label: string;
   value: string;
   sub?: string;
+  primary?: boolean;
 }
 
-const StatCard = ({
-  card,
-  width,
-}: {
-  card: CardDef;
-  width: number;
-}) => (
+const StatCard = ({ card, width }: { card: CardDef; width: number }) => (
   <View style={[styles.card, { width }]}>
-    <View style={[styles.cardIcon, { backgroundColor: card.color + "1F" }]}>
-      <Ionicons name={card.icon} size={webMs(16)} color={card.color} />
-    </View>
-    <Text allowFontScaling={false} style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit>
+    <Ionicons
+      name={card.icon}
+      size={webMs(14)}
+      color={card.color}
+      style={styles.cardIcon}
+    />
+    <Text
+      allowFontScaling={false}
+      style={[styles.value, card.primary && styles.valuePrimary]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+    >
       {card.value}
     </Text>
-    <Text allowFontScaling={false} style={styles.cardLabel} numberOfLines={1}>
+    <Text allowFontScaling={false} style={styles.label} numberOfLines={1}>
       {card.label}
     </Text>
     {card.sub ? (
-      <Text allowFontScaling={false} style={styles.cardSub} numberOfLines={1}>
+      <Text allowFontScaling={false} style={styles.sub} numberOfLines={1}>
         {card.sub}
       </Text>
-    ) : null}
+    ) : (
+      <Text allowFontScaling={false} style={styles.sub}>
+        {" "}
+      </Text>
+    )}
   </View>
 );
 
@@ -79,7 +94,7 @@ export const PerformanceSnapshot = ({
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   const gap = webSc(SPACING.sm);
-  const cols = width >= 720 ? 4 : width >= 520 ? 3 : 2;
+  const cols = width >= 700 ? 4 : width >= 480 ? 3 : 2;
   const cardWidth = width > 0 ? (width - gap * (cols - 1)) / cols : 0;
 
   const cards: CardDef[] = [
@@ -88,21 +103,23 @@ export const PerformanceSnapshot = ({
       color: COLORS.primary,
       label: "Matches Played",
       value: String(stats.matchesPlayed),
+      primary: true,
     },
     {
       icon: "stats-chart-outline",
       color: COLORS.success,
-      label: "Win %",
+      label: "Win Rate",
       value: stats.winPct != null ? `${Math.round(stats.winPct)}%` : "—",
       sub:
         stats.matchesPlayed > 0
-          ? `${stats.matchesWon}/${stats.matchesPlayed} matches`
+          ? `${stats.matchesWon}W • ${stats.matchesPlayed - stats.matchesWon}L`
           : undefined,
+      primary: true,
     },
     {
       icon: "podium-outline",
       color: COLORS.warning,
-      label: "Avg Placement",
+      label: "Avg Place",
       value: stats.avgPlacement != null ? stats.avgPlacement.toFixed(1) : "—",
     },
     {
@@ -120,40 +137,55 @@ export const PerformanceSnapshot = ({
     {
       icon: "trophy-outline",
       color: COLORS.warning,
-      label: "Tournament Wins",
+      label: "Wins",
       value: String(stats.tournamentWins),
-      sub: stats.events > 0 ? `of ${stats.events} events` : undefined,
+      sub: stats.events > 0 ? `of ${stats.events}` : undefined,
     },
     {
       icon: "medal-outline",
       color: COLORS.success,
-      label: "Top 3 Finishes",
+      label: "Top 3",
       value: String(stats.topThree),
-      sub: stats.events > 0 ? `of ${stats.events} events` : undefined,
+      sub: stats.events > 0 ? `of ${stats.events}` : undefined,
     },
     {
       icon: "flame-outline",
       color: COLORS.error,
-      label: "Current Streak",
+      label: "Streak",
       value: stats.streakType ? `${stats.streakType}${stats.streakCount}` : "—",
     },
   ];
 
   return (
     <View style={styles.section}>
-      <View style={styles.head}>
-        <Text allowFontScaling={false} style={styles.title} numberOfLines={1}>
-          Performance Snapshot
-        </Text>
-        <View style={styles.periodWrap}>
-          <Dropdown
-            compact
-            options={PERIODS.map((p) => ({ label: p.label, value: p.key }))}
-            value={period}
-            onSelect={(v) => onPeriod(v as PeriodKey)}
-          />
-        </View>
-      </View>
+      <Text allowFontScaling={false} style={styles.title} numberOfLines={1}>
+        Performance Snapshot
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pills}
+      >
+        {PERIODS.map((p) => {
+          const active = p.key === period;
+          return (
+            <TouchableOpacity
+              key={p.key}
+              style={[styles.pill, active && styles.pillOn]}
+              onPress={() => onPeriod(p.key)}
+              activeOpacity={0.8}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.pillText, active && styles.pillTextOn]}
+              >
+                {p.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       <View style={[styles.grid, { gap }]} onLayout={onLayout}>
         {cardWidth > 0 &&
@@ -165,54 +197,58 @@ export const PerformanceSnapshot = ({
 
 const styles = StyleSheet.create({
   section: { marginHorizontal: webSc(SPACING.md), marginTop: webSc(SPACING.lg) },
-  head: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: webSc(SPACING.sm),
-    marginBottom: webSc(SPACING.md),
-  },
   title: {
-    flex: 1,
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "800",
     color: COLORS.text,
     letterSpacing: 0.5,
+    marginBottom: webSc(SPACING.sm),
   },
-  periodWrap: { width: webSc(132) },
+  pills: { gap: webSc(SPACING.xs), paddingBottom: webSc(SPACING.sm) },
+  pill: {
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.full),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  pillOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  pillText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.textSecondary },
+  pillTextOn: { color: "#fff" },
 
   grid: { flexDirection: "row", flexWrap: "wrap" },
   card: {
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: webSc(RADIUS.lg),
+    borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: webSc(SPACING.md),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
   },
   cardIcon: {
-    width: webSc(30),
-    height: webSc(30),
-    borderRadius: webSc(RADIUS.sm),
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: webSc(SPACING.sm),
+    position: "absolute",
+    top: webSc(SPACING.sm),
+    right: webSc(SPACING.sm),
+    opacity: 0.4,
   },
-  cardValue: {
+  value: {
     fontSize: webMs(FONT_SIZES.xl),
     fontWeight: "900",
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
   },
-  cardLabel: {
+  valuePrimary: { fontSize: webMs(FONT_SIZES.xxl) },
+  label: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textSecondary,
     fontWeight: "700",
     marginTop: webSc(2),
   },
-  cardSub: {
+  sub: {
     fontSize: webMs(9),
     color: COLORS.textMuted,
     fontWeight: "600",
-    marginTop: webSc(2),
+    marginTop: webSc(1),
   },
 });

@@ -35,12 +35,12 @@ export interface PlayerPerformance {
 
 export const PERIODS = [
   { key: "TODAY", label: "Today", days: 0 },
-  { key: "7D", label: "7 Days", days: 7 },
-  { key: "30D", label: "30 Days", days: 30 },
-  { key: "3M", label: "3 Months", days: 90 },
-  { key: "6M", label: "6 Months", days: 180 },
-  { key: "1Y", label: "1 Year", days: 365 },
-  { key: "ALL", label: "All Time", days: null },
+  { key: "7D", label: "7D", days: 7 },
+  { key: "30D", label: "30D", days: 30 },
+  { key: "3M", label: "3M", days: 90 },
+  { key: "6M", label: "6M", days: 180 },
+  { key: "1Y", label: "1Y", days: 365 },
+  { key: "ALL", label: "All", days: null },
 ] as const;
 export type PeriodKey = (typeof PERIODS)[number]["key"];
 
