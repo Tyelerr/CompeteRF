@@ -95,6 +95,8 @@ import { StandingsView } from "../../../../src/views/components/tournament/live/
 import { MatchHistoryView } from "../../../../src/views/components/tournament/live/MatchHistoryView";
 import { SummaryView } from "../../../../src/views/components/tournament/live/SummaryView";
 import { PayoutsView } from "../../../../src/views/components/tournament/live/PayoutsView";
+import { SettingsTemplates } from "../../../../src/views/components/tournament/SettingsTemplates";
+import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -514,6 +516,22 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     feesAddedOnTop: f.feesOnTop,
   },
   };
+};
+
+// Fields that belong to THIS event (not a reusable template) — excluded when
+// saving / applying a settings template so the TD keeps their own name + schedule.
+const TEMPLATE_EXCLUDED_KEYS: (keyof SettingsForm)[] = [
+  "name",
+  "tournamentDate",
+  "startTime",
+  "description",
+];
+const templatableSettings = (f: SettingsForm): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  (Object.keys(f) as (keyof SettingsForm)[]).forEach((k) => {
+    if (!TEMPLATE_EXCLUDED_KEYS.includes(k)) out[k] = f[k];
+  });
+  return out;
 };
 
 // ── Small building blocks ────────────────────────────────────────────────────
@@ -2025,6 +2043,12 @@ export default function ManageTournamentScreen() {
   // ---- Bracket / Draw state ----------------------------------------------
   const { profile: tdProfile } = useAuthContext();
   const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
+
+  // ---- Settings templates (save/apply the whole settings form, max 5) ----
+  const settingsTemplates = useSettingsTemplates(tdProfile?.id_auto);
+  const [tplSaveOpen, setTplSaveOpen] = useState(false);
+  const applyTemplate = (settings: Record<string, unknown>) =>
+    patchForm(settings as Partial<SettingsForm>);
   const [drawType, setDrawType] = useState<DrawType>("random");
   const [redrawVisible, setRedrawVisible] = useState(false);
   const [redrawReason, setRedrawReason] = useState("");
@@ -2300,7 +2324,8 @@ export default function ManageTournamentScreen() {
       await hub.saveSettings(toPatch(form));
       savedSnapshotRef.current = JSON.stringify(form);
       await propagateSidePotChanges(prevForm);
-      Alert.alert("Saved", "Tournament settings updated.");
+      // Settings saved — offer to keep them as a reusable template.
+      setTplSaveOpen(true);
     } catch {
       Alert.alert("Error", "Failed to save settings. Please try again.");
     }
@@ -2614,6 +2639,20 @@ export default function ManageTournamentScreen() {
 
     return (
       <View>
+        {!settingsLocked && (
+          <SettingsTemplates
+            templates={settingsTemplates.templates}
+            count={settingsTemplates.count}
+            atLimit={settingsTemplates.atLimit}
+            saving={settingsTemplates.saving}
+            onApply={applyTemplate}
+            onSave={(nm) => settingsTemplates.save(nm, templatableSettings(form))}
+            onRename={settingsTemplates.rename}
+            onDelete={settingsTemplates.remove}
+            saveOpen={tplSaveOpen}
+            onSaveOpenChange={setTplSaveOpen}
+          />
+        )}
         {settingsLocked && (
           <View style={styles.settingsLockBanner}>
             <Text allowFontScaling={false} style={styles.settingsLockTitle}>
