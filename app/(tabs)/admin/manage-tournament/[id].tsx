@@ -91,6 +91,7 @@ import { MatchesView } from "../../../../src/views/components/tournament/live/Ma
 import { PrizePoolView } from "../../../../src/views/components/tournament/live/PrizePoolView";
 import { QueueView } from "../../../../src/views/components/tournament/live/QueueView";
 import { StatsView } from "../../../../src/views/components/tournament/live/StatsView";
+import { StandingsView } from "../../../../src/views/components/tournament/live/StandingsView";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
@@ -4014,8 +4015,9 @@ export default function ManageTournamentScreen() {
         );
       case "stats":
         return <StatsView matches={liveMatches} />;
-      case "results":
       case "standings":
+        return <StandingsView matches={liveMatches} />;
+      case "results":
         return (
           <TabPlaceholder
             locked={false}
@@ -4403,9 +4405,12 @@ export default function ManageTournamentScreen() {
         onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
       />
 
-      {activeTab === "matches" || activeTab === "queue" || activeTab === "stats" ? (
-        // Matches/Queue/Stats own their scrolling and fill the available height, so
-        // they live outside the page ScrollView.
+      {activeTab === "matches" ||
+      activeTab === "queue" ||
+      activeTab === "stats" ||
+      activeTab === "standings" ? (
+        // These own their scrolling and fill the available height, so they live
+        // outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : (
         <ScrollView

@@ -260,6 +260,133 @@ export const computeAllPlayerStats = (
   return out;
 };
 
+// ── Final standings ───────────────────────────────────────────────────────────
+// Final placements derived from the bracket: the deciding final gives 1st / 2nd,
+// then players are placed by the round they were eliminated in — for double elim
+// that's the losers bracket (LB final loser = 3rd, then 4th, 5-6th …); for single
+// elim the winners bracket below the final (semifinal losers = 3-4th …). Players
+// knocked out in the same round tie at a place range.
+export interface StandingEntry {
+  key: string;
+  place: number; // numeric best place in the (possibly tied) range — for sorting
+  placeLabel: string; // "1st", "2nd", "5-6th"
+  name: string;
+  fargo: number | null;
+}
+
+const ordinalSuffix = (n: number): string => {
+  const t = n % 100;
+  if (t >= 11 && t <= 13) return "th";
+  switch (n % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+};
+const placeRangeLabel = (lo: number, hi: number): string =>
+  lo === hi ? `${lo}${ordinalSuffix(lo)}` : `${lo}-${hi}${ordinalSuffix(hi)}`;
+
+interface SidePlayer {
+  name: string | null;
+  regId: number | null;
+  fargo: number | null;
+}
+const loserOf = (m: LiveMatch): SidePlayer => {
+  const loserIsP1 = m.winner === 2;
+  return {
+    name: loserIsP1 ? m.p1Name : m.p2Name,
+    regId: loserIsP1 ? m.p1RegId : m.p2RegId,
+    fargo: loserIsP1 ? m.p1Fargo : m.p2Fargo,
+  };
+};
+
+export const computeStandings = (matches: LiveMatch[]): StandingEntry[] => {
+  const real = matches.filter((m) => !m.empty);
+  const decided = (m: LiveMatch) =>
+    m.status === "completed" && (m.winner === 1 || m.winner === 2);
+  const hasLosers = real.some((m) => m.side === "losers");
+  const hasGrand = real.some((m) => m.side === "grand");
+
+  const entries: StandingEntry[] = [];
+  const used = new Set<string>();
+  const keyOf = (regId: number | null, name: string | null) =>
+    regId != null ? `r${regId}` : `n${name ?? "?"}`;
+  const add = (p: SidePlayer, place: number, placeLabel: string) => {
+    if (!p.name) return;
+    const key = keyOf(p.regId, p.name);
+    if (used.has(key)) return;
+    used.add(key);
+    entries.push({ key, place, placeLabel, name: p.name, fargo: p.fargo });
+  };
+
+  // 1) Champion + runner-up from the deciding final.
+  let finalMatch: LiveMatch | undefined;
+  if (hasGrand) {
+    finalMatch = real
+      .filter((m) => m.side === "grand" && decided(m))
+      .sort((a, b) => b.round - a.round)[0];
+  } else {
+    const winners = real.filter((m) => m.side === "winners");
+    const maxR = winners.reduce((a, m) => Math.max(a, m.round), 0);
+    finalMatch = winners.find((m) => m.round === maxR && decided(m));
+  }
+  if (finalMatch) {
+    const champP1 = finalMatch.winner === 1;
+    add(
+      {
+        name: champP1 ? finalMatch.p1Name : finalMatch.p2Name,
+        regId: champP1 ? finalMatch.p1RegId : finalMatch.p2RegId,
+        fargo: champP1 ? finalMatch.p1Fargo : finalMatch.p2Fargo,
+      },
+      1,
+      "1st",
+    );
+    add(loserOf(finalMatch), 2, "2nd");
+  }
+
+  // 2) Everyone else, by elimination round (best place first).
+  const elimSide = hasLosers ? "losers" : "winners";
+  const elim = real.filter(
+    (m) => m.side === elimSide && decided(m) && !m.bye,
+  );
+  const maxElimRound = elim.reduce((a, m) => Math.max(a, m.round), 0);
+  const byRound = new Map<number, LiveMatch[]>();
+  for (const m of elim) {
+    // For single elim the top winners round IS the final (already 1st/2nd).
+    if (!hasLosers && m.round === maxElimRound) continue;
+    if (!byRound.has(m.round)) byRound.set(m.round, []);
+    byRound.get(m.round)!.push(m);
+  }
+  const rounds = [...byRound.keys()].sort((a, b) => b - a);
+  let place = 3;
+  for (const r of rounds) {
+    const losers = byRound
+      .get(r)!
+      .map(loserOf)
+      .filter((l) => l.name && !used.has(keyOf(l.regId, l.name)));
+    if (losers.length === 0) continue;
+    const lo = place;
+    const hi = place + losers.length - 1;
+    const label = placeRangeLabel(lo, hi);
+    losers.sort((a, b) => (b.fargo ?? -1) - (a.fargo ?? -1));
+    for (const l of losers) add(l, lo, label);
+    place = hi + 1;
+  }
+
+  entries.sort(
+    (a, b) =>
+      a.place - b.place ||
+      (b.fargo ?? -1) - (a.fargo ?? -1) ||
+      a.name.localeCompare(b.name),
+  );
+  return entries;
+};
+
 // One row of a single player's match history within this tournament.
 export interface PlayerMatchRow {
   id: string;
