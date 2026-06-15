@@ -87,27 +87,32 @@ export const SettingsTemplates = ({
   const selected = templates.find((t) => String(t.id) === selectedId) ?? null;
   const modified = !!selected && !sameSettings(currentSettings, selected.settings);
 
+  // Load a template into the live settings form (replacing what's there).
+  const loadTemplate = (t: SettingsTemplate, alsoClose?: boolean) =>
+    Alert.alert(
+      "Open & Edit Template",
+      `Load "${t.name}"? This will clear your current tournament settings and replace them with this template.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open & Edit",
+          style: "destructive",
+          onPress: () => {
+            onApply(t.settings);
+            setSelectedId(String(t.id));
+            if (alsoClose) setManageOpen(false);
+          },
+        },
+      ],
+    );
+
   const onSelectTemplate = (value: string) => {
     if (value === SAVE_VALUE) {
       onSaveOpenChange(true);
       return;
     }
     const t = templates.find((x) => String(x.id) === value);
-    if (!t) return;
-    Alert.alert(
-      "Apply Template",
-      `Load "${t.name}" into this tournament's settings? Current settings will be replaced.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Apply",
-          onPress: () => {
-            onApply(t.settings);
-            setSelectedId(value);
-          },
-        },
-      ],
-    );
+    if (t) loadTemplate(t);
   };
 
   const dropdownOptions = [
@@ -337,13 +342,29 @@ export const SettingsTemplates = ({
                       </>
                     ) : (
                       <>
-                        <Text
-                          allowFontScaling={false}
-                          style={styles.tplName}
-                          numberOfLines={1}
+                        <TouchableOpacity
+                          style={styles.tplMain}
+                          activeOpacity={0.7}
+                          onPress={() => loadTemplate(t, true)}
                         >
-                          {t.name}
-                        </Text>
+                          <Text
+                            allowFontScaling={false}
+                            style={styles.tplName}
+                            numberOfLines={1}
+                          >
+                            {t.name}
+                          </Text>
+                          <View style={styles.tplOpen}>
+                            <Text allowFontScaling={false} style={styles.tplOpenText}>
+                              Open &amp; Edit
+                            </Text>
+                            <Ionicons
+                              name="chevron-forward"
+                              size={webMs(13)}
+                              color={COLORS.primary}
+                            />
+                          </View>
+                        </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.iconBtn, styles.iconBtnPrimary]}
                           onPress={() => {
@@ -518,7 +539,10 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.md),
   },
+  tplMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   tplName: { flex: 1, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  tplOpen: { flexDirection: "row", alignItems: "center", gap: webSc(2) },
+  tplOpenText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
   renameInput: {
     flex: 1,
     height: webSc(40),
