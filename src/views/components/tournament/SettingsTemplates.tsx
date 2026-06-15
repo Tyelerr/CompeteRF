@@ -185,25 +185,30 @@ export const SettingsTemplates = ({
 
         {/* Loaded template's name — editable to rename it. */}
         {selected && (
-          <View style={styles.renameRow}>
-            <Ionicons
-              name="pricetag-outline"
-              size={webMs(14)}
-              color={COLORS.textMuted}
-            />
-            <TextInput
-              allowFontScaling={false}
-              style={styles.renameField}
-              value={renameDraft}
-              onChangeText={setRenameDraft}
-              onEndEditing={commitRename}
-              onSubmitEditing={commitRename}
-              maxLength={40}
-              placeholder="Template name"
-              placeholderTextColor={COLORS.textMuted}
-              returnKeyType="done"
-            />
-            <Ionicons name="pencil" size={webMs(13)} color={COLORS.primary} />
+          <View style={styles.renameBlock}>
+            <Text allowFontScaling={false} style={styles.renameLabel}>
+              Template Name
+            </Text>
+            <View style={styles.renameRow}>
+              <Ionicons
+                name="pricetag-outline"
+                size={webMs(14)}
+                color={COLORS.textMuted}
+              />
+              <TextInput
+                allowFontScaling={false}
+                style={styles.renameField}
+                value={renameDraft}
+                onChangeText={setRenameDraft}
+                onEndEditing={commitRename}
+                onSubmitEditing={commitRename}
+                maxLength={40}
+                placeholder="Template name"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+              />
+              <Ionicons name="pencil" size={webMs(13)} color={COLORS.primary} />
+            </View>
           </View>
         )}
 
@@ -401,6 +406,15 @@ const styles = StyleSheet.create({
   barLabelGroup: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   barTitle: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   barCount: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
+  renameBlock: { marginBottom: webSc(SPACING.sm) },
+  renameLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "800",
+    color: COLORS.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: webSc(SPACING.xs),
+  },
   renameRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -411,7 +425,6 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.md),
     backgroundColor: COLORS.background,
     paddingHorizontal: webSc(SPACING.md),
-    marginBottom: webSc(SPACING.sm),
   },
   renameField: {
     flex: 1,
