@@ -279,7 +279,7 @@ export const SettingsTemplates = ({
               ))}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.actBtn, styles.actPrimary, styles.closeBtn]}
+              style={styles.doneBtn}
               activeOpacity={0.8}
               onPress={() => setManageOpen(false)}
             >
@@ -392,7 +392,15 @@ const styles = StyleSheet.create({
   actPrimary: { backgroundColor: COLORS.primary },
   actPrimaryText: { fontSize: webMs(FONT_SIZES.sm), color: "#fff", fontWeight: "800" },
   actOff: { opacity: 0.5 },
-  closeBtn: { marginTop: webSc(SPACING.md) },
+  // Standalone full-width button — no flex:1 (that collapses height in a column).
+  doneBtn: {
+    alignSelf: "stretch",
+    paddingVertical: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    marginTop: webSc(SPACING.md),
+  },
 
   manageList: { maxHeight: webSc(260), marginTop: webSc(SPACING.sm) },
   divider: { height: 1, backgroundColor: COLORS.border },
