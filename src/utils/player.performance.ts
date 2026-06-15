@@ -34,11 +34,13 @@ export interface PlayerPerformance {
 }
 
 export const PERIODS = [
-  { key: "30D", label: "30D", days: 30 },
-  { key: "3M", label: "3M", days: 90 },
-  { key: "6M", label: "6M", days: 180 },
-  { key: "1Y", label: "1Y", days: 365 },
-  { key: "ALL", label: "All", days: null },
+  { key: "TODAY", label: "Today", days: 0 },
+  { key: "7D", label: "7 Days", days: 7 },
+  { key: "30D", label: "30 Days", days: 30 },
+  { key: "3M", label: "3 Months", days: 90 },
+  { key: "6M", label: "6 Months", days: 180 },
+  { key: "1Y", label: "1 Year", days: 365 },
+  { key: "ALL", label: "All Time", days: null },
 ] as const;
 export type PeriodKey = (typeof PERIODS)[number]["key"];
 
@@ -65,7 +67,15 @@ export const computePlayerPerformance = (
   periodDays: number | null,
   now: number,
 ): PlayerPerformance => {
-  const cutoff = periodDays != null ? now - periodDays * 86400000 : 0;
+  // days null = all time; 0 = since the start of today; otherwise a rolling window.
+  let cutoff = 0;
+  if (periodDays === 0) {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    cutoff = d.getTime();
+  } else if (periodDays != null) {
+    cutoff = now - periodDays * 86400000;
+  }
   const inWindow = rows.filter((r) => {
     if (periodDays == null) return true;
     const t = r.date ? Date.parse(r.date) : 0;
