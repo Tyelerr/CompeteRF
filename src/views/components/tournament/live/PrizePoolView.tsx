@@ -205,6 +205,52 @@ const PercentCell = ({
   );
 };
 
+// Editable dollar cell (Custom mode): typed whole-dollar amount commits on blur
+// as an exact override for that place. Local draft keeps typing smooth.
+const AmountCell = ({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled: boolean;
+  onCommit: (v: number) => void;
+}) => {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  if (disabled) {
+    return (
+      <Text allowFontScaling={false} style={styles.payAmt}>
+        {money(value)}
+      </Text>
+    );
+  }
+  return (
+    <View style={styles.amtInputWrap}>
+      <Text allowFontScaling={false} style={styles.amtSign}>
+        $
+      </Text>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.amtInput}
+        value={draft}
+        onChangeText={(t) => setDraft(t.replace(/[^0-9]/g, ""))}
+        onEndEditing={() => {
+          const v = parseInt(draft, 10);
+          if (isNaN(v)) setDraft(String(value));
+          else onCommit(v);
+        }}
+        keyboardType="number-pad"
+        maxLength={7}
+        selectTextOnFocus
+      />
+    </View>
+  );
+};
+
 // ── Payout card (entry pool or a single side pot) ─────────────────────────────
 const PayoutCard = ({
   title,
@@ -225,6 +271,9 @@ const PayoutCard = ({
   const percents = places.map((p) => p.percent);
   const preset = activePreset(places);
   const count = places.length;
+  // Custom = the TD is typing exact dollar amounts per place (overrides set).
+  const customMode = places.some((p) => p.amountOverride != null);
+  const remaining = breakdown.remaining; // pool − total assigned
 
   const setCount = (n: number) => {
     const clamped = Math.max(1, Math.min(MAX_PLACES, n));
@@ -235,7 +284,14 @@ const PayoutCard = ({
   };
 
   const applyPreset = (key: PresetKey) => {
-    if (key === "custom") return; // Custom is a state, not an action
+    if (key === "custom") {
+      // Enter dollar mode: seed each place with its current payout as an exact
+      // amount the TD can then edit.
+      onPlaces(
+        places.map((p, i) => ({ ...p, amountOverride: breakdown.places[i].amount })),
+      );
+      return;
+    }
     onPlaces(placesFromPercents(presetSplit(key, count)));
   };
 
@@ -244,6 +300,13 @@ const PayoutCard = ({
 
   const commitPercent = (i: number, v: number) =>
     onPlaces(placesFromPercents(setPercent(percents, i, v)));
+
+  const commitAmount = (i: number, dollars: number) =>
+    onPlaces(
+      places.map((p, k) =>
+        k === i ? { ...p, amountOverride: Math.max(0, Math.round(dollars)) } : p,
+      ),
+    );
 
   return (
     <Card
@@ -285,7 +348,6 @@ const PayoutCard = ({
               <TouchableOpacity
                 key={p.key}
                 style={[styles.presetChip, active && styles.presetChipActive]}
-                disabled={p.key === "custom"}
                 onPress={() => applyPreset(p.key)}
               >
                 <Text
@@ -293,7 +355,6 @@ const PayoutCard = ({
                   style={[
                     styles.presetText,
                     active && styles.presetTextActive,
-                    p.key === "custom" && !active && styles.presetTextMuted,
                   ]}
                 >
                   {p.label}
@@ -304,52 +365,86 @@ const PayoutCard = ({
         </View>
       )}
 
-      {/* Payout rows: place · [−] percent [+] · amount */}
-      {breakdown.places.map((r, i) => (
-        <View key={i} style={styles.payRow}>
-          <Text allowFontScaling={false} style={styles.payPlace}>
-            {ordinal(r.place)}
-          </Text>
-          <View style={styles.payPctGroup}>
-            {!locked && (
-              <TouchableOpacity
-                style={[
-                  styles.pctBtn,
-                  !canDecrease(percents, i) && styles.pctBtnOff,
-                ]}
-                disabled={!canDecrease(percents, i)}
-                onPress={() => bump(i, -1)}
-              >
-                <Text allowFontScaling={false} style={styles.pctBtnText}>
-                  {"−"}
+      {/* Payout rows. Percent mode: place · [−] percent [+] · amount. Custom mode:
+          place · derived percent · editable $ amount. */}
+      {breakdown.places.map((r, i) => {
+        const derivedPct = pool > 0 ? Math.round((r.amount / pool) * 100) : 0;
+        return (
+          <View key={i} style={styles.payRow}>
+            <Text allowFontScaling={false} style={styles.payPlace}>
+              {ordinal(r.place)}
+            </Text>
+            {customMode ? (
+              <>
+                <Text allowFontScaling={false} style={styles.derivedPct}>
+                  {derivedPct}%
                 </Text>
-              </TouchableOpacity>
-            )}
-            <PercentCell
-              value={r.percent}
-              disabled={locked}
-              onCommit={(v) => commitPercent(i, v)}
-            />
-            {!locked && (
-              <TouchableOpacity
-                style={[
-                  styles.pctBtn,
-                  !canIncrease(percents, i) && styles.pctBtnOff,
-                ]}
-                disabled={!canIncrease(percents, i)}
-                onPress={() => bump(i, 1)}
-              >
-                <Text allowFontScaling={false} style={styles.pctBtnText}>
-                  +
+                <AmountCell
+                  value={r.amount}
+                  disabled={locked}
+                  onCommit={(v) => commitAmount(i, v)}
+                />
+              </>
+            ) : (
+              <>
+                <View style={styles.payPctGroup}>
+                  {!locked && (
+                    <TouchableOpacity
+                      style={[
+                        styles.pctBtn,
+                        !canDecrease(percents, i) && styles.pctBtnOff,
+                      ]}
+                      disabled={!canDecrease(percents, i)}
+                      onPress={() => bump(i, -1)}
+                    >
+                      <Text allowFontScaling={false} style={styles.pctBtnText}>
+                        {"−"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <PercentCell
+                    value={r.percent}
+                    disabled={locked}
+                    onCommit={(v) => commitPercent(i, v)}
+                  />
+                  {!locked && (
+                    <TouchableOpacity
+                      style={[
+                        styles.pctBtn,
+                        !canIncrease(percents, i) && styles.pctBtnOff,
+                      ]}
+                      disabled={!canIncrease(percents, i)}
+                      onPress={() => bump(i, 1)}
+                    >
+                      <Text allowFontScaling={false} style={styles.pctBtnText}>
+                        +
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text allowFontScaling={false} style={styles.payAmt}>
+                  {money(r.amount)}
                 </Text>
-              </TouchableOpacity>
+              </>
             )}
           </View>
-          <Text allowFontScaling={false} style={styles.payAmt}>
-            {money(r.amount)}
-          </Text>
-        </View>
-      ))}
+        );
+      })}
+
+      {/* Leftover / over-allocation note. */}
+      {remaining > 0.004 ? (
+        <Text allowFontScaling={false} style={styles.leftoverText}>
+          {money(remaining)} still to pay out
+        </Text>
+      ) : remaining < -0.004 ? (
+        <Text allowFontScaling={false} style={styles.overText}>
+          {money(-remaining)} over the pool — trim a payout
+        </Text>
+      ) : (
+        <Text allowFontScaling={false} style={styles.fullyText}>
+          Pool fully paid out
+        </Text>
+      )}
     </Card>
   );
 };
@@ -640,7 +735,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   presetTextActive: { color: COLORS.primary, fontWeight: "700" },
-  presetTextMuted: { color: COLORS.textMuted },
   // Payout rows
   payRow: {
     flexDirection: "row",
@@ -711,6 +805,59 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: "700",
     width: webSc(80),
+    textAlign: "right",
+  },
+  // Custom (dollar) mode
+  derivedPct: {
+    flex: 1,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  amtInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.xs),
+    width: webSc(90),
+    justifyContent: "flex-end",
+  },
+  amtSign: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+  },
+  amtInput: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "700",
+    paddingVertical: webSc(SPACING.xs),
+    minWidth: webSc(50),
+    textAlign: "right",
+  },
+  leftoverText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
+    textAlign: "right",
+  },
+  overText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.error,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
+    textAlign: "right",
+  },
+  fullyText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.success,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
     textAlign: "right",
   },
   // Lock banner
