@@ -35,7 +35,6 @@ interface Props {
   saving: boolean;
   onApply: (settings: Record<string, unknown>) => void;
   onSave: (name: string) => Promise<unknown>;
-  onRename: (id: number, name: string) => Promise<void> | void;
   onDelete: (id: number) => Promise<void> | void;
   // The save modal is controlled so the parent can pop it right after a settings save.
   saveOpen: boolean;
@@ -70,7 +69,6 @@ export const SettingsTemplates = ({
   saving,
   onApply,
   onSave,
-  onRename,
   onDelete,
   saveOpen,
   onSaveOpenChange,
@@ -79,8 +77,6 @@ export const SettingsTemplates = ({
 }: Props) => {
   const [name, setName] = useState("");
   const [manageOpen, setManageOpen] = useState(false);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameText, setRenameText] = useState("");
   // The template the TD loaded (drives the Using line + Modified badge).
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -138,11 +134,6 @@ export const SettingsTemplates = ({
         e instanceof Error ? e.message : "Please try again.",
       );
     }
-  };
-
-  const commitRename = async (id: number) => {
-    if (renameText.trim()) await onRename(id, renameText.trim());
-    setRenamingId(null);
   };
 
   const confirmDelete = (t: SettingsTemplate) =>
@@ -300,101 +291,42 @@ export const SettingsTemplates = ({
               bounces={false}
               showsVerticalScrollIndicator={false}
             >
-              {templates.map((t) => {
-                const isRenaming = renamingId === t.id;
-                return (
-                  <View key={t.id} style={styles.tplCard}>
-                    {isRenaming ? (
-                      <>
-                        <TextInput
-                          allowFontScaling={false}
-                          style={styles.renameInput}
-                          value={renameText}
-                          onChangeText={setRenameText}
-                          maxLength={40}
-                          autoFocus
-                          onSubmitEditing={() => commitRename(t.id)}
-                          placeholder="Template name"
-                          placeholderTextColor={COLORS.textMuted}
-                        />
-                        <TouchableOpacity
-                          style={[styles.iconBtn, styles.iconBtnPrimary]}
-                          onPress={() => commitRename(t.id)}
-                          hitSlop={6}
-                        >
-                          <Ionicons
-                            name="checkmark"
-                            size={webMs(15)}
-                            color={COLORS.primary}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.iconBtn}
-                          onPress={() => setRenamingId(null)}
-                          hitSlop={6}
-                        >
-                          <Ionicons
-                            name="close"
-                            size={webMs(15)}
-                            color={COLORS.textSecondary}
-                          />
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <>
-                        <TouchableOpacity
-                          style={styles.tplMain}
-                          activeOpacity={0.7}
-                          onPress={() => loadTemplate(t, true)}
-                        >
-                          <Text
-                            allowFontScaling={false}
-                            style={styles.tplName}
-                            numberOfLines={1}
-                          >
-                            {t.name}
-                          </Text>
-                          <View style={styles.tplOpen}>
-                            <Text allowFontScaling={false} style={styles.tplOpenText}>
-                              Open &amp; Edit
-                            </Text>
-                            <Ionicons
-                              name="chevron-forward"
-                              size={webMs(13)}
-                              color={COLORS.primary}
-                            />
-                          </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.iconBtn, styles.iconBtnPrimary]}
-                          onPress={() => {
-                            setRenamingId(t.id);
-                            setRenameText(t.name);
-                          }}
-                          hitSlop={6}
-                        >
-                          <Ionicons
-                            name="pencil"
-                            size={webMs(13)}
-                            color={COLORS.primary}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.iconBtn, styles.iconBtnDanger]}
-                          onPress={() => confirmDelete(t)}
-                          hitSlop={6}
-                        >
-                          <Ionicons
-                            name="trash-outline"
-                            size={webMs(13)}
-                            color={COLORS.error}
-                          />
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                );
-              })}
+              {templates.map((t) => (
+                <View key={t.id} style={styles.tplCard}>
+                  <TouchableOpacity
+                    style={styles.tplMain}
+                    activeOpacity={0.7}
+                    onPress={() => loadTemplate(t, true)}
+                  >
+                    <Text
+                      allowFontScaling={false}
+                      style={styles.tplName}
+                      numberOfLines={1}
+                    >
+                      {t.name}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Pencil opens the template — loads all its settings to edit. */}
+                  <TouchableOpacity
+                    style={[styles.iconBtn, styles.iconBtnPrimary]}
+                    onPress={() => loadTemplate(t, true)}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="pencil" size={webMs(13)} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.iconBtn, styles.iconBtnDanger]}
+                    onPress={() => confirmDelete(t)}
+                    hitSlop={6}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={webMs(13)}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
             </ScrollView>
 
             <TouchableOpacity
@@ -539,22 +471,8 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.md),
   },
-  tplMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
-  tplName: { flex: 1, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
-  tplOpen: { flexDirection: "row", alignItems: "center", gap: webSc(2) },
-  tplOpenText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
-  renameInput: {
-    flex: 1,
-    height: webSc(40),
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: webSc(RADIUS.sm),
-    backgroundColor: COLORS.surface,
-    color: COLORS.text,
-    paddingHorizontal: webSc(SPACING.sm),
-    fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "700",
-  },
+  tplMain: { flex: 1 },
+  tplName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   iconBtn: {
     width: webSc(30),
     height: webSc(30),

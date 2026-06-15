@@ -2673,7 +2673,6 @@ export default function ManageTournamentScreen() {
             saving={settingsTemplates.saving}
             onApply={applyTemplate}
             onSave={(nm) => settingsTemplates.save(nm, templatableSettings(form))}
-            onRename={settingsTemplates.rename}
             onDelete={settingsTemplates.remove}
             saveOpen={tplSaveOpen}
             onSaveOpenChange={setTplSaveOpen}
