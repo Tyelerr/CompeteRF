@@ -271,27 +271,47 @@ export const sidePotTotal = (players: number, amountPerPlayer: number): number =
   round2(Math.max(0, players) * Math.max(0, amountPerPlayer));
 
 // ── Breakdown ─────────────────────────────────────────────────────────────────
+// Payouts are WHOLE DOLLARS — a TD pays cash, not coins. Each percent place is
+// floored to a dollar, then the leftover whole dollars are handed to the largest
+// fractional remainders, so the percent payouts still sum to the whole-dollar
+// pool (no stray cents). Custom dollar overrides are kept exact (also whole).
 export const computeBreakdown = (
   pool: number,
   places: PrizePlace[],
 ): PoolBreakdown => {
-  const rows: PlaceBreakdown[] = places.map((pl, i) => {
-    const custom = pl.amountOverride != null;
-    const amount = custom
-      ? round2(Math.max(0, pl.amountOverride as number))
-      : round2((clampPct(pl.percent) / 100) * pool);
-    return { place: i + 1, percent: clampPct(pl.percent), amount, custom };
-  });
+  const poolR = round2(pool);
+  const raw = places.map((pl) =>
+    pl.amountOverride != null
+      ? { custom: true, value: Math.max(0, Math.round(pl.amountOverride)) }
+      : { custom: false, value: (clampPct(pl.percent) / 100) * poolR },
+  );
+
+  const amounts = raw.map((r) => (r.custom ? r.value : Math.floor(r.value)));
+  const pctIdx = raw.map((r, i) => (r.custom ? -1 : i)).filter((i) => i >= 0);
+  // Never pay out more than the pool, so target the floor of the percent dollars.
+  const pctTarget = Math.floor(pctIdx.reduce((s, i) => s + raw[i].value, 0) + 1e-9);
+  let rem = pctTarget - pctIdx.reduce((s, i) => s + amounts[i], 0);
+  const order = pctIdx
+    .map((i) => ({ i, f: raw[i].value - Math.floor(raw[i].value) }))
+    .sort((a, b) => b.f - a.f);
+  for (let k = 0; k < order.length && rem > 0; k++, rem -= 1) amounts[order[k].i] += 1;
+
+  const rows: PlaceBreakdown[] = places.map((pl, i) => ({
+    place: i + 1,
+    percent: clampPct(pl.percent),
+    amount: amounts[i],
+    custom: raw[i].custom,
+  }));
   const percentTotal = round2(rows.reduce((s, r) => s + r.percent, 0));
   const payoutTotal = round2(rows.reduce((s, r) => s + r.amount, 0));
   return {
-    pool: round2(pool),
+    pool: poolR,
     places: rows,
     percentTotal,
     payoutTotal,
-    remaining: round2(pool - payoutTotal),
+    remaining: round2(poolR - payoutTotal),
     percentValid: Math.abs(percentTotal - 100) < EPS,
-    amountValid: payoutTotal <= pool + EPS,
+    amountValid: payoutTotal <= poolR + EPS,
   };
 };
 
