@@ -5,6 +5,7 @@
 // parent supplies the current settings and applies a chosen template.
 
 import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   Alert,
   Modal,
@@ -221,70 +222,114 @@ export const SettingsTemplates = ({
         <Pressable style={styles.backdrop} onPress={() => setManageOpen(false)}>
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text allowFontScaling={false} style={styles.sheetTitle}>
-              Your Templates
+              Saved Templates
             </Text>
-            <ScrollView style={styles.manageList} bounces={false}>
-              {templates.map((t, i) => (
-                <View key={t.id}>
-                  {i > 0 && <View style={styles.divider} />}
-                  <View style={styles.manageRow}>
-                    {renamingId === t.id ? (
-                      <TextInput
-                        allowFontScaling={false}
-                        style={[styles.input, styles.renameInput]}
-                        value={renameText}
-                        onChangeText={setRenameText}
-                        maxLength={40}
-                        autoFocus
-                        onSubmitEditing={() => commitRename(t.id)}
-                      />
+            <Text allowFontScaling={false} style={styles.sheetSub}>
+              Manage reusable tournament setup presets.
+            </Text>
+            <Text allowFontScaling={false} style={styles.countText}>
+              {`${count} of ${MAX_SETTINGS_TEMPLATES} saved`}
+            </Text>
+
+            <ScrollView
+              style={styles.manageList}
+              contentContainerStyle={styles.manageListInner}
+              bounces={false}
+              showsVerticalScrollIndicator={false}
+            >
+              {templates.map((t) => {
+                const isRenaming = renamingId === t.id;
+                return (
+                  <View key={t.id} style={styles.tplCard}>
+                    {isRenaming ? (
+                      <>
+                        <TextInput
+                          allowFontScaling={false}
+                          style={styles.renameInput}
+                          value={renameText}
+                          onChangeText={setRenameText}
+                          maxLength={40}
+                          autoFocus
+                          onSubmitEditing={() => commitRename(t.id)}
+                          placeholder="Template name"
+                          placeholderTextColor={COLORS.textMuted}
+                        />
+                        <TouchableOpacity
+                          style={[styles.iconBtn, styles.iconBtnPrimary]}
+                          onPress={() => commitRename(t.id)}
+                          hitSlop={6}
+                        >
+                          <Ionicons
+                            name="checkmark"
+                            size={webMs(18)}
+                            color={COLORS.primary}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.iconBtn}
+                          onPress={() => setRenamingId(null)}
+                          hitSlop={6}
+                        >
+                          <Ionicons
+                            name="close"
+                            size={webMs(18)}
+                            color={COLORS.textSecondary}
+                          />
+                        </TouchableOpacity>
+                      </>
                     ) : (
-                      <Text
-                        allowFontScaling={false}
-                        style={styles.manageName}
-                        numberOfLines={1}
-                      >
-                        {t.name}
-                      </Text>
+                      <>
+                        <View style={styles.tplInfo}>
+                          <Text
+                            allowFontScaling={false}
+                            style={styles.tplName}
+                            numberOfLines={1}
+                          >
+                            {t.name}
+                          </Text>
+                          <Text allowFontScaling={false} style={styles.tplMeta}>
+                            Tournament setup preset
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.iconBtn, styles.iconBtnPrimary]}
+                          onPress={() => {
+                            setRenamingId(t.id);
+                            setRenameText(t.name);
+                          }}
+                          hitSlop={6}
+                        >
+                          <Ionicons
+                            name="pencil"
+                            size={webMs(16)}
+                            color={COLORS.primary}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.iconBtn, styles.iconBtnDanger]}
+                          onPress={() => confirmDelete(t)}
+                          hitSlop={6}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={webMs(16)}
+                            color={COLORS.error}
+                          />
+                        </TouchableOpacity>
+                      </>
                     )}
-                    {renamingId === t.id ? (
-                      <TouchableOpacity onPress={() => commitRename(t.id)} hitSlop={8}>
-                        <Text allowFontScaling={false} style={styles.manageAction}>
-                          Save
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        onPress={() => {
-                          setRenamingId(t.id);
-                          setRenameText(t.name);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Text allowFontScaling={false} style={styles.manageAction}>
-                          Rename
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity onPress={() => confirmDelete(t)} hitSlop={8}>
-                      <Text
-                        allowFontScaling={false}
-                        style={[styles.manageAction, styles.manageDelete]}
-                      >
-                        Delete
-                      </Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
+
             <TouchableOpacity
-              style={styles.doneBtn}
+              style={styles.closeBtn}
               activeOpacity={0.8}
               onPress={() => setManageOpen(false)}
             >
-              <Text allowFontScaling={false} style={styles.actPrimaryText}>
-                Done
+              <Text allowFontScaling={false} style={styles.closeBtnText}>
+                Close
               </Text>
             </TouchableOpacity>
           </Pressable>
@@ -392,26 +437,63 @@ const styles = StyleSheet.create({
   actPrimary: { backgroundColor: COLORS.primary },
   actPrimaryText: { fontSize: webMs(FONT_SIZES.sm), color: "#fff", fontWeight: "800" },
   actOff: { opacity: 0.5 },
-  // Standalone full-width button — no flex:1 (that collapses height in a column).
-  doneBtn: {
-    alignSelf: "stretch",
-    paddingVertical: webSc(SPACING.md),
-    borderRadius: webSc(RADIUS.md),
-    alignItems: "center",
-    backgroundColor: COLORS.primary,
-    marginTop: webSc(SPACING.md),
-  },
 
-  manageList: { maxHeight: webSc(260), marginTop: webSc(SPACING.sm) },
-  divider: { height: 1, backgroundColor: COLORS.border },
-  manageRow: {
+  // ── Manage modal ──────────────────────────────────────────────────────────
+  countText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.primary,
+    fontWeight: "800",
+    marginTop: webSc(SPACING.xs),
+  },
+  manageList: { maxHeight: webSc(320), marginTop: webSc(SPACING.md) },
+  manageListInner: { gap: webSc(SPACING.sm), paddingBottom: webSc(2) },
+  tplCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: webSc(SPACING.md),
+    gap: webSc(SPACING.sm),
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
     paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
   },
-  manageName: { flex: 1, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
-  renameInput: { flex: 1, marginTop: 0, height: webSc(40) },
-  manageAction: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
-  manageDelete: { color: COLORS.error },
+  tplInfo: { flex: 1, gap: webSc(2) },
+  tplName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  tplMeta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "600" },
+  renameInput: {
+    flex: 1,
+    height: webSc(40),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
+    paddingHorizontal: webSc(SPACING.sm),
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "700",
+  },
+  iconBtn: {
+    width: webSc(38),
+    height: webSc(38),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBtnPrimary: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "12" },
+  iconBtnDanger: { borderColor: COLORS.error, backgroundColor: COLORS.error + "12" },
+  closeBtn: {
+    alignSelf: "stretch",
+    marginTop: webSc(SPACING.lg),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.md),
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  closeBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "800" },
 });
