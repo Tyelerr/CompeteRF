@@ -167,6 +167,7 @@ export const LiveTournamentScreen = ({
   focusMatchId,
   focusKey,
   highlightRegId,
+  from,
 }: {
   id: string;
   initialTab?: string;
@@ -174,11 +175,18 @@ export const LiveTournamentScreen = ({
   focusMatchId?: string;
   focusKey?: string;
   highlightRegId?: number | null;
+  // Which tab/screen to return to on Back. This screen lives under (tabs) as a
+  // hidden tab, so a plain router.back() falls to the first tab (Home).
+  from?: string;
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tournamentId = id ? Number(id) : undefined;
   const sp = useTournamentSpectator(tournamentId);
+  const goBack = () => {
+    if (from === "profile") router.navigate("/profile" as any);
+    else router.back();
+  };
   const validTab = TABS.some((t) => t.key === initialTab)
     ? (initialTab as Tab)
     : "overview";
@@ -215,7 +223,7 @@ export const LiveTournamentScreen = ({
     <View style={styles.root}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + wxSc(SPACING.xs) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={8}>
+        <TouchableOpacity onPress={goBack} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-back" size={wxMs(24)} color={COLORS.text} />
         </TouchableOpacity>
         <View style={styles.headerMid}>

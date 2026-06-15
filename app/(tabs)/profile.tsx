@@ -314,7 +314,7 @@ export default function ProfileScreen() {
     // fk changes every tap so the (kept-mounted) spectator screen re-centers + resets.
     const fk = Date.now();
     const q =
-      `tab=matches&view=bracket&fk=${fk}` +
+      `tab=matches&view=bracket&fk=${fk}&from=profile` +
       `${focus ? `&focus=${focus}` : ""}` +
       `${myRegId ? `&me=${myRegId}` : ""}`;
     router.push(`/live-tournament/${tournamentId}?${q}` as any);
@@ -323,7 +323,7 @@ export default function ProfileScreen() {
   // Recent Activity row → open that tournament's bracket view.
   const openTournamentBracket = (tournamentId: number) => {
     router.push(
-      `/live-tournament/${tournamentId}?tab=matches&view=bracket&fk=${Date.now()}` as any,
+      `/live-tournament/${tournamentId}?tab=matches&view=bracket&from=profile&fk=${Date.now()}` as any,
     );
   };
 
