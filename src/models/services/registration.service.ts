@@ -17,6 +17,19 @@ import {
   RegistrationUpdate,
 } from "../types/registration.types";
 import { RegistrationStatus } from "../types/common.types";
+import { PlayerHistoryRow } from "../../utils/player.performance";
+import { TournamentLiveSettings } from "../types/tournament-settings.types";
+
+interface RawHistoryRow {
+  id: number;
+  tournament: {
+    game_type: string | null;
+    tournament_date: string | null;
+    status: string | null;
+    live_state: string | null;
+    live_settings: TournamentLiveSettings | null;
+  } | null;
+}
 
 export const registrationService = {
   // ---- Reads -------------------------------------------------------------
@@ -71,6 +84,30 @@ export const registrationService = {
       .order("registered_at", { ascending: false });
     if (error) throw error;
     return (data || []) as unknown as PlayerTournament[];
+  },
+
+  // A player's full tournament history (with bracket + match state) for the
+  // profile Performance Snapshot. Capped to the most recent 100 events.
+  async getPlayerHistory(playerId: number): Promise<PlayerHistoryRow[]> {
+    const { data, error } = await supabase
+      .from("tournament_players")
+      .select(
+        "id, tournament:tournament_id (game_type, tournament_date, status, live_state, live_settings)",
+      )
+      .eq("player_id", playerId)
+      .order("registered_at", { ascending: false })
+      .limit(100);
+    if (error) throw error;
+    return ((data ?? []) as unknown as RawHistoryRow[])
+      .filter((r) => r.tournament != null)
+      .map((r) => ({
+        regId: r.id,
+        gameType: r.tournament!.game_type ?? null,
+        date: r.tournament!.tournament_date ?? null,
+        status: r.tournament!.status ?? null,
+        liveState: r.tournament!.live_state ?? null,
+        liveSettings: r.tournament!.live_settings ?? null,
+      }));
   },
 
   // One registration by id (optional record -> maybeSingle).

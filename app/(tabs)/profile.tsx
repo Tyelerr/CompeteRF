@@ -25,6 +25,8 @@ import { moderateScale, scale } from "../../src/utils/scaling";
 import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.tournaments";
 import { usePlayerLiveMatch } from "../../src/viewmodels/hooks/use.player.live.match";
+import { usePlayerPerformance } from "../../src/viewmodels/hooks/use.player.performance";
+import { PerformanceSnapshot } from "../../src/views/components/profile/PerformanceSnapshot";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
 import { Button } from "../../src/views/components/common/button";
@@ -193,6 +195,7 @@ export default function ProfileScreen() {
   } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
   const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const performance = usePlayerPerformance(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
@@ -489,16 +492,11 @@ export default function ProfileScreen() {
               {/* Placeholder sections — only with My Tournaments, not Search Alerts */}
               {!searchAlertsVisible && (
                 <>
-                  <View style={styles.placeholderSection}>
-                    <Text allowFontScaling={false} style={styles.placeholderTitle}>
-                      PERFORMANCE SNAPSHOT
-                    </Text>
-                    <View style={styles.placeholderCard}>
-                      <Text allowFontScaling={false} style={styles.placeholderText}>
-                        Play in a tournament to see your stats
-                      </Text>
-                    </View>
-                  </View>
+                  <PerformanceSnapshot
+                    stats={performance.stats}
+                    period={performance.period}
+                    onPeriod={performance.setPeriod}
+                  />
                   <View style={styles.placeholderSection}>
                     <Text allowFontScaling={false} style={styles.placeholderTitle}>
                       RECENT ACTIVITY
