@@ -279,11 +279,12 @@ export const SettingsTemplates = ({
               ))}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.actBtn, styles.actGhost, styles.closeBtn]}
+              style={[styles.actBtn, styles.actPrimary, styles.closeBtn]}
+              activeOpacity={0.8}
               onPress={() => setManageOpen(false)}
             >
-              <Text allowFontScaling={false} style={styles.actGhostText}>
-                Close
+              <Text allowFontScaling={false} style={styles.actPrimaryText}>
+                Done
               </Text>
             </TouchableOpacity>
           </Pressable>
@@ -386,7 +387,7 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.md),
     alignItems: "center",
   },
-  actGhost: { borderWidth: 1, borderColor: COLORS.border },
+  actGhost: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background },
   actGhostText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
   actPrimary: { backgroundColor: COLORS.primary },
   actPrimaryText: { fontSize: webMs(FONT_SIZES.sm), color: "#fff", fontWeight: "800" },
