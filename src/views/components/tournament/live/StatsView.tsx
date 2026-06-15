@@ -255,7 +255,11 @@ const PlayerStatsBody = ({
               label="Current Fargo"
               value={p.fargo != null ? String(p.fargo) : "—"}
             />
-            <Row label="Performance" value={deltaLabel(p.performanceDelta)} />
+            <Row
+              label="Performance"
+              value={deltaLabel(p.performanceDelta)}
+              valueColor={dColor}
+            />
             <Row label="Win %" value={winFractionLabel(p.winPct)} />
             <Row
               label="Avg Opponent Fargo"
