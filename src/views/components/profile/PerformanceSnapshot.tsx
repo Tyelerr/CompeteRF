@@ -5,14 +5,7 @@
 // larger. Responsive grid: 2 columns on mobile, 3–4 on wider screens.
 
 import { ComponentProps, useState } from "react";
-import {
-  LayoutChangeEvent,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -23,6 +16,7 @@ import {
   PeriodKey,
   PlayerPerformance,
 } from "../../../utils/player.performance";
+import { Dropdown } from "../common/dropdown";
 
 const ordinal = (n: number): string => {
   const t = n % 100;
@@ -158,34 +152,19 @@ export const PerformanceSnapshot = ({
 
   return (
     <View style={styles.section}>
-      <Text allowFontScaling={false} style={styles.title} numberOfLines={1}>
-        Performance Snapshot
-      </Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pills}
-      >
-        {PERIODS.map((p) => {
-          const active = p.key === period;
-          return (
-            <TouchableOpacity
-              key={p.key}
-              style={[styles.pill, active && styles.pillOn]}
-              onPress={() => onPeriod(p.key)}
-              activeOpacity={0.8}
-            >
-              <Text
-                allowFontScaling={false}
-                style={[styles.pillText, active && styles.pillTextOn]}
-              >
-                {p.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.head}>
+        <Text allowFontScaling={false} style={styles.title} numberOfLines={1}>
+          Performance Snapshot
+        </Text>
+        <View style={styles.periodWrap}>
+          <Dropdown
+            compact
+            options={PERIODS.map((p) => ({ label: p.label, value: p.key }))}
+            value={period}
+            onSelect={(v) => onPeriod(v as PeriodKey)}
+          />
+        </View>
+      </View>
 
       <View style={[styles.grid, { gap }]} onLayout={onLayout}>
         {cardWidth > 0 &&
@@ -197,25 +176,21 @@ export const PerformanceSnapshot = ({
 
 const styles = StyleSheet.create({
   section: { marginHorizontal: webSc(SPACING.md), marginTop: webSc(SPACING.lg) },
+  head: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
   title: {
+    flex: 1,
     fontSize: webMs(FONT_SIZES.md),
     fontWeight: "800",
     color: COLORS.text,
     letterSpacing: 0.5,
-    marginBottom: webSc(SPACING.sm),
   },
-  pills: { gap: webSc(SPACING.xs), paddingBottom: webSc(SPACING.sm) },
-  pill: {
-    paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.xs),
-    borderRadius: webSc(RADIUS.full),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  pillOn: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  pillText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.textSecondary },
-  pillTextOn: { color: "#fff" },
+  periodWrap: { width: webSc(132) },
 
   grid: { flexDirection: "row", flexWrap: "wrap" },
   card: {
