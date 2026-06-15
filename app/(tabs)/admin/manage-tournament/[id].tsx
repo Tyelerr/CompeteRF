@@ -2091,6 +2091,30 @@ export default function ManageTournamentScreen() {
     hub
       .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual" })
       .catch(() => {});
+
+  // Finish the event: marks it completed (live_state finished) which unlocks the
+  // Results phase. Confirmed first since it stops live editing.
+  const handleFinishTournament = () => {
+    Alert.alert(
+      "Finish Tournament",
+      "Mark this tournament completed? This unlocks the Results phase and stops live editing.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Finish",
+          style: "destructive",
+          onPress: () => {
+            hub
+              .complete()
+              .then(() => setActionsOpen(false))
+              .catch(() =>
+                Alert.alert("Error", "Failed to finish the tournament."),
+              );
+          },
+        },
+      ],
+    );
+  };
   // The table being edited in the table edit sheet (status / streaming / remove).
   const [editingTableId, setEditingTableId] = useState<number | null>(null);
   // "Add Tables" collapses once the tournament is live (you rarely add mid-event).
@@ -4366,6 +4390,8 @@ export default function ManageTournamentScreen() {
       <TournamentActionsModal
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
+        onFinish={handleFinishTournament}
+        finishing={hub.isMutatingLive}
       />
 
       {/* Lifecycle navigation — Setup / Live / Results phase dropdowns */}

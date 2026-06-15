@@ -25,6 +25,7 @@ const BOLT = String.fromCodePoint(0x26a1);
 interface ActionItem {
   label: string;
   danger?: boolean;
+  action?: "finish"; // wired actions; the rest are still placeholders
 }
 
 const SECTIONS: { title: string; items: ActionItem[] }[] = [
@@ -49,22 +50,39 @@ const SECTIONS: { title: string; items: ActionItem[] }[] = [
   },
   {
     title: "TOURNAMENT",
-    items: [{ label: "Export Results" }, { label: "Finish Tournament", danger: true }],
+    items: [
+      { label: "Export Results" },
+      { label: "Finish Tournament", danger: true, action: "finish" },
+    ],
   },
 ];
 
 export const TournamentActionsModal = ({
   visible,
   onClose,
+  onFinish,
+  finishing,
 }: {
   visible: boolean;
   onClose: () => void;
+  // Marks the tournament completed (unlocks the Results phase). When absent, the
+  // Finish action falls back to the "coming soon" placeholder.
+  onFinish?: () => void;
+  finishing?: boolean;
 }) => {
   const [comingSoon, setComingSoon] = useState<string | null>(null);
 
   const close = () => {
     setComingSoon(null);
     onClose();
+  };
+
+  const onItemPress = (item: ActionItem) => {
+    if (item.action === "finish" && onFinish) {
+      onFinish();
+      return;
+    }
+    setComingSoon(item.label);
   };
 
   return (
@@ -111,7 +129,8 @@ export const TournamentActionsModal = ({
                       <TouchableOpacity
                         style={styles.row}
                         activeOpacity={0.7}
-                        onPress={() => setComingSoon(item.label)}
+                        disabled={item.action === "finish" && finishing}
+                        onPress={() => onItemPress(item)}
                       >
                         <Text
                           allowFontScaling={false}
@@ -120,11 +139,17 @@ export const TournamentActionsModal = ({
                         >
                           {item.label}
                         </Text>
-                        <View style={styles.soonTag}>
-                          <Text allowFontScaling={false} style={styles.soonText}>
-                            Soon
+                        {item.action === "finish" && onFinish ? (
+                          <Text allowFontScaling={false} style={styles.rowChevron}>
+                            {finishing ? "…" : "›"}
                           </Text>
-                        </View>
+                        ) : (
+                          <View style={styles.soonTag}>
+                            <Text allowFontScaling={false} style={styles.soonText}>
+                              Soon
+                            </Text>
+                          </View>
+                        )}
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -222,6 +247,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   soonText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700" },
+  rowChevron: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.error, fontWeight: "800" },
   closeBtn: {
     marginTop: webSc(SPACING.md),
     paddingVertical: webSc(SPACING.md),
