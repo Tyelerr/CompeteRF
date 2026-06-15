@@ -23,6 +23,7 @@ import {
   computeAllPlayerStats,
   computeTournamentStats,
   formatDurationMs,
+  playerMatchHistory,
   PlayerTournamentStats,
   winFractionLabel,
   winPctLabel,
@@ -162,14 +163,17 @@ const TournamentStatsBody = ({ matches }: { matches: LiveMatch[] }) => {
 };
 
 const PlayerStatsBody = ({
+  matches,
   players,
   selected,
   onSelect,
 }: {
+  matches: LiveMatch[];
   players: PlayerTournamentStats[];
   selected: PlayerTournamentStats | null;
   onSelect: (key: string) => void;
 }) => {
+  const history = selected ? playerMatchHistory(matches, selected.key) : [];
   if (players.length === 0) {
     return (
       <View style={styles.card}>
@@ -265,6 +269,64 @@ const PlayerStatsBody = ({
             <Row label="Games Lost" value={String(p.gamesLost)} />
             <Row label="Record" value={`${p.matchWins}-${p.matchLosses}`} />
           </View>
+
+          {/* Match history for this player */}
+          <View style={styles.card}>
+            <Text allowFontScaling={false} style={styles.cardTitle}>
+              Match History
+            </Text>
+            {history.length === 0 ? (
+              <Text allowFontScaling={false} style={styles.empty}>
+                No matches played yet.
+              </Text>
+            ) : (
+              history.map((h, i) => (
+                <View key={h.id}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <View style={styles.histRow}>
+                    <View
+                      style={[
+                        styles.histTag,
+                        h.live
+                          ? styles.histTagLive
+                          : h.won
+                            ? styles.histTagWin
+                            : styles.histTagLoss,
+                      ]}
+                    >
+                      <Text allowFontScaling={false} style={styles.histTagText}>
+                        {h.live ? "•" : h.won ? "W" : "L"}
+                      </Text>
+                    </View>
+                    <View style={styles.histMain}>
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.histOpp}
+                        numberOfLines={1}
+                      >
+                        {h.opponentName ? `vs ${h.opponentName}` : "vs TBD"}
+                      </Text>
+                      <Text
+                        allowFontScaling={false}
+                        style={styles.histRound}
+                        numberOfLines={1}
+                      >
+                        {h.roundLabel}
+                        {h.result === "forfeit"
+                          ? " · Forfeit"
+                          : h.result === "withdraw"
+                            ? " · Withdraw"
+                            : ""}
+                      </Text>
+                    </View>
+                    <Text allowFontScaling={false} style={styles.histScore}>
+                      {`${h.myScore}-${h.oppScore}`}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
         </>
       )}
     </>
@@ -318,6 +380,7 @@ export const StatsView = ({
         <TournamentStatsBody matches={matches} />
       ) : (
         <PlayerStatsBody
+          matches={matches}
           players={players}
           selected={selected}
           onSelect={setSelectedKey}
@@ -487,6 +550,39 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "800",
+    color: COLORS.text,
+    fontVariant: ["tabular-nums"],
+  },
+
+  // Match history rows
+  histRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.sm),
+  },
+  histTag: {
+    width: webSc(24),
+    height: webSc(24),
+    borderRadius: webSc(RADIUS.sm),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  histTagWin: { backgroundColor: COLORS.success },
+  histTagLoss: { backgroundColor: COLORS.error },
+  histTagLive: { backgroundColor: COLORS.primary },
+  histTagText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "900", color: "#fff" },
+  histMain: { flex: 1 },
+  histOpp: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  histRound: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+    marginTop: webSc(2),
+  },
+  histScore: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "900",
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
   },

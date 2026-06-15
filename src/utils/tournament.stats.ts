@@ -260,6 +260,46 @@ export const computeAllPlayerStats = (
   return out;
 };
 
+// One row of a single player's match history within this tournament.
+export interface PlayerMatchRow {
+  id: string;
+  roundLabel: string; // e.g. "Winners Side Match 3", "Finals"
+  opponentName: string | null;
+  myScore: number;
+  oppScore: number;
+  won: boolean;
+  live: boolean; // currently in progress
+  result: LiveMatch["result"]; // forfeit / withdraw / normal
+}
+
+// The selected player's played + in-progress matches, in bracket (≈ chronological)
+// order. Scheduled-but-not-started matches are left out — this is history.
+export const playerMatchHistory = (
+  matches: LiveMatch[],
+  playerKey: string,
+): PlayerMatchRow[] => {
+  const keyOf = (regId: number | null, name: string | null) =>
+    regId != null ? `r${regId}` : `n${name ?? "?"}`;
+  const rows: PlayerMatchRow[] = [];
+  for (const m of matches) {
+    if (m.bye || m.empty || m.status === "scheduled") continue;
+    const isP1 = keyOf(m.p1RegId, m.p1Name) === playerKey;
+    const isP2 = keyOf(m.p2RegId, m.p2Name) === playerKey;
+    if (!isP1 && !isP2) continue;
+    rows.push({
+      id: m.id,
+      roundLabel: m.label,
+      opponentName: isP1 ? m.p2Name : m.p1Name,
+      myScore: (isP1 ? m.p1Score : m.p2Score) ?? 0,
+      oppScore: (isP1 ? m.p2Score : m.p1Score) ?? 0,
+      won: m.winner === (isP1 ? 1 : 2),
+      live: m.status === "in_progress",
+      result: m.result,
+    });
+  }
+  return rows;
+};
+
 // "58.3%" / "N/A" for a 0–1 win fraction.
 export const winFractionLabel = (p: number | null): string =>
   p == null ? "N/A" : `${(p * 100).toFixed(1)}%`;
