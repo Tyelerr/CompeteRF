@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { registrationService } from "../../models/services/registration.service";
 import {
   computePlayerPerformance,
+  computePreviousPerformance,
   PERIODS,
   PeriodKey,
 } from "../../utils/player.performance";
@@ -21,10 +22,20 @@ export const usePlayerPerformance = (playerId?: number) => {
   });
 
   const days = PERIODS.find((p) => p.key === period)?.days ?? null;
-  const stats = useMemo(
-    () => computePlayerPerformance(data ?? [], days, Date.now()),
-    [data, days],
-  );
+  const { stats, prev } = useMemo(() => {
+    const now = Date.now();
+    return {
+      stats: computePlayerPerformance(data ?? [], days, now),
+      prev: computePreviousPerformance(data ?? [], days, now),
+    };
+  }, [data, days]);
 
-  return { stats, period, setPeriod, loading: isLoading, hasData: (data?.length ?? 0) > 0 };
+  return {
+    stats,
+    prev,
+    period,
+    setPeriod,
+    loading: isLoading,
+    hasData: (data?.length ?? 0) > 0,
+  };
 };

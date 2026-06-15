@@ -25,7 +25,10 @@ export interface PlayerPerformance {
   winPct: number | null; // 0–100
   avgPlacement: number | null;
   bestFinish: number | null; // numeric place
+  bestFinishDate: string | null; // when that finish was achieved
   topGameType: string | null; // prettified, e.g. "9 Ball"
+  topGameEvents: number; // events of that game type
+  eventsEntered: number; // tournaments entered in the window
   tournamentWins: number;
   topThree: number;
   streakType: "W" | "L" | null;
@@ -61,31 +64,22 @@ const raceConfigOf = (ls: TournamentLiveSettings | null): RaceConfig => ({
   diffMax: ls?.fargoDiffMaxRace ?? null,
 });
 
-export const computePlayerPerformance = (
+// Inclusive of startMs, exclusive of endMs (rows are dated by tournament_date).
+const computeWindow = (
   rows: PlayerHistoryRow[],
-  periodDays: number | null,
-  now: number,
+  startMs: number,
+  endMs: number,
 ): PlayerPerformance => {
-  // days null = all time; 0 = since the start of today; otherwise a rolling window.
-  let cutoff = 0;
-  if (periodDays === 0) {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    cutoff = d.getTime();
-  } else if (periodDays != null) {
-    cutoff = now - periodDays * 86400000;
-  }
   const inWindow = rows.filter((r) => {
-    if (periodDays == null) return true;
     const t = r.date ? Date.parse(r.date) : 0;
-    return t >= cutoff;
+    return t >= startMs && t < endMs;
   });
 
   let matchesPlayed = 0;
   let matchesWon = 0;
   let tournamentWins = 0;
   let topThree = 0;
-  const placements: number[] = [];
+  const placements: { place: number; date: string | null }[] = [];
   const gameCount = new Map<string, number>();
   const results: { at: number; won: boolean }[] = [];
 
@@ -117,7 +111,7 @@ export const computePlayerPerformance = (
     if (r.status === "completed" || r.liveState === "finished") {
       const me = computeStandings(matches).find((s) => s.key === `r${r.regId}`);
       if (me) {
-        placements.push(me.place);
+        placements.push({ place: me.place, date: r.date });
         if (me.place === 1) tournamentWins += 1;
         if (me.place <= 3) topThree += 1;
       }
@@ -139,27 +133,70 @@ export const computePlayerPerformance = (
   }
 
   let topGameType: string | null = null;
-  let topN = 0;
+  let topGameEvents = 0;
   for (const [g, c] of gameCount) {
-    if (c > topN) {
-      topN = c;
+    if (c > topGameEvents) {
+      topGameEvents = c;
       topGameType = g;
     }
   }
+
+  const best = placements.reduce<{ place: number; date: string | null } | null>(
+    (acc, p) => (acc == null || p.place < acc.place ? p : acc),
+    null,
+  );
 
   return {
     matchesPlayed,
     matchesWon,
     winPct: matchesPlayed > 0 ? (matchesWon / matchesPlayed) * 100 : null,
     avgPlacement: placements.length
-      ? placements.reduce((a, b) => a + b, 0) / placements.length
+      ? placements.reduce((a, b) => a + b.place, 0) / placements.length
       : null,
-    bestFinish: placements.length ? Math.min(...placements) : null,
+    bestFinish: best?.place ?? null,
+    bestFinishDate: best?.date ?? null,
     topGameType: topGameType ? prettyGameType(topGameType) : null,
+    topGameEvents,
+    eventsEntered: inWindow.length,
     tournamentWins,
     topThree,
     streakType,
     streakCount,
     events: placements.length,
   };
+};
+
+// The window for a period: { start, len } (len null = all time, no prior window).
+const windowFor = (
+  periodDays: number | null,
+  now: number,
+): { start: number; len: number | null } => {
+  if (periodDays == null) return { start: 0, len: null };
+  if (periodDays === 0) {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return { start: d.getTime(), len: 86400000 };
+  }
+  return { start: now - periodDays * 86400000, len: periodDays * 86400000 };
+};
+
+export const computePlayerPerformance = (
+  rows: PlayerHistoryRow[],
+  periodDays: number | null,
+  now: number,
+): PlayerPerformance => {
+  const { start } = windowFor(periodDays, now);
+  return computeWindow(rows, start, Infinity);
+};
+
+// The immediately-preceding window of the same length (for trend deltas). Null
+// for All Time (no prior window to compare against).
+export const computePreviousPerformance = (
+  rows: PlayerHistoryRow[],
+  periodDays: number | null,
+  now: number,
+): PlayerPerformance | null => {
+  const { start, len } = windowFor(periodDays, now);
+  if (len == null) return null;
+  return computeWindow(rows, start - len, start);
 };

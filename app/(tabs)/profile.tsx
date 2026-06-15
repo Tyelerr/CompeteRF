@@ -494,6 +494,7 @@ export default function ProfileScreen() {
                 <>
                   <PerformanceSnapshot
                     stats={performance.stats}
+                    prev={performance.prev}
                     period={performance.period}
                     onPeriod={performance.setPeriod}
                   />
