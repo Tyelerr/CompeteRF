@@ -274,8 +274,10 @@ const PayoutCard = ({
   const percents = places.map((p) => p.percent);
   const preset = activePreset(places);
   const count = places.length;
-  // Custom = the TD is typing exact dollar amounts per place (overrides set).
-  const customMode = places.some((p) => p.amountOverride != null);
+  // Custom = anything that isn't a named preset (adjusted percents OR typed dollar
+  // overrides). Either way the card is dollar-editable, so nudging a stepper off a
+  // preset drops straight into editable Custom rather than a dead "Custom" label.
+  const customMode = preset === "custom";
   const remaining = breakdown.remaining; // pool − total assigned
 
   const setCount = (n: number) => {
