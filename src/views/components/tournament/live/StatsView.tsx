@@ -231,18 +231,18 @@ const PlayerStatsBody = ({
             </Text>
             <View style={styles.perfHead}>
               <View>
-                <Text allowFontScaling={false} style={styles.perfRating}>
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.perfRating, { color: dColor }]}
+                >
                   {p.performanceRating != null ? p.performanceRating : "N/A"}
                 </Text>
                 <Text allowFontScaling={false} style={styles.perfRatingLabel}>
                   Performance Rating
                 </Text>
               </View>
-              <View style={[styles.deltaBadge, { borderColor: dColor }]}>
-                <Text
-                  allowFontScaling={false}
-                  style={[styles.deltaText, { color: dColor }]}
-                >
+              <View style={styles.deltaBadge}>
+                <Text allowFontScaling={false} style={styles.deltaText}>
                   {deltaLabel(p.performanceDelta)}
                 </Text>
                 <Text allowFontScaling={false} style={styles.deltaSub}>
@@ -255,11 +255,7 @@ const PlayerStatsBody = ({
               label="Current Fargo"
               value={p.fargo != null ? String(p.fargo) : "—"}
             />
-            <Row
-              label="Performance Delta"
-              value={deltaLabel(p.performanceDelta)}
-              valueColor={dColor}
-            />
+            <Row label="Performance" value={deltaLabel(p.performanceDelta)} />
             <Row label="Win %" value={winFractionLabel(p.winPct)} />
             <Row
               label="Avg Opponent Fargo"
@@ -535,9 +531,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
     paddingVertical: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.md),
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
   },
-  deltaText: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "900", fontVariant: ["tabular-nums"] },
+  deltaText: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "900",
+    color: COLORS.text,
+    fontVariant: ["tabular-nums"],
+  },
   deltaSub: { fontSize: webMs(9), color: COLORS.textMuted, fontWeight: "700", letterSpacing: 0.5 },
 
   row: {
