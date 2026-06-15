@@ -270,31 +270,45 @@ export const entryPoolTotal = (
 export const sidePotTotal = (players: number, amountPerPlayer: number): number =>
   round2(Math.max(0, players) * Math.max(0, amountPerPlayer));
 
+// The cash increment payouts snap to — TDs pay round notes, not coins or odd
+// dollars. $10 for real-sized pools (so $133 -> $130, $147 -> $150); smaller pools
+// drop to $5 / $1 so a paid place never rounds away to nothing.
+export const payoutStepFor = (pool: number): number =>
+  pool >= 100 ? 10 : pool >= 40 ? 5 : 1;
+
 // ── Breakdown ─────────────────────────────────────────────────────────────────
-// Payouts are WHOLE DOLLARS — a TD pays cash, not coins. Each percent place is
-// floored to a dollar, then the leftover whole dollars are handed to the largest
-// fractional remainders, so the percent payouts still sum to the whole-dollar
-// pool (no stray cents). Custom dollar overrides are kept exact (also whole).
+// Payouts snap to a round cash increment (see payoutStepFor). Each percent place
+// is floored to the increment, then the leftover increments are handed to the
+// largest remainders, so the percent payouts still sum to the pool (rounded down
+// to the increment — any sub-increment remainder shows as unassigned). Custom
+// dollar overrides are kept exact.
 export const computeBreakdown = (
   pool: number,
   places: PrizePlace[],
 ): PoolBreakdown => {
   const poolR = round2(pool);
+  const step = payoutStepFor(poolR);
+  const stepFloor = (v: number) => Math.floor(v / step + 1e-9) * step;
+
   const raw = places.map((pl) =>
     pl.amountOverride != null
       ? { custom: true, value: Math.max(0, Math.round(pl.amountOverride)) }
       : { custom: false, value: (clampPct(pl.percent) / 100) * poolR },
   );
 
-  const amounts = raw.map((r) => (r.custom ? r.value : Math.floor(r.value)));
+  const amounts = raw.map((r) => (r.custom ? r.value : stepFloor(r.value)));
   const pctIdx = raw.map((r, i) => (r.custom ? -1 : i)).filter((i) => i >= 0);
-  // Never pay out more than the pool, so target the floor of the percent dollars.
-  const pctTarget = Math.floor(pctIdx.reduce((s, i) => s + raw[i].value, 0) + 1e-9);
-  let rem = pctTarget - pctIdx.reduce((s, i) => s + amounts[i], 0);
+  // Target the pool rounded DOWN to the increment, so payouts never exceed it.
+  const pctTarget = stepFloor(pctIdx.reduce((s, i) => s + raw[i].value, 0));
+  let units = Math.round(
+    (pctTarget - pctIdx.reduce((s, i) => s + amounts[i], 0)) / step,
+  );
   const order = pctIdx
-    .map((i) => ({ i, f: raw[i].value - Math.floor(raw[i].value) }))
+    .map((i) => ({ i, f: raw[i].value - stepFloor(raw[i].value) }))
     .sort((a, b) => b.f - a.f);
-  for (let k = 0; k < order.length && rem > 0; k++, rem -= 1) amounts[order[k].i] += 1;
+  for (let k = 0; k < order.length && units > 0; k++, units -= 1) {
+    amounts[order[k].i] += step;
+  }
 
   const rows: PlaceBreakdown[] = places.map((pl, i) => ({
     place: i + 1,
