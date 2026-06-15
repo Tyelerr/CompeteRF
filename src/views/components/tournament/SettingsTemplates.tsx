@@ -26,6 +26,7 @@ import {
   MAX_SETTINGS_TEMPLATES,
   SettingsTemplate,
 } from "../../../models/services/settings-template.service";
+import { Dropdown } from "../common/dropdown";
 
 interface Props {
   templates: SettingsTemplate[];
@@ -39,7 +40,28 @@ interface Props {
   // The save modal is controlled so the parent can pop it right after a settings save.
   saveOpen: boolean;
   onSaveOpenChange: (open: boolean) => void;
+  // The current (live) templatable settings, and a formatter for the "Using" line.
+  currentSettings: Record<string, unknown>;
+  summarize: (settings: Record<string, unknown>) => string[];
 }
+
+const SAVE_VALUE = "__save_current__";
+
+// Deep, key-order-independent equality (JSONB returns keys in a different order).
+const sortDeep = (v: unknown): unknown => {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v && typeof v === "object") {
+    return Object.keys(v as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, k) => {
+        acc[k] = sortDeep((v as Record<string, unknown>)[k]);
+        return acc;
+      }, {});
+  }
+  return v;
+};
+const sameSettings = (a: unknown, b: unknown) =>
+  JSON.stringify(sortDeep(a)) === JSON.stringify(sortDeep(b));
 
 export const SettingsTemplates = ({
   templates,
@@ -52,21 +74,49 @@ export const SettingsTemplates = ({
   onDelete,
   saveOpen,
   onSaveOpenChange,
+  currentSettings,
+  summarize,
 }: Props) => {
   const [name, setName] = useState("");
   const [manageOpen, setManageOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameText, setRenameText] = useState("");
+  // The template the TD loaded (drives the Using line + Modified badge).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const apply = (t: SettingsTemplate) =>
+  const selected = templates.find((t) => String(t.id) === selectedId) ?? null;
+  const modified = !!selected && !sameSettings(currentSettings, selected.settings);
+
+  const onSelectTemplate = (value: string) => {
+    if (value === SAVE_VALUE) {
+      onSaveOpenChange(true);
+      return;
+    }
+    const t = templates.find((x) => String(x.id) === value);
+    if (!t) return;
     Alert.alert(
       "Apply Template",
       `Load "${t.name}" into this tournament's settings? Current settings will be replaced.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Apply", onPress: () => onApply(t.settings) },
+        {
+          text: "Apply",
+          onPress: () => {
+            onApply(t.settings);
+            setSelectedId(value);
+          },
+        },
       ],
     );
+  };
+
+  const dropdownOptions = [
+    ...templates.map((t) => ({ label: t.name, value: String(t.id) })),
+    {
+      label: atLimit ? "Saved templates full (5/5)" : "＋ Save current settings…",
+      value: SAVE_VALUE,
+    },
+  ];
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -93,65 +143,73 @@ export const SettingsTemplates = ({
   const confirmDelete = (t: SettingsTemplate) =>
     Alert.alert("Delete Template", `Delete "${t.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => onDelete(t.id) },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          onDelete(t.id);
+          if (selectedId === String(t.id)) setSelectedId(null);
+        },
+      },
     ]);
 
   return (
     <>
-      {/* Top bar */}
+      {/* Compact preset card */}
       <View style={styles.bar}>
         <View style={styles.barHead}>
-          <Text allowFontScaling={false} style={styles.barTitle}>
-            {`Templates ${count}/${MAX_SETTINGS_TEMPLATES}`}
+          <View style={styles.barLabelGroup}>
+            <Ionicons
+              name="albums-outline"
+              size={webMs(14)}
+              color={COLORS.primary}
+            />
+            <Text allowFontScaling={false} style={styles.barTitle}>
+              Template
+            </Text>
+          </View>
+          <Text allowFontScaling={false} style={styles.barCount}>
+            {`${count} of ${MAX_SETTINGS_TEMPLATES} saved`}
           </Text>
-          <View style={styles.barActions}>
+        </View>
+
+        <View style={styles.selectorRow}>
+          <View style={styles.dropdownWrap}>
+            <Dropdown
+              options={dropdownOptions}
+              value={selectedId ?? ""}
+              onSelect={onSelectTemplate}
+              placeholder={
+                count > 0 ? "Select a template" : "Save current settings…"
+              }
+            />
+          </View>
+          {count > 0 && (
             <TouchableOpacity
-              style={styles.barBtn}
-              onPress={() => onSaveOpenChange(true)}
+              style={styles.manageBtn}
+              onPress={() => setManageOpen(true)}
             >
-              <Text allowFontScaling={false} style={styles.barBtnText}>
-                {"＋ Save"}
+              <Text allowFontScaling={false} style={styles.manageBtnText}>
+                Manage
               </Text>
             </TouchableOpacity>
-            {count > 0 && (
-              <TouchableOpacity
-                style={styles.barBtn}
-                onPress={() => setManageOpen(true)}
-              >
-                <Text allowFontScaling={false} style={styles.barBtnText}>
-                  Edit
+          )}
+        </View>
+
+        {selected && (
+          <View style={styles.usingRow}>
+            <Text allowFontScaling={false} style={styles.usingText} numberOfLines={1}>
+              <Text style={styles.usingLabel}>Using: </Text>
+              {summarize(selected.settings).join("  ·  ") || selected.name}
+            </Text>
+            {modified && (
+              <View style={styles.modBadge}>
+                <Text allowFontScaling={false} style={styles.modText}>
+                  Modified
                 </Text>
-              </TouchableOpacity>
+              </View>
             )}
           </View>
-        </View>
-        {count === 0 ? (
-          <Text allowFontScaling={false} style={styles.barEmpty}>
-            Save these settings as a reusable template, then load them into your
-            next tournament.
-          </Text>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chips}
-          >
-            {templates.map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={styles.chip}
-                onPress={() => apply(t)}
-              >
-                <Text
-                  allowFontScaling={false}
-                  style={styles.chipText}
-                  numberOfLines={1}
-                >
-                  {t.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
         )}
       </View>
 
@@ -347,34 +405,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: webSc(SPACING.xs),
   },
+  barLabelGroup: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   barTitle: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
-  barActions: { flexDirection: "row", gap: webSc(SPACING.sm) },
-  barBtn: {
-    paddingHorizontal: webSc(SPACING.sm),
-    paddingVertical: webSc(4),
-    borderRadius: webSc(RADIUS.sm),
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + "15",
-  },
-  barBtnText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.primary },
-  barEmpty: {
-    fontSize: webMs(FONT_SIZES.xs),
-    color: COLORS.textSecondary,
-    marginTop: webSc(SPACING.xs),
-  },
-  chips: { gap: webSc(SPACING.xs), paddingTop: webSc(SPACING.sm) },
-  chip: {
+  barCount: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
+  selectorRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  dropdownWrap: { flex: 1 },
+  manageBtn: {
     paddingHorizontal: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.xs),
-    borderRadius: webSc(RADIUS.full),
+    height: webSc(44),
+    borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.background,
-    maxWidth: webSc(180),
+    alignItems: "center",
+    justifyContent: "center",
   },
-  chipText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  manageBtnText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  usingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.xs),
+  },
+  usingText: { flex: 1, fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
+  usingLabel: { color: COLORS.textMuted, fontWeight: "800" },
+  modBadge: {
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.warning + "22",
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  modText: { fontSize: webMs(9), fontWeight: "900", color: COLORS.warning, letterSpacing: 0.5 },
 
   backdrop: {
     flex: 1,

@@ -534,6 +534,32 @@ const templatableSettings = (f: SettingsForm): Record<string, unknown> => {
   return out;
 };
 
+const prettifySlug = (s: string): string =>
+  s
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+
+// Short "Using: …" summary for a saved template — game type, format, race mode.
+const summarizeTemplate = (s: Record<string, unknown>): string[] => {
+  const out: string[] = [];
+  const gt = typeof s.gameType === "string" ? s.gameType : "";
+  if (gt) out.push(GAME_TYPE_MAP[gt.toLowerCase()] ?? prettifySlug(gt));
+  const fmt = typeof s.tournamentFormat === "string" ? s.tournamentFormat : "";
+  if (fmt) out.push(prettifySlug(fmt));
+  const rm = typeof s.raceMode === "string" ? s.raceMode : "";
+  if (rm)
+    out.push(
+      rm === "groups"
+        ? "Race Groups"
+        : rm === "differential"
+          ? "Fargo Differential"
+          : "Fixed Race",
+    );
+  return out;
+};
+
 // ── Small building blocks ────────────────────────────────────────────────────
 const Section = ({
   title,
@@ -2651,6 +2677,8 @@ export default function ManageTournamentScreen() {
             onDelete={settingsTemplates.remove}
             saveOpen={tplSaveOpen}
             onSaveOpenChange={setTplSaveOpen}
+            currentSettings={templatableSettings(form)}
+            summarize={summarizeTemplate}
           />
         )}
         {settingsLocked && (
