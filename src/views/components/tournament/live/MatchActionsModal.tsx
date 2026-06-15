@@ -67,7 +67,15 @@ export const MatchActionsModal = ({
 
   useEffect(() => {
     if (!match) return;
-    setStep(initialStep);
+    // "start" is a card-view shortcut: open the table step ready to START the
+    // match; plain "table" opens it in assign-only mode.
+    if (initialStep === "start") {
+      setTableMode("start");
+      setStep("table");
+    } else {
+      if (initialStep === "table") setTableMode("assign");
+      setStep(initialStep);
+    }
     setTableId(match.tableId);
     setP1Score(match.p1Score != null ? String(match.p1Score) : "");
     setP2Score(match.p2Score != null ? String(match.p2Score) : "");

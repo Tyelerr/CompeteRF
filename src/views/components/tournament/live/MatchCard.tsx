@@ -142,7 +142,7 @@ export const MatchCard = ({
             <Btn label="View Details" primary onPress={() => onAction?.(m, "details")} busy={busy} />
           ) : m.status === "scheduled" ? (
             <>
-              <Btn label="Start Match" primary onPress={() => onAction?.(m, "table")} busy={busy} />
+              <Btn label="Start Match" primary onPress={() => onAction?.(m, "start")} busy={busy} />
               <Btn label="Assign Table" onPress={() => onAction?.(m, "table")} busy={busy} />
             </>
           ) : running ? (

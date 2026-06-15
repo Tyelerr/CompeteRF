@@ -18,6 +18,7 @@ import { MatchResult as ResolverResult, resolveBracket } from "./bracket.resolve
 export type MatchActionStep =
   | "menu"
   | "table"
+  | "start" // shortcut into the table step in "start" mode (card-view Start Match)
   | "winner"
   | "winnerScore"
   | "score"
