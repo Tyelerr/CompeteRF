@@ -64,6 +64,9 @@ interface PrizePoolViewProps {
   feesAddedOnTop: boolean; // true = fees collected on top of entry, not deducted
 }
 
+// Dollar nudge for the Custom-mode steppers (type an exact amount, then adjust).
+const AMT_STEP = 5;
+
 const money = (n: number): string => {
   const r = Math.round((n + Number.EPSILON) * 100) / 100;
   return Number.isInteger(r) ? `$${r}` : `$${r.toFixed(2)}`;
@@ -379,11 +382,36 @@ const PayoutCard = ({
                 <Text allowFontScaling={false} style={styles.derivedPct}>
                   {derivedPct}%
                 </Text>
-                <AmountCell
-                  value={r.amount}
-                  disabled={locked}
-                  onCommit={(v) => commitAmount(i, v)}
-                />
+                {locked ? (
+                  <Text allowFontScaling={false} style={styles.payAmt}>
+                    {money(r.amount)}
+                  </Text>
+                ) : (
+                  <View style={styles.amtGroup}>
+                    <TouchableOpacity
+                      style={[styles.pctBtn, r.amount <= 0 && styles.pctBtnOff]}
+                      disabled={r.amount <= 0}
+                      onPress={() => commitAmount(i, Math.max(0, r.amount - AMT_STEP))}
+                    >
+                      <Text allowFontScaling={false} style={styles.pctBtnText}>
+                        {"−"}
+                      </Text>
+                    </TouchableOpacity>
+                    <AmountCell
+                      value={r.amount}
+                      disabled={false}
+                      onCommit={(v) => commitAmount(i, v)}
+                    />
+                    <TouchableOpacity
+                      style={styles.pctBtn}
+                      onPress={() => commitAmount(i, r.amount + AMT_STEP)}
+                    >
+                      <Text allowFontScaling={false} style={styles.pctBtnText}>
+                        +
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </>
             ) : (
               <>
@@ -815,6 +843,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  amtGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+  },
   amtInputWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -823,7 +856,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderRadius: webSc(RADIUS.sm),
     paddingHorizontal: webSc(SPACING.xs),
-    width: webSc(90),
+    width: webSc(72),
     justifyContent: "flex-end",
   },
   amtSign: {
