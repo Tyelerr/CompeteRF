@@ -4,7 +4,7 @@
 // and a manage modal to rename / delete. The settings blob is opaque here — the
 // parent supplies the current settings and applies a chosen template.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   Alert,
@@ -35,6 +35,7 @@ interface Props {
   saving: boolean;
   onApply: (settings: Record<string, unknown>) => void;
   onSave: (name: string) => Promise<unknown>;
+  onRename: (id: number, name: string) => Promise<void> | void;
   onDelete: (id: number) => Promise<void> | void;
   // The save modal is controlled so the parent can pop it right after a settings save.
   saveOpen: boolean;
@@ -69,6 +70,7 @@ export const SettingsTemplates = ({
   saving,
   onApply,
   onSave,
+  onRename,
   onDelete,
   saveOpen,
   onSaveOpenChange,
@@ -77,11 +79,23 @@ export const SettingsTemplates = ({
 }: Props) => {
   const [name, setName] = useState("");
   const [manageOpen, setManageOpen] = useState(false);
-  // The template the TD loaded (drives the Using line + Modified badge).
+  // The template the TD loaded (drives the rename field, Using line, Modified badge).
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   const selected = templates.find((t) => String(t.id) === selectedId) ?? null;
   const modified = !!selected && !sameSettings(currentSettings, selected.settings);
+
+  // Keep the rename field in sync with the loaded template (switch / external rename).
+  useEffect(() => {
+    setRenameDraft(selected?.name ?? "");
+  }, [selectedId, selected?.name]);
+
+  const commitRename = () => {
+    const v = renameDraft.trim();
+    if (selected && v && v !== selected.name) onRename(selected.id, v);
+    else setRenameDraft(selected?.name ?? "");
+  };
 
   // Load a template into the live settings form (replacing what's there).
   const loadTemplate = (t: SettingsTemplate, alsoClose?: boolean) =>
@@ -168,6 +182,30 @@ export const SettingsTemplates = ({
             {`${count} of ${MAX_SETTINGS_TEMPLATES} saved`}
           </Text>
         </View>
+
+        {/* Loaded template's name — editable to rename it. */}
+        {selected && (
+          <View style={styles.renameRow}>
+            <Ionicons
+              name="pricetag-outline"
+              size={webMs(14)}
+              color={COLORS.textMuted}
+            />
+            <TextInput
+              allowFontScaling={false}
+              style={styles.renameField}
+              value={renameDraft}
+              onChangeText={setRenameDraft}
+              onEndEditing={commitRename}
+              onSubmitEditing={commitRename}
+              maxLength={40}
+              placeholder="Template name"
+              placeholderTextColor={COLORS.textMuted}
+              returnKeyType="done"
+            />
+            <Ionicons name="pencil" size={webMs(13)} color={COLORS.primary} />
+          </View>
+        )}
 
         <View style={styles.selectorRow}>
           <View style={styles.dropdownWrap}>
@@ -363,6 +401,25 @@ const styles = StyleSheet.create({
   barLabelGroup: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   barTitle: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   barCount: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.primary },
+  renameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    height: webSc(44),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.background,
+    paddingHorizontal: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.sm),
+  },
+  renameField: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "800",
+    paddingVertical: 0,
+  },
   selectorRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   dropdownWrap: { flex: 1 },
   manageBtn: {
