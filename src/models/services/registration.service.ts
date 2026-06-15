@@ -23,6 +23,8 @@ import { TournamentLiveSettings } from "../types/tournament-settings.types";
 interface RawHistoryRow {
   id: number;
   tournament: {
+    id: number;
+    name: string | null;
     game_type: string | null;
     tournament_date: string | null;
     status: string | null;
@@ -92,7 +94,7 @@ export const registrationService = {
     const { data, error } = await supabase
       .from("tournament_players")
       .select(
-        "id, tournament:tournament_id (game_type, tournament_date, status, live_state, live_settings)",
+        "id, tournament:tournament_id (id, name, game_type, tournament_date, status, live_state, live_settings)",
       )
       .eq("player_id", playerId)
       .order("registered_at", { ascending: false })
@@ -102,6 +104,8 @@ export const registrationService = {
       .filter((r) => r.tournament != null)
       .map((r) => ({
         regId: r.id,
+        tournamentId: r.tournament!.id,
+        name: r.tournament!.name ?? "Tournament",
         gameType: r.tournament!.game_type ?? null,
         date: r.tournament!.tournament_date ?? null,
         status: r.tournament!.status ?? null,

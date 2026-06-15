@@ -8,6 +8,7 @@ import { registrationService } from "../../models/services/registration.service"
 import {
   computePlayerPerformance,
   computePreviousPerformance,
+  computeRecentActivity,
   PERIODS,
   PeriodKey,
 } from "../../utils/player.performance";
@@ -30,9 +31,15 @@ export const usePlayerPerformance = (playerId?: number) => {
     };
   }, [data, days]);
 
+  const recentActivity = useMemo(
+    () => computeRecentActivity(data ?? []),
+    [data],
+  );
+
   return {
     stats,
     prev,
+    recentActivity,
     period,
     setPeriod,
     loading: isLoading,

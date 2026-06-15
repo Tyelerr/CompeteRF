@@ -12,6 +12,8 @@ import { computeStandings } from "./tournament.stats";
 
 export interface PlayerHistoryRow {
   regId: number; // the player's tournament_players.id in this event
+  tournamentId: number;
+  name: string;
   gameType: string | null;
   date: string | null; // tournament_date
   status: string | null;
@@ -199,4 +201,66 @@ export const computePreviousPerformance = (
   const { start, len } = windowFor(periodDays, now);
   if (len == null) return null;
   return computeWindow(rows, start - len, start);
+};
+
+// ── Recent activity (profile feed) ────────────────────────────────────────────
+export interface RecentActivityItem {
+  tournamentId: number;
+  name: string;
+  date: string | null;
+  wins: number; // the player's match wins in that event
+  losses: number;
+  placeLabel: string | null; // final placement (finished events), e.g. "3rd"
+  finished: boolean;
+}
+
+// The player's tournaments that actually have a bracket, newest first, with their
+// match record + final placement.
+export const computeRecentActivity = (
+  rows: PlayerHistoryRow[],
+  limit = 12,
+): RecentActivityItem[] => {
+  const items: RecentActivityItem[] = [];
+  for (const r of rows) {
+    const ls = r.liveSettings;
+    if (!ls?.bracket) continue;
+    const finished = r.status === "completed" || r.liveState === "finished";
+
+    const matches = buildLiveMatches(
+      ls.bracket,
+      ls.matchState ?? {},
+      [],
+      r.gameType ?? "",
+      raceConfigOf(ls),
+    );
+    let wins = 0;
+    let losses = 0;
+    for (const m of matches) {
+      if (m.bye || m.empty || m.status !== "completed") continue;
+      const isP1 = m.p1RegId === r.regId;
+      const isP2 = m.p2RegId === r.regId;
+      if (!isP1 && !isP2) continue;
+      if (m.winner !== 1 && m.winner !== 2) continue;
+      if (m.winner === (isP1 ? 1 : 2)) wins += 1;
+      else losses += 1;
+    }
+    const placeLabel = finished
+      ? (computeStandings(matches).find((s) => s.key === `r${r.regId}`)?.placeLabel ??
+        null)
+      : null;
+
+    items.push({
+      tournamentId: r.tournamentId,
+      name: r.name,
+      date: r.date,
+      wins,
+      losses,
+      placeLabel,
+      finished,
+    });
+  }
+  items.sort(
+    (a, b) => (b.date ? Date.parse(b.date) : 0) - (a.date ? Date.parse(a.date) : 0),
+  );
+  return items.slice(0, limit);
 };

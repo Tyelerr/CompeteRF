@@ -27,6 +27,7 @@ import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.to
 import { usePlayerLiveMatch } from "../../src/viewmodels/hooks/use.player.live.match";
 import { usePlayerPerformance } from "../../src/viewmodels/hooks/use.player.performance";
 import { PerformanceSnapshot } from "../../src/views/components/profile/PerformanceSnapshot";
+import { RecentActivity } from "../../src/views/components/profile/RecentActivity";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
 import { Button } from "../../src/views/components/common/button";
@@ -319,6 +320,13 @@ export default function ProfileScreen() {
     router.push(`/live-tournament/${tournamentId}?${q}` as any);
   };
 
+  // Recent Activity row → open that tournament's bracket view.
+  const openTournamentBracket = (tournamentId: number) => {
+    router.push(
+      `/live-tournament/${tournamentId}?tab=matches&view=bracket&fk=${Date.now()}` as any,
+    );
+  };
+
   const formatMemberSince = (d: string) =>
     new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
 
@@ -498,16 +506,10 @@ export default function ProfileScreen() {
                     period={performance.period}
                     onPeriod={performance.setPeriod}
                   />
-                  <View style={styles.placeholderSection}>
-                    <Text allowFontScaling={false} style={styles.placeholderTitle}>
-                      RECENT ACTIVITY
-                    </Text>
-                    <View style={styles.placeholderCard}>
-                      <Text allowFontScaling={false} style={styles.placeholderText}>
-                        Your matches and results will show up here
-                      </Text>
-                    </View>
-                  </View>
+                  <RecentActivity
+                    items={performance.recentActivity}
+                    onOpen={openTournamentBracket}
+                  />
                 </>
               )}
             </>
@@ -588,25 +590,6 @@ const styles = StyleSheet.create({
     marginTop: wxSc(SPACING.xs),
   },
   matchCenterSub: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: wxSc(2) },
-
-  // Placeholder sections
-  placeholderSection: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.lg) },
-  placeholderTitle: {
-    fontSize: wxMs(FONT_SIZES.md),
-    fontWeight: "800",
-    color: COLORS.text,
-    letterSpacing: 0.5,
-    marginBottom: wxSc(SPACING.sm),
-  },
-  placeholderCard: {
-    backgroundColor: COLORS.backgroundCard,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    paddingVertical: wxSc(SPACING.xl),
-    alignItems: "center",
-  },
-  placeholderText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
 
   header: {
     padding: wxSc(SPACING.md),
