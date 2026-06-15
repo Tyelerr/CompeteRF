@@ -261,7 +261,7 @@ export const SettingsTemplates = ({
                         >
                           <Ionicons
                             name="checkmark"
-                            size={webMs(18)}
+                            size={webMs(15)}
                             color={COLORS.primary}
                           />
                         </TouchableOpacity>
@@ -272,25 +272,20 @@ export const SettingsTemplates = ({
                         >
                           <Ionicons
                             name="close"
-                            size={webMs(18)}
+                            size={webMs(15)}
                             color={COLORS.textSecondary}
                           />
                         </TouchableOpacity>
                       </>
                     ) : (
                       <>
-                        <View style={styles.tplInfo}>
-                          <Text
-                            allowFontScaling={false}
-                            style={styles.tplName}
-                            numberOfLines={1}
-                          >
-                            {t.name}
-                          </Text>
-                          <Text allowFontScaling={false} style={styles.tplMeta}>
-                            Tournament setup preset
-                          </Text>
-                        </View>
+                        <Text
+                          allowFontScaling={false}
+                          style={styles.tplName}
+                          numberOfLines={1}
+                        >
+                          {t.name}
+                        </Text>
                         <TouchableOpacity
                           style={[styles.iconBtn, styles.iconBtnPrimary]}
                           onPress={() => {
@@ -301,7 +296,7 @@ export const SettingsTemplates = ({
                         >
                           <Ionicons
                             name="pencil"
-                            size={webMs(16)}
+                            size={webMs(13)}
                             color={COLORS.primary}
                           />
                         </TouchableOpacity>
@@ -312,7 +307,7 @@ export const SettingsTemplates = ({
                         >
                           <Ionicons
                             name="trash-outline"
-                            size={webMs(16)}
+                            size={webMs(13)}
                             color={COLORS.error}
                           />
                         </TouchableOpacity>
@@ -458,9 +453,7 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.md),
   },
-  tplInfo: { flex: 1, gap: webSc(2) },
-  tplName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
-  tplMeta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "600" },
+  tplName: { flex: 1, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   renameInput: {
     flex: 1,
     height: webSc(40),
@@ -474,8 +467,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   iconBtn: {
-    width: webSc(38),
-    height: webSc(38),
+    width: webSc(30),
+    height: webSc(30),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
