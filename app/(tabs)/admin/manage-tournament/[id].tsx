@@ -1240,6 +1240,28 @@ const RegistrationRow = ({
             {fargoText}
             {raceLine() ? ` · ${raceLine()}` : ""}
           </Text>
+          {/* Side-pot entries stay visible (grayed) once locked, so a player who
+              forgot which pots they're in can just ask. */}
+          {sidePots.length > 0 && (
+            <View style={styles.lockedPotsRow}>
+              <Text allowFontScaling={false} style={styles.lockedPotsLabel}>
+                Side pots:
+              </Text>
+              {livePaidPots().length === 0 ? (
+                <Text allowFontScaling={false} style={styles.lockedPotsNone}>
+                  None
+                </Text>
+              ) : (
+                livePaidPots().map((name) => (
+                  <View key={name} style={styles.lockedPotChip}>
+                    <Text allowFontScaling={false} style={styles.lockedPotChipText}>
+                      {name}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
           <Text allowFontScaling={false} style={styles.hint}>
             Player list locked — reopen &amp; redraw to change.
           </Text>
@@ -1660,6 +1682,18 @@ export default function ManageTournamentScreen() {
     for (const s of prizeSidePots) map[s.name] = sidePotTotal(s.players, s.amount);
     return map;
   }, [prizeSidePots]);
+  // Which players (by standings key r<registrationId>) entered each side pot, so a
+  // side pot only pays its entrants — a non-entrant who finishes higher is skipped
+  // and the money falls to the next-best entrant.
+  const sidePotEntrants = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const r of hub.registrations) {
+      for (const name of safePaidSidePots(r.paid_side_pots)) {
+        (map[name] ??= []).push(`r${r.id}`);
+      }
+    }
+    return map;
+  }, [hub.registrations]);
   const prizeComplete =
     prizeFeesOk &&
     isPrizePoolComplete(prizeForm, prizeEntryPool, prizeSidePotPools);
@@ -4035,6 +4069,7 @@ export default function ManageTournamentScreen() {
             config={hub.prizePool}
             entryPool={prizeEntryPool}
             sidePotPools={prizeSidePotPools}
+            sidePotEntrants={sidePotEntrants}
           />
         );
       case "history":
@@ -4810,6 +4845,32 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginTop: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.xs),
+  },
+  lockedPotsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+  },
+  lockedPotsLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontWeight: "700",
+  },
+  lockedPotsNone: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  lockedPotChip: {
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  lockedPotChipText: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
   },
 
   // Segmented control (race mode + player filter)

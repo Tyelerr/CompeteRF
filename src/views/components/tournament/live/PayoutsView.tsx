@@ -37,11 +37,14 @@ export const PayoutsView = ({
   config,
   entryPool,
   sidePotPools,
+  sidePotEntrants,
 }: {
   matches: LiveMatch[];
   config: PrizePoolConfig | null;
   entryPool: number;
   sidePotPools: Record<string, number>;
+  // Side pot name -> standings keys (r<registrationId>) of the players who entered.
+  sidePotEntrants?: Record<string, string[]>;
 }) => {
   const standings = useMemo(() => computeStandings(matches), [matches]);
   const nameAtPlace = (place: number): string => {
@@ -101,9 +104,13 @@ export const PayoutsView = ({
         ))}
       </View>
 
-      {/* Side pots */}
+      {/* Side pots — only the players who ENTERED the pot are eligible, ordered by
+          their overall finish, so a higher-placing non-entrant is skipped and the
+          money falls to the next entrant. */}
       {config.sidePots.map((sp) => {
         const b = computeBreakdown(sidePotPools[sp.name] ?? 0, sp.places);
+        const entered = new Set(sidePotEntrants?.[sp.name] ?? []);
+        const finishers = standings.filter((s) => entered.has(s.key));
         return (
           <View key={sp.name} style={styles.card}>
             <View style={styles.head}>
@@ -114,25 +121,27 @@ export const PayoutsView = ({
                 {money(b.pool)}
               </Text>
             </View>
-            {b.places.map((pl, i) => (
-              <View key={pl.place}>
-                {i > 0 && <View style={styles.divider} />}
-                <View style={styles.row}>
-                  <View style={styles.placeChip}>
-                    <Text allowFontScaling={false} style={styles.placeText}>
-                      {ordinal(pl.place)}
+            {b.places.map((pl, i) => {
+              const winner = finishers[i];
+              return (
+                <View key={pl.place}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <View style={styles.row}>
+                    <View style={styles.placeChip}>
+                      <Text allowFontScaling={false} style={styles.placeText}>
+                        {ordinal(pl.place)}
+                      </Text>
+                    </View>
+                    <Text allowFontScaling={false} style={styles.payName} numberOfLines={1}>
+                      {winner ? winner.name : "—"}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.payAmount}>
+                      {money(pl.amount)}
                     </Text>
                   </View>
-                  <Text allowFontScaling={false} style={styles.payName}>
-                    {/* Side pots are a separate competition — winners aren't tracked. */}
-                    —
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.payAmount}>
-                    {money(pl.amount)}
-                  </Text>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         );
       })}
