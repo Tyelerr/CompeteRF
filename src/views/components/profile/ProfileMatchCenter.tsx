@@ -70,11 +70,12 @@ const Avatar = ({
       <View style={styles.stepper}>
         <TouchableOpacity
           style={styles.stepBtn}
-          activeOpacity={0.7}
+          activeOpacity={0.6}
           disabled={busy}
           onPress={onMinus}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
         >
-          <Ionicons name="remove" size={wxMs(18)} color={COLORS.text} />
+          <Ionicons name="remove" size={wxMs(20)} color={COLORS.text} />
         </TouchableOpacity>
         <View style={styles.stepScoreBox}>
           <Text allowFontScaling={false} style={styles.stepScore}>
@@ -83,11 +84,12 @@ const Avatar = ({
         </View>
         <TouchableOpacity
           style={styles.stepBtn}
-          activeOpacity={0.7}
+          activeOpacity={0.6}
           disabled={busy}
           onPress={onPlus}
+          hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
         >
-          <Ionicons name="add" size={wxMs(18)} color={COLORS.text} />
+          <Ionicons name="add" size={wxMs(20)} color={COLORS.text} />
         </TouchableOpacity>
       </View>
     )}
@@ -119,7 +121,10 @@ export const ProfileMatchCenter = ({
     .join("  ·  ");
 
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onPress}>
+    // Plain View — the card itself is NOT tappable so rapid / slightly-off taps on
+    // the score steppers can't accidentally open the bracket. Use the explicit
+    // "View Bracket" button below.
+    <View style={styles.card}>
       <View style={styles.head}>
         <View style={styles.headLeft}>
           <View style={[styles.dot, !isPlaying && styles.dotIdle]} />
@@ -172,14 +177,19 @@ export const ProfileMatchCenter = ({
         </View>
       )}
 
-      <View style={styles.footer}>
+      <TouchableOpacity
+        style={styles.footer}
+        activeOpacity={0.6}
+        onPress={onPress}
+        hitSlop={{ top: 4, bottom: 8, left: 8, right: 8 }}
+      >
         <Ionicons name="git-network-outline" size={wxMs(15)} color={COLORS.primary} />
         <Text allowFontScaling={false} style={styles.footerText}>
           View Bracket
         </Text>
         <Ionicons name="chevron-forward" size={wxMs(15)} color={COLORS.primary} />
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -258,9 +268,9 @@ const styles = StyleSheet.create({
     marginTop: wxSc(SPACING.xs),
   },
   stepBtn: {
-    width: wxSc(30),
-    height: wxSc(30),
-    borderRadius: wxSc(8),
+    width: wxSc(36),
+    height: wxSc(36),
+    borderRadius: wxSc(10),
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
