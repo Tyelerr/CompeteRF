@@ -354,8 +354,6 @@ export const useTournamentDirectorManager = () => {
         return null;
       }
 
-      const now = new Date();
-      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       let timezone = "America/New_York";
       try {
         timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone;
@@ -363,18 +361,16 @@ export const useTournamentDirectorManager = () => {
         // keep fallback
       }
 
+      // Everything the TD fills in is left blank — name, game type, format,
+      // date, time, fees. Only the required structural fields (director, venue,
+      // timezone, status) are seeded so the row inserts and shows on Billiards.
       const created = await tournamentService.createTournament({
         director_id: profile.id_auto,
         venue_id: venueRow.venue_id,
-        name: "Untitled Tournament",
-        game_type: "8-ball" as Tournament["game_type"],
-        tournament_format:
-          "single-elimination" as Tournament["tournament_format"],
-        tournament_date: localDate,
-        start_time: "19:00",
+        name: "",
+        game_type: "" as Tournament["game_type"],
+        tournament_format: "" as Tournament["tournament_format"],
         timezone,
-        entry_fee: 0,
-        added_money: 0,
         reports_to_fargo: false,
         calcutta: false,
         open_tournament: false,
