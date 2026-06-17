@@ -114,7 +114,7 @@ const isWeb = Platform.OS === "web";
 const KB_DONE = "kbDoneAccessory";
 
 // Unicode-escaped glyphs (raw emoji in the source corrupt under our toolchain).
-const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1" };
+const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1", check: "\u2713" };
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 type TabKey =
@@ -754,12 +754,14 @@ const AddPlayerModal = ({
   onAddPlayer,
   onAddGuest,
   isAdding,
+  addedPlayerIds,
 }: {
   visible: boolean;
   onClose: () => void;
   onAddPlayer: (profile: Profile) => void;
   onAddGuest: (guestName: string) => void;
   isAdding: boolean;
+  addedPlayerIds: Set<number>;
 }) => {
   const search = usePlayerSearch();
   const [guestMode, setGuestMode] = useState(false);
@@ -866,34 +868,46 @@ const AddPlayerModal = ({
                       No players found. Use &quot;No Account&quot; to add a guest.
                     </Text>
                   )}
-                {search.results.map((profile) => (
-                  <TouchableOpacity
-                    key={profile.id_auto}
-                    style={styles.resultRow}
-                    onPress={() => onAddPlayer(profile)}
-                    disabled={isAdding}
-                  >
-                    <View style={styles.resultInfo}>
-                      <Text
-                        allowFontScaling={false}
-                        style={styles.resultName}
-                        numberOfLines={1}
-                      >
-                        {profile.name || profile.user_name}
-                      </Text>
-                      <Text
-                        allowFontScaling={false}
-                        style={styles.resultMeta}
-                        numberOfLines={1}
-                      >
-                        @{profile.user_name} {"\u00B7"} #{profile.id_auto}
-                      </Text>
-                    </View>
-                    <Text allowFontScaling={false} style={styles.resultAdd}>
-                      + Add
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {search.results.map((profile) => {
+                  const already = addedPlayerIds.has(profile.id_auto);
+                  return (
+                    <TouchableOpacity
+                      key={profile.id_auto}
+                      style={[styles.resultRow, already && styles.resultRowAdded]}
+                      onPress={() => onAddPlayer(profile)}
+                      disabled={isAdding || already}
+                    >
+                      <View style={styles.resultInfo}>
+                        <Text
+                          allowFontScaling={false}
+                          style={styles.resultName}
+                          numberOfLines={1}
+                        >
+                          {profile.name || profile.user_name}
+                        </Text>
+                        <Text
+                          allowFontScaling={false}
+                          style={styles.resultMeta}
+                          numberOfLines={1}
+                        >
+                          @{profile.user_name} {"\u00B7"} #{profile.id_auto}
+                        </Text>
+                      </View>
+                      {already ? (
+                        <Text
+                          allowFontScaling={false}
+                          style={styles.resultAdded}
+                        >
+                          {GLYPH.check} Added
+                        </Text>
+                      ) : (
+                        <Text allowFontScaling={false} style={styles.resultAdd}>
+                          + Add
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
 
               <View style={styles.modalButtons}>
@@ -2490,7 +2504,8 @@ export default function ManageTournamentScreen() {
         player_id: profile.id_auto,
         status: "approved",
       });
-      setAddModalVisible(false);
+      // Keep the modal open so the TD can add several players in a row — the
+      // just-added one flips to "Added" in the results as confirmation.
     } catch {
       Alert.alert("Error", "Failed to add player. Please try again.");
     } finally {
@@ -2506,7 +2521,7 @@ export default function ManageTournamentScreen() {
         guest_name: guestName,
         status: "approved",
       });
-      setAddModalVisible(false);
+      // Modal stays open (back at search) so several guests can be added in a row.
     } catch {
       Alert.alert("Error", "Failed to add guest. Please try again.");
     } finally {
@@ -2624,6 +2639,18 @@ export default function ManageTournamentScreen() {
     );
 
   // ---- Derived player lists ----------------------------------------------
+  // Profile ids already registered (non-cancelled) — used to mark search
+  // results "Added" in the Add Player modal so the TD knows the add stuck.
+  const addedPlayerIds = useMemo(
+    () =>
+      new Set(
+        hub.registrations
+          .filter((r) => r.status !== "cancelled" && r.player_id != null)
+          .map((r) => r.player_id as number),
+      ),
+    [hub.registrations],
+  );
+
   const statusCounts = useMemo(() => {
     const c: Record<DisplayStatus, number> = {
       prereg: 0,
@@ -4235,6 +4262,7 @@ export default function ManageTournamentScreen() {
         onAddPlayer={handleAddPlayer}
         onAddGuest={handleAddGuest}
         isAdding={isAdding}
+        addedPlayerIds={addedPlayerIds}
       />
 
       {/* Add Fee modal (Settings → Fees Deducted From Entry) */}
@@ -6117,6 +6145,12 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "600",
+  },
+  resultRowAdded: { opacity: 0.55 },
+  resultAdded: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.success,
+    fontWeight: "700",
   },
   modalButtons: {
     flexDirection: "row",
