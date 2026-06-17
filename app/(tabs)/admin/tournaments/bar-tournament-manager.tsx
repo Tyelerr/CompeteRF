@@ -324,21 +324,6 @@ export default function BarTournamentManagerScreen() {
         title="Tournament Manager"
         subtitle="Managing tournaments at your venues"
         onBack={() => router.back()}
-        rightAction={
-          <TouchableOpacity
-            style={[styles.newBtn, vm.creating && styles.newBtnDisabled]}
-            onPress={handleCreateNew}
-            disabled={vm.creating}
-          >
-            {vm.creating ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Text allowFontScaling={false} style={styles.newBtnText}>
-                + New
-              </Text>
-            )}
-          </TouchableOpacity>
-        }
       />
 
       <AdminSearchBar
@@ -372,6 +357,22 @@ export default function BarTournamentManagerScreen() {
           ]}
         />
       </AdminFilterRow>
+
+      <View style={styles.newTournamentWrap}>
+        <TouchableOpacity
+          style={[styles.newTournamentBtn, vm.creating && styles.newBtnDisabled]}
+          onPress={handleCreateNew}
+          disabled={vm.creating}
+        >
+          {vm.creating ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
+              + New Tournament
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {/* Pagination */}
       <Pagination
@@ -475,17 +476,20 @@ const styles = StyleSheet.create({
     marginTop: wxSc(2),
   },
   placeholder: { width: wxSc(50) },
-  newBtn: {
-    paddingHorizontal: wxSc(SPACING.sm),
-    paddingVertical: wxSc(SPACING.xs),
-    borderRadius: wxSc(8),
-    backgroundColor: COLORS.primary,
-    minWidth: wxSc(54),
+  newBtnDisabled: { opacity: 0.6 },
+  newTournamentWrap: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+  },
+  newTournamentBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: wxSc(8),
+    paddingVertical: wxSc(SPACING.sm),
   },
-  newBtnDisabled: { opacity: 0.6 },
-  newBtnText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
+  newTournamentBtnText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
   searchContainer: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,

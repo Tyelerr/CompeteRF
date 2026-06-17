@@ -212,17 +212,7 @@ export default function TDTournamentsScreen() {
           <Text allowFontScaling={false} style={styles.headerTitle}>My Tournaments</Text>
           <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap a card to manage</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.newBtn, vm.creating && styles.newBtnDisabled]}
-          onPress={handleCreateNew}
-          disabled={vm.creating}
-        >
-          {vm.creating ? (
-            <ActivityIndicator size="small" color={COLORS.white} />
-          ) : (
-            <Text allowFontScaling={false} style={styles.newBtnText}>+ New</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
       </View>
 
       <View style={styles.searchContainer}>
@@ -269,6 +259,22 @@ export default function TDTournamentsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      <View style={styles.newTournamentWrap}>
+        <TouchableOpacity
+          style={[styles.newTournamentBtn, vm.creating && styles.newBtnDisabled]}
+          onPress={handleCreateNew}
+          disabled={vm.creating}
+        >
+          {vm.creating ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
+              + New Tournament
+            </Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       {vm.tournaments.length > 0 && (
@@ -347,17 +353,25 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   headerSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2) },
   placeholder: { width: scale(50) },
-  newBtn: {
-    paddingHorizontal: scale(SPACING.sm),
-    paddingVertical: scale(SPACING.xs),
-    borderRadius: scale(6),
-    backgroundColor: COLORS.primary,
-    minWidth: scale(54),
+  newBtnDisabled: { opacity: 0.6 },
+  newTournamentWrap: {
+    paddingHorizontal: scale(SPACING.md),
+    paddingBottom: scale(SPACING.sm),
+    backgroundColor: COLORS.background,
+  },
+  newTournamentBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: scale(8),
+    paddingVertical: scale(SPACING.sm),
   },
-  newBtnDisabled: { opacity: 0.6 },
-  newBtnText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
+  newTournamentBtnText: {
+    fontSize: moderateScale(FONT_SIZES.sm),
+    fontWeight: "800",
+    color: COLORS.white,
+  },
   searchContainer: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), backgroundColor: COLORS.background },
   searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(8), paddingHorizontal: scale(SPACING.sm) },
   searchIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs) },
