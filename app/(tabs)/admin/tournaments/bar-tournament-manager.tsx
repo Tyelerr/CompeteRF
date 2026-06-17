@@ -2,6 +2,7 @@
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -133,6 +134,15 @@ export default function BarTournamentManagerScreen() {
   const handleSearch = (query: string) => {
     vm.setSearchQuery(query);
     pagination.resetPage();
+  };
+
+  // "+ New" — create a draft straight from the manager, then open it in the
+  // Manage hub so the owner builds it there (no detour through the Submit tab).
+  const handleCreateNew = async () => {
+    const newId = await vm.createDraftTournament();
+    if (newId != null) {
+      router.push(`/(tabs)/admin/manage-tournament/${newId}` as any);
+    }
   };
 
   const handleEditTournament = (tournamentId: number) => {
@@ -316,12 +326,17 @@ export default function BarTournamentManagerScreen() {
         onBack={() => router.back()}
         rightAction={
           <TouchableOpacity
-            style={styles.newBtn}
-            onPress={() => router.push("/(tabs)/submit" as any)}
+            style={[styles.newBtn, vm.creating && styles.newBtnDisabled]}
+            onPress={handleCreateNew}
+            disabled={vm.creating}
           >
-            <Text allowFontScaling={false} style={styles.newBtnText}>
-              + New
-            </Text>
+            {vm.creating ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Text allowFontScaling={false} style={styles.newBtnText}>
+                + New
+              </Text>
+            )}
           </TouchableOpacity>
         }
       />
@@ -465,7 +480,11 @@ const styles = StyleSheet.create({
     paddingVertical: wxSc(SPACING.xs),
     borderRadius: wxSc(8),
     backgroundColor: COLORS.primary,
+    minWidth: wxSc(54),
+    alignItems: "center",
+    justifyContent: "center",
   },
+  newBtnDisabled: { opacity: 0.6 },
   newBtnText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
   searchContainer: {
     paddingHorizontal: SPACING.md,

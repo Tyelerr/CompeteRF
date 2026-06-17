@@ -82,6 +82,15 @@ export default function TDTournamentsScreen() {
     router.push(`/(tabs)/admin/edit-tournament/${tournament.id}` as any);
   };
 
+  // "+ New" — create a draft straight from the manager, then open it in the
+  // Manage hub so the TD builds it there (no detour through the Submit tab).
+  const handleCreateNew = async () => {
+    const newId = await vm.createDraftTournament();
+    if (newId != null) {
+      router.push(`/(tabs)/admin/manage-tournament/${newId}` as any);
+    }
+  };
+
   const handleCancel = async (tournament: any) => {
     Alert.alert(
       "Cancel Tournament",
@@ -204,10 +213,15 @@ export default function TDTournamentsScreen() {
           <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap a card to manage</Text>
         </View>
         <TouchableOpacity
-          style={styles.newBtn}
-          onPress={() => router.push("/(tabs)/submit" as any)}
+          style={[styles.newBtn, vm.creating && styles.newBtnDisabled]}
+          onPress={handleCreateNew}
+          disabled={vm.creating}
         >
-          <Text allowFontScaling={false} style={styles.newBtnText}>+ New</Text>
+          {vm.creating ? (
+            <ActivityIndicator size="small" color={COLORS.white} />
+          ) : (
+            <Text allowFontScaling={false} style={styles.newBtnText}>+ New</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -338,7 +352,11 @@ const styles = StyleSheet.create({
     paddingVertical: scale(SPACING.xs),
     borderRadius: scale(6),
     backgroundColor: COLORS.primary,
+    minWidth: scale(54),
+    alignItems: "center",
+    justifyContent: "center",
   },
+  newBtnDisabled: { opacity: 0.6 },
   newBtnText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
   searchContainer: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), backgroundColor: COLORS.background },
   searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(8), paddingHorizontal: scale(SPACING.sm) },

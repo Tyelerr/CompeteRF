@@ -39,6 +39,7 @@ export const useTournamentDirectorManager = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   // Data
   const [tournaments, setTournaments] = useState<TournamentDirectorWithStats[]>(
@@ -323,6 +324,75 @@ export const useTournamentDirectorManager = () => {
     }
   };
 
+  // Create a blank "draft" tournament straight from the manager, then hand the
+  // TD off to the Manage hub to fill in the real details (the hub's Settings tab
+  // is now a full build form). We seed the required NOT NULL columns with sensible
+  // placeholders — name/game/format/date/time are all editable in the hub. The
+  // tournament is created `active` so it shows up on Billiards immediately, as
+  // requested. Returns the new tournament id, or null if creation was blocked.
+  const createDraftTournament = async (): Promise<number | null> => {
+    if (!profile?.id_auto) return null;
+    try {
+      setCreating(true);
+
+      // A tournament needs a venue. Use the director's most recently assigned,
+      // non-archived venue as the default (changeable on the Edit screen).
+      const { data: venueRow } = await supabase
+        .from("venue_directors")
+        .select("venue_id")
+        .eq("director_id", profile.id_auto)
+        .is("archived_at", null)
+        .order("assigned_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!venueRow?.venue_id) {
+        Alert.alert(
+          "Add a Venue First",
+          "You need at least one venue assigned before you can create a tournament. Contact a bar owner or admin to get set up.",
+        );
+        return null;
+      }
+
+      const now = new Date();
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      let timezone = "America/New_York";
+      try {
+        timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone;
+      } catch {
+        // keep fallback
+      }
+
+      const created = await tournamentService.createTournament({
+        director_id: profile.id_auto,
+        venue_id: venueRow.venue_id,
+        name: "Untitled Tournament",
+        game_type: "8-ball" as Tournament["game_type"],
+        tournament_format:
+          "single-elimination" as Tournament["tournament_format"],
+        tournament_date: localDate,
+        start_time: "19:00",
+        timezone,
+        entry_fee: 0,
+        added_money: 0,
+        reports_to_fargo: false,
+        calcutta: false,
+        open_tournament: false,
+        is_recurring: false,
+        status: "active",
+      });
+
+      await loadTournaments({ silent: true });
+      return created.id;
+    } catch (error) {
+      console.error("Error creating draft tournament:", error);
+      Alert.alert("Error", "Failed to create the tournament. Please try again.");
+      return null;
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
     loadTournaments();
@@ -333,6 +403,7 @@ export const useTournamentDirectorManager = () => {
     loading,
     refreshing,
     processing,
+    creating,
 
     // Data
     tournaments: filteredTournaments,
@@ -357,6 +428,7 @@ export const useTournamentDirectorManager = () => {
     cancelTournament,
     restoreTournament,
     completeTournament,
+    createDraftTournament,
     onRefresh,
   };
 };
