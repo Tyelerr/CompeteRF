@@ -1,6 +1,6 @@
 ﻿// app/(tabs)/notification-preferences.tsx
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,6 +18,7 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
+import { SMS_PREFERENCE_CATEGORIES } from "../../src/models/types/notification.types";
 import { useNotificationPreferences } from "../../src/viewmodels/hooks/use.notification.preferences";
 
 const isWeb = Platform.OS === "web";
@@ -25,7 +27,7 @@ const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
-  const { user } = useAuthContext();
+  const { user, canSubmitTournaments } = useAuthContext();
   const {
     preferences,
     isLoading,
@@ -34,11 +36,29 @@ export default function NotificationPreferencesScreen() {
     devicePermission,
     categories,
     togglePreference,
+    savePreferences,
     openDeviceSettings,
     refresh,
   } = useNotificationPreferences(user?.id);
 
   const onRefresh = useCallback(async () => { await refresh(); }, [refresh]);
+
+  // Local copy of the SMS phone so typing is smooth; saved on blur.
+  const [phone, setPhone] = useState("");
+  useEffect(() => {
+    setPhone(preferences?.sms_phone ?? "");
+  }, [preferences?.sms_phone]);
+
+  const smsOn = preferences?.sms_enabled ?? false;
+  const smsCategories = SMS_PREFERENCE_CATEGORIES.filter(
+    (c) => !c.directorOnly || canSubmitTournaments,
+  );
+
+  const savePhone = () => {
+    const trimmed = phone.trim();
+    if (trimmed === (preferences?.sms_phone ?? "")) return;
+    savePreferences({ sms_phone: trimmed || null });
+  };
 
   if (isLoading) {
     return (
@@ -114,6 +134,76 @@ export default function NotificationPreferencesScreen() {
                     trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
                     thumbColor={isEnabled ? COLORS.primary : COLORS.textMuted}
                     disabled={isSaving}
+                  />
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.section}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>TEXT MESSAGE ALERTS</Text>
+
+            {/* Phone number */}
+            <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+              <View style={styles.preferenceInfo}>
+                <View style={styles.preferenceHeader}>
+                  <Text allowFontScaling={false} style={styles.preferenceIcon}>{"📱"}</Text>
+                  <Text allowFontScaling={false} style={styles.preferenceLabel}>Mobile Number</Text>
+                </View>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.phoneInput}
+                  value={phone}
+                  onChangeText={setPhone}
+                  onBlur={savePhone}
+                  placeholder="(555) 123-4567"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="phone-pad"
+                  returnKeyType="done"
+                  onSubmitEditing={savePhone}
+                />
+              </View>
+            </View>
+
+            {/* Master SMS opt-in */}
+            <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
+              <View style={styles.preferenceInfo}>
+                <View style={styles.preferenceHeader}>
+                  <Text allowFontScaling={false} style={styles.preferenceIcon}>{"💬"}</Text>
+                  <Text allowFontScaling={false} style={styles.preferenceLabel}>Enable Text Alerts</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.preferenceDescription}>
+                  Standard message &amp; data rates may apply. Turn off any time.
+                </Text>
+              </View>
+              <Switch
+                value={smsOn}
+                onValueChange={(value) => savePreferences({ sms_enabled: value })}
+                trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
+                thumbColor={smsOn ? COLORS.primary : COLORS.textMuted}
+                disabled={isSaving || !phone.trim()}
+              />
+            </View>
+
+            {/* Per-alert SMS toggles (role-gated) */}
+            {smsCategories.map((category, index) => {
+              const isEnabled = (preferences?.[category.key] ?? false) && smsOn;
+              const isLast = index === smsCategories.length - 1;
+              return (
+                <View key={category.key} style={[styles.preferenceRow, !isLast && styles.preferenceRowBorder]}>
+                  <View style={styles.preferenceInfo}>
+                    <View style={styles.preferenceHeader}>
+                      <Text allowFontScaling={false} style={styles.preferenceIcon}>{category.icon}</Text>
+                      <Text allowFontScaling={false} style={[styles.preferenceLabel, !smsOn && styles.preferenceLabelDisabled]}>{category.label}</Text>
+                    </View>
+                    <Text allowFontScaling={false} style={styles.preferenceDescription}>{category.description}</Text>
+                  </View>
+                  <Switch
+                    value={isEnabled}
+                    onValueChange={(value) => savePreferences({ [category.key]: value })}
+                    trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
+                    thumbColor={isEnabled ? COLORS.primary : COLORS.textMuted}
+                    disabled={isSaving || !smsOn}
                   />
                 </View>
               );
@@ -221,6 +311,19 @@ const styles = StyleSheet.create({
   preferenceHeader: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginBottom: wxSc(4) },
   preferenceIcon: { fontSize: wxMs(18) },
   preferenceLabel: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  preferenceLabelDisabled: { color: COLORS.textMuted },
+  phoneInput: {
+    marginTop: wxSc(SPACING.xs),
+    marginLeft: wxSc(26),
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.sm),
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    fontSize: wxMs(FONT_SIZES.md),
+    color: COLORS.text,
+  },
   preferenceDescription: {
     fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary,
     lineHeight: wxMs(FONT_SIZES.xs) * 1.5,

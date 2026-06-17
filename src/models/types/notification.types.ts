@@ -48,6 +48,11 @@ export interface NotificationPreferences {
   giveaway_updates: boolean;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
+  // SMS (text message) channel — see 20260617120000_sms_notifications.sql.
+  sms_enabled: boolean;
+  sms_phone: string | null;
+  sms_match_alerts: boolean;
+  sms_weekly_report: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -186,6 +191,38 @@ export const PREFERENCE_CATEGORIES: PreferenceCategory[] = [
     label: "Giveaway Updates",
     description: "New giveaways, winner announcements, and entry reminders",
     icon: "\uD83C\uDF81",
+  },
+];
+
+/** SMS alert category for the Text Message Alerts settings section. */
+export interface SmsPreferenceCategory {
+  key: keyof Pick<
+    NotificationPreferences,
+    "sms_match_alerts" | "sms_weekly_report"
+  >;
+  label: string;
+  description: string;
+  icon: string;
+  // When true, the toggle is only shown to users who run tournaments
+  // (tournament directors / bar owners / admins).
+  directorOnly?: boolean;
+}
+
+export const SMS_PREFERENCE_CATEGORIES: SmsPreferenceCategory[] = [
+  {
+    key: "sms_match_alerts",
+    label: "Match Alerts",
+    description:
+      "Get a text when it's your turn to play — your table number and opponent.",
+    icon: "🎱",
+  },
+  {
+    key: "sms_weekly_report",
+    label: "Weekly TD Report",
+    description:
+      "A weekly summary of your tournaments — entries, payouts, and activity.",
+    icon: "📊",
+    directorOnly: true,
   },
 ];
 

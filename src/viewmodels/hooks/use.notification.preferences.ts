@@ -25,6 +25,11 @@ interface UseNotificationPreferencesReturn {
     key: PreferenceCategory["key"],
     value: boolean,
   ) => Promise<void>;
+  // Generic save for fields the typed togglePreference doesn't cover
+  // (the SMS toggles and the SMS phone number). Optimistic, like togglePreference.
+  savePreferences: (
+    updates: Partial<NotificationPreferences>,
+  ) => Promise<void>;
   setQuietHours: (
     start: string | null,
     end: string | null,
@@ -97,6 +102,30 @@ export function useNotificationPreferences(
     }
   }
 
+  async function savePreferences(
+    updates: Partial<NotificationPreferences>,
+  ): Promise<void> {
+    if (!userId || !preferences) return;
+
+    const prev = preferences;
+    setPreferences({ ...preferences, ...updates });
+    setIsSaving(true);
+
+    try {
+      const updated = await notificationService.updatePreferences(
+        userId,
+        updates,
+      );
+      setPreferences(updated);
+    } catch (err) {
+      setPreferences(prev);
+      console.error("Save preferences error:", err);
+      Alert.alert("Error", "Failed to save. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function setQuietHours(
     start: string | null,
     end: string | null,
@@ -139,6 +168,7 @@ export function useNotificationPreferences(
     devicePermission,
     categories: PREFERENCE_CATEGORIES,
     togglePreference,
+    savePreferences,
     setQuietHours,
     openDeviceSettings,
     refresh,
