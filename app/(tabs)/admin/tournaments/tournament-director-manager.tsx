@@ -1,5 +1,5 @@
 ﻿import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -203,7 +203,12 @@ export default function TDTournamentsScreen() {
           <Text allowFontScaling={false} style={styles.headerTitle}>My Tournaments</Text>
           <Text allowFontScaling={false} style={styles.headerSubtitle}>Tap a card to manage</Text>
         </View>
-        <View style={styles.placeholder} />
+        <TouchableOpacity
+          style={styles.newBtn}
+          onPress={() => router.push("/(tabs)/submit" as any)}
+        >
+          <Text allowFontScaling={false} style={styles.newBtnText}>+ New</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchContainer}>
@@ -328,6 +333,13 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text },
   headerSubtitle: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: scale(2) },
   placeholder: { width: scale(50) },
+  newBtn: {
+    paddingHorizontal: scale(SPACING.sm),
+    paddingVertical: scale(SPACING.xs),
+    borderRadius: scale(6),
+    backgroundColor: COLORS.primary,
+  },
+  newBtnText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
   searchContainer: { paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), backgroundColor: COLORS.background },
   searchInputContainer: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: scale(8), paddingHorizontal: scale(SPACING.sm) },
   searchIcon: { fontSize: moderateScale(FONT_SIZES.sm), marginRight: scale(SPACING.xs) },

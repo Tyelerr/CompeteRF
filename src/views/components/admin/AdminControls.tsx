@@ -29,10 +29,12 @@ export const AdminHeader = ({
   title,
   subtitle,
   onBack,
+  rightAction,
 }: {
   title: string;
   subtitle?: string;
   onBack: () => void;
+  rightAction?: ReactNode;
 }) => (
   <View style={[styles.header, isWeb && styles.headerWeb]}>
     <TouchableOpacity
@@ -50,6 +52,11 @@ export const AdminHeader = ({
       <Text allowFontScaling={false} style={styles.headerSubtitle}>
         {subtitle}
       </Text>
+    ) : null}
+    {rightAction ? (
+      <View style={[styles.headerRight, isWeb && styles.backBtnWeb]}>
+        {rightAction}
+      </View>
     ) : null}
   </View>
 );
@@ -114,6 +121,12 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   backBtnWeb: { top: SPACING.lg },
+  headerRight: {
+    position: "absolute",
+    right: SPACING.md,
+    top: SPACING.xl + SPACING.lg,
+    zIndex: 1,
+  },
   backText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.primary,

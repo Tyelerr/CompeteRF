@@ -696,6 +696,13 @@ export const useSubmitTournament = () => {
     setChipEditValues({});
   };
 
+  // After creating, clear the form and drop the TD on the Billiards page so they
+  // can see the new tournament live (it's created status=active, so it shows there).
+  const onCreated = () => {
+    resetForm();
+    router.push("/(tabs)/billiards" as any);
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!profile) return;
@@ -709,11 +716,11 @@ export const useSubmitTournament = () => {
         showAlert(
           "Success!",
           `Your recurring series "${formData.name}" has been created! ${additionalCount + 1} tournaments scheduled within the next 30 days.`,
-          resetForm,
+          onCreated,
         );
       } else {
         await createSingleTournament();
-        showAlert("Success!", "Your tournament has been submitted successfully!", resetForm);
+        showAlert("Success!", "Your tournament has been submitted successfully!", onCreated);
       }
     } catch (error: any) {
       console.error("Submit error:", error);

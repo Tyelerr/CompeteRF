@@ -314,6 +314,16 @@ export default function BarTournamentManagerScreen() {
         title="Tournament Manager"
         subtitle="Managing tournaments at your venues"
         onBack={() => router.back()}
+        rightAction={
+          <TouchableOpacity
+            style={styles.newBtn}
+            onPress={() => router.push("/(tabs)/submit" as any)}
+          >
+            <Text allowFontScaling={false} style={styles.newBtnText}>
+              + New
+            </Text>
+          </TouchableOpacity>
+        }
       />
 
       <AdminSearchBar
@@ -450,6 +460,13 @@ const styles = StyleSheet.create({
     marginTop: wxSc(2),
   },
   placeholder: { width: wxSc(50) },
+  newBtn: {
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.xs),
+    borderRadius: wxSc(8),
+    backgroundColor: COLORS.primary,
+  },
+  newBtnText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
   searchContainer: {
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
