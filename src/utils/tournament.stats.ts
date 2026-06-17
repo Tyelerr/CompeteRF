@@ -272,6 +272,8 @@ export interface StandingEntry {
   placeLabel: string; // "1st", "2nd", "5-6th"
   name: string;
   fargo: number | null;
+  wins: number; // matches won in this tournament (byes excluded)
+  losses: number; // matches lost in this tournament
 }
 
 const ordinalSuffix = (n: number): string => {
@@ -316,12 +318,40 @@ export const computeStandings = (matches: LiveMatch[]): StandingEntry[] => {
   const used = new Set<string>();
   const keyOf = (regId: number | null, name: string | null) =>
     regId != null ? `r${regId}` : `n${name ?? "?"}`;
+
+  // Per-player win/loss record across the tournament (byes don't count as a
+  // played match). Keyed the same way as entries so we can look it up in add().
+  const records = new Map<string, { wins: number; losses: number }>();
+  const bump = (regId: number | null, name: string | null, won: boolean) => {
+    if (!name) return;
+    const k = keyOf(regId, name);
+    const rec = records.get(k) ?? { wins: 0, losses: 0 };
+    if (won) rec.wins += 1;
+    else rec.losses += 1;
+    records.set(k, rec);
+  };
+  for (const m of real) {
+    if (!decided(m) || m.bye) continue;
+    const p1Won = m.winner === 1;
+    bump(m.p1RegId, m.p1Name, p1Won);
+    bump(m.p2RegId, m.p2Name, !p1Won);
+  }
+
   const add = (p: SidePlayer, place: number, placeLabel: string) => {
     if (!p.name) return;
     const key = keyOf(p.regId, p.name);
     if (used.has(key)) return;
     used.add(key);
-    entries.push({ key, place, placeLabel, name: p.name, fargo: p.fargo });
+    const rec = records.get(key) ?? { wins: 0, losses: 0 };
+    entries.push({
+      key,
+      place,
+      placeLabel,
+      name: p.name,
+      fargo: p.fargo,
+      wins: rec.wins,
+      losses: rec.losses,
+    });
   };
 
   // 1) Champion + runner-up from the deciding final.

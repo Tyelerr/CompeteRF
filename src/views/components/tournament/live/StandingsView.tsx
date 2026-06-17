@@ -61,13 +61,18 @@ export const StandingsView = ({ matches }: { matches: LiveMatch[] }) => {
                       {s.placeLabel}
                     </Text>
                   </View>
-                  <Text
-                    allowFontScaling={false}
-                    style={[styles.name, medal && styles.nameMedal]}
-                    numberOfLines={1}
-                  >
-                    {s.name}
-                  </Text>
+                  <View style={styles.nameCol}>
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.name, medal && styles.nameMedal]}
+                      numberOfLines={1}
+                    >
+                      {s.name}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.record}>
+                      {s.wins}-{s.losses}
+                    </Text>
+                  </View>
                   <View style={styles.fargoPill}>
                     <Text allowFontScaling={false} style={styles.fargoLabel}>
                       FARGO
@@ -131,8 +136,16 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontVariant: ["tabular-nums"],
   },
-  name: { flex: 1, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  nameCol: { flex: 1 },
+  name: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
   nameMedal: { fontWeight: "800" },
+  record: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+    marginTop: webSc(2),
+    fontVariant: ["tabular-nums"],
+  },
   fargoPill: {
     flexDirection: "row",
     alignItems: "center",
