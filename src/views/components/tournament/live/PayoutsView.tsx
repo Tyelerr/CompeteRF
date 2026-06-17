@@ -47,6 +47,13 @@ export const PayoutsView = ({
   sidePotEntrants?: Record<string, string[]>;
 }) => {
   const standings = useMemo(() => computeStandings(matches), [matches]);
+  // Side pots pay the BEST-finishing entrants, which isn't known until the event
+  // is over (a champion exists). Before that, leave side-pot winners blank so we
+  // don't award a pot to whoever happens to sit atop the partial standings.
+  const finished = useMemo(
+    () => standings.some((s) => s.place === 1),
+    [standings],
+  );
   const nameAtPlace = (place: number): string => {
     const at = standings.filter((s) => s.place === place);
     return at.length ? at.map((s) => s.name).join(", ") : "—";
@@ -122,7 +129,7 @@ export const PayoutsView = ({
               </Text>
             </View>
             {b.places.map((pl, i) => {
-              const winner = finishers[i];
+              const winner = finished ? finishers[i] : undefined;
               return (
                 <View key={pl.place}>
                   {i > 0 && <View style={styles.divider} />}

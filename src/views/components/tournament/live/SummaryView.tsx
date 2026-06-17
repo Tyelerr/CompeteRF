@@ -72,8 +72,14 @@ export const SummaryView = ({
 }) => {
   const stats = useMemo(() => computeTournamentStats(matches), [matches]);
   const standings = useMemo(() => computeStandings(matches), [matches]);
-  const podium = standings.slice(0, 3);
-  const champion = podium[0];
+  // The champion only exists once the deciding final is played (place === 1).
+  // Until then the standings array starts at whatever place has filled in so far
+  // (e.g. 4th), so we must NOT treat standings[0] as the winner.
+  const champion = useMemo(
+    () => standings.find((s) => s.place === 1) ?? null,
+    [standings],
+  );
+  const podium = champion ? standings.slice(0, 3) : [];
 
   return (
     <ScrollView
