@@ -202,6 +202,8 @@ export const useBarTournamentManager = () => {
         return null;
       }
 
+      const now = new Date();
+      const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       let timezone = "America/New_York";
       try {
         timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone;
@@ -209,15 +211,17 @@ export const useBarTournamentManager = () => {
         // keep fallback
       }
 
-      // Everything the owner fills in is left blank — name, game type, format,
-      // date, time, fees. Only the required structural fields (director, venue,
-      // timezone, status) are seeded so the row inserts and shows on Billiards.
+      // The fields the owner fills in are left blank — name, game type, format,
+      // fees. Date/time are NOT NULL columns, so we seed today's date and a
+      // default start time (adjusted in the hub).
       const created = await tournamentService.createTournament({
         director_id: profile.id_auto,
         venue_id: venueRow.venue_id,
         name: "",
         game_type: "" as Tournament["game_type"],
         tournament_format: "" as Tournament["tournament_format"],
+        tournament_date: localDate,
+        start_time: "19:00",
         timezone,
         reports_to_fargo: false,
         calcutta: false,
