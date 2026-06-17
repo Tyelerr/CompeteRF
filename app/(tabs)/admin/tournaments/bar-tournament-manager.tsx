@@ -330,6 +330,7 @@ export default function BarTournamentManagerScreen() {
         value={vm.searchQuery}
         onChangeText={handleSearch}
         placeholder="Search name, game type, venue, or director..."
+        topFraction={0.04}
       />
 
       <AdminFilterRow>

@@ -66,14 +66,18 @@ export const AdminSearchBar = ({
   value,
   onChangeText,
   placeholder = "Search...",
+  topFraction = SEARCH_TOP_FRACTION,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
+  // Fraction of screen height to push the search bar (and content below) down.
+  // Defaults to SEARCH_TOP_FRACTION; pass a smaller value to sit higher.
+  topFraction?: number;
 }) => {
   const { height } = useWindowDimensions();
   return (
-  <View style={[styles.searchWrap, { marginTop: Math.round(height * SEARCH_TOP_FRACTION) }]}>
+  <View style={[styles.searchWrap, { marginTop: Math.round(height * topFraction) }]}>
     <Text allowFontScaling={false} style={styles.searchIcon}>
       {"🔍"}
     </Text>
