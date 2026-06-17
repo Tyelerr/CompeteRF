@@ -35,6 +35,7 @@ import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { webMs, webSc } from "../../../../src/utils/scaling";
 import {
+  EQUIPMENT_OPTIONS,
   GAME_TYPES,
   START_TIMES,
   TOURNAMENT_FORMATS,
@@ -43,6 +44,7 @@ import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import {
   GameType,
   RegistrationStatus,
+  TableSize,
   TableStatus,
   TournamentFormat,
 } from "../../../../src/models/types/common.types";
@@ -309,11 +311,15 @@ interface SettingsForm {
   maxFargo: string;
   entryFee: string;
   addedMoney: string;
+  calcutta: boolean;
   reportsToFargo: boolean;
   openTournament: boolean;
   isRecurring: boolean;
   tournamentDate: string;
   startTime: string;
+  tableSize: string;
+  equipment: string;
+  phoneNumber: string;
   raceMode: RaceMode;
   // Fixed race (numbers — driven by steppers)
   raceWinners: number; // also the single-elim "Match Race To"
@@ -365,6 +371,15 @@ const RACE_MODE_OPTIONS = [
   { label: "Fargo Differential", value: "differential" },
 ];
 
+// Standard table sizes (values match the TableSize union). Venues can hold
+// custom sizes, but the manage form offers the three standard picks.
+const TABLE_SIZE_OPTIONS = [
+  { label: "Select table size", value: "" },
+  { label: "7 Foot (Bar Box)", value: "7ft" },
+  { label: "8 Foot", value: "8ft" },
+  { label: "9 Foot (Pro)", value: "9ft" },
+];
+
 // paid_side_pots should always be a string[], but legacy/seed rows may store a
 // non-array value (e.g. an empty JSONB object). Coerce defensively so the UI
 // never crashes on `.filter`/`.length`/`.map`.
@@ -392,11 +407,15 @@ const toForm = (t: Tournament): SettingsForm => {
     maxFargo: numStr(t.max_fargo),
     entryFee: numStr(t.entry_fee),
     addedMoney: numStr(t.added_money),
+    calcutta: !!t.calcutta,
     reportsToFargo: !!t.reports_to_fargo,
     openTournament: !!t.open_tournament,
     isRecurring: !!t.is_recurring,
     tournamentDate: t.tournament_date ?? "",
     startTime: toStartTime(t.start_time),
+    tableSize: t.table_size ?? "",
+    equipment: t.equipment ?? "",
+    phoneNumber: t.phone_number ?? "",
     // Race is configured fresh in the hub — do NOT inherit the free-text race
     // entered on the submit page. Only a previously-saved live setting pre-fills.
     raceWinners: ls.fixedRaceWinners ?? 5,
@@ -478,11 +497,15 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   max_fargo: intOrNull(f.maxFargo) ?? undefined,
   entry_fee: numOrNull(f.entryFee) ?? undefined,
   added_money: numOrNull(f.addedMoney) ?? undefined,
+  calcutta: f.calcutta,
   reports_to_fargo: f.reportsToFargo,
   open_tournament: f.openTournament,
   is_recurring: f.isRecurring,
   tournament_date: f.tournamentDate,
   start_time: f.startTime,
+  table_size: (f.tableSize || undefined) as TableSize | undefined,
+  equipment: f.equipment.trim() || undefined,
+  phone_number: f.phoneNumber.trim() || undefined,
   side_pots: f.sidePots
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
@@ -525,6 +548,7 @@ const TEMPLATE_EXCLUDED_KEYS: (keyof SettingsForm)[] = [
   "tournamentDate",
   "startTime",
   "description",
+  "phoneNumber",
 ];
 const templatableSettings = (f: SettingsForm): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -2983,6 +3007,12 @@ export default function ManageTournamentScreen() {
             accessoryId={KB_DONE}
           />
 
+          <ToggleSwitch
+            label="Calcutta"
+            value={form.calcutta}
+            onValueChange={(v) => patchForm({ calcutta: v })}
+          />
+
           {/* Fees — built-in + custom, one uniform list */}
           <View style={styles.feeBlock}>
             <FieldLabel label="Fees (per player)" />
@@ -3248,8 +3278,34 @@ export default function ManageTournamentScreen() {
               No venue on record.
             </Text>
           )}
+          <View style={styles.field}>
+            <FieldLabel label="Table Size" />
+            <Dropdown
+              placeholder="Select table size"
+              options={TABLE_SIZE_OPTIONS}
+              value={form.tableSize}
+              onSelect={(v) => patchForm({ tableSize: v })}
+            />
+          </View>
+          <View style={styles.field}>
+            <FieldLabel label="Equipment" />
+            <Dropdown
+              placeholder="Select equipment"
+              options={EQUIPMENT_OPTIONS}
+              value={form.equipment}
+              onSelect={(v) => patchForm({ equipment: v })}
+            />
+          </View>
+          <LabeledInput
+            label="Contact Phone"
+            value={form.phoneNumber}
+            onChangeText={(v) => patchForm({ phoneNumber: v })}
+            placeholder="Contact phone number"
+            keyboardType="phone-pad"
+          />
           <Text allowFontScaling={false} style={styles.hint}>
-            Venue and tournament image are changed on the Edit Tournament screen.
+            To change the venue or tournament image, use the Edit Tournament
+            screen.
           </Text>
         </Section>
         </View>
