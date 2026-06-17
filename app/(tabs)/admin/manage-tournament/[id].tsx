@@ -103,6 +103,7 @@ import { PhaseNav } from "../../../../src/views/components/tournament/live/Phase
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
+import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
 import {
   ManagePhase,
   useManageTournament,
@@ -2176,6 +2177,37 @@ export default function ManageTournamentScreen() {
   }, [tableMatch]);
 
   // ---- Queue Manager handlers --------------------------------------------
+  // When a match goes live, text both players that it's their turn — but only
+  // those who opted into SMS match alerts (the service checks prefs). Best-effort:
+  // never blocks or fails the start. tableIdOverride covers assign+start, where
+  // liveMatches hasn't re-rendered with the new table yet.
+  const notifyMatchPlayers = (matchId: string, tableIdOverride?: number) => {
+    const m = liveMatches.find((x) => x.id === matchId);
+    if (!m) return;
+    const tableId = tableIdOverride ?? m.tableId ?? undefined;
+    const table =
+      tableId != null ? hub.tables.find((t) => t.id === tableId) : null;
+    const tableLabel = table ? `Table ${table.table_number}` : null;
+    const tournamentName = hub.tournament?.name ?? null;
+    const regToPlayer = new Map(
+      hub.registrations.map((r) => [r.id, r.player_id]),
+    );
+    const sides = [
+      { regId: m.p1RegId, opp: m.p2Name },
+      { regId: m.p2RegId, opp: m.p1Name },
+    ];
+    for (const s of sides) {
+      const playerId = s.regId != null ? regToPlayer.get(s.regId) : null;
+      if (playerId == null) continue;
+      smsNotificationService.notifyMatchReady({
+        playerId,
+        opponentName: s.opp,
+        tableLabel,
+        tournamentName,
+      });
+    }
+  };
+
   // Assigning a table PARKS the match on it (table set, still "scheduled") — the
   // TD then starts it separately. This keeps a table reserved without the clock
   // running until play actually begins.
@@ -2193,6 +2225,7 @@ export default function ManageTournamentScreen() {
         matchId,
         patch: { tableId, status: "in_progress", startedAt: new Date().toISOString() },
       })
+      .then(() => notifyMatchPlayers(matchId, tableId))
       .catch(() => Alert.alert("Error", "Failed to assign and start the match."));
   // Start a match already parked on a table (keeps its table).
   const handleQueueStart = (matchId: string) =>
@@ -2201,6 +2234,7 @@ export default function ManageTournamentScreen() {
         matchId,
         patch: { status: "in_progress", startedAt: new Date().toISOString() },
       })
+      .then(() => notifyMatchPlayers(matchId))
       .catch(() => Alert.alert("Error", "Failed to start the match."));
   // Send a match back to the queue: clear its table and revert to scheduled.
   const handleQueueUnassign = (matchId: string) =>
