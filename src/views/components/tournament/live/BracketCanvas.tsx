@@ -497,7 +497,13 @@ export const BracketCanvas = ({
   const clampPan = (x: number, y: number, s: number) => {
     const cw = width * s;
     const ch = height * s;
-    const px = cw <= viewport.w ? PAD : clamp(x, viewport.w - cw - PAD, PAD);
+    // The match-number badge (W1/L3/…) sits LABEL_ZONE to the left of the first
+    // column, so anchor the left edge that much further right or it gets clipped.
+    const leftAnchor = PAD + LABEL_ZONE * s;
+    const px =
+      cw <= viewport.w
+        ? leftAnchor
+        : clamp(x, viewport.w - cw - PAD, leftAnchor);
     const py = ch <= viewport.h ? PAD : clamp(y, viewport.h - ch - PAD, PAD);
     return { x: px, y: py };
   };
