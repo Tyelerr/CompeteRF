@@ -46,6 +46,10 @@ const LINE_W = 3; // connector thickness (plain View; stays visible to MIN_SCALE
 const MIN_SCALE = 0.22; // how far you can zoom out (lower = see more of the bracket)
 const MAX_SCALE = 2.5;
 const START_SCALE = 0.7;
+// Zoom level when auto-centering on a match (e.g. "View Bracket" from a profile).
+// 1.0 fills a phone nicely, but on a wide desktop that makes nodes look huge, so
+// open more zoomed-out on web — the viewer can wheel-zoom in from there.
+const FOCUS_SCALE = Platform.OS === "web" ? 0.6 : 1;
 const PAD = SPACING.md;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -490,7 +494,7 @@ export const BracketCanvas = ({
   const focusOnMatch = (name: string, match: LiveMatch) => {
     const node = positioned.find((p) => p.match.id === match.id);
     if (node && viewport.w > 0) {
-      const target = 1;
+      const target = FOCUS_SCALE;
       animateTo(
         target,
         viewport.w / 2 - (node.x + NODE_WIDTH / 2) * target,
@@ -516,7 +520,7 @@ export const BracketCanvas = ({
     if (!focusMatchId || viewport.w === 0) return;
     const node = positioned.find((p) => p.match.id === focusMatchId);
     if (!node) return;
-    const target = 1;
+    const target = FOCUS_SCALE;
     animateTo(
       target,
       viewport.w / 2 - (node.x + NODE_WIDTH / 2) * target,
