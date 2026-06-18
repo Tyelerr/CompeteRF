@@ -491,15 +491,27 @@ export const BracketCanvas = ({
     return playerIndex.filter((n) => n.toLowerCase().includes(q)).slice(0, 6);
   }, [query, playerIndex]);
 
+  // Keep an auto-focus within the bracket's bounds: a top-left match anchors at
+  // the top-left (PAD) instead of being pulled to the viewport centre, which left
+  // empty space above/left and made the bracket look shoved down-and-right.
+  const clampPan = (x: number, y: number, s: number) => {
+    const cw = width * s;
+    const ch = height * s;
+    const px = cw <= viewport.w ? PAD : clamp(x, viewport.w - cw - PAD, PAD);
+    const py = ch <= viewport.h ? PAD : clamp(y, viewport.h - ch - PAD, PAD);
+    return { x: px, y: py };
+  };
+
   const focusOnMatch = (name: string, match: LiveMatch) => {
     const node = positioned.find((p) => p.match.id === match.id);
     if (node && viewport.w > 0) {
       const target = FOCUS_SCALE;
-      animateTo(
-        target,
+      const p = clampPan(
         viewport.w / 2 - (node.x + NODE_WIDTH / 2) * target,
         viewport.h / 2 - (node.y + NODE_HEIGHT / 2) * target,
+        target,
       );
+      animateTo(target, p.x, p.y);
     }
     setHighlight(match.id);
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -521,11 +533,12 @@ export const BracketCanvas = ({
     const node = positioned.find((p) => p.match.id === focusMatchId);
     if (!node) return;
     const target = FOCUS_SCALE;
-    animateTo(
-      target,
+    const p = clampPan(
       viewport.w / 2 - (node.x + NODE_WIDTH / 2) * target,
       viewport.h / 2 - (node.y + NODE_HEIGHT / 2) * target,
+      target,
     );
+    animateTo(target, p.x, p.y);
     setHighlight(focusMatchId);
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
     highlightTimer.current = setTimeout(() => setHighlight(null), 2600);
