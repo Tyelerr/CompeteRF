@@ -13,8 +13,8 @@ import { webMs, webSc } from "../../../../utils/scaling";
 import { formatClock, LiveMatch } from "../../../../utils/match.utils";
 import { LiveDot } from "./LiveDot";
 
-export const NODE_WIDTH = 230;
-export const NODE_HEIGHT = 130;
+export const NODE_WIDTH = 248;
+export const NODE_HEIGHT = 138;
 
 const MatchNodeBase = ({
   match,
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.lg),
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: COLORS.borderLight,
     paddingHorizontal: webSc(SPACING.sm),
     paddingVertical: webSc(SPACING.sm),
     justifyContent: "space-between",
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
   nodeLive: { backgroundColor: "#16241B" },
   // Finished matches recede (winner stays green); the viewer's own matches keep a
   // colored border on top so their path is easy to follow.
-  nodeDone: { backgroundColor: COLORS.background, borderColor: COLORS.border },
+  nodeDone: { backgroundColor: COLORS.backgroundCard, borderColor: COLORS.border },
   nodeStream: { borderColor: COLORS.error, borderWidth: 2 },
   nodeHighlight: { borderColor: COLORS.primary, borderWidth: 2 },
   nodeMine: { borderColor: COLORS.primary, borderWidth: 2 },

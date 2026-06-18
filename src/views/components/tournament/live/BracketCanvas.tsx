@@ -41,7 +41,7 @@ const LABEL_ZONE = 64;
 const PARENT_RUN = 40;
 const GAP_Y = 34;
 const LABEL_H = 30;
-const DIVIDER_GAP = 150;
+const DIVIDER_GAP = 210; // breathing room between the winners and losers brackets
 const LINE_W = 3; // connector thickness (plain View; stays visible to MIN_SCALE)
 const MIN_SCALE = 0.22; // how far you can zoom out (lower = see more of the bracket)
 const MAX_SCALE = 2.5;
@@ -50,6 +50,7 @@ const START_SCALE = 0.7;
 // 1.0 fills a phone nicely, but on a wide desktop that makes nodes look huge, so
 // open more zoomed-out on web — the viewer can wheel-zoom in from there.
 const FOCUS_SCALE = Platform.OS === "web" ? 0.6 : 1;
+const isWeb = Platform.OS === "web";
 const PAD = SPACING.md;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -553,6 +554,45 @@ export const BracketCanvas = ({
   const toggleFav = (name: string) =>
     setFavs((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 
+  // Toolbar zoom controls (web mouse users have no pinch). Zoom around the
+  // viewport centre; reset/fit re-frame the whole bracket.
+  const zoomAround = (factor: number) => {
+    const ns = clamp(scale.current * factor, MIN_SCALE, MAX_SCALE);
+    const actual = ns / scale.current;
+    const fx = viewport.w / 2;
+    const fy = viewport.h / 2;
+    animateTo(ns, fx - (fx - tx.current) * actual, fy - (fy - ty.current) * actual);
+  };
+  const zoomIn = () => zoomAround(1.25);
+  const zoomOut = () => zoomAround(1 / 1.25);
+  const resetView = () => {
+    const p = clampPan(PAD, PAD, START_SCALE);
+    animateTo(START_SCALE, p.x, p.y);
+  };
+  const fitBracket = () => {
+    if (viewport.w === 0 || viewport.h === 0) return;
+    const effW = width + LABEL_ZONE; // include the left label zone
+    const s = clamp(
+      Math.min((viewport.w - PAD * 2) / effW, (viewport.h - PAD * 2) / height),
+      MIN_SCALE,
+      MAX_SCALE,
+    );
+    animateTo(
+      s,
+      (viewport.w - effW * s) / 2 + LABEL_ZONE * s,
+      (viewport.h - height * s) / 2,
+    );
+  };
+
+  // When not centering on a specific match, frame the whole bracket centered.
+  const didInitialFit = useRef(false);
+  useEffect(() => {
+    if (focusMatchId || viewport.w === 0 || didInitialFit.current) return;
+    didInitialFit.current = true;
+    fitBracket();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport.w, viewport.h, focusMatchId]);
+
   // Stable so memoized nodes don't re-render on every parent render.
   // The viewer's relationship to a match: win / loss (completed) or "mine" (pending).
   const mineFor = (m: LiveMatch): "win" | "loss" | "mine" | null => {
@@ -576,20 +616,22 @@ export const BracketCanvas = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.searchRow}>
-        <TextInput
-          allowFontScaling={false}
-          style={styles.search}
-          placeholder="Find a player…"
-          placeholderTextColor={COLORS.textMuted}
-          value={query}
-          onChangeText={(v) => {
-            setQuery(v);
-            setShowFavs(false);
-          }}
-        />
+      <View style={styles.toolbar}>
+        <View style={styles.searchWrap}>
+          <TextInput
+            allowFontScaling={false}
+            style={styles.search}
+            placeholder="Find a player…"
+            placeholderTextColor={COLORS.textMuted}
+            value={query}
+            onChangeText={(v) => {
+              setQuery(v);
+              setShowFavs(false);
+            }}
+          />
+        </View>
         <TouchableOpacity
-          style={[styles.starBtn, showFavs && styles.starBtnOn]}
+          style={[styles.toolBtn, showFavs && styles.toolBtnOn]}
           onPress={() => {
             setShowFavs((s) => !s);
             setQuery("");
@@ -600,6 +642,31 @@ export const BracketCanvas = ({
             {favs.length ? "★" : "☆"}
           </Text>
         </TouchableOpacity>
+        {isWeb && (
+          <>
+            <View style={styles.toolDivider} />
+            <TouchableOpacity style={styles.toolBtn} onPress={zoomOut} hitSlop={6}>
+              <Text allowFontScaling={false} style={styles.toolBtnGlyph}>
+                −
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolBtn} onPress={zoomIn} hitSlop={6}>
+              <Text allowFontScaling={false} style={styles.toolBtnGlyph}>
+                +
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolBtnWide} onPress={fitBracket} hitSlop={6}>
+              <Text allowFontScaling={false} style={styles.toolBtnText}>
+                Fit
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.toolBtnWide} onPress={resetView} hitSlop={6}>
+              <Text allowFontScaling={false} style={styles.toolBtnText}>
+                Reset
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {results.length > 0 && (
@@ -822,15 +889,17 @@ export const BracketCanvas = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  searchRow: {
+  // Compact left-aligned toolbar — not stretched across the page.
+  toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: webSc(SPACING.sm),
-    marginBottom: webSc(SPACING.xs),
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.sm),
+    alignSelf: isWeb ? "flex-start" : "stretch",
   },
+  searchWrap: isWeb ? { width: 300 } : { flex: 1 },
   search: {
-    flex: 1,
-    height: webSc(44),
+    height: webSc(40),
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
@@ -839,9 +908,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
     fontSize: webMs(FONT_SIZES.sm),
   },
-  starBtn: {
-    width: webSc(44),
-    height: webSc(44),
+  toolBtn: {
+    width: webSc(40),
+    height: webSc(40),
     borderRadius: webSc(RADIUS.md),
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -849,7 +918,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  starBtnOn: { borderColor: COLORS.warning },
+  toolBtnWide: {
+    height: webSc(40),
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toolBtnOn: { borderColor: COLORS.warning },
+  toolBtnGlyph: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.text, fontWeight: "800" },
+  toolBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "700" },
+  toolDivider: {
+    width: 1,
+    height: webSc(24),
+    backgroundColor: COLORS.border,
+    marginHorizontal: webSc(SPACING.xs),
+  },
   star: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.warning },
   dropdown: {
     backgroundColor: COLORS.surface,
@@ -858,6 +945,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginBottom: webSc(SPACING.xs),
     overflow: "hidden",
+    ...(isWeb ? { width: 340, alignSelf: "flex-start" as const } : null),
   },
   dropRow: {
     flexDirection: "row",
@@ -872,7 +960,16 @@ const styles = StyleSheet.create({
   dropName: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700", flex: 1 },
   dropMeta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
   favEmpty: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, padding: webSc(SPACING.md) },
-  viewport: { flex: 1, overflow: "hidden", backgroundColor: COLORS.background },
+  // Defined dark panel so the bracket reads as an intentional surface, not nodes
+  // floating on a black page.
+  viewport: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   fill: { flex: 1 },
   roundLabelWrap: { position: "absolute", width: NODE_WIDTH, alignItems: "center" },
   roundLabel: {
