@@ -8,6 +8,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { analyticsService } from "../src/models/services/analytics.service";
 import { AuthProvider } from "../src/providers/AuthProvider";
 import { QueryProvider } from "../src/providers/QueryProvider";
+import { WebAlertHost } from "../src/views/components/common/WebAlertHost";
 import { COLORS } from "../src/theme/colors";
 
 SplashScreen.preventAutoHideAsync();
@@ -103,6 +104,7 @@ export default function RootLayout() {
       {appReady && !splashDone && (
         <AnimatedSplash onComplete={() => setSplashDone(true)} />
       )}
+      <WebAlertHost />
     </SafeAreaProvider>
   );
 }
