@@ -7,20 +7,29 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
  * Use for horizontal spacing, padding, margins, icon sizes.
  */
 export const scale = (size: number): number =>
-  Math.round((size * SCREEN_WIDTH) / BASE_WIDTH);
+  // Web has no device-width relationship to a 390px phone base — scaling there
+  // blows layouts up several times over. Return the raw value on web (matching
+  // webSc), so components that use scale() directly render correctly on web too.
+  Platform.OS === "web"
+    ? size
+    : Math.round((size * SCREEN_WIDTH) / BASE_WIDTH);
 /**
  * Scales a size proportionally to screen height.
  * Use for vertical spacing when height-sensitivity matters.
  */
 export const verticalScale = (size: number): number =>
-  Math.round((size * SCREEN_HEIGHT) / BASE_HEIGHT);
+  Platform.OS === "web"
+    ? size
+    : Math.round((size * SCREEN_HEIGHT) / BASE_HEIGHT);
 /**
  * Scales with a dampening factor so changes are subtle.
  * Use for font sizes — avoids text growing/shrinking too aggressively.
  * factor=0.5 means halfway between no scaling and full scaling.
  */
 export const moderateScale = (size: number, factor = 0.5): number =>
-  Math.round(size + (scale(size) - size) * factor);
+  Platform.OS === "web"
+    ? size
+    : Math.round(size + (scale(size) - size) * factor);
 /**
  * Platform-aware scale: returns raw value on web, scaled value on native.
  * IMPORTANT: Never name local aliases 'sc' or 'ms' — those names collide
