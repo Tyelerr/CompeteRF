@@ -69,7 +69,11 @@ function remapNodeModulesAssets(distDir) {
     }
   };
   walk(distDir);
-  fs.renameSync(nmDir, path.join(distDir, "assets", "nm"));
+  // A leftover assets/nm from a previous publish (expo export doesn't clean it)
+  // would make the rename fail with EPERM on Windows — remove it first.
+  const target = path.join(distDir, "assets", "nm");
+  if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+  fs.renameSync(nmDir, target);
   console.log(
     "[web:publish] Remapped assets/node_modules -> assets/nm so icon fonts deploy (Vercel ignores node_modules).",
   );
