@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compete — SMS Opt-In</title>
+  <meta name="robots" content="index,follow" />
+  <style>
+    :root{
+      --bg:#000000; --surface:#1F1F1F; --text:#FFFFFF; --textSecondary:#A1A1A1;
+      --textMuted:#6B7280; --border:#333333; --primary:#3B82F6; --success:#10B981;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:var(--bg);color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;padding:24px;line-height:1.5;
+    }
+    .wrap{max-width:480px;margin:0 auto}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .brand .logo{font-size:22px}
+    .brand h1{font-size:18px;font-weight:800;letter-spacing:1px;margin:0}
+    .lede{color:var(--textSecondary);font-size:14px;margin:0 0 20px}
+    .card{
+      background:var(--surface);border:1px solid var(--border);border-radius:14px;
+      overflow:hidden;margin-bottom:16px;
+    }
+    .card-title{
+      font-size:12px;font-weight:700;letter-spacing:1px;color:var(--textMuted);
+      padding:14px 16px 8px;
+    }
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:14px 16px;border-top:1px solid var(--border)}
+    .row:first-of-type{border-top:none}
+    .row .info{flex:1}
+    .row .label{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .row .desc{font-size:12px;color:var(--textSecondary);margin-top:4px}
+    .field{
+      margin:6px 16px 14px;padding:12px;background:var(--bg);border:1px solid var(--border);
+      border-radius:10px;color:var(--text);font-size:15px;
+    }
+    /* iOS-style switch (ON) */
+    .switch{width:46px;height:28px;border-radius:999px;background:rgba(59,130,246,.5);
+      position:relative;flex:none}
+    .switch::after{content:"";position:absolute;top:3px;left:21px;width:22px;height:22px;
+      border-radius:50%;background:var(--primary)}
+    .disclosure{
+      padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);
+      color:var(--textMuted);font-size:12px;line-height:1.6;
+    }
+    .btn{
+      margin:16px;padding:12px;border:1px solid var(--primary);border-radius:10px;
+      text-align:center;color:var(--primary);font-weight:700;font-size:14px;
+    }
+    .footnote{color:var(--textMuted);font-size:12px;text-align:center;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><span class="logo">🎱</span><h1>COMPETE</h1></div>
+    <p class="lede">How players opt in to text alerts inside the Compete app
+      (Notifications &rarr; Text Message Alerts).</p>
+
+    <div class="card">
+      <div class="card-title">TEXT MESSAGE ALERTS</div>
+
+      <div class="row">
+        <div class="info">
+          <div class="label"><span>📱</span> Mobile Number</div>
+        </div>
+      </div>
+      <div class="field">(480) 555-0123</div>
+
+      <div class="row">
+        <div class="info">
+          <div class="label"><span>💬</span> Enable Text Alerts</div>
+          <div class="desc">Get text alerts for your matches. Reply STOP to opt out.</div>
+        </div>
+        <div class="switch" aria-label="enabled"></div>
+      </div>
+
+      <div class="disclosure">
+        By enabling SMS notifications, you agree to receive automated text messages
+        from Compete about match assignments, tournament reminders, and account
+        updates. Message frequency varies. Message &amp; data rates may apply.
+        Reply STOP to opt out and HELP for help.
+      </div>
+
+      <div class="row">
+        <div class="info">
+          <div class="label"><span>🎱</span> Match Alerts</div>
+          <div class="desc">Get a text when it's your turn to play — your table number and opponent.</div>
+        </div>
+        <div class="switch" aria-label="enabled"></div>
+      </div>
+
+      <div class="btn">Send Test Text</div>
+    </div>
+
+    <p class="footnote">
+      Consent is explicit and per-user: a player enters their own mobile number and
+      turns on "Enable Text Alerts." No texts are sent unless both are set. Users can
+      reply STOP at any time to unsubscribe.
+    </p>
+  </div>
+</body>
+</html>
