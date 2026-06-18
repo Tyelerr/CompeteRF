@@ -3,10 +3,12 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { moderateScale, scale } from "../../../utils/scaling";
+import { webMs, webSc } from "../../../utils/scaling";
 import { useResetPassword } from "../../../viewmodels/useResetPassword";
 import { Button } from "../../components/common/button";
 import { Input } from "../../components/common/input";
+
+const isWeb = Platform.OS === "web";
 
 export const ResetPasswordScreen = () => {
   const router = useRouter();
@@ -27,7 +29,7 @@ export const ResetPasswordScreen = () => {
 
   if (success) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
           <Text allowFontScaling={false} style={styles.icon}>{"\u2705"}</Text>
           <Text allowFontScaling={false} style={styles.title}>PASSWORD UPDATED</Text>
@@ -43,7 +45,7 @@ export const ResetPasswordScreen = () => {
   // URL with support without needing device logs.
   if (verifyError) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
           <Text allowFontScaling={false} style={styles.icon}>{"\u26A0\uFE0F"}</Text>
           <Text allowFontScaling={false} style={styles.title}>RESET LINK PROBLEM</Text>
@@ -62,7 +64,7 @@ export const ResetPasswordScreen = () => {
 
   if (verifying || !sessionReady) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
           <Text allowFontScaling={false} style={styles.icon}>{"\u23F3"}</Text>
           <Text allowFontScaling={false} style={styles.title}>VERIFYING...</Text>
@@ -73,7 +75,7 @@ export const ResetPasswordScreen = () => {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView style={[styles.container, isWeb && styles.containerWeb]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <Text allowFontScaling={false} style={styles.title}>NEW PASSWORD</Text>
       <Text allowFontScaling={false} style={styles.description}>Choose a strong password for your account.</Text>
       <View style={styles.form}>
@@ -87,15 +89,17 @@ export const ResetPasswordScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background, padding: scale(SPACING.lg) },
-  title: { fontSize: moderateScale(FONT_SIZES.xxl), fontWeight: "700", color: COLORS.text, marginTop: scale(SPACING.xl), marginBottom: scale(SPACING.md), textAlign: "center" },
-  description: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary, marginBottom: scale(SPACING.xl) },
+  container: { flex: 1, backgroundColor: COLORS.background, padding: webSc(SPACING.lg) },
+  // On web, constrain the column so inputs don't stretch across the page.
+  containerWeb: { maxWidth: 480, width: "100%" as any, alignSelf: "center" as any },
+  title: { fontSize: webMs(FONT_SIZES.xxl), fontWeight: "700", color: COLORS.text, marginTop: webSc(SPACING.xl), marginBottom: webSc(SPACING.md), textAlign: "center" },
+  description: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, marginBottom: webSc(SPACING.xl) },
   form: { flex: 1 },
-  error: { color: COLORS.error, fontSize: moderateScale(FONT_SIZES.sm), marginBottom: scale(SPACING.md) },
-  content: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: scale(SPACING.xl) },
-  icon: { fontSize: moderateScale(60), marginBottom: scale(SPACING.lg) },
-  message: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary, textAlign: "center", marginBottom: scale(SPACING.md), paddingHorizontal: scale(SPACING.md) },
-  debugBox: { marginTop: scale(SPACING.lg), padding: scale(SPACING.md), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, width: "100%" },
-  debugLabel: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginBottom: scale(SPACING.xs), fontWeight: "600", textTransform: "uppercase" },
-  debugText: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textSecondary, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+  error: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), marginBottom: webSc(SPACING.md) },
+  content: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: webSc(SPACING.xl) },
+  icon: { fontSize: webMs(60), marginBottom: webSc(SPACING.lg) },
+  message: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, textAlign: "center", marginBottom: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.md) },
+  debugBox: { marginTop: webSc(SPACING.lg), padding: webSc(SPACING.md), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, width: "100%" },
+  debugLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginBottom: webSc(SPACING.xs), fontWeight: "600", textTransform: "uppercase" },
+  debugText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
 });
