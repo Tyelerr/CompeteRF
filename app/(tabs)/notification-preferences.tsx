@@ -37,6 +37,8 @@ export default function NotificationPreferencesScreen() {
     categories,
     togglePreference,
     savePreferences,
+    isSendingTest,
+    sendTestSms,
     openDeviceSettings,
     refresh,
   } = useNotificationPreferences(user?.id);
@@ -220,6 +222,24 @@ export default function NotificationPreferencesScreen() {
                 </View>
               );
             })}
+
+            <TouchableOpacity
+              style={[
+                styles.testSmsBtn,
+                (!smsOn || isSendingTest) && styles.testSmsBtnDisabled,
+              ]}
+              onPress={sendTestSms}
+              disabled={!smsOn || isSendingTest}
+              activeOpacity={0.7}
+            >
+              {isSendingTest ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Text allowFontScaling={false} style={styles.testSmsText}>
+                  Send Test Text
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
 
           <View style={styles.section}>
@@ -336,6 +356,17 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
   },
+  testSmsBtn: {
+    margin: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.sm),
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  testSmsBtnDisabled: { opacity: 0.4 },
+  testSmsText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.primary },
   phoneInput: {
     marginTop: wxSc(SPACING.xs),
     marginLeft: wxSc(26),
