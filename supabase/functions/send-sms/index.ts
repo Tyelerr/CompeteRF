@@ -1,15 +1,19 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 // ---------------------------------------------------------------------------
-// send-sms — sends a single text message via Twilio.
+// send-sms — sends a single text message via Telnyx.
 //
 // Secrets (set with `supabase secrets set ...`, never in the app):
-//   TWILIO_ACCOUNT_SID   — your Twilio Account SID (starts with "AC...")
-//   TWILIO_AUTH_TOKEN    — your Twilio Auth Token
-//   TWILIO_FROM_NUMBER   — the Twilio phone number to send from (E.164, +1...)
+//   TELNYX_API_KEY               — your Telnyx V2 API key (Bearer token)
+//   TELNYX_FROM_NUMBER           — a Telnyx number to send from (E.164, +1...)
+//   TELNYX_MESSAGING_PROFILE_ID  — (optional) use instead of/along with a number
+//
+// At least one of TELNYX_FROM_NUMBER or TELNYX_MESSAGING_PROFILE_ID is required.
 //
 // Request body: { to: string, body: string }
 // ---------------------------------------------------------------------------
+
+const TELNYX_API_URL = "https://api.telnyx.com/v2/messages";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -32,12 +36,12 @@ serve(async (req: Request) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const fromNumber = Deno.env.get("TWILIO_FROM_NUMBER");
+  const apiKey = Deno.env.get("TELNYX_API_KEY");
+  const fromNumber = Deno.env.get("TELNYX_FROM_NUMBER");
+  const messagingProfileId = Deno.env.get("TELNYX_MESSAGING_PROFILE_ID");
 
-  if (!accountSid || !authToken || !fromNumber) {
-    console.error("[send-sms] Twilio secrets are not fully set.");
+  if (!apiKey || (!fromNumber && !messagingProfileId)) {
+    console.error("[send-sms] Telnyx secrets are not fully set.");
     return jsonResponse({ error: "SMS service is not configured." }, 500);
   }
 
@@ -49,47 +53,45 @@ serve(async (req: Request) => {
   }
 
   const to = normalizeNumber(payload.to);
-  const body = (payload.body ?? "").trim();
+  const text = (payload.body ?? "").trim();
 
-  if (!to || !body) {
+  if (!to || !text) {
     return jsonResponse({ error: "Missing required fields: to, body." }, 400);
   }
 
-  const form = new URLSearchParams();
-  form.set("To", to);
-  form.set("From", fromNumber);
-  form.set("Body", body);
+  const telnyxBody: Record<string, string> = { to, text };
+  if (fromNumber) telnyxBody.from = fromNumber;
+  if (messagingProfileId) telnyxBody.messaging_profile_id = messagingProfileId;
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const auth = btoa(`${accountSid}:${authToken}`);
-
-  let twilioResponse: Response;
+  let telnyxResponse: Response;
   try {
-    twilioResponse = await fetch(url, {
+    telnyxResponse = await fetch(TELNYX_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-      body: form.toString(),
+      body: JSON.stringify(telnyxBody),
     });
   } catch (err) {
-    console.error("[send-sms] Network error reaching Twilio:", err);
+    console.error("[send-sms] Network error reaching Telnyx:", err);
     return jsonResponse({ error: "Failed to reach SMS provider." }, 502);
   }
 
-  const data = await twilioResponse.json();
+  const data = await telnyxResponse.json();
 
-  if (!twilioResponse.ok) {
-    console.error("[send-sms] Twilio API error:", data);
-    return jsonResponse(
-      { error: data?.message ?? "Unknown error from SMS provider." },
-      twilioResponse.status,
-    );
+  if (!telnyxResponse.ok) {
+    const detail =
+      data?.errors?.[0]?.detail ??
+      data?.errors?.[0]?.title ??
+      "Unknown error from SMS provider.";
+    console.error("[send-sms] Telnyx API error:", data);
+    return jsonResponse({ error: detail }, telnyxResponse.status);
   }
 
-  console.log(`[send-sms] Sent to ${to}. Twilio SID: ${data.sid}`);
-  return jsonResponse({ success: true, id: data.sid }, 200);
+  const id = data?.data?.id;
+  console.log(`[send-sms] Sent to ${to}. Telnyx ID: ${id}`);
+  return jsonResponse({ success: true, id }, 200);
 });
 
 // ---------------------------------------------------------------------------
