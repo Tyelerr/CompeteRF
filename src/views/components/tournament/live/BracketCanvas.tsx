@@ -10,6 +10,7 @@ import {
   Animated,
   Keyboard,
   LayoutChangeEvent,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -370,6 +371,9 @@ export const BracketCanvas = ({
   const pinchRef = useRef(null);
   const panRef = useRef(null);
   const tapRef = useRef(null);
+  // Web only: the viewport DOM node, so we can attach a wheel listener for zoom
+  // (there's no pinch gesture with a mouse/trackpad-scroll).
+  const viewportRef = useRef<any>(null);
 
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [query, setQuery] = useState("");
@@ -387,6 +391,32 @@ export const BracketCanvas = ({
     txA.setValue(x);
     tyA.setValue(y);
   };
+
+  // Web: zoom with the mouse wheel / trackpad scroll, centered on the cursor —
+  // there's no pinch gesture without touch. Attached as a native DOM listener
+  // (RN-web View doesn't expose onWheel) and non-passive so we can preventDefault.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = viewportRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== "function") return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = node.getBoundingClientRect();
+      const focalX = e.clientX - rect.left;
+      const focalY = e.clientY - rect.top;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const ns = clamp(scale.current * factor, MIN_SCALE, MAX_SCALE);
+      const actual = ns / scale.current;
+      set(
+        ns,
+        focalX - (focalX - tx.current) * actual,
+        focalY - (focalY - ty.current) * actual,
+      );
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onPinchEvent = (e: { nativeEvent: { scale: number; focalX: number; focalY: number } }) => {
     const { scale: g, focalX, focalY } = e.nativeEvent;
@@ -595,7 +625,8 @@ export const BracketCanvas = ({
         </View>
       )}
 
-      <GestureHandlerRootView style={styles.viewport} onLayout={onViewport}>
+      <View ref={viewportRef} style={styles.viewport}>
+      <GestureHandlerRootView style={styles.fill} onLayout={onViewport}>
         <TapGestureHandler ref={tapRef} numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
           <Animated.View style={styles.fill}>
             <PinchGestureHandler
@@ -761,6 +792,7 @@ export const BracketCanvas = ({
           </View>
         )}
       </GestureHandlerRootView>
+      </View>
     </View>
   );
 };

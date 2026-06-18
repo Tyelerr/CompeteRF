@@ -188,7 +188,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
     paddingTop: webSc(SPACING.sm),
     paddingBottom: webSc(SPACING.sm),
-    backgroundColor: COLORS.surface,
+    // Match the black page body on web; keep the subtle surface bar on mobile.
+    backgroundColor: Platform.OS === "web" ? COLORS.background : COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },

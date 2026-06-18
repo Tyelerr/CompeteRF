@@ -3612,12 +3612,13 @@ export default function ManageTournamentScreen() {
             No tables yet. Add tables above.
           </Text>
         ) : (
-          hub.tables.map((tbl) => {
+          <View style={isWeb ? styles.tableGrid : undefined}>
+          {hub.tables.map((tbl) => {
             const occupiedBy = tableMatch[tbl.id] ?? null;
             const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
             const color = tableStatusColor(effStatus);
             return (
-              <View key={tbl.id} style={styles.tableRow}>
+              <View key={tbl.id} style={[styles.tableRow, isWeb && styles.tableRowWeb]}>
                 <TouchableOpacity
                   style={styles.tableRowMain}
                   activeOpacity={0.75}
@@ -3641,11 +3642,9 @@ export default function ManageTournamentScreen() {
                   </View>
                   <View style={styles.tableRowRight}>
                     {tbl.is_streaming && (
-                      <View style={styles.streamBadge}>
-                        <Text allowFontScaling={false} style={styles.streamBadgeText}>
-                          LIVE
-                        </Text>
-                      </View>
+                      <Text allowFontScaling={false} style={styles.streamLive}>
+                        ● LIVE
+                      </Text>
                     )}
                     <View
                       style={[
@@ -3677,7 +3676,8 @@ export default function ManageTournamentScreen() {
                 </TouchableOpacity>
               </View>
             );
-          })
+          })}
+          </View>
         )}
       </View>
 
@@ -4819,7 +4819,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  headerWeb: { paddingTop: webSc(SPACING.lg) },
+  headerWeb: { paddingTop: webSc(SPACING.lg), backgroundColor: COLORS.background },
   backButton: { padding: webSc(SPACING.xs) },
   backText: {
     fontSize: webMs(FONT_SIZES.sm),
@@ -5538,6 +5538,9 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
   },
+  // Web: two-up grid for the tables list.
+  tableGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  tableRowWeb: { width: "48.5%" },
   tableRowMain: {
     flex: 1,
     flexDirection: "row",
@@ -5568,13 +5571,12 @@ const styles = StyleSheet.create({
   },
   statusChipText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   tableRowChevron: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.textMuted, fontWeight: "700" },
-  streamBadge: {
-    backgroundColor: COLORS.error,
-    borderRadius: webSc(RADIUS.sm),
-    paddingHorizontal: webSc(SPACING.xs),
-    paddingVertical: 1,
+  streamLive: {
+    color: COLORS.error,
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "900",
+    letterSpacing: 0.5,
   },
-  streamBadgeText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
 
   // Table edit sheet
   editHead: {
