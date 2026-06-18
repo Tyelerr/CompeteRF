@@ -7,6 +7,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +30,8 @@ import { MatchCard } from "./MatchCard";
 import { BracketCanvas } from "./BracketCanvas";
 import { MatchActionsModal } from "./MatchActionsModal";
 import { SpectatorMatchModal } from "./SpectatorMatchModal";
+
+const isWeb = Platform.OS === "web";
 
 type ViewMode = "cards" | "bracket";
 type CardFilter = "all" | "scheduled" | "in_progress" | "completed" | "bye";
@@ -174,7 +177,10 @@ export const MatchesView = ({
           </View>
           <ScrollView
             style={styles.cardsScroll}
-            contentContainerStyle={styles.cardsContent}
+            contentContainerStyle={[
+              styles.cardsContent,
+              isWeb && styles.cardsGrid,
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -184,18 +190,18 @@ export const MatchesView = ({
                 No matches for this search / filter.
               </Text>
             ) : (
-              filtered.map((m) =>
-                readOnly ? (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    readOnly
-                    onPress={() => setDetail(m)}
-                  />
-                ) : (
-                  <MatchCard key={m.id} match={m} onAction={openSheet} busy={busy} />
-                ),
-              )
+              filtered.map((m) => (
+                <View
+                  key={m.id}
+                  style={isWeb ? styles.cardCell : undefined}
+                >
+                  {readOnly ? (
+                    <MatchCard match={m} readOnly onPress={() => setDetail(m)} />
+                  ) : (
+                    <MatchCard match={m} onAction={openSheet} busy={busy} />
+                  )}
+                </View>
+              ))
             )}
           </ScrollView>
         </View>
@@ -277,6 +283,9 @@ const styles = StyleSheet.create({
   filterWrap: { width: webSc(150) },
   cardsScroll: { flex: 1 },
   cardsContent: { paddingHorizontal: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl) },
+  // Web: two match cards per row.
+  cardsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  cardCell: { width: "49%" },
   noResults: {
     textAlign: "center",
     color: COLORS.textMuted,
