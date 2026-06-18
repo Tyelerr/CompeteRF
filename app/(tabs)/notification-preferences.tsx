@@ -173,7 +173,7 @@ export default function NotificationPreferencesScreen() {
                   <Text allowFontScaling={false} style={styles.preferenceLabel}>Enable Text Alerts</Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.preferenceDescription}>
-                  Standard message &amp; data rates may apply. Turn off any time.
+                  Get text alerts for your matches. Reply STOP to opt out.
                 </Text>
               </View>
               <Switch
@@ -183,6 +183,18 @@ export default function NotificationPreferencesScreen() {
                 thumbColor={smsOn ? COLORS.primary : COLORS.textMuted}
                 disabled={isSaving || !phone.trim()}
               />
+            </View>
+
+            {/* Carrier-required SMS consent disclosure. Kept always visible (not
+                gated on the toggle) so it appears in the opt-in screenshot used for
+                toll-free verification. */}
+            <View style={styles.smsDisclosure}>
+              <Text allowFontScaling={false} style={styles.smsDisclosureText}>
+                By enabling SMS notifications, you agree to receive automated text
+                messages from Compete about match assignments, tournament reminders,
+                and account updates. Message frequency varies. Message &amp; data
+                rates may apply. Reply STOP to opt out and HELP for help.
+              </Text>
             </View>
 
             {/* Per-alert SMS toggles (role-gated) */}
@@ -312,6 +324,18 @@ const styles = StyleSheet.create({
   preferenceIcon: { fontSize: wxMs(18) },
   preferenceLabel: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
   preferenceLabelDisabled: { color: COLORS.textMuted },
+  smsDisclosure: {
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.sm),
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  smsDisclosureText: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
+  },
   phoneInput: {
     marginTop: wxSc(SPACING.xs),
     marginLeft: wxSc(26),
