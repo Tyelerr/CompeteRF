@@ -221,6 +221,7 @@ export const LiveTournamentScreen = ({
 
   return (
     <View style={styles.root}>
+      <View style={[styles.inner, isWeb && styles.webInner]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + wxSc(SPACING.xs) }]}>
         <TouchableOpacity onPress={goBack} style={styles.backBtn} hitSlop={8}>
@@ -407,12 +408,17 @@ export const LiveTournamentScreen = ({
           </View>
         </ScrollView>
       )}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background },
+  inner: { flex: 1 },
+  // Web: keep the page content a sensible centered width instead of stretching the
+  // tab bars and toggles across an ultrawide window.
+  webInner: { flex: 1, width: "100%" as any, maxWidth: 1080, alignSelf: "center" as any },
   header: {
     flexDirection: "row",
     alignItems: "center",
