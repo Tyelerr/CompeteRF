@@ -1,4 +1,5 @@
-﻿import { Stack } from "expo-router";
+﻿import "../src/utils/web-alert"; // patch RN-web's no-op Alert.alert (side effect)
+import { Stack } from "expo-router";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Platform, StyleSheet } from "react-native";
