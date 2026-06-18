@@ -42,6 +42,41 @@ if (!link.orgId || !link.projectId) {
   process.exit(1);
 }
 
+// Vercel silently drops any `node_modules` directory from a deployment. Expo's
+// web export puts vendored icon fonts under dist/assets/node_modules/... — so on
+// the deployed site those fonts 404 and every icon renders as an empty box.
+// Rename that folder to a name Vercel keeps, and rewrite the references in the
+// exported text files (JS bundle, html, css, json, maps) to match.
+function remapNodeModulesAssets(distDir) {
+  const nmDir = path.join(distDir, "assets", "node_modules");
+  if (!fs.existsSync(nmDir)) return;
+  const textExt = new Set([".js", ".html", ".json", ".css", ".map"]);
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules") continue; // skip the font binaries
+        walk(p);
+      } else if (textExt.has(path.extname(entry.name))) {
+        const content = fs.readFileSync(p, "utf8");
+        if (content.includes("assets/node_modules")) {
+          fs.writeFileSync(
+            p,
+            content.split("assets/node_modules").join("assets/nm"),
+          );
+        }
+      }
+    }
+  };
+  walk(distDir);
+  fs.renameSync(nmDir, path.join(distDir, "assets", "nm"));
+  console.log(
+    "[web:publish] Remapped assets/node_modules -> assets/nm so icon fonts deploy (Vercel ignores node_modules).",
+  );
+}
+
+remapNodeModulesAssets(distPath);
+
 console.log(
   `[web:publish] Deploying dist/ to Vercel project "${link.projectName || link.projectId}" (production)...`,
 );
