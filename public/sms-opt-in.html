@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Compete — SMS Opt-In</title>
+  <title>Compete Tournaments — SMS Opt-In</title>
   <meta name="robots" content="index,follow" />
   <style>
     :root{
@@ -39,11 +39,12 @@
       margin:6px 16px 14px;padding:12px;background:var(--bg);border:1px solid var(--border);
       border-radius:10px;color:var(--text);font-size:15px;
     }
-    /* iOS-style switch (ON) */
-    .switch{width:46px;height:28px;border-radius:999px;background:rgba(59,130,246,.5);
+    .field-empty{color:var(--textMuted)}
+    /* iOS-style switch (OFF) — opt-in is not pre-selected; the user turns it on. */
+    .switch{width:46px;height:28px;border-radius:999px;background:var(--border);
       position:relative;flex:none}
-    .switch::after{content:"";position:absolute;top:3px;left:21px;width:22px;height:22px;
-      border-radius:50%;background:var(--primary)}
+    .switch::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;
+      border-radius:50%;background:var(--textMuted)}
     .disclosure{
       padding:12px 16px;border-top:1px solid var(--border);background:var(--bg);
       color:var(--textMuted);font-size:12px;line-height:1.6;
@@ -57,19 +58,19 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="brand"><span class="logo">🎱</span><h1>COMPETE</h1></div>
-    <p class="lede">How players opt in to text alerts inside the Compete app
-      (Notifications &rarr; Text Message Alerts).</p>
+    <div class="brand"><span class="logo">🎱</span><h1>Compete Tournaments</h1></div>
+    <p class="lede">How players opt in to text alerts inside the Compete Tournaments
+      app (Notifications &rarr; App Notifications).</p>
 
     <div class="card">
-      <div class="card-title">TEXT MESSAGE ALERTS</div>
+      <div class="card-title">App Notifications</div>
 
       <div class="row">
         <div class="info">
           <div class="label"><span>📱</span> Mobile Number</div>
         </div>
       </div>
-      <div class="field">(480) 555-0123</div>
+      <div class="field field-empty">Mobile number</div>
 
       <div class="row">
         <div class="info">
