@@ -59,7 +59,9 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   if (!vm.tournament) return null;
   const t: any = vm.tournament;
   const imageUrl = getImageUrl(t);
-  // Once started/finished, anyone can open the read-only spectator view.
+  // External tournaments link out to their bracket; Compete tournaments open the
+  // read-only spectator view once they've started.
+  const isExternal = t.bracket_source === "external";
   const hasStarted =
     t.live_state === "in_progress" ||
     t.live_state === "finished" ||
@@ -67,6 +69,9 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   const viewTournament = () => {
     onClose();
     router.push(`/live-tournament/${t.id}` as any);
+  };
+  const openExternalBracket = () => {
+    if (typeof window !== "undefined") window.open(t.external_bracket_url, "_blank");
   };
   const isChip = t.tournament_format === "chip-tournament";
   const chipRanges = isChip && Array.isArray(t.chip_ranges) && t.chip_ranges.length > 0 ? t.chip_ranges : null;
@@ -168,12 +173,17 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                 </View>
               </View>
 
-              {hasStarted && (
+              {isExternal && t.external_bracket_url ? (
+                <TouchableOpacity style={s.viewTournamentBtn} onPress={openExternalBracket}>
+                  <Ionicons name="open-outline" size={18} color="#fff" />
+                  <Text allowFontScaling={false} style={s.viewTournamentText}>View Bracket</Text>
+                </TouchableOpacity>
+              ) : hasStarted ? (
                 <TouchableOpacity style={s.viewTournamentBtn} onPress={viewTournament}>
                   <Ionicons name="eye-outline" size={18} color="#fff" />
                   <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
 
               <View style={{ flexDirection: "row", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
                 <TouchableOpacity style={s.reportBtn} onPress={() => report.openReportModal("tournament", t.id.toString())}>

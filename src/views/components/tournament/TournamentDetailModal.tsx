@@ -2,7 +2,7 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Image, Modal, Platform, ScrollView, Share, StyleSheet,
+  Alert, Image, Linking, Modal, Platform, ScrollView, Share, StyleSheet,
   Text, TouchableOpacity, View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
@@ -119,6 +119,7 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const canRegister = tournament?.live_state === "registration_open";
   // Once a tournament has started (or finished), anyone can open the read-only
   // spectator view (bracket / matches / players).
+  const isExternal = tournament?.bracket_source === "external";
   const hasStarted =
     tournament?.live_state === "in_progress" ||
     tournament?.live_state === "finished" ||
@@ -128,6 +129,9 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
     if (!tournament) return;
     handleClose();
     router.push(`/live-tournament/${tournament.id}` as any);
+  };
+  const handleViewBracket = () => {
+    if (tournament?.external_bracket_url) Linking.openURL(tournament.external_bracket_url);
   };
 
   const innerContent = (
@@ -265,14 +269,21 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
             </Text>
           </ScrollView>
 
-          {hasStarted && (
+          {isExternal && tournament.external_bracket_url ? (
+            <View style={s.registerContainer}>
+              <TouchableOpacity style={s.viewTournamentButton} onPress={handleViewBracket}>
+                <Ionicons name="open-outline" size={18} color="#fff" />
+                <Text allowFontScaling={false} style={s.viewTournamentText}>View Bracket</Text>
+              </TouchableOpacity>
+            </View>
+          ) : hasStarted ? (
             <View style={s.registerContainer}>
               <TouchableOpacity style={s.viewTournamentButton} onPress={handleViewTournament}>
                 <Ionicons name="eye-outline" size={18} color="#fff" />
                 <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
 
           {canRegister && (
             <View style={s.registerContainer}>

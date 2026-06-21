@@ -321,6 +321,7 @@ interface SettingsForm {
   tableSize: string;
   equipment: string;
   phoneNumber: string;
+  externalBracketUrl: string;
   raceMode: RaceMode;
   // Fixed race (numbers — driven by steppers)
   raceWinners: number; // also the single-elim "Match Race To"
@@ -417,6 +418,7 @@ const toForm = (t: Tournament): SettingsForm => {
     tableSize: t.table_size ?? "",
     equipment: t.equipment ?? "",
     phoneNumber: t.phone_number ?? "",
+    externalBracketUrl: t.external_bracket_url ?? "",
     // Race is configured fresh in the hub — do NOT inherit the free-text race
     // entered on the submit page. Only a previously-saved live setting pre-fills.
     raceWinners: ls.fixedRaceWinners ?? 5,
@@ -507,6 +509,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   table_size: (f.tableSize || undefined) as TableSize | undefined,
   equipment: f.equipment.trim() || undefined,
   phone_number: f.phoneNumber.trim() || undefined,
+  external_bracket_url: f.externalBracketUrl.trim() || undefined,
   side_pots: f.sidePots
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
@@ -2015,7 +2018,21 @@ export default function ManageTournamentScreen() {
           : "settings";
 
   // Build the lifecycle nav model (phase buttons + their page menus).
-  const navPhases = PHASE_ORDER.map((pk) => {
+  // External (other-software) tournaments get a basic manager — just the details
+  // page, no live-engine phases/tabs.
+  const isExternal = hub.tournament?.bracket_source === "external";
+  const navPhases = isExternal
+    ? [
+        {
+          key: "setup" as PhaseKey,
+          label: "Manage",
+          glyph: "●",
+          state: "current" as "done" | "current" | "live" | "locked",
+          locked: false,
+          pages: [{ key: "settings" as TabKey, label: "Details" }],
+        },
+      ]
+    : PHASE_ORDER.map((pk) => {
     const def = PHASE_DEFS[pk];
     const st = phaseStateOf(pk);
     return {
@@ -2062,6 +2079,12 @@ export default function ManageTournamentScreen() {
     setActiveTab(defaultTabForPhase(tournamentGroup));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournamentGroup]);
+
+  // External tournaments only have the details page — keep them on it.
+  useEffect(() => {
+    if (isExternal && activeTab !== "settings") setActiveTab("settings");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExternal]);
 
   const handlePhasePress = (p: PhaseKey) => {
     if (!phaseUnlocked(p)) {
@@ -2728,6 +2751,121 @@ export default function ManageTournamentScreen() {
         </View>
       );
     }
+
+    // External (other-software) tournaments: a basic listing form — no live-engine
+    // fields. Just the details, the external bracket link, schedule, entry, venue.
+    if (isExternal) {
+      const extVenue = hub.tournament?.venues;
+      return (
+        <View>
+          <Section title="Tournament Details">
+            <LabeledInput
+              label="Name *"
+              value={form.name}
+              onChangeText={(v) => patchForm({ name: v })}
+              placeholder="Tournament name"
+            />
+            <View style={styles.field}>
+              <FieldLabel label="Game Type *" />
+              <Dropdown
+                placeholder="Select game type"
+                options={GAME_TYPES}
+                value={form.gameType}
+                onSelect={(v) => patchForm({ gameType: v })}
+              />
+            </View>
+            <View style={styles.field}>
+              <FieldLabel label="Format *" />
+              <Dropdown
+                placeholder="Select format"
+                options={TOURNAMENT_FORMATS}
+                value={form.tournamentFormat}
+                onSelect={(v) => patchForm({ tournamentFormat: v })}
+              />
+            </View>
+            <LabeledInput
+              label="Description"
+              value={form.description}
+              onChangeText={(v) => patchForm({ description: v })}
+              placeholder="Describe the tournament..."
+              multiline
+            />
+          </Section>
+
+          <Section title="External Bracket">
+            <LabeledInput
+              label="Bracket Link"
+              value={form.externalBracketUrl}
+              onChangeText={(v) => patchForm({ externalBracketUrl: v })}
+              placeholder="https://..."
+            />
+            <Text allowFontScaling={false} style={styles.hint}>
+              Players tap &quot;View Bracket&quot; on the tournament to open this link.
+            </Text>
+          </Section>
+
+          <Section title="Schedule">
+            <View style={styles.field}>
+              <FieldLabel label="Date *" />
+              <DatePicker
+                value={form.tournamentDate}
+                onChange={(v) => patchForm({ tournamentDate: v })}
+                placeholder="Select date"
+              />
+            </View>
+            <View style={styles.field}>
+              <FieldLabel label="Start Time *" />
+              <Dropdown
+                placeholder="Select start time"
+                options={START_TIMES}
+                value={form.startTime}
+                onSelect={(v) => patchForm({ startTime: v })}
+              />
+            </View>
+          </Section>
+
+          <Section title="Entry">
+            <LabeledInput
+              label="Entry Fee"
+              value={form.entryFee}
+              onChangeText={(v) => patchForm({ entryFee: v })}
+              placeholder="$0.00"
+              keyboardType="decimal-pad"
+              accessoryId={KB_DONE}
+            />
+            <LabeledInput
+              label="Added Money"
+              value={form.addedMoney}
+              onChangeText={(v) => patchForm({ addedMoney: v })}
+              placeholder="$0.00"
+              keyboardType="decimal-pad"
+              accessoryId={KB_DONE}
+            />
+          </Section>
+
+          <Section title="Venue">
+            {extVenue ? (
+              <View style={styles.readOnlyCard}>
+                <Text allowFontScaling={false} style={styles.readOnlyName}>
+                  {extVenue.venue}
+                </Text>
+                <Text allowFontScaling={false} style={styles.readOnlySub}>
+                  {extVenue.address}
+                </Text>
+                <Text allowFontScaling={false} style={styles.readOnlySub}>
+                  {extVenue.city}, {extVenue.state} {extVenue.zip_code}
+                </Text>
+              </View>
+            ) : (
+              <Text allowFontScaling={false} style={styles.hint}>
+                No venue on record.
+              </Text>
+            )}
+          </Section>
+        </View>
+      );
+    }
+
     const venue = hub.tournament?.venues;
     // Max Fargo and Open Tournament are mutually exclusive — each greys the other.
     const maxFargoDisabled = form.openTournament;
@@ -4683,7 +4821,7 @@ export default function ManageTournamentScreen() {
       {/* Fixed footer: Save Settings / Start Registration */}
       {activeTab === "settings" && form && !settingsLocked && (
         <View style={styles.settingsFooter}>
-          {!formRequiredComplete && (
+          {!isExternal && !formRequiredComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
               Complete the required fields (name, game, format, venue, date,
               time) to start registration.
@@ -4691,7 +4829,7 @@ export default function ManageTournamentScreen() {
           )}
           <View style={[styles.saveRow, styles.settingsFooterInner]}>
             <TouchableOpacity
-              style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
+              style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
               onPress={handleSave}
               disabled={hub.isSaving}
             >
@@ -4699,15 +4837,17 @@ export default function ManageTournamentScreen() {
                 {hub.isSaving ? "Saving..." : "Save Settings"}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
-              onPress={handleStartRegistration}
-              disabled={!canStartRegistration}
-            >
-              <Text allowFontScaling={false} style={styles.startBtnText}>
-                Start Registration
-              </Text>
-            </TouchableOpacity>
+            {!isExternal && (
+              <TouchableOpacity
+                style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
+                onPress={handleStartRegistration}
+                disabled={!canStartRegistration}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  Start Registration
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
