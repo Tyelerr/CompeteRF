@@ -1,4 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
@@ -28,6 +29,7 @@ const getImageUrl = (t: any): string | null => {
 };
 
 export function WebTournamentDetailOverlay({ id, onClose }: Props) {
+  const router = useRouter();
   const vm = useTournamentDetail(id);
   const { session } = useAuth() as any;
   const { profile } = useAuthContext();
@@ -57,6 +59,15 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   if (!vm.tournament) return null;
   const t: any = vm.tournament;
   const imageUrl = getImageUrl(t);
+  // Once started/finished, anyone can open the read-only spectator view.
+  const hasStarted =
+    t.live_state === "in_progress" ||
+    t.live_state === "finished" ||
+    t.status === "completed";
+  const viewTournament = () => {
+    onClose();
+    router.push(`/live-tournament/${t.id}` as any);
+  };
   const isChip = t.tournament_format === "chip-tournament";
   const chipRanges = isChip && Array.isArray(t.chip_ranges) && t.chip_ranges.length > 0 ? t.chip_ranges : null;
 
@@ -157,6 +168,13 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                 </View>
               </View>
 
+              {hasStarted && (
+                <TouchableOpacity style={s.viewTournamentBtn} onPress={viewTournament}>
+                  <Ionicons name="eye-outline" size={18} color="#fff" />
+                  <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
+                </TouchableOpacity>
+              )}
+
               <View style={{ flexDirection: "row", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
                 <TouchableOpacity style={s.reportBtn} onPress={() => report.openReportModal("tournament", t.id.toString())}>
                   <Ionicons name="flag-outline" size={14} color="#E53935" />
@@ -213,6 +231,8 @@ const s = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   label: { fontSize: 14, color: COLORS.textSecondary },
   val: { fontSize: 14, color: COLORS.text },
+  viewTournamentBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 12, marginTop: 4, marginBottom: 4 },
+  viewTournamentText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   reportBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: "#E53935", backgroundColor: "rgba(229,57,53,0.1)" },
   closeActionBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 6, backgroundColor: COLORS.error, alignItems: "center" },
 });
