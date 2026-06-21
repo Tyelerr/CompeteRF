@@ -1,0 +1,2 @@
+[functions.rss-feed]
+verify_jwt = true

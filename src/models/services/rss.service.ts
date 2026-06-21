@@ -1,5 +1,6 @@
 ﻿import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { supabase } from "../../lib/supabase";
 import { RSSItem } from "../types/home.types";
 
 const RSS_FEED_URL = "https://www.azbilliards.com/feed/";
@@ -37,17 +38,23 @@ class RSSService {
     const isNative = Platform.OS !== "web";
     const sources = isNative ? [RSS_FEED_URL, ...CORS_PROXIES] : [...CORS_PROXIES];
 
+    const notEmpty = (items: RSSItem[]) => {
+      if (items.length === 0) throw new Error("empty feed");
+      return items;
+    };
+
     // Race every source — the first one to return articles wins, so a blocked or
-    // slow source (e.g. a direct fetch that one network refuses) never delays the
-    // others. A source that errors or returns nothing simply drops out.
-    const attempts = sources.map((url) =>
-      this.fetchFromUrl(url, url === RSS_FEED_URL ? FETCH_TIMEOUT_MS : WEB_FETCH_TIMEOUT_MS).then(
-        (items) => {
-          if (items.length === 0) throw new Error("empty feed");
-          return items;
-        },
+    // slow source never delays the others. Our own edge function (server-side,
+    // no CORS) is the reliable primary; the public proxies are the fallback.
+    const attempts = [
+      this.fetchFromEdge().then(notEmpty),
+      ...sources.map((url) =>
+        this.fetchFromUrl(
+          url,
+          url === RSS_FEED_URL ? FETCH_TIMEOUT_MS : WEB_FETCH_TIMEOUT_MS,
+        ).then(notEmpty),
       ),
-    );
+    ];
 
     try {
       const items = await Promise.any(attempts);
@@ -65,6 +72,16 @@ class RSSService {
     if (!response.ok) throw new Error("status " + response.status);
     const xmlText = await response.text();
     return this.parseRSSFeed(xmlText);
+  }
+
+  // Our Supabase edge function fetches the feed server-side (no CORS), so it
+  // works reliably on web where public proxies get blocked / rate-limited.
+  private async fetchFromEdge(): Promise<RSSItem[]> {
+    const { data, error } = await supabase.functions.invoke("rss-feed");
+    if (error) throw error;
+    const xml = (data as { xml?: string })?.xml;
+    if (!xml) throw new Error("no xml from edge");
+    return this.parseRSSFeed(xml);
   }
 
   private async cacheNews(items: RSSItem[]): Promise<void> {
