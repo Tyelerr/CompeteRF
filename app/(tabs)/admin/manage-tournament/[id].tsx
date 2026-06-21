@@ -3060,18 +3060,6 @@ export default function ManageTournamentScreen() {
             />
           </Section>
 
-          <Section title="External Bracket">
-            <LabeledInput
-              label="Bracket Link"
-              value={form.externalBracketUrl}
-              onChangeText={(v) => patchForm({ externalBracketUrl: v })}
-              placeholder="https://..."
-            />
-            <Text allowFontScaling={false} style={styles.hint}>
-              Players tap &quot;View Bracket&quot; on the tournament to open this link.
-            </Text>
-          </Section>
-
           {renderRaceSection()}
 
           <Section title="Schedule">
@@ -3196,11 +3184,22 @@ export default function ManageTournamentScreen() {
             </View>
           </Section>
 
-          <Text allowFontScaling={false} style={styles.hintAmber}>
-            Tip: link your bracket-software profile/page rather than a single
-            bracket — that way it always shows your latest event, and you
-            don&apos;t have to wait for a per-tournament link to generate.
-          </Text>
+          <Section title="External Bracket">
+            <LabeledInput
+              label="Bracket Link"
+              value={form.externalBracketUrl}
+              onChangeText={(v) => patchForm({ externalBracketUrl: v })}
+              placeholder="https://..."
+            />
+            <Text allowFontScaling={false} style={styles.hint}>
+              Players tap &quot;View Bracket&quot; on the tournament to open this link.
+            </Text>
+            <Text allowFontScaling={false} style={styles.hintAmber}>
+              Tip: link your bracket-software profile/page rather than a single
+              bracket — that way it always shows your latest event, and you
+              don&apos;t have to wait for a per-tournament link to generate.
+            </Text>
+          </Section>
         </View>
       );
     }
