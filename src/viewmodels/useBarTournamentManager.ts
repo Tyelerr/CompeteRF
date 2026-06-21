@@ -180,7 +180,9 @@ export const useBarTournamentManager = () => {
   // the Manage hub (its Settings tab is a full build form). Seeds the required
   // NOT NULL columns with placeholders the owner edits in the hub. Created
   // `active` so it appears on Billiards right away. Returns the new id, or null.
-  const createDraftTournament = async (): Promise<number | null> => {
+  const createDraftTournament = async (
+    source: "compete" | "external" = "compete",
+  ): Promise<number | null> => {
     if (!profile?.id_auto) return null;
     try {
       setCreating(true);
@@ -228,6 +230,7 @@ export const useBarTournamentManager = () => {
         open_tournament: false,
         is_recurring: false,
         status: "active",
+        bracket_source: source,
       });
 
       await loadTournaments();

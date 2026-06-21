@@ -19,6 +19,7 @@ import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { useTournamentDirectorManager } from "../../../../src/viewmodels/useTournamentDirectorManager";
 import { EmptyState } from "../../../../src/views/components/dashboard";
 import { TournamentCard } from "../../../../src/views/components/tournament";
+import { TournamentSoftwareModal } from "../../../../src/views/components/tournament/TournamentSoftwareModal";
 
 const isWeb = Platform.OS === "web";
 
@@ -56,6 +57,7 @@ export default function TDTournamentsScreen() {
   const [paginatedTournaments, setPaginatedTournaments] = useState<any[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [processingTournamentId, setProcessingTournamentId] = useState<number | null>(null);
+  const [softwareOpen, setSoftwareOpen] = useState(false);
 
   useEffect(() => {
     const newCurrentPage = 1;
@@ -82,10 +84,11 @@ export default function TDTournamentsScreen() {
     router.push(`/(tabs)/admin/edit-tournament/${tournament.id}` as any);
   };
 
-  // "+ New" — create a draft straight from the manager, then open it in the
-  // Manage hub so the TD builds it there (no detour through the Submit tab).
-  const handleCreateNew = async () => {
-    const newId = await vm.createDraftTournament();
+  // "New Tournament" — first ask which software (Compete engine vs. external),
+  // then create a draft and open it in the Manage hub.
+  const handleSelectSoftware = async (source: "compete" | "external") => {
+    const newId = await vm.createDraftTournament(source);
+    setSoftwareOpen(false);
     if (newId != null) {
       router.push(`/(tabs)/admin/manage-tournament/${newId}` as any);
     }
@@ -204,6 +207,12 @@ export default function TDTournamentsScreen() {
 
   return (
     <View style={styles.container}>
+      <TournamentSoftwareModal
+        visible={softwareOpen}
+        busy={vm.creating}
+        onClose={() => setSoftwareOpen(false)}
+        onSelect={handleSelectSoftware}
+      />
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text allowFontScaling={false} style={styles.backText}>{"\u2190"} Back</Text>
@@ -264,16 +273,12 @@ export default function TDTournamentsScreen() {
       <View style={styles.newTournamentWrap}>
         <TouchableOpacity
           style={[styles.newTournamentBtn, vm.creating && styles.newBtnDisabled]}
-          onPress={handleCreateNew}
+          onPress={() => setSoftwareOpen(true)}
           disabled={vm.creating}
         >
-          {vm.creating ? (
-            <ActivityIndicator size="small" color={COLORS.white} />
-          ) : (
-            <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
-              + New Tournament
-            </Text>
-          )}
+          <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
+            + New Tournament
+          </Text>
         </TouchableOpacity>
       </View>
 

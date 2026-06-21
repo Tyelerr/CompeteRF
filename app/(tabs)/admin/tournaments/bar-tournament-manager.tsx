@@ -2,7 +2,6 @@
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -33,6 +32,7 @@ import { ReassignDirectorModal } from "../../../../src/views/components/common/r
 import { EmptyState } from "../../../../src/views/components/dashboard/empty-state";
 import { TournamentCard } from "../../../../src/views/components/tournament";
 import { AdminHeader, AdminSearchBar, AdminFilterRow } from "../../../../src/views/components/admin/AdminControls";
+import { TournamentSoftwareModal } from "../../../../src/views/components/tournament/TournamentSoftwareModal";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 
 const isWeb = Platform.OS === "web";
@@ -112,6 +112,7 @@ export default function BarTournamentManagerScreen() {
   const [searchingDirectors, setSearchingDirectors] = useState(false);
 
   // Pagination
+  const [softwareOpen, setSoftwareOpen] = useState(false);
   const pagination = usePagination(vm.tournaments, { itemsPerPage: 10 });
   const listRef = useRef<any>(null);
 
@@ -136,10 +137,10 @@ export default function BarTournamentManagerScreen() {
     pagination.resetPage();
   };
 
-  // "+ New" — create a draft straight from the manager, then open it in the
-  // Manage hub so the owner builds it there (no detour through the Submit tab).
-  const handleCreateNew = async () => {
-    const newId = await vm.createDraftTournament();
+  // "New Tournament" — ask which software, then create the draft and open it.
+  const handleSelectSoftware = async (source: "compete" | "external") => {
+    const newId = await vm.createDraftTournament(source);
+    setSoftwareOpen(false);
     if (newId != null) {
       router.push(`/(tabs)/admin/manage-tournament/${newId}` as any);
     }
@@ -300,6 +301,12 @@ export default function BarTournamentManagerScreen() {
 
   return (
     <View style={styles.container}>
+      <TournamentSoftwareModal
+        visible={softwareOpen}
+        busy={vm.creating}
+        onClose={() => setSoftwareOpen(false)}
+        onSelect={handleSelectSoftware}
+      />
       {/* Delete Modal */}
       <DeleteModal
         visible={cancelModalVisible}
@@ -362,16 +369,12 @@ export default function BarTournamentManagerScreen() {
       <View style={styles.newTournamentWrap}>
         <TouchableOpacity
           style={[styles.newTournamentBtn, vm.creating && styles.newBtnDisabled]}
-          onPress={handleCreateNew}
+          onPress={() => setSoftwareOpen(true)}
           disabled={vm.creating}
         >
-          {vm.creating ? (
-            <ActivityIndicator size="small" color={COLORS.white} />
-          ) : (
-            <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
-              + New Tournament
-            </Text>
-          )}
+          <Text allowFontScaling={false} style={styles.newTournamentBtnText}>
+            + New Tournament
+          </Text>
         </TouchableOpacity>
       </View>
 

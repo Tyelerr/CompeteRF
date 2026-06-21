@@ -330,7 +330,9 @@ export const useTournamentDirectorManager = () => {
   // placeholders — name/game/format/date/time are all editable in the hub. The
   // tournament is created `active` so it shows up on Billiards immediately, as
   // requested. Returns the new tournament id, or null if creation was blocked.
-  const createDraftTournament = async (): Promise<number | null> => {
+  const createDraftTournament = async (
+    source: "compete" | "external" = "compete",
+  ): Promise<number | null> => {
     if (!profile?.id_auto) return null;
     try {
       setCreating(true);
@@ -380,6 +382,7 @@ export const useTournamentDirectorManager = () => {
         open_tournament: false,
         is_recurring: false,
         status: "active",
+        bracket_source: source,
       });
 
       await loadTournaments({ silent: true });

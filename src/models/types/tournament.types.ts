@@ -43,6 +43,10 @@ export interface Tournament {
   // Chip Tournament data
   chip_ranges?: ChipRange[];
   status: TournamentStatus;
+  // 'compete' = run on the live bracket engine; 'external' = run in other
+  // software and just listed here, with external_bracket_url for "View Bracket".
+  bracket_source?: "compete" | "external";
+  external_bracket_url?: string;
   // Live-engine runtime state (Phase 0 columns; separate from `status`).
   live_state?: TournamentLiveState;
   is_paused?: boolean;
