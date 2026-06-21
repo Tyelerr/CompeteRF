@@ -1507,6 +1507,8 @@ export default function ManageTournamentScreen() {
 
   const hub = useManageTournament(tournamentId);
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
+  // External "Submit Tournament" cancellable countdown (null = not submitting).
+  const [submitCountdown, setSubmitCountdown] = useState<number | null>(null);
   // Top-level lifecycle phase currently shown (Setup / Live / Results).
   const [selectedPhase, setSelectedPhase] = useState<PhaseKey>("setup");
   const lastGroupRef = useRef<PhaseKey | null>(null);
@@ -2452,6 +2454,33 @@ export default function ManageTournamentScreen() {
     }
   };
 
+  // External tournaments: save + list, no live engine. Shown after the countdown.
+  const submitExternalTournament = async () => {
+    if (!form) return;
+    try {
+      await hub.saveSettings(toPatch(form));
+      savedSnapshotRef.current = JSON.stringify(form);
+      Alert.alert("Submitted", "Your tournament is now listed on Billiards.");
+    } catch {
+      Alert.alert("Error", "Failed to submit the tournament. Please try again.");
+    }
+  };
+  // Tick the cancellable submit countdown; fire the submit at 0.
+  useEffect(() => {
+    if (submitCountdown === null) return;
+    if (submitCountdown <= 0) {
+      setSubmitCountdown(null);
+      submitExternalTournament();
+      return;
+    }
+    const t = setTimeout(
+      () => setSubmitCountdown((n) => (n === null ? null : n - 1)),
+      1000,
+    );
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitCountdown]);
+
   const handleStartRegistration = () => {
     Alert.alert(
       "Start Registration",
@@ -2775,7 +2804,7 @@ export default function ManageTournamentScreen() {
               />
             </View>
             <View style={styles.field}>
-              <FieldLabel label="Format *" />
+              <FieldLabel label="Tournament Format *" />
               <Dropdown
                 placeholder="Select format"
                 options={TOURNAMENT_FORMATS}
@@ -2801,6 +2830,11 @@ export default function ManageTournamentScreen() {
             />
             <Text allowFontScaling={false} style={styles.hint}>
               Players tap &quot;View Bracket&quot; on the tournament to open this link.
+            </Text>
+            <Text allowFontScaling={false} style={styles.hint}>
+              Tip: link your bracket-software profile/page rather than a single
+              bracket — that way it always shows your latest event, and you don&apos;t
+              have to wait for a per-tournament link to generate.
             </Text>
           </Section>
 
@@ -2841,9 +2875,47 @@ export default function ManageTournamentScreen() {
               keyboardType="decimal-pad"
               accessoryId={KB_DONE}
             />
+            <View style={styles.sidePotHeader}>
+              <FieldLabel label="Side Pots" />
+              <TouchableOpacity style={styles.addRowBtnSm} onPress={addSidePot}>
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                  + Add
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {form.sidePots.map((pot, i) => (
+              <View key={i} style={styles.sidePotRow}>
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.input, styles.sidePotName]}
+                  value={pot.name}
+                  onChangeText={(v) => updateSidePot(i, "name", v)}
+                  placeholder="Name"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.input, styles.sidePotAmount]}
+                  value={pot.amount}
+                  onChangeText={(v) => updateSidePot(i, "amount", v)}
+                  placeholder="$"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="decimal-pad"
+                  inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
+                />
+                <TouchableOpacity
+                  style={styles.groupRemove}
+                  onPress={() => removeSidePot(i)}
+                >
+                  <Text allowFontScaling={false} style={styles.groupRemoveText}>
+                    {"✕"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))}
           </Section>
 
-          <Section title="Venue">
+          <Section title="My Venues">
             {extVenue ? (
               <View style={styles.readOnlyCard}>
                 <Text allowFontScaling={false} style={styles.readOnlyName}>
@@ -4454,6 +4526,31 @@ export default function ManageTournamentScreen() {
         addedPlayerIds={addedPlayerIds}
       />
 
+      {/* External submit countdown — cancellable before it lists */}
+      <Modal visible={submitCountdown !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text allowFontScaling={false} style={styles.modalTitle}>
+              Submitting Tournament…
+            </Text>
+            <Text allowFontScaling={false} style={styles.countdownNum}>
+              {submitCountdown}
+            </Text>
+            <Text allowFontScaling={false} style={styles.modalHint}>
+              Listing your tournament on Billiards. Tap cancel to make changes.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalButtonCancel}
+              onPress={() => setSubmitCountdown(null)}
+            >
+              <Text allowFontScaling={false} style={styles.modalButtonCancelText}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add Fee modal (Settings → Fees Deducted From Entry) */}
       {feeModalVisible && (
         <Modal
@@ -4830,11 +4927,15 @@ export default function ManageTournamentScreen() {
           <View style={[styles.saveRow, styles.settingsFooterInner]}>
             <TouchableOpacity
               style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
-              onPress={handleSave}
+              onPress={isExternal ? () => setSubmitCountdown(5) : handleSave}
               disabled={hub.isSaving}
             >
               <Text allowFontScaling={false} style={styles.saveBtnText}>
-                {hub.isSaving ? "Saving..." : "Save Settings"}
+                {isExternal
+                  ? "Submit Tournament"
+                  : hub.isSaving
+                    ? "Saving..."
+                    : "Save Settings"}
               </Text>
             </TouchableOpacity>
             {!isExternal && (
@@ -6308,6 +6409,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
     marginBottom: webSc(SPACING.md),
+  },
+  countdownNum: {
+    fontSize: webMs(48),
+    fontWeight: "900",
+    color: COLORS.primary,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
   },
   modalHint: {
     fontSize: webMs(FONT_SIZES.xs),
