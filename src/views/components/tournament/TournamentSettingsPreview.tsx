@@ -3,20 +3,25 @@
 // hub Settings form (web two-column event builder). Pure over the live form
 // values, so it updates in real time as the TD types.
 
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { Tournament } from "../../../models/types/tournament.types";
 import { GAME_TYPE_MAP } from "../../../utils/game-type.utils";
 import { formatDate, formatTime } from "../../../utils/formatters";
+import { getTournamentImageUrl } from "../../../utils/tournament-helpers";
 
 interface VenueLike {
   venue?: string | null;
+  address?: string | null;
   city?: string | null;
   state?: string | null;
+  zip_code?: string | null;
 }
 interface PreviewForm {
   name: string;
+  description: string;
   gameType: string;
   tournamentFormat: string;
   tournamentDate: string;
@@ -90,14 +95,13 @@ export const TournamentSettingsPreview = ({
   const gameLabel = form.gameType
     ? GAME_TYPE_MAP[form.gameType] ?? prettify(form.gameType)
     : "";
+  const imageUrl = form.gameType
+    ? getTournamentImageUrl({ game_type: form.gameType } as Tournament)
+    : null;
   const dateStr = form.tournamentDate ? formatDate(form.tournamentDate) : "";
   const timeStr = form.startTime ? formatTime(form.startTime) : "";
   const dateTime = [dateStr, timeStr].filter(Boolean).join(" · ");
-  const venueStr = venue?.venue
-    ? [venue.venue, [venue.city, venue.state].filter(Boolean).join(", ")]
-        .filter(Boolean)
-        .join(" — ")
-    : "";
+  const cityState = [venue?.city, venue?.state].filter(Boolean).join(", ");
   const entry = money(form.entryFee);
   const added = money(form.addedMoney);
   const fargo = form.openTournament
@@ -112,6 +116,20 @@ export const TournamentSettingsPreview = ({
       <Text allowFontScaling={false} style={styles.previewLabel}>
         LIVE PREVIEW
       </Text>
+
+      {imageUrl ? (
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.headerImg}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.headerImgPlaceholder}>
+          <Text allowFontScaling={false} style={styles.headerImgEmoji}>
+            🎱
+          </Text>
+        </View>
+      )}
 
       <View style={styles.badges}>
         {!!gameLabel && (
@@ -148,10 +166,37 @@ export const TournamentSettingsPreview = ({
         {form.name.trim() || "Untitled Tournament"}
       </Text>
 
+      {!!form.description.trim() && (
+        <Text allowFontScaling={false} style={styles.desc} numberOfLines={4}>
+          {form.description.trim()}
+        </Text>
+      )}
+
       <View style={styles.divider} />
 
       <Row label="When" value={dateTime} />
-      <Row label="Where" value={venueStr} />
+
+      {venue?.venue ? (
+        <View style={styles.venueBlock}>
+          <Text allowFontScaling={false} style={styles.venueLabel}>
+            Venue
+          </Text>
+          <Text allowFontScaling={false} style={styles.venueName} numberOfLines={1}>
+            {venue.venue}
+          </Text>
+          {!!venue.address && (
+            <Text allowFontScaling={false} style={styles.venueSub} numberOfLines={1}>
+              {venue.address}
+            </Text>
+          )}
+          {!!cityState && (
+            <Text allowFontScaling={false} style={styles.venueSub} numberOfLines={1}>
+              {cityState} {venue.zip_code ?? ""}
+            </Text>
+          )}
+        </View>
+      ) : null}
+
       <Row label="Race" value={raceSummary(form)} />
       <Row label="Entry Fee" value={entry || "Free"} />
       <Row label="Added Money" value={added ? `+ ${added}` : ""} />
@@ -204,6 +249,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: SPACING.sm,
   },
+  headerImg: { width: "100%", height: 130, borderRadius: RADIUS.md, marginBottom: SPACING.sm },
+  headerImgPlaceholder: {
+    width: "100%",
+    height: 130,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerImgEmoji: { fontSize: 40 },
+  desc: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: ms(FONT_SIZES.sm) * 1.5, marginBottom: SPACING.xs },
+  venueBlock: { paddingVertical: 5 },
+  venueLabel: { fontSize: ms(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "600", marginBottom: 2 },
+  venueName: { fontSize: ms(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
+  venueSub: { fontSize: ms(FONT_SIZES.xs), color: COLORS.textSecondary },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.sm },
   gameBadge: { backgroundColor: COLORS.primary, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4 },
   gameBadgeText: { color: "#fff", fontSize: ms(FONT_SIZES.xs), fontWeight: "700" },
