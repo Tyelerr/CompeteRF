@@ -79,7 +79,9 @@ export const useBarTournamentManager = () => {
       if (!tournamentData) { setTournaments([]); return; }
 
       const tournamentsWithStats: BarTournamentWithStats[] = await Promise.all(
-        tournamentData.map(async (tournament: any) => {
+        tournamentData
+          .filter((t: any) => !t.is_draft) // hide unsaved drafts
+          .map(async (tournament: any) => {
           const { count: viewsCount } = await supabase
             .from("tournament_analytics")
             .select("id", { count: "exact", head: true })
@@ -231,6 +233,7 @@ export const useBarTournamentManager = () => {
         is_recurring: false,
         status: "active",
         bracket_source: source,
+        is_draft: true,
       });
 
       await loadTournaments();

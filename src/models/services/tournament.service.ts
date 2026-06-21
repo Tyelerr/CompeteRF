@@ -25,6 +25,7 @@ export const tournamentService = {
       .select("*, venues(*), profiles!director_id(*)", { count: "exact" })
       .eq("status", "active")
       .eq("is_hidden", false)
+      .eq("is_draft", false)
       .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);

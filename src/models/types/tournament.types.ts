@@ -40,6 +40,7 @@ export interface Tournament {
   thumbnail?: string;
   is_recurring: boolean;
   is_hidden?: boolean;         // App Store compliance: soft-hide
+  is_draft?: boolean;          // brand-new, unsaved tournament — hidden until first save
   // Chip Tournament data
   chip_ranges?: ChipRange[];
   status: TournamentStatus;

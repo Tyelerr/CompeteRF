@@ -510,6 +510,8 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   equipment: f.equipment.trim() || undefined,
   phone_number: f.phoneNumber.trim() || undefined,
   external_bracket_url: f.externalBracketUrl.trim() || undefined,
+  // Any save commits the tournament — it's no longer an unsaved draft.
+  is_draft: false,
   side_pots: f.sidePots
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),

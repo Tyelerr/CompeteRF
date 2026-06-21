@@ -129,7 +129,9 @@ export const useTournamentDirectorManager = () => {
       // Get stats for each tournament
       const tournamentsWithStats: TournamentDirectorWithStats[] =
         await Promise.all(
-          tournamentData.map(async (tournament: any) => {
+          tournamentData
+            .filter((t: any) => !t.is_draft) // hide unsaved drafts
+            .map(async (tournament: any) => {
             // Get view count
             const { count: viewsCount } = await supabase
               .from("tournament_analytics")
@@ -383,6 +385,7 @@ export const useTournamentDirectorManager = () => {
         is_recurring: false,
         status: "active",
         bracket_source: source,
+        is_draft: true,
       });
 
       await loadTournaments({ silent: true });
