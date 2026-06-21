@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
@@ -110,6 +111,7 @@ import {
   useVenuesByOwner,
 } from "../../../../src/viewmodels/hooks/use.venues";
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
+import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
 import {
   ManagePhase,
   useManageTournament,
@@ -1523,6 +1525,8 @@ export default function ManageTournamentScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
   // External "Submit Tournament" cancellable countdown (null = not submitting).
   const [submitCountdown, setSubmitCountdown] = useState<number | null>(null);
+  // Wide web → two-column event-builder layout (form + sticky live preview).
+  const { width: winW } = useWindowDimensions();
   // Top-level lifecycle phase currently shown (Setup / Live / Results).
   const [selectedPhase, setSelectedPhase] = useState<PhaseKey>("setup");
   const lastGroupRef = useRef<PhaseKey | null>(null);
@@ -5159,6 +5163,26 @@ export default function ManageTournamentScreen() {
         // These own their scrolling and fill the available height, so they live
         // outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
+      ) : isWeb && winW >= 980 && activeTab === "settings" && form ? (
+        // Wide web: event-builder two-column — scrollable form + sticky preview.
+        <View style={styles.builderRow}>
+          <ScrollView
+            style={styles.builderForm}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {renderSettings()}
+          </ScrollView>
+          <View style={styles.builderPreview}>
+            <TournamentSettingsPreview
+              form={form}
+              venue={hub.tournament?.venues}
+              tablesCount={hub.tables.length}
+              isExternal={isExternal}
+            />
+          </View>
+        </View>
       ) : (
         <ScrollView
           style={styles.scrollFlex}
@@ -5475,6 +5499,22 @@ const styles = StyleSheet.create({
   },
   contentWeb: { alignItems: "stretch" },
   scrollFlex: { flex: 1 },
+  // Web event-builder two-column: scrollable form (left) + sticky preview (right).
+  builderRow: {
+    flex: 1,
+    flexDirection: "row",
+    width: "100%" as any,
+    maxWidth: 1180,
+    alignSelf: "center" as any,
+    gap: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+  },
+  builderForm: { flex: 1 },
+  builderPreview: {
+    width: 360,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.lg,
+  },
 
   // Sections / fields
   section: {
