@@ -649,12 +649,19 @@ const LabeledInput = ({
   accessoryId?: string; // iOS keyboard Done bar
 }) => (
   <View style={styles.field}>
-    <Text
-      allowFontScaling={false}
-      style={[styles.fieldLabel, disabled && styles.labelDisabled]}
-    >
-      {label}
-    </Text>
+    <View style={styles.fieldLabelRow}>
+      <Text
+        allowFontScaling={false}
+        style={[styles.fieldLabel, disabled && styles.labelDisabled]}
+      >
+        {label}
+      </Text>
+      {!disabled && !!value.trim() && (
+        <Text allowFontScaling={false} style={styles.fieldCheck}>
+          {"✓"}
+        </Text>
+      )}
+    </View>
     <TextInput
       allowFontScaling={false}
       editable={!disabled}
@@ -681,10 +688,23 @@ const LabeledInput = ({
   </View>
 );
 
-const FieldLabel = ({ label }: { label: string }) => (
-  <Text allowFontScaling={false} style={styles.fieldLabel}>
-    {label}
-  </Text>
+const FieldLabel = ({
+  label,
+  complete,
+}: {
+  label: string;
+  complete?: boolean;
+}) => (
+  <View style={styles.fieldLabelRow}>
+    <Text allowFontScaling={false} style={styles.fieldLabel}>
+      {label}
+    </Text>
+    {complete && (
+      <Text allowFontScaling={false} style={styles.fieldCheck}>
+        {"✓"}
+      </Text>
+    )}
+  </View>
 );
 
 // Full-width +/- stepper. Center reads e.g. "Race to 7". Press-and-hold on a
@@ -3124,7 +3144,7 @@ export default function ManageTournamentScreen() {
 
           <Section title="Schedule">
             <View style={styles.field}>
-              <FieldLabel label="Date *" />
+              <FieldLabel label="Date *" complete={!!form.tournamentDate} />
               <DatePicker
                 value={form.tournamentDate}
                 onChange={(v) => patchForm({ tournamentDate: v })}
@@ -3832,7 +3852,7 @@ export default function ManageTournamentScreen() {
 
         <Section title="Schedule">
           <View style={styles.field}>
-            <FieldLabel label="Date *" />
+            <FieldLabel label="Date *" complete={!!form.tournamentDate} />
             <DatePicker
               value={form.tournamentDate}
               onChange={(v) => patchForm({ tournamentDate: v })}
@@ -5596,6 +5616,17 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
     fontWeight: "500",
+    marginBottom: webSc(SPACING.xs),
+  },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+  },
+  fieldCheck: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.success,
+    fontWeight: "700",
     marginBottom: webSc(SPACING.xs),
   },
   input: {

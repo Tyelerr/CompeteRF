@@ -69,6 +69,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
         {/* @ts-ignore */}
         <TouchableOpacity ref={anchorRef} style={[wStyles.selector, compact && wStyles.selectorCompact, isOpen && wStyles.selectorOpen, !isOpen && hovered && !disabled && wStyles.selectorHovered, error && wStyles.selectorError, disabled && wStyles.selectorDisabled, { transition: "border-color 0.18s ease, box-shadow 0.18s ease", cursor: disabled ? "not-allowed" : "pointer" } as any]} onPress={handlePress} activeOpacity={disabled ? 1 : 0.7} onMouseEnter={() => !disabled && setHovered(true)} onMouseLeave={() => setHovered(false)}>
           <Text allowFontScaling={false} style={[wStyles.selectorText, compact && wStyles.selectorTextCompact, !selectedOption && wStyles.placeholder, disabled && wStyles.textDisabled, isOpen && wStyles.selectorTextOpen]} numberOfLines={1}>{selectedOption?.label || placeholder}</Text>
+          {selectedOption && !disabled && <Text allowFontScaling={false} style={wStyles.check}>{"\u2713"}</Text>}
           <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "\u25B2" : "\u25BC"}</Text>
         </TouchableOpacity>
         {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
@@ -91,6 +92,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
       {label && <Text allowFontScaling={false} style={styles.label}>{label}</Text>}
       <TouchableOpacity ref={selectorRef as any} style={[styles.selector, error && styles.selectorError, disabled && styles.selectorDisabled]} onPress={handleMobilePress} activeOpacity={disabled ? 1 : 0.7}>
         <Text allowFontScaling={false} style={[styles.selectorText, !selectedOption && styles.placeholder, disabled && styles.textDisabled]} numberOfLines={1} ellipsizeMode="tail">{selectedOption?.label || placeholder}</Text>
+        {selectedOption && !disabled && <Text allowFontScaling={false} style={styles.check}>{"\u2713"}</Text>}
         <Text allowFontScaling={false} style={[styles.arrow, disabled && styles.textDisabled]}>{"\u25BC"}</Text>
       </TouchableOpacity>
       {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
@@ -129,6 +131,7 @@ const styles = StyleSheet.create({
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: 4 },
+  check: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "700", marginLeft: 4 },
   error: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, marginTop: wxSc(SPACING.xs) },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
   dropdownWrapper: {},
@@ -159,4 +162,5 @@ const wStyles = StyleSheet.create({
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4 },
   arrowOpen: { color: COLORS.primary },
+  check: { fontSize: 13, color: COLORS.success, fontWeight: "700", marginLeft: 4 },
 });
