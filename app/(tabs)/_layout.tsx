@@ -11,7 +11,7 @@ import TabBarIcon from "../../src/views/components/common/tabbaricon";
 function WebNavBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { canSubmitTournaments, profile } = useAuthContext();
+  const { profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
   const { width } = useWindowDimensions();
   const isMobileWeb = width < 768;
@@ -20,7 +20,6 @@ function WebNavBar() {
   const tabs = [
     { name: "index", label: "\uD83C\uDFE0 Home", path: "/" },
     { name: "billiards", label: "\uD83C\uDFB1 Tournaments", path: "/billiards" },
-    ...(canSubmitTournaments ? [{ name: "submit", label: "\u2795 Submit", path: "/submit" }] : []),
     ...(hasAdminAccess ? [{ name: "admin", label: "\u2699\uFE0F Admin", path: "/admin" }] : []),
     { name: "shop", label: "\uD83C\uDF81 Giveaways", path: "/shop" },
     { name: "profile", label: "\uD83D\uDC64 Profile", path: "/profile" },
@@ -173,7 +172,7 @@ const styles = StyleSheet.create({
 });
 
 export default function TabLayout() {
-  const { canSubmitTournaments, profile } = useAuthContext();
+  const { profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
   const insets = useSafeAreaInsets();
 
@@ -185,7 +184,7 @@ export default function TabLayout() {
       >
         <Tabs.Screen name="index" />
         <Tabs.Screen name="billiards" />
-        <Tabs.Screen name="submit" options={{ href: canSubmitTournaments ? undefined : null }} />
+        <Tabs.Screen name="submit" options={{ href: null }} />
         <Tabs.Screen name="admin" options={{ href: hasAdminAccess ? undefined : null }} />
         <Tabs.Screen name="shop" />
         <Tabs.Screen name="profile" />
@@ -226,7 +225,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFE0"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="billiards" options={{ title: "Billiards", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFB1"} color={color} focused={focused} /> }} />
-      <Tabs.Screen name="submit" options={{ title: "Submit", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2795"} color={color} focused={focused} />, href: canSubmitTournaments ? undefined : null }} />
+      <Tabs.Screen name="submit" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ title: "Admin", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />, href: hasAdminAccess ? undefined : null }} />
       <Tabs.Screen name="shop" options={{ title: "Giveaways", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDF81"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83D\uDC64"} color={color} focused={focused} /> }} />
