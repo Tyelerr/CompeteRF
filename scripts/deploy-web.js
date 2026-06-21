@@ -81,6 +81,20 @@ function remapNodeModulesAssets(distDir) {
 
 remapNodeModulesAssets(distPath);
 
+// SPA fallback: Expo's web export is a single-page app, so a direct hit or
+// refresh on a client route (e.g. /billiards) would 404 on Vercel. Rewrite
+// unknown paths to index.html. Real files (assets, *.html) match the filesystem
+// first and are served as-is, so only app routes fall through to the shell.
+function writeSpaConfig(distDir) {
+  const cfg = { rewrites: [{ source: "/(.*)", destination: "/index.html" }] };
+  fs.writeFileSync(
+    path.join(distDir, "vercel.json"),
+    JSON.stringify(cfg, null, 2),
+  );
+  console.log("[web:publish] Wrote SPA rewrite (vercel.json) for client routing.");
+}
+writeSpaConfig(distPath);
+
 console.log(
   `[web:publish] Deploying dist/ to Vercel project "${link.projectName || link.projectId}" (production)...`,
 );
