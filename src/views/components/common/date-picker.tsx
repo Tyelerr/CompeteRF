@@ -42,6 +42,10 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
     return (
       <View style={wStyles.wrap}>
         <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)}
+          onClick={(e) => {
+            const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+            try { el.showPicker?.(); } catch { /* not user-activated */ }
+          }}
           style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", backgroundColor: COLORS.surface, border: "1px solid " + COLORS.border, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: value ? COLORS.text : COLORS.textMuted, outline: "none", cursor: "pointer", colorScheme: "dark" } as React.CSSProperties}
         />
       </View>

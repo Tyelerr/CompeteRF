@@ -339,6 +339,25 @@ export const useTournamentDirectorManager = () => {
     try {
       setCreating(true);
 
+      // Reuse this director's existing unsaved draft instead of inserting a new
+      // row every time. Backing out of a draft and starting over should NOT burn
+      // a new tournament id — only an actually-saved tournament consumes one.
+      const { data: existingDraft } = await supabase
+        .from("tournaments")
+        .select("id")
+        .eq("director_id", profile.id_auto)
+        .eq("is_draft", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingDraft?.id) {
+        await supabase
+          .from("tournaments")
+          .update({ bracket_source: source })
+          .eq("id", existingDraft.id);
+        return existingDraft.id;
+      }
+
       // A tournament needs a venue. Use the director's most recently assigned,
       // non-archived venue as the default (changeable on the Edit screen).
       const { data: venueRow } = await supabase

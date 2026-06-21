@@ -189,6 +189,24 @@ export const useBarTournamentManager = () => {
     try {
       setCreating(true);
 
+      // Reuse this owner's existing unsaved draft instead of inserting a new row
+      // every time — backing out of a draft shouldn't burn a new tournament id.
+      const { data: existingDraft } = await supabase
+        .from("tournaments")
+        .select("id")
+        .eq("director_id", profile.id_auto)
+        .eq("is_draft", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingDraft?.id) {
+        await supabase
+          .from("tournaments")
+          .update({ bracket_source: source })
+          .eq("id", existingDraft.id);
+        return existingDraft.id;
+      }
+
       // Use one of the owner's (non-archived) venues as the default.
       const { data: venueRow } = await supabase
         .from("venue_owners")

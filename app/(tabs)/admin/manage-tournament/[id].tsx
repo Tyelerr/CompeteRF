@@ -5222,16 +5222,16 @@ export default function ManageTournamentScreen() {
         // outside the page ScrollView.
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : isWeb && winW >= 980 && activeTab === "settings" && form ? (
-        // Wide web: event-builder two-column — scrollable form + sticky preview.
-        <View style={styles.builderRow}>
-          <ScrollView
-            style={styles.builderForm}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {renderSettings()}
-          </ScrollView>
+        // Wide web: event-builder two-column. The whole page scrolls (so you can
+        // scroll from anywhere, including over the preview) and the preview is
+        // sticky so it stays in view as the form scrolls.
+        <ScrollView
+          style={styles.scrollFlex}
+          contentContainerStyle={styles.builderRow}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.builderForm}>{renderSettings()}</View>
           <View style={styles.builderPreview}>
             <TournamentSettingsPreview
               form={form}
@@ -5240,7 +5240,7 @@ export default function ManageTournamentScreen() {
               isExternal={isExternal}
             />
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.scrollFlex}
@@ -5557,21 +5557,23 @@ const styles = StyleSheet.create({
   },
   contentWeb: { alignItems: "stretch" },
   scrollFlex: { flex: 1 },
-  // Web event-builder two-column: scrollable form (left) + sticky preview (right).
+  // Web event-builder two-column: the page scrolls; the preview is sticky.
   builderRow: {
-    flex: 1,
     flexDirection: "row",
+    alignItems: "flex-start",
     width: "100%" as any,
     maxWidth: 1180,
     alignSelf: "center" as any,
     gap: SPACING.lg,
-    paddingHorizontal: SPACING.md,
+    padding: SPACING.md,
+    paddingBottom: SPACING.xl * 2,
   },
   builderForm: { flex: 1 },
   builderPreview: {
     width: 360,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.lg,
+    position: "sticky" as any,
+    top: SPACING.md,
+    alignSelf: "flex-start",
   },
 
   // Sections / fields
