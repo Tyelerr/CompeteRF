@@ -3070,11 +3070,6 @@ export default function ManageTournamentScreen() {
             <Text allowFontScaling={false} style={styles.hint}>
               Players tap &quot;View Bracket&quot; on the tournament to open this link.
             </Text>
-            <Text allowFontScaling={false} style={styles.hint}>
-              Tip: link your bracket-software profile/page rather than a single
-              bracket — that way it always shows your latest event, and you don&apos;t
-              have to wait for a per-tournament link to generate.
-            </Text>
           </Section>
 
           {renderRaceSection()}
@@ -3200,6 +3195,12 @@ export default function ManageTournamentScreen() {
               />
             </View>
           </Section>
+
+          <Text allowFontScaling={false} style={styles.hintAmber}>
+            Tip: link your bracket-software profile/page rather than a single
+            bracket — that way it always shows your latest event, and you
+            don&apos;t have to wait for a per-tournament link to generate.
+          </Text>
         </View>
       );
     }
@@ -5567,6 +5568,13 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginTop: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.xs),
+  },
+  hintAmber: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    fontStyle: "italic",
+    marginTop: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.sm),
   },
   lockedPotsRow: {
     flexDirection: "row",
