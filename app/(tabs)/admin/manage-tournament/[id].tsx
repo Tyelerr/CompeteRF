@@ -5138,14 +5138,17 @@ export default function ManageTournamentScreen() {
         finishing={hub.isMutatingLive}
       />
 
-      {/* Lifecycle navigation — Setup / Live / Results phase dropdowns */}
-      <PhaseNav
-        phases={navPhases}
-        selectedKey={selectedPhase}
-        activePageKey={activeTab}
-        onSelectPage={handleSelectPage}
-        onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
-      />
+      {/* Lifecycle navigation — Setup / Live / Results phase dropdowns. External
+          tournaments have only the details page, so no phase nav is shown. */}
+      {!isExternal && (
+        <PhaseNav
+          phases={navPhases}
+          selectedKey={selectedPhase}
+          activePageKey={activeTab}
+          onSelectPage={handleSelectPage}
+          onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
+        />
+      )}
 
       {activeTab === "matches" ||
       activeTab === "queue" ||
