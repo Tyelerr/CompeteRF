@@ -190,7 +190,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "players", label: "Players" },
       { tab: "tables", label: "Tables" },
       { tab: "prizepool", label: "Prize Pool" },
-      { tab: "bracket", label: "Draw Bracket", lead: "⚡", divider: true },
+      { tab: "bracket", label: "Generate Bracket", lead: "⚡", divider: true },
     ],
   },
   live: {
@@ -2367,11 +2367,11 @@ export default function ManageTournamentScreen() {
       return;
     }
     Alert.alert(
-      "Draw Bracket",
+      "Generate Bracket",
       "This closes registration and locks the player field and prize pool. Continue?",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Draw Bracket", onPress: () => handleDrawBracket(reason) },
+        { text: "Generate Bracket", onPress: () => handleDrawBracket(reason) },
       ],
     );
   };
@@ -4276,6 +4276,23 @@ export default function ManageTournamentScreen() {
     );
   }
 
+  // "Start Registration" should reflect the LIVE form, not just the last-saved
+  // tournament — the button saves first, so a fully-filled form can open
+  // registration without a separate Save + refresh. Venue is set at creation
+  // (not in this form), so it comes from the loaded tournament.
+  const formRequiredComplete =
+    !!form &&
+    !!form.name.trim() &&
+    !!form.gameType &&
+    !!form.tournamentFormat &&
+    !!form.tournamentDate &&
+    !!form.startTime &&
+    !!hub.tournament?.venue_id;
+  const regNotYetOpen =
+    hub.phase === "setup_incomplete" || hub.phase === "ready_to_open";
+  const canStartRegistration =
+    formRequiredComplete && regNotYetOpen && !hub.isMutatingLive;
+
   return (
     <View style={styles.container}>
       {Platform.OS === "ios" && (
@@ -4666,7 +4683,7 @@ export default function ManageTournamentScreen() {
       {/* Fixed footer: Save Settings / Start Registration */}
       {activeTab === "settings" && form && !settingsLocked && (
         <View style={styles.settingsFooter}>
-          {hub.phase === "setup_incomplete" && (
+          {!formRequiredComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
               Complete the required fields (name, game, format, venue, date,
               time) to start registration.
@@ -4683,13 +4700,9 @@ export default function ManageTournamentScreen() {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.startBtn,
-                (hub.phase !== "ready_to_open" || hub.isMutatingLive) &&
-                  styles.btnDisabled,
-              ]}
+              style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
               onPress={handleStartRegistration}
-              disabled={hub.phase !== "ready_to_open" || hub.isMutatingLive}
+              disabled={!canStartRegistration}
             >
               <Text allowFontScaling={false} style={styles.startBtnText}>
                 Start Registration
@@ -4739,18 +4752,24 @@ export default function ManageTournamentScreen() {
                 <TouchableOpacity
                   style={[
                     styles.startBtn,
-                    (hub.isDrawing || !prizeComplete) && styles.btnDisabled,
+                    hub.isDrawing && styles.startBtnRunning,
+                    !hub.isDrawing && !prizeComplete && styles.btnDisabled,
                   ]}
                   onPress={handleDrawPress}
                   disabled={hub.isDrawing || !prizeComplete}
                 >
-                  <Text allowFontScaling={false} style={styles.startBtnText}>
-                    {hub.isDrawing
-                      ? "Drawing..."
-                      : hub.bracket
-                        ? "Redraw Bracket"
-                        : "Draw Bracket"}
-                  </Text>
+                  {hub.isDrawing ? (
+                    <View style={styles.btnRow}>
+                      <ActivityIndicator size="small" color={COLORS.white} />
+                      <Text allowFontScaling={false} style={styles.startBtnText}>
+                        Generating…
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text allowFontScaling={false} style={styles.startBtnText}>
+                      {hub.bracket ? "Regenerate Bracket" : "Generate Bracket"}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </>
@@ -5327,6 +5346,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   btnDisabled: { opacity: 0.5 },
+  startBtnRunning: { backgroundColor: COLORS.warning },
+  btnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+  },
   startHint: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
