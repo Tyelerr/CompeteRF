@@ -28,6 +28,7 @@ interface PreviewForm {
   startTime: string;
   entryFee: string;
   addedMoney: string;
+  tableSize: string;
   maxFargo: string;
   openTournament: boolean;
   isRecurring: boolean;
@@ -69,13 +70,25 @@ const money = (v: string): string => {
   return isNaN(n) || n === 0 ? "" : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
 };
 
-const Row = ({ label, value }: { label: string; value: string }) =>
+const Row = ({
+  label,
+  value,
+  valueStyle,
+}: {
+  label: string;
+  value: string;
+  valueStyle?: object;
+}) =>
   value ? (
     <View style={styles.row}>
       <Text allowFontScaling={false} style={styles.rowLabel}>
         {label}
       </Text>
-      <Text allowFontScaling={false} style={styles.rowValue} numberOfLines={2}>
+      <Text
+        allowFontScaling={false}
+        style={[styles.rowValue, valueStyle]}
+        numberOfLines={2}
+      >
         {value}
       </Text>
     </View>
@@ -194,12 +207,21 @@ export const TournamentSettingsPreview = ({
               {cityState} {venue.zip_code ?? ""}
             </Text>
           )}
+          {!!form.tableSize && (
+            <Text allowFontScaling={false} style={styles.venueSub} numberOfLines={1}>
+              Table size: {form.tableSize}
+            </Text>
+          )}
         </View>
       ) : null}
 
       <Row label="Race" value={raceSummary(form)} />
-      <Row label="Entry Fee" value={entry || "Free"} />
-      <Row label="Added Money" value={added ? `+ ${added}` : ""} />
+      <Row
+        label="Entry Fee"
+        value={entry || "Free"}
+        valueStyle={styles.greenValue}
+      />
+      <Row label="Added Money" value={added ? `+ ${added}` : ""} valueStyle={styles.greenValue} />
       <Row label="Fargo" value={fargo} />
       {!isExternal && (
         <Row
@@ -245,10 +267,11 @@ const styles = StyleSheet.create({
   previewLabel: {
     fontSize: ms(FONT_SIZES.xs),
     fontWeight: "800",
-    color: COLORS.textMuted,
+    color: COLORS.primary,
     letterSpacing: 1.5,
     marginBottom: SPACING.sm,
   },
+  greenValue: { color: COLORS.success },
   headerImg: { width: "100%", height: 130, borderRadius: RADIUS.md, marginBottom: SPACING.sm },
   headerImgPlaceholder: {
     width: "100%",
