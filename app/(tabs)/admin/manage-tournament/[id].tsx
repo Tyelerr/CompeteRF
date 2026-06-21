@@ -329,6 +329,7 @@ interface SettingsForm {
   tableSize: string;
   equipment: string;
   phoneNumber: string;
+  contactName: string;
   externalBracketUrl: string;
   venueId: number | null;
   recurrenceType: string;
@@ -428,6 +429,7 @@ const toForm = (t: Tournament): SettingsForm => {
     tableSize: t.table_size ?? "",
     equipment: t.equipment ?? "",
     phoneNumber: t.phone_number ?? "",
+    contactName: t.contact_name ?? "",
     externalBracketUrl: t.external_bracket_url ?? "",
     venueId: t.venue_id ?? null,
     recurrenceType: t.recurrence_type ?? "",
@@ -521,6 +523,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   table_size: (f.tableSize || undefined) as TableSize | undefined,
   equipment: f.equipment.trim() || undefined,
   phone_number: f.phoneNumber.trim() || undefined,
+  contact_name: f.contactName.trim() || undefined,
   external_bracket_url: f.externalBracketUrl.trim() || undefined,
   venue_id: f.venueId ?? undefined,
   recurrence_type: f.isRecurring ? f.recurrenceType.trim() || undefined : undefined,
@@ -2183,6 +2186,26 @@ export default function ManageTournamentScreen() {
       alive = false;
     };
   }, [selectedVenueId]);
+
+  // Contact name: defaults to the director's own name (from their profile) with a
+  // custom option. contactMode tracks which the dropdown is on.
+  const tdFullName =
+    [tdProfile?.first_name, tdProfile?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    tdProfile?.name ||
+    "";
+  const [contactMode, setContactMode] = useState<"profile" | "custom">("profile");
+  const contactSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!form || contactSyncedRef.current) return;
+    contactSyncedRef.current = true;
+    setContactMode(
+      form.contactName && form.contactName !== tdFullName ? "custom" : "profile",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
   const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
 
   // ---- Settings templates (save/apply the whole settings form, max 5) ----
@@ -2823,6 +2846,39 @@ export default function ManageTournamentScreen() {
   }, [hub.registrations, playerSearch, statusFilter]);
 
   // ---- Tab renderers ------------------------------------------------------
+  // Contact name picker: the director's profile name or a custom one. Shared by
+  // the Compete (Venue) and external (My Venues) forms.
+  const renderContactName = () => {
+    if (!form) return null;
+    return (
+      <>
+        <View style={styles.field}>
+          <FieldLabel label="Contact Name" />
+          <Dropdown
+            placeholder="Select contact name"
+            options={[
+              { label: tdFullName || "My name", value: "profile" },
+              { label: "Custom / Other", value: "custom" },
+            ]}
+            value={contactMode}
+            onSelect={(v) => {
+              setContactMode(v as "profile" | "custom");
+              patchForm({ contactName: v === "profile" ? tdFullName : "" });
+            }}
+          />
+        </View>
+        {contactMode === "custom" && (
+          <LabeledInput
+            label="Custom Contact Name"
+            value={form.contactName}
+            onChangeText={(v) => patchForm({ contactName: v })}
+            placeholder="Enter contact name"
+          />
+        )}
+      </>
+    );
+  };
+
   // Shared race configuration (Fixed / A-B-C Groups / Fargo Differential) so the
   // external "Other Software" form uses the identical UI as the Compete form.
   const renderRaceSection = () => {
@@ -3186,6 +3242,7 @@ export default function ManageTournamentScreen() {
                 onSelect={(v) => patchForm({ tableSize: v })}
               />
             </View>
+            {renderContactName()}
           </Section>
 
           <Section title="External Bracket">
@@ -3848,6 +3905,7 @@ export default function ManageTournamentScreen() {
               onSelect={(v) => patchForm({ equipment: v })}
             />
           </View>
+          {renderContactName()}
           <LabeledInput
             label="Contact Phone"
             value={form.phoneNumber}

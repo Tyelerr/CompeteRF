@@ -37,6 +37,7 @@ export interface Tournament {
   calcutta: boolean;
   open_tournament: boolean;
   phone_number?: string;
+  contact_name?: string;       // public contact person (defaults to director's name)
   thumbnail?: string;
   is_recurring: boolean;
   recurrence_type?: string;    // weekly | biweekly | monthly (for recurring listings)
