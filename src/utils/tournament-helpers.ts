@@ -25,10 +25,16 @@ export function getTournamentImageUrl(
   tournament: Tournament,
 ): string | null {
   if (tournament.thumbnail) {
-    if (tournament.thumbnail.startsWith("custom:")) {
-      return tournament.thumbnail.replace("custom:", "");
+    const thumb = tournament.thumbnail;
+    if (thumb.startsWith("custom:")) {
+      return thumb.replace("custom:", "");
     }
-    const imageFile = GAME_TYPE_IMAGE_MAP[tournament.thumbnail];
+    // Bulk-imported / older tournaments store the uploaded image as a raw URL
+    // (no "custom:" prefix) — use it directly so the card matches the detail page.
+    if (/^https?:\/\//.test(thumb)) {
+      return thumb;
+    }
+    const imageFile = GAME_TYPE_IMAGE_MAP[thumb];
     if (imageFile) {
       return `${TOURNAMENT_IMAGE_BASE_URL}/${imageFile}`;
     }

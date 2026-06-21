@@ -1,5 +1,5 @@
 ﻿import { Tabs, usePathname, useRouter } from "expo-router";
-import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState } from "react";
 import { useAuthContext } from "../../src/providers/AuthProvider";
@@ -36,8 +36,13 @@ function WebNavBar() {
     <View>
       <View style={styles.navbar}>
         <View style={styles.navInner}>
-          <TouchableOpacity onPress={() => router.push("/")}>
-            <Text style={styles.logo}>{"\u26AB"} Compete</Text>
+          <TouchableOpacity style={styles.logoRow} onPress={() => router.push("/")}>
+            <Image
+              source={require("../../assets/images/icon.png")}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
+            <Text style={styles.logo}>Compete</Text>
           </TouchableOpacity>
 
           {isMobileWeb ? (
@@ -104,6 +109,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  logoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  logoImg: { width: 30, height: 30, borderRadius: 7 },
   logo: {
     color: COLORS.text,
     fontSize: 20,

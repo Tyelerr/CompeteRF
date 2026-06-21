@@ -4,6 +4,7 @@ import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { formatCurrency, formatDate, formatTime } from "../../../utils/helpers";
+import { getTournamentImageUrl } from "../../../utils/tournament-helpers";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Badge } from "../common/badge";
 import { Button } from "../common/button";
@@ -20,9 +21,11 @@ export const TournamentDetail = ({ tournament, favoriteCount, isFavorited, onFav
   };
   const callVenue = () => { if (tournament.phone_number) Linking.openURL(`tel:${tournament.phone_number}`); };
 
+  const imageUrl = getTournamentImageUrl(tournament);
+
   return (
     <ScrollView style={styles.container}>
-      {tournament.thumbnail && <Image source={{ uri: tournament.thumbnail }} style={styles.image} />}
+      {imageUrl && <Image source={{ uri: imageUrl }} style={styles.image} />}
       <View style={styles.header}>
         <Text allowFontScaling={false} style={styles.name}>{tournament.name}</Text>
         {tournament.is_recurring && <Badge label="🔄 Recurring" variant="info" />}
