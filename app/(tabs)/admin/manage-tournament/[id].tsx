@@ -37,6 +37,7 @@ import { webMs, webSc } from "../../../../src/utils/scaling";
 import {
   EQUIPMENT_OPTIONS,
   GAME_TYPES,
+  RECURRENCE_TYPES,
   START_TIMES,
   TOURNAMENT_FORMATS,
 } from "../../../../src/utils/tournament-form-data";
@@ -104,6 +105,11 @@ import { TournamentActionsModal } from "../../../../src/views/components/tournam
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
+import {
+  useVenuesByDirector,
+  useVenuesByOwner,
+} from "../../../../src/viewmodels/hooks/use.venues";
+import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import {
   ManagePhase,
   useManageTournament,
@@ -322,6 +328,8 @@ interface SettingsForm {
   equipment: string;
   phoneNumber: string;
   externalBracketUrl: string;
+  venueId: number | null;
+  recurrenceType: string;
   raceMode: RaceMode;
   // Fixed race (numbers — driven by steppers)
   raceWinners: number; // also the single-elim "Match Race To"
@@ -419,6 +427,8 @@ const toForm = (t: Tournament): SettingsForm => {
     equipment: t.equipment ?? "",
     phoneNumber: t.phone_number ?? "",
     externalBracketUrl: t.external_bracket_url ?? "",
+    venueId: t.venue_id ?? null,
+    recurrenceType: t.recurrence_type ?? "",
     // Race is configured fresh in the hub — do NOT inherit the free-text race
     // entered on the submit page. Only a previously-saved live setting pre-fills.
     raceWinners: ls.fixedRaceWinners ?? 5,
@@ -510,6 +520,8 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   equipment: f.equipment.trim() || undefined,
   phone_number: f.phoneNumber.trim() || undefined,
   external_bracket_url: f.externalBracketUrl.trim() || undefined,
+  venue_id: f.venueId ?? undefined,
+  recurrence_type: f.isRecurring ? f.recurrenceType.trim() || undefined : undefined,
   // Any save commits the tournament — it's no longer an unsaved draft.
   is_draft: false,
   side_pots: f.sidePots
@@ -2134,6 +2146,39 @@ export default function ManageTournamentScreen() {
 
   // ---- Bracket / Draw state ----------------------------------------------
   const { profile: tdProfile } = useAuthContext();
+
+  // The current user's venues (as director and/or owner) for the "My Venues"
+  // picker, plus the table sizes configured at the selected venue.
+  const dirVenues = useVenuesByDirector(tdProfile?.id_auto);
+  const ownerVenues = useVenuesByOwner(tdProfile?.id_auto);
+  const myVenueOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    [...dirVenues.venues, ...ownerVenues.venues].forEach((v) => {
+      if (v?.id != null) map.set(v.id, v.venue);
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({
+      label: name,
+      value: String(id),
+    }));
+  }, [dirVenues.venues, ownerVenues.venues]);
+  const [venueTableSizes, setVenueTableSizes] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const selectedVenueId = form?.venueId ?? null;
+  useEffect(() => {
+    if (!selectedVenueId) {
+      setVenueTableSizes([]);
+      return;
+    }
+    let alive = true;
+    venueTableService
+      .getTableSizeOptions(selectedVenueId)
+      .then((opts) => alive && setVenueTableSizes(opts))
+      .catch(() => alive && setVenueTableSizes([]));
+    return () => {
+      alive = false;
+    };
+  }, [selectedVenueId]);
   const [bracketSizeSel, setBracketSizeSel] = useState<number | null>(null);
 
   // ---- Settings templates (save/apply the whole settings form, max 5) ----
@@ -2774,6 +2819,199 @@ export default function ManageTournamentScreen() {
   }, [hub.registrations, playerSearch, statusFilter]);
 
   // ---- Tab renderers ------------------------------------------------------
+  // Shared race configuration (Fixed / A-B-C Groups / Fargo Differential) so the
+  // external "Other Software" form uses the identical UI as the Compete form.
+  const renderRaceSection = () => {
+    if (!form) return null;
+    return (
+        <Section title="Race">
+          <View style={styles.field}>
+            <Dropdown
+              placeholder="Select race type"
+              options={RACE_MODE_OPTIONS}
+              value={form.raceMode}
+              onSelect={(v) => patchForm({ raceMode: v as RaceMode })}
+            />
+          </View>
+
+          {form.raceMode === "fixed" && (
+            <View>
+              <Stepper
+                prefix={
+                  formatHasLosersSide(form.tournamentFormat)
+                    ? "Winners race to"
+                    : "Race to"
+                }
+                value={form.raceWinners}
+                onChange={(v) => patchForm({ raceWinners: v })}
+                min={0}
+                max={50}
+              />
+              {formatHasLosersSide(form.tournamentFormat) && (
+                <Stepper
+                  prefix="Losers race to"
+                  value={form.raceLosers}
+                  onChange={(v) => patchForm({ raceLosers: v })}
+                  min={0}
+                  max={50}
+                />
+              )}
+              <Stepper
+                prefix="Finals race to"
+                value={form.raceFinals}
+                onChange={(v) => patchForm({ raceFinals: v })}
+                min={0}
+                max={50}
+              />
+            </View>
+          )}
+
+          {form.raceMode === "differential" && (
+            <View>
+              <Text allowFontScaling={false} style={styles.hint}>
+                Races are calculated automatically from each pair&apos;s Fargo
+                gap. The lower-rated player races to the minimum; the higher gets
+                one extra game per the point difference (rounded down).
+              </Text>
+              <Stepper
+                prefix="Min race to"
+                value={form.diffMinRace}
+                onChange={(v) => patchForm({ diffMinRace: v })}
+                min={0}
+                max={50}
+              />
+              <Stepper
+                prefix="Point difference"
+                value={form.diffPerGame}
+                onChange={(v) => patchForm({ diffPerGame: v })}
+                min={1}
+                max={300}
+                step={1}
+              />
+              <ToggleSwitch
+                label="Limit maximum race"
+                value={form.diffMaxEnabled}
+                onValueChange={(v) => patchForm({ diffMaxEnabled: v })}
+              />
+              {form.diffMaxEnabled && (
+                <Stepper
+                  prefix="Max race to"
+                  value={form.diffMaxRace}
+                  onChange={(v) => patchForm({ diffMaxRace: v })}
+                  min={1}
+                  max={50}
+                />
+              )}
+              {(() => {
+                const per = Math.max(1, form.diffPerGame);
+                const higher = 500 + per;
+                const capped = form.diffMaxEnabled
+                  ? Math.min(form.diffMaxRace, form.diffMinRace + 1)
+                  : form.diffMinRace + 1;
+                return (
+                  <View style={styles.exampleBox}>
+                    <Text allowFontScaling={false} style={styles.exampleTitle}>
+                      Example
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.exampleText}>
+                      A player rated 500 races to {form.diffMinRace}.
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.exampleText}>
+                      A player rated {higher} (a {per}-point gap = 1 game) races
+                      to {capped}.
+                    </Text>
+                  </View>
+                );
+              })()}
+            </View>
+          )}
+
+          {form.raceMode === "groups" && (
+            <View>
+              <Text allowFontScaling={false} style={styles.hint}>
+                Players are auto-assigned a race from the group their Fargo falls
+                in (manual override per player later).
+              </Text>
+              {form.raceGroups.map((g, i) => (
+                <View key={g.id} style={styles.groupRow}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupLabel]}
+                    value={g.label}
+                    onChangeText={(v) => updateRaceGroup(i, "label", v)}
+                    placeholder="A"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.minFargo}
+                    onChangeText={(v) => updateRaceGroup(i, "minFargo", v)}
+                    placeholder="Min"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.maxFargo}
+                    onChangeText={(v) => updateRaceGroup(i, "maxFargo", v)}
+                    placeholder="Max"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.groupNum]}
+                    value={g.raceTo}
+                    onChangeText={(v) => updateRaceGroup(i, "raceTo", v)}
+                    placeholder="Race to"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="numeric"
+                  />
+                  <TouchableOpacity
+                    style={styles.groupRemove}
+                    onPress={() => removeRaceGroup(i)}
+                  >
+                    <Text allowFontScaling={false} style={styles.groupRemoveText}>
+                      {"✕"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity style={styles.addRowBtn} onPress={addRaceGroup}>
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                  + Add Group
+                </Text>
+              </TouchableOpacity>
+              {form.raceGroups.length > 0 && (
+                <View style={styles.exampleBox}>
+                  <Text allowFontScaling={false} style={styles.exampleTitle}>
+                    Group Settings
+                  </Text>
+                  {form.raceGroups.map((g, i) => (
+                    <Text
+                      key={g.id}
+                      allowFontScaling={false}
+                      style={styles.exampleText}
+                    >
+                      Group {g.label || String.fromCharCode(65 + i)}:{" "}
+                      {g.minFargo.trim() || "0"}-{g.maxFargo.trim() || "+"} · Race
+                      to {g.raceTo.trim() || "?"}
+                    </Text>
+                  ))}
+                  <Text allowFontScaling={false} style={styles.exampleText}>
+                    A blank minimum counts as 0; a blank maximum has no upper
+                    limit.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </Section>
+    );
+  };
+
   const renderSettings = () => {
     if (!form) {
       return (
@@ -2786,7 +3024,6 @@ export default function ManageTournamentScreen() {
     // External (other-software) tournaments: a basic listing form — no live-engine
     // fields. Just the details, the external bracket link, schedule, entry, venue.
     if (isExternal) {
-      const extVenue = hub.tournament?.venues;
       return (
         <View>
           <Section title="Tournament Details">
@@ -2840,6 +3077,8 @@ export default function ManageTournamentScreen() {
             </Text>
           </Section>
 
+          {renderRaceSection()}
+
           <Section title="Schedule">
             <View style={styles.field}>
               <FieldLabel label="Date *" />
@@ -2858,6 +3097,22 @@ export default function ManageTournamentScreen() {
                 onSelect={(v) => patchForm({ startTime: v })}
               />
             </View>
+            <ToggleSwitch
+              label="Recurring Tournament"
+              value={form.isRecurring}
+              onValueChange={(v) => patchForm({ isRecurring: v })}
+            />
+            {form.isRecurring && (
+              <View style={styles.field}>
+                <FieldLabel label="Recurring Frequency *" />
+                <Dropdown
+                  placeholder="How often does it repeat?"
+                  options={RECURRENCE_TYPES}
+                  value={form.recurrenceType}
+                  onSelect={(v) => patchForm({ recurrenceType: v })}
+                />
+              </View>
+            )}
           </Section>
 
           <Section title="Entry">
@@ -2918,23 +3173,32 @@ export default function ManageTournamentScreen() {
           </Section>
 
           <Section title="My Venues">
-            {extVenue ? (
-              <View style={styles.readOnlyCard}>
-                <Text allowFontScaling={false} style={styles.readOnlyName}>
-                  {extVenue.venue}
-                </Text>
-                <Text allowFontScaling={false} style={styles.readOnlySub}>
-                  {extVenue.address}
-                </Text>
-                <Text allowFontScaling={false} style={styles.readOnlySub}>
-                  {extVenue.city}, {extVenue.state} {extVenue.zip_code}
-                </Text>
-              </View>
-            ) : (
-              <Text allowFontScaling={false} style={styles.hint}>
-                No venue on record.
-              </Text>
-            )}
+            <View style={styles.field}>
+              <FieldLabel label="Venue *" />
+              <Dropdown
+                placeholder="Select a venue"
+                options={myVenueOptions}
+                value={form.venueId != null ? String(form.venueId) : ""}
+                onSelect={(v) =>
+                  patchForm({ venueId: v ? Number(v) : null, tableSize: "" })
+                }
+              />
+            </View>
+            <View style={styles.field}>
+              <FieldLabel label="Table Size" />
+              <Dropdown
+                placeholder={
+                  selectedVenueId
+                    ? venueTableSizes.length
+                      ? "Select table size"
+                      : "No table sizes set for this venue"
+                    : "Pick a venue first"
+                }
+                options={venueTableSizes}
+                value={form.tableSize}
+                onSelect={(v) => patchForm({ tableSize: v })}
+              />
+            </View>
           </Section>
         </View>
       );
@@ -3531,6 +3795,17 @@ export default function ManageTournamentScreen() {
             value={form.isRecurring}
             onValueChange={(v) => patchForm({ isRecurring: v })}
           />
+          {form.isRecurring && (
+            <View style={styles.field}>
+              <FieldLabel label="Recurring Frequency *" />
+              <Dropdown
+                placeholder="How often does it repeat?"
+                options={RECURRENCE_TYPES}
+                value={form.recurrenceType}
+                onSelect={(v) => patchForm({ recurrenceType: v })}
+              />
+            </View>
+          )}
         </Section>
 
         <Section title="Venue">
