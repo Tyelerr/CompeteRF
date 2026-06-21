@@ -53,6 +53,17 @@
       margin:16px;padding:12px;border:1px solid var(--primary);border-radius:10px;
       text-align:center;color:var(--primary);font-weight:700;font-size:14px;
     }
+    .msgs{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+      padding:14px 16px;margin-bottom:16px}
+    .msgs h2{font-size:12px;font-weight:700;letter-spacing:1px;color:var(--textMuted);
+      margin:0 0 10px;text-transform:uppercase}
+    .usecase{font-size:13px;color:var(--textSecondary);margin:0 0 12px}
+    .usecase b{color:var(--text)}
+    .bubble{background:var(--bg);border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;margin-bottom:10px}
+    .bubble:last-child{margin-bottom:0}
+    .bubble .sender{font-size:11px;color:var(--textMuted);font-weight:700;margin-bottom:4px}
+    .bubble .text{font-size:13px;color:var(--text);line-height:1.5}
     .footnote{color:var(--textMuted);font-size:12px;text-align:center;margin-top:8px}
   </style>
 </head>
@@ -96,6 +107,21 @@
       </div>
 
       <div class="btn">Send Test Text</div>
+    </div>
+
+    <div class="msgs">
+      <h2>Sample Messages</h2>
+      <p class="usecase">Use case: <b>Mixed</b> — tournament reminders &amp; match alerts.</p>
+      <div class="bubble">
+        <div class="sender">Compete Tournaments</div>
+        <div class="text">Your tournament starts in 30 minutes! Open the app for
+          details: [Link]. Reply STOP to opt out. Reply HELP for help.</div>
+      </div>
+      <div class="bubble">
+        <div class="sender">Compete Tournaments</div>
+        <div class="text">Your match is ready. Please report to Table 7. Reply STOP
+          to opt out. Reply HELP for help.</div>
+      </div>
     </div>
 
     <p class="footnote">
