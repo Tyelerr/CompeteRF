@@ -627,13 +627,15 @@ const Section = ({
 // Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
 const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
 
-// Money fields accept only digits and format live as they're typed, filling the
-// decimals in from the right (type 5,0,0,0 -> 50.00). Blank stays blank.
-const formatMoneyLive = (text: string): string => {
-  const digits = text.replace(/\D/g, "");
-  if (!digits) return "";
-  const cents = parseInt(digits, 10);
-  return isNaN(cents) ? "" : (cents / 100).toFixed(2);
+// Money fields hold whole dollars typed left-to-right with a fixed ".00" suffix
+// (type 5 -> 5.00, type 590 -> 590.00). The input box shows just the dollars;
+// ".00" is rendered as a separate suffix so typing never fights the decimals.
+// moneyDollars = the editable dollar digits; moneyFromInput = stored "<n>.00".
+const moneyDollars = (stored: string): string =>
+  stored ? stored.split(".")[0] : "";
+const moneyFromInput = (typed: string): string => {
+  const digits = typed.replace(/\D/g, "");
+  return digits ? String(parseInt(digits, 10)) + ".00" : "";
 };
 // Normalize an already-stored value (e.g. 50 or 50.5) to two decimals for display.
 const formatMoney = (text: string): string => {
@@ -711,11 +713,12 @@ const LabeledInput = ({
           editable={!disabled}
           style={[
             styles.inputInner,
+            money && styles.inputInnerMoney,
             multiline && styles.inputMultiline,
             Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
           ]}
-          value={value}
-          onChangeText={(v) => onChangeText(money ? formatMoneyLive(v) : v)}
+          value={money ? moneyDollars(value) : value}
+          onChangeText={(v) => onChangeText(money ? moneyFromInput(v) : v)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
@@ -725,6 +728,11 @@ const LabeledInput = ({
           maxLength={maxLength}
           inputAccessoryViewID={Platform.OS === "ios" ? accessoryId : undefined}
         />
+        {money && !!value && (
+          <Text allowFontScaling={false} style={styles.moneySuffix}>
+            .00
+          </Text>
+        )}
       </View>
       {hint ? (
         <Text allowFontScaling={false} style={styles.hint}>
@@ -3250,16 +3258,28 @@ export default function ManageTournamentScreen() {
                   placeholder="Name"
                   placeholderTextColor={COLORS.textMuted}
                 />
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.input, styles.sidePotAmount]}
-                  value={pot.amount}
-                  onChangeText={(v) => updateSidePot(i, "amount", formatMoneyLive(v))}
-                  placeholder="$"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="decimal-pad"
-                  inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
-                />
+                <View style={[styles.input, styles.sidePotAmount, styles.moneyCell]}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[
+                      styles.moneyCellInput,
+                      Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
+                    ]}
+                    value={moneyDollars(pot.amount)}
+                    onChangeText={(v) =>
+                      updateSidePot(i, "amount", moneyFromInput(v))
+                    }
+                    placeholder="$"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="decimal-pad"
+                    inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
+                  />
+                  {!!pot.amount && (
+                    <Text allowFontScaling={false} style={styles.moneySuffix}>
+                      .00
+                    </Text>
+                  )}
+                </View>
                 <TouchableOpacity
                   style={styles.groupRemove}
                   onPress={() => removeSidePot(i)}
@@ -3867,16 +3887,26 @@ export default function ManageTournamentScreen() {
                 placeholder="Name"
                 placeholderTextColor={COLORS.textMuted}
               />
-              <TextInput
-                allowFontScaling={false}
-                style={[styles.input, styles.sidePotAmount]}
-                value={pot.amount}
-                onChangeText={(v) => updateSidePot(i, "amount", formatMoneyLive(v))}
-                placeholder="$"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="decimal-pad"
-                inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
-              />
+              <View style={[styles.input, styles.sidePotAmount, styles.moneyCell]}>
+                <TextInput
+                  allowFontScaling={false}
+                  style={[
+                    styles.moneyCellInput,
+                    Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
+                  ]}
+                  value={moneyDollars(pot.amount)}
+                  onChangeText={(v) => updateSidePot(i, "amount", moneyFromInput(v))}
+                  placeholder="$"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="decimal-pad"
+                  inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
+                />
+                {!!pot.amount && (
+                  <Text allowFontScaling={false} style={styles.moneySuffix}>
+                    .00
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity
                 style={styles.groupRemove}
                 onPress={() => removeSidePot(i)}
@@ -5690,6 +5720,19 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm),
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
+  },
+  // Money: right-align the dollars so the fixed ".00" suffix hugs the number.
+  inputInnerMoney: { textAlign: "right" },
+  moneySuffix: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  // Side-pot amount cell: the bordered box (styles.input) becomes a row holding a
+  // borderless dollars input + the ".00" suffix.
+  moneyCell: { flexDirection: "row", alignItems: "center" },
+  moneyCellInput: {
+    flex: 1,
+    paddingVertical: 0,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    textAlign: "right",
   },
   labelDisabled: { color: COLORS.textMuted },
 
