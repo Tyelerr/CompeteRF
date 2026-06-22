@@ -626,6 +626,23 @@ const Section = ({
 
 // Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
 const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
+
+// Money fields: while typing keep only digits + a single decimal point (max two
+// decimals); on blur normalize to two places (50 -> 50.00). Blank stays blank.
+const sanitizeMoney = (text: string): string => {
+  const cleaned = text.replace(/[^0-9.]/g, "");
+  const dot = cleaned.indexOf(".");
+  if (dot === -1) return cleaned;
+  const intPart = cleaned.slice(0, dot);
+  const decPart = cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+  return intPart + "." + decPart;
+};
+const formatMoney = (text: string): string => {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const n = parseFloat(trimmed);
+  return isNaN(n) ? "" : n.toFixed(2);
+};
 // Web-only inline styles (transition/boxShadow aren't in RN's StyleSheet types).
 const INPUT_WRAP_WEB =
   Platform.OS === "web"
@@ -649,6 +666,7 @@ const LabeledInput = ({
   hint,
   accessoryId,
   noCheck,
+  money,
 }: {
   label: string;
   value: string;
@@ -662,6 +680,7 @@ const LabeledInput = ({
   hint?: string;
   accessoryId?: string; // iOS keyboard Done bar
   noCheck?: boolean; // opt out of the completion check (e.g. free-text description)
+  money?: boolean; // numbers-only; format to two decimals on blur
 }) => {
   // Complete when the field holds data; FieldCheck renders nothing otherwise.
   const showCheck = !disabled && !noCheck && !!value.trim();
@@ -697,9 +716,12 @@ const LabeledInput = ({
             Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
           ]}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={(v) => onChangeText(money ? sanitizeMoney(v) : v)}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false);
+            if (money) onChangeText(formatMoney(value));
+          }}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textMuted}
           keyboardType={keyboardType ?? "default"}
@@ -3203,6 +3225,7 @@ export default function ManageTournamentScreen() {
               placeholder="$0.00"
               keyboardType="decimal-pad"
               accessoryId={KB_DONE}
+              money
             />
             <LabeledInput
               label="Added Money"
@@ -3211,6 +3234,7 @@ export default function ManageTournamentScreen() {
               placeholder="$0.00"
               keyboardType="decimal-pad"
               accessoryId={KB_DONE}
+              money
             />
             <View style={styles.sidePotHeader}>
               <FieldLabel label="Side Pots" />
@@ -3234,7 +3258,8 @@ export default function ManageTournamentScreen() {
                   allowFontScaling={false}
                   style={[styles.input, styles.sidePotAmount]}
                   value={pot.amount}
-                  onChangeText={(v) => updateSidePot(i, "amount", v)}
+                  onChangeText={(v) => updateSidePot(i, "amount", sanitizeMoney(v))}
+                  onBlur={() => updateSidePot(i, "amount", formatMoney(pot.amount))}
                   placeholder="$"
                   placeholderTextColor={COLORS.textMuted}
                   keyboardType="decimal-pad"
@@ -3641,6 +3666,7 @@ export default function ManageTournamentScreen() {
             placeholder="$0.00"
             keyboardType="decimal-pad"
             accessoryId={KB_DONE}
+            money
           />
 
           <ToggleSwitch
@@ -3826,6 +3852,7 @@ export default function ManageTournamentScreen() {
             placeholder="$0.00"
             keyboardType="decimal-pad"
             accessoryId={KB_DONE}
+            money
           />
           <View style={styles.sidePotHeader}>
             <FieldLabel label="Side Pots" />
@@ -3849,7 +3876,8 @@ export default function ManageTournamentScreen() {
                 allowFontScaling={false}
                 style={[styles.input, styles.sidePotAmount]}
                 value={pot.amount}
-                onChangeText={(v) => updateSidePot(i, "amount", v)}
+                onChangeText={(v) => updateSidePot(i, "amount", sanitizeMoney(v))}
+                onBlur={() => updateSidePot(i, "amount", formatMoney(pot.amount))}
                 placeholder="$"
                 placeholderTextColor={COLORS.textMuted}
                 keyboardType="decimal-pad"
