@@ -419,8 +419,8 @@ const toForm = (t: Tournament): SettingsForm => {
     race: t.race ?? "",
     description: t.description ?? "",
     maxFargo: numStr(t.max_fargo),
-    entryFee: numStr(t.entry_fee),
-    addedMoney: numStr(t.added_money),
+    entryFee: formatMoney(numStr(t.entry_fee)),
+    addedMoney: formatMoney(numStr(t.added_money)),
     calcutta: !!t.calcutta,
     reportsToFargo: !!t.reports_to_fargo,
     openTournament: !!t.open_tournament,
@@ -445,7 +445,7 @@ const toForm = (t: Tournament): SettingsForm => {
     diffMaxEnabled: ls.fargoDiffMaxRace != null,
     sidePots: (t.side_pots ?? []).map((p) => ({
       name: p.name ?? "",
-      amount: numStr(p.amount as number),
+      amount: formatMoney(numStr(p.amount as number)),
     })),
     raceMode: ls.raceMode ?? "fixed",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
@@ -627,18 +627,17 @@ const Section = ({
 // Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
 const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
 
-// Money fields: while typing keep only digits + a single decimal point (max two
-// decimals); on blur normalize to two places (50 -> 50.00). Blank stays blank.
-const sanitizeMoney = (text: string): string => {
-  const cleaned = text.replace(/[^0-9.]/g, "");
-  const dot = cleaned.indexOf(".");
-  if (dot === -1) return cleaned;
-  const intPart = cleaned.slice(0, dot);
-  const decPart = cleaned.slice(dot + 1).replace(/\./g, "").slice(0, 2);
-  return intPart + "." + decPart;
+// Money fields accept only digits and format live as they're typed, filling the
+// decimals in from the right (type 5,0,0,0 -> 50.00). Blank stays blank.
+const formatMoneyLive = (text: string): string => {
+  const digits = text.replace(/\D/g, "");
+  if (!digits) return "";
+  const cents = parseInt(digits, 10);
+  return isNaN(cents) ? "" : (cents / 100).toFixed(2);
 };
+// Normalize an already-stored value (e.g. 50 or 50.5) to two decimals for display.
 const formatMoney = (text: string): string => {
-  const trimmed = text.trim();
+  const trimmed = String(text ?? "").trim();
   if (!trimmed) return "";
   const n = parseFloat(trimmed);
   return isNaN(n) ? "" : n.toFixed(2);
@@ -716,12 +715,9 @@ const LabeledInput = ({
             Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
           ]}
           value={value}
-          onChangeText={(v) => onChangeText(money ? sanitizeMoney(v) : v)}
+          onChangeText={(v) => onChangeText(money ? formatMoneyLive(v) : v)}
           onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            if (money) onChangeText(formatMoney(value));
-          }}
+          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textMuted}
           keyboardType={keyboardType ?? "default"}
@@ -3258,8 +3254,7 @@ export default function ManageTournamentScreen() {
                   allowFontScaling={false}
                   style={[styles.input, styles.sidePotAmount]}
                   value={pot.amount}
-                  onChangeText={(v) => updateSidePot(i, "amount", sanitizeMoney(v))}
-                  onBlur={() => updateSidePot(i, "amount", formatMoney(pot.amount))}
+                  onChangeText={(v) => updateSidePot(i, "amount", formatMoneyLive(v))}
                   placeholder="$"
                   placeholderTextColor={COLORS.textMuted}
                   keyboardType="decimal-pad"
@@ -3876,8 +3871,7 @@ export default function ManageTournamentScreen() {
                 allowFontScaling={false}
                 style={[styles.input, styles.sidePotAmount]}
                 value={pot.amount}
-                onChangeText={(v) => updateSidePot(i, "amount", sanitizeMoney(v))}
-                onBlur={() => updateSidePot(i, "amount", formatMoney(pot.amount))}
+                onChangeText={(v) => updateSidePot(i, "amount", formatMoneyLive(v))}
                 placeholder="$"
                 placeholderTextColor={COLORS.textMuted}
                 keyboardType="decimal-pad"
