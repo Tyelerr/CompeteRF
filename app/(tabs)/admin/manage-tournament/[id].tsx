@@ -624,6 +624,18 @@ const Section = ({
   </View>
 );
 
+// Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
+const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
+// Web-only inline styles (transition/boxShadow aren't in RN's StyleSheet types).
+const INPUT_WRAP_WEB =
+  Platform.OS === "web"
+    ? { transition: "border-color 0.18s ease, box-shadow 0.18s ease" }
+    : null;
+const INPUT_WRAP_FOCUS_RING =
+  Platform.OS === "web"
+    ? { boxShadow: "0 0 0 3px " + COLORS.primary + "33" }
+    : null;
+
 const LabeledInput = ({
   label,
   value,
@@ -651,6 +663,9 @@ const LabeledInput = ({
 }) => {
   // Complete when the field holds data; FieldCheck renders nothing otherwise.
   const showCheck = !disabled && !!value.trim();
+  // The wrapper owns the border + focus highlight so the whole field reads as one
+  // smooth control; the inner input draws no outline of its own.
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <Text
@@ -662,8 +677,11 @@ const LabeledInput = ({
       <View
         style={[
           styles.inputWrap,
+          INPUT_WRAP_WEB as object,
           multiline && styles.inputWrapMultiline,
           narrow && styles.inputWrapNarrow,
+          focused && !disabled && styles.inputWrapFocused,
+          focused && !disabled && (INPUT_WRAP_FOCUS_RING as object),
           disabled && styles.inputDisabled,
         ]}
       >
@@ -671,9 +689,15 @@ const LabeledInput = ({
         <TextInput
           allowFontScaling={false}
           editable={!disabled}
-          style={[styles.inputInner, multiline && styles.inputMultiline]}
+          style={[
+            styles.inputInner,
+            multiline && styles.inputMultiline,
+            Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
+          ]}
           value={value}
           onChangeText={onChangeText}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textMuted}
           keyboardType={keyboardType ?? "default"}
@@ -5632,6 +5656,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingHorizontal: CHECK_INSET,
   },
+  inputWrapFocused: { borderColor: COLORS.primary },
   inputWrapMultiline: { alignItems: "flex-start" },
   inputWrapNarrow: { width: webSc(96), alignSelf: "flex-start" },
   inputInner: {
