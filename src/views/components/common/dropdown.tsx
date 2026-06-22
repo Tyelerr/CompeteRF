@@ -62,8 +62,9 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
   const anchorRef = useRef<any>(null);
   const selectedOption = options.find((o) => o.value === value);
   const handlePress = () => { if (!disabled) setIsOpen(!isOpen); };
-  // A dropdown is "complete" when it holds a real selection.
-  const showCheck = !!selectedOption && !disabled;
+  // "Complete" only when a real option is selected — a placeholder (empty value)
+  // never counts, even if an empty-valued option happens to match.
+  const showCheck = !disabled && !!value && !!selectedOption?.label;
 
   if (isWeb) {
     return (
