@@ -2067,8 +2067,28 @@ export default function ManageTournamentScreen() {
       ],
     );
 
-  const tournamentName = hub.tournament?.name || paramName || "Tournament";
-  const phaseMeta = PHASE_META[hub.phase];
+  const isExternal = hub.tournament?.bracket_source === "external";
+  const tournamentName =
+    hub.tournament?.name ||
+    paramName ||
+    (isExternal ? "Tournament Submission" : "Tournament");
+  // External (other-software) tournaments have no Compete registration/bracket
+  // lifecycle, so the saved-state phase badge ("Setup Incomplete" / "Ready to
+  // Start Registration") doesn't apply. Show submission readiness from the LIVE
+  // form instead so it flips to "Ready to Submit" the moment everything's filled.
+  const externalComplete =
+    !!form &&
+    !!form.name.trim() &&
+    !!form.gameType &&
+    !!form.tournamentFormat &&
+    !!form.tournamentDate &&
+    !!form.startTime &&
+    !!form.venueId;
+  const phaseMeta = isExternal
+    ? externalComplete
+      ? { label: "Ready to Submit", color: COLORS.success }
+      : { label: "Setup Incomplete", color: COLORS.warning }
+    : PHASE_META[hub.phase];
 
   // ── Lifecycle phase navigation ──────────────────────────────────────────────
   const tournamentGroup = phaseGroupOf(hub.phase);
@@ -2104,8 +2124,7 @@ export default function ManageTournamentScreen() {
 
   // Build the lifecycle nav model (phase buttons + their page menus).
   // External (other-software) tournaments get a basic manager — just the details
-  // page, no live-engine phases/tabs.
-  const isExternal = hub.tournament?.bracket_source === "external";
+  // page, no live-engine phases/tabs. (isExternal is computed above for the title.)
   const navPhases = isExternal
     ? [
         {
