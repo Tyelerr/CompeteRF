@@ -112,6 +112,7 @@ import {
 } from "../../../../src/viewmodels/hooks/use.venues";
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
+import { CHECK_INSET, FieldCheck } from "../../../../src/views/components/common/field-check";
 import {
   ManagePhase,
   useManageTournament,
@@ -648,10 +649,8 @@ const LabeledInput = ({
   hint?: string;
   accessoryId?: string; // iOS keyboard Done bar
 }) => {
-  // Show the green ✓ only after the user has filled the field and moved on, so
-  // seeded/empty fields don't flash a phantom check.
-  const [touched, setTouched] = useState(false);
-  const showCheck = !disabled && touched && !!value.trim();
+  // Complete when the field holds data; FieldCheck renders nothing otherwise.
+  const showCheck = !disabled && !!value.trim();
   return (
     <View style={styles.field}>
       <Text
@@ -668,18 +667,13 @@ const LabeledInput = ({
           disabled && styles.inputDisabled,
         ]}
       >
-        {showCheck && (
-          <Text allowFontScaling={false} style={styles.inputCheck}>
-            {"✓"}
-          </Text>
-        )}
+        <FieldCheck complete={showCheck} />
         <TextInput
           allowFontScaling={false}
           editable={!disabled}
           style={[styles.inputInner, multiline && styles.inputMultiline]}
           value={value}
           onChangeText={onChangeText}
-          onBlur={() => setTouched(true)}
           placeholder={placeholder}
           placeholderTextColor={COLORS.textMuted}
           keyboardType={keyboardType ?? "default"}
@@ -5614,17 +5608,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: webSc(SPACING.xs),
   },
-  fieldLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: webSc(SPACING.xs),
-  },
-  fieldCheck: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.success,
-    fontWeight: "700",
-    marginBottom: webSc(SPACING.xs),
-  },
   input: {
     backgroundColor: COLORS.background,
     borderRadius: webSc(RADIUS.sm),
@@ -5647,7 +5630,7 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: webSc(SPACING.sm),
+    paddingHorizontal: CHECK_INSET,
   },
   inputWrapMultiline: { alignItems: "flex-start" },
   inputWrapNarrow: { width: webSc(96), alignSelf: "flex-start" },
@@ -5656,12 +5639,6 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm),
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
-  },
-  inputCheck: {
-    color: COLORS.success,
-    fontWeight: "700",
-    fontSize: webMs(FONT_SIZES.sm),
-    marginRight: 6,
   },
   labelDisabled: { color: COLORS.textMuted },
 

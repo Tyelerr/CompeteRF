@@ -4,6 +4,7 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { CHECK_INSET, FieldCheck } from "./field-check";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -55,17 +56,14 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
 export const Dropdown = ({ label, placeholder = "Select...", options, value, onSelect, error, disabled = false, searchable = false, searchPlaceholder = "Search...", compact = false }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [touched, setTouched] = useState(false);
   const [searchText, setSearchText] = useState("");
   const selectorRef = useRef<View>(null);
   const [selectorLayout, setSelectorLayout] = useState({ x: 0, y: 0, width: 0, height: 0, pageY: 0 });
   const anchorRef = useRef<any>(null);
   const selectedOption = options.find((o) => o.value === value);
   const handlePress = () => { if (!disabled) setIsOpen(!isOpen); };
-  // Only badge a dropdown once the user has actually picked something — seeded
-  // defaults shouldn't show a phantom check.
-  const handleSelect = (v: string) => { setTouched(true); onSelect(v); };
-  const showCheck = touched && !!selectedOption && !disabled;
+  // A dropdown is "complete" when it holds a real selection.
+  const showCheck = !!selectedOption && !disabled;
 
   if (isWeb) {
     return (
@@ -73,12 +71,12 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
         {label && <Text allowFontScaling={false} style={[styles.label, (isOpen || hovered) && !disabled && wStyles.labelActive]}>{label}</Text>}
         {/* @ts-ignore */}
         <TouchableOpacity ref={anchorRef} style={[wStyles.selector, compact && wStyles.selectorCompact, isOpen && wStyles.selectorOpen, !isOpen && hovered && !disabled && wStyles.selectorHovered, error && wStyles.selectorError, disabled && wStyles.selectorDisabled, { transition: "border-color 0.18s ease, box-shadow 0.18s ease", cursor: disabled ? "not-allowed" : "pointer" } as any]} onPress={handlePress} activeOpacity={disabled ? 1 : 0.7} onMouseEnter={() => !disabled && setHovered(true)} onMouseLeave={() => setHovered(false)}>
-          {showCheck && <Text allowFontScaling={false} style={wStyles.check}>{"\u2713"}</Text>}
+          <FieldCheck complete={showCheck} />
           <Text allowFontScaling={false} style={[wStyles.selectorText, compact && wStyles.selectorTextCompact, !selectedOption && wStyles.placeholder, disabled && wStyles.textDisabled, isOpen && wStyles.selectorTextOpen]} numberOfLines={1}>{selectedOption?.label || placeholder}</Text>
           <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "\u25B2" : "\u25BC"}</Text>
         </TouchableOpacity>
         {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
-        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={handleSelect} onClose={() => setIsOpen(false)} />}
+        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={onSelect} onClose={() => setIsOpen(false)} />}
       </View>
     );
   }
@@ -96,7 +94,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
     <View style={styles.container}>
       {label && <Text allowFontScaling={false} style={styles.label}>{label}</Text>}
       <TouchableOpacity ref={selectorRef as any} style={[styles.selector, error && styles.selectorError, disabled && styles.selectorDisabled]} onPress={handleMobilePress} activeOpacity={disabled ? 1 : 0.7}>
-        {showCheck && <Text allowFontScaling={false} style={styles.check}>{"\u2713"}</Text>}
+        <FieldCheck complete={showCheck} />
         <Text allowFontScaling={false} style={[styles.selectorText, !selectedOption && styles.placeholder, disabled && styles.textDisabled]} numberOfLines={1} ellipsizeMode="tail">{selectedOption?.label || placeholder}</Text>
         <Text allowFontScaling={false} style={[styles.arrow, disabled && styles.textDisabled]}>{"\u25BC"}</Text>
       </TouchableOpacity>
@@ -113,7 +111,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
               <FlatList data={filteredOptions} keyExtractor={(item) => item.value} keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={<View style={styles.emptyContainer}><Text allowFontScaling={false} style={styles.emptyText}>No results found</Text></View>}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={[styles.option, item.value === value && styles.optionSelected]} onPress={() => { handleSelect(item.value); setIsOpen(false); }}>
+                  <TouchableOpacity style={[styles.option, item.value === value && styles.optionSelected]} onPress={() => { onSelect(item.value); setIsOpen(false); }}>
                     <Text allowFontScaling={false} style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
                   </TouchableOpacity>
                 )}
@@ -136,7 +134,6 @@ const styles = StyleSheet.create({
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: 4 },
-  check: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "700", marginRight: 6 },
   error: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, marginTop: wxSc(SPACING.xs) },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
   dropdownWrapper: {},
@@ -154,7 +151,7 @@ const styles = StyleSheet.create({
 const wStyles = StyleSheet.create({
   container: { marginTop: 0 },
   labelActive: { color: COLORS.primary },
-  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, height: 38, paddingHorizontal: 10, paddingVertical: 0, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, height: 38, paddingHorizontal: CHECK_INSET, paddingVertical: 0, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   selectorCompact: { height: 32, paddingHorizontal: 8, borderRadius: 4 },
   selectorHovered: { borderColor: COLORS.primary + "80" } as any,
   selectorOpen: { borderColor: COLORS.primary } as any,
@@ -167,5 +164,4 @@ const wStyles = StyleSheet.create({
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4 },
   arrowOpen: { color: COLORS.primary },
-  check: { fontSize: 13, color: COLORS.success, fontWeight: "700", marginRight: 6 },
 });
