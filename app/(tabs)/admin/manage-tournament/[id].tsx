@@ -647,64 +647,60 @@ const LabeledInput = ({
   disabled?: boolean;
   hint?: string;
   accessoryId?: string; // iOS keyboard Done bar
-}) => (
-  <View style={styles.field}>
-    <View style={styles.fieldLabelRow}>
+}) => {
+  // Show the green ✓ only after the user has filled the field and moved on, so
+  // seeded/empty fields don't flash a phantom check.
+  const [touched, setTouched] = useState(false);
+  const showCheck = !disabled && touched && !!value.trim();
+  return (
+    <View style={styles.field}>
       <Text
         allowFontScaling={false}
         style={[styles.fieldLabel, disabled && styles.labelDisabled]}
       >
         {label}
       </Text>
-      {!disabled && !!value.trim() && (
-        <Text allowFontScaling={false} style={styles.fieldCheck}>
-          {"✓"}
+      <View
+        style={[
+          styles.inputWrap,
+          multiline && styles.inputWrapMultiline,
+          narrow && styles.inputWrapNarrow,
+          disabled && styles.inputDisabled,
+        ]}
+      >
+        {showCheck && (
+          <Text allowFontScaling={false} style={styles.inputCheck}>
+            {"✓"}
+          </Text>
+        )}
+        <TextInput
+          allowFontScaling={false}
+          editable={!disabled}
+          style={[styles.inputInner, multiline && styles.inputMultiline]}
+          value={value}
+          onChangeText={onChangeText}
+          onBlur={() => setTouched(true)}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.textMuted}
+          keyboardType={keyboardType ?? "default"}
+          multiline={multiline}
+          maxLength={maxLength}
+          inputAccessoryViewID={Platform.OS === "ios" ? accessoryId : undefined}
+        />
+      </View>
+      {hint ? (
+        <Text allowFontScaling={false} style={styles.hint}>
+          {hint}
         </Text>
-      )}
+      ) : null}
     </View>
-    <TextInput
-      allowFontScaling={false}
-      editable={!disabled}
-      style={[
-        styles.input,
-        multiline && styles.inputMultiline,
-        narrow && styles.inputNarrow,
-        disabled && styles.inputDisabled,
-      ]}
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={COLORS.textMuted}
-      keyboardType={keyboardType ?? "default"}
-      multiline={multiline}
-      maxLength={maxLength}
-      inputAccessoryViewID={Platform.OS === "ios" ? accessoryId : undefined}
-    />
-    {hint ? (
-      <Text allowFontScaling={false} style={styles.hint}>
-        {hint}
-      </Text>
-    ) : null}
-  </View>
-);
+  );
+};
 
-const FieldLabel = ({
-  label,
-  complete,
-}: {
-  label: string;
-  complete?: boolean;
-}) => (
-  <View style={styles.fieldLabelRow}>
-    <Text allowFontScaling={false} style={styles.fieldLabel}>
-      {label}
-    </Text>
-    {complete && (
-      <Text allowFontScaling={false} style={styles.fieldCheck}>
-        {"✓"}
-      </Text>
-    )}
-  </View>
+const FieldLabel = ({ label }: { label: string }) => (
+  <Text allowFontScaling={false} style={styles.fieldLabel}>
+    {label}
+  </Text>
 );
 
 // Full-width +/- stepper. Center reads e.g. "Race to 7". Press-and-hold on a
@@ -3144,7 +3140,7 @@ export default function ManageTournamentScreen() {
 
           <Section title="Schedule">
             <View style={styles.field}>
-              <FieldLabel label="Date *" complete={!!form.tournamentDate} />
+              <FieldLabel label="Date *" />
               <DatePicker
                 value={form.tournamentDate}
                 onChange={(v) => patchForm({ tournamentDate: v })}
@@ -3852,7 +3848,7 @@ export default function ManageTournamentScreen() {
 
         <Section title="Schedule">
           <View style={styles.field}>
-            <FieldLabel label="Date *" complete={!!form.tournamentDate} />
+            <FieldLabel label="Date *" />
             <DatePicker
               value={form.tournamentDate}
               onChange={(v) => patchForm({ tournamentDate: v })}
@@ -5642,6 +5638,31 @@ const styles = StyleSheet.create({
   inputMultiline: { minHeight: webSc(80), textAlignVertical: "top" },
   inputNarrow: { width: webSc(96), alignSelf: "flex-start" },
   inputDisabled: { opacity: 0.4 },
+  // Bordered wrapper so the green ✓ can sit inside the box on the left while the
+  // text input fills the rest (shorter typing area, checks aligned left).
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: webSc(SPACING.sm),
+  },
+  inputWrapMultiline: { alignItems: "flex-start" },
+  inputWrapNarrow: { width: webSc(96), alignSelf: "flex-start" },
+  inputInner: {
+    flex: 1,
+    paddingVertical: webSc(SPACING.sm),
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+  },
+  inputCheck: {
+    color: COLORS.success,
+    fontWeight: "700",
+    fontSize: webMs(FONT_SIZES.sm),
+    marginRight: 6,
+  },
   labelDisabled: { color: COLORS.textMuted },
 
   // +/- stepper (full width: [-]  centered text  [+])

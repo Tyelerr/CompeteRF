@@ -23,6 +23,9 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
   const [showModal, setShowModal] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
   const [hasSelected, setHasSelected] = useState(false);
+  // Green ✓ only after the user actually picks a date (not for seeded defaults).
+  const [touched, setTouched] = useState(false);
+  const showCheck = touched && !!value;
 
   useEffect(() => {
     if (showModal) { setTempDate(value ? parseLocalDate(value) : new Date()); setHasSelected(!!value); }
@@ -35,18 +38,20 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
     const m = String(tempDate.getUTCMonth() + 1).padStart(2, "0");
     const d = String(tempDate.getUTCDate()).padStart(2, "0");
     onChange(y + "-" + m + "-" + d);
+    setTouched(true);
     setShowModal(false);
   };
 
   if (isWeb) {
     return (
       <View style={wStyles.wrap}>
-        <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)}
+        {showCheck && <Text allowFontScaling={false} style={wStyles.check}>{"✓"}</Text>}
+        <input type="date" value={value || ""} onChange={(e) => { setTouched(true); onChange(e.target.value); }}
           onClick={(e) => {
             const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
             try { el.showPicker?.(); } catch { /* not user-activated */ }
           }}
-          style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", backgroundColor: COLORS.surface, border: "1px solid " + COLORS.border, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: value ? COLORS.text : COLORS.textMuted, outline: "none", cursor: "pointer", colorScheme: "dark" } as React.CSSProperties}
+          style={{ flex: 1, minWidth: 0, maxWidth: "100%", boxSizing: "border-box", backgroundColor: COLORS.surface, border: "1px solid " + COLORS.border, borderRadius: 6, padding: "8px 10px", fontSize: 13, color: value ? COLORS.text : COLORS.textMuted, outline: "none", cursor: "pointer", colorScheme: "dark" } as React.CSSProperties}
         />
       </View>
     );
@@ -58,6 +63,7 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
   return (
     <>
       <TouchableOpacity style={styles.button} onPress={() => setShowModal(true)}>
+        {showCheck && <Text allowFontScaling={false} style={styles.checkM}>{"✓"}</Text>}
         <Text allowFontScaling={false} style={[styles.buttonText, !value && styles.placeholder]}>{formatDisplay(value, placeholder)}</Text>
       </TouchableOpacity>
       <Modal visible={showModal} animationType="fade" transparent onRequestClose={() => setShowModal(false)}>
@@ -85,10 +91,14 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
   );
 };
 
-const wStyles = StyleSheet.create({ wrap: { flex: 1, height: 36 } });
+const wStyles = StyleSheet.create({
+  wrap: { flexDirection: "row", alignItems: "center", minHeight: 36 },
+  check: { color: COLORS.success, fontWeight: "700", fontSize: 13, marginRight: 6 },
+});
 
 const styles = StyleSheet.create({
-  button: { flex: 1, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), alignItems: "center", borderWidth: 1, borderColor: COLORS.border },
+  button: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: scale(SPACING.md), borderWidth: 1, borderColor: COLORS.border },
+  checkM: { color: COLORS.success, fontWeight: "700", fontSize: moderateScale(FONT_SIZES.md), marginRight: scale(SPACING.sm) },
   buttonText: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text },
   placeholder: { color: COLORS.textMuted },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center", padding: scale(SPACING.lg) },

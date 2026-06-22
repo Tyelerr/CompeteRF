@@ -55,12 +55,17 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
 export const Dropdown = ({ label, placeholder = "Select...", options, value, onSelect, error, disabled = false, searchable = false, searchPlaceholder = "Search...", compact = false }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [touched, setTouched] = useState(false);
   const [searchText, setSearchText] = useState("");
   const selectorRef = useRef<View>(null);
   const [selectorLayout, setSelectorLayout] = useState({ x: 0, y: 0, width: 0, height: 0, pageY: 0 });
   const anchorRef = useRef<any>(null);
   const selectedOption = options.find((o) => o.value === value);
   const handlePress = () => { if (!disabled) setIsOpen(!isOpen); };
+  // Only badge a dropdown once the user has actually picked something — seeded
+  // defaults shouldn't show a phantom check.
+  const handleSelect = (v: string) => { setTouched(true); onSelect(v); };
+  const showCheck = touched && !!selectedOption && !disabled;
 
   if (isWeb) {
     return (
@@ -68,12 +73,12 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
         {label && <Text allowFontScaling={false} style={[styles.label, (isOpen || hovered) && !disabled && wStyles.labelActive]}>{label}</Text>}
         {/* @ts-ignore */}
         <TouchableOpacity ref={anchorRef} style={[wStyles.selector, compact && wStyles.selectorCompact, isOpen && wStyles.selectorOpen, !isOpen && hovered && !disabled && wStyles.selectorHovered, error && wStyles.selectorError, disabled && wStyles.selectorDisabled, { transition: "border-color 0.18s ease, box-shadow 0.18s ease", cursor: disabled ? "not-allowed" : "pointer" } as any]} onPress={handlePress} activeOpacity={disabled ? 1 : 0.7} onMouseEnter={() => !disabled && setHovered(true)} onMouseLeave={() => setHovered(false)}>
+          {showCheck && <Text allowFontScaling={false} style={wStyles.check}>{"\u2713"}</Text>}
           <Text allowFontScaling={false} style={[wStyles.selectorText, compact && wStyles.selectorTextCompact, !selectedOption && wStyles.placeholder, disabled && wStyles.textDisabled, isOpen && wStyles.selectorTextOpen]} numberOfLines={1}>{selectedOption?.label || placeholder}</Text>
-          {selectedOption && !disabled && <Text allowFontScaling={false} style={wStyles.check}>{"\u2713"}</Text>}
           <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "\u25B2" : "\u25BC"}</Text>
         </TouchableOpacity>
         {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
-        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={onSelect} onClose={() => setIsOpen(false)} />}
+        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={handleSelect} onClose={() => setIsOpen(false)} />}
       </View>
     );
   }
@@ -91,8 +96,8 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
     <View style={styles.container}>
       {label && <Text allowFontScaling={false} style={styles.label}>{label}</Text>}
       <TouchableOpacity ref={selectorRef as any} style={[styles.selector, error && styles.selectorError, disabled && styles.selectorDisabled]} onPress={handleMobilePress} activeOpacity={disabled ? 1 : 0.7}>
+        {showCheck && <Text allowFontScaling={false} style={styles.check}>{"\u2713"}</Text>}
         <Text allowFontScaling={false} style={[styles.selectorText, !selectedOption && styles.placeholder, disabled && styles.textDisabled]} numberOfLines={1} ellipsizeMode="tail">{selectedOption?.label || placeholder}</Text>
-        {selectedOption && !disabled && <Text allowFontScaling={false} style={styles.check}>{"\u2713"}</Text>}
         <Text allowFontScaling={false} style={[styles.arrow, disabled && styles.textDisabled]}>{"\u25BC"}</Text>
       </TouchableOpacity>
       {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
@@ -108,7 +113,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
               <FlatList data={filteredOptions} keyExtractor={(item) => item.value} keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={<View style={styles.emptyContainer}><Text allowFontScaling={false} style={styles.emptyText}>No results found</Text></View>}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={[styles.option, item.value === value && styles.optionSelected]} onPress={() => { onSelect(item.value); setIsOpen(false); }}>
+                  <TouchableOpacity style={[styles.option, item.value === value && styles.optionSelected]} onPress={() => { handleSelect(item.value); setIsOpen(false); }}>
                     <Text allowFontScaling={false} style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
                   </TouchableOpacity>
                 )}
@@ -131,7 +136,7 @@ const styles = StyleSheet.create({
   placeholder: { color: COLORS.textMuted },
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textMuted, marginLeft: 4 },
-  check: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "700", marginLeft: 4 },
+  check: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "700", marginRight: 6 },
   error: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, marginTop: wxSc(SPACING.xs) },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
   dropdownWrapper: {},
@@ -162,5 +167,5 @@ const wStyles = StyleSheet.create({
   textDisabled: { color: COLORS.textSecondary },
   arrow: { fontSize: 10, color: COLORS.textMuted, marginLeft: 4 },
   arrowOpen: { color: COLORS.primary },
-  check: { fontSize: 13, color: COLORS.success, fontWeight: "700", marginLeft: 4 },
+  check: { fontSize: 13, color: COLORS.success, fontWeight: "700", marginRight: 6 },
 });
