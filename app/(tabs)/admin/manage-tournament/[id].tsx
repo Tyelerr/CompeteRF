@@ -648,6 +648,7 @@ const LabeledInput = ({
   disabled,
   hint,
   accessoryId,
+  noCheck,
 }: {
   label: string;
   value: string;
@@ -660,9 +661,10 @@ const LabeledInput = ({
   disabled?: boolean;
   hint?: string;
   accessoryId?: string; // iOS keyboard Done bar
+  noCheck?: boolean; // opt out of the completion check (e.g. free-text description)
 }) => {
   // Complete when the field holds data; FieldCheck renders nothing otherwise.
-  const showCheck = !disabled && !!value.trim();
+  const showCheck = !disabled && !noCheck && !!value.trim();
   // The wrapper owns the border + focus highlight so the whole field reads as one
   // smooth control; the inner input draws no outline of its own.
   const [focused, setFocused] = useState(false);
@@ -3151,6 +3153,7 @@ export default function ManageTournamentScreen() {
               onChangeText={(v) => patchForm({ description: v })}
               placeholder="Describe the tournament..."
               multiline
+              noCheck
             />
           </Section>
 
@@ -3401,6 +3404,7 @@ export default function ManageTournamentScreen() {
             onChangeText={(v) => patchForm({ description: v })}
             placeholder="Describe the tournament..."
             multiline
+            noCheck
           />
         </Section>
 
