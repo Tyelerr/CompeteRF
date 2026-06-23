@@ -1,8 +1,9 @@
 // src/views/components/common/money-input.tsx
 // Compact money input that reads as a single "$55.00" unit inside one box.
 // You type whole dollars left-to-right; "$" and ".00" are fixed affixes so the
-// editable text never fights the decimals (cursor stays in the dollars). On web
-// the input auto-sizes to its content so the affixes hug the number.
+// editable text never fights the decimals (cursor stays in the dollars). The box
+// is a FIXED width so it doesn't resize/jump as you type; on web the inner input
+// auto-sizes so the affixes still hug the number tightly on the left.
 
 import { useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
@@ -22,12 +23,10 @@ const toStored = (typed: string): string => {
 export const MoneyInput = ({
   value,
   onChange,
-  placeholder = "0",
   disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   disabled?: boolean;
 }) => {
   const [focused, setFocused] = useState(false);
@@ -55,8 +54,7 @@ export const MoneyInput = ({
         onChangeText={(v) => onChange(toStored(v))}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        placeholder={value ? "" : placeholder}
-        placeholderTextColor={COLORS.textMuted}
+        placeholder=""
         keyboardType="decimal-pad"
       />
       <Text allowFontScaling={false} style={styles.affix}>
@@ -71,22 +69,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
+    width: isWeb ? 150 : 130,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.sm,
-    paddingHorizontal: 10,
-    paddingVertical: isWeb ? 8 : 6,
-    minHeight: 38,
+    paddingHorizontal: 12,
+    paddingVertical: isWeb ? 9 : 7,
+    minHeight: 40,
   },
   boxFocused: { borderColor: COLORS.primary },
   boxDisabled: { opacity: 0.5 },
   input: {
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.md,
     color: COLORS.text,
     paddingVertical: 0,
-    textAlign: "center",
-    minWidth: isWeb ? 14 : 40,
+    textAlign: "left",
+    minWidth: isWeb ? 8 : 30,
   },
-  affix: { fontSize: FONT_SIZES.sm, color: COLORS.text, fontWeight: "600" },
+  affix: { fontSize: FONT_SIZES.md, color: COLORS.text, fontWeight: "600" },
 });

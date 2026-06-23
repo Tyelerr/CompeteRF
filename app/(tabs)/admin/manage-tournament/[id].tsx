@@ -5911,6 +5911,7 @@ const styles = StyleSheet.create({
   },
   sidePotEditName: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
