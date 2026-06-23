@@ -113,6 +113,7 @@ import {
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
 import { CHECK_INSET, FieldCheck } from "../../../../src/views/components/common/field-check";
+import { MoneyInput } from "../../../../src/views/components/common/money-input";
 import {
   ManagePhase,
   useManageTournament,
@@ -1592,6 +1593,8 @@ export default function ManageTournamentScreen() {
   const [submitCountdown, setSubmitCountdown] = useState<number | null>(null);
   // Wide web → two-column event-builder layout (form + sticky live preview).
   const { width: winW } = useWindowDimensions();
+  // Which side pot (if any) is in inline-edit mode; others show as a compact list.
+  const [editingSidePot, setEditingSidePot] = useState<number | null>(null);
   // Top-level lifecycle phase currently shown (Setup / Live / Results).
   const [selectedPhase, setSelectedPhase] = useState<PhaseKey>("setup");
   const lastGroupRef = useRef<PhaseKey | null>(null);
@@ -3153,6 +3156,102 @@ export default function ManageTournamentScreen() {
     );
   };
 
+  // Entry money + side pots — a compact dashboard layout shared by both forms:
+  // Entry Fee / Added Money on one row, then a tidy side-pots list with inline
+  // edit/delete and a right-aligned "+ Add Side Pot".
+  const renderEntryFields = () => {
+    if (!form) return null;
+    return (
+      <>
+        <View style={styles.entryRow}>
+          <View style={styles.entryCol}>
+            <FieldLabel label="Entry Fee" />
+            <MoneyInput
+              value={form.entryFee}
+              onChange={(v) => patchForm({ entryFee: v })}
+            />
+          </View>
+          <View style={styles.entryCol}>
+            <FieldLabel label="Added Money" />
+            <MoneyInput
+              value={form.addedMoney}
+              onChange={(v) => patchForm({ addedMoney: v })}
+            />
+          </View>
+        </View>
+
+        <View style={styles.sidePotHeader}>
+          <FieldLabel label="Side Pots" />
+          <TouchableOpacity
+            style={styles.addRowBtnSm}
+            onPress={() => {
+              const newIdx = form.sidePots.length;
+              addSidePot();
+              setEditingSidePot(newIdx);
+            }}
+          >
+            <Text allowFontScaling={false} style={styles.addRowBtnText}>
+              + Add Side Pot
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {form.sidePots.map((pot, i) =>
+          editingSidePot === i ? (
+            <View key={i} style={styles.sidePotEditRow}>
+              <TextInput
+                allowFontScaling={false}
+                style={[
+                  styles.sidePotEditName,
+                  Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
+                ]}
+                value={pot.name}
+                onChangeText={(v) => updateSidePot(i, "name", v)}
+                placeholder="Pot name"
+                placeholderTextColor={COLORS.textMuted}
+              />
+              <MoneyInput
+                value={pot.amount}
+                onChange={(v) => updateSidePot(i, "amount", v)}
+              />
+              <TouchableOpacity
+                style={styles.sidePotDoneBtn}
+                onPress={() => setEditingSidePot(null)}
+              >
+                <Text allowFontScaling={false} style={styles.sidePotDoneText}>
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View key={i} style={styles.sidePotListItem}>
+              <Text
+                allowFontScaling={false}
+                style={styles.sidePotListText}
+                numberOfLines={1}
+              >
+                {pot.name.trim() || "Untitled pot"}
+                {pot.amount ? ` — $${pot.amount}` : ""}
+              </Text>
+              <View style={styles.sidePotListActions}>
+                <TouchableOpacity onPress={() => setEditingSidePot(i)}>
+                  <Text allowFontScaling={false} style={styles.sidePotLink}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => removeSidePot(i)}>
+                  <Text allowFontScaling={false} style={styles.sidePotLinkDanger}>
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ),
+        )}
+      </>
+    );
+  };
+
   const renderSettings = () => {
     if (!form) {
       return (
@@ -3240,78 +3339,7 @@ export default function ManageTournamentScreen() {
             )}
           </Section>
 
-          <Section title="Entry">
-            <LabeledInput
-              label="Entry Fee"
-              value={form.entryFee}
-              onChangeText={(v) => patchForm({ entryFee: v })}
-              placeholder="$0.00"
-              keyboardType="decimal-pad"
-              accessoryId={KB_DONE}
-              money
-              narrow
-            />
-            <LabeledInput
-              label="Added Money"
-              value={form.addedMoney}
-              onChangeText={(v) => patchForm({ addedMoney: v })}
-              placeholder="$0.00"
-              keyboardType="decimal-pad"
-              accessoryId={KB_DONE}
-              money
-              narrow
-            />
-            <View style={styles.sidePotHeader}>
-              <FieldLabel label="Side Pots" />
-              <TouchableOpacity style={styles.addRowBtnSm} onPress={addSidePot}>
-                <Text allowFontScaling={false} style={styles.addRowBtnText}>
-                  + Add
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {form.sidePots.map((pot, i) => (
-              <View key={i} style={styles.sidePotRow}>
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.input, styles.sidePotName]}
-                  value={pot.name}
-                  onChangeText={(v) => updateSidePot(i, "name", v)}
-                  placeholder="Name"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-                <View style={[styles.input, styles.sidePotAmount, styles.moneyCell]}>
-                  <TextInput
-                    allowFontScaling={false}
-                    style={[
-                      styles.moneyCellInput,
-                      Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
-                    ]}
-                    value={moneyDollars(pot.amount)}
-                    onChangeText={(v) =>
-                      updateSidePot(i, "amount", moneyFromInput(v))
-                    }
-                    placeholder="$"
-                    placeholderTextColor={COLORS.textMuted}
-                    keyboardType="decimal-pad"
-                    inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
-                  />
-                  {!!pot.amount && (
-                    <Text allowFontScaling={false} style={styles.moneySuffix}>
-                      .00
-                    </Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.groupRemove}
-                  onPress={() => removeSidePot(i)}
-                >
-                  <Text allowFontScaling={false} style={styles.groupRemoveText}>
-                    {"✕"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </Section>
+          <Section title="Entry & Payouts">{renderEntryFields()}</Section>
 
           <Section title="My Venues">
             <View style={styles.field}>
@@ -5924,6 +5952,66 @@ const styles = StyleSheet.create({
   },
   sidePotName: { flex: 2 },
   sidePotAmount: { flex: 1 },
+  // Compact Entry & Payouts dashboard layout
+  entryRow: { flexDirection: "row", gap: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  entryCol: { flex: 1 },
+  sidePotEditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    marginBottom: webSc(SPACING.xs),
+  },
+  sidePotEditName: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: 10,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+  },
+  sidePotDoneBtn: {
+    paddingVertical: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.sm),
+  },
+  sidePotDoneText: {
+    color: COLORS.primary,
+    fontWeight: "700",
+    fontSize: webMs(FONT_SIZES.sm),
+  },
+  sidePotListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: 10,
+    borderRadius: webSc(RADIUS.sm),
+    backgroundColor: COLORS.background,
+    marginBottom: webSc(SPACING.xs),
+  },
+  sidePotListText: {
+    flex: 1,
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "600",
+  },
+  sidePotListActions: {
+    flexDirection: "row",
+    gap: webSc(SPACING.md),
+    alignItems: "center",
+  },
+  sidePotLink: {
+    color: COLORS.primary,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+  },
+  sidePotLinkDanger: {
+    color: COLORS.error,
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+  },
 
   // Keyboard Done accessory (iOS)
   kbDoneBar: {
