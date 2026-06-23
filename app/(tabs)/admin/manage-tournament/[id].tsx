@@ -3249,6 +3249,7 @@ export default function ManageTournamentScreen() {
               keyboardType="decimal-pad"
               accessoryId={KB_DONE}
               money
+              narrow
             />
             <LabeledInput
               label="Added Money"
@@ -3258,6 +3259,7 @@ export default function ManageTournamentScreen() {
               keyboardType="decimal-pad"
               accessoryId={KB_DONE}
               money
+              narrow
             />
             <View style={styles.sidePotHeader}>
               <FieldLabel label="Side Pots" />
@@ -3701,6 +3703,7 @@ export default function ManageTournamentScreen() {
             keyboardType="decimal-pad"
             accessoryId={KB_DONE}
             money
+            narrow
           />
 
           <ToggleSwitch
@@ -3887,6 +3890,7 @@ export default function ManageTournamentScreen() {
             keyboardType="decimal-pad"
             accessoryId={KB_DONE}
             money
+            narrow
           />
           <View style={styles.sidePotHeader}>
             <FieldLabel label="Side Pots" />
@@ -5731,7 +5735,7 @@ const styles = StyleSheet.create({
   },
   inputWrapFocused: { borderColor: COLORS.primary },
   inputWrapMultiline: { alignItems: "flex-start" },
-  inputWrapNarrow: { width: webSc(96), alignSelf: "flex-start" },
+  inputWrapNarrow: { width: webSc(120), alignSelf: "flex-start" },
   inputInner: {
     flex: 1,
     paddingVertical: webSc(SPACING.sm),
