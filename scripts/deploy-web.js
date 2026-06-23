@@ -86,12 +86,40 @@ remapNodeModulesAssets(distPath);
 // unknown paths to index.html. Real files (assets, *.html) match the filesystem
 // first and are served as-is, so only app routes fall through to the shell.
 function writeSpaConfig(distDir) {
-  const cfg = { rewrites: [{ source: "/(.*)", destination: "/index.html" }] };
+  const cfg = {
+    rewrites: [{ source: "/(.*)", destination: "/index.html" }],
+    // Force the HTML shell to always revalidate so a new deploy (with a new
+    // entry-<hash>.js) shows up without a manual hard-refresh. The hashed JS/CSS
+    // assets are content-addressed, so they stay cached immutably.
+    headers: [
+      {
+        source: "/",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        ],
+      },
+      {
+        source: "/index.html",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        ],
+      },
+      {
+        source: "/_expo/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ],
+  };
   fs.writeFileSync(
     path.join(distDir, "vercel.json"),
     JSON.stringify(cfg, null, 2),
   );
-  console.log("[web:publish] Wrote SPA rewrite (vercel.json) for client routing.");
+  console.log("[web:publish] Wrote SPA rewrite + cache headers (vercel.json).");
 }
 writeSpaConfig(distPath);
 
