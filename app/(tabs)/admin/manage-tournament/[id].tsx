@@ -3156,30 +3156,36 @@ export default function ManageTournamentScreen() {
     );
   };
 
-  // Entry money + side pots — a compact dashboard layout shared by both forms:
-  // Entry Fee / Added Money on one row, then a tidy side-pots list with inline
-  // edit/delete and a right-aligned "+ Add Side Pot".
-  const renderEntryFields = () => {
+  // Compact dashboard pieces shared by both forms. renderMoneyRow = Entry Fee /
+  // Added Money on one row; renderSidePots = a tidy list with inline edit/delete
+  // and a right-aligned "+ Add Side Pot". The external form uses both back-to-back;
+  // the Compete form slots its fees/Calcutta block between them.
+  const renderMoneyRow = () => {
+    if (!form) return null;
+    return (
+      <View style={styles.entryRow}>
+        <View style={styles.entryCol}>
+          <FieldLabel label="Entry Fee" />
+          <MoneyInput
+            value={form.entryFee}
+            onChange={(v) => patchForm({ entryFee: v })}
+          />
+        </View>
+        <View style={styles.entryCol}>
+          <FieldLabel label="Added Money" />
+          <MoneyInput
+            value={form.addedMoney}
+            onChange={(v) => patchForm({ addedMoney: v })}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  const renderSidePots = () => {
     if (!form) return null;
     return (
       <>
-        <View style={styles.entryRow}>
-          <View style={styles.entryCol}>
-            <FieldLabel label="Entry Fee" />
-            <MoneyInput
-              value={form.entryFee}
-              onChange={(v) => patchForm({ entryFee: v })}
-            />
-          </View>
-          <View style={styles.entryCol}>
-            <FieldLabel label="Added Money" />
-            <MoneyInput
-              value={form.addedMoney}
-              onChange={(v) => patchForm({ addedMoney: v })}
-            />
-          </View>
-        </View>
-
         <View style={styles.sidePotHeader}>
           <FieldLabel label="Side Pots" />
           <TouchableOpacity
@@ -3251,6 +3257,14 @@ export default function ManageTournamentScreen() {
       </>
     );
   };
+
+  // External form: money row directly above the side-pots list.
+  const renderEntryFields = () => (
+    <>
+      {renderMoneyRow()}
+      {renderSidePots()}
+    </>
+  );
 
   const renderSettings = () => {
     if (!form) {
@@ -3722,17 +3736,8 @@ export default function ManageTournamentScreen() {
           )}
         </Section>
 
-        <Section title="Entry & Money">
-          <LabeledInput
-            label="Entry Fee"
-            value={form.entryFee}
-            onChangeText={(v) => patchForm({ entryFee: v })}
-            placeholder="$0.00"
-            keyboardType="decimal-pad"
-            accessoryId={KB_DONE}
-            money
-            narrow
-          />
+        <Section title="Entry & Payouts">
+          {renderMoneyRow()}
 
           <ToggleSwitch
             label="Calcutta"
@@ -3910,64 +3915,7 @@ export default function ManageTournamentScreen() {
             )}
           </View>
 
-          <LabeledInput
-            label="Money Added"
-            value={form.addedMoney}
-            onChangeText={(v) => patchForm({ addedMoney: v })}
-            placeholder="$0.00"
-            keyboardType="decimal-pad"
-            accessoryId={KB_DONE}
-            money
-            narrow
-          />
-          <View style={styles.sidePotHeader}>
-            <FieldLabel label="Side Pots" />
-            <TouchableOpacity style={styles.addRowBtnSm} onPress={addSidePot}>
-              <Text allowFontScaling={false} style={styles.addRowBtnText}>
-                + Add
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {form.sidePots.map((pot, i) => (
-            <View key={i} style={styles.sidePotRow}>
-              <TextInput
-                allowFontScaling={false}
-                style={[styles.input, styles.sidePotName]}
-                value={pot.name}
-                onChangeText={(v) => updateSidePot(i, "name", v)}
-                placeholder="Name"
-                placeholderTextColor={COLORS.textMuted}
-              />
-              <View style={[styles.input, styles.sidePotAmount, styles.moneyCell]}>
-                <TextInput
-                  allowFontScaling={false}
-                  style={[
-                    styles.moneyCellInput,
-                    Platform.OS === "web" ? (INPUT_NO_OUTLINE as object) : null,
-                  ]}
-                  value={moneyDollars(pot.amount)}
-                  onChangeText={(v) => updateSidePot(i, "amount", moneyFromInput(v))}
-                  placeholder="$"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="decimal-pad"
-                  inputAccessoryViewID={Platform.OS === "ios" ? KB_DONE : undefined}
-                />
-                {!!pot.amount && (
-                  <Text allowFontScaling={false} style={styles.moneySuffix}>
-                    .00
-                  </Text>
-                )}
-              </View>
-              <TouchableOpacity
-                style={styles.groupRemove}
-                onPress={() => removeSidePot(i)}
-              >
-                <Text allowFontScaling={false} style={styles.groupRemoveText}>
-                  {"\u2715"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+          {renderSidePots()}
         </Section>
 
 
