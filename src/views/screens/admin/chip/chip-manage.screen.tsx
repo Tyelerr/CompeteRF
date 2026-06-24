@@ -47,19 +47,36 @@ const FORMAT_OPTS = [
   { label: "Scotch Doubles", value: "scotch_doubles" },
 ];
 const DEFAULT_SINGLES_TIERS = [
-  { minFargo: 700, maxFargo: null as number | null, chips: 1 },
-  { minFargo: 600, maxFargo: 699, chips: 2 },
-  { minFargo: 500, maxFargo: 599, chips: 3 },
-  { minFargo: 400, maxFargo: 499, chips: 4 },
-  { minFargo: 0, maxFargo: 399, chips: 5 },
+  { minFargo: 701, maxFargo: null as number | null, chips: 3 },
+  { minFargo: 641, maxFargo: 700, chips: 4 },
+  { minFargo: 581, maxFargo: 640, chips: 5 },
+  { minFargo: 521, maxFargo: 580, chips: 6 },
+  { minFargo: 461, maxFargo: 520, chips: 7 },
+  { minFargo: 0, maxFargo: 460, chips: 8 },
 ];
 const DEFAULT_DOUBLES_TIERS = [
-  { minFargo: 1300, maxFargo: null as number | null, chips: 2 },
-  { minFargo: 1200, maxFargo: 1299, chips: 3 },
-  { minFargo: 1100, maxFargo: 1199, chips: 4 },
-  { minFargo: 1000, maxFargo: 1099, chips: 5 },
-  { minFargo: 0, maxFargo: 999, chips: 6 },
+  { minFargo: 1241, maxFargo: null as number | null, chips: 3 },
+  { minFargo: 1181, maxFargo: 1240, chips: 4 },
+  { minFargo: 1121, maxFargo: 1180, chips: 5 },
+  { minFargo: 1061, maxFargo: 1120, chips: 6 },
+  { minFargo: 1001, maxFargo: 1060, chips: 7 },
+  { minFargo: 0, maxFargo: 1000, chips: 8 },
 ];
+const defaultTiersFor = (fmt: string) =>
+  (fmt === "scotch_doubles" ? DEFAULT_DOUBLES_TIERS : DEFAULT_SINGLES_TIERS).map((t, i) => ({
+    id: `seed_${i}`,
+    ...t,
+  }));
+// True if the tiers look like one of the default sets (i.e. not customized).
+const isDefaultTiers = (tiers: { minFargo: number; maxFargo: number | null; chips: number }[]) => {
+  const match = (def: typeof DEFAULT_SINGLES_TIERS) =>
+    tiers.length === def.length &&
+    [...tiers].sort((a, b) => a.minFargo - b.minFargo).every((t, i) => {
+      const d = [...def].sort((a, b) => a.minFargo - b.minFargo)[i];
+      return t.minFargo === d.minFargo && (t.maxFargo ?? null) === (d.maxFargo ?? null) && t.chips === d.chips;
+    });
+  return match(DEFAULT_SINGLES_TIERS) || match(DEFAULT_DOUBLES_TIERS);
+};
 
 const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
 const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
@@ -99,6 +116,19 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     }
   }, [vm.phase]);
 
+  // Prefill the default chip table once on a fresh tournament (still editable).
+  const seededRef = useRef(false);
+  const tiersLen = vm.chip?.settings.tiers.length ?? 0;
+  const fmt = vm.chip?.settings.format;
+  useEffect(() => {
+    if (vm.loading || !fmt) return;
+    if (tiersLen === 0 && !seededRef.current) {
+      seededRef.current = true;
+      vm.updateSettings({ tiers: defaultTiersFor(fmt) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vm.loading, tiersLen, fmt]);
+
   if (vm.loading) {
     return (
       <View style={styles.center}>
@@ -120,10 +150,7 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     chip.entries.find((e) => e.id === eid) ?? null;
   const chipPreview = (e: ChipEntry) =>
     chipsForFargo(chip.settings.tiers, teamFargoOf(e, chip.settings.format));
-  const seedTiers = () =>
-    vm.updateSettings({
-      tiers: (doubles ? DEFAULT_DOUBLES_TIERS : DEFAULT_SINGLES_TIERS).map((t, i) => ({ id: `seed_${i}`, ...t })),
-    });
+  const seedTiers = () => vm.updateSettings({ tiers: defaultTiersFor(chip.settings.format) });
 
   // ── Setup · Settings (incl. the Fargo chip table) ────────────────────────────
   const renderSettingsTab = () => (
@@ -133,7 +160,16 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
           <TextInput allowFontScaling={false} style={styles.input} value={tournament.name} onChangeText={vm.setName} placeholder="Tournament name" placeholderTextColor={COLORS.textMuted} />
         </Field>
         <Field label="Format">
-          <Dropdown options={FORMAT_OPTS} value={chip.settings.format} onSelect={(v) => vm.updateSettings({ format: v as any })} />
+          <Dropdown
+            options={FORMAT_OPTS}
+            value={chip.settings.format}
+            onSelect={(v) => {
+              // Swap to the new format's default chip table unless the TD has
+              // customized the tiers.
+              const swap = chip.settings.tiers.length === 0 || isDefaultTiers(chip.settings.tiers);
+              vm.updateSettings({ format: v as any, ...(swap ? { tiers: defaultTiersFor(v) } : {}) });
+            }}
+          />
         </Field>
         <ToggleRow
           label="Allow Buy-Backs"
