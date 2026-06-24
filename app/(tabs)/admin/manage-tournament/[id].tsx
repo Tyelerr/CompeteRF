@@ -1588,6 +1588,15 @@ export default function ManageTournamentScreen() {
   const paramName = params.name || "";
 
   const hub = useManageTournament(tournamentId);
+
+  // Chip Tournaments have their own separate manage flow (winner-stays queue,
+  // not a bracket). Redirect there once we know the format.
+  useEffect(() => {
+    if (hub.tournament?.tournament_format === "chip-tournament") {
+      router.replace(`/(tabs)/admin/chip-tournament/${tournamentId}` as any);
+    }
+  }, [hub.tournament?.tournament_format, tournamentId, router]);
+
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
   // External "Submit Tournament" cancellable countdown (null = not submitting).
   const [submitCountdown, setSubmitCountdown] = useState<number | null>(null);
