@@ -312,6 +312,29 @@ interface RaceGroupForm {
   maxFargo: string;
   raceTo: string;
 }
+// One Fargo→chips tier for a Chip Tournament (edited under the Fargo section).
+// Stored on the tournament row in chip_ranges; the chip engine reads it from there.
+interface ChipTierForm {
+  id: string;
+  minFargo: string;
+  maxFargo: string; // blank = no upper bound ("& above")
+  chips: string;
+}
+const CHIP_DEFAULTS_SINGLES: [number, number | null, number][] = [
+  [701, null, 3], [641, 700, 4], [581, 640, 5], [521, 580, 6], [461, 520, 7], [0, 460, 8],
+];
+const CHIP_DEFAULTS_DOUBLES: [number, number | null, number][] = [
+  [1241, null, 3], [1181, 1240, 4], [1121, 1180, 5], [1061, 1120, 6], [1001, 1060, 7], [0, 1000, 8],
+];
+const defaultChipTiers = (gameType: string): ChipTierForm[] =>
+  (gameType.includes("scotch-doubles") ? CHIP_DEFAULTS_DOUBLES : CHIP_DEFAULTS_SINGLES).map(
+    ([mn, mx, c], i) => ({
+      id: `seed_${i}`,
+      minFargo: String(mn),
+      maxFargo: mx == null ? "" : String(mx),
+      chips: String(c),
+    }),
+  );
 interface SettingsForm {
   name: string;
   gameType: string;
@@ -349,6 +372,7 @@ interface SettingsForm {
   sidePots: SidePotForm[];
   fees: FeeForm[];
   feesOnTop: boolean;
+  chipTiers: ChipTierForm[]; // Chip Tournament Fargo→chips table (under Fargo)
 }
 
 const numOrNull = (s: string): number | null => {
@@ -458,6 +482,18 @@ const toForm = (t: Tournament): SettingsForm => {
     })),
     fees: feesToForm(ls.fees ?? []),
     feesOnTop: !!ls.feesAddedOnTop,
+    chipTiers:
+      t.tournament_format !== "chip-tournament"
+        ? []
+        : t.chip_ranges && t.chip_ranges.length
+          ? t.chip_ranges.map((r: any, i: number) => ({
+              id: `t_${i}`,
+              minFargo: String(r.minFargo ?? r.minRating ?? 0),
+              maxFargo:
+                (r.maxFargo ?? r.maxRating) == null ? "" : String(r.maxFargo ?? r.maxRating),
+              chips: String(r.chips ?? 0),
+            }))
+          : defaultChipTiers(t.game_type ?? ""),
   };
 };
 
@@ -534,6 +570,15 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   side_pots: f.sidePots
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
+  // Chip Tournament Fargo→chips table (the chip engine reads this).
+  chip_ranges:
+    f.tournamentFormat === "chip-tournament"
+      ? (f.chipTiers.map((t) => ({
+          minFargo: intOrNull(t.minFargo) ?? 0,
+          maxFargo: t.maxFargo.trim() === "" ? null : intOrNull(t.maxFargo),
+          chips: intOrNull(t.chips) ?? 0,
+        })) as any)
+      : undefined,
   live_settings: {
     raceMode: f.raceMode,
     fixedRaceWinners: f.raceWinners,
@@ -1589,13 +1634,12 @@ export default function ManageTournamentScreen() {
 
   const hub = useManageTournament(tournamentId);
 
-  // Chip Tournaments have their own separate manage flow (winner-stays queue,
-  // not a bracket). Redirect there once we know the format.
-  useEffect(() => {
-    if (hub.tournament?.tournament_format === "chip-tournament") {
-      router.replace(`/(tabs)/admin/chip-tournament/${tournamentId}` as any);
-    }
-  }, [hub.tournament?.tournament_format, tournamentId, router]);
+  // Chip Tournaments are set up here (in the Compete form — settings + the Fargo
+  // chip table under Fargo). The live winner-stays queue engine is its own screen,
+  // opened from the footer once setup is saved.
+  const openChipManager = () => {
+    router.push(`/(tabs)/admin/chip-tournament/${tournamentId}` as any);
+  };
 
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
   // External "Submit Tournament" cancellable countdown (null = not submitting).
@@ -2740,6 +2784,21 @@ export default function ManageTournamentScreen() {
       raceGroups: (form?.raceGroups ?? []).filter((_, idx) => idx !== i),
     });
 
+  // ---- Chip Tournament tier table (under Fargo) --------------------------------
+  const addChipTier = () =>
+    patchForm({
+      chipTiers: [
+        ...(form?.chipTiers ?? []),
+        { id: `ct-${Date.now()}-${(form?.chipTiers?.length ?? 0)}`, minFargo: "0", maxFargo: "", chips: "1" },
+      ],
+    });
+  const updateChipTier = (id: string, key: keyof ChipTierForm, v: string) =>
+    patchForm({
+      chipTiers: (form?.chipTiers ?? []).map((t) => (t.id === id ? { ...t, [key]: v } : t)),
+    });
+  const removeChipTier = (id: string) =>
+    patchForm({ chipTiers: (form?.chipTiers ?? []).filter((t) => t.id !== id) });
+
   // ---- Players handlers ---------------------------------------------------
   const handleAddPlayer = async (profile: Profile) => {
     const existing = hub.registrations.find(
@@ -3585,6 +3644,64 @@ export default function ManageTournamentScreen() {
             <Text allowFontScaling={false} style={styles.hint}>
               Clear the maximum Fargo to allow an open tournament.
             </Text>
+          )}
+
+          {isChip && (
+            <View style={styles.chipTableBlock}>
+              <View style={styles.sidePotHeader}>
+                <FieldLabel label="Fargo Chip Table" />
+                <TouchableOpacity style={styles.addRowBtnSm} onPress={addChipTier}>
+                  <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                    + Add Tier
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text allowFontScaling={false} style={styles.hint}>
+                {form.gameType.includes("scotch-doubles")
+                  ? "Combined team Fargo (Player 1 + Player 2) → starting chips."
+                  : "Player Fargo → starting chips. Higher Fargo = fewer chips. Leave Max blank for the top tier."}
+              </Text>
+              <View style={styles.chipTierHead}>
+                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Min</Text>
+                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Max</Text>
+                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Chips</Text>
+                <View style={styles.groupRemove} />
+              </View>
+              {form.chipTiers.map((t) => (
+                <View key={t.id} style={styles.chipTierRow}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.flex1, styles.chipTierInput]}
+                    value={t.minFargo}
+                    onChangeText={(v) => updateChipTier(t.id, "minFargo", v.replace(/[^0-9]/g, ""))}
+                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.flex1, styles.chipTierInput]}
+                    value={t.maxFargo}
+                    onChangeText={(v) => updateChipTier(t.id, "maxFargo", v.replace(/[^0-9]/g, ""))}
+                    keyboardType="numeric"
+                    placeholder="∞"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.flex1, styles.chipTierInput]}
+                    value={t.chips}
+                    onChangeText={(v) => updateChipTier(t.id, "chips", v.replace(/[^0-9]/g, ""))}
+                    keyboardType="numeric"
+                    placeholder="1"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <TouchableOpacity style={styles.groupRemove} onPress={() => removeChipTier(t.id)}>
+                    <Text allowFontScaling={false} style={styles.groupRemoveText}>{"✕"}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
           )}
         </Section>
 
@@ -5243,7 +5360,28 @@ export default function ManageTournamentScreen() {
                     : "Save Settings"}
               </Text>
             </TouchableOpacity>
-            {!isExternal && (
+            {!isExternal && isChip && (
+              <TouchableOpacity
+                style={[styles.startBtn, !formRequiredComplete && styles.btnDisabled]}
+                onPress={async () => {
+                  if (form) {
+                    try {
+                      await hub.saveSettings(toPatch(form));
+                    } catch {
+                      Alert.alert("Error", "Failed to save settings.");
+                      return;
+                    }
+                  }
+                  openChipManager();
+                }}
+                disabled={!formRequiredComplete || hub.isSaving}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  Open Chip Manager →
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!isExternal && !isChip && (
               <TouchableOpacity
                 style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
                 onPress={handleStartRegistration}
@@ -5718,6 +5856,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   groupRemoveText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
+  flex1: { flex: 1 },
+  chipTableBlock: { marginTop: webSc(SPACING.md) },
+  chipTierHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), marginBottom: 2 },
+  chipTierHeadText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  chipTierRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), marginBottom: webSc(SPACING.xs) },
+  chipTierInput: { textAlign: "center" },
   addRowBtn: {
     borderWidth: 1,
     borderColor: COLORS.primary,

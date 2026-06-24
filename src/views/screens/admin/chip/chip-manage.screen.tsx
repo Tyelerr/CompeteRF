@@ -24,7 +24,6 @@ import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
-import { Dropdown } from "../../../components/common/dropdown";
 import {
   PhaseNav,
   PhaseNavPhase,
@@ -41,42 +40,6 @@ import {
 import { ChipEntry } from "../../../../models/types/chip.types";
 
 const isWeb = Platform.OS === "web";
-
-const FORMAT_OPTS = [
-  { label: "Singles", value: "singles" },
-  { label: "Scotch Doubles", value: "scotch_doubles" },
-];
-const DEFAULT_SINGLES_TIERS = [
-  { minFargo: 701, maxFargo: null as number | null, chips: 3 },
-  { minFargo: 641, maxFargo: 700, chips: 4 },
-  { minFargo: 581, maxFargo: 640, chips: 5 },
-  { minFargo: 521, maxFargo: 580, chips: 6 },
-  { minFargo: 461, maxFargo: 520, chips: 7 },
-  { minFargo: 0, maxFargo: 460, chips: 8 },
-];
-const DEFAULT_DOUBLES_TIERS = [
-  { minFargo: 1241, maxFargo: null as number | null, chips: 3 },
-  { minFargo: 1181, maxFargo: 1240, chips: 4 },
-  { minFargo: 1121, maxFargo: 1180, chips: 5 },
-  { minFargo: 1061, maxFargo: 1120, chips: 6 },
-  { minFargo: 1001, maxFargo: 1060, chips: 7 },
-  { minFargo: 0, maxFargo: 1000, chips: 8 },
-];
-const defaultTiersFor = (fmt: string) =>
-  (fmt === "scotch_doubles" ? DEFAULT_DOUBLES_TIERS : DEFAULT_SINGLES_TIERS).map((t, i) => ({
-    id: `seed_${i}`,
-    ...t,
-  }));
-// True if the tiers look like one of the default sets (i.e. not customized).
-const isDefaultTiers = (tiers: { minFargo: number; maxFargo: number | null; chips: number }[]) => {
-  const match = (def: typeof DEFAULT_SINGLES_TIERS) =>
-    tiers.length === def.length &&
-    [...tiers].sort((a, b) => a.minFargo - b.minFargo).every((t, i) => {
-      const d = [...def].sort((a, b) => a.minFargo - b.minFargo)[i];
-      return t.minFargo === d.minFargo && (t.maxFargo ?? null) === (d.maxFargo ?? null) && t.chips === d.chips;
-    });
-  return match(DEFAULT_SINGLES_TIERS) || match(DEFAULT_DOUBLES_TIERS);
-};
 
 const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
 const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
@@ -115,19 +78,6 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     setPage(DEFAULT_PAGE[vm.phase]);
   }, [vm.loading, vm.phase]);
 
-  // Prefill the default chip table once on a fresh tournament (still editable).
-  const seededRef = useRef(false);
-  const tiersLen = vm.chip?.settings.tiers.length ?? 0;
-  const fmt = vm.chip?.settings.format;
-  useEffect(() => {
-    if (vm.loading || !fmt) return;
-    if (tiersLen === 0 && !seededRef.current) {
-      seededRef.current = true;
-      vm.updateSettings({ tiers: defaultTiersFor(fmt) });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vm.loading, tiersLen, fmt]);
-
   if (vm.loading) {
     return (
       <View style={styles.center}>
@@ -149,67 +99,32 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     chip.entries.find((e) => e.id === eid) ?? null;
   const chipPreview = (e: ChipEntry) =>
     chipsForFargo(chip.settings.tiers, teamFargoOf(e, chip.settings.format));
-  const seedTiers = () => vm.updateSettings({ tiers: defaultTiersFor(chip.settings.format) });
 
-  // ── Setup · Settings (incl. the Fargo chip table) ────────────────────────────
+  // ── Setup · Settings (live-running options; the chip table + format live on the
+  // tournament's main Settings page in the Compete form) ───────────────────────
   const renderSettingsTab = () => (
-    <>
-      <Section title="Settings">
-        <Field label="Tournament Name">
-          <TextInput allowFontScaling={false} style={styles.input} value={tournament.name} onChangeText={vm.setName} placeholder="Tournament name" placeholderTextColor={COLORS.textMuted} />
-        </Field>
-        <Field label="Format">
-          <Dropdown
-            options={FORMAT_OPTS}
-            value={chip.settings.format}
-            onSelect={(v) => {
-              // Swap to the new format's default chip table unless the TD has
-              // customized the tiers.
-              const swap = chip.settings.tiers.length === 0 || isDefaultTiers(chip.settings.tiers);
-              vm.updateSettings({ format: v as any, ...(swap ? { tiers: defaultTiersFor(v) } : {}) });
-            }}
-          />
-        </Field>
-        <ToggleRow
-          label="Allow Buy-Backs"
-          sub="Eliminated players can buy back into the queue"
-          value={chip.settings.buyBacksAllowed}
-          onChange={(v) => vm.updateSettings({ buyBacksAllowed: v })}
-        />
-      </Section>
-
-      <Section title="Fargo Chip Table" action={<HeaderBtn label="+ Add Tier" onPress={vm.addTier} />}>
-        <Text style={styles.hint}>
-          {doubles
-            ? "Combined team Fargo (Player 1 + Player 2) → starting chips."
-            : "Player Fargo → starting chips. Higher Fargo = fewer chips."}
-        </Text>
-        {chip.settings.tiers.length === 0 ? (
-          <TouchableOpacity style={styles.seedBtn} onPress={seedTiers}>
-            <Text style={styles.seedBtnText}>Use default {doubles ? "doubles" : "singles"} table</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <View style={styles.tierHead}>
-              <Text style={[styles.tierHeadText, styles.tierMin]}>Min</Text>
-              <Text style={[styles.tierHeadText, styles.tierMax]}>Max</Text>
-              <Text style={[styles.tierHeadText, styles.tierChips]}>Chips</Text>
-              <View style={styles.tierDel} />
-            </View>
-            {chip.settings.tiers.map((t) => (
-              <View key={t.id} style={styles.tierRow}>
-                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierMin]} value={String(t.minFargo ?? "")} onChangeText={(v) => vm.updateTier(t.id, { minFargo: parseInt(v.replace(/\D/g, "") || "0", 10) })} keyboardType="numeric" placeholder="0" placeholderTextColor={COLORS.textMuted} />
-                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierMax]} value={t.maxFargo == null ? "" : String(t.maxFargo)} onChangeText={(v) => { const d = v.replace(/\D/g, ""); vm.updateTier(t.id, { maxFargo: d === "" ? null : parseInt(d, 10) }); }} keyboardType="numeric" placeholder="∞" placeholderTextColor={COLORS.textMuted} />
-                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierChips]} value={String(t.chips ?? "")} onChangeText={(v) => vm.updateTier(t.id, { chips: parseInt(v.replace(/\D/g, "") || "0", 10) })} keyboardType="numeric" placeholder="1" placeholderTextColor={COLORS.textMuted} />
-                <TouchableOpacity style={styles.tierDel} onPress={() => vm.removeTier(t.id)}>
-                  <Text style={styles.delX}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </>
-        )}
-      </Section>
-    </>
+    <Section title="Settings">
+      <Field label="Tournament Name">
+        <TextInput allowFontScaling={false} style={styles.input} value={tournament.name} onChangeText={vm.setName} placeholder="Tournament name" placeholderTextColor={COLORS.textMuted} />
+      </Field>
+      <View style={styles.toggleRow}>
+        <Text style={styles.toggleLabel}>Format</Text>
+        <Text style={styles.readonlyVal}>{doubles ? "Scotch Doubles" : "Singles"}</Text>
+      </View>
+      <ToggleRow
+        label="Allow Buy-Backs"
+        sub="Eliminated players can buy back into the queue"
+        value={chip.settings.buyBacksAllowed}
+        onChange={(v) => vm.updateSettings({ buyBacksAllowed: v })}
+      />
+      <Text style={styles.hint}>
+        The Fargo chip table, game type and format are set on the tournament&apos;s main
+        Settings page (under Fargo).
+        {chip.settings.tiers.length
+          ? ` ${chip.settings.tiers.length} chip tiers loaded.`
+          : " No chip tiers set yet — add them on the Settings page."}
+      </Text>
+    </Section>
   );
 
   // ── Setup · Players (registration) ───────────────────────────────────────────
@@ -615,6 +530,7 @@ const styles = StyleSheet.create({
 
   toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: webSc(SPACING.xs), gap: webSc(SPACING.md) },
   toggleLabel: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "500" },
+  readonlyVal: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   toggleSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
 
   headerBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingVertical: 4, paddingHorizontal: 10 },

@@ -15,7 +15,6 @@ import {
 } from "../types/chip.types";
 import { Tournament } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
-import { emptyChipState } from "./chip.engine";
 
 export interface ChipTournamentBundle {
   tournament: Tournament;
@@ -174,20 +173,25 @@ export const chipService = {
     ]);
 
     const c = cfg.data;
-    // A fresh chip tournament defaults its format from the game type chosen on the
-    // Compete form: a *-scotch-doubles game type → Scotch Doubles, else Singles.
-    const derivedFormat = String((t as Tournament).game_type ?? "").includes("scotch-doubles")
+    const tt = t as Tournament;
+    // Format follows the Compete-form game type (*-scotch-doubles → Scotch Doubles).
+    const derivedFormat = String(tt.game_type ?? "").includes("scotch-doubles")
       ? "scotch_doubles"
       : "singles";
-    const base = emptyChipState(derivedFormat);
+    // The Fargo chip table is edited on the Compete Settings page and stored on the
+    // tournament row (chip_ranges) — read it from there, not chip_config.
+    const tiers = ((tt.chip_ranges as any[]) ?? []).map((r, i) => ({
+      id: `t_${i}`,
+      minFargo: r.minFargo ?? r.minRating ?? 0,
+      maxFargo: (r.maxFargo ?? r.maxRating) ?? null,
+      chips: r.chips ?? 0,
+    }));
     const chip: ChipState = {
-      settings: c
-        ? {
-            format: c.format,
-            tiers: c.tiers ?? [],
-            buyBacksAllowed: !!c.buy_backs_allowed,
-          }
-        : base.settings,
+      settings: {
+        format: derivedFormat,
+        tiers,
+        buyBacksAllowed: !!c?.buy_backs_allowed,
+      },
       entries: (entries.data ?? []).map(rowToEntry),
       tables: (tables.data ?? []).map(rowToTable),
       matches: (matches.data ?? []).map(rowToMatch),
@@ -206,7 +210,7 @@ export const chipService = {
     const { error: cfgErr } = await supabase.from("chip_config").upsert({
       tournament_id: id,
       format: chip.settings.format,
-      tiers: chip.settings.tiers,
+      // tiers live on the tournament row (chip_ranges), edited in the Compete form.
       buy_backs_allowed: chip.settings.buyBacksAllowed,
       queue: chip.queue,
       started_at: chip.startedAt ?? null,
