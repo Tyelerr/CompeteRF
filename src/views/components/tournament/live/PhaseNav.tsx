@@ -190,8 +190,6 @@ const styles = StyleSheet.create({
     paddingBottom: webSc(SPACING.sm),
     // Match the black page body on web; keep the subtle surface bar on mobile.
     backgroundColor: Platform.OS === "web" ? COLORS.background : COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   pill: {
     flex: 1,

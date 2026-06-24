@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
   errorText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.surface },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.background },
   back: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   headerCenter: { flex: 1, alignItems: "center" },
   headerTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700" },
