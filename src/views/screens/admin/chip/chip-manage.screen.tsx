@@ -97,7 +97,7 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
   const router = useRouter();
   const [selectedPhase, setSelectedPhase] = useState<"setup" | "live" | "results">("setup");
   const [page, setPage] = useState<string>("Settings");
-  const lastPhase = useRef<string>("setup");
+  const initedRef = useRef(false);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -106,15 +106,14 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     return () => clearInterval(t);
   }, [vm.phase]);
 
-  // Follow the lifecycle: when the tournament changes phase (Start / End), jump
-  // the nav to that phase's first page.
+  // Land on the current phase ONCE after the first load. After that the TD drives
+  // the nav — starting the tournament must not yank them off Settings.
   useEffect(() => {
-    if (vm.phase !== lastPhase.current) {
-      lastPhase.current = vm.phase;
-      setSelectedPhase(vm.phase);
-      setPage(DEFAULT_PAGE[vm.phase]);
-    }
-  }, [vm.phase]);
+    if (vm.loading || initedRef.current) return;
+    initedRef.current = true;
+    setSelectedPhase(vm.phase);
+    setPage(DEFAULT_PAGE[vm.phase]);
+  }, [vm.loading, vm.phase]);
 
   // Prefill the default chip table once on a fresh tournament (still editable).
   const seededRef = useRef(false);
@@ -271,17 +270,30 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
 
   // ── Setup · Review & Start ───────────────────────────────────────────────────
   const renderReview = () => {
+    const started = vm.phase !== "setup";
     const ready = chip.entries.filter((e) => e.checkedIn).length >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1;
     return (
-      <Section title="Review & Start">
+      <Section title={started ? "Tournament" : "Review & Start"}>
         <View style={styles.reviewRow}>
           <Review label="Checked in" value={chip.entries.filter((e) => e.checkedIn).length} sub={`${chip.entries.length} registered`} />
           <Review label="Tables" value={chip.tables.length} />
           <Review label="Tiers" value={chip.settings.tiers.length} />
         </View>
-        <TouchableOpacity style={[styles.startBtn, !ready && styles.startBtnDisabled]} disabled={!ready || vm.starting} onPress={vm.start}>
-          {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{ready ? "Start Tournament" : "Need 2+ checked-in players, a table, and a chip tier"}</Text>}
-        </TouchableOpacity>
+        {started ? (
+          <>
+            <Text style={styles.hint}>
+              The tournament is {vm.phase === "results" ? "finished" : "running"}. You can still edit
+              Settings, Players and Tables here at any time.
+            </Text>
+            <TouchableOpacity style={styles.startBtn} onPress={() => { setSelectedPhase(vm.phase); setPage(vm.phase === "results" ? "Standings" : "Tables"); }}>
+              <Text style={styles.startBtnText}>{vm.phase === "results" ? "View Results →" : "Go to Live →"}</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity style={[styles.startBtn, !ready && styles.startBtnDisabled]} disabled={!ready || vm.starting} onPress={vm.start}>
+            {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{ready ? "Start Tournament" : "Need 2+ checked-in players, a table, and a chip tier"}</Text>}
+          </TouchableOpacity>
+        )}
       </Section>
     );
   };
