@@ -389,6 +389,7 @@ interface SettingsForm {
   fees: FeeForm[];
   feesOnTop: boolean;
   chipTiers: ChipTierForm[]; // Chip Tournament Fargo→chips table (under Fargo)
+  chipBuyBacks: boolean; // Chip Tournament: allow eliminated players to buy back
 }
 
 const numOrNull = (s: string): number | null => {
@@ -512,6 +513,7 @@ const toForm = (t: Tournament): SettingsForm => {
               };
             })
           : defaultChipTiers(t.game_type ?? ""),
+    chipBuyBacks: !!(ls as any).chipBuyBacks,
   };
 };
 
@@ -630,7 +632,8 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
         enabled: fee.enabled,
       })),
     feesAddedOnTop: f.feesOnTop,
-  },
+    chipBuyBacks: f.chipBuyBacks,
+  } as any,
   };
 };
 
@@ -3736,6 +3739,14 @@ export default function ManageTournamentScreen() {
                 </TouchableOpacity>
               </View>
             ))}
+            <ToggleSwitch
+              label="Allow Buy-Backs"
+              value={form.chipBuyBacks}
+              onValueChange={(v) => patchForm({ chipBuyBacks: v })}
+            />
+            <Text allowFontScaling={false} style={styles.hint}>
+              Eliminated players can buy back into the queue.
+            </Text>
           </Section>
         )}
 
@@ -5411,7 +5422,7 @@ export default function ManageTournamentScreen() {
                 disabled={!formRequiredComplete || hub.isSaving}
               >
                 <Text allowFontScaling={false} style={styles.startBtnText}>
-                  Open Chip Manager →
+                  Begin Registration →
                 </Text>
               </TouchableOpacity>
             )}

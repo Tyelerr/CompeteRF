@@ -14,7 +14,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -41,11 +40,11 @@ import { ChipEntry } from "../../../../models/types/chip.types";
 
 const isWeb = Platform.OS === "web";
 
-const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
+const SETUP_PAGES = ["Players", "Tables", "Review"];
 const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
 const RESULTS_PAGES = ["Standings", "History"];
 const DEFAULT_PAGE: Record<string, string> = {
-  setup: "Settings",
+  setup: "Players",
   live: "Tables",
   results: "Standings",
 };
@@ -59,7 +58,7 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
   const vm = useChipTournament(id);
   const router = useRouter();
   const [selectedPhase, setSelectedPhase] = useState<"setup" | "live" | "results">("setup");
-  const [page, setPage] = useState<string>("Settings");
+  const [page, setPage] = useState<string>("Players");
   const initedRef = useRef(false);
   const [now, setNow] = useState(Date.now());
 
@@ -99,33 +98,6 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     chip.entries.find((e) => e.id === eid) ?? null;
   const chipPreview = (e: ChipEntry) =>
     chipsForFargo(chip.settings.tiers, teamFargoOf(e, chip.settings.format));
-
-  // ── Setup · Settings (live-running options; the chip table + format live on the
-  // tournament's main Settings page in the Compete form) ───────────────────────
-  const renderSettingsTab = () => (
-    <Section title="Settings">
-      <Field label="Tournament Name">
-        <TextInput allowFontScaling={false} style={styles.input} value={tournament.name} onChangeText={vm.setName} placeholder="Tournament name" placeholderTextColor={COLORS.textMuted} />
-      </Field>
-      <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>Format</Text>
-        <Text style={styles.readonlyVal}>{doubles ? "Scotch Doubles" : "Singles"}</Text>
-      </View>
-      <ToggleRow
-        label="Allow Buy-Backs"
-        sub="Eliminated players can buy back into the queue"
-        value={chip.settings.buyBacksAllowed}
-        onChange={(v) => vm.updateSettings({ buyBacksAllowed: v })}
-      />
-      <Text style={styles.hint}>
-        The Fargo chip table, game type and format are set on the tournament&apos;s main
-        Settings page (under Fargo).
-        {chip.settings.tiers.length
-          ? ` ${chip.settings.tiers.length} chip tiers loaded.`
-          : " No chip tiers set yet — add them on the Settings page."}
-      </Text>
-    </Section>
-  );
 
   // ── Setup · Players (registration) ───────────────────────────────────────────
   const renderPlayersSetup = () => (
@@ -387,10 +359,9 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
 
   const content = () => {
     if (selectedPhase === "setup") {
-      if (page === "Players") return renderPlayersSetup();
       if (page === "Tables") return renderTablesSetup();
       if (page === "Review") return renderReview();
-      return renderSettingsTab();
+      return renderPlayersSetup();
     }
     if (selectedPhase === "live") {
       if (page === "Dashboard") return renderLiveDashboard();
@@ -444,21 +415,6 @@ const Section = ({ title, action, children }: { title: string; action?: React.Re
       {action}
     </View>
     {children}
-  </View>
-);
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <View style={styles.fieldWrap}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    {children}
-  </View>
-);
-const ToggleRow = ({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) => (
-  <View style={styles.toggleRow}>
-    <View style={styles.flexSpacer}>
-      <Text style={styles.toggleLabel}>{label}</Text>
-      {sub ? <Text style={styles.toggleSub}>{sub}</Text> : null}
-    </View>
-    <Switch value={value} onValueChange={onChange} trackColor={{ true: COLORS.primary }} />
   </View>
 );
 const MiniToggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (

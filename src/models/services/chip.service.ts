@@ -193,7 +193,8 @@ export const chipService = {
       settings: {
         format: derivedFormat,
         tiers,
-        buyBacksAllowed: !!c?.buy_backs_allowed,
+        // Buy-backs are configured on the Compete Settings form (live_settings).
+        buyBacksAllowed: !!(tt.live_settings as any)?.chipBuyBacks,
       },
       entries: (entries.data ?? []).map(rowToEntry),
       tables: (tables.data ?? []).map(rowToTable),
@@ -213,8 +214,8 @@ export const chipService = {
     const { error: cfgErr } = await supabase.from("chip_config").upsert({
       tournament_id: id,
       format: chip.settings.format,
-      // tiers live on the tournament row (chip_ranges), edited in the Compete form.
-      buy_backs_allowed: chip.settings.buyBacksAllowed,
+      // tiers (chip_ranges) + buy-backs (live_settings) are edited on the Compete
+      // Settings form, not here.
       queue: chip.queue,
       started_at: chip.startedAt ?? null,
       finished_at: chip.finishedAt ?? null,
