@@ -4,9 +4,15 @@
 // (entry_fee, added_money, side_pots, max_fargo, etc.) are persisted directly
 // on the tournament row and are NOT duplicated here.
 //
+// The Chip Tournament format (tournament_format = "chip-tournament") keeps its
+// ENTIRE live state under `chip` (see chip.types.ts / CHIP_TOURNAMENT.md). It is a
+// separate ecosystem and does not use the bracket fields below.
+//
 // Every field is optional; the blob defaults to {} for tournaments created
 // before this feature. Toggles are stored even when the underlying feature
 // ships later (the TD's choice is recorded now).
+
+import { ChipState } from "./chip.types";
 
 // One A/B/C race group: players whose Fargo falls in [minFargo, maxFargo]
 // race to `raceTo`. (Renamed from the old "Fargo Handicap Groups" concept.)
@@ -198,4 +204,8 @@ export interface TournamentLiveSettings {
   // (fees reduce the pool). true = collected on top of the entry (fees are
   // separate; the full entry goes to the pool).
   feesAddedOnTop?: boolean;
+
+  // Chip Tournament state (separate ecosystem; see chip.types.ts). Present only
+  // when tournament_format === "chip-tournament".
+  chip?: ChipState;
 }
