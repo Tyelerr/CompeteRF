@@ -2071,6 +2071,8 @@ export default function ManageTournamentScreen() {
     );
 
   const isExternal = hub.tournament?.bracket_source === "external";
+  // Chip Tournament format: no game spot, and the race is a simple "Race To" (1+).
+  const isChip = form?.tournamentFormat === "chip-tournament";
   const tournamentName =
     hub.tournament?.name ||
     paramName ||
@@ -2967,6 +2969,25 @@ export default function ManageTournamentScreen() {
   // external "Other Software" form uses the identical UI as the Compete form.
   const renderRaceSection = () => {
     if (!form) return null;
+    // Chip tournaments use a single short race (usually race to 1) — no race
+    // modes, no losers/finals races.
+    if (isChip) {
+      return (
+        <Section title="Race">
+          <Stepper
+            prefix="Race to"
+            value={form.raceWinners || 1}
+            onChange={(v) => patchForm({ raceWinners: v })}
+            min={1}
+            max={15}
+          />
+          <Text allowFontScaling={false} style={styles.hint}>
+            Each chip match is short — race to 1 means a single game decides the
+            match. Raise it for longer chip matches.
+          </Text>
+        </Section>
+      );
+    }
     return (
         <Section title="Race">
           <View style={styles.field}>
@@ -3492,15 +3513,23 @@ export default function ManageTournamentScreen() {
               placeholder="Select format"
               options={TOURNAMENT_FORMATS}
               value={form.tournamentFormat}
-              onSelect={(v) => patchForm({ tournamentFormat: v })}
+              onSelect={(v) =>
+                patchForm({
+                  tournamentFormat: v,
+                  // Chip matches default to a single short race.
+                  ...(v === "chip-tournament" ? { raceWinners: 1 } : {}),
+                })
+              }
             />
           </View>
-          <LabeledInput
-            label="Game Spot"
-            value={form.gameSpot}
-            onChangeText={(v) => patchForm({ gameSpot: v })}
-            placeholder="e.g., The Ball"
-          />
+          {!isChip && (
+            <LabeledInput
+              label="Game Spot"
+              value={form.gameSpot}
+              onChangeText={(v) => patchForm({ gameSpot: v })}
+              placeholder="e.g., The Ball"
+            />
+          )}
           <LabeledInput
             label="Description"
             value={form.description}
