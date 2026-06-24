@@ -11,11 +11,15 @@ touching chip code. Build order is **data-first**, in reviewable slices.
 
 ## Locked architecture decisions
 
-1. **State lives in `tournaments.live_settings.chip`** (a JSONB blob), exactly like
-   the bracket engine keeps its state in `live_settings`. The tournaments row is
-   TD-owned, so the TD/Bar Owner can write it with a normal update under RLS — **no
-   new tables for Phase 1**. (Spectator reads and player writes can come later via a
-   `SECURITY DEFINER` RPC, mirroring `submit_match_state`.)
+1. **State lives in real relational tables** — `chip_config` (1:1 settings + run
+   meta + queue order), `chip_entries`, `chip_tables`, `chip_matches`,
+   `chip_events` (migration `20260624120000_chip_tournament_tables.sql`). This was
+   chosen over a JSONB blob so the data is **owned and queryable** (player stats,
+   match history, eliminations, reporting). IDs are TEXT, matching the engine's
+   client-generated ids. RLS: **public read** (spectator-friendly); writes
+   restricted to the tournament's director or an admin via `is_chip_manager()`.
+   `chip.service.ts` hydrates a `ChipState` from the rows and writes it back
+   (upsert + prune); the engine stays pure and table-agnostic.
 2. **The engine is pure app code.** `chip.engine.ts` holds the winner-stays queue
    logic (advance, anti-repeat, eliminations, reshuffle, derived stats) as pure
    functions over a `ChipState`. Persistence is a thin service that loads/saves the
