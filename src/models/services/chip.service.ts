@@ -174,7 +174,12 @@ export const chipService = {
     ]);
 
     const c = cfg.data;
-    const base = emptyChipState("singles");
+    // A fresh chip tournament defaults its format from the game type chosen on the
+    // Compete form: a *-scotch-doubles game type → Scotch Doubles, else Singles.
+    const derivedFormat = String((t as Tournament).game_type ?? "").includes("scotch-doubles")
+      ? "scotch_doubles"
+      : "singles";
+    const base = emptyChipState(derivedFormat);
     const chip: ChipState = {
       settings: c
         ? {
