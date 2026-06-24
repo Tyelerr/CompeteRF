@@ -150,6 +150,20 @@ export default function FaqScreen() {
                     support@thecompeteapp.com
                   </Text>
                 </TouchableOpacity>
+
+                {isWeb && (
+                  <View style={styles.businessBlock}>
+                    <Text allowFontScaling={false} style={styles.businessName}>
+                      AZ Tech Guys LLC
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.businessLine}>
+                      Phoenix, Arizona, United States
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.businessLine}>
+                      Email: support@thecompeteapp.com
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -336,6 +350,27 @@ const styles = StyleSheet.create({
     fontSize: wxMs(FONT_SIZES.sm),
     color: COLORS.primary,
     textDecorationLine: "underline",
+  },
+  // Compliance business contact block (web only)
+  businessBlock: {
+    width: "100%" as any,
+    alignItems: "center",
+    marginTop: wxSc(SPACING.lg),
+    paddingTop: wxSc(SPACING.md),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  businessName: {
+    fontSize: wxMs(FONT_SIZES.md),
+    fontWeight: "700",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+  businessLine: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginTop: wxSc(SPACING.xs),
   },
 
   legalCard: {
