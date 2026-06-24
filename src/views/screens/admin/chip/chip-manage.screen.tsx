@@ -528,7 +528,13 @@ const WinnerBtn = ({ entry, onPress }: { entry: ChipEntry; onPress: () => void }
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: {
+    ...Platform.select({
+      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+    }),
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
   errorText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.surface },
@@ -546,7 +552,7 @@ const styles = StyleSheet.create({
 
   scroll: { flex: 1 },
   content: { padding: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2) },
-  contentWeb: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
+  contentWeb: { width: "100%" as any },
 
   section: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: webSc(SPACING.sm) },
