@@ -6,10 +6,11 @@
 // timers), Queue, Players (chips/records + buy-back). Results = Standings.
 // Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,10 @@ import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { Dropdown } from "../../../components/common/dropdown";
+import {
+  PhaseNav,
+  PhaseNavPhase,
+} from "../../../components/tournament/live/PhaseNav";
 import { useChipTournament } from "../../../../viewmodels/use.chip.tournament";
 import {
   chipsForFargo,
@@ -56,8 +61,14 @@ const DEFAULT_DOUBLES_TIERS = [
   { minFargo: 0, maxFargo: 999, chips: 6 },
 ];
 
-const SETUP_TABS = ["Settings", "Players", "Tables", "Review"] as const;
-const LIVE_TABS = ["Dashboard", "Tables", "Queue", "Players"] as const;
+const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
+const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
+const RESULTS_PAGES = ["Standings", "History"];
+const DEFAULT_PAGE: Record<string, string> = {
+  setup: "Settings",
+  live: "Tables",
+  results: "Standings",
+};
 
 const fmtClock = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -67,14 +78,25 @@ const fmtClock = (ms: number) => {
 export const ChipManageScreen = ({ id }: { id: number }) => {
   const vm = useChipTournament(id);
   const router = useRouter();
-  const [setupTab, setSetupTab] = useState<(typeof SETUP_TABS)[number]>("Settings");
-  const [liveTab, setLiveTab] = useState<(typeof LIVE_TABS)[number]>("Tables");
+  const [selectedPhase, setSelectedPhase] = useState<"setup" | "live" | "results">("setup");
+  const [page, setPage] = useState<string>("Settings");
+  const lastPhase = useRef<string>("setup");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     if (vm.phase !== "live") return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
+  }, [vm.phase]);
+
+  // Follow the lifecycle: when the tournament changes phase (Start / End), jump
+  // the nav to that phase's first page.
+  useEffect(() => {
+    if (vm.phase !== lastPhase.current) {
+      lastPhase.current = vm.phase;
+      setSelectedPhase(vm.phase);
+      setPage(DEFAULT_PAGE[vm.phase]);
+    }
   }, [vm.phase]);
 
   if (vm.loading) {
@@ -334,8 +356,8 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     );
   };
 
-  // ── Results ──────────────────────────────────────────────────────────────────
-  const renderResults = () => {
+  // ── Results · Standings ──────────────────────────────────────────────────────
+  const renderStandings = () => {
     const alive = [...chip.entries].filter((e) => e.status !== "eliminated").sort((a, b) => b.chips - a.chips || b.wins - a.wins);
     const out = [...chip.entries].filter((e) => e.status === "eliminated").sort((a, b) => b.wins - a.wins);
     const row = (e: ChipEntry, rank: number) => (
@@ -357,9 +379,64 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     );
   };
 
-  const tabs = vm.phase === "setup" ? SETUP_TABS : vm.phase === "live" ? LIVE_TABS : [];
-  const activeTab = vm.phase === "setup" ? setupTab : liveTab;
-  const setTab = vm.phase === "setup" ? (setSetupTab as (t: string) => void) : (setLiveTab as (t: string) => void);
+  // ── Results · History (timeline from chip_events) ────────────────────────────
+  const renderHistory = () => (
+    <Section title="History">
+      {chip.events.length === 0 && <Text style={styles.hint}>No events yet.</Text>}
+      {chip.events.map((ev) => (
+        <View key={ev.id} style={styles.histRow}>
+          <Text style={styles.histText} numberOfLines={2}>{ev.text}</Text>
+        </View>
+      ))}
+    </Section>
+  );
+
+  // ── Phase nav model (Setup / Live / Results dropdown buttons) ─────────────────
+  const started = vm.phase === "live" || vm.phase === "results";
+  const finished = vm.phase === "results";
+  const mkPages = (keys: string[]) => keys.map((k) => ({ key: k, label: k, glyph: "○" }));
+  const phases: PhaseNavPhase[] = [
+    {
+      key: "setup",
+      label: "Setup",
+      glyph: started ? "✓" : "●",
+      state: started ? "done" : "current",
+      locked: false,
+      pages: mkPages(SETUP_PAGES),
+    },
+    {
+      key: "live",
+      label: "Live",
+      glyph: vm.phase === "live" ? "⏺" : finished ? "✓" : "🔒",
+      state: vm.phase === "live" ? "live" : finished ? "done" : "locked",
+      locked: !started,
+      pages: mkPages(LIVE_PAGES),
+    },
+    {
+      key: "results",
+      label: "Results",
+      glyph: finished ? "✓" : started ? "●" : "🔒",
+      state: finished ? "done" : started ? "current" : "locked",
+      locked: !started,
+      pages: mkPages(RESULTS_PAGES),
+    },
+  ];
+
+  const content = () => {
+    if (selectedPhase === "setup") {
+      if (page === "Players") return renderPlayersSetup();
+      if (page === "Tables") return renderTablesSetup();
+      if (page === "Review") return renderReview();
+      return renderSettingsTab();
+    }
+    if (selectedPhase === "live") {
+      if (page === "Dashboard") return renderLiveDashboard();
+      if (page === "Queue") return renderLiveQueue();
+      if (page === "Players") return renderLivePlayers();
+      return renderLiveTables();
+    }
+    return page === "History" ? renderHistory() : renderStandings();
+  };
 
   return (
     <View style={styles.container}>
@@ -367,31 +444,30 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{tournament.name || "Chip Tournament"}</Text>
-          <View style={styles.phaseBadge}><Text style={styles.phaseBadgeText}>{vm.phase === "setup" ? "Setup" : vm.phase === "live" ? "LIVE" : "Results"}</Text></View>
         </View>
         <View style={{ width: webSc(44) }} />
       </View>
 
-      {tabs.length > 0 && (
-        <View style={styles.tabBar}>
-          {tabs.map((t) => (
-            <TouchableOpacity key={t} style={[styles.tab, activeTab === t && styles.tabOn]} onPress={() => setTab(t)}>
-              <Text style={[styles.tabText, activeTab === t && styles.tabTextOn]}>{t}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      <PhaseNav
+        phases={phases}
+        selectedKey={selectedPhase}
+        activePageKey={page}
+        onSelectPage={(phaseKey, pageKey) => {
+          setSelectedPhase(phaseKey as "setup" | "live" | "results");
+          setPage(pageKey);
+        }}
+        onLockedPress={(phaseKey) =>
+          Alert.alert(
+            "Not yet",
+            phaseKey === "live"
+              ? "Start the tournament from Setup → Review first."
+              : "Results open once the tournament is running.",
+          )
+        }
+      />
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, isWeb && styles.contentWeb]} keyboardShouldPersistTaps="handled">
-        {vm.phase === "setup" && setupTab === "Settings" && renderSettingsTab()}
-        {vm.phase === "setup" && setupTab === "Players" && renderPlayersSetup()}
-        {vm.phase === "setup" && setupTab === "Tables" && renderTablesSetup()}
-        {vm.phase === "setup" && setupTab === "Review" && renderReview()}
-        {vm.phase === "live" && liveTab === "Dashboard" && renderLiveDashboard()}
-        {vm.phase === "live" && liveTab === "Tables" && renderLiveTables()}
-        {vm.phase === "live" && liveTab === "Queue" && renderLiveQueue()}
-        {vm.phase === "live" && liveTab === "Players" && renderLivePlayers()}
-        {vm.phase === "results" && renderResults()}
+        {content()}
       </ScrollView>
     </View>
   );
@@ -575,4 +651,7 @@ const styles = StyleSheet.create({
   standRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: 22 },
   standName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flex: 1 },
   standMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs) },
+
+  histRow: { paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  histText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
 });
