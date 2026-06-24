@@ -180,12 +180,15 @@ export const chipService = {
       : "singles";
     // The Fargo chip table is edited on the Compete Settings page and stored on the
     // tournament row (chip_ranges) — read it from there, not chip_config.
-    const tiers = ((tt.chip_ranges as any[]) ?? []).map((r, i) => ({
-      id: `t_${i}`,
-      minFargo: r.minFargo ?? r.minRating ?? 0,
-      maxFargo: (r.maxFargo ?? r.maxRating) ?? null,
-      chips: r.chips ?? 0,
-    }));
+    const tiers = ((tt.chip_ranges as any[]) ?? []).map((r, i) => {
+      const max = r.maxRating ?? r.maxFargo;
+      return {
+        id: `t_${i}`,
+        minFargo: r.minRating ?? r.minFargo ?? 0,
+        maxFargo: max == null || max >= 9000 ? null : max,
+        chips: r.chips ?? 0,
+      };
+    });
     const chip: ChipState = {
       settings: {
         format: derivedFormat,

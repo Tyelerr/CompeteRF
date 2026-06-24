@@ -335,6 +335,22 @@ const defaultChipTiers = (gameType: string): ChipTierForm[] =>
       chips: String(c),
     }),
   );
+// True if the tiers are empty or exactly one of the default sets (not customized),
+// so we can safely swap defaults when the game type changes.
+const chipTiersAreDefault = (tiers: ChipTierForm[]): boolean => {
+  const matches = (def: [number, number | null, number][]) =>
+    tiers.length === def.length &&
+    tiers.every((t, i) => {
+      const [mn, mx, c] = def[i];
+      const tMax = t.maxFargo.trim() === "" ? null : parseInt(t.maxFargo, 10);
+      return (
+        (parseInt(t.minFargo, 10) || 0) === mn &&
+        tMax === mx &&
+        (parseInt(t.chips, 10) || 0) === c
+      );
+    });
+  return tiers.length === 0 || matches(CHIP_DEFAULTS_SINGLES) || matches(CHIP_DEFAULTS_DOUBLES);
+};
 interface SettingsForm {
   name: string;
   gameType: string;
@@ -486,13 +502,15 @@ const toForm = (t: Tournament): SettingsForm => {
       t.tournament_format !== "chip-tournament"
         ? []
         : t.chip_ranges && t.chip_ranges.length
-          ? t.chip_ranges.map((r: any, i: number) => ({
-              id: `t_${i}`,
-              minFargo: String(r.minFargo ?? r.minRating ?? 0),
-              maxFargo:
-                (r.maxFargo ?? r.maxRating) == null ? "" : String(r.maxFargo ?? r.maxRating),
-              chips: String(r.chips ?? 0),
-            }))
+          ? t.chip_ranges.map((r: any, i: number) => {
+              const max = r.maxRating ?? r.maxFargo;
+              return {
+                id: `t_${i}`,
+                minFargo: String(r.minRating ?? r.minFargo ?? 0),
+                maxFargo: max == null || max >= 9000 ? "" : String(max),
+                chips: String(r.chips ?? 0),
+              };
+            })
           : defaultChipTiers(t.game_type ?? ""),
   };
 };
@@ -570,14 +588,19 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   side_pots: f.sidePots
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), amount: numOrNull(p.amount) ?? 0 })),
-  // Chip Tournament Fargo→chips table (the chip engine reads this).
+  // Chip Tournament Fargo→chips table. Stored in the shared ChipRange shape
+  // (minRating/maxRating/chips/label) so the tournament-detail "Chip Chart" and
+  // the chip engine both read it. Open-ended top tier uses maxRating 9999.
   chip_ranges:
     f.tournamentFormat === "chip-tournament"
-      ? (f.chipTiers.map((t) => ({
-          minFargo: intOrNull(t.minFargo) ?? 0,
-          maxFargo: t.maxFargo.trim() === "" ? null : intOrNull(t.maxFargo),
-          chips: intOrNull(t.chips) ?? 0,
-        })) as any)
+      ? (f.chipTiers.map((t) => {
+          const min = intOrNull(t.minFargo) ?? 0;
+          const maxStr = t.maxFargo.trim();
+          const max = maxStr === "" ? 9999 : intOrNull(maxStr) ?? 9999;
+          const label =
+            maxStr === "" ? `${min} & Above` : min === 0 ? `${max} & Under` : `${min}-${max}`;
+          return { minRating: min, maxRating: max, chips: intOrNull(t.chips) ?? 0, label };
+        }) as any)
       : undefined,
   live_settings: {
     raceMode: f.raceMode,
@@ -2798,6 +2821,8 @@ export default function ManageTournamentScreen() {
     });
   const removeChipTier = (id: string) =>
     patchForm({ chipTiers: (form?.chipTiers ?? []).filter((t) => t.id !== id) });
+  const prefillChipDefaults = () =>
+    patchForm({ chipTiers: defaultChipTiers(form?.gameType ?? "") });
 
   // ---- Players handlers ---------------------------------------------------
   const handleAddPlayer = async (profile: Profile) => {
@@ -3572,7 +3597,16 @@ export default function ManageTournamentScreen() {
               placeholder="Select game type"
               options={GAME_TYPES}
               value={form.gameType}
-              onSelect={(v) => patchForm({ gameType: v })}
+              onSelect={(v) =>
+                patchForm({
+                  gameType: v,
+                  // For chip tournaments, swap the default chip table to match the
+                  // game type (singles vs scotch doubles) unless the TD customized it.
+                  ...(isChip && chipTiersAreDefault(form.chipTiers)
+                    ? { chipTiers: defaultChipTiers(v) }
+                    : {}),
+                })
+              }
             />
           </View>
           <View style={styles.field}>
@@ -3645,65 +3679,65 @@ export default function ManageTournamentScreen() {
               Clear the maximum Fargo to allow an open tournament.
             </Text>
           )}
+        </Section>
 
-          {isChip && (
-            <View style={styles.chipTableBlock}>
-              <View style={styles.sidePotHeader}>
-                <FieldLabel label="Fargo Chip Table" />
-                <TouchableOpacity style={styles.addRowBtnSm} onPress={addChipTier}>
-                  <Text allowFontScaling={false} style={styles.addRowBtnText}>
-                    + Add Tier
-                  </Text>
+        {isChip && (
+          <Section title="Fargo Chip Table">
+            <View style={styles.chipTableActions}>
+              <TouchableOpacity style={styles.addRowBtnSm} onPress={prefillChipDefaults}>
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>Use defaults</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addRowBtnSm} onPress={addChipTier}>
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>+ Add Tier</Text>
+              </TouchableOpacity>
+            </View>
+            <Text allowFontScaling={false} style={styles.hint}>
+              {form.gameType.includes("scotch-doubles")
+                ? "Combined team Fargo (P1 + P2) → starting chips. Leave Max blank for the top tier."
+                : "Player Fargo → starting chips. Leave Max blank for the top tier."}
+            </Text>
+            <View style={styles.chipTierHead}>
+              <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.chipCol]}>Min</Text>
+              <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.chipCol]}>Max</Text>
+              <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.chipCol]}>Chips</Text>
+              <View style={styles.chipColDel} />
+            </View>
+            {form.chipTiers.map((t) => (
+              <View key={t.id} style={styles.chipTierRow}>
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.chipTierInput, styles.chipCol]}
+                  value={t.minFargo}
+                  onChangeText={(v) => updateChipTier(t.id, "minFargo", v.replace(/[^0-9]/g, ""))}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.chipTierInput, styles.chipCol]}
+                  value={t.maxFargo}
+                  onChangeText={(v) => updateChipTier(t.id, "maxFargo", v.replace(/[^0-9]/g, ""))}
+                  keyboardType="numeric"
+                  placeholder="∞"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TextInput
+                  allowFontScaling={false}
+                  style={[styles.chipTierInput, styles.chipCol]}
+                  value={t.chips}
+                  onChangeText={(v) => updateChipTier(t.id, "chips", v.replace(/[^0-9]/g, ""))}
+                  keyboardType="numeric"
+                  placeholder="1"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                <TouchableOpacity style={styles.chipColDel} onPress={() => removeChipTier(t.id)}>
+                  <Text allowFontScaling={false} style={styles.groupRemoveText}>{"✕"}</Text>
                 </TouchableOpacity>
               </View>
-              <Text allowFontScaling={false} style={styles.hint}>
-                {form.gameType.includes("scotch-doubles")
-                  ? "Combined team Fargo (Player 1 + Player 2) → starting chips."
-                  : "Player Fargo → starting chips. Higher Fargo = fewer chips. Leave Max blank for the top tier."}
-              </Text>
-              <View style={styles.chipTierHead}>
-                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Min</Text>
-                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Max</Text>
-                <Text allowFontScaling={false} style={[styles.chipTierHeadText, styles.flex1]}>Chips</Text>
-                <View style={styles.groupRemove} />
-              </View>
-              {form.chipTiers.map((t) => (
-                <View key={t.id} style={styles.chipTierRow}>
-                  <TextInput
-                    allowFontScaling={false}
-                    style={[styles.input, styles.flex1, styles.chipTierInput]}
-                    value={t.minFargo}
-                    onChangeText={(v) => updateChipTier(t.id, "minFargo", v.replace(/[^0-9]/g, ""))}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                  <TextInput
-                    allowFontScaling={false}
-                    style={[styles.input, styles.flex1, styles.chipTierInput]}
-                    value={t.maxFargo}
-                    onChangeText={(v) => updateChipTier(t.id, "maxFargo", v.replace(/[^0-9]/g, ""))}
-                    keyboardType="numeric"
-                    placeholder="∞"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                  <TextInput
-                    allowFontScaling={false}
-                    style={[styles.input, styles.flex1, styles.chipTierInput]}
-                    value={t.chips}
-                    onChangeText={(v) => updateChipTier(t.id, "chips", v.replace(/[^0-9]/g, ""))}
-                    keyboardType="numeric"
-                    placeholder="1"
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                  <TouchableOpacity style={styles.groupRemove} onPress={() => removeChipTier(t.id)}>
-                    <Text allowFontScaling={false} style={styles.groupRemoveText}>{"✕"}</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </Section>
+            ))}
+          </Section>
+        )}
 
         {renderRaceSection()}
 
@@ -5857,11 +5891,24 @@ const styles = StyleSheet.create({
   },
   groupRemoveText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
   flex1: { flex: 1 },
-  chipTableBlock: { marginTop: webSc(SPACING.md) },
+  chipTableActions: { flexDirection: "row", justifyContent: "flex-end", gap: webSc(SPACING.xs), marginBottom: webSc(SPACING.sm) },
   chipTierHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), marginBottom: 2 },
-  chipTierHeadText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  chipTierHeadText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", textAlign: "center" },
   chipTierRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), marginBottom: webSc(SPACING.xs) },
-  chipTierInput: { textAlign: "center" },
+  chipCol: { flex: 1, minWidth: 0 },
+  chipColDel: { width: webSc(28), alignItems: "center", justifyContent: "center" },
+  chipTierInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(6),
+    paddingHorizontal: webSc(4),
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    textAlign: "center",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+  },
   addRowBtn: {
     borderWidth: 1,
     borderColor: COLORS.primary,

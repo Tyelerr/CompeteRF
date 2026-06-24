@@ -41,6 +41,7 @@ interface PreviewForm {
   diffMinRace: number;
   raceGroups: { id: string }[];
   sidePots: { name: string; amount: string }[];
+  chipTiers?: { minFargo: string; maxFargo: string; chips: string }[];
 }
 
 const prettify = (s: string | null | undefined): string =>
@@ -216,6 +217,32 @@ export const TournamentSettingsPreview = ({
       ) : null}
 
       <Row label="Race" value={raceSummary(form)} />
+
+      {form.tournamentFormat === "chip-tournament" && !!form.chipTiers?.length && (
+        <>
+          <View style={styles.divider} />
+          <Text allowFontScaling={false} style={styles.rowLabel}>
+            🎠 Chip Count
+          </Text>
+          {form.chipTiers.map((t, i) => {
+            const min = t.minFargo.trim() || "0";
+            const max = t.maxFargo.trim();
+            const range = max === "" ? `${min} & Above` : min === "0" ? `${max} & Under` : `${min}–${max}`;
+            const n = parseInt(t.chips || "0", 10);
+            return (
+              <View key={i} style={styles.potRow}>
+                <Text allowFontScaling={false} style={styles.potName} numberOfLines={1}>
+                  {range}
+                </Text>
+                <Text allowFontScaling={false} style={styles.potAmt}>
+                  {n} Chip{n === 1 ? "" : "s"}
+                </Text>
+              </View>
+            );
+          })}
+        </>
+      )}
+
       <Row
         label="Entry Fee"
         value={entry || "Free"}
