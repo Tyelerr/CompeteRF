@@ -8,6 +8,7 @@ import { chipService } from "../models/services/chip.service";
 import {
   addTable as engineAddTable,
   adjustChips as engineAdjustChips,
+  buyBackEntry as engineBuyBack,
   newId,
   recordWinner as engineRecordWinner,
   removeTable as engineRemoveTable,
@@ -185,6 +186,10 @@ export const useChipTournament = (id: number) => {
       update((c) => engineAdjustChips(c, entryId, delta)),
     [update],
   );
+  const buyBack = useCallback(
+    (entryId: string) => update((c) => engineBuyBack(c, entryId)),
+    [update],
+  );
   const endTournament = useCallback(async () => {
     if (chip) await chipService.save(id, chip);
     await chipService.setLiveState(id, "finished");
@@ -239,6 +244,7 @@ export const useChipTournament = (id: number) => {
     recordWinner,
     reshuffle,
     adjustChips,
+    buyBack,
     endTournament,
   };
 };

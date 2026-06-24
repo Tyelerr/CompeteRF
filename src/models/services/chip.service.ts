@@ -179,11 +179,8 @@ export const chipService = {
       settings: c
         ? {
             format: c.format,
-            performanceTracking: c.performance_tracking,
-            streamEnabled: c.stream_enabled,
-            winnerStays: c.winner_stays,
-            autoEliminate: c.auto_eliminate,
             tiers: c.tiers ?? [],
+            buyBacksAllowed: !!c.buy_backs_allowed,
           }
         : base.settings,
       entries: (entries.data ?? []).map(rowToEntry),
@@ -204,11 +201,8 @@ export const chipService = {
     const { error: cfgErr } = await supabase.from("chip_config").upsert({
       tournament_id: id,
       format: chip.settings.format,
-      performance_tracking: chip.settings.performanceTracking,
-      stream_enabled: chip.settings.streamEnabled,
-      winner_stays: chip.settings.winnerStays,
-      auto_eliminate: chip.settings.autoEliminate,
       tiers: chip.settings.tiers,
+      buy_backs_allowed: chip.settings.buyBacksAllowed,
       queue: chip.queue,
       started_at: chip.startedAt ?? null,
       finished_at: chip.finishedAt ?? null,

@@ -1,9 +1,10 @@
 // src/views/screens/admin/chip/chip-manage.screen.tsx
-// Chip Tournament manage flow (TD / Bar Owner). Phase 1: a full Setup phase
-// (Settings, Fargo chip table, Registration, Tables, Review & Start) plus a
-// functional-minimal Live (tables + winner buttons + queue + dashboard) and
-// Results (standings). Rich features (story cards, history, admin menu, player
-// profiles) are follow-up slices. See CHIP_TOURNAMENT.md.
+// Chip Tournament manage flow (TD / Bar Owner). Structured like the bracket hub:
+// a Setup / Live / Results phase with sub-page tabs. Setup pages = Settings (name,
+// format, buy-backs, Fargo chip table), Players (registration), Tables (add/remove
+// + mark stream), Review & Start. Live pages = Dashboard, Tables (winner buttons +
+// timers), Queue, Players (chips/records + buy-back). Results = Standings.
+// Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
@@ -40,7 +41,6 @@ const FORMAT_OPTS = [
   { label: "Singles", value: "singles" },
   { label: "Scotch Doubles", value: "scotch_doubles" },
 ];
-
 const DEFAULT_SINGLES_TIERS = [
   { minFargo: 700, maxFargo: null as number | null, chips: 1 },
   { minFargo: 600, maxFargo: 699, chips: 2 },
@@ -56,6 +56,9 @@ const DEFAULT_DOUBLES_TIERS = [
   { minFargo: 0, maxFargo: 999, chips: 6 },
 ];
 
+const SETUP_TABS = ["Settings", "Players", "Tables", "Review"] as const;
+const LIVE_TABS = ["Dashboard", "Tables", "Queue", "Players"] as const;
+
 const fmtClock = (ms: number) => {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -64,6 +67,8 @@ const fmtClock = (ms: number) => {
 export const ChipManageScreen = ({ id }: { id: number }) => {
   const vm = useChipTournament(id);
   const router = useRouter();
+  const [setupTab, setSetupTab] = useState<(typeof SETUP_TABS)[number]>("Settings");
+  const [liveTab, setLiveTab] = useState<(typeof LIVE_TABS)[number]>("Tables");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -89,72 +94,34 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
 
   const { chip, tournament } = vm;
   const doubles = chip.settings.format === "scotch_doubles";
-
   const entryById = (eid: string | null | undefined) =>
     chip.entries.find((e) => e.id === eid) ?? null;
-
   const chipPreview = (e: ChipEntry) =>
     chipsForFargo(chip.settings.tiers, teamFargoOf(e, chip.settings.format));
-
-  // ── Setup ───────────────────────────────────────────────────────────────────
   const seedTiers = () =>
     vm.updateSettings({
-      tiers: (doubles ? DEFAULT_DOUBLES_TIERS : DEFAULT_SINGLES_TIERS).map((t, i) => ({
-        id: `seed_${i}`,
-        ...t,
-      })),
+      tiers: (doubles ? DEFAULT_DOUBLES_TIERS : DEFAULT_SINGLES_TIERS).map((t, i) => ({ id: `seed_${i}`, ...t })),
     });
 
-  const renderSetup = () => (
+  // ── Setup · Settings (incl. the Fargo chip table) ────────────────────────────
+  const renderSettingsTab = () => (
     <>
-      {/* Settings */}
       <Section title="Settings">
         <Field label="Tournament Name">
-          <TextInput
-            allowFontScaling={false}
-            style={styles.input}
-            value={tournament.name}
-            onChangeText={vm.setName}
-            placeholder="Tournament name"
-            placeholderTextColor={COLORS.textMuted}
-          />
+          <TextInput allowFontScaling={false} style={styles.input} value={tournament.name} onChangeText={vm.setName} placeholder="Tournament name" placeholderTextColor={COLORS.textMuted} />
         </Field>
         <Field label="Format">
-          <Dropdown
-            options={FORMAT_OPTS}
-            value={chip.settings.format}
-            onSelect={(v) => vm.updateSettings({ format: v as any })}
-          />
+          <Dropdown options={FORMAT_OPTS} value={chip.settings.format} onSelect={(v) => vm.updateSettings({ format: v as any })} />
         </Field>
         <ToggleRow
-          label="Performance Tracking"
-          value={chip.settings.performanceTracking}
-          onChange={(v) => vm.updateSettings({ performanceTracking: v })}
-        />
-        <ToggleRow
-          label="Stream Table Enabled"
-          value={chip.settings.streamEnabled}
-          onChange={(v) => vm.updateSettings({ streamEnabled: v })}
-        />
-        <ToggleRow
-          label="Winner Stays"
-          value={chip.settings.winnerStays}
-          onChange={(v) => vm.updateSettings({ winnerStays: v })}
-        />
-        <ToggleRow
-          label="Auto Eliminate at 0 chips"
-          value={chip.settings.autoEliminate}
-          onChange={(v) => vm.updateSettings({ autoEliminate: v })}
+          label="Allow Buy-Backs"
+          sub="Eliminated players can buy back into the queue"
+          value={chip.settings.buyBacksAllowed}
+          onChange={(v) => vm.updateSettings({ buyBacksAllowed: v })}
         />
       </Section>
 
-      {/* Fargo Chip Table */}
-      <Section
-        title="Fargo Chip Table"
-        action={
-          <HeaderBtn label="+ Add Tier" onPress={vm.addTier} />
-        }
-      >
+      <Section title="Fargo Chip Table" action={<HeaderBtn label="+ Add Tier" onPress={vm.addTier} />}>
         <Text style={styles.hint}>
           {doubles
             ? "Combined team Fargo (Player 1 + Player 2) → starting chips."
@@ -174,36 +141,9 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
             </View>
             {chip.settings.tiers.map((t) => (
               <View key={t.id} style={styles.tierRow}>
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.tierInput, styles.tierMin]}
-                  value={String(t.minFargo ?? "")}
-                  onChangeText={(v) => vm.updateTier(t.id, { minFargo: parseInt(v.replace(/\D/g, "") || "0", 10) })}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.tierInput, styles.tierMax]}
-                  value={t.maxFargo == null ? "" : String(t.maxFargo)}
-                  onChangeText={(v) => {
-                    const d = v.replace(/\D/g, "");
-                    vm.updateTier(t.id, { maxFargo: d === "" ? null : parseInt(d, 10) });
-                  }}
-                  keyboardType="numeric"
-                  placeholder="∞"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.tierInput, styles.tierChips]}
-                  value={String(t.chips ?? "")}
-                  onChangeText={(v) => vm.updateTier(t.id, { chips: parseInt(v.replace(/\D/g, "") || "0", 10) })}
-                  keyboardType="numeric"
-                  placeholder="1"
-                  placeholderTextColor={COLORS.textMuted}
-                />
+                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierMin]} value={String(t.minFargo ?? "")} onChangeText={(v) => vm.updateTier(t.id, { minFargo: parseInt(v.replace(/\D/g, "") || "0", 10) })} keyboardType="numeric" placeholder="0" placeholderTextColor={COLORS.textMuted} />
+                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierMax]} value={t.maxFargo == null ? "" : String(t.maxFargo)} onChangeText={(v) => { const d = v.replace(/\D/g, ""); vm.updateTier(t.id, { maxFargo: d === "" ? null : parseInt(d, 10) }); }} keyboardType="numeric" placeholder="∞" placeholderTextColor={COLORS.textMuted} />
+                <TextInput allowFontScaling={false} style={[styles.tierInput, styles.tierChips]} value={String(t.chips ?? "")} onChangeText={(v) => vm.updateTier(t.id, { chips: parseInt(v.replace(/\D/g, "") || "0", 10) })} keyboardType="numeric" placeholder="1" placeholderTextColor={COLORS.textMuted} />
                 <TouchableOpacity style={styles.tierDel} onPress={() => vm.removeTier(t.id)}>
                   <Text style={styles.delX}>✕</Text>
                 </TouchableOpacity>
@@ -212,215 +152,189 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
           </>
         )}
       </Section>
-
-      {/* Registration */}
-      <Section
-        title={`Registration (${chip.entries.length})`}
-        action={<HeaderBtn label="+ Add Player" onPress={vm.addEntry} />}
-      >
-        {chip.entries.length === 0 && (
-          <Text style={styles.hint}>No players yet. Add players to register them.</Text>
-        )}
-        {chip.entries.map((e, i) => (
-          <View key={e.id} style={styles.entryCard}>
-            <View style={styles.entryTop}>
-              <Text style={styles.entryNum}>#{i + 1}</Text>
-              <View style={styles.entryChipPill}>
-                <Text style={styles.entryChipText}>{chipPreview(e)} chips</Text>
-              </View>
-              <TouchableOpacity onPress={() => vm.removeEntry(e.id)}>
-                <Text style={styles.delX}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.entryRow}>
-              <TextInput
-                allowFontScaling={false}
-                style={[styles.input, styles.flex2]}
-                value={e.p1Name}
-                onChangeText={(v) => vm.updateEntry(e.id, { p1Name: v })}
-                placeholder={doubles ? "Player 1" : "Player name"}
-                placeholderTextColor={COLORS.textMuted}
-              />
-              <TextInput
-                allowFontScaling={false}
-                style={[styles.input, styles.flex1]}
-                value={e.p1Fargo == null ? "" : String(e.p1Fargo)}
-                onChangeText={(v) => {
-                  const d = v.replace(/\D/g, "");
-                  vm.updateEntry(e.id, { p1Fargo: d === "" ? null : parseInt(d, 10) });
-                }}
-                keyboardType="numeric"
-                placeholder="Fargo"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-            {doubles && (
-              <View style={styles.entryRow}>
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.input, styles.flex2]}
-                  value={e.p2Name ?? ""}
-                  onChangeText={(v) => vm.updateEntry(e.id, { p2Name: v })}
-                  placeholder="Player 2"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-                <TextInput
-                  allowFontScaling={false}
-                  style={[styles.input, styles.flex1]}
-                  value={e.p2Fargo == null ? "" : String(e.p2Fargo)}
-                  onChangeText={(v) => {
-                    const d = v.replace(/\D/g, "");
-                    vm.updateEntry(e.id, { p2Fargo: d === "" ? null : parseInt(d, 10) });
-                  }}
-                  keyboardType="numeric"
-                  placeholder="Fargo"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-              </View>
-            )}
-            {!doubles && (
-              <TextInput
-                allowFontScaling={false}
-                style={styles.input}
-                value={e.p1Phone ?? ""}
-                onChangeText={(v) => vm.updateEntry(e.id, { p1Phone: v })}
-                placeholder="Phone (optional)"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="phone-pad"
-              />
-            )}
-            <View style={styles.entryToggles}>
-              <MiniToggle label="Paid" value={e.paid} onChange={(v) => vm.updateEntry(e.id, { paid: v })} />
-              <MiniToggle label="Checked in" value={e.checkedIn} onChange={(v) => vm.updateEntry(e.id, { checkedIn: v })} />
-            </View>
-          </View>
-        ))}
-      </Section>
-
-      {/* Tables */}
-      <Section
-        title={`Tables (${chip.tables.length})`}
-        action={<HeaderBtn label="+ Add Table" onPress={vm.addTable} />}
-      >
-        {chip.tables.map((t) => (
-          <View key={t.id} style={styles.tableRow}>
-            <Text style={styles.tableLabel}>{t.label}</Text>
-            {chip.settings.streamEnabled && (
-              <TouchableOpacity
-                style={[styles.streamPill, t.isStream && styles.streamPillOn]}
-                onPress={() => vm.updateTable(t.id, { isStream: !t.isStream })}
-              >
-                <Text style={[styles.streamText, t.isStream && styles.streamTextOn]}>
-                  📺 Stream
-                </Text>
-              </TouchableOpacity>
-            )}
-            <View style={styles.flexSpacer} />
-            <TouchableOpacity onPress={() => vm.removeTable(t.id)}>
-              <Text style={styles.delX}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-        {chip.tables.length === 0 && (
-          <Text style={styles.hint}>Add at least one table to run the queue.</Text>
-        )}
-      </Section>
-
-      {/* Review & Start */}
-      <Section title="Review & Start">
-        <View style={styles.reviewRow}>
-          <Review label="Players" value={chip.entries.filter((e) => e.checkedIn).length} sub={`${chip.entries.length} registered`} />
-          <Review label="Tables" value={chip.tables.length} />
-          <Review label="Tiers" value={chip.settings.tiers.length} />
-        </View>
-        <StartButton vm={vm} chip={chip} />
-      </Section>
     </>
   );
 
-  // ── Live ────────────────────────────────────────────────────────────────────
-  const renderLive = () => {
+  // ── Setup · Players (registration) ───────────────────────────────────────────
+  const renderPlayersSetup = () => (
+    <Section title={`Players (${chip.entries.length})`} action={<HeaderBtn label="+ Add Player" onPress={vm.addEntry} />}>
+      {chip.entries.length === 0 && <Text style={styles.hint}>No players yet. Add players to register them.</Text>}
+      {chip.entries.map((e, i) => (
+        <View key={e.id} style={styles.entryCard}>
+          <View style={styles.entryTop}>
+            <Text style={styles.entryNum}>#{i + 1}</Text>
+            <View style={styles.entryChipPill}><Text style={styles.entryChipText}>{chipPreview(e)} chips</Text></View>
+            <TouchableOpacity onPress={() => vm.removeEntry(e.id)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
+          </View>
+          <View style={styles.entryRow}>
+            <TextInput allowFontScaling={false} style={[styles.input, styles.flex2]} value={e.p1Name} onChangeText={(v) => vm.updateEntry(e.id, { p1Name: v })} placeholder={doubles ? "Player 1" : "Player name"} placeholderTextColor={COLORS.textMuted} />
+            <TextInput allowFontScaling={false} style={[styles.input, styles.flex1]} value={e.p1Fargo == null ? "" : String(e.p1Fargo)} onChangeText={(v) => { const d = v.replace(/\D/g, ""); vm.updateEntry(e.id, { p1Fargo: d === "" ? null : parseInt(d, 10) }); }} keyboardType="numeric" placeholder="Fargo" placeholderTextColor={COLORS.textMuted} />
+          </View>
+          {doubles && (
+            <View style={styles.entryRow}>
+              <TextInput allowFontScaling={false} style={[styles.input, styles.flex2]} value={e.p2Name ?? ""} onChangeText={(v) => vm.updateEntry(e.id, { p2Name: v })} placeholder="Player 2" placeholderTextColor={COLORS.textMuted} />
+              <TextInput allowFontScaling={false} style={[styles.input, styles.flex1]} value={e.p2Fargo == null ? "" : String(e.p2Fargo)} onChangeText={(v) => { const d = v.replace(/\D/g, ""); vm.updateEntry(e.id, { p2Fargo: d === "" ? null : parseInt(d, 10) }); }} keyboardType="numeric" placeholder="Fargo" placeholderTextColor={COLORS.textMuted} />
+            </View>
+          )}
+          {!doubles && (
+            <TextInput allowFontScaling={false} style={styles.input} value={e.p1Phone ?? ""} onChangeText={(v) => vm.updateEntry(e.id, { p1Phone: v })} placeholder="Phone (optional)" placeholderTextColor={COLORS.textMuted} keyboardType="phone-pad" />
+          )}
+          <View style={styles.entryToggles}>
+            <MiniToggle label="Paid" value={e.paid} onChange={(v) => vm.updateEntry(e.id, { paid: v })} />
+            <MiniToggle label="Checked in" value={e.checkedIn} onChange={(v) => vm.updateEntry(e.id, { checkedIn: v })} />
+          </View>
+        </View>
+      ))}
+    </Section>
+  );
+
+  // ── Setup · Tables (incl. stream marking) ────────────────────────────────────
+  const renderTablesSetup = () => (
+    <Section title={`Tables (${chip.tables.length})`} action={<HeaderBtn label="+ Add Table" onPress={vm.addTable} />}>
+      <Text style={styles.hint}>Mark a table as the stream table here.</Text>
+      {chip.tables.map((t) => (
+        <View key={t.id} style={styles.tableSetupRow}>
+          <View style={styles.tableSetupTop}>
+            <Text style={styles.tableLabel}>{t.label}</Text>
+            <TouchableOpacity style={[styles.streamPill, t.isStream && styles.streamPillOn]} onPress={() => vm.updateTable(t.id, { isStream: !t.isStream })}>
+              <Text style={[styles.streamText, t.isStream && styles.streamTextOn]}>📺 Stream</Text>
+            </TouchableOpacity>
+            <View style={styles.flexSpacer} />
+            <TouchableOpacity onPress={() => vm.removeTable(t.id)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
+          </View>
+          {t.isStream && (
+            <TextInput allowFontScaling={false} style={styles.input} value={t.streamUrl ?? ""} onChangeText={(v) => vm.updateTable(t.id, { streamUrl: v })} placeholder="Stream link (optional)" placeholderTextColor={COLORS.textMuted} />
+          )}
+        </View>
+      ))}
+      {chip.tables.length === 0 && <Text style={styles.hint}>Add at least one table to run the queue.</Text>}
+    </Section>
+  );
+
+  // ── Setup · Review & Start ───────────────────────────────────────────────────
+  const renderReview = () => {
+    const ready = chip.entries.filter((e) => e.checkedIn).length >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1;
+    return (
+      <Section title="Review & Start">
+        <View style={styles.reviewRow}>
+          <Review label="Checked in" value={chip.entries.filter((e) => e.checkedIn).length} sub={`${chip.entries.length} registered`} />
+          <Review label="Tables" value={chip.tables.length} />
+          <Review label="Tiers" value={chip.settings.tiers.length} />
+        </View>
+        <TouchableOpacity style={[styles.startBtn, !ready && styles.startBtnDisabled]} disabled={!ready || vm.starting} onPress={vm.start}>
+          {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{ready ? "Start Tournament" : "Need 2+ checked-in players, a table, and a chip tier"}</Text>}
+        </TouchableOpacity>
+      </Section>
+    );
+  };
+
+  // ── Live · Dashboard ─────────────────────────────────────────────────────────
+  const renderLiveDashboard = () => {
     const d = dashboard(chip);
     return (
-      <>
-        <Section title="Dashboard">
-          <View style={styles.cardGrid}>
-            <StatCard label="Remaining" value={d.playersRemaining} />
-            <StatCard label="Eliminated" value={d.eliminated} />
-            <StatCard label="In Queue" value={d.queueCount} />
-            <StatCard label="Active Tables" value={d.activeTables} />
-            <StatCard label="Matches" value={d.matchesPlayed} />
-            <StatCard label="Avg Match" value={d.avgMatchMs ? fmtClock(d.avgMatchMs) : "—"} />
-          </View>
-        </Section>
+      <Section title="Dashboard">
+        <View style={styles.cardGrid}>
+          <StatCard label="Remaining" value={d.playersRemaining} />
+          <StatCard label="Eliminated" value={d.eliminated} />
+          <StatCard label="In Queue" value={d.queueCount} />
+          <StatCard label="Active Tables" value={d.activeTables} />
+          <StatCard label="Matches" value={d.matchesPlayed} />
+          <StatCard label="Avg Match" value={d.avgMatchMs ? fmtClock(d.avgMatchMs) : "—"} />
+        </View>
+        {chip.winnerId && <Text style={styles.champ}>🏆 {teamName(entryById(chip.winnerId)!)} wins!</Text>}
+        <View style={styles.reviewRow}>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={vm.reshuffle}><Text style={styles.secondaryBtnText}>🔀 Reshuffle</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.secondaryBtn, styles.dangerBtn]} onPress={vm.endTournament}><Text style={[styles.secondaryBtnText, styles.dangerText]}>End Tournament</Text></TouchableOpacity>
+        </View>
+      </Section>
+    );
+  };
 
-        <Section title="Tables">
-          {chip.tables.map((table) => {
-            const match = chip.matches.find((m) => m.id === table.matchId && m.status === "in_progress");
-            const elapsed = match ? matchElapsedMs(match, now) : 0;
-            const long = elapsed > LONG_MATCH_MS;
-            const a = match ? entryById(match.aId) : null;
-            const b = match ? entryById(match.bId) : null;
-            const holder = entryById(table.holderId);
-            return (
-              <View key={table.id} style={[styles.liveTable, long && styles.liveTableLong]}>
-                <View style={styles.liveTableHead}>
-                  <Text style={styles.tableLabel}>{table.label}{table.isStream ? "  📺" : ""}</Text>
-                  {match ? (
-                    <Text style={[styles.timer, long && styles.timerLong]}>{fmtClock(elapsed)}</Text>
-                  ) : (
-                    <Text style={styles.openTag}>{holder ? "Waiting…" : "Open"}</Text>
-                  )}
-                </View>
-                {match && a && b ? (
-                  <View style={styles.matchBody}>
-                    <WinnerBtn entry={a} onPress={() => vm.recordWinner(match.id, a.id)} />
-                    <Text style={styles.vs}>vs</Text>
-                    <WinnerBtn entry={b} onPress={() => vm.recordWinner(match.id, b.id)} />
-                  </View>
-                ) : holder ? (
-                  <Text style={styles.hint}>{teamName(holder)} stays — waiting for a challenger.</Text>
-                ) : (
-                  <Text style={styles.hint}>No match.</Text>
+  // ── Live · Tables ────────────────────────────────────────────────────────────
+  const renderLiveTables = () => (
+    <Section title="Tables">
+      {chip.tables.map((table) => {
+        const match = chip.matches.find((m) => m.id === table.matchId && m.status === "in_progress");
+        const elapsed = match ? matchElapsedMs(match, now) : 0;
+        const long = elapsed > LONG_MATCH_MS;
+        const a = match ? entryById(match.aId) : null;
+        const b = match ? entryById(match.bId) : null;
+        const holder = entryById(table.holderId);
+        return (
+          <View key={table.id} style={[styles.liveTable, long && styles.liveTableLong]}>
+            <View style={styles.liveTableHead}>
+              <Text style={styles.tableLabel}>{table.label}{table.isStream ? "  📺" : ""}</Text>
+              {match ? <Text style={[styles.timer, long && styles.timerLong]}>{fmtClock(elapsed)}</Text> : <Text style={styles.openTag}>{holder ? "Waiting…" : "Open"}</Text>}
+            </View>
+            {match && a && b ? (
+              <View style={styles.matchBody}>
+                <WinnerBtn entry={a} onPress={() => vm.recordWinner(match.id, a.id)} />
+                <Text style={styles.vs}>vs</Text>
+                <WinnerBtn entry={b} onPress={() => vm.recordWinner(match.id, b.id)} />
+              </View>
+            ) : holder ? (
+              <Text style={styles.hint}>{teamName(holder)} stays — waiting for a challenger.</Text>
+            ) : (
+              <Text style={styles.hint}>No match.</Text>
+            )}
+          </View>
+        );
+      })}
+    </Section>
+  );
+
+  // ── Live · Queue ─────────────────────────────────────────────────────────────
+  const renderLiveQueue = () => (
+    <Section title={`Queue (${chip.queue.length})`}>
+      {chip.queue.map((qid, i) => {
+        const e = entryById(qid);
+        if (!e) return null;
+        return (
+          <View key={qid} style={styles.queueRow}>
+            <Text style={styles.queuePos}>{i + 1}</Text>
+            <Text style={styles.queueName} numberOfLines={1}>{teamName(e)}</Text>
+            <Text style={styles.queueMeta}>{e.chips} chip{e.chips === 1 ? "" : "s"} · {e.wins}-{e.losses}</Text>
+          </View>
+        );
+      })}
+      {chip.queue.length === 0 && <Text style={styles.hint}>Queue is empty.</Text>}
+    </Section>
+  );
+
+  // ── Live · Players (records + buy-back) ──────────────────────────────────────
+  const renderLivePlayers = () => {
+    const alive = chip.entries.filter((e) => e.status !== "eliminated");
+    const out = chip.entries.filter((e) => e.status === "eliminated");
+    return (
+      <>
+        <Section title={`Players (${alive.length})`}>
+          {alive.map((e) => (
+            <View key={e.id} style={styles.playerRow}>
+              <Text style={styles.playerName} numberOfLines={1}>{teamName(e)}</Text>
+              <Text style={styles.playerMeta}>{e.chips} · {e.wins}-{e.losses} · {e.status}</Text>
+              <TouchableOpacity style={styles.chipStep} onPress={() => vm.adjustChips(e.id, -1)}><Text style={styles.chipStepText}>−</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.chipStep} onPress={() => vm.adjustChips(e.id, 1)}><Text style={styles.chipStepText}>+</Text></TouchableOpacity>
+            </View>
+          ))}
+        </Section>
+        {out.length > 0 && (
+          <Section title={`Eliminated (${out.length})`}>
+            {out.map((e) => (
+              <View key={e.id} style={styles.playerRow}>
+                <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1}>{teamName(e)}</Text>
+                <Text style={styles.playerMeta}>{e.wins}-{e.losses} · {e.eliminations}K</Text>
+                {chip.settings.buyBacksAllowed && (
+                  <TouchableOpacity style={styles.buyBackBtn} onPress={() => vm.buyBack(e.id)}><Text style={styles.buyBackText}>Buy back</Text></TouchableOpacity>
                 )}
               </View>
-            );
-          })}
-        </Section>
-
-        <Section title={`Queue (${chip.queue.length})`}>
-          {chip.queue.map((qid, i) => {
-            const e = entryById(qid);
-            if (!e) return null;
-            return (
-              <View key={qid} style={styles.queueRow}>
-                <Text style={styles.queuePos}>{i + 1}</Text>
-                <Text style={styles.queueName} numberOfLines={1}>{teamName(e)}</Text>
-                <Text style={styles.queueMeta}>{e.chips} chip{e.chips === 1 ? "" : "s"} · {e.wins}-{e.losses}</Text>
-              </View>
-            );
-          })}
-          {chip.queue.length === 0 && <Text style={styles.hint}>Queue is empty.</Text>}
-        </Section>
-
-        <Section title="Director">
-          <View style={styles.reviewRow}>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={vm.reshuffle}>
-              <Text style={styles.secondaryBtnText}>🔀 Reshuffle</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.secondaryBtn, styles.dangerBtn]} onPress={vm.endTournament}>
-              <Text style={[styles.secondaryBtnText, styles.dangerText]}>End Tournament</Text>
-            </TouchableOpacity>
-          </View>
-          {chip.winnerId && (
-            <Text style={styles.champ}>🏆 {teamName(entryById(chip.winnerId)!)} wins!</Text>
-          )}
-        </Section>
+            ))}
+          </Section>
+        )}
       </>
     );
   };
 
-  // ── Results ─────────────────────────────────────────────────────────────────
+  // ── Results ──────────────────────────────────────────────────────────────────
   const renderResults = () => {
     const alive = [...chip.entries].filter((e) => e.status !== "eliminated").sort((a, b) => b.chips - a.chips || b.wins - a.wins);
     const out = [...chip.entries].filter((e) => e.status === "eliminated").sort((a, b) => b.wins - a.wins);
@@ -433,55 +347,57 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
     );
     return (
       <>
-        {chip.winnerId && (
-          <Section title="Champion">
-            <Text style={styles.champ}>🏆 {teamName(entryById(chip.winnerId)!)}</Text>
-          </Section>
-        )}
+        {chip.winnerId && <Section title="Champion"><Text style={styles.champ}>🏆 {teamName(entryById(chip.winnerId)!)}</Text></Section>}
         <Section title="Standings">
           <Text style={styles.hint}>Chips · W-L · Eliminations</Text>
           {alive.map((e, i) => row(e, i + 1))}
         </Section>
-        {out.length > 0 && (
-          <Section title="Eliminated">
-            {out.map((e, i) => row(e, alive.length + i + 1))}
-          </Section>
-        )}
+        {out.length > 0 && <Section title="Eliminated">{out.map((e, i) => row(e, alive.length + i + 1))}</Section>}
       </>
     );
   };
 
+  const tabs = vm.phase === "setup" ? SETUP_TABS : vm.phase === "live" ? LIVE_TABS : [];
+  const activeTab = vm.phase === "setup" ? setupTab : liveTab;
+  const setTab = vm.phase === "setup" ? (setSetupTab as (t: string) => void) : (setLiveTab as (t: string) => void);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>‹ Back</Text>
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{tournament.name || "Chip Tournament"}</Text>
-          <View style={styles.phaseBadge}>
-            <Text style={styles.phaseBadgeText}>
-              {vm.phase === "setup" ? "Setup" : vm.phase === "live" ? "LIVE" : "Results"}
-            </Text>
-          </View>
+          <View style={styles.phaseBadge}><Text style={styles.phaseBadgeText}>{vm.phase === "setup" ? "Setup" : vm.phase === "live" ? "LIVE" : "Results"}</Text></View>
         </View>
         <View style={{ width: webSc(44) }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {vm.phase === "setup" && renderSetup()}
-        {vm.phase === "live" && renderLive()}
+      {tabs.length > 0 && (
+        <View style={styles.tabBar}>
+          {tabs.map((t) => (
+            <TouchableOpacity key={t} style={[styles.tab, activeTab === t && styles.tabOn]} onPress={() => setTab(t)}>
+              <Text style={[styles.tabText, activeTab === t && styles.tabTextOn]}>{t}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, isWeb && styles.contentWeb]} keyboardShouldPersistTaps="handled">
+        {vm.phase === "setup" && setupTab === "Settings" && renderSettingsTab()}
+        {vm.phase === "setup" && setupTab === "Players" && renderPlayersSetup()}
+        {vm.phase === "setup" && setupTab === "Tables" && renderTablesSetup()}
+        {vm.phase === "setup" && setupTab === "Review" && renderReview()}
+        {vm.phase === "live" && liveTab === "Dashboard" && renderLiveDashboard()}
+        {vm.phase === "live" && liveTab === "Tables" && renderLiveTables()}
+        {vm.phase === "live" && liveTab === "Queue" && renderLiveQueue()}
+        {vm.phase === "live" && liveTab === "Players" && renderLivePlayers()}
         {vm.phase === "results" && renderResults()}
       </ScrollView>
     </View>
   );
 };
 
-// ── small presentational helpers ───────────────────────────────────────────────
+// ── presentational helpers ──────────────────────────────────────────────────────
 const Section = ({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) => (
   <View style={styles.section}>
     <View style={styles.sectionHead}>
@@ -497,9 +413,12 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
     {children}
   </View>
 );
-const ToggleRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+const ToggleRow = ({ label, sub, value, onChange }: { label: string; sub?: string; value: boolean; onChange: (v: boolean) => void }) => (
   <View style={styles.toggleRow}>
-    <Text style={styles.toggleLabel}>{label}</Text>
+    <View style={styles.flexSpacer}>
+      <Text style={styles.toggleLabel}>{label}</Text>
+      {sub ? <Text style={styles.toggleSub}>{sub}</Text> : null}
+    </View>
     <Switch value={value} onValueChange={onChange} trackColor={{ true: COLORS.primary }} />
   </View>
 );
@@ -509,9 +428,7 @@ const MiniToggle = ({ label, value, onChange }: { label: string; value: boolean;
   </TouchableOpacity>
 );
 const HeaderBtn = ({ label, onPress }: { label: string; onPress: () => void }) => (
-  <TouchableOpacity style={styles.headerBtn} onPress={onPress}>
-    <Text style={styles.headerBtnText}>{label}</Text>
-  </TouchableOpacity>
+  <TouchableOpacity style={styles.headerBtn} onPress={onPress}><Text style={styles.headerBtnText}>{label}</Text></TouchableOpacity>
 );
 const Review = ({ label, value, sub }: { label: string; value: number; sub?: string }) => (
   <View style={styles.reviewCard}>
@@ -533,39 +450,24 @@ const WinnerBtn = ({ entry, onPress }: { entry: ChipEntry; onPress: () => void }
     <Text style={styles.winnerTap}>Tap = winner</Text>
   </TouchableOpacity>
 );
-const StartButton = ({ vm, chip }: { vm: ReturnType<typeof useChipTournament>; chip: NonNullable<ReturnType<typeof useChipTournament>["chip"]> }) => {
-  const ready = chip.entries.filter((e) => e.checkedIn).length >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1;
-  return (
-    <TouchableOpacity
-      style={[styles.startBtn, !ready && styles.startBtnDisabled]}
-      disabled={!ready || vm.starting}
-      onPress={vm.start}
-    >
-      {vm.starting ? (
-        <ActivityIndicator color="#fff" />
-      ) : (
-        <Text style={styles.startBtnText}>
-          {ready ? "Start Tournament" : "Need 2+ checked-in players, a table, and a chip tier"}
-        </Text>
-      )}
-    </TouchableOpacity>
-  );
-};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
   errorText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
-  header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm),
-    backgroundColor: COLORS.surface,
-  },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.surface },
   back: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   headerCenter: { flex: 1, alignItems: "center" },
   headerTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700" },
   phaseBadge: { marginTop: 2, backgroundColor: COLORS.primary + "22", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   phaseBadgeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 1 },
+
+  tabBar: { flexDirection: "row", backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, paddingHorizontal: webSc(SPACING.sm) },
+  tab: { paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabOn: { borderBottomColor: COLORS.primary },
+  tabText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  tabTextOn: { color: COLORS.primary, fontWeight: "700" },
+
   scroll: { flex: 1 },
   content: { padding: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2) },
   contentWeb: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
@@ -577,16 +479,13 @@ const styles = StyleSheet.create({
 
   fieldWrap: { marginBottom: webSc(SPACING.sm) },
   fieldLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), marginBottom: webSc(SPACING.xs), fontWeight: "500" },
-  input: {
-    backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm,
-    paddingVertical: webSc(SPACING.sm), paddingHorizontal: 10, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm),
-    ...(isWeb ? ({ outlineStyle: "none" } as object) : null),
-  },
+  input: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), paddingHorizontal: 10, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   flex1: { flex: 1 },
   flex2: { flex: 2 },
 
-  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: webSc(SPACING.xs) },
+  toggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: webSc(SPACING.xs), gap: webSc(SPACING.md) },
   toggleLabel: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "500" },
+  toggleSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
 
   headerBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingVertical: 4, paddingHorizontal: 10 },
   headerBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
@@ -596,11 +495,7 @@ const styles = StyleSheet.create({
   tierHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   tierHeadText: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   tierRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  tierInput: {
-    backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm,
-    paddingVertical: webSc(SPACING.xs), paddingHorizontal: 8, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), textAlign: "center",
-    ...(isWeb ? ({ outlineStyle: "none" } as object) : null),
-  },
+  tierInput: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.xs), paddingHorizontal: 8, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), textAlign: "center", ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   tierMin: { flex: 1 },
   tierMax: { flex: 1 },
   tierChips: { flex: 1 },
@@ -619,7 +514,8 @@ const styles = StyleSheet.create({
   miniToggleText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
   miniToggleTextOn: { color: COLORS.success, fontWeight: "700" },
 
-  tableRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  tableSetupRow: { paddingVertical: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: webSc(SPACING.xs) },
+  tableSetupTop: { flexDirection: "row", alignItems: "center", gap: 8 },
   tableLabel: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   flexSpacer: { flex: 1 },
   streamPill: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingVertical: 3, paddingHorizontal: 8 },
@@ -660,11 +556,20 @@ const styles = StyleSheet.create({
   queueName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flex: 1 },
   queueMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs) },
 
+  playerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  playerName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flex: 1 },
+  playerOut: { color: COLORS.textMuted, textDecorationLine: "line-through" },
+  playerMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs) },
+  chipStep: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center" },
+  chipStepText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
+  buyBackBtn: { borderWidth: 1, borderColor: COLORS.success, borderRadius: RADIUS.sm, paddingVertical: 4, paddingHorizontal: 10 },
+  buyBackText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+
   secondaryBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   secondaryBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
   dangerBtn: { borderColor: COLORS.error },
   dangerText: { color: COLORS.error },
-  champ: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", textAlign: "center", marginTop: webSc(SPACING.sm) },
+  champ: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", textAlign: "center", marginVertical: webSc(SPACING.sm) },
 
   standRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   standRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: 22 },

@@ -23,11 +23,11 @@ export interface ChipTier {
 
 export interface ChipSettings {
   format: ChipFormat;
-  performanceTracking: boolean;
-  streamEnabled: boolean;
-  winnerStays: boolean; // core rule; surfaced as a setting (default true)
-  autoEliminate: boolean; // auto-eliminate at zero chips (vs. TD confirm)
   tiers: ChipTier[]; // the Fargo chip table (fully customizable)
+  // Buy-backs: when allowed, a player eliminated at 0 chips can be bought back in
+  // by the TD (re-enters the queue with fresh chips). Winner-stays and performance
+  // tracking are always on; stream tables are marked per-table in Tables setup.
+  buyBacksAllowed: boolean;
 }
 
 // A player or team. For singles, p2* are null and teamFargo == p1Fargo.

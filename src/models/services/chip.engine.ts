@@ -96,11 +96,8 @@ const aliveEntries = (s: ChipState): ChipEntry[] =>
 export const emptyChipState = (format: ChipFormat): ChipState => ({
   settings: {
     format,
-    performanceTracking: true,
-    streamEnabled: false,
-    winnerStays: true,
-    autoEliminate: true,
     tiers: [],
+    buyBacksAllowed: false,
   },
   entries: [],
   tables: [],
@@ -259,7 +256,7 @@ export const recordWinner = (
   table.lastLoserId = loserId; // anti-repeat: skip the loser next on THIS table
   winner.tableId = table.id;
 
-  if (loser.chips <= 0 && s.settings.autoEliminate) {
+  if (loser.chips <= 0) {
     loser.status = "eliminated";
     loser.eliminatedAt = new Date().toISOString();
     loser.tableId = null;
@@ -329,12 +326,36 @@ export const adjustChips = (
   if (!e) return input;
   e.chips = Math.max(0, e.chips + delta);
   pushEvent(s, "chip_adjust", `${teamName(e)} ${delta > 0 ? "+" : ""}${delta} chip → ${e.chips}`, by);
-  if (e.chips <= 0 && e.status === "queued" && s.settings.autoEliminate) {
+  if (e.chips <= 0 && e.status === "queued") {
     e.status = "eliminated";
     e.eliminatedAt = new Date().toISOString();
     s.queue = s.queue.filter((id) => id !== entryId);
     pushEvent(s, "elimination", `${teamName(e)} eliminated`, by);
   }
+  return s;
+};
+
+// Buy a previously-eliminated player back into the tournament (TD action, only
+// when buy-backs are allowed). They re-enter the back of the queue with fresh
+// chips (defaults to their starting chips) and are no longer eliminated.
+export const buyBackEntry = (
+  input: ChipState,
+  entryId: string,
+  chips?: number,
+  by?: number | null,
+): ChipState => {
+  const s = clone(input);
+  const e = entryById(s, entryId);
+  if (!e || e.status !== "eliminated") return input;
+  e.chips = chips != null && chips > 0 ? chips : e.startChips || 1;
+  e.status = "queued";
+  e.eliminatedAt = null;
+  e.streak = 0;
+  if (!s.queue.includes(entryId)) s.queue.push(entryId);
+  s.finishedAt = null;
+  s.winnerId = null;
+  pushEvent(s, "manual", `${teamName(e)} bought back in (${e.chips} chips)`, by);
+  seatAllTables(s);
   return s;
 };
 
