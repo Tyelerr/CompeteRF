@@ -374,10 +374,21 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{tournament.name || "Chip Tournament"}</Text>
+          <View style={styles.phaseBadge}>
+            <Text allowFontScaling={false} style={styles.phaseBadgeText}>
+              {tournament.live_state === "in_progress"
+                ? "LIVE"
+                : tournament.live_state === "finished" || tournament.status === "completed"
+                  ? "Completed"
+                  : tournament.live_state === "registration_open"
+                    ? "Registration Open"
+                    : "Setup"}
+            </Text>
+          </View>
         </View>
         <View style={{ width: webSc(44) }} />
       </View>
@@ -456,7 +467,8 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
   errorText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md) },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.background },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.xl + SPACING.sm), paddingBottom: webSc(SPACING.sm), backgroundColor: COLORS.background },
+  headerWeb: { paddingTop: webSc(SPACING.lg) },
   back: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   headerCenter: { flex: 1, alignItems: "center" },
   headerTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700" },
