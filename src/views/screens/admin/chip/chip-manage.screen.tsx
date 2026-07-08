@@ -79,9 +79,20 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
   }, [vm.loading, vm.phase]);
 
   if (vm.loading) {
+    // Keep the header so the push transition lands on a consistent screen instead
+    // of flashing a bare spinner.
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={COLORS.primary} />
+      <View style={styles.container}>
+        <View style={[styles.header, isWeb && styles.headerWeb]}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.back}>‹ Back</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter} />
+          <View style={{ width: webSc(44) }} />
+        </View>
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
       </View>
     );
   }
@@ -399,9 +410,11 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
         selectedKey={selectedPhase}
         activePageKey={page}
         onSelectPage={(phaseKey, pageKey) => {
-          // Settings lives on the Compete form — jump back to it.
+          // Settings lives on the Compete form — pop back to it (it's still mounted
+          // below, so this is a clean back transition, not a re-mount).
           if (phaseKey === "setup" && pageKey === "Settings") {
-            router.replace(`/(tabs)/admin/manage-tournament/${id}` as any);
+            if (router.canGoBack()) router.back();
+            else router.replace(`/(tabs)/admin/manage-tournament/${id}` as any);
             return;
           }
           setSelectedPhase(phaseKey as "setup" | "live" | "results");
