@@ -40,7 +40,8 @@ import { ChipEntry } from "../../../../models/types/chip.types";
 
 const isWeb = Platform.OS === "web";
 
-const SETUP_PAGES = ["Players", "Tables", "Review"];
+// "Settings" jumps back to the Compete form (the real settings live there).
+const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
 const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
 const RESULTS_PAGES = ["Standings", "History"];
 const DEFAULT_PAGE: Record<string, string> = {
@@ -398,6 +399,11 @@ export const ChipManageScreen = ({ id }: { id: number }) => {
         selectedKey={selectedPhase}
         activePageKey={page}
         onSelectPage={(phaseKey, pageKey) => {
+          // Settings lives on the Compete form — jump back to it.
+          if (phaseKey === "setup" && pageKey === "Settings") {
+            router.replace(`/(tabs)/admin/manage-tournament/${id}` as any);
+            return;
+          }
           setSelectedPhase(phaseKey as "setup" | "live" | "results");
           setPage(pageKey);
         }}
