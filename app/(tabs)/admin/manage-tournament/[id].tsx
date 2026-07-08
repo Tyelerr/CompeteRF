@@ -113,7 +113,7 @@ import {
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
 import { CHECK_INSET, FieldCheck } from "../../../../src/views/components/common/field-check";
-import { MoneyInput } from "../../../../src/views/components/common/money-input";
+import { MoneyInput, formatCurrency } from "../../../../src/views/components/common/money-input";
 import {
   ManagePhase,
   useManageTournament,
@@ -528,7 +528,7 @@ const feesToForm = (saved: TournamentFee[]): FeeForm[] => {
       id: s?.id ?? `fee-${p.category}`,
       category: p.category,
       name: p.label,
-      amount: numStr(s?.amount),
+      amount: formatCurrency(numStr(s?.amount)),
       enabled: s ? (s.enabled ?? true) : false,
     };
   });
@@ -538,7 +538,7 @@ const feesToForm = (saved: TournamentFee[]): FeeForm[] => {
       id: f.id,
       category: "custom" as FeeCategory,
       name: f.name ?? "",
-      amount: numStr(f.amount),
+      amount: formatCurrency(numStr(f.amount)),
       enabled: f.enabled ?? true,
     }));
   return [...builtIns, ...customs];
@@ -3841,23 +3841,11 @@ export default function ManageTournamentScreen() {
                   )}
 
                   {fee.enabled && (
-                    <View style={styles.feeAmtWrap}>
-                      <Text allowFontScaling={false} style={styles.feeDollar}>
-                        $
-                      </Text>
-                      <TextInput
-                        allowFontScaling={false}
-                        style={[styles.input, styles.feeAmtInput]}
-                        value={fee.amount}
-                        onChangeText={(v) => updateFee(fee.id, "amount", v)}
-                        placeholder="0"
-                        placeholderTextColor={COLORS.textMuted}
-                        keyboardType="decimal-pad"
-                        inputAccessoryViewID={
-                          Platform.OS === "ios" ? KB_DONE : undefined
-                        }
-                      />
-                    </View>
+                    <MoneyInput
+                      value={fee.amount}
+                      onChange={(v) => updateFee(fee.id, "amount", v)}
+                      compact
+                    />
                   )}
 
                   {isCustom && (
