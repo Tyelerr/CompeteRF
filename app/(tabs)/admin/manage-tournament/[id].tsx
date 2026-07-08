@@ -2152,6 +2152,12 @@ export default function ManageTournamentScreen() {
   const isExternal = hub.tournament?.bracket_source === "external";
   // Chip Tournament format: no game spot, and the race is a simple "Race To" (1+).
   const isChip = form?.tournamentFormat === "chip-tournament";
+  // Whether a chip tournament has already begun registration (drives Begin vs View).
+  const chipRegistrationStarted =
+    isChip &&
+    ["registration_open", "registration_closed", "in_progress", "finished"].includes(
+      hub.tournament?.live_state ?? "not_started",
+    );
   const tournamentName =
     hub.tournament?.name ||
     paramName ||
@@ -5395,11 +5401,17 @@ export default function ManageTournamentScreen() {
             </TouchableOpacity>
             {!isExternal && isChip && (
               <TouchableOpacity
-                style={[styles.startBtn, !formRequiredComplete && styles.btnDisabled]}
+                style={[
+                  styles.startBtn,
+                  !chipRegistrationStarted && !formRequiredComplete && styles.btnDisabled,
+                ]}
                 onPress={async () => {
                   if (form) {
                     try {
                       await hub.saveSettings(toPatch(form));
+                      // First time through, open registration so the tournament
+                      // reflects it (and future visits show "View Registration").
+                      if (!chipRegistrationStarted) await hub.startRegistration();
                     } catch {
                       Alert.alert("Error", "Failed to save settings.");
                       return;
@@ -5407,10 +5419,12 @@ export default function ManageTournamentScreen() {
                   }
                   openChipManager();
                 }}
-                disabled={!formRequiredComplete || hub.isSaving}
+                disabled={
+                  hub.isSaving || (!chipRegistrationStarted && !formRequiredComplete)
+                }
               >
                 <Text allowFontScaling={false} style={styles.startBtnText}>
-                  Begin Registration →
+                  {chipRegistrationStarted ? "View Registration →" : "Begin Registration →"}
                 </Text>
               </TouchableOpacity>
             )}
