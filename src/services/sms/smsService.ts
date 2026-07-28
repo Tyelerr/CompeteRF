@@ -3,7 +3,7 @@ import { SmsPayload, SmsResult } from "./sms.types";
 
 const EDGE_FUNCTION_NAME = "send-sms";
 
-// Raw send: hands a single text to the send-sms edge function (Twilio). The
+// Raw send: hands a single text to the send-sms edge function (Telnyx). The
 // edge function holds the credentials; the app never sees them.
 export async function sendSms(payload: SmsPayload): Promise<SmsResult> {
   try {
