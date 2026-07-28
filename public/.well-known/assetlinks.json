@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.thecompeteapp.competerf",
+      "sha256_cert_fingerprints": [
+        "49:B9:DE:8D:FE:56:34:46:9E:2D:4B:2B:FC:8E:6D:8D:47:A9:C7:09:73:3E:01:02:64:0A:FB:AD:7B:CF:51:71"
+      ]
+    }
+  }
+]

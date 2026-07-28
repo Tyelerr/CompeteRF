@@ -16,6 +16,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -33,6 +34,8 @@ interface ActionMenuProps {
   items: ActionMenuItem[];
   label?: string; // trigger text (default "Manage")
   disabled?: boolean;
+  // Compact icon-only ⋯ trigger (desktop table rows) instead of a labeled button.
+  compact?: boolean;
 }
 
 const MENU_WIDTH = 200;
@@ -42,6 +45,7 @@ export const ActionMenu = ({
   items,
   label = "Manage",
   disabled,
+  compact,
 }: ActionMenuProps) => {
   const triggerRef = useRef<View>(null);
   const { width: winW, height: winH } = useWindowDimensions();
@@ -78,17 +82,23 @@ export const ActionMenu = ({
     <>
       <TouchableOpacity
         ref={triggerRef}
-        style={[styles.trigger, disabled && styles.triggerDisabled]}
+        style={[compact ? styles.triggerCompact : styles.trigger, disabled && styles.triggerDisabled]}
         onPress={openMenu}
         disabled={disabled}
         activeOpacity={0.7}
       >
-        <Text allowFontScaling={false} style={styles.triggerText}>
-          {label}
-        </Text>
-        <Text allowFontScaling={false} style={styles.triggerArrow}>
-          {"▾"}
-        </Text>
+        {compact ? (
+          <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
+        ) : (
+          <>
+            <Text allowFontScaling={false} style={styles.triggerText}>
+              {label}
+            </Text>
+            <Text allowFontScaling={false} style={styles.triggerArrow}>
+              {"▾"}
+            </Text>
+          </>
+        )}
       </TouchableOpacity>
 
       <Modal
@@ -155,6 +165,16 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.sm),
     paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.md),
+  },
+  triggerCompact: {
+    width: webSc(36),
+    height: webSc(36),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
   },
   triggerDisabled: { opacity: 0.5 },
   triggerText: {

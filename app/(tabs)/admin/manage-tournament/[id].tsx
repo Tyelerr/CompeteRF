@@ -11,6 +11,7 @@
 // / no-show / search). Glyphs are Unicode escapes (raw emoji corrupt here).
 
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -102,10 +103,13 @@ import { PayoutsView } from "../../../../src/views/components/tournament/live/Pa
 import { SettingsTemplates } from "../../../../src/views/components/tournament/SettingsTemplates";
 import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
+import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
+import { teamService } from "../../../../src/models/services/team.service";
+import { useQuery } from "@tanstack/react-query";
 import {
   useVenuesByDirector,
   useVenuesByOwner,
@@ -223,6 +227,62 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "summary", label: "Summary" },
     ],
   },
+};
+
+// Chip tournaments use the SAME shell but different pages: no bracket — Setup has
+// Players/Tables/Review, Live is the chip engine (Dashboard/Tables/Queue/Players),
+// Results is Standings/History. (Tab keys are reused; the chip body renders the
+// right content per (phase, tab) — see chipPageForTab.)
+const CHIP_PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
+  setup: {
+    label: "Setup",
+    tabs: [
+      { tab: "settings", label: "Settings" },
+      { tab: "players", label: "Players" },
+      { tab: "tables", label: "Tables" },
+      { tab: "prizepool", label: "Prize Pool" },
+      { tab: "review", label: "Review & Start", lead: "⚡", divider: true },
+    ],
+  },
+  live: {
+    label: "Live",
+    tabs: [
+      { tab: "matches", label: "Dashboard" },
+      { tab: "tables", label: "Tables" },
+      { tab: "queue", label: "Queue" },
+      { tab: "players", label: "Players" },
+    ],
+  },
+  results: {
+    label: "Results",
+    tabs: [
+      { tab: "summary", label: "Summary" },
+      { tab: "standings", label: "Standings" },
+      { tab: "history", label: "Match History" },
+    ],
+  },
+};
+
+// Map a chip tournament's (phase, tab) to the embedded chip body page. Returns
+// null for the pages the standard manager owns (Settings = the Compete form,
+// Prize Pool = the shared prize view), which are rendered normally.
+const chipPageForTab = (phase: PhaseKey, tab: TabKey): ChipBodyPage | null => {
+  if (tab === "settings" || tab === "prizepool") return null;
+  if (phase === "live") {
+    if (tab === "tables") return "live-tables";
+    if (tab === "queue") return "live-queue";
+    if (tab === "players") return "live-players";
+    return "live-dashboard"; // "matches" tab
+  }
+  if (phase === "results") {
+    if (tab === "history") return "history";
+    if (tab === "summary") return "summary";
+    return "standings";
+  }
+  // setup
+  if (tab === "tables") return "tables";
+  if (tab === "review") return "review";
+  return "players";
 };
 
 // Which lifecycle phase the tournament is currently in. Drawing the bracket is the
@@ -1657,15 +1717,31 @@ export default function ManageTournamentScreen() {
   const params = useLocalSearchParams<{ id: string; name?: string }>();
   const tournamentId = Number(params.id);
   const paramName = params.name || "";
+  const insets = useSafeAreaInsets();
+  // Global ⚡ Actions button (header) for chip tournaments → drives the embedded
+  // chip manager's Actions modal.
+  const [chipActionsOpen, setChipActionsOpen] = useState(false);
 
   const hub = useManageTournament(tournamentId);
+
+  // Chip (team) tournaments register as TEAMS, not tournament_players — so the
+  // Prize Pool tab counts teams from here (entry pool + side pots) the same way
+  // the elim flow counts registrations. Only fetched for chip events.
+  const isChipTournament =
+    hub.tournament?.tournament_format === "chip-tournament";
+  const chipTeamsQuery = useQuery({
+    queryKey: ["tournament-teams", tournamentId],
+    queryFn: () => teamService.getTeams(tournamentId),
+    enabled: !!tournamentId && isChipTournament,
+  });
+  const chipTeams = useMemo(
+    () => (chipTeamsQuery.data ?? []).filter((t) => t.status !== "pending_partner"),
+    [chipTeamsQuery.data],
+  );
 
   // Chip Tournaments are set up here (in the Compete form — settings + the Fargo
   // chip table under Fargo). The live winner-stays queue engine is its own screen,
   // opened from the footer once setup is saved.
-  const openChipManager = () => {
-    router.push(`/(tabs)/admin/chip-tournament/${tournamentId}` as any);
-  };
 
   const [activeTab, setActiveTab] = useState<TabKey>("settings");
   // External "Submit Tournament" cancellable countdown (null = not submitting).
@@ -1784,6 +1860,10 @@ export default function ManageTournamentScreen() {
   // registrations/removals made elsewhere show up without a manual refresh.
   useEffect(() => {
     if (activeTab === "players") hub.refetchRegistrations();
+    // Chip side-pot entries are made on the (embedded) chip Players tab, which
+    // uses a separate data source — refresh teams when the Prize Pool tab opens
+    // so its entry pool + side-pot counts reflect the latest entries.
+    if (isChipTournament && activeTab === "prizepool") chipTeamsQuery.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -1837,10 +1917,13 @@ export default function ManageTournamentScreen() {
     [hub.registrations],
   );
   // Live Ready count while open; the drawn field once locked (so a closed
-  // field's pool stops moving).
-  const prizePlayers = prizeLocked
-    ? hub.bracket?.players ?? readyCount
-    : readyCount;
+  // field's pool stops moving). Chip (team) events count each registered TEAM as
+  // one entrant (teams don't flow through tournament_players).
+  const prizePlayers = isChipTournament
+    ? chipTeams.length
+    : prizeLocked
+      ? hub.bracket?.players ?? readyCount
+      : readyCount;
   const prizeEntryFee = Number(hub.tournament?.entry_fee) || 0;
   const prizeAddedMoney = Number(hub.tournament?.added_money) || 0;
 
@@ -1868,22 +1951,33 @@ export default function ManageTournamentScreen() {
     prizeFeesOnTop,
   );
 
-  // Side pots come from the tournament; entrant counts from paid_side_pots.
+  // Side pots come from the tournament; entrant counts from paid_side_pots. For a
+  // chip (team) event the membership lives on the team (tournament_teams
+  // .paid_side_pots) instead of the player registration.
   const prizeSidePots = useMemo(() => {
-    const pots = hub.tournament?.side_pots ?? [];
+    const pots = (hub.tournament?.side_pots ?? []).filter((p) =>
+      (p.name ?? "").trim(),
+    );
+    if (isChipTournament) {
+      return pots.map((p) => ({
+        name: p.name.trim(),
+        amount: Number(p.amount) || 0,
+        players: chipTeams.filter((t) =>
+          (t.paid_side_pots ?? []).includes(p.name.trim()),
+        ).length,
+      }));
+    }
     const active = hub.registrations.filter(
       (r) => r.status !== "cancelled" && r.status !== "no_show",
     );
-    return pots
-      .filter((p) => (p.name ?? "").trim())
-      .map((p) => ({
-        name: p.name.trim(),
-        amount: Number(p.amount) || 0,
-        players: active.filter((r) =>
-          safePaidSidePots(r.paid_side_pots).includes(p.name.trim()),
-        ).length,
-      }));
-  }, [hub.tournament, hub.registrations]);
+    return pots.map((p) => ({
+      name: p.name.trim(),
+      amount: Number(p.amount) || 0,
+      players: active.filter((r) =>
+        safePaidSidePots(r.paid_side_pots).includes(p.name.trim()),
+      ).length,
+    }));
+  }, [hub.tournament, hub.registrations, isChipTournament, chipTeams]);
   const sidePotNames = useMemo(
     () => prizeSidePots.map((s) => s.name),
     [prizeSidePots],
@@ -1894,6 +1988,9 @@ export default function ManageTournamentScreen() {
   const [prizeForm, setPrizeForm] = useState<PrizePoolConfig | null>(null);
   const prizeSeededRef = useRef(false);
   const prizeSavedRef = useRef<string | null>(null);
+  // The page ScrollView — chip pages ask to jump to the top (e.g. when a shuffle
+  // round completes) so the Shuffle Mode banner / Start Shuffle is in reach.
+  const pageScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     if (prizeSeededRef.current || !hub.tournament) return;
     const base = hub.prizePool ?? defaultPrizePoolConfig(sidePotNames);
@@ -1935,18 +2032,27 @@ export default function ManageTournamentScreen() {
     for (const s of prizeSidePots) map[s.name] = sidePotTotal(s.players, s.amount);
     return map;
   }, [prizeSidePots]);
-  // Which players (by standings key r<registrationId>) entered each side pot, so a
-  // side pot only pays its entrants — a non-entrant who finishes higher is skipped
-  // and the money falls to the next-best entrant.
+  // Which entrants (by standings key) entered each side pot, so a side pot only
+  // pays its entrants — a non-entrant who finishes higher is skipped and the
+  // money falls to the next-best entrant. Elim keys players as r<registrationId>;
+  // chip keys teams as team<teamId>.
   const sidePotEntrants = useMemo(() => {
     const map: Record<string, string[]> = {};
+    if (isChipTournament) {
+      for (const t of chipTeams) {
+        for (const name of t.paid_side_pots ?? []) {
+          (map[name] ??= []).push(`team${t.id}`);
+        }
+      }
+      return map;
+    }
     for (const r of hub.registrations) {
       for (const name of safePaidSidePots(r.paid_side_pots)) {
         (map[name] ??= []).push(`r${r.id}`);
       }
     }
     return map;
-  }, [hub.registrations]);
+  }, [hub.registrations, isChipTournament, chipTeams]);
   const prizeComplete =
     prizeFeesOk &&
     isPrizePoolComplete(prizeForm, prizeEntryPool, prizeSidePotPools);
@@ -1989,6 +2095,11 @@ export default function ManageTournamentScreen() {
 
   // Gate forward navigation: a setup step can't open until earlier ones are done.
   const goToTab = (target: TabKey) => {
+    // Chip tournaments have no bracket-completion order — every page is reachable.
+    if (isChip) {
+      setActiveTab(target);
+      return;
+    }
     if (!SETUP_ORDER.includes(target)) {
       setActiveTab(target);
       return;
@@ -2181,13 +2292,22 @@ export default function ManageTournamentScreen() {
     : PHASE_META[hub.phase];
 
   // ── Lifecycle phase navigation ──────────────────────────────────────────────
-  const tournamentGroup = phaseGroupOf(hub.phase);
-  const liveUnlocked = (
-    ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
-  ).includes(hub.phase);
+  // Chip lifecycle follows the tournament's live_state (there's no bracket phase).
+  const chipLiveState = hub.tournament?.live_state ?? "not_started";
+  const chipFinished = chipLiveState === "finished" || hub.tournament?.status === "completed";
+  const tournamentGroup: PhaseKey = isChip
+    ? chipFinished
+      ? "results"
+      : chipLiveState === "in_progress"
+        ? "live"
+        : "setup"
+    : phaseGroupOf(hub.phase);
+  const liveUnlocked = isChip
+    ? ["in_progress", "finished"].includes(chipLiveState)
+    : (["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]).includes(hub.phase);
   // Results is read-only (standings / payouts / stats / history / summary), so it
   // is viewable as soon as there's a bracket to report on — not gated on finishing.
-  const resultsUnlocked = liveUnlocked;
+  const resultsUnlocked = isChip ? chipFinished : liveUnlocked;
   const phaseUnlocked = (p: PhaseKey) =>
     p === "setup" ||
     (p === "live" && liveUnlocked) ||
@@ -2197,7 +2317,7 @@ export default function ManageTournamentScreen() {
     const i = PHASE_ORDER.indexOf(p);
     const cur = PHASE_ORDER.indexOf(tournamentGroup);
     if (i < cur) return "done";
-    if (i === cur) return p === "live" && hub.phase === "running" ? "live" : "current";
+    if (i === cur) return p === "live" && (isChip ? chipLiveState === "in_progress" : hub.phase === "running") ? "live" : "current";
     // An unlocked future phase (e.g. Live once the bracket is drawn) reads as
     // available rather than locked.
     if (phaseUnlocked(p)) return "current";
@@ -2208,9 +2328,11 @@ export default function ManageTournamentScreen() {
       ? "matches"
       : p === "results"
         ? "standings"
-        : hub.phase === "bracket_drawn"
-          ? "bracket" // land on Draw Bracket (where Start lives) once drawn
-          : "settings";
+        : isChip
+          ? "players" // chip Setup opens on the registration list
+          : hub.phase === "bracket_drawn"
+            ? "bracket" // land on Draw Bracket (where Start lives) once drawn
+            : "settings";
 
   // Build the lifecycle nav model (phase buttons + their page menus).
   // External (other-software) tournaments get a basic manager — just the details
@@ -2227,7 +2349,7 @@ export default function ManageTournamentScreen() {
         },
       ]
     : PHASE_ORDER.map((pk) => {
-    const def = PHASE_DEFS[pk];
+    const def = (isChip ? CHIP_PHASE_DEFS : PHASE_DEFS)[pk];
     const st = phaseStateOf(pk);
     return {
       key: pk,
@@ -2262,6 +2384,36 @@ export default function ManageTournamentScreen() {
     }
     setSelectedPhase(phaseKey as PhaseKey);
     handleTabPress(pageKey as TabKey);
+  };
+
+  // The header ⚡ Actions button is shown in the SAME place on every page (Setup /
+  // Live / Results). Before the tournament starts it explains the controls are
+  // locked and offers to jump to Review/Start; once started it opens the full chip
+  // Actions modal from anywhere in the manager. The modal lives inside the embedded
+  // chip screen, so on pages that don't render it (Settings / Prize Pool) we hop to
+  // the live/results view first — the modal then appears when that page mounts.
+  const onActionsPress = () => {
+    if (!isChip) {
+      setActionsOpen(true);
+      return;
+    }
+    if (!liveUnlocked) {
+      Alert.alert(
+        "Tournament Not Started",
+        "Finish setup and start the tournament to unlock live tournament controls.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Start Tournament", onPress: () => handleSelectPage("setup", "review") },
+        ],
+      );
+      return;
+    }
+    if (chipPageForTab(selectedPhase, activeTab) == null) {
+      const grp: PhaseKey = tournamentGroup === "results" ? "results" : "live";
+      setSelectedPhase(grp);
+      setActiveTab(defaultTabForPhase(grp));
+    }
+    setChipActionsOpen(true);
   };
 
   // Auto-advance the selected phase when the tournament's lifecycle moves
@@ -2445,6 +2597,60 @@ export default function ManageTournamentScreen() {
     for (const id of Object.keys(tableMatch)) map[Number(id)] = tableMatch[Number(id)].label;
     return map;
   }, [tableMatch]);
+
+  // ── Tournament-complete detection ────────────────────────────────────────
+  // The event is decided once every playable match is completed — i.e. the TD
+  // has entered the final score. Byes/empties auto-resolve and a skipped GF2
+  // drops out of the list, so this holds for both single- and double-elim.
+  // (Chip has no bracket, so decidableMatches is empty and this stays false.)
+  const decidableMatches = useMemo(
+    () => liveMatches.filter((m) => !m.empty && !m.bye),
+    [liveMatches],
+  );
+  const allMatchesDecided =
+    !isChip &&
+    decidableMatches.length > 0 &&
+    decidableMatches.every((m) => m.status === "completed");
+  // The championship match is the one whose winner advances nowhere.
+  const championName = useMemo(() => {
+    if (!allMatchesDecided) return null;
+    const finalM = decidableMatches.find((m) => m.winnerToLabel == null);
+    if (!finalM || finalM.winner == null) return null;
+    return finalM.winner === 1 ? finalM.p1Name : finalM.p2Name;
+  }, [allMatchesDecided, decidableMatches]);
+
+  // When the last score lands, nudge the TD to finish the event (once per
+  // completion — dismissing won't nag, but editing a score and re-completing
+  // re-arms it). Finishing flips live_state to "finished", which is what stops
+  // the tournament from showing as live everywhere it's reported.
+  const finishPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!allMatchesDecided || hub.phase !== "running") {
+      finishPromptedRef.current = false;
+      return;
+    }
+    if (finishPromptedRef.current) return;
+    finishPromptedRef.current = true;
+    Alert.alert(
+      "Tournament Complete",
+      championName
+        ? `${championName} takes the title! 🏆\n\nEvery match is finished — mark this tournament completed?`
+        : "Every match is finished — mark this tournament completed?",
+      [
+        { text: "Not Yet", style: "cancel" },
+        {
+          text: "Finish Tournament",
+          onPress: () =>
+            hub
+              .complete()
+              .catch(() =>
+                Alert.alert("Error", "Failed to finish the tournament."),
+              ),
+        },
+      ],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMatchesDecided, hub.phase, championName]);
 
   // ---- Queue Manager handlers --------------------------------------------
   // When a match goes live, text both players that it's their turn — but only
@@ -4830,6 +5036,32 @@ export default function ManageTournamentScreen() {
   };
 
   const renderTab = () => {
+    // Chip tournaments render the chip engine inline for their pages (Settings /
+    // Prize Pool still use the shared views below).
+    if (isChip) {
+      const cp = chipPageForTab(selectedPhase, activeTab);
+      if (cp) {
+        return (
+          <ChipManageScreen
+            embedded
+            id={tournamentId}
+            embeddedPage={cp}
+            actionsOpen={chipActionsOpen}
+            onActionsOpenChange={setChipActionsOpen}
+            onRequestScrollTop={() => pageScrollRef.current?.scrollTo({ y: 0, animated: true })}
+            onNavigate={(tab) => {
+              setSelectedPhase("live");
+              handleTabPress(tab);
+            }}
+            onGoLive={() => {
+              setSelectedPhase("live");
+              handleTabPress("matches");
+            }}
+            onOpenSettings={() => handleSelectPage("setup", "settings")}
+          />
+        );
+      }
+    }
     switch (activeTab) {
       case "settings":
         return renderSettings();
@@ -5259,7 +5491,7 @@ export default function ManageTournamentScreen() {
       )}
 
       {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb]}>
+      <View style={[styles.header, isWeb && styles.headerWeb, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Text allowFontScaling={false} style={styles.backText}>
             {GLYPH.back} Back
@@ -5288,7 +5520,13 @@ export default function ManageTournamentScreen() {
             </Text>
           </View>
         </View>
-        <View style={styles.placeholderSpace} />
+        {isChip ? (
+          <TouchableOpacity style={styles.headerActionBtn} onPress={onActionsPress}>
+            <Text allowFontScaling={false} style={styles.headerActionText}>⚡ Actions</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholderSpace} />
+        )}
       </View>
 
       <TournamentActionsModal
@@ -5310,15 +5548,16 @@ export default function ManageTournamentScreen() {
         />
       )}
 
-      {activeTab === "matches" ||
-      activeTab === "queue" ||
-      activeTab === "stats" ||
-      activeTab === "standings" ||
-      activeTab === "payouts" ||
-      activeTab === "history" ||
-      activeTab === "summary" ? (
+      {!isChip &&
+      (activeTab === "matches" ||
+        activeTab === "queue" ||
+        activeTab === "stats" ||
+        activeTab === "standings" ||
+        activeTab === "payouts" ||
+        activeTab === "history" ||
+        activeTab === "summary") ? (
         // These own their scrolling and fill the available height, so they live
-        // outside the page ScrollView.
+        // outside the page ScrollView. (Chip pages use the page ScrollView below.)
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : isWeb && winW >= 980 && activeTab === "settings" && form ? (
         // Wide web: event-builder two-column. The whole page scrolls (so you can
@@ -5342,6 +5581,7 @@ export default function ManageTournamentScreen() {
         </ScrollView>
       ) : (
         <ScrollView
+          ref={pageScrollRef}
           style={styles.scrollFlex}
           contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
           showsVerticalScrollIndicator={false}
@@ -5363,7 +5603,7 @@ export default function ManageTournamentScreen() {
       )}
 
       {/* Fixed footer: Close Registration stays pinned while the list scrolls */}
-      {activeTab === "players" && hub.liveState === "registration_open" && (
+      {!isChip && activeTab === "players" && hub.liveState === "registration_open" && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
             style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
@@ -5410,21 +5650,24 @@ export default function ManageTournamentScreen() {
                     try {
                       await hub.saveSettings(toPatch(form));
                       // First time through, open registration so the tournament
-                      // reflects it (and future visits show "View Registration").
+                      // reflects it.
                       if (!chipRegistrationStarted) await hub.startRegistration();
                     } catch {
                       Alert.alert("Error", "Failed to save settings.");
                       return;
                     }
                   }
-                  openChipManager();
+                  // Chip lives in THIS shell now — go to the Players page, not a
+                  // separate chip manager.
+                  setSelectedPhase("setup");
+                  handleTabPress("players");
                 }}
                 disabled={
                   hub.isSaving || (!chipRegistrationStarted && !formRequiredComplete)
                 }
               >
                 <Text allowFontScaling={false} style={styles.startBtnText}>
-                  {chipRegistrationStarted ? "View Registration →" : "Begin Registration →"}
+                  {chipRegistrationStarted ? "View Players →" : "Begin Registration →"}
                 </Text>
               </TouchableOpacity>
             )}
@@ -5532,6 +5775,39 @@ export default function ManageTournamentScreen() {
           )}
         </View>
       )}
+
+      {/* Fixed footer: Finish Tournament — appears once the final score is in,
+          so the TD always has a clear way to close the event out (in addition to
+          the auto-prompt). Not shown on the bracket tab, which has its own footer. */}
+      {hub.phase === "running" &&
+        allMatchesDecided &&
+        (activeTab === "matches" ||
+          activeTab === "queue" ||
+          activeTab === "stats" ||
+          activeTab === "standings") && (
+          <View style={styles.settingsFooter}>
+            <Text allowFontScaling={false} style={styles.startHintFooter}>
+              {championName
+                ? `${championName} wins! All matches are complete.`
+                : "All matches are complete."}
+            </Text>
+            <View style={[styles.saveRow, styles.settingsFooterInner]}>
+              <TouchableOpacity
+                style={[
+                  styles.startBtn,
+                  { flex: 1 },
+                  hub.isMutatingLive && styles.btnDisabled,
+                ]}
+                onPress={handleFinishTournament}
+                disabled={hub.isMutatingLive}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  Finish Tournament
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
     </View>
   );
 }
@@ -5539,7 +5815,7 @@ export default function ManageTournamentScreen() {
 const styles = StyleSheet.create({
   container: {
     ...Platform.select({
-      web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+      web: { maxWidth: 1240, width: "100%" as any, alignSelf: "center" as any },
     }),
     flex: 1,
     backgroundColor: COLORS.background,
@@ -5592,6 +5868,8 @@ const styles = StyleSheet.create({
   },
   phaseBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   placeholderSpace: { width: webSc(50) },
+  headerActionBtn: { backgroundColor: COLORS.primary, borderRadius: webSc(RADIUS.md), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
+  headerActionText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   actionsBtn: {
     width: webSc(50),
     alignItems: "center",

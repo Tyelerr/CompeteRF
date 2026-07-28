@@ -5,7 +5,7 @@ export const TERMS_OF_SERVICE = {
   title: 'Terms of Service',
   lastUpdated: 'March 25, 2026',
   preamble:
-    'Welcome to Compete. These Terms of Service (\u201CTerms\u201D) govern your access to and use of the Compete mobile application (\u201CApp\u201D), operated by AZ Tech Guys LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). By creating an account or using the App, you agree to be bound by these Terms. If you do not agree, do not use the App.',
+    'Welcome to Compete. These Terms of Service (\u201CTerms\u201D) govern your access to and use of the Compete mobile application (\u201CApp\u201D), operated by Compete Tournaments LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). By creating an account or using the App, you agree to be bound by these Terms. If you do not agree, do not use the App.',
   sections: [
     {
       heading: 'Platform Disclaimer',
@@ -145,7 +145,7 @@ export const TERMS_OF_SERVICE = {
     {
       heading: '13. Indemnification',
       body:
-        'You agree to indemnify, defend, and hold harmless Compete and AZ Tech Guys LLC, their officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorneys\u2019 fees) arising out of or related to your use of the App, your User Content, your violation of these Terms, or your violation of any rights of a third party.',
+        'You agree to indemnify, defend, and hold harmless Compete and Compete Tournaments LLC, their officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorneys\u2019 fees) arising out of or related to your use of the App, your User Content, your violation of these Terms, or your violation of any rights of a third party.',
     },
     {
       heading: '14. Termination',
@@ -177,7 +177,7 @@ export const TERMS_OF_SERVICE = {
     {
       heading: '17. Contact Us',
       body:
-        'If you have any questions about these Terms, please contact us at:\n\nAZ Tech Guys LLC\nPhoenix, Arizona, United States\nEmail: support@thecompeteapp.com',
+        'If you have any questions about these Terms, please contact us at:\n\nCompete Tournaments LLC\nPhoenix, Arizona, United States\nEmail: support@thecompeteapp.com',
     },
   ],
 } as const;
@@ -186,7 +186,7 @@ export const PRIVACY_POLICY = {
   title: 'Privacy Policy',
   lastUpdated: 'March 25, 2026',
   preamble:
-    'Compete is operated by AZ Tech Guys LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). This Privacy Policy explains what personal information we collect through the Compete mobile application (\u201CApp\u201D), how we use and protect it, and your rights regarding your data. By using the App, you agree to the collection and use of information as described in this policy.',
+    'Compete is operated by Compete Tournaments LLC (\u201CCompete,\u201D \u201Cwe,\u201D \u201Cus,\u201D or \u201Cour\u201D). This Privacy Policy explains what personal information we collect through the Compete mobile application (\u201CApp\u201D), how we use and protect it, and your rights regarding your data. By using the App, you agree to the collection and use of information as described in this policy.',
   sections: [
     {
       heading: '1. Information We Collect',
@@ -308,7 +308,7 @@ export const PRIVACY_POLICY = {
     {
       heading: '11. Contact Us',
       body:
-        'If you have any questions, concerns, or requests related to this Privacy Policy or your personal data, please contact us at:\n\nAZ Tech Guys LLC\nPhoenix, Arizona, United States\nEmail: support@thecompeteapp.com',
+        'If you have any questions, concerns, or requests related to this Privacy Policy or your personal data, please contact us at:\n\nCompete Tournaments LLC\nPhoenix, Arizona, United States\nEmail: support@thecompeteapp.com',
     },
   ],
 } as const;

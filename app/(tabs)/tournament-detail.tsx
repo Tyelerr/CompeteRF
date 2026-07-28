@@ -25,11 +25,14 @@ import { FullScreenImageViewer } from "../../src/views/components/common/FullScr
 import { Loading } from "../../src/views/components/common/loading";
 import ReportModal from "../../src/views/components/common/ReportModal";
 import { useAuthContext } from "../../src/providers/AuthProvider";
+import { TeamInviteBanner } from "../../src/views/components/tournament/TeamInviteBanner";
+import { TeamJoinBanner } from "../../src/views/components/tournament/TeamJoinBanner";
 
 const isWeb = Platform.OS === "web";
 
 export default function TournamentDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, invite } = useLocalSearchParams();
+  const inviteToken = Array.isArray(invite) ? invite[0] : invite;
   const vm = useTournamentDetail(id as string);
   const { session, isAdmin } = useAuth();
   const { profile } = useAuthContext();
@@ -128,6 +131,9 @@ export default function TournamentDetailScreen() {
             <Text allowFontScaling={false} style={styles.hiddenText}>HIDDEN – This tournament has been hidden by an admin</Text>
           </View>
         )}
+
+        <TeamJoinBanner token={inviteToken} />
+        <TeamInviteBanner tournamentId={tournament.id} playerId={profile?.id_auto} />
 
         <View style={[styles.topSection, isWeb && wStyles.topSection]}>
           <View style={styles.leftContent}>

@@ -1,4 +1,5 @@
 import { getActiveFilterCount } from "../../../models/types/filter.types";
+import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -48,11 +49,44 @@ const ITEMS_PER_PAGE = isWeb ? 40 : 20;
 const SCROLL_UP_THRESHOLD = 50;
 
 export const BilliardsScreen = () => {
+  // Hide the native detail modal while this tab is unfocused (e.g. while the chip
+  // live view is open) so it doesn't float above the pushed screen — it re-shows
+  // on return, which is how Back lands back on the same modal.
+  const isFocused = useIsFocused();
   const [webDetailId, setWebDetailId] = useState<string | null>(null);
   const [mobileDetailId, setMobileDetailId] = useState<string | null>(null);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const { tournamentId: deepLinkId } = useLocalSearchParams<{ tournamentId?: string }>();
   const deepLinkHandled = useRef(false);
+  const searchRef = useRef<TextInput>(null);
+
+  // iOS keeps the search field as the first responder across navigation, so it
+  // re-presents the keyboard when this tab returns — popping it up over the
+  // tournament-detail modal. Blur + dismiss both when leaving AND when arriving
+  // with the modal open (a couple of delayed passes beat the tab-transition
+  // re-present, which fires after the animation completes).
+  useEffect(() => {
+    const kill = () => {
+      searchRef.current?.blur();
+      Keyboard.dismiss();
+    };
+    if (!isFocused) {
+      kill();
+      return;
+    }
+    if (mobileDetailId != null) {
+      kill();
+      // Arm a short-lived guard: any keyboard that tries to appear in the ~700ms
+      // after the tab returns (the iOS first-responder re-present) is dismissed.
+      // It self-disarms, so typing in the Report/Register sub-modals later works.
+      const sub = Keyboard.addListener("keyboardDidShow", kill);
+      const t = setTimeout(() => sub.remove(), 700);
+      return () => {
+        sub.remove();
+        clearTimeout(t);
+      };
+    }
+  }, [isFocused, mobileDetailId]);
 
   useEffect(() => {
     if (deepLinkId) {
@@ -332,7 +366,7 @@ export const BilliardsScreen = () => {
                   <View style={styles.searchContainer}>
                     <View style={styles.searchBar}>
                       <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
-                      <TextInput allowFontScaling={false} style={styles.searchInput} placeholder="Search by name, venue, director..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} returnKeyType="search" onSubmitEditing={Keyboard.dismiss} />
+                      <TextInput ref={searchRef} allowFontScaling={false} style={styles.searchInput} placeholder="Search by name, venue, director..." placeholderTextColor={COLORS.textMuted} value={vm.searchQuery} onChangeText={vm.setSearchQuery} returnKeyType="search" onSubmitEditing={Keyboard.dismiss} />
                       {vm.searchQuery.length > 0 && (
                         <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.clearBtn}>
                           <Text allowFontScaling={false} style={styles.clearBtnText}>{"\u2715"}</Text>
@@ -422,7 +456,7 @@ export const BilliardsScreen = () => {
 
         {isWeb && webDetailId && <WebTournamentDetailOverlay id={webDetailId} onClose={() => setWebDetailId(null)} />}
 
-        <TournamentDetailModal id={mobileDetailId} visible={mobileDetailId !== null} onClose={() => setMobileDetailId(null)} onReport={openReportModal} />
+        <TournamentDetailModal id={mobileDetailId} visible={mobileDetailId !== null && isFocused} onClose={() => setMobileDetailId(null)} onReport={openReportModal} />
 
         <ReportModal visible={isReportVisible} onClose={closeReportModal} contentType={reportContentType} reason={reportReason} onReasonChange={setReportReason} details={reportDetails} onDetailsChange={setReportDetails} onSubmit={handleReportSubmit} isSubmitting={isReportSubmitting} />
 

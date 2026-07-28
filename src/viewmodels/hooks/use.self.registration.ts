@@ -42,23 +42,39 @@ export const useSelfRegistration = (
   // Active = has a row that isn't cancelled.
   const isRegistered = !!registration && registration.status !== "cancelled";
 
-  // Self-register as preregistered. Re-uses an existing (e.g. cancelled) row to
-  // satisfy the (tournament_id, player_id) unique index. Throws on failure.
-  const register = useCallback(async () => {
-    if (!tournamentId || !playerId) return;
-    setRegistering(true);
-    try {
-      const r = registration
-        ? await registrationService.reRegister(registration.id)
-        : await registrationService.register({
+  // Self-register as preregistered (Pending Approval). The player may SUGGEST
+  // their Fargo — it's stored only on the registration (fargo_rating) as a hint
+  // for the TD, and NEVER written to their profile. The TD confirms/edits it at
+  // approval, and only that confirmed value becomes the verified profile Fargo.
+  // Re-uses an existing (e.g. cancelled) row to satisfy the
+  // (tournament_id, player_id) unique index. Throws on failure.
+  const register = useCallback(
+    async (fargo?: number | null) => {
+      if (!tournamentId || !playerId) return;
+      setRegistering(true);
+      try {
+        let r: Registration;
+        if (registration) {
+          r = await registrationService.reRegister(registration.id);
+          if (fargo != null) {
+            r = await registrationService.updateRegistration(registration.id, {
+              fargo_rating: fargo,
+            });
+          }
+        } else {
+          r = await registrationService.register({
             tournament_id: tournamentId,
             player_id: playerId,
+            fargo_rating: fargo ?? null,
           });
-      setRegistration(r);
-    } finally {
-      setRegistering(false);
-    }
-  }, [tournamentId, playerId, registration]);
+        }
+        setRegistration(r);
+      } finally {
+        setRegistering(false);
+      }
+    },
+    [tournamentId, playerId, registration],
+  );
 
   return { registration, isRegistered, loading, register, registering, refresh };
 };

@@ -140,6 +140,10 @@ export const MatchCard = ({
         <View style={styles.actions}>
           {m.bye ? (
             <Btn label="View Details" primary onPress={() => onAction?.(m, "details")} busy={busy} />
+          ) : m.pending ? (
+            // Opponent hasn't advanced yet — not playable. Only open the (gated)
+            // menu so the TD can view details, not start/score it.
+            <Btn label="Waiting for player…" onPress={() => onAction?.(m, "menu")} busy={busy} />
           ) : m.status === "scheduled" ? (
             <>
               <Btn label="Start Match" primary onPress={() => onAction?.(m, "start")} busy={busy} />

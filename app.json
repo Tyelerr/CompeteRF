@@ -14,6 +14,7 @@
                              "buildNumber":  "52",
                              "usesAppleSignIn":  true,
                              "associatedDomains":  [
+                                                       "applinks:www.thecompeteapp.com",
                                                        "applinks:thecompeteapp.com"
                                                    ],
                              "infoPlist":  {
@@ -29,7 +30,29 @@
                                                   },
                                  "edgeToEdgeEnabled":  true,
                                  "predictiveBackGestureEnabled":  false,
-                                 "package":  "com.thecompeteapp.competerf"
+                                 "package":  "com.thecompeteapp.competerf",
+                                 "intentFilters":  [
+                                                       {
+                                                           "action":  "VIEW",
+                                                           "autoVerify":  true,
+                                                           "data":  [
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "www.thecompeteapp.com",
+                                                                            "pathPrefix":  "/join"
+                                                                        },
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "thecompeteapp.com",
+                                                                            "pathPrefix":  "/join"
+                                                                        }
+                                                                    ],
+                                                           "category":  [
+                                                                            "BROWSABLE",
+                                                                            "DEFAULT"
+                                                                        ]
+                                                       }
+                                                   ]
                              },
                  "web":  {
                              "bundler":  "metro",

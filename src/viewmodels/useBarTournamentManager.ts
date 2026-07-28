@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { getNavCache, setNavCache } from "./nav-cache";
 
 export interface BarTournamentWithStats extends Tournament {
   views_count: number;
@@ -29,34 +30,40 @@ interface StatusCounts {
 export const useBarTournamentManager = () => {
   const { profile } = useAuthContext();
 
-  const [loading, setLoading] = useState(true);
+  // Show the last-loaded list instantly on revisit; refresh in the background.
+  const cacheKey = `bar-tournaments:${profile?.id_auto ?? "none"}`;
+  const cached = getNavCache<{ tournaments: BarTournamentWithStats[]; statusCounts: StatusCounts }>(cacheKey);
+
+  const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
-  const [tournaments, setTournaments] = useState<BarTournamentWithStats[]>([]);
+  const [tournaments, setTournaments] = useState<BarTournamentWithStats[]>(cached?.tournaments ?? []);
   const [filteredTournaments, setFilteredTournaments] = useState<BarTournamentWithStats[]>([]);
   const [statusFilter, setStatusFilter] = useState<TournamentStatusFilter>("active");
   const [sortOption, setSortOption] = useState<SortOption>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusCounts, setStatusCounts] = useState<StatusCounts>({
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>(cached?.statusCounts ?? {
     active: 0, completed: 0, cancelled: 0, archived: 0, all: 0,
   });
 
   const totalCount = tournaments.length;
 
   useEffect(() => {
-    if (profile?.id_auto) loadTournaments();
+    // Background refresh when we already have cached data → no full-screen spinner.
+    if (profile?.id_auto) loadTournaments(!!cached);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id_auto]);
 
   useEffect(() => {
     applyFilters();
   }, [tournaments, statusFilter, sortOption, sortDirection, searchQuery]);
 
-  const loadTournaments = async () => {
+  const loadTournaments = async (background = false) => {
     if (!profile?.id_auto) return;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const { data: venueOwnerships } = await supabase
         .from("venue_owners")
         .select("venue_id")
@@ -65,7 +72,8 @@ export const useBarTournamentManager = () => {
 
       if (!venueOwnerships || venueOwnerships.length === 0) {
         setTournaments([]);
-        calculateStatusCounts([]);
+        const emptyCounts = calculateStatusCounts([]);
+        setNavCache(cacheKey, { tournaments: [], statusCounts: emptyCounts });
         return;
       }
 
@@ -78,48 +86,85 @@ export const useBarTournamentManager = () => {
 
       if (!tournamentData) { setTournaments([]); return; }
 
-      const tournamentsWithStats: BarTournamentWithStats[] = await Promise.all(
-        tournamentData
-          .filter((t: any) => !t.is_draft) // hide unsaved drafts
-          .map(async (tournament: any) => {
-          const { count: viewsCount } = await supabase
-            .from("tournament_analytics")
-            .select("id", { count: "exact", head: true })
-            .eq("tournament_id", tournament.id)
-            .eq("event_type", "view");
-          const { count: favoritesCount } = await supabase
-            .from("favorites")
-            .select("id", { count: "exact", head: true })
-            .eq("tournament_id", tournament.id);
-          return {
-            ...tournament,
-            venue_name: tournament.venues?.venue || "Unknown",
-            director_name: tournament.profiles?.user_name || "Unknown",
-            views_count: viewsCount || 0,
-            favorites_count: favoritesCount || 0,
-            can_edit: true,
-            can_delete: tournament.status !== "completed",
-          };
-        }),
-      );
+      const nonDrafts = tournamentData.filter((t: any) => !t.is_draft); // hide unsaved drafts
+      const engagement = await loadEngagementCounts(nonDrafts.map((t: any) => t.id as number));
+
+      const tournamentsWithStats: BarTournamentWithStats[] = nonDrafts.map((tournament: any) => ({
+        ...tournament,
+        venue_name: tournament.venues?.venue || "Unknown",
+        director_name: tournament.profiles?.user_name || "Unknown",
+        views_count: engagement[tournament.id]?.views ?? 0,
+        favorites_count: engagement[tournament.id]?.favorites ?? 0,
+        can_edit: true,
+        can_delete: tournament.status !== "completed",
+      }));
 
       setTournaments(tournamentsWithStats);
-      calculateStatusCounts(tournamentsWithStats);
+      const counts = calculateStatusCounts(tournamentsWithStats);
+      setNavCache(cacheKey, { tournaments: tournamentsWithStats, statusCounts: counts });
     } catch (error) {
       console.error("Error loading tournaments:", error);
-      Alert.alert("Error", "Failed to load tournaments. Please try again.");
+      // Silent on background refreshes so a transient blip doesn't nag the user
+      // while they're already looking at cached data.
+      if (!background) Alert.alert("Error", "Failed to load tournaments. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const calculateStatusCounts = (tournamentList: BarTournamentWithStats[]) => {
+  // Engagement (views + favorites) counts for a set of tournaments. Fast path is
+  // one batched RPC; if that function isn't in the DB yet (migration not applied)
+  // or errors, it falls back to the original per-tournament counts so nothing
+  // breaks either way.
+  const loadEngagementCounts = async (
+    ids: number[],
+  ): Promise<Record<number, { views: number; favorites: number }>> => {
+    const map: Record<number, { views: number; favorites: number }> = {};
+    if (ids.length === 0) return map;
+
+    try {
+      const { data, error } = await supabase.rpc("bar_tournament_engagement", {
+        p_tournament_ids: ids,
+      });
+      if (!error && Array.isArray(data)) {
+        for (const row of data as any[]) {
+          map[Number(row.tournament_id)] = {
+            views: Number(row.views_count) || 0,
+            favorites: Number(row.favorites_count) || 0,
+          };
+        }
+        return map;
+      }
+    } catch {
+      // fall through to the per-tournament fallback below
+    }
+
+    // Fallback: per-tournament counts (works before the migration is applied).
+    await Promise.all(
+      ids.map(async (id) => {
+        const { count: viewsCount } = await supabase
+          .from("tournament_analytics")
+          .select("id", { count: "exact", head: true })
+          .eq("tournament_id", id)
+          .eq("event_type", "view");
+        const { count: favoritesCount } = await supabase
+          .from("favorites")
+          .select("id", { count: "exact", head: true })
+          .eq("tournament_id", id);
+        map[id] = { views: viewsCount || 0, favorites: favoritesCount || 0 };
+      }),
+    );
+    return map;
+  };
+
+  const calculateStatusCounts = (tournamentList: BarTournamentWithStats[]): StatusCounts => {
     const counts = tournamentList.reduce(
       (acc, t) => { acc.all++; acc[t.status as keyof StatusCounts]++; return acc; },
-      { active: 0, completed: 0, cancelled: 0, archived: 0, all: 0 },
+      { active: 0, completed: 0, cancelled: 0, archived: 0, all: 0 } as StatusCounts,
     );
     setStatusCounts(counts);
+    return counts;
   };
 
   const applyFilters = () => {
@@ -151,7 +196,7 @@ export const useBarTournamentManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.archiveTournament(tournamentId, profile.id_auto);
-      await loadTournaments();
+      await loadTournaments(true);
       return true;
     } catch (error) { console.error("Error archiving tournament:", error); return false; }
     finally { setProcessing(null); }
@@ -162,7 +207,7 @@ export const useBarTournamentManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.cancelTournament(tournamentId, reason, profile.id_auto);
-      await loadTournaments();
+      await loadTournaments(true);
       return true;
     } catch (error) { console.error("Error cancelling tournament:", error); return false; }
     finally { setProcessing(null); }
@@ -172,7 +217,7 @@ export const useBarTournamentManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.restoreTournament(tournamentId);
-      await loadTournaments();
+      await loadTournaments(true);
       return true;
     } catch (error) { console.error("Error restoring tournament:", error); return false; }
     finally { setProcessing(null); }
@@ -254,7 +299,7 @@ export const useBarTournamentManager = () => {
         is_draft: true,
       });
 
-      await loadTournaments();
+      await loadTournaments(true);
       return created.id;
     } catch (error) {
       console.error("Error creating draft tournament:", error);
@@ -265,7 +310,7 @@ export const useBarTournamentManager = () => {
     }
   };
 
-  const onRefresh = () => { setRefreshing(true); loadTournaments(); };
+  const onRefresh = () => { setRefreshing(true); loadTournaments(true); };
 
   return {
     loading, refreshing, processing, creating,

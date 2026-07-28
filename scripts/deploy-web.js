@@ -73,7 +73,23 @@ function remapNodeModulesAssets(distDir) {
   // would make the rename fail with EPERM on Windows — remove it first.
   const target = path.join(distDir, "assets", "nm");
   if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
-  fs.renameSync(nmDir, target);
+  try {
+    fs.renameSync(nmDir, target);
+  } catch (err) {
+    // On Windows a running Metro/Expo dev server keeps a watcher handle on any
+    // folder named `node_modules` (including this one under dist/), so the
+    // in-place rename fails with EPERM. Fall back to copying the fonts to
+    // assets/nm and leaving the locked original in place — Vercel drops the
+    // `node_modules` copy from the upload anyway, so only assets/nm ships.
+    if (err && err.code === "EPERM") {
+      fs.cpSync(nmDir, target, { recursive: true });
+      console.log(
+        "[web:publish] Rename blocked (dev server watcher); copied assets/node_modules -> assets/nm instead.",
+      );
+    } else {
+      throw err;
+    }
+  }
   console.log(
     "[web:publish] Remapped assets/node_modules -> assets/nm so icon fonts deploy (Vercel ignores node_modules).",
   );
@@ -81,13 +97,34 @@ function remapNodeModulesAssets(distDir) {
 
 remapNodeModulesAssets(distPath);
 
+// Expo's web export can skip dotfile directories, so copy the Universal/App Link
+// association files (public/.well-known) into the deploy output explicitly.
+function copyWellKnown(distDir) {
+  const src = path.join(root, "public", ".well-known");
+  if (!fs.existsSync(src)) return;
+  const dest = path.join(distDir, ".well-known");
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of fs.readdirSync(src)) {
+    fs.copyFileSync(path.join(src, name), path.join(dest, name));
+  }
+  console.log("[web:publish] Copied .well-known association files into dist/.");
+}
+copyWellKnown(distPath);
+
 // SPA fallback: Expo's web export is a single-page app, so a direct hit or
 // refresh on a client route (e.g. /billiards) would 404 on Vercel. Rewrite
 // unknown paths to index.html. Real files (assets, *.html) match the filesystem
 // first and are served as-is, so only app routes fall through to the shell.
 function writeSpaConfig(distDir) {
   const cfg = {
-    rewrites: [{ source: "/(.*)", destination: "/index.html" }],
+    // Universal/App Link association files must be served as real JSON and must
+    // NOT fall through to the SPA shell. Vercel matches the filesystem before
+    // rewrites, but the extensionless AASA needs an explicit JSON content-type.
+    rewrites: [
+      { source: "/.well-known/apple-app-site-association", destination: "/.well-known/apple-app-site-association" },
+      { source: "/.well-known/assetlinks.json", destination: "/.well-known/assetlinks.json" },
+      { source: "/(.*)", destination: "/index.html" },
+    ],
     // Force the HTML shell to always revalidate so a new deploy (with a new
     // entry-<hash>.js) shows up without a manual hard-refresh. The hashed JS/CSS
     // assets are content-addressed, so they stay cached immutably.
@@ -112,6 +149,11 @@ function writeSpaConfig(distDir) {
             value: "public, max-age=31536000, immutable",
           },
         ],
+      },
+      {
+        // Apple requires the AASA (no file extension) to be application/json.
+        source: "/.well-known/apple-app-site-association",
+        headers: [{ key: "Content-Type", value: "application/json" }],
       },
     ],
   };

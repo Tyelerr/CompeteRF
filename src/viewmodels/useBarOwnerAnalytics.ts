@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
+import { getNavCache, setNavCache } from "./nav-cache";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -211,12 +212,24 @@ async function getScopedTopEntities(
 export function useBarOwnerAnalytics() {
   const { profile } = useAuthContext();
 
-  const [data, setData] = useState<BarOwnerAnalyticsState>(EMPTY_STATE);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriodOption>(
     TIME_PERIOD_OPTIONS[3], // Lifetime
   );
+
+  // Show the last-loaded analytics instantly on revisit; refresh in the
+  // background. Keyed by owner + time period so the numbers always match.
+  const cacheKey = `bo-analytics:${profile?.id_auto ?? "none"}:${timePeriod.value}`;
+  const cached = getNavCache<BarOwnerAnalyticsState>(cacheKey);
+
+  const [data, setData] = useState<BarOwnerAnalyticsState>(cached ?? EMPTY_STATE);
+  const [loading, setLoading] = useState(!cached);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Persist whatever's on screen so the next visit renders it instantly.
+  useEffect(() => {
+    if (!loading) setNavCache(cacheKey, data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, loading]);
 
   // ── Get the owner's tournament IDs ─────────────────────────────────────
   const getOwnerTournamentIds = useCallback(async (): Promise<number[]> => {
@@ -348,8 +361,11 @@ export function useBarOwnerAnalytics() {
 
   // ── Initial load ───────────────────────────────────────────────────────
   useEffect(() => {
-    setLoading(true);
+    // Only show the full-screen spinner when we have nothing cached for this
+    // owner+period; otherwise refresh quietly behind the cached data.
+    if (!getNavCache(cacheKey)) setLoading(true);
     fetchData().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchData]);
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────

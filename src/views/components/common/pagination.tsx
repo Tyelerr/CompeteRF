@@ -15,14 +15,17 @@ interface PaginationProps {
   onNextPage: () => void;
   canGoPrev: boolean;
   canGoNext: boolean;
+  // Optional item noun for the summary text, e.g. "tournaments" →
+  // "Showing 1–10 of 11 tournaments". Omitted → "Showing 1–10 of 11".
+  noun?: string;
 }
 
-export function Pagination({ totalCount, displayStart, displayEnd, currentPage, totalPages, onPrevPage, onNextPage, canGoPrev, canGoNext }: PaginationProps) {
+export function Pagination({ totalCount, displayStart, displayEnd, currentPage, totalPages, onPrevPage, onNextPage, canGoPrev, canGoNext, noun }: PaginationProps) {
   if (totalCount === 0) return null;
   return (
     <View style={styles.container}>
       <Text allowFontScaling={false} style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
-        Total count: {totalCount} Displaying {displayStart}-{displayEnd}
+        Showing {displayStart}{"–"}{displayEnd} of {totalCount}{noun ? ` ${noun}` : ""}
       </Text>
       <View style={styles.pagination}>
         <TouchableOpacity onPress={onPrevPage} disabled={!canGoPrev} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>

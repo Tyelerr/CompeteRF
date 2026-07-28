@@ -6,6 +6,7 @@ import {
   TimePeriod,
 } from "../models/types/dashboard-types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { getNavCache, setNavCache } from "./nav-cache";
 
 export interface BarOwnerStats {
   totalVenues: number;
@@ -29,12 +30,22 @@ export interface BarOwnerVenueSummary {
 export const useBarOwnerDashboard = () => {
   const { profile } = useAuthContext();
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(TIME_PERIODS[5]); // Lifetime default
 
+  // Show the last-loaded dashboard instantly on revisit; refresh in the
+  // background. Keyed by owner + selected time period so numbers never mismatch.
+  const cacheKey = `bo-dashboard:${profile?.id_auto ?? "none"}:${timePeriod.days ?? "life"}`;
+  const cached = getNavCache<{
+    stats: BarOwnerStats;
+    recentVenues: BarOwnerVenueSummary[];
+    eventTypeStats: EventTypeStats[];
+  }>(cacheKey);
+
+  const [loading, setLoading] = useState(!cached);
+  const [refreshing, setRefreshing] = useState(false);
+
   // Stats
-  const [stats, setStats] = useState<BarOwnerStats>({
+  const [stats, setStats] = useState<BarOwnerStats>(cached?.stats ?? {
     totalVenues: 0,
     totalDirectors: 0,
     activeTournaments: 0,
@@ -45,16 +56,22 @@ export const useBarOwnerDashboard = () => {
   });
 
   // Recent venues
-  const [recentVenues, setRecentVenues] = useState<BarOwnerVenueSummary[]>([]);
+  const [recentVenues, setRecentVenues] = useState<BarOwnerVenueSummary[]>(cached?.recentVenues ?? []);
 
   // Analytics data
-  const [eventTypeStats, setEventTypeStats] = useState<EventTypeStats[]>([]);
+  const [eventTypeStats, setEventTypeStats] = useState<EventTypeStats[]>(cached?.eventTypeStats ?? []);
 
   useEffect(() => {
-    if (profile?.id_auto) {
-      loadDashboardData();
-    }
+    // Background refresh when we already have cached data → no full-screen spinner.
+    if (profile?.id_auto) loadDashboardData(!!getNavCache(cacheKey));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id_auto, timePeriod]);
+
+  // Persist whatever's on screen so the next visit renders it instantly.
+  useEffect(() => {
+    if (!loading) setNavCache(cacheKey, { stats, recentVenues, eventTypeStats });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats, recentVenues, eventTypeStats, loading]);
 
   const getDateFilter = () => {
     if (timePeriod.days === null) return null; // Lifetime
@@ -69,10 +86,11 @@ export const useBarOwnerDashboard = () => {
     return date.toISOString();
   };
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (background = false) => {
     if (!profile?.id_auto) return;
 
     try {
+      if (!background) setLoading(true);
       await Promise.all([
         loadStats(),
         loadRecentVenues(),
@@ -307,7 +325,7 @@ export const useBarOwnerDashboard = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadDashboardData();
+    loadDashboardData(true);
   };
 
   const handleTimePeriodChange = (value: string) => {

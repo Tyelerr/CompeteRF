@@ -4,13 +4,16 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../src/theme/spacing";
@@ -286,9 +289,52 @@ const TDDashboard = () => {
 
 // --- Bar Owner Dashboard ---------------------------------------------------
 
+// Compact horizontal nav card: [icon] title + description, optional count, web
+// hover state. `accent` marks the primary (most-used) destination.
+const NavCard = ({
+  icon,
+  title,
+  desc,
+  count,
+  accent,
+  width,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  desc: string;
+  count?: number;
+  accent?: boolean;
+  width: string | number;
+  onPress: () => void;
+}) => (
+  <Pressable
+    onPress={onPress}
+    style={(state: any) => [
+      styles.boCard,
+      { width },
+      accent && styles.boCardAccent,
+      state.hovered && styles.boCardHover,
+      state.pressed && styles.boCardPressed,
+    ]}
+  >
+    <View style={[styles.boIconWrap, accent && styles.boIconWrapAccent]}>
+      <Ionicons name={icon} size={22} color={accent ? COLORS.primary : COLORS.textSecondary} />
+    </View>
+    <View style={styles.boCardBody}>
+      <Text allowFontScaling={false} style={[styles.boCardTitle, accent && { color: COLORS.primaryLight }]} numberOfLines={1}>{title}</Text>
+      <Text allowFontScaling={false} style={styles.boCardDesc} numberOfLines={2}>{desc}</Text>
+    </View>
+    {count != null && (
+      <Text allowFontScaling={false} style={[styles.boCardCount, accent && { color: COLORS.primary }]}>{count}</Text>
+    )}
+  </Pressable>
+);
+
 const BarOwnerDashboard = () => {
   const router = useRouter();
   const vm = useBarOwnerDashboard();
+  const { width: winW } = useWindowDimensions();
 
 
   // Only check once per app session — useFocusEffect fires on every
@@ -303,7 +349,10 @@ const BarOwnerDashboard = () => {
     );
   }
 
-  return (
+  // Native (mobile) keeps its original dashboard exactly as it was — the
+  // responsive redesign below is web-only.
+  if (!isWeb) {
+    return (
       <ScrollView
         style={styles.container}
         contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined}
@@ -327,7 +376,7 @@ const BarOwnerDashboard = () => {
 
           <View style={styles.statsGrid}>
             <StatCard
-              icon={"\uD83C\uDFE2"}
+              icon={"🏢"}
               value={vm.stats.totalVenues}
               label="Venue Manager"
               onPress={() =>
@@ -335,7 +384,7 @@ const BarOwnerDashboard = () => {
               }
             />
             <StatCard
-              icon={"\uD83D\uDC64"}
+              icon={"👤"}
               value={vm.stats.totalDirectors}
               label="Directors"
               onPress={() =>
@@ -345,7 +394,7 @@ const BarOwnerDashboard = () => {
               }
             />
             <StatCard
-              icon={"\uD83C\uDFC6"}
+              icon={"🏆"}
               value={vm.stats.activeTournaments}
               label="Tournament Manager"
               onPress={() =>
@@ -355,19 +404,19 @@ const BarOwnerDashboard = () => {
               }
             />
             <StatCard
-              icon={"\uD83D\uDCCA"}
+              icon={"📊"}
               label="Analytics"
               onPress={() =>
                 router.push("/(tabs)/admin/bar-owner-analytics" as any)
               }
             />
             <StatCard
-              icon={"\u2709\uFE0F"}
+              icon={"✉️"}
               label="Messages"
               onPress={() => router.push("/(tabs)/admin/messages" as any)}
             />
             <StatCard
-              icon={"\uD83D\uDCB3"}
+              icon={"💳"}
               label="Billing"
               onPress={() =>
                 router.push("/(tabs)/admin/bar-owner-billing" as any)
@@ -381,7 +430,7 @@ const BarOwnerDashboard = () => {
             <View style={styles.quickStatsCard}>
               <View style={styles.quickStatRow}>
                 <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E3A5F" }]}>
-                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83D\uDC41"}</Text>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"👁"}</Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.quickStatLabel}>Views</Text>
                 <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4A9EFF" }]}>
@@ -390,7 +439,7 @@ const BarOwnerDashboard = () => {
               </View>
               <View style={styles.quickStatRow}>
                 <View style={[styles.quickStatIconWrap, { backgroundColor: "#5F1E1E" }]}>
-                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\u2764\uFE0F"}</Text>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"❤️"}</Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.quickStatLabel}>Favorites</Text>
                 <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#FF6B6B" }]}>
@@ -399,7 +448,7 @@ const BarOwnerDashboard = () => {
               </View>
               <View style={[styles.quickStatRow, { marginBottom: 0 }]}>
                 <View style={[styles.quickStatIconWrap, { backgroundColor: "#1E4D2B" }]}>
-                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"\uD83C\uDFAF"}</Text>
+                  <Text allowFontScaling={false} style={styles.quickStatIcon}>{"🎯"}</Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.quickStatLabel}>Active Events</Text>
                 <Text allowFontScaling={false} style={[styles.quickStatNumber, { color: "#4ADE80" }]}>
@@ -412,6 +461,125 @@ const BarOwnerDashboard = () => {
           <View style={styles.bottomSpacer} />
         </DashboardInner>
       </ScrollView>
+    );
+  }
+
+  // Responsive breakpoints (desktop / tablet / mobile). Web reads the window
+  // width; native phones fall to the 1-column arrangement.
+  const cols = winW >= 1024 ? 3 : winW >= 640 ? 2 : 1;
+  const cardW = cols === 1 ? "100%" : cols === 2 ? "48.5%" : "31.5%";
+  const twoCol = winW >= 1024;
+
+  const navItems: {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    desc: string;
+    count?: number;
+    accent?: boolean;
+    onPress: () => void;
+  }[] = [
+    { icon: "trophy-outline", title: "Tournament Manager", desc: "Create and run your tournaments", count: vm.stats.activeTournaments, accent: true, onPress: () => router.push("/(tabs)/admin/tournaments/bar-tournament-manager" as any) },
+    { icon: "business-outline", title: "Venue Manager", desc: "Your venues and locations", count: vm.stats.totalVenues, onPress: () => router.push("/(tabs)/admin/bar-owner-venues" as any) },
+    { icon: "people-outline", title: "Directors", desc: "Manage tournament directors", count: vm.stats.totalDirectors, onPress: () => router.push("/(tabs)/admin/directors/bar-owner-directors" as any) },
+    { icon: "bar-chart-outline", title: "Analytics", desc: "Views, favorites, and trends", onPress: () => router.push("/(tabs)/admin/bar-owner-analytics" as any) },
+    { icon: "mail-outline", title: "Messages", desc: "Player and director messages", onPress: () => router.push("/(tabs)/admin/messages" as any) },
+    { icon: "card-outline", title: "Billing", desc: "Plan and payment details", onPress: () => router.push("/(tabs)/admin/bar-owner-billing" as any) },
+  ];
+
+  const statBlocks: { icon: keyof typeof Ionicons.glyphMap; label: string; value: number; color: string }[] = [
+    { icon: "eye-outline", label: "Views", value: vm.stats.todayViews, color: "#4A9EFF" },
+    { icon: "heart-outline", label: "Favorites", value: vm.stats.todayFavorites, color: "#FF6B6B" },
+    { icon: "flash-outline", label: "Active Events", value: vm.stats.activeTournaments, color: "#4ADE80" },
+  ];
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={isWeb ? styles.boScrollWeb : undefined}
+      refreshControl={
+        isWeb ? undefined : (
+          <RefreshControl refreshing={vm.refreshing} onRefresh={vm.onRefresh} tintColor={COLORS.primary} />
+        )
+      }
+    >
+      <View style={[styles.boInner, isWeb && styles.boInnerWeb]}>
+        {/* Header \u2014 left-aligned title/subtitle, right-side primary CTA (web) */}
+        <View style={styles.boHeader}>
+          <View style={styles.boHeaderText}>
+            <Text allowFontScaling={false} style={styles.boTitle}>Bar Owner Dashboard</Text>
+            <Text allowFontScaling={false} style={styles.boSubtitle}>
+              Manage your venues, directors, tournaments, and performance.
+            </Text>
+          </View>
+          {isWeb && (
+            <TouchableOpacity
+              style={styles.boCreateBtn}
+              activeOpacity={0.85}
+              onPress={() => router.push("/(tabs)/admin/tournaments/bar-tournament-manager" as any)}
+            >
+              <Ionicons name="add" size={18} color="#FFFFFF" />
+              <Text allowFontScaling={false} style={styles.boCreateText}>Create Tournament</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Navigation cards \u2014 3 / 2 / 1 per row */}
+        <View style={styles.boGrid}>
+          {navItems.map((it) => (
+            <NavCard key={it.title} {...it} width={cardW} />
+          ))}
+        </View>
+
+        {/* Quick Stats + Your Venues \u2014 two columns on desktop, stacked below */}
+        <View style={[styles.boContentRow, !twoCol && styles.boContentStack]}>
+          <View style={[styles.boPanel, twoCol && styles.boColFlex]}>
+            <Text allowFontScaling={false} style={styles.boPanelTitle}>Quick Stats</Text>
+            <Text allowFontScaling={false} style={styles.boPanelSub}>{"Today's performance"}</Text>
+            <View style={styles.boStatsRow}>
+              {statBlocks.map((s) => (
+                <View key={s.label} style={styles.boStatBlock}>
+                  <View style={[styles.boStatIcon, { backgroundColor: s.color + "22" }]}>
+                    <Ionicons name={s.icon} size={16} color={s.color} />
+                  </View>
+                  <Text allowFontScaling={false} style={[styles.boStatNum, { color: s.color }]}>{s.value}</Text>
+                  <Text allowFontScaling={false} style={styles.boStatLabel}>{s.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={[styles.boPanel, twoCol && styles.boColFlex]}>
+            <Text allowFontScaling={false} style={styles.boPanelTitle}>Your Venues</Text>
+            <Text allowFontScaling={false} style={styles.boPanelSub}>{vm.stats.totalVenues} total</Text>
+            {vm.recentVenues.length === 0 ? (
+              <Text allowFontScaling={false} style={styles.boEmpty}>No venues yet.</Text>
+            ) : (
+              vm.recentVenues.slice(0, 5).map((v, i) => (
+                <TouchableOpacity
+                  key={v.id}
+                  style={[styles.boVenueRow, i > 0 && styles.boVenueDivider]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push("/(tabs)/admin/bar-owner-venues" as any)}
+                >
+                  <View style={styles.boVenueIcon}>
+                    <Ionicons name="business" size={15} color={COLORS.primaryLight} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text allowFontScaling={false} style={styles.boVenueName} numberOfLines={1}>{v.venue}</Text>
+                    <Text allowFontScaling={false} style={styles.boVenueMeta} numberOfLines={1}>
+                      {[v.city, v.state].filter(Boolean).join(", ") || "\u2014"}
+                    </Text>
+                  </View>
+                  <Text allowFontScaling={false} style={styles.boVenueStat}>{v.activeTournaments} active</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </View>
+
+        <View style={styles.bottomSpacer} />
+      </View>
+    </ScrollView>
   );
 };
 
@@ -866,4 +1034,46 @@ const styles = StyleSheet.create({
   bottomSpacer: {
     height: SPACING.xl * 2,
   },
+
+  // ── Bar Owner Dashboard (web workspace + responsive) ──────────────────────
+  boScrollWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  boInner: { width: "100%" as any, paddingHorizontal: SPACING.md, paddingTop: SPACING.xl + SPACING.lg },
+  boInnerWeb: { maxWidth: 1280, paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl },
+  boHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: SPACING.md, marginBottom: SPACING.lg },
+  boHeaderText: { flexGrow: 1, flexShrink: 1, minWidth: 220 },
+  boTitle: { color: COLORS.text, fontSize: wxMs(26), fontWeight: "800" },
+  boSubtitle: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), marginTop: 4 },
+  boCreateBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, height: 42, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  boCreateText: { color: "#FFFFFF", fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
+
+  boGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: SPACING.sm, marginBottom: SPACING.lg },
+  boCard: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, minHeight: 76, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, ...(isWeb ? ({ cursor: "pointer", transitionDuration: "150ms" } as object) : null) },
+  boCardAccent: { borderColor: COLORS.primary + "66", backgroundColor: COLORS.primary + "12" },
+  boCardHover: { borderColor: COLORS.primary, backgroundColor: COLORS.surfaceLight },
+  boCardPressed: { opacity: 0.85 },
+  boIconWrap: { width: 44, height: 44, borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  boIconWrapAccent: { backgroundColor: COLORS.primary + "1F", borderColor: COLORS.primary + "55" },
+  boCardBody: { flex: 1, minWidth: 0 },
+  boCardTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  boCardDesc: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: 2, lineHeight: wxMs(FONT_SIZES.xs) * 1.35 },
+  boCardCount: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xxl), fontWeight: "900", marginLeft: SPACING.xs },
+
+  boContentRow: { flexDirection: "row", alignItems: "flex-start", gap: SPACING.md },
+  boContentStack: { flexDirection: "column" },
+  boColFlex: { flex: 1 },
+  boPanel: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, marginBottom: SPACING.md },
+  boPanelTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  boPanelSub: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: 2, marginBottom: SPACING.md },
+  boStatsRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
+  boStatBlock: { flex: 1, minWidth: 90, alignItems: "flex-start", backgroundColor: COLORS.background, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: 2 },
+  boStatIcon: { width: 26, height: 26, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  boStatNum: { fontSize: wxMs(24), fontWeight: "900" },
+  boStatLabel: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
+  boVenueRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, paddingVertical: SPACING.sm },
+  boVenueDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLORS.border },
+  boVenueIcon: { width: 30, height: 30, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.primary + "14" },
+  boVenueName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  boVenueMeta: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: 1 },
+  boVenueStat: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700" },
+  boEmpty: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), paddingVertical: SPACING.md },
 });

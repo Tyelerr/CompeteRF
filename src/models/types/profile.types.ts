@@ -24,6 +24,12 @@ export interface Profile {
   language_preference: Language;
   role: UserRole;
   status: UserStatus;
+  // Verified Fargo — an attribute of the account, confirmed by a TD at approval
+  // (never typed by the player). See migration 20260709120000_fargo_verification.
+  fargo?: number | null;
+  fargo_status?: "unverified" | "verified";
+  fargo_last_verified_at?: string | null;
+  fargo_verified_by?: number | null; // id_auto of the TD who confirmed it
   is_disabled?: boolean;       // App Store compliance: eject user
   notify_saved_search_matches: boolean;
   notify_favorite_updates: boolean;

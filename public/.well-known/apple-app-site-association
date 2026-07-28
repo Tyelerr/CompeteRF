@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["ZVFYBFEX6X.com.thecompeteapp.competerf"],
+        "components": [
+          {
+            "/": "/join/*",
+            "comment": "Team / tournament invite links"
+          }
+        ]
+      }
+    ]
+  }
+}

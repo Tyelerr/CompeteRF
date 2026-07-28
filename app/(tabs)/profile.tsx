@@ -3,6 +3,7 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { Alert,
   Animated,
@@ -36,6 +37,8 @@ import { NotificationsModal } from "../../src/views/components/notifications/Not
 import { EditProfileModal } from "../../src/views/components/profile/EditProfileModal";
 import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
 import { TournamentHubView } from "../../src/views/components/profile/TournamentHubView";
+import { ChipTournamentHubView } from "../../src/views/components/profile/ChipTournamentHubView";
+import { usePlayerChipTournament } from "../../src/viewmodels/hooks/use.player.chip.tournament";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
 
@@ -196,6 +199,7 @@ export default function ProfileScreen() {
   } = useFavorites(storeProfile?.id_auto);
   const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
   const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto);
+  const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto);
   const performance = usePlayerPerformance(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
@@ -215,6 +219,9 @@ export default function ProfileScreen() {
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  // Hide the detail modal while this tab is unfocused (e.g. the chip live view is
+  // open) so it doesn't float above it; it re-shows on return so Back lands here.
+  const detailIsFocused = useIsFocused();
 
   const favoritedIds = useMemo(
     () => new Set(favorites.map((f) => f.tournament_id)),
@@ -467,7 +474,12 @@ export default function ProfileScreen() {
           )}
 
           {inLiveTournament && profileTab === "tournament" ? (
-            hub ? (
+            chipHub ? (
+              <ChipTournamentHubView
+                hub={chipHub}
+                onOpenTournament={(id) => openDetailModal(id)}
+              />
+            ) : hub ? (
               <TournamentHubView
                 hub={hub}
                 onOpenTournament={openBracket}
@@ -531,7 +543,7 @@ export default function ProfileScreen() {
       />
 
       {isWeb && showDetailModal && detailTournamentId && <WebTournamentDetailOverlay id={detailTournamentId} onClose={closeDetailModal} />}
-      {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal} onClose={closeDetailModal} />}
+      {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal && detailIsFocused} onClose={closeDetailModal} origin="profile" />}
     </View>
   );
 }

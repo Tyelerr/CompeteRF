@@ -16,6 +16,9 @@ export interface Registration {
   seed?: number | null;
   fargo_rating?: number | null;
   is_starter_rating: boolean;       // TD assigned a starting rating (no Fargo yet)
+  // Immutable snapshot of the Fargo confirmed for THIS event at approval. Does
+  // NOT change if the player's profile Fargo later changes.
+  fargo_at_registration?: number | null;
   race_override?: number | null;    // TD-set race-to that overrides group/Fargo logic
   paid_entry: boolean;
   paid_side_pots: string[];         // names of side pots the player bought into
@@ -56,6 +59,7 @@ export interface PlayerTournament {
     id: number;
     name: string;
     game_type: string;
+    tournament_format?: string | null; // e.g. "single-elimination", "chip-tournament"
     tournament_date: string;
     start_time?: string | null;
     status: string; // tournament status (active/completed/archived/...)
@@ -70,6 +74,7 @@ export interface RegistrationUpdate {
   queue_position?: number | null;
   seed?: number | null;
   fargo_rating?: number | null;
+  fargo_at_registration?: number | null;
   is_starter_rating?: boolean;
   race_override?: number | null;
   paid_entry?: boolean;

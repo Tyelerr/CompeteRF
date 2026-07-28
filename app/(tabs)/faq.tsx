@@ -154,7 +154,7 @@ export default function FaqScreen() {
                 {isWeb && (
                   <View style={styles.businessBlock}>
                     <Text allowFontScaling={false} style={styles.businessName}>
-                      AZ Tech Guys LLC
+                      Compete Tournaments LLC
                     </Text>
                     <Text allowFontScaling={false} style={styles.businessLine}>
                       Phoenix, Arizona, United States

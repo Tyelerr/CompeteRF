@@ -1,9 +1,9 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Image, Linking, Modal, Platform, ScrollView, Share, StyleSheet,
-  Text, TouchableOpacity, View,
+  Alert, Image, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, Share,
+  StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
 import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
@@ -14,6 +14,9 @@ import { moderateScale, scale } from "../../../utils/scaling";
 import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useSelfRegistration } from "../../../viewmodels/hooks/use.self.registration";
+import { usePendingTeamInvite } from "../../../viewmodels/hooks/use.team.invite";
+import { TeamRegisterModal } from "./TeamRegisterModal";
+import { TeamInviteModal } from "./TeamInviteModal";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
 import { Button } from "../common/button";
 import { FullScreenImageViewer } from "../common/FullScreenImageViewer";
@@ -25,9 +28,12 @@ interface TournamentDetailModalProps {
   id: string | null;
   visible: boolean;
   onClose: () => void;
+  // Route to return to when the chip spectator view's Back is pressed (the tab
+  // that owns this modal — "billiards" by default, "profile" from the profile).
+  origin?: string;
 }
 
-export function TournamentDetailModal({ id, visible, onClose }: TournamentDetailModalProps) {
+export function TournamentDetailModal({ id, visible, onClose, origin = "billiards" }: TournamentDetailModalProps) {
   const router = useRouter();
   const vm = useTournamentDetail(id ?? "");
   const { session, isAdmin } = useAuth();
@@ -39,14 +45,24 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   // Self-registration (player registers themselves from this modal).
   const reg = useSelfRegistration(vm.tournament?.id, profile?.id_auto);
   const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showTeamInvite, setShowTeamInvite] = useState(false);
+  const teamInvite = usePendingTeamInvite(vm.tournament?.id, profile?.id_auto);
+  const [regFargo, setRegFargo] = useState("");
+  const [fargoFocused, setFargoFocused] = useState(false);
+  const [fargoMode, setFargoMode] = useState<"enter" | "none">("enter");
+  const fargoRef = useRef<TextInput>(null);
 
   // The modal stays mounted (only `visible` toggles), so re-fetch the player's
   // registration each time it opens — otherwise a TD removing the player leaves
   // a stale "✓ Registered" state and blocks re-registering.
   useEffect(() => {
-    if (visible) reg.refresh();
+    if (visible) {
+      reg.refresh();
+      teamInvite.refresh();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, reg.refresh]);
+  }, [visible, reg.refresh, teamInvite.refresh]);
 
   const handleClose = useCallback(() => { closeReportModal(); onClose(); }, [closeReportModal, onClose]);
 
@@ -59,10 +75,16 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   };
 
   const handleConfirmRegister = async () => {
+    const digits = regFargo.replace(/\D/g, "");
+    const fargo = fargoMode === "none" || digits === "" ? null : parseInt(digits, 10);
     try {
-      await reg.register();
+      await reg.register(fargo);
       setShowRegisterConfirm(false);
-      Alert.alert("You're registered", "You're registered for this tournament.");
+      setRegFargo("");
+      Alert.alert(
+        "You're registered",
+        "You're registered. The tournament director will review and confirm your Fargo to approve your entry.",
+      );
     } catch {
       Alert.alert("Error", "Couldn't complete registration. Please try again.");
     }
@@ -111,6 +133,7 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
   const tournament: any = vm.tournament;
   const imageUrl = tournament ? getTournamentImageUrl(tournament) : null;
   const isChipTournament = tournament?.tournament_format === "chip-tournament";
+  const isTeamFormat = String(tournament?.game_type ?? "").includes("scotch-doubles");
   const chipRanges = isChipTournament && Array.isArray(tournament?.chip_ranges) && tournament.chip_ranges.length > 0 ? tournament.chip_ranges : null;
   const director = tournament?.profiles ?? null;
   const directorName = getDirectorName(director);
@@ -127,8 +150,17 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
 
   const handleViewTournament = () => {
     if (!tournament) return;
-    handleClose();
-    router.push(`/live-tournament/${tournament.id}` as any);
+    if (isChipTournament) {
+      // Keep THIS modal mounted (the owner screen hides it while the chip live
+      // view is focused and re-shows it on return), so Back lands back on this
+      // modal instead of a new page. Don't clear the selection. `origin` tells
+      // the spectator Back which tab to return to (tab back-behavior otherwise
+      // drops to Home).
+      router.push(`/chip-live/${tournament.id}?from=${origin}` as any);
+    } else {
+      handleClose();
+      router.push(`/live-tournament/${tournament.id}` as any);
+    }
   };
   const handleViewBracket = () => {
     if (tournament?.external_bracket_url) Linking.openURL(tournament.external_bracket_url);
@@ -287,7 +319,26 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
 
           {canRegister && (
             <View style={s.registerContainer}>
-              {reg.isRegistered ? (
+              {isTeamFormat ? (
+                teamInvite.invite ? (
+                  <TouchableOpacity style={s.registerButton} onPress={() => setShowTeamInvite(true)}>
+                    <Text allowFontScaling={false} style={s.registerButtonText}>View Team Invite</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={s.registerButton}
+                    onPress={() => {
+                      if (!profile?.id_auto) {
+                        Alert.alert("Log In Required", "Create a free account or log in to register a team.");
+                        return;
+                      }
+                      setShowTeamModal(true);
+                    }}
+                  >
+                    <Text allowFontScaling={false} style={s.registerButtonText}>Register Team</Text>
+                  </TouchableOpacity>
+                )
+              ) : reg.isRegistered ? (
                 <View style={s.registeredPill}>
                   <Text allowFontScaling={false} style={s.registeredPillText}>✓ Registered</Text>
                 </View>
@@ -314,25 +365,73 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
 
           {showRegisterConfirm && (
             <View style={s.confirmOverlay}>
-              <TouchableOpacity
-                style={s.confirmBackdrop}
-                activeOpacity={1}
-                onPress={() => !reg.registering && setShowRegisterConfirm(false)}
-              />
-              <View style={s.confirmCard}>
-                <Text allowFontScaling={false} style={s.confirmTitle}>Register for Tournament?</Text>
-                <Text allowFontScaling={false} style={s.confirmBody}>You are registering for:</Text>
+              <Pressable style={s.confirmBackdrop} onPress={() => Keyboard.dismiss()} />
+              <Pressable style={s.confirmCard} onPress={() => Keyboard.dismiss()}>
+                <Text allowFontScaling={false} style={s.confirmTitle}>REGISTER FOR TOURNAMENT</Text>
                 <Text allowFontScaling={false} style={s.confirmName}>{tournament.name}</Text>
-                <Text allowFontScaling={false} style={s.confirmBody}>
-                  Your account will be added to the tournament registration list.
-                </Text>
+
+                <View style={s.confirmDivider} />
+
+                <View style={s.radioRow}>
+                  <TouchableOpacity
+                    style={s.radioOpt}
+                    activeOpacity={0.7}
+                    onPress={() => setFargoMode("enter")}
+                  >
+                    <View style={[s.radioDot, fargoMode === "enter" && s.radioDotOn]}>
+                      {fargoMode === "enter" && <View style={s.radioInner} />}
+                    </View>
+                    <Text allowFontScaling={false} style={s.radioLabel}>Enter Fargo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.radioOpt}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setFargoMode("none");
+                      Keyboard.dismiss();
+                    }}
+                  >
+                    <View style={[s.radioDot, fargoMode === "none" && s.radioDotOn]}>
+                      {fargoMode === "none" && <View style={s.radioInner} />}
+                    </View>
+                    <Text allowFontScaling={false} style={s.radioLabel}>No Fargo</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {fargoMode === "enter" && (
+                  <>
+                    <Pressable
+                      style={[s.confirmFargoField, fargoFocused && s.confirmFargoFieldFocused]}
+                      onPress={() => fargoRef.current?.focus()}
+                    >
+                      <Text allowFontScaling={false} style={s.confirmFargoHash}>#</Text>
+                      <TextInput
+                        ref={fargoRef}
+                        allowFontScaling={false}
+                        style={s.confirmFargoInput}
+                        value={regFargo}
+                        onChangeText={(v) => setRegFargo(v.replace(/\D/g, ""))}
+                        onFocus={() => setFargoFocused(true)}
+                        onBlur={() => setFargoFocused(false)}
+                        keyboardType="number-pad"
+                        placeholder="500"
+                        placeholderTextColor={COLORS.textMuted}
+                        maxLength={4}
+                      />
+                    </Pressable>
+                    <Text allowFontScaling={false} style={s.confirmFargoHint}>
+                      Your Fargo will be verified by the Tournament Director.
+                    </Text>
+                  </>
+                )}
+
                 <View style={s.confirmButtons}>
                   <TouchableOpacity
                     style={s.confirmCancel}
                     onPress={() => setShowRegisterConfirm(false)}
                     disabled={reg.registering}
                   >
-                    <Text allowFontScaling={false} style={s.confirmCancelText}>Close</Text>
+                    <Text allowFontScaling={false} style={s.confirmCancelText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.confirmConfirm}
@@ -344,7 +443,7 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
                     </Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </Pressable>
             </View>
           )}
         </>
@@ -362,6 +461,15 @@ export function TournamentDetailModal({ id, visible, onClose }: TournamentDetail
       </View>
       <FullScreenImageViewer visible={showImageViewer} imageUrl={imageUrl} title={tournament?.name} onClose={() => setShowImageViewer(false)} />
       <ReportModal asOverlay visible={isModalVisible} onClose={closeReportModal} contentType={contentType} reason={reason} onReasonChange={setReason} details={details} onDetailsChange={setDetails} onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+      <TeamRegisterModal visible={showTeamModal} tournament={tournament} playerId={profile?.id_auto} onClose={() => setShowTeamModal(false)} />
+      <TeamInviteModal
+        visible={showTeamInvite}
+        invite={teamInvite.invite}
+        busy={teamInvite.busy}
+        onAccept={teamInvite.accept}
+        onDecline={teamInvite.decline}
+        onClose={() => setShowTeamInvite(false)}
+      />
     </Modal>
   );
 }
@@ -429,14 +537,80 @@ const s = StyleSheet.create({
   registeredPillText: { color: COLORS.success, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   confirmOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", padding: scale(SPACING.lg) },
   confirmBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.7)" },
-  confirmCard: { width: "100%", backgroundColor: COLORS.surface, borderRadius: scale(16), borderWidth: 1, borderColor: COLORS.border, padding: scale(SPACING.lg) },
-  confirmTitle: { fontSize: moderateScale(FONT_SIZES.lg), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.md) },
-  confirmBody: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, lineHeight: moderateScale(20) },
-  confirmName: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, marginVertical: scale(SPACING.sm), textAlign: "center" },
-  confirmButtons: { flexDirection: "row", gap: scale(SPACING.sm), marginTop: scale(SPACING.lg) },
-  confirmCancel: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
-  confirmCancelText: { color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
-  confirmConfirm: { flex: 1, paddingVertical: scale(SPACING.md), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.primary },
+  confirmCard: {
+    width: "100%",
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: scale(22),
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.md),
+    shadowColor: "#000000",
+    shadowOpacity: 0.55,
+    shadowRadius: scale(24),
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 16,
+  },
+  // 1 — modal title (small uppercase eyebrow)
+  confirmTitle: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700", letterSpacing: 1, color: COLORS.textSecondary, marginBottom: scale(SPACING.xs) },
+  // 2 — tournament name (largest, blue for emphasis)
+  confirmName: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "800", color: COLORS.primaryLight, lineHeight: moderateScale(26) },
+  confirmDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: scale(SPACING.sm) },
+  // radio selector (Enter Fargo / No Fargo)
+  radioRow: { flexDirection: "row", gap: scale(SPACING.lg), marginBottom: scale(SPACING.sm) },
+  radioOpt: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.sm), paddingVertical: scale(SPACING.xs) },
+  radioDot: { width: scale(20), height: scale(20), borderRadius: scale(10), borderWidth: 2, borderColor: COLORS.borderLight, alignItems: "center", justifyContent: "center" },
+  radioDotOn: { borderColor: COLORS.primaryLight },
+  radioInner: { width: scale(10), height: scale(10), borderRadius: scale(5), backgroundColor: COLORS.primaryLight },
+  radioLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
+  // input — compact numeric field (~half width), "#" prefix, blue focus
+  confirmFargoField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: scale(SPACING.xs),
+    width: "50%",
+    height: scale(50),
+    backgroundColor: COLORS.surfaceLight,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    borderRadius: scale(12),
+    paddingHorizontal: scale(SPACING.md),
+  },
+  confirmFargoFieldFocused: {
+    borderColor: COLORS.primaryLight,
+    backgroundColor: COLORS.surface,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: scale(10),
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
+  confirmFargoHash: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.textMuted },
+  confirmFargoInput: {
+    flex: 1,
+    height: "100%",
+    color: COLORS.text,
+    fontSize: moderateScale(FONT_SIZES.md),
+    fontWeight: "600",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+  },
+  // helper text (small, light)
+  confirmFargoHint: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: scale(SPACING.sm) },
+  confirmButtons: { flexDirection: "row", gap: scale(SPACING.sm), marginTop: scale(SPACING.md) },
+  confirmCancel: { flex: 1, paddingVertical: scale(9), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.borderLight },
+  confirmCancelText: { color: COLORS.textSecondary, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
+  confirmConfirm: {
+    flex: 1,
+    paddingVertical: scale(9),
+    borderRadius: scale(12),
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: scale(12),
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   confirmConfirmText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
   bottomBar: { flexDirection: "row", padding: scale(SPACING.md), gap: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, paddingBottom: Platform.OS === "ios" ? 20 : scale(SPACING.md) },
   shareButton: { flex: 1, backgroundColor: COLORS.surface, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center", borderWidth: 1, borderColor: COLORS.primary },

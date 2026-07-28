@@ -80,7 +80,7 @@ export const registrationService = {
     const { data, error } = await supabase
       .from("tournament_players")
       .select(
-        "id, status, registered_at, tournament:tournament_id (id, name, game_type, tournament_date, start_time, status, live_state, thumbnail, venues:venue_id (venue, city, state))",
+        "id, status, registered_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, thumbnail, venues:venue_id (venue, city, state))",
       )
       .eq("player_id", playerId)
       .order("registered_at", { ascending: false });
@@ -201,6 +201,19 @@ export const registrationService = {
     return registrationService.updateRegistration(id, {
       status: "approved" as RegistrationStatus,
     });
+  },
+
+  // TD approves a registration AND confirms the player's Fargo in one atomic
+  // step (see migration 20260709120000_fargo_verification). This writes the
+  // confirmed Fargo to the player's PROFILE as their verified rating, freezes a
+  // per-event snapshot on the registration, and sets status = approved. Runs as
+  // a SECURITY DEFINER RPC because the TD is writing another user's profile.
+  async approveWithFargo(id: number, fargo: number): Promise<void> {
+    const { error } = await supabase.rpc("approve_registration_with_fargo", {
+      p_registration_id: id,
+      p_fargo: fargo,
+    });
+    if (error) throw error;
   },
 
   // TD checks a player in (records the timestamp).

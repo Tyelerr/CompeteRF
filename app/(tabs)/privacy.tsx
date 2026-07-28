@@ -27,7 +27,7 @@ export default function PrivacyPage() {
             ))}
             {isWeb && (
               <View style={styles.webFooter}>
-                <Text style={styles.webFooterText}>{"\u00A9"} 2026 AZ Tech Guys LLC. All rights reserved.</Text>
+                <Text style={styles.webFooterText}>{"\u00A9"} 2026 Compete Tournaments LLC. All rights reserved.</Text>
                 <View style={styles.webFooterLinks}>
                   <Text style={styles.webFooterLink} onPress={() => { if (typeof window !== "undefined") window.location.href = "/terms"; }}>Terms of Service</Text>
                   <Text style={styles.webFooterDot}>{"\u00B7"}</Text>

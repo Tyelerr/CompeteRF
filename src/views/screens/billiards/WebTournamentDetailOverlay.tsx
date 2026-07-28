@@ -68,7 +68,12 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
     t.status === "completed";
   const viewTournament = () => {
     onClose();
-    router.push(`/live-tournament/${t.id}` as any);
+    // Format-aware: chip tournaments open their dedicated read-only live view.
+    router.push(
+      (t.tournament_format === "chip-tournament"
+        ? `/chip-live/${t.id}`
+        : `/live-tournament/${t.id}`) as any,
+    );
   };
   const openExternalBracket = () => {
     if (typeof window !== "undefined") window.open(t.external_bracket_url, "_blank");

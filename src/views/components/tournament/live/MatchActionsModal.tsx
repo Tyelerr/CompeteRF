@@ -67,9 +67,14 @@ export const MatchActionsModal = ({
 
   useEffect(() => {
     if (!match) return;
-    // "start" is a card-view shortcut: open the table step ready to START the
-    // match; plain "table" opens it in assign-only mode.
-    if (initialStep === "start") {
+    // A match whose opponent hasn't arrived yet (a feeder is still undecided) is
+    // NOT playable — force it to the (gated) menu no matter what step was asked
+    // for, so a card/node shortcut can't jump straight into scoring it.
+    if (match.pending && !match.bye) {
+      setStep("menu");
+    } else if (initialStep === "start") {
+      // "start" is a card-view shortcut: open the table step ready to START the
+      // match; plain "table" opens it in assign-only mode.
       setTableMode("start");
       setStep("table");
     } else {
@@ -142,13 +147,45 @@ export const MatchActionsModal = ({
     );
   };
 
+  // A match with a still-undecided feeder (one side is TBD) can't be started,
+  // scored, or won — the second player hasn't arrived. A bye is a separate,
+  // legitimate one-player case, handled below.
+  const notReady = m.pending && !m.bye;
+
   // ---- menu items by status ----
   type Item = { label: string; danger?: boolean; onPress: () => void };
   const items: Item[] = [];
-  // A bye auto-advances; start/score/table/timer don't apply. The advancing
-  // player can still forfeit or withdraw (both remove them — a bye has no
-  // opponent to award a loss to, so the player simply doesn't advance).
-  if (m.bye) {
+  if (notReady) {
+    // Nothing to play yet — only let the TD look, or clear a result that was
+    // recorded before this guard existed (recovery path for corrupted state).
+    items.push({ label: "View Match Details", onPress: () => setStep("details") });
+    const hasProgress =
+      m.status !== "scheduled" ||
+      m.winner != null ||
+      m.p1Score != null ||
+      m.p2Score != null ||
+      m.tableId != null;
+    if (hasProgress) {
+      items.push({
+        label: "Reset Match",
+        danger: true,
+        onPress: () =>
+          apply({
+            status: "scheduled",
+            tableId: null,
+            startedAt: null,
+            completedAt: null,
+            winner: null,
+            p1Score: null,
+            p2Score: null,
+            result: null,
+          }),
+      });
+    }
+  } else if (m.bye) {
+    // A bye auto-advances; start/score/table/timer don't apply. The advancing
+    // player can still forfeit or withdraw (both remove them — a bye has no
+    // opponent to award a loss to, so the player simply doesn't advance).
     items.push({ label: "View Match Details", onPress: () => setStep("details") });
     items.push({
       label: "Forfeit",
@@ -231,7 +268,8 @@ export const MatchActionsModal = ({
         ]),
     });
   }
-  if (!m.bye) items.push({ label: "View Match Details", onPress: () => setStep("details") });
+  if (!m.bye && !notReady)
+    items.push({ label: "View Match Details", onPress: () => setStep("details") });
 
   const Header = ({ title }: { title: string }) => (
     <View style={styles.sheetHeader}>
@@ -335,6 +373,12 @@ export const MatchActionsModal = ({
               <Text allowFontScaling={false} style={styles.sub} numberOfLines={1}>
                 {namesLine}
               </Text>
+              {notReady && (
+                <Text allowFontScaling={false} style={styles.notReadyNote}>
+                  Waiting for the other player to advance. This match can be
+                  scored once both players are set.
+                </Text>
+              )}
               <View>
                 {items.map((it) => (
                   <TouchableOpacity
@@ -716,6 +760,13 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: "center",
     marginBottom: webSc(SPACING.md),
+  },
+  notReadyNote: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.warning,
+    textAlign: "center",
+    marginBottom: webSc(SPACING.md),
+    lineHeight: webMs(FONT_SIZES.md) * 1.3,
   },
   menuScroll: { maxHeight: webSc(380) },
   menuRow: {

@@ -10,16 +10,20 @@ import {
 } from "../models/types/director.types";
 import { useAuthContext } from "../providers/AuthProvider";
 import { usePagination } from "./hooks/use.pagination";
+import { getNavCache, setNavCache } from "./nav-cache";
 
 const ITEMS_PER_PAGE = 5;
 
 export const useBarOwnerDirectors = () => {
   const { profile } = useAuthContext();
 
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `bo-directors:${profile?.id_auto ?? "none"}`;
+  const cached = getNavCache<GroupedDirector[]>(cacheKey);
+
+  const [loading, setLoading] = useState(!cached);
   const [refreshing, setRefreshing] = useState(false);
   const [processing, setProcessing] = useState<number | null>(null);
-  const [allGroupedDirectors, setAllGroupedDirectors] = useState<GroupedDirector[]>([]);
+  const [allGroupedDirectors, setAllGroupedDirectors] = useState<GroupedDirector[]>(cached ?? []);
   const [venueOptions, setVenueOptions] = useState<VenueOption[]>([]);
   const [availableDirectors, setAvailableDirectors] = useState<DirectorOption[]>([]);
 
@@ -34,21 +38,23 @@ export const useBarOwnerDirectors = () => {
   const [removeReason, setRemoveReason] = useState("");
 
   useEffect(() => {
-    if (profile?.id_auto) loadData();
+    if (profile?.id_auto) loadData(!!cached);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id_auto]);
 
-  const loadData = async () => {
+  const loadData = async (background = false) => {
     if (!profile?.id_auto) return;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const [grouped] = await Promise.all([
         directorService.getGroupedDirectors(profile.id_auto),
         loadVenueOptions(),
       ]);
       setAllGroupedDirectors(grouped);
+      setNavCache(cacheKey, grouped);
     } catch (error) {
       console.error("Error loading directors:", error);
-      Alert.alert("Error", "Failed to load directors");
+      if (!background) Alert.alert("Error", "Failed to load directors");
     } finally {
       setLoading(false);
     }
@@ -134,7 +140,7 @@ export const useBarOwnerDirectors = () => {
       await directorService.addDirector({ venue_id: venueId, director_id: directorId, assigned_by: profile.id_auto });
       Alert.alert("Success", "Director added successfully");
       setShowAddModal(false);
-      await loadData();
+      await loadData(true);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to add director");
     } finally {
@@ -159,7 +165,7 @@ export const useBarOwnerDirectors = () => {
       Alert.alert("Success", "Director removed from all venues");
       setShowRemoveModal(false);
       setSelectedDirector(null);
-      await loadData();
+      await loadData(true);
     } catch (error) {
       Alert.alert("Error", "Failed to remove director");
     } finally {
@@ -185,7 +191,7 @@ export const useBarOwnerDirectors = () => {
       Alert.alert("Success", "Venues updated successfully");
       setShowEditVenuesModal(false);
       setEditingDirector(null);
-      await loadData();
+      await loadData(true);
     } catch (error) {
       Alert.alert("Error", "Failed to update venues");
     } finally {
@@ -202,7 +208,7 @@ export const useBarOwnerDirectors = () => {
         await directorService.restoreDirector(id);
       }
       Alert.alert("Success", "Director restored");
-      await loadData();
+      await loadData(true);
     } catch (error) {
       Alert.alert("Error", "Failed to restore director");
     } finally {
@@ -218,7 +224,7 @@ export const useBarOwnerDirectors = () => {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadData().finally(() => setRefreshing(false));
+    loadData(true).finally(() => setRefreshing(false));
   }, [profile?.id_auto]);
 
   return {
