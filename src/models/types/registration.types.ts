@@ -9,8 +9,11 @@ import { RegistrationStatus } from "./common.types";
 export interface Registration {
   id: number;
   tournament_id: number;
-  player_id?: number | null;        // null for guests
-  guest_name?: string | null;       // used when player_id is null
+  player_id?: number | null;        // legacy id_auto; null for guests AND pending players
+  // Phase 5: stable players.id. Set for ACTIVE (dual-written) and PENDING
+  // registrations; null for name-only guests. The identity source of truth.
+  player_uuid?: string | null;
+  guest_name?: string | null;       // used when player_id AND player_uuid are null
   status: RegistrationStatus;
   queue_position?: number | null;
   seed?: number | null;
