@@ -58,7 +58,9 @@ export const useUnifiedPlayerSearch = (
     if (tournamentId == null) return;
     setIsLoadingRecents(true);
     try {
-      const data = await playerRegistrationService.getRecentPlayers(tournamentId);
+      // Keep the pre-typing list short so the search field + results stay on-screen
+      // (especially with the keyboard up).
+      const data = await playerRegistrationService.getRecentPlayers(tournamentId, 4);
       setRecents(data);
     } catch {
       setRecents([]);
