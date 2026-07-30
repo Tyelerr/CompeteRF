@@ -87,6 +87,9 @@ export const UnifiedRegisterModal = ({
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
+  // Cap the scrollable results/recents area so the card sizes to its content (no dead
+  // space with a short recents list) but still scrolls when there are many results.
+  const listMax = Math.round(winH * 0.5);
 
   const [step, setStep] = useState<Step>("search");
   const [slot, setSlot] = useState<Slot>(1);
@@ -425,7 +428,7 @@ export const UnifiedRegisterModal = ({
           />
           {search.isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
         </View>
-        <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+        <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
           {showRecents ? (
             search.isLoadingRecents ? (
               <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
@@ -461,7 +464,7 @@ export const UnifiedRegisterModal = ({
 
   const renderCreate = () => (
     <View style={styles.stepBody}>
-      <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+      <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
         <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
         <Text allowFontScaling={false} style={styles.hint}>
           We’ll reuse an existing player if this email already exists.
@@ -498,7 +501,7 @@ export const UnifiedRegisterModal = ({
 
   const renderFargo = () => (
     <View style={styles.stepBody}>
-      <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+      <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
         <View style={styles.selectedCard}>
           <Text allowFontScaling={false} style={styles.selectedName}>{selected[1]?.display_name}</Text>
           {selected[1] && badge(selected[1].account_status, true)}
@@ -603,7 +606,7 @@ export const UnifiedRegisterModal = ({
               {renderDraft()}
             </ScrollView>
           ) : (
-            <View style={[styles.sheet, { height: Math.round(winH * 0.75) }]}>
+            <View style={[styles.sheet, { maxHeight: Math.round(winH * 0.85) }]}>
               <View style={styles.header}>
                 <View>
                   <Text allowFontScaling={false} style={styles.title}>{title}</Text>
@@ -656,7 +659,7 @@ const styles = StyleSheet.create({
   closeText: { fontSize: webMs(FONT_SIZES.xl), color: COLORS.textSecondary },
   flash: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
 
-  stepBody: { flex: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+  stepBody: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
   p1Reminder: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.xs) },
 
   searchBar: {
@@ -669,7 +672,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
   },
   searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), paddingVertical: webSc(SPACING.md) },
-  results: { flex: 1, marginTop: webSc(SPACING.sm) },
+  results: { marginTop: webSc(SPACING.sm) },
   sectionLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textTransform: "uppercase", letterSpacing: 1, marginBottom: webSc(SPACING.xs) },
 
   row: { flexDirection: "row", alignItems: "center", paddingVertical: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
