@@ -27,6 +27,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -87,6 +88,7 @@ export const UnifiedRegisterModal = ({
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
 
   const [step, setStep] = useState<Step>("search");
   const [slot, setSlot] = useState<Slot>(1);
@@ -595,7 +597,7 @@ export const UnifiedRegisterModal = ({
     <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
-          <View style={[styles.sheet, step === "draft" && styles.sheetAuto]}>
+          <View style={[styles.sheet, step === "draft" && { height: undefined, maxHeight: Math.round(winH * 0.88) }]}>
             <View style={styles.header}>
               <View>
                 <Text allowFontScaling={false} style={styles.title}>{title}</Text>
@@ -629,9 +631,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.xl,
     height: "88%",
   },
-  // Draft step sizes to the card's content instead of the full 88% (caps + scrolls
-  // when the card is tall, e.g. a complete team with side pots).
-  sheetAuto: { height: undefined, maxHeight: "88%" },
+  // Draft step sizes to the card's content (sheet uses a pixel maxHeight inline so
+  // it caps + scrolls only when the card is tall, e.g. a complete team + side pots).
   draftBody: { flexShrink: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
   header: {
     flexDirection: "row",
