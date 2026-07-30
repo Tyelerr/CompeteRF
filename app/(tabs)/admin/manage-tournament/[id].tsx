@@ -37,6 +37,7 @@ import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { webMs, webSc } from "../../../../src/utils/scaling";
 import { UnifiedRegisterModal } from "../../../../src/views/components/tournament/UnifiedRegisterModal";
+import { playerRegistrationService } from "../../../../src/models/services/player.registration.service";
 import {
   EQUIPMENT_OPTIONS,
   GAME_TYPES,
@@ -341,8 +342,16 @@ const PLAYER_FILTERS = [
   { label: "Removed", value: "removed" },
 ];
 
-const getDisplayName = (r: Registration): string => {
+const getDisplayName = (
+  r: Registration,
+  pendingNames?: Map<string, string>,
+): string => {
   if (r.player_id && r.profiles) return r.profiles.name || r.profiles.user_name;
+  // Phase 5: a PENDING registration has only player_uuid (no id_auto/profile) —
+  // resolve its name from the roster-display map (RLS-locked players table).
+  if (r.player_uuid && pendingNames?.get(r.player_uuid)) {
+    return pendingNames.get(r.player_uuid)!;
+  }
   return r.guest_name || "Unnamed guest";
 };
 
@@ -1295,6 +1304,7 @@ const RegistrationRow = ({
   onRestore,
   isProcessing,
   locked,
+  pendingNames,
 }: {
   registration: Registration;
   sidePots: { name: string; amount: number }[];
@@ -1322,10 +1332,13 @@ const RegistrationRow = ({
   onRestore: () => void;
   isProcessing: boolean;
   locked?: boolean;
+  pendingNames?: Map<string, string>;
 }) => {
   const d = displayStatusOf(registration.status);
   const meta = DISPLAY_META[d];
-  const isGuest = !registration.player_id;
+  // Phase 5: a pending player (player_uuid, no id_auto) is a real player, NOT a
+  // guest — only a name-only row (no player_id AND no player_uuid) is a guest.
+  const isGuest = !registration.player_id && !registration.player_uuid;
   const isGroups = raceMode === "groups";
 
   // Current pots are the source of truth: a player's stored paid_side_pots may
@@ -1510,7 +1523,7 @@ const RegistrationRow = ({
       <View style={styles.regHeader}>
         <View style={styles.nameRow}>
           <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
-            {getDisplayName(registration)}
+            {getDisplayName(registration, pendingNames)}
           </Text>
           {isGuest ? (
             <View style={styles.guestTag}>
@@ -1835,6 +1848,8 @@ export default function ManageTournamentScreen() {
 
   // Players tab state
   const [addModalVisible, setAddModalVisible] = useState(false);
+  // Phase 5: uuid -> display name for PENDING registrations (no id_auto/profile).
+  const [pendingNames, setPendingNames] = useState<Map<string, string>>(new Map());
   const [isAdding, setIsAdding] = useState(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
@@ -1869,6 +1884,24 @@ export default function ManageTournamentScreen() {
     if (isChipTournament && activeTab === "prizepool") chipTeamsQuery.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Phase 5: resolve display names for any PENDING registrations (player_uuid but
+  // no id_auto/profile), since the players table is RLS-locked. Only fetches when
+  // a pending row is present.
+  useEffect(() => {
+    const hasPending = hub.registrations.some((r) => r.player_uuid && !r.player_id);
+    if (!hasPending || !tournamentId) return;
+    let cancelled = false;
+    playerRegistrationService
+      .getRegistrationDisplay(tournamentId)
+      .then((rows) => {
+        if (!cancelled) setPendingNames(new Map(rows.map((x) => [x.player_id, x.display_name])));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [hub.registrations, tournamentId]);
 
   // Guided-setup prompt shown when the TD jumps ahead of an incomplete step.
   const [gatePrompt, setGatePrompt] = useState<{
@@ -2551,7 +2584,7 @@ export default function ManageTournamentScreen() {
         .filter((r) => r.status === "checked_in")
         .map((r) => ({
           registrationId: r.id,
-          name: getDisplayName(r),
+          name: getDisplayName(r, pendingNames),
           fargo: r.fargo_rating ?? null,
           raceOverride: r.race_override ?? null,
         })),
@@ -3161,7 +3194,7 @@ export default function ManageTournamentScreen() {
     withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show.");
 
   const handleRemove = (r: Registration) =>
-    Alert.alert("Remove Player", `Remove ${getDisplayName(r)} from this tournament?`, [
+    Alert.alert("Remove Player", `Remove ${getDisplayName(r, pendingNames)} from this tournament?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -3225,14 +3258,14 @@ export default function ManageTournamentScreen() {
         } else if (statusFilter !== d) {
           return false;
         }
-        if (q && !getDisplayName(r).toLowerCase().includes(q)) return false;
+        if (q && !getDisplayName(r, pendingNames).toLowerCase().includes(q)) return false;
         return true;
       })
       .sort((a, b) => {
         const ra = STATUS_RANK[displayStatusOf(a.status)];
         const rb = STATUS_RANK[displayStatusOf(b.status)];
         if (ra !== rb) return ra - rb;
-        return getDisplayName(a).localeCompare(getDisplayName(b));
+        return getDisplayName(a, pendingNames).localeCompare(getDisplayName(b, pendingNames));
       });
   }, [hub.registrations, playerSearch, statusFilter]);
 
@@ -4303,6 +4336,7 @@ export default function ManageTournamentScreen() {
             <RegistrationRow
               key={item.id}
               registration={item}
+              pendingNames={pendingNames}
               sidePots={sidePots}
               entryFee={entryFee}
               raceMode={raceMode}

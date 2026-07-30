@@ -45,6 +45,19 @@ export interface CreatePendingInput {
   phone?: string | null;
 }
 
+// Roster display resolver row (get_registration_players_display). Lets a screen
+// render PENDING players by name despite the RLS-locked players table. No email/phone.
+export interface RosterPlayerDisplay {
+  player_id: string;
+  account_status: PlayerAccountStatus;
+  display_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  fargo: number | null;
+}
+
 export type InvitationState =
   | "sent"
   | "accepted"

@@ -14,6 +14,7 @@ import {
   InvitationStatus,
   IssuedInvitation,
   PlayerSearchResult,
+  RosterPlayerDisplay,
 } from "../types/player.registration.types";
 
 export const playerRegistrationService = {
@@ -46,6 +47,20 @@ export const playerRegistrationService = {
     );
     if (error) throw error;
     return (data ?? []) as PlayerSearchResult[];
+  },
+
+  // Display info (name/status/avatar/fargo — no email/phone) for every
+  // uuid-registered player in a tournament. Used to render PENDING players in the
+  // roster, since the players table is RLS-locked (no PostgREST embed).
+  async getRegistrationDisplay(
+    tournamentId: number,
+  ): Promise<RosterPlayerDisplay[]> {
+    const { data, error } = await supabase.rpc(
+      "get_registration_players_display",
+      { p_tournament_id: tournamentId },
+    );
+    if (error) throw error;
+    return (data ?? []) as RosterPlayerDisplay[];
   },
 
   // ---- Create / reuse a pending player ----------------------------------
