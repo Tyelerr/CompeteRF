@@ -15,7 +15,7 @@
 //          Invite slot, static Payment/Check-In, footer = Cancel + (Save as Waiting
 //          for Partner | Create Team). Actions that need a persisted row are hidden.
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -89,13 +89,19 @@ export interface TeamCardProps {
   saving?: boolean;
 }
 
-const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => (
-  <View style={styles.prow}>
+const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => {
+  const [editingFargo, setEditingFargo] = useState(false);
+  const avatar = (
     <View style={styles.pavatar}>
       <Text allowFontScaling={false} style={styles.pavatarText}>{(p.name || "?").charAt(0).toUpperCase()}</Text>
     </View>
-    <View style={{ flex: 1 }}>
-      {p.editingRow ? (
+  );
+
+  // Display edit mode (Actions → editing a saved row): full inline edit.
+  if (p.editingRow) {
+    return (
+      <View style={styles.prow}>
+        {avatar}
         <View style={styles.peditRow}>
           <TextInput
             allowFontScaling={false}
@@ -124,38 +130,61 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => (
             </TouchableOpacity>
           )}
         </View>
-      ) : (
-        <>
-          <Text allowFontScaling={false} style={styles.pname}>{p.name || "Player"}</Text>
-          {p.fargoEditable ? (
-            <View style={styles.pfargoEditRow}>
-              <Text allowFontScaling={false} style={styles.pmeta}>{p.idLabel ? `${p.idLabel} · ` : ""}Fargo</Text>
-              <View style={styles.peditFargoWrap}>
-                <TextInput
-                  allowFontScaling={false}
-                  style={styles.peditFargo}
-                  value={p.fargo != null ? String(p.fargo) : ""}
-                  onChangeText={p.onChangeFargo}
-                  keyboardType="number-pad"
-                  placeholder="Fargo"
-                  placeholderTextColor={COLORS.textMuted}
-                  maxLength={4}
-                />
-              </View>
-            </View>
-          ) : (
-            <Text allowFontScaling={false} style={styles.pmeta}>{p.idLabel ? `${p.idLabel} · ` : ""}Fargo {p.fargo ?? "—"}</Text>
-          )}
-        </>
-      )}
-    </View>
-    {!p.editingRow && (
-      <View style={styles.pverifyCol}>
-        {p.removable && p.onRemove ? (
-          <TouchableOpacity style={styles.pverifyBtn} onPress={p.onRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+      </View>
+    );
+  }
+
+  // Editable draft row: name (+ id) on the left, a compact Fargo pill that expands
+  // to an input on tap, and a Change action — all on one line.
+  if (p.fargoEditable) {
+    return (
+      <View style={styles.prow}>
+        {avatar}
+        <View style={styles.pinfo}>
+          <Text allowFontScaling={false} style={styles.pname} numberOfLines={1}>{p.name || "Player"}</Text>
+          {p.idLabel ? <Text allowFontScaling={false} style={styles.pmeta} numberOfLines={1}>{p.idLabel}</Text> : null}
+        </View>
+        {editingFargo ? (
+          <TextInput
+            allowFontScaling={false}
+            style={styles.fargoInput}
+            value={p.fargo != null ? String(p.fargo) : ""}
+            onChangeText={p.onChangeFargo}
+            keyboardType="number-pad"
+            autoFocus
+            maxLength={4}
+            placeholder="Fargo"
+            placeholderTextColor={COLORS.textMuted}
+            onBlur={() => setEditingFargo(false)}
+            onSubmitEditing={() => setEditingFargo(false)}
+            returnKeyType="done"
+          />
+        ) : (
+          <TouchableOpacity style={styles.fargoPill} onPress={() => setEditingFargo(true)} activeOpacity={0.7}>
+            <Text allowFontScaling={false} style={styles.fargoPillText}>
+              {p.fargo != null ? `Fargo ${p.fargo}` : "Set Fargo"}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {p.removable && p.onRemove && (
+          <TouchableOpacity style={styles.pchangeBtn} onPress={p.onRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text allowFontScaling={false} style={styles.pchangeText}>Change</Text>
           </TouchableOpacity>
-        ) : p.verified ? (
+        )}
+      </View>
+    );
+  }
+
+  // Saved display row — unchanged.
+  return (
+    <View style={styles.prow}>
+      {avatar}
+      <View style={{ flex: 1 }}>
+        <Text allowFontScaling={false} style={styles.pname}>{p.name || "Player"}</Text>
+        <Text allowFontScaling={false} style={styles.pmeta}>{p.idLabel ? `${p.idLabel} · ` : ""}Fargo {p.fargo ?? "—"}</Text>
+      </View>
+      <View style={styles.pverifyCol}>
+        {p.verified ? (
           <Text allowFontScaling={false} style={styles.pverified}>✓ Verified</Text>
         ) : p.canVerify && p.onVerify ? (
           <TouchableOpacity style={styles.pverifyBtn} onPress={p.onVerify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -165,9 +194,9 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => (
           <Text allowFontScaling={false} style={styles.pneeds}>No Fargo</Text>
         ) : null}
       </View>
-    )}
-  </View>
-);
+    </View>
+  );
+};
 
 export const TeamCard = (props: TeamCardProps) => {
   const {
@@ -331,6 +360,12 @@ const styles = StyleSheet.create({
   pverifyBtn: { paddingVertical: 2, paddingHorizontal: 2 },
   pverifyText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", textDecorationLine: "underline" },
   pchangeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  pchangeBtn: { paddingHorizontal: 2, paddingVertical: 2 },
+  pinfo: { flex: 1, minWidth: 0 },
+  // Compact Fargo pill (normal state) → expands to fargoInput on tap.
+  fargoPill: { backgroundColor: COLORS.surfaceLight, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 5 },
+  fargoPillText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  fargoInput: { minWidth: webSc(70), backgroundColor: COLORS.surfaceLight, borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 4, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   peditRow: { flexDirection: "row", gap: webSc(SPACING.sm), alignItems: "center" },
   peditName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: COLORS.surfaceLight, ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   peditFargoWrap: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: 8, backgroundColor: COLORS.surfaceLight, height: webSc(34), minWidth: webSc(88) },
