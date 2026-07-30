@@ -529,8 +529,11 @@ export const UnifiedRegisterModal = ({
     const p2 = selected[2];
     const chips = computeChips ? computeChips(parseFargo(1), parseFargo(2)) : null;
     return (
-      <View style={styles.stepBody}>
-        <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.draftBody}
+        contentContainerStyle={{ paddingBottom: insets.bottom + webSc(SPACING.md) }}
+        keyboardShouldPersistTaps="handled"
+      >
           <TeamCard
             mode="draft"
             doubles
@@ -573,8 +576,7 @@ export const UnifiedRegisterModal = ({
             saving={busy}
           />
           {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-        </ScrollView>
-      </View>
+      </ScrollView>
     );
   };
 
@@ -593,7 +595,7 @@ export const UnifiedRegisterModal = ({
     <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, step === "draft" && styles.sheetAuto]}>
             <View style={styles.header}>
               <View>
                 <Text allowFontScaling={false} style={styles.title}>{title}</Text>
@@ -627,6 +629,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.xl,
     height: "88%",
   },
+  // Draft step sizes to the card's content instead of the full 88% (caps + scrolls
+  // when the card is tall, e.g. a complete team with side pots).
+  sheetAuto: { height: undefined, maxHeight: "88%" },
+  draftBody: { flexShrink: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
