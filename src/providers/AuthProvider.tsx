@@ -19,6 +19,7 @@ import {
 import { Alert, AppState, AppStateStatus, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { profileService } from '../models/services/profile.service';
+import { playerRegistrationService } from '../models/services/player.registration.service';
 import { Profile, ProfileInsert } from '../models/types/profile.types';
 import { useNotifications } from '../viewmodels/hooks/use.notifications';
 import { useOnboarding } from '../viewmodels/hooks/useOnboarding';
@@ -203,6 +204,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         data.directed_venue_ids || [],
       );
       pingLastActive();
+      // Phase 5: best-effort self-heal — link any PENDING player owned by this
+      // account's verified email to the profile (idempotent; no-op if already
+      // linked or the email is unverified). Fire-and-forget: never blocks or
+      // breaks hydration. This is the fallback repair path complementing the
+      // auth.users email-confirmation trigger.
+      playerRegistrationService.claimPendingPlayer().catch(() => {});
     } catch (error) {
       console.error('Auth session hydration error:', error);
       if (myGen !== hydrationGenRef.current) return;

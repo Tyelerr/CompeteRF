@@ -125,6 +125,15 @@ export const playerRegistrationService = {
     if (error) throw error;
   },
 
+  // Set (or clear, when blank) a team's display name. Manager-gated server-side.
+  async setTeamName(teamId: number, name: string): Promise<void> {
+    const { error } = await supabase.rpc("set_team_name", {
+      p_team_id: teamId,
+      p_name: name,
+    });
+    if (error) throw error;
+  },
+
   // ---- Invitations (token rules only; email delivery is a separate service) --
 
   // Create/refresh a pending player's activation token. Returns the RAW token

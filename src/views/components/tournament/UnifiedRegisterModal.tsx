@@ -297,6 +297,9 @@ export const UnifiedRegisterModal = ({
         selected[2].player_id,
         parseFargo(2),
       );
+      if (teamName.trim()) {
+        await playerRegistrationService.setTeamName(effectiveTeamId, teamName.trim());
+      }
       onTeamSaved?.(effectiveTeamId);
       onClose();
     } catch (e: any) {

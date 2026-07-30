@@ -36,6 +36,7 @@ import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { webMs, webSc } from "../../../../src/utils/scaling";
+import { UnifiedRegisterModal } from "../../../../src/views/components/tournament/UnifiedRegisterModal";
 import {
   EQUIPMENT_OPTIONS,
   GAME_TYPES,
@@ -258,6 +259,7 @@ const CHIP_PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = 
     tabs: [
       { tab: "summary", label: "Summary" },
       { tab: "standings", label: "Standings" },
+      { tab: "payouts", label: "Payouts" },
       { tab: "history", label: "Match History" },
     ],
   },
@@ -275,6 +277,7 @@ const chipPageForTab = (phase: PhaseKey, tab: TabKey): ChipBodyPage | null => {
     return "live-dashboard"; // "matches" tab
   }
   if (phase === "results") {
+    if (tab === "payouts") return "payouts";
     if (tab === "history") return "history";
     if (tab === "summary") return "summary";
     return "standings";
@@ -2660,26 +2663,20 @@ export default function ManageTournamentScreen() {
   const notifyMatchPlayers = (matchId: string, tableIdOverride?: number) => {
     const m = liveMatches.find((x) => x.id === matchId);
     if (!m) return;
-    const tableId = tableIdOverride ?? m.tableId ?? undefined;
-    const table =
-      tableId != null ? hub.tables.find((t) => t.id === tableId) : null;
-    const tableLabel = table ? `Table ${table.table_number}` : null;
-    const tournamentName = hub.tournament?.name ?? null;
+    // Server-authorized: pass only identifiers. The Edge Function resolves the
+    // recipient/opponent/table, checks verification + consent, and dedupes.
+    const tournamentId = hub.tournament?.id;
+    if (tournamentId == null) return;
     const regToPlayer = new Map(
       hub.registrations.map((r) => [r.id, r.player_id]),
     );
-    const sides = [
-      { regId: m.p1RegId, opp: m.p2Name },
-      { regId: m.p2RegId, opp: m.p1Name },
-    ];
-    for (const s of sides) {
-      const playerId = s.regId != null ? regToPlayer.get(s.regId) : null;
+    for (const regId of [m.p1RegId, m.p2RegId]) {
+      const playerId = regId != null ? regToPlayer.get(regId) : null;
       if (playerId == null) continue;
       smsNotificationService.notifyMatchReady({
-        playerId,
-        opponentName: s.opp,
-        tableLabel,
-        tournamentName,
+        tournamentId,
+        matchId: m.id,
+        recipientIdAuto: playerId,
       });
     }
   };
@@ -5058,6 +5055,7 @@ export default function ManageTournamentScreen() {
               handleTabPress("matches");
             }}
             onOpenSettings={() => handleSelectPage("setup", "settings")}
+            onOpenResults={() => handleSelectPage("results", "standings")}
           />
         );
       }
@@ -5187,13 +5185,16 @@ export default function ManageTournamentScreen() {
         </InputAccessoryView>
       )}
 
-      <AddPlayerModal
+      {/* Phase 5: unified search-first Add Player flow (singles/elimination).
+          The legacy AddPlayerModal component + handleAddPlayer/handleAddGuest are
+          intentionally kept in this file (unrendered) until the new flow is verified
+          on device, per the integration plan. */}
+      <UnifiedRegisterModal
         visible={addModalVisible}
         onClose={() => setAddModalVisible(false)}
-        onAddPlayer={handleAddPlayer}
-        onAddGuest={handleAddGuest}
-        isAdding={isAdding}
-        addedPlayerIds={addedPlayerIds}
+        tournamentId={tournamentId}
+        mode="singles"
+        onRegistered={() => hub.refetchRegistrations()}
       />
 
       {/* External submit countdown — cancellable before it lists */}
