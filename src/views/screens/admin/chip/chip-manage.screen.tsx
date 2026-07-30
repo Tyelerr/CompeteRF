@@ -2940,6 +2940,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           tournamentId={id}
           mode="doubles"
           resumeTeam={unifiedOpen?.resumeTeam ?? null}
+          computeChips={(f1, f2) => chipsForFargo(chip.settings.tiers, (f1 ?? 0) + (f2 ?? 0))}
           onTeamSaved={() => {
             setUnifiedOpen(null);
             vm.reload();

@@ -1,21 +1,21 @@
 // src/views/components/tournament/UnifiedRegisterModal.tsx
 // ONE adaptive, search-first registration modal for Singles AND Scotch Doubles.
-// Built in isolation (Phase 5 UI commit) — not yet wired into any screen.
+// It behaves like a single continuous form that progressively reveals the next
+// part — no separate "Continue to Teammate" screen, no nested popups.
 //
-// Flow (see PHASE5_REVIEW.md / the locked direction):
-//   • Opens straight on a focused search — no "existing vs create" fork.
-//   • Unified ACTIVE + PENDING results (debounced); Recent Players before typing.
-//   • No result -> inline "Create <query>" -> first/last/email/(phone) -> the
-//     service creates OR reuses by normalized email and returns players.id.
-//   • Inline Fargo confirmation (replaces the old popup).
-//   • Singles: search -> Fargo -> Add Player (Player 1 of 1).
-//   • Doubles: Player 1 of 2 -> Fargo -> [Continue to Teammate | Save as Waiting
-//     for Teammate] -> Player 2 of 2 -> Fargo -> Team Review -> Create Team.
-//   • NO team row is created during intermediate steps — only on "Save as Waiting
-//     for Teammate" or the final "Create Team".
-//   • Same player can't fill both slots. Everything keyed on the stable players.id.
+// Singles:  search -> select -> inline Fargo -> Add Player (Player 1 of 1).
+// Doubles:  Player 1 of 2 (search/select) -> Player 2 of 2 (P1 shown compact with
+//           inline Fargo, P2 search revealed underneath) -> select P2 + inline Fargo
+//           -> Team Review -> Create Team. "Save as Waiting for Teammate" is a
+//           secondary text action at the bottom of the Player 2 search.
+//
+// A team row is created ONLY on explicit "Save as Waiting for Teammate" or the final
+// "Create Team". Same player can't fill both slots. Everything is keyed on players.id.
+// Create Player is a persistent centered blue link in a fixed footer (results scroll
+// above it, it stays above the keyboard + safe-area inset). Phone uses the shared
+// US formatter (formatUsPhoneInput/digitsOnly) and submits E.164 (+1XXXXXXXXXX).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -29,10 +29,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
+import { digitsOnly, formatUsPhoneInput } from "../../../utils/phone";
 import { Button } from "../common/button";
 import { Input } from "../common/input";
 import { useUnifiedPlayerSearch } from "../../../viewmodels/hooks/use.unified.player.search";
@@ -46,15 +48,15 @@ export interface UnifiedRegisterModalProps {
   onClose: () => void;
   tournamentId: number | null;
   mode: RegisterMode;
-  // Resume the doubles flow at Player 2 for an existing waiting team
-  // ("+ Add Teammate"). When set, Player 1 is skipped.
+  // Resume doubles at Player 2 for an existing waiting team ("+ Add Teammate").
   resumeTeam?: { teamId: number; captainName?: string | null } | null;
-  // Parent refresh hooks (fire-and-refresh). The modal owns all writes.
   onRegistered?: (playerId: string, registrationId: number) => void;
   onTeamSaved?: (teamId: number) => void;
+  // Optional chip preview for Team Review (chip tournaments pass chipsForFargo).
+  computeChips?: (p1Fargo: number | null, p2Fargo: number | null) => number | null;
 }
 
-type Step = "search" | "create" | "fargo" | "review";
+type Step = "search" | "create" | "fargo" | "team" | "review";
 type Slot = 1 | 2;
 
 const initials = (name: string): string =>
@@ -80,8 +82,10 @@ export const UnifiedRegisterModal = ({
   resumeTeam = null,
   onRegistered,
   onTeamSaved,
+  computeChips,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>("search");
   const [slot, setSlot] = useState<Slot>(1);
@@ -90,18 +94,17 @@ export const UnifiedRegisterModal = ({
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState<number | null>(null);
 
-  // Inline create-player form
+  // Inline create-player form. phoneDigits holds up to 10 US digits; we submit E.164.
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phoneDigits, setPhoneDigits] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
 
   const search = useUnifiedPlayerSearch(tournamentId);
-  const searchInputRef = useRef<TextInput>(null);
 
   // Reset all state whenever the modal (re)opens.
   useEffect(() => {
@@ -112,18 +115,16 @@ export const UnifiedRegisterModal = ({
     setFirstName("");
     setLastName("");
     setEmail("");
-    setPhone("");
+    setPhoneDigits("");
     setFargo({ 1: "", 2: "" });
     setTeamName("");
+    setSelected({ 1: null, 2: null });
     if (resumeTeam) {
-      // Resume at Player 2; Player 1 is the existing captain.
       setTeamId(resumeTeam.teamId);
-      setSelected({ 1: null, 2: null });
       setSlot(2);
-      setStep("search");
+      setStep("team"); // straight to Player 2 for an existing waiting team
     } else {
       setTeamId(null);
-      setSelected({ 1: null, 2: null });
       setSlot(1);
       setStep("search");
     }
@@ -136,45 +137,78 @@ export const UnifiedRegisterModal = ({
   const stepLabel = useMemo(() => {
     if (step === "review") return "Team Review";
     if (!isDoubles) return "Player 1 of 1";
-    return slot === 1 ? "Player 1 of 2" : "Player 2 of 2";
+    if (slot === 2 || step === "team") return "Player 2 of 2";
+    return "Player 1 of 2";
   }, [step, isDoubles, slot]);
 
   // Exclude the already-picked Player 1 from Player 2 results (no same player twice).
-  const visibleResults = useMemo(() => {
-    const otherId = slot === 2 ? selected[1]?.player_id : undefined;
-    return search.results.filter((r) => r.player_id !== otherId);
-  }, [search.results, slot, selected]);
+  const excludeId = slot === 2 ? selected[1]?.player_id : undefined;
+  const visibleResults = useMemo(
+    () => search.results.filter((r) => r.player_id !== excludeId),
+    [search.results, excludeId],
+  );
+  const visibleRecents = useMemo(
+    () => search.recents.filter((r) => r.player_id !== excludeId),
+    [search.recents, excludeId],
+  );
 
-  const visibleRecents = useMemo(() => {
-    const otherId = slot === 2 ? selected[1]?.player_id : undefined;
-    return search.recents.filter((r) => r.player_id !== otherId);
-  }, [search.recents, slot, selected]);
+  const parseFargo = (slotKey: Slot): number | null => {
+    const raw = fargo[slotKey].trim();
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  };
 
-  const goSearch = useCallback(() => {
+  const prefill = (slotKey: Slot, player: PlayerSearchResult) => {
+    setSelected((s) => ({ ...s, [slotKey]: player }));
+    setFargo((f) => ({ ...f, [slotKey]: player.fargo != null ? String(player.fargo) : "" }));
+  };
+
+  // --- Selection --------------------------------------------------------------
+
+  const pickPlayer = (player: PlayerSearchResult) => {
+    if (slot === 1 && !isDoubles && player.is_registered) return;
+    if (slot === 2 && selected[1]?.player_id === player.player_id) return;
+    setErrorMsg(null);
+    prefill(slot, player);
+    if (slot === 1) {
+      if (isDoubles) {
+        setSlot(2);
+        search.reset();
+        search.loadRecents();
+        setStep("team");
+      } else {
+        setStep("fargo");
+      }
+    }
+    // slot === 2: stay on the team step; the teammate area switches to the
+    // selected-player view (P2 Fargo + Continue to Review).
+  };
+
+  const clearTeammate = () => {
+    setSelected((s) => ({ ...s, 2: null }));
+    setFargo((f) => ({ ...f, 2: "" }));
     setErrorMsg(null);
     search.reset();
     search.loadRecents();
-    setStep("search");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const pickPlayer = (player: PlayerSearchResult) => {
-    if (!isDoubles && player.is_registered) return; // already in this tournament
-    if (slot === 2 && selected[1]?.player_id === player.player_id) return; // guard
-    setSelected((s) => ({ ...s, [slot]: player }));
-    setFargo((f) => ({ ...f, [slot]: player.fargo != null ? String(player.fargo) : "" }));
-    setErrorMsg(null);
-    setStep("fargo");
   };
+
+  // --- Inline create ----------------------------------------------------------
 
   const openCreate = () => {
     const { first, last } = splitName(search.query);
     setFirstName(first);
     setLastName(last);
     setEmail("");
-    setPhone("");
+    setPhoneDigits("");
     setErrorMsg(null);
     setStep("create");
+  };
+
+  const backFromCreate = () => {
+    // Return to the previous search WITHOUT clearing the term.
+    setErrorMsg(null);
+    setStep(slot === 2 ? "team" : "search");
   };
 
   const submitCreate = async () => {
@@ -190,14 +224,14 @@ export const UnifiedRegisterModal = ({
     setBusy(true);
     setErrorMsg(null);
     try {
+      const e164 = phoneDigits.length === 10 ? `+1${phoneDigits}` : null;
       const res = await playerRegistrationService.createPendingPlayer({
         tournamentId,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
-        phone: phone.trim() || null,
+        phone: e164,
       });
-      // Whether created or reused, we now have a stable players.id to select.
       const picked: PlayerSearchResult = {
         player_id: res.player_id,
         account_status: res.account_status,
@@ -215,12 +249,21 @@ export const UnifiedRegisterModal = ({
         setBusy(false);
         return;
       }
-      setSelected((s) => ({ ...s, [slot]: picked }));
-      setFargo((f) => ({ ...f, [slot]: "" }));
       if (res.outcome !== "CREATED_PENDING") {
         setFlash(res.outcome === "MATCHED_ACTIVE" ? "Existing player reused." : "Existing pending player reused.");
       }
-      setStep("fargo");
+      setSelected((s) => ({ ...s, [slot]: picked }));
+      setFargo((f) => ({ ...f, [slot]: "" }));
+      if (slot === 1 && isDoubles) {
+        setSlot(2);
+        search.reset();
+        search.loadRecents();
+        setStep("team");
+      } else if (slot === 1) {
+        setStep("fargo");
+      } else {
+        setStep("team"); // P2 created -> back to team step (selected-player view)
+      }
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Could not create the player.");
     } finally {
@@ -228,14 +271,7 @@ export const UnifiedRegisterModal = ({
     }
   };
 
-  const parseFargo = (slotKey: Slot): number | null => {
-    const raw = fargo[slotKey].trim();
-    if (!raw) return null;
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  // --- Terminal actions (the ONLY writes that create rows) -----------------
+  // --- Terminal writes (the ONLY row-creating actions) ------------------------
 
   const doRegisterSingles = async () => {
     if (tournamentId == null || !selected[1]) return;
@@ -249,10 +285,12 @@ export const UnifiedRegisterModal = ({
       );
       onRegistered?.(selected[1].player_id, regId);
       setFlash(`${selected[1].display_name} added.`);
-      // Stay open to add more.
       setSelected({ 1: null, 2: null });
       setFargo({ 1: "", 2: "" });
-      goSearch();
+      setSlot(1);
+      search.reset();
+      search.loadRecents();
+      setStep("search");
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Could not add the player.");
     } finally {
@@ -291,8 +329,8 @@ export const UnifiedRegisterModal = ({
           selected[1].player_id,
           parseFargo(1),
         );
-        // Persist immediately so a retry after a later RPC failure (addTeamMember /
-        // setTeamName) REUSES this team instead of creating a duplicate.
+        // Persist immediately so a retry after a later RPC failure REUSES this team
+        // instead of creating a duplicate.
         setTeamId(effectiveTeamId);
       }
       await playerRegistrationService.addTeamMember(
@@ -311,10 +349,18 @@ export const UnifiedRegisterModal = ({
     }
   };
 
-  // --- Renderers -----------------------------------------------------------
+  // --- Small render helpers ---------------------------------------------------
+
+  const badge = (status: string, long = false) => (
+    <View style={[styles.badge, status === "ACTIVE" ? styles.badgeActive : styles.badgePending]}>
+      <Text allowFontScaling={false} style={styles.badgeText}>
+        {status === "ACTIVE" ? (long ? "Compete Account" : "Compete") : long ? "Pending Account" : "Pending"}
+      </Text>
+    </View>
+  );
 
   const renderRow = (r: PlayerSearchResult) => {
-    const disabled = !isDoubles && r.is_registered;
+    const disabled = slot === 1 && !isDoubles && r.is_registered;
     return (
       <TouchableOpacity
         key={r.player_id}
@@ -338,191 +384,265 @@ export const UnifiedRegisterModal = ({
           </Text>
         </View>
         <View style={styles.rowRight}>
-          <View style={[styles.badge, r.account_status === "ACTIVE" ? styles.badgeActive : styles.badgePending]}>
-            <Text allowFontScaling={false} style={styles.badgeText}>
-              {r.account_status === "ACTIVE" ? "Compete" : "Pending"}
-            </Text>
-          </View>
+          {badge(r.account_status)}
           {disabled && <Text allowFontScaling={false} style={styles.registeredTag}>Registered</Text>}
         </View>
       </TouchableOpacity>
     );
   };
 
-  const renderSearch = () => {
+  const createLinkLabel = () => {
+    const q = search.query.trim();
+    return q.length >= 2 ? `+ Create “${q}”` : "+ Create a new player";
+  };
+
+  // Fixed footer create link (+ optional secondary "Save as Waiting").
+  const renderFooter = (showSaveWaiting: boolean) => (
+    <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+      <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
+        <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
+      </TouchableOpacity>
+      {showSaveWaiting && (
+        <TouchableOpacity onPress={doSaveWaiting} activeOpacity={0.7} style={styles.waitingWrap} disabled={busy}>
+          <Text allowFontScaling={false} style={styles.waitingLink}>Save as Waiting for Teammate</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const renderResults = (autoFocusInput: boolean, placeholder: string) => {
     const trimmed = search.query.trim();
     const showRecents = trimmed.length < 2;
     return (
-      <View style={styles.stepBody}>
+      <>
         <View style={styles.searchBar}>
           <TextInput
-            ref={searchInputRef}
             allowFontScaling={false}
             style={styles.searchInput}
             value={search.query}
             onChangeText={search.setQuery}
-            placeholder="Search by name, username, or email…"
+            placeholder={placeholder}
             placeholderTextColor={COLORS.textMuted}
-            autoFocus
+            autoFocus={autoFocusInput}
             autoCapitalize="none"
             autoCorrect={false}
           />
           {search.isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
         </View>
-
-        {slot === 2 && (
-          <Text allowFontScaling={false} style={styles.p1Chip}>
-            Player 1 ✓  {selected[1]?.display_name ?? resumeTeam?.captainName ?? ""}
-          </Text>
-        )}
-
-        <ScrollView keyboardShouldPersistTaps="handled" style={styles.results}>
+        <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
           {showRecents ? (
-            <>
-              {search.isLoadingRecents ? (
-                <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
-              ) : visibleRecents.length > 0 ? (
-                <>
-                  <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
-                  {visibleRecents.map(renderRow)}
-                </>
-              ) : (
-                <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
-              )}
-            </>
+            search.isLoadingRecents ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
+            ) : visibleRecents.length > 0 ? (
+              <>
+                <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
+                {visibleRecents.map(renderRow)}
+              </>
+            ) : (
+              <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
+            )
           ) : (
             <>
               {visibleResults.map(renderRow)}
               {!search.isSearching && visibleResults.length === 0 && (
-                <View style={styles.noResults}>
-                  <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
-                  <TouchableOpacity style={styles.createCta} activeOpacity={0.7} onPress={openCreate}>
-                    <Text allowFontScaling={false} style={styles.createCtaText}>+ Create “{trimmed}”</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              {visibleResults.length > 0 && (
-                <TouchableOpacity style={styles.createInline} activeOpacity={0.7} onPress={openCreate}>
-                  <Text allowFontScaling={false} style={styles.createInlineText}>+ Create a new player</Text>
-                </TouchableOpacity>
+                <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
               )}
             </>
           )}
         </ScrollView>
-      </View>
+      </>
     );
   };
 
-  const renderCreate = () => (
-    <ScrollView style={styles.stepBody} keyboardShouldPersistTaps="handled">
-      <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
-      <Text allowFontScaling={false} style={styles.hint}>
-        We’ll reuse an existing player if this email already exists.
-      </Text>
-      <Input label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
-      <Input label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" />
-      <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-      <Input label="Phone (optional)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-      <View style={styles.actionsRow}>
-        <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={goSearch} /></View>
-        <View style={styles.actionBtn}><Button title="Create & Continue" onPress={submitCreate} loading={busy} /></View>
-      </View>
-    </ScrollView>
+  // --- Steps ------------------------------------------------------------------
+
+  const renderSearch = () => (
+    <View style={styles.stepBody}>
+      {renderResults(true, "Search by name, username, or email…")}
+      {renderFooter(false)}
+    </View>
   );
 
-  const renderFargo = () => {
-    const player = selected[slot];
-    const isP1Doubles = isDoubles && slot === 1;
-    const isP2Doubles = isDoubles && slot === 2;
-    return (
-      <ScrollView style={styles.stepBody} keyboardShouldPersistTaps="handled">
-        <View style={styles.selectedCard}>
-          <Text allowFontScaling={false} style={styles.selectedName}>{player?.display_name}</Text>
-          <View style={[styles.badge, player?.account_status === "ACTIVE" ? styles.badgeActive : styles.badgePending]}>
-            <Text allowFontScaling={false} style={styles.badgeText}>
-              {player?.account_status === "ACTIVE" ? "Compete Account" : "Pending Account"}
-            </Text>
+  const renderCreate = () => (
+    <View style={styles.stepBody}>
+      <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+        <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
+        <Text allowFontScaling={false} style={styles.hint}>
+          We’ll reuse an existing player if this email already exists.
+        </Text>
+        <Input label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
+        <Input label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" />
+        <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <Text allowFontScaling={false} style={styles.phoneLabel}>Phone (optional)</Text>
+        <View style={styles.phoneRow}>
+          <View style={styles.countryPrefix}>
+            <Text allowFontScaling={false} style={styles.countryPrefixText}>🇺🇸 +1</Text>
           </View>
+          <TextInput
+            allowFontScaling={false}
+            style={styles.phoneInput}
+            value={formatUsPhoneInput(phoneDigits)}
+            onChangeText={(t) => setPhoneDigits(digitsOnly(t).slice(0, 10))}
+            placeholder="(555) 123-4567"
+            placeholderTextColor={COLORS.textMuted}
+            keyboardType="number-pad"
+            textContentType="telephoneNumber"
+          />
         </View>
+        {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+      </ScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+        <View style={styles.actionsRow}>
+          <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={backFromCreate} /></View>
+          <View style={styles.actionBtn}><Button title="Create & Continue" onPress={submitCreate} loading={busy} /></View>
+        </View>
+      </View>
+    </View>
+  );
 
+  const renderFargo = () => (
+    <View style={styles.stepBody}>
+      <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+        <View style={styles.selectedCard}>
+          <Text allowFontScaling={false} style={styles.selectedName}>{selected[1]?.display_name}</Text>
+          {selected[1] && badge(selected[1].account_status, true)}
+        </View>
         <Input
           label="Fargo rating (optional)"
-          value={fargo[slot]}
-          onChangeText={(t) => setFargo((f) => ({ ...f, [slot]: t.replace(/[^0-9]/g, "") }))}
+          value={fargo[1]}
+          onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
           keyboardType="numeric"
           helper="You can verify it after adding."
         />
         {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-
-        {!isDoubles && (
-          <View style={styles.actionsRow}>
-            <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={goSearch} /></View>
-            <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
-          </View>
-        )}
-
-        {isP1Doubles && (
-          <View style={styles.stackActions}>
-            <Button title="Continue to Teammate" onPress={() => { setErrorMsg(null); setSlot(2); goSearch(); }} />
-            <View style={{ height: webSc(SPACING.sm) }} />
-            <Button title="Save as Waiting for Teammate" variant="outline" onPress={doSaveWaiting} loading={busy} />
-            <View style={{ height: webSc(SPACING.sm) }} />
-            <Button title="Back" variant="ghost" onPress={goSearch} />
-          </View>
-        )}
-
-        {isP2Doubles && (
-          <View style={styles.actionsRow}>
-            <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={goSearch} /></View>
-            <View style={styles.actionBtn}><Button title="Continue to Review" onPress={() => { setErrorMsg(null); setStep("review"); }} /></View>
-          </View>
-        )}
       </ScrollView>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+        <View style={styles.actionsRow}>
+          <View style={styles.actionBtn}>
+            <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
+          </View>
+          <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderTeam = () => {
+    const p1Name = selected[1]?.display_name ?? resumeTeam?.captainName ?? "Player 1";
+    const p2 = selected[2];
+    return (
+      <View style={styles.stepBody}>
+        {/* Player 1 — compact selected card + inline Fargo (editable when we picked
+            P1 this session; read-only name when resuming an existing team). */}
+        <View style={styles.p1Block}>
+          <View style={styles.p1Header}>
+            <Text allowFontScaling={false} style={styles.p1Label}>Player 1</Text>
+            <View style={styles.p1HeaderRight}>
+              {selected[1] && badge(selected[1].account_status)}
+              {selected[1] && !resumeTeam && (
+                <TouchableOpacity
+                  onPress={() => { setErrorMsg(null); setSlot(1); search.reset(); search.loadRecents(); setStep("search"); }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text allowFontScaling={false} style={styles.changeLink}>Change</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          <Text allowFontScaling={false} style={styles.p1Name}>{p1Name}</Text>
+          {selected[1] && (
+            <View style={styles.p1FargoRow}>
+              <Text allowFontScaling={false} style={styles.p1FargoLabel}>Fargo</Text>
+              <TextInput
+                allowFontScaling={false}
+                style={styles.p1FargoInput}
+                value={fargo[1]}
+                onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
+                keyboardType="numeric"
+                placeholder="—"
+                placeholderTextColor={COLORS.textMuted}
+              />
+            </View>
+          )}
+        </View>
+
+        <Text allowFontScaling={false} style={styles.teammateLabel}>Teammate</Text>
+
+        {!p2 ? (
+          <>
+            {renderResults(true, "Search teammate by name, username, or email…")}
+            {renderFooter(!resumeTeam)}
+          </>
+        ) : (
+          <View style={styles.results}>
+            <View style={styles.selectedCard}>
+              <View style={{ flex: 1 }}>
+                <Text allowFontScaling={false} style={styles.selectedName}>{p2.display_name}</Text>
+                <TouchableOpacity onPress={clearTeammate} activeOpacity={0.7}>
+                  <Text allowFontScaling={false} style={styles.changeLink}>Change teammate</Text>
+                </TouchableOpacity>
+              </View>
+              {badge(p2.account_status, true)}
+            </View>
+            <Input
+              label="Player 2 Fargo (optional)"
+              value={fargo[2]}
+              onChangeText={(t) => setFargo((f) => ({ ...f, 2: t.replace(/[^0-9]/g, "") }))}
+              keyboardType="numeric"
+              helper="You can verify it after adding."
+            />
+            {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+            <View style={styles.actionsRow}>
+              <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={clearTeammate} /></View>
+              <View style={styles.actionBtn}><Button title="Continue to Review" onPress={() => { setErrorMsg(null); setStep("review"); }} /></View>
+            </View>
+          </View>
+        )}
+      </View>
     );
   };
 
   const renderReview = () => {
     const p1Name = selected[1]?.display_name ?? resumeTeam?.captainName ?? "Player 1";
     const p2 = selected[2];
+    const chips = computeChips ? computeChips(parseFargo(1), parseFargo(2)) : null;
     return (
-      <ScrollView style={styles.stepBody} keyboardShouldPersistTaps="handled">
-        <Text allowFontScaling={false} style={styles.createHeading}>Team review</Text>
-
-        <View style={styles.reviewMember}>
-          <Text allowFontScaling={false} style={styles.reviewName}>{p1Name}</Text>
-          <Text allowFontScaling={false} style={styles.reviewMeta}>
-            {fargo[1].trim() ? `Fargo ${fargo[1].trim()}` : "No Fargo"}
-          </Text>
+      <View style={styles.stepBody}>
+        <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
+          <Text allowFontScaling={false} style={styles.createHeading}>Team review</Text>
+          <View style={styles.reviewMember}>
+            <Text allowFontScaling={false} style={styles.reviewName}>{p1Name}</Text>
+            <Text allowFontScaling={false} style={styles.reviewMeta}>{fargo[1].trim() ? `Fargo ${fargo[1].trim()}` : "No Fargo"}</Text>
+          </View>
+          <Text allowFontScaling={false} style={styles.plus}>+</Text>
+          <View style={styles.reviewMember}>
+            <Text allowFontScaling={false} style={styles.reviewName}>{p2?.display_name}</Text>
+            <Text allowFontScaling={false} style={styles.reviewMeta}>
+              {fargo[2].trim() ? `Fargo ${fargo[2].trim()}` : "No Fargo"}
+              {"  ·  "}{p2?.account_status === "ACTIVE" ? "Compete" : "Pending"}
+            </Text>
+          </View>
+          {chips != null && (
+            <Text allowFontScaling={false} style={styles.chipsLine}>Assigned chips: {chips}</Text>
+          )}
+          <Input label="Team name (optional)" value={teamName} onChangeText={setTeamName} placeholder={`${p1Name} / ${p2?.display_name ?? ""}`} />
+          {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+        </ScrollView>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+          <View style={styles.actionsRow}>
+            <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("team"); }} /></View>
+            <View style={styles.actionBtn}><Button title="Create Team" onPress={doCreateTeam} loading={busy} /></View>
+          </View>
         </View>
-        <Text allowFontScaling={false} style={styles.plus}>+</Text>
-        <View style={styles.reviewMember}>
-          <Text allowFontScaling={false} style={styles.reviewName}>{p2?.display_name}</Text>
-          <Text allowFontScaling={false} style={styles.reviewMeta}>
-            {fargo[2].trim() ? `Fargo ${fargo[2].trim()}` : "No Fargo"}
-            {"  ·  "}
-            {p2?.account_status === "ACTIVE" ? "Compete" : "Pending"}
-          </Text>
-        </View>
-
-        <Input label="Team name (optional)" value={teamName} onChangeText={setTeamName} placeholder={`${p1Name} / ${p2?.display_name ?? ""}`} />
-        {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-
-        <View style={styles.actionsRow}>
-          <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("fargo"); }} /></View>
-          <View style={styles.actionBtn}><Button title="Create Team" onPress={doCreateTeam} loading={busy} /></View>
-        </View>
-      </ScrollView>
+      </View>
     );
   };
 
   return (
     <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.kav}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
           <View style={styles.sheet}>
             <View style={styles.header}>
               <View>
@@ -539,6 +659,7 @@ export const UnifiedRegisterModal = ({
             {step === "search" && renderSearch()}
             {step === "create" && renderCreate()}
             {step === "fargo" && renderFargo()}
+            {step === "team" && renderTeam()}
             {step === "review" && renderReview()}
           </View>
         </KeyboardAvoidingView>
@@ -555,7 +676,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.xl,
     borderTopRightRadius: RADIUS.xl,
     height: "88%",
-    paddingBottom: webSc(SPACING.md),
   },
   header: {
     flexDirection: "row",
@@ -569,12 +689,8 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: webSc(SPACING.xs) },
   closeButton: { padding: webSc(SPACING.sm) },
   closeText: { fontSize: webMs(FONT_SIZES.xl), color: COLORS.textSecondary },
-  flash: {
-    color: COLORS.secondary,
-    fontSize: webMs(FONT_SIZES.sm),
-    paddingHorizontal: webSc(SPACING.md),
-    paddingTop: webSc(SPACING.sm),
-  },
+  flash: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+
   stepBody: { flex: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
 
   searchBar: {
@@ -586,43 +702,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     paddingHorizontal: webSc(SPACING.md),
   },
-  searchInput: {
-    flex: 1,
-    color: COLORS.text,
-    fontSize: webMs(FONT_SIZES.md),
-    paddingVertical: webSc(SPACING.md),
-  },
-  p1Chip: {
-    color: COLORS.secondary,
-    fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "600",
-    marginTop: webSc(SPACING.sm),
-  },
+  searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), paddingVertical: webSc(SPACING.md) },
   results: { flex: 1, marginTop: webSc(SPACING.sm) },
-  sectionLabel: {
-    color: COLORS.textMuted,
-    fontSize: webMs(FONT_SIZES.xs),
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: webSc(SPACING.xs),
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: webSc(SPACING.sm),
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
+  sectionLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textTransform: "uppercase", letterSpacing: 1, marginBottom: webSc(SPACING.xs) },
+
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   rowDisabled: { opacity: 0.45 },
   avatar: { width: webSc(40), height: webSc(40), borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight },
-  avatarFallback: {
-    width: webSc(40),
-    height: webSc(40),
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surfaceLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  avatarFallback: { width: webSc(40), height: webSc(40), borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight, alignItems: "center", justifyContent: "center" },
   avatarInitials: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.sm) },
   rowMain: { flex: 1, marginLeft: webSc(SPACING.sm) },
   rowName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
@@ -635,43 +722,75 @@ const styles = StyleSheet.create({
   registeredTag: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
   hint: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.md) },
-  noResults: { alignItems: "flex-start", marginTop: webSc(SPACING.md) },
-  createCta: {
-    marginTop: webSc(SPACING.md),
-    paddingVertical: webSc(SPACING.md),
-    paddingHorizontal: webSc(SPACING.lg),
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  createCtaText: { color: COLORS.primary, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) },
-  createInline: { paddingVertical: webSc(SPACING.md), marginTop: webSc(SPACING.xs) },
-  createInlineText: { color: COLORS.primary, fontWeight: "600", fontSize: webMs(FONT_SIZES.sm) },
+
+  // Fixed footer (create link stays put while results scroll above it).
+  footer: { paddingTop: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  createLinkWrap: { alignItems: "center", paddingVertical: webSc(SPACING.sm) },
+  createLink: { color: COLORS.primary, fontWeight: "600", fontSize: webMs(FONT_SIZES.md), textAlign: "center" },
+  waitingWrap: { alignItems: "center", paddingVertical: webSc(SPACING.xs) },
+  waitingLink: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), textAlign: "center" },
 
   createHeading: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
 
-  selectedCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: RADIUS.md,
-    padding: webSc(SPACING.md),
-    marginBottom: webSc(SPACING.md),
+  // Phone field (matches the SMS-verify visual; reuses the shared US formatter).
+  phoneLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, marginBottom: webSc(SPACING.xs), fontWeight: "500" },
+  phoneRow: { flexDirection: "row", alignItems: "center", marginBottom: webSc(SPACING.md) },
+  countryPrefix: {
+    backgroundColor: COLORS.surfaceLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopLeftRadius: RADIUS.md,
+    borderBottomLeftRadius: RADIUS.md,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.md),
   },
-  selectedName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "600", flex: 1 },
+  countryPrefixText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
+  phoneInput: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderLeftWidth: 0,
+    borderColor: COLORS.border,
+    borderTopRightRadius: RADIUS.md,
+    borderBottomRightRadius: RADIUS.md,
+    paddingVertical: webSc(SPACING.md),
+    paddingHorizontal: webSc(SPACING.md),
+    fontSize: webMs(FONT_SIZES.md),
+    color: COLORS.text,
+  },
 
-  reviewMember: {
-    backgroundColor: COLORS.backgroundCard,
+  selectedCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  selectedName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "600" },
+  changeLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
+
+  // Player 1 compact block on the Player-2 step.
+  p1Block: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.sm) },
+  p1Header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  p1HeaderRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  p1Label: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textTransform: "uppercase", letterSpacing: 1 },
+  p1Name: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "600", marginTop: 2 },
+  p1FargoRow: { flexDirection: "row", alignItems: "center", marginTop: webSc(SPACING.sm) },
+  p1FargoLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), marginRight: webSc(SPACING.sm) },
+  p1FargoInput: {
+    minWidth: webSc(80),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: RADIUS.md,
-    padding: webSc(SPACING.md),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    color: COLORS.text,
+    fontSize: webMs(FONT_SIZES.md),
   },
+  teammateLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textTransform: "uppercase", letterSpacing: 1, marginBottom: webSc(SPACING.xs) },
+
+  reviewMember: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md) },
   reviewName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   reviewMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
   plus: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.lg), textAlign: "center", paddingVertical: webSc(SPACING.xs) },
+  chipsLine: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginTop: webSc(SPACING.md) },
 
   actionsRow: { flexDirection: "row", marginTop: webSc(SPACING.md), gap: webSc(SPACING.sm) },
   actionBtn: { flex: 1 },
-  stackActions: { marginTop: webSc(SPACING.md) },
   error: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.sm) },
 });
