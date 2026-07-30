@@ -55,6 +55,7 @@ import { computeBreakdown, entryPoolTotal, feesPerPlayer } from "../../../../uti
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
+import { TeamCard, TeamCardPlayerVM, TeamCardProps } from "../../../components/tournament/TeamCard";
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
 import { ConfettiBurst, ConfettiBurstRef } from "../../../components/common/ConfettiBurst";
@@ -1695,6 +1696,92 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
   };
 
+  // Map a roster entry -> shared TeamCard props (display mode). Reuses the exact
+  // same helpers/handlers the old mobile card used, so behavior is preserved; the
+  // desktop table still uses renderPlayerRow/renderTeamExpanded (untouched).
+  const teamCardPlayerVM = (e: ChipEntry, which: 1 | 2): TeamCardPlayerVM => {
+    const editing = editEntryId === e.id;
+    const name = which === 1 ? e.p1Name : e.p2Name ?? "";
+    const pid = which === 1 ? e.p1ProfileId : e.p2ProfileId;
+    const fg = which === 1 ? e.p1Fargo : e.p2Fargo;
+    const verified = which === 1 ? (e.isTeam ? !!e.p1FargoVerified : e.regStatus === "approved") : !!e.p2FargoVerified;
+    const memberId = which === 1 ? e.p1MemberId : e.p2MemberId;
+    const canVerify = ((e.isTeam && memberId != null) || (!e.isTeam && e.regId != null)) && !readOnly;
+    return {
+      name,
+      idLabel: pid != null ? `Player ID #${pid}` : null,
+      fargo: fg ?? null,
+      verified,
+      canVerify,
+      onVerify: () => {
+        if (e.isTeam && memberId != null) openConfirmMember(memberId, name || "Player", fg ?? null);
+        else if (!e.isTeam && e.regId != null) openApprove(e.regId, name || "Player", fg ?? null);
+      },
+      editingRow: editing,
+      onChangeName: (v) => vm.updateEntry(e.id, which === 1 ? { p1Name: v } : { p2Name: v }),
+      onChangeFargo: (v) => setFargo(e.id, which === 1 ? "p1Fargo" : "p2Fargo", v),
+      onRemove: () => {
+        if (memberId != null) {
+          Alert.alert("Remove player", `Remove ${name || "this player"} from the team?`, [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove", style: "destructive", onPress: () => vm.removeTeamMember(memberId) },
+          ]);
+        } else if (which === 2) {
+          vm.updateEntry(e.id, { p2Name: null, p2Fargo: null, p2ProfileId: null });
+        } else {
+          vm.removeEntry(e.id);
+        }
+      },
+    };
+  };
+
+  const toTeamCardProps = (e: ChipEntry, i: number): TeamCardProps => {
+    const st = entryState(e);
+    const meta = STATE_META[st];
+    const editing = editEntryId === e.id;
+    const partner = doubles && hasPartner(e);
+    return {
+      mode: "display",
+      doubles,
+      label: `${doubles ? "Team" : "Player"} #${i + 1}`,
+      statusLabel: meta.label,
+      statusColor: meta.color,
+      chipsPillText: `${chipPreview(e)} Chips`,
+      teamName: e.teamName,
+      player1: teamCardPlayerVM(e, 1),
+      player2: partner ? teamCardPlayerVM(e, 2) : null,
+      showAddPartner: doubles && !hasPartner(e) && !readOnly,
+      onAddPlayer2: () => (e.teamId != null ? setUnifiedOpen({ resumeTeam: { teamId: e.teamId, captainName: e.p1Name ?? null } }) : setPicker({ mode: "partner", entryId: e.id })),
+      onInvitePartner: e.teamId != null ? () => openInvite(e) : undefined,
+      showTeamFargo: !!partner,
+      teamFargo: (e.p1Fargo ?? 0) + (e.p2Fargo ?? 0),
+      assignedChipsText: `${chipPreview(e)}${e.chipOverride != null ? " · manual" : ""}`,
+      paid: !!e.paid,
+      checkedIn: !!e.checkedIn,
+      onTogglePaid: () => setPaid(e, !e.paid),
+      sidePots:
+        tournamentSidePots.length > 0 && e.teamId != null
+          ? tournamentSidePots.map((p) => {
+              const nm = p.name.trim();
+              const inPot = (e.paidSidePots ?? []).includes(nm);
+              const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
+              return { name: nm, label: `${nm}${amt}${inPot ? " · Entered" : ""}`, entered: inPot, onToggle: () => toggleSidePot(e, nm) };
+            })
+          : undefined,
+      showChipOverride: editing && !readOnly && e.teamId != null,
+      chipOverrideDefault: e.chipOverride != null ? String(e.chipOverride) : "",
+      chipAutoPlaceholder: `Auto (${autoChips(e)})`,
+      onChipOverrideEnd: (v) => {
+        const d = v.replace(/\D/g, "");
+        if (e.teamId != null) vm.setTeamChips(e.teamId, d === "" ? null : parseInt(d, 10));
+      },
+      readOnly,
+      actionsLabel: editing ? "Done" : "Actions",
+      onActions: () => (editing ? setEditEntryId(null) : setMenuEntryId(e.id)),
+      primary: renderPrimary(e, st),
+    };
+  };
+
   const renderPlayersSetup = () => {
     if (isWeb && winW >= 760) return renderPlayersSetupDesktop();
     return (
@@ -1722,117 +1809,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Text>
       )}
 
-      {rosterFiltered.map((e, i) => {
-        const st = entryState(e);
-        const meta = STATE_META[st];
-        const editing = editEntryId === e.id;
-        return (
-          <View key={e.id} style={styles.tcard}>
-            <View style={styles.tcardHead}>
-              <Text style={styles.tcardNum}>{doubles ? "Team" : "Player"} #{i + 1}</Text>
-              <View style={styles.flexSpacer2} />
-              <View style={[styles.tbadge, { borderColor: meta.color, backgroundColor: meta.color + "22" }]}>
-                <Text style={[styles.tbadgeText, { color: meta.color }]}>{meta.label}</Text>
-              </View>
-              <View style={styles.tchipPill}><Text style={styles.tchipText}>{chipPreview(e)} Chips</Text></View>
-            </View>
-            {/* Only a custom team name (e.g. "Desert Sharks") — the player rows below
-                already show who's on the team, so we never repeat their names here. */}
-            {e.teamName ? <Text style={styles.tcardName} numberOfLines={2}>{e.teamName}</Text> : null}
-
-            {renderPlayerRow(e, 1)}
-            {doubles &&
-              (hasPartner(e) ? (
-                renderPlayerRow(e, 2)
-              ) : (
-                <View style={styles.partnerActionsRow}>
-                  <TouchableOpacity style={styles.partnerBtn} onPress={() => (e.teamId != null ? setUnifiedOpen({ resumeTeam: { teamId: e.teamId, captainName: e.p1Name ?? null } }) : setPicker({ mode: "partner", entryId: e.id }))}>
-                    <Text style={styles.partnerBtnText}>Add Player 2</Text>
-                  </TouchableOpacity>
-                  {e.teamId != null && (
-                    <TouchableOpacity style={styles.invitePartnerBtn} onPress={() => openInvite(e)}>
-                      <Text style={styles.invitePartnerBtnText}>Invite Partner</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))}
-
-            {editing && e.teamId != null && (
-              <View style={styles.editChipRow}>
-                <Text style={styles.editChipLabel}>Chip count (blank = auto)</Text>
-                <TextInput
-                  allowFontScaling={false}
-                  style={styles.editChipInput}
-                  defaultValue={e.chipOverride != null ? String(e.chipOverride) : ""}
-                  onEndEditing={(ev) => {
-                    const d = ev.nativeEvent.text.replace(/\D/g, "");
-                    vm.setTeamChips(e.teamId as number, d === "" ? null : parseInt(d, 10));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder={`Auto (${autoChips(e)})`}
-                  placeholderTextColor={COLORS.textMuted}
-                  maxLength={3}
-                />
-              </View>
-            )}
-
-            <View style={styles.tsummary}>
-              {doubles && hasPartner(e) && (
-                <View style={styles.tsumRow}>
-                  <Text style={styles.tsumLabel}>Team Fargo</Text>
-                  <Text style={styles.tsumVal}>{(e.p1Fargo ?? 0) + (e.p2Fargo ?? 0)}</Text>
-                </View>
-              )}
-              <View style={styles.tsumRow}>
-                <Text style={styles.tsumLabel}>Assigned Chips</Text>
-                <Text style={[styles.tsumVal, { color: COLORS.primaryLight }]}>{chipPreview(e)}{e.chipOverride != null ? " · manual" : ""}</Text>
-              </View>
-              <TouchableOpacity style={styles.tsumRow} onPress={() => setPaid(e, !e.paid)}>
-                <Text style={styles.tsumLabel}>Payment</Text>
-                <Text style={[styles.tsumVal, { color: e.paid ? COLORS.success : COLORS.textSecondary }]}>{e.paid ? "Paid ✓" : "Unpaid"}</Text>
-              </TouchableOpacity>
-              <View style={styles.tsumRow}>
-                <Text style={styles.tsumLabel}>Check In</Text>
-                <Text style={[styles.tsumVal, { color: e.checkedIn ? COLORS.success : COLORS.textSecondary }]}>{e.checkedIn ? "Checked In ✓" : "Not Checked In"}</Text>
-              </View>
-              {tournamentSidePots.length > 0 && e.teamId != null && (
-                <View style={styles.tpotsBlock}>
-                  <Text style={styles.tpotsHead}>Side Pots</Text>
-                  {tournamentSidePots.map((p) => {
-                    const name = p.name.trim();
-                    const inPot = (e.paidSidePots ?? []).includes(name);
-                    const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
-                    return (
-                      <TouchableOpacity
-                        key={name}
-                        style={styles.potRow}
-                        onPress={() => toggleSidePot(e, name)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.potCheckbox, inPot && styles.potCheckboxOn]}>
-                          {inPot && <Text style={styles.potCheckMark}>✓</Text>}
-                        </View>
-                        <Text style={[styles.potLabel, inPot && styles.potLabelOn]}>
-                          {name}{amt}{inPot ? " · Entered" : ""}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-
-            <View style={styles.tfooter}>
-              {!readOnly && (
-                <TouchableOpacity style={styles.actionsBtn} onPress={() => (editing ? setEditEntryId(null) : setMenuEntryId(e.id))}>
-                  <Text style={styles.actionsBtnText}>{editing ? "Done" : "Actions"}</Text>
-                </TouchableOpacity>
-              )}
-              {renderPrimary(e, st)}
-            </View>
-          </View>
-        );
-      })}
+      {/* Phase 5: mobile roster now renders the SHARED TeamCard (display mode) — the
+          same component the Add Team modal uses in draft mode, so they can't drift.
+          Business logic stays here and is passed via toTeamCardProps(). */}
+      {rosterFiltered.map((e, i) => (
+        <TeamCard key={e.id} {...toTeamCardProps(e, i)} />
+      ))}
     </View>
     );
   };
