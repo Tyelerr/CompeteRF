@@ -30,7 +30,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -87,7 +86,6 @@ export const UnifiedRegisterModal = ({
   computeChips,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
-  const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
 
   const [step, setStep] = useState<Step>("search");
@@ -396,7 +394,7 @@ export const UnifiedRegisterModal = ({
 
   // Fixed footer create link (+ optional secondary "Save as Waiting").
   const renderFooter = (showSaveWaiting: boolean) => (
-    <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+    <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
       <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
         <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
       </TouchableOpacity>
@@ -489,7 +487,7 @@ export const UnifiedRegisterModal = ({
         </View>
         {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
       </ScrollView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+      <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
         <View style={styles.actionsRow}>
           <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={backFromCreate} /></View>
           <View style={styles.actionBtn}><Button title="Create & Continue" onPress={submitCreate} loading={busy} /></View>
@@ -514,7 +512,7 @@ export const UnifiedRegisterModal = ({
         />
         {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
       </ScrollView>
-      <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
+      <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
         <View style={styles.actionsRow}>
           <View style={styles.actionBtn}>
             <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
@@ -531,11 +529,7 @@ export const UnifiedRegisterModal = ({
     const p2 = selected[2];
     const chips = computeChips ? computeChips(parseFargo(1), parseFargo(2)) : null;
     return (
-      <ScrollView
-        style={styles.draftBody}
-        contentContainerStyle={{ paddingBottom: insets.bottom + webSc(SPACING.md) }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.draftBody}>
           <TeamCard
             mode="draft"
             doubles
@@ -578,7 +572,7 @@ export const UnifiedRegisterModal = ({
             saving={busy}
           />
           {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-      </ScrollView>
+      </View>
     );
   };
 
@@ -597,7 +591,7 @@ export const UnifiedRegisterModal = ({
     <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
-          <View style={[styles.sheet, step === "draft" && { height: undefined, maxHeight: Math.round(winH * 0.88) }]}>
+          <View style={[styles.sheet, step === "draft" ? { maxHeight: Math.round(winH * 0.85) } : { height: Math.round(winH * 0.75) }]}>
             <View style={styles.header}>
               <View>
                 <Text allowFontScaling={false} style={styles.title}>{title}</Text>
@@ -623,17 +617,20 @@ export const UnifiedRegisterModal = ({
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  kav: { width: "100%" },
+  // Centered floating card (matches the screen's other dialogs), not a bottom sheet.
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center", paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.lg) },
+  kav: { width: "100%", maxWidth: 480, alignSelf: "center" },
   sheet: {
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    height: "88%",
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    width: "100%",
+    overflow: "hidden",
   },
   // Draft step sizes to the card's content (sheet uses a pixel maxHeight inline so
   // it caps + scrolls only when the card is tall, e.g. a complete team + side pots).
-  draftBody: { flexShrink: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+  draftBody: { paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
