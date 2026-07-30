@@ -17,6 +17,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -39,22 +40,33 @@ import {
   PhaseNavPhase,
 } from "../../../components/tournament/live/PhaseNav";
 import { useChipTournament } from "../../../../viewmodels/use.chip.tournament";
+import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite";
 import {
   chipsForFargo,
   dashboard,
+  finalPlacements,
   LONG_MATCH_MS,
   matchElapsedMs,
   recommendedActiveTables,
   teamFargoOf,
   teamName,
 } from "../../../../models/services/chip.engine";
+import { computeBreakdown, entryPoolTotal, feesPerPlayer } from "../../../../utils/prize-pool";
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
+import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
+import { ConfettiBurst, ConfettiBurstRef } from "../../../components/common/ConfettiBurst";
 
 const profileName = (p: Profile): string =>
   [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.name || p.user_name;
+
+// "1st" / "2nd" / "3rd" / "4th" … ordinal suffix for placement labels.
+const ordSuffix = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+};
 
 const isWeb = Platform.OS === "web";
 
@@ -95,7 +107,7 @@ const useKeyboardHeight = () => {
 // "Settings" jumps back to the Compete form (the real settings live there).
 const SETUP_PAGES = ["Settings", "Players", "Tables", "Review"];
 const LIVE_PAGES = ["Dashboard", "Tables", "Queue", "Players"];
-const RESULTS_PAGES = ["Standings", "History"];
+const RESULTS_PAGES = ["Standings", "Payouts", "History"];
 const DEFAULT_PAGE: Record<string, string> = {
   setup: "Players",
   live: "Tables",
@@ -274,6 +286,7 @@ export type ChipBodyPage =
   | "live-queue"
   | "live-players"
   | "standings"
+  | "payouts"
   | "history"
   | "summary";
 
@@ -295,10 +308,16 @@ interface ChipManageProps {
   onRequestScrollTop?: () => void;
   // Open the tournament's Settings page (the host owns tab nav in embedded mode).
   onOpenSettings?: () => void;
+  // Open the Results → Standings page (host owns tab nav in embedded mode).
+  onOpenResults?: () => void;
 }
 
-export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings }: ChipManageProps) => {
+export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults }: ChipManageProps) => {
   const vm = useChipTournament(id);
+  // Shared completed-tournament lock. Every manager page reads this: when true the
+  // pages are historical/read-only — all mutating controls are hidden. The engine
+  // guards (see the viewmodel) enforce the same lock so stale UI can't change it.
+  const readOnly = vm.isFinished;
   const router = useRouter();
   // Acting Tournament Director — recorded on restores as "Performed by".
   const { profile } = useAuthContext();
@@ -361,6 +380,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const kbHeight = useKeyboardHeight();
   const [picker, setPicker] = useState<
     { mode: "new" } | { mode: "partner"; entryId: string } | null
+  >(null);
+  // Phase 5: unified Scotch-Doubles Add Team flow. When set, the shared search-first
+  // modal is open instead of the legacy picker + Fargo popup. resumeTeam != null =>
+  // "Add Player 2" on an existing waiting team. Singles keeps the legacy picker.
+  const [unifiedOpen, setUnifiedOpen] = useState<
+    { resumeTeam: { teamId: number; captainName: string | null } | null } | null
   >(null);
   // The picker sheet has two content-driven heights: a compact state before the
   // user types, and an expanded state once results appear. Animate the switch so
@@ -444,6 +469,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // which floats INSIDE the same modal (no nested modal / bottom sheet).
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profMenuOpen, setProfMenuOpen] = useState(false);
+  // Results · Final Standings: collapsed to the top few by default, expandable.
+  const [resultsStandingsExpanded, setResultsStandingsExpanded] = useState(false);
   const profScrollRef = useRef<ScrollView>(null);
   const closeProfile = () => { setProfMenuOpen(false); setProfileId(null); };
   // Dashboard expand toggles.
@@ -475,6 +502,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // a re-received assignment doesn't reopen it).
   const [assignPopupTableId, setAssignPopupTableId] = useState<string | null>(null);
   const ackedPendingRef = useRef<Set<string>>(new Set());
+  // Champion confirmation: shown once per decided winner while still Live. Confetti
+  // fires exactly once when the TD taps Finish (guarded so it never replays on
+  // reload/undo). `championShownRef` remembers which winnerId we've surfaced.
+  const [championModalOpen, setChampionModalOpen] = useState(false);
+  const championShownRef = useRef<string | null>(null);
+  const confettiFiredRef = useRef<string | null>(null);
+  const confettiRef = useRef<ConfettiBurstRef>(null);
   // Last-known keyboard height (px). The Add-Tables sheet reserves exactly this
   // much space beneath itself when you enter Customize mode, so the keyboard
   // then slides UNDER the sheet without shifting it. Seeded with a modern iOS
@@ -530,6 +564,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Surface the "Next Match" popup once per new winner-stays assignment (a table
   // that has a holder + a pending challenger, awaiting Start Match).
   useEffect(() => {
+    // An ack should suppress the popup only for a table's CURRENT pending
+    // assignment (so "Not Yet" isn't nagged). Prune any ack that no longer
+    // matches a live pending — once that match is started or the assignment
+    // changes, the NEXT winner-stays assignment must re-prompt, INCLUDING the
+    // same team returning to the same table. Without this the prompt fired only
+    // once per (table, challenger) pairing for the whole tournament.
+    const validAcks = new Set<string>();
+    for (const t of vm.chip?.tables ?? []) {
+      if (t.pendingChallengerId && !t.matchId) validAcks.add(`${t.id}:${t.pendingChallengerId}`);
+    }
+    for (const key of Array.from(ackedPendingRef.current)) {
+      if (!validAcks.has(key)) ackedPendingRef.current.delete(key);
+    }
+
     if (assignPopupTableId) return;
     const pend = vm.chip?.tables?.find(
       (t) => t.pendingChallengerId && t.holderId && !t.matchId && !ackedPendingRef.current.has(`${t.id}:${t.pendingChallengerId}`),
@@ -558,26 +606,33 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // When the winner-stays queue crowns a champion (one entry left), nudge the TD
   // to finish the event — the engine sets chip.winnerId, but the tournament only
   // moves to Results when the TD ends it. Fires once per decision.
-  const finishPromptedRef = useRef(false);
   useEffect(() => {
     const winnerId = vm.chip?.winnerId;
+    // Only while the champion is decided but the event is still Live (not yet
+    // finished). Surface the modal once per winnerId.
     if (!winnerId || vm.phase !== "live") {
-      finishPromptedRef.current = false;
+      championShownRef.current = null;
       return;
     }
-    if (finishPromptedRef.current) return;
-    finishPromptedRef.current = true;
-    const champ = vm.chip?.entries.find((e) => e.id === winnerId);
-    Alert.alert(
-      "We have a winner!",
-      `🏆 ${champ ? teamName(champ) : "The last entry standing"} takes it.\n\nFinish the tournament and move to Results?`,
-      [
-        { text: "Not Yet", style: "cancel" },
-        { text: "Finish Tournament", onPress: () => vm.endTournament() },
-      ],
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (championShownRef.current === winnerId) return;
+    championShownRef.current = winnerId;
+    setChampionModalOpen(true);
   }, [vm.chip?.winnerId, vm.phase]);
+
+  // The one Finish action (shared by the champion modal, the champion card, and
+  // the Actions sheet). Idempotent: fires confetti once per winner, then hands off
+  // to the vm's idempotent endTournament (no double-complete / duplicate rows).
+  const doFinishTournament = () => {
+    // Idempotent at the UI layer: ignore repeat taps while finishing or once done.
+    if (vm.finishing || vm.isFinished) { setChampionModalOpen(false); return; }
+    const winnerId = vm.chip?.winnerId;
+    setChampionModalOpen(false);
+    if (winnerId && confettiFiredRef.current !== winnerId) {
+      confettiFiredRef.current = winnerId;
+      confettiRef.current?.fire();
+    }
+    vm.endTournament();
+  };
 
   if (vm.loading) {
     if (embedded) {
@@ -853,7 +908,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       "Mark this tournament completed and move to Results? Live editing stops.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Finish", style: "destructive", onPress: () => vm.endTournament() },
+        { text: "Finish", style: "destructive", onPress: doFinishTournament },
       ],
     );
   };
@@ -1308,6 +1363,47 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }
   };
 
+  // TD "Invite Partner": share this team's EXISTING invite link so Player 2 can
+  // join it (join_team_by_token fills the open slot on this same team — never a
+  // second team, never replacing Player 1). Token is read lazily (the roster RPC
+  // omits it). Offers Text / Share / Copy via a native action sheet.
+  const openInvite = async (e: ChipEntry) => {
+    if (e.teamId == null || !vm.tournament) return;
+    let token: string | null = null;
+    try {
+      token = await vm.getInviteToken(e.teamId as number);
+    } catch {
+      /* fall through to the unavailable alert */
+    }
+    if (!token) {
+      Alert.alert("Invite unavailable", "Couldn't load the team invite link. Please try again.");
+      return;
+    }
+    const link = teamInviteLink(vm.tournament.id, token);
+    const msg = teamInviteMessage(e.p1Name, vm.tournament.name, link);
+    Alert.alert("Invite Partner", "Send Player 2 the invite link to join this team.", [
+      {
+        text: "Text Invite",
+        onPress: () => {
+          const sep = Platform.OS === "ios" ? "&" : "?";
+          Linking.openURL(`sms:${sep}body=${encodeURIComponent(msg)}`).catch(() => {});
+        },
+      },
+      { text: "Share Invite", onPress: () => { Share.share({ message: msg }).catch(() => {}); } },
+      {
+        text: "Copy Link",
+        onPress: () => {
+          if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).clipboard) {
+            (navigator as any).clipboard.writeText(link).catch(() => {});
+          } else {
+            Share.share({ message: link }).catch(() => {});
+          }
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   // One player's row: name (wraps to 2 lines) + Player ID · Fargo, with a SMALL
   // secondary Verify control (the only large button on the card is the workflow one).
   const renderPlayerRow = (e: ChipEntry, which: 1 | 2) => {
@@ -1360,7 +1456,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <View style={styles.pverifyCol}>
             {verified ? (
               <Text style={styles.pverified}>✓ Verified</Text>
-            ) : canVerify ? (
+            ) : canVerify && !readOnly ? (
               <TouchableOpacity style={styles.pverifyBtn} onPress={onVerify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={styles.pverifyText}>Verify</Text>
               </TouchableOpacity>
@@ -1375,6 +1471,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // The single large workflow button (+ a hint when approval is still blocked).
   const renderPrimary = (e: ChipEntry, st: EntryState) => {
+    // Completed: no workflow action — just a static final status badge.
+    if (readOnly)
+      return <View style={[styles.tprimary, styles.tprimaryDone]}><Text style={styles.tprimaryDoneText}>{e.checkedIn ? "✓ Checked In" : "Registered"}</Text></View>;
     if (st === "waiting")
       return <View style={[styles.tprimary, styles.tprimaryDim]}><Text style={styles.tprimaryDimText}>Waiting for Partner</Text></View>;
     if (st === "checkedin")
@@ -1424,12 +1523,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       {doubles &&
         (hasPartner(e) ? (
           renderPlayerRow(e, 2)
-        ) : (
-          <TouchableOpacity style={styles.partnerBtn} onPress={() => setPicker({ mode: "partner", entryId: e.id })}>
-            <Text style={styles.partnerBtnText}>+ Select Partner</Text>
-          </TouchableOpacity>
+        ) : readOnly ? null : (
+          <View style={styles.partnerActionsRow}>
+            <TouchableOpacity style={styles.partnerBtn} onPress={() => (e.teamId != null ? setUnifiedOpen({ resumeTeam: { teamId: e.teamId, captainName: e.p1Name ?? null } }) : setPicker({ mode: "partner", entryId: e.id }))}>
+              <Text style={styles.partnerBtnText}>Add Player 2</Text>
+            </TouchableOpacity>
+            {e.teamId != null && (
+              <TouchableOpacity style={styles.invitePartnerBtn} onPress={() => openInvite(e)}>
+                <Text style={styles.invitePartnerBtnText}>Invite Partner</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         ))}
-      {editing && e.teamId != null && (
+      {editing && !readOnly && e.teamId != null && (
         <View style={styles.editChipRow}>
           <Text style={styles.editChipLabel}>Chip count (blank = auto)</Text>
           <TextInput
@@ -1455,7 +1561,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             const inPot = (e.paidSidePots ?? []).includes(name);
             const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
             return (
-              <TouchableOpacity key={name} style={styles.potRow} onPress={() => toggleSidePot(e, name)} activeOpacity={0.7}>
+              <TouchableOpacity key={name} disabled={readOnly} style={styles.potRow} onPress={() => toggleSidePot(e, name)} activeOpacity={0.7}>
                 <View style={[styles.potCheckbox, inPot && styles.potCheckboxOn]}>{inPot && <Text style={styles.potCheckMark}>✓</Text>}</View>
                 <Text style={[styles.potLabel, inPot && styles.potLabelOn]}>{name}{amt}{inPot ? " · Entered" : ""}</Text>
               </TouchableOpacity>
@@ -1463,7 +1569,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           })}
         </View>
       )}
-      {st === "pending" && (
+      {st === "pending" && !readOnly && (
         <>
           <TouchableOpacity style={[styles.ptApprove, !allVerified(e) && styles.tprimaryOff]} disabled={!allVerified(e)} onPress={() => approveEntry(e)}>
             <Text style={styles.ptApproveText}>Approve {doubles ? "Team" : "Player"}</Text>
@@ -1483,6 +1589,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <Text style={styles.ptTitle}>Players</Text>
           <Text style={styles.ptCount}>· {chip.entries.length} {doubles ? "teams" : "players"}</Text>
         </View>
+        {readOnly && (
+          <Text style={styles.readOnlyNote}>Tournament completed — player registration is locked.</Text>
+        )}
         <View style={styles.ptToolbar}>
           <View style={styles.ptSearch}>
             <Ionicons name="search" size={16} color={COLORS.textMuted} />
@@ -1497,10 +1606,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Text style={styles.ptFilterText} numberOfLines={1}>{STATUS_LABELS[rosterFilter]}</Text>
             <Ionicons name="chevron-down" size={15} color={COLORS.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.ptAddBtn} onPress={() => setPicker({ mode: "new" })} activeOpacity={0.85}>
-            <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text style={styles.ptAddText}>Add {doubles ? "Team" : "Player"}</Text>
-          </TouchableOpacity>
+          {!readOnly && (
+            <TouchableOpacity style={styles.ptAddBtn} onPress={() => (doubles ? setUnifiedOpen({ resumeTeam: null }) : setPicker({ mode: "new" }))} activeOpacity={0.85}>
+              <Ionicons name="add" size={18} color="#FFFFFF" />
+              <Text style={styles.ptAddText}>Add {doubles ? "Team" : "Player"}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {rosterFiltered.length === 0 ? (
@@ -1541,13 +1652,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     <Text allowFontScaling={false} style={[styles.ptChips, styles.ptcChips]}>{chipPreview(e)}</Text>
                     {showPay && (
                       <View style={styles.ptcPay}>
-                        <TouchableOpacity onPress={() => setPaid(e, !e.paid)} style={[styles.ptBadge, e.paid ? styles.ptBadgeGood : styles.ptBadgeMuted]} activeOpacity={0.7}>
+                        <TouchableOpacity disabled={readOnly} onPress={() => setPaid(e, !e.paid)} style={[styles.ptBadge, e.paid ? styles.ptBadgeGood : styles.ptBadgeMuted]} activeOpacity={0.7}>
                           <Text allowFontScaling={false} style={[styles.ptBadgeText, e.paid ? styles.ptBadgeTextGood : styles.ptBadgeTextMuted]}>{e.paid ? "Paid" : "Unpaid"}</Text>
                         </TouchableOpacity>
                       </View>
                     )}
                     <View style={styles.ptcStatus}>
-                      {st === "checkedin" ? (
+                      {readOnly ? (
+                        <View style={[styles.ptBadge, e.checkedIn ? styles.ptBadgeGood : { borderColor: meta.color + "88", backgroundColor: meta.color + "22" }]}>
+                          <Text allowFontScaling={false} style={[styles.ptBadgeText, e.checkedIn ? styles.ptBadgeTextGood : { color: meta.color }]}>{e.checkedIn ? "Checked In" : meta.label}</Text>
+                        </View>
+                      ) : st === "checkedin" ? (
                         <TouchableOpacity onPress={() => setCheckIn(e, false)} style={[styles.ptBadge, styles.ptBadgeGood]} activeOpacity={0.7}>
                           <Text allowFontScaling={false} style={[styles.ptBadgeText, styles.ptBadgeTextGood]}>Checked In</Text>
                         </TouchableOpacity>
@@ -1562,9 +1677,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       )}
                     </View>
                     <View style={styles.ptcActions}>
-                      <TouchableOpacity onPress={() => setMenuEntryId(e.id)} style={styles.ptDots} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
-                      </TouchableOpacity>
+                      {!readOnly && (
+                        <TouchableOpacity onPress={() => setMenuEntryId(e.id)} style={styles.ptDots} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                      )}
                       <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={webMs(16)} color={COLORS.textMuted} />
                     </View>
                   </Pressable>
@@ -1582,11 +1699,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (isWeb && winW >= 760) return renderPlayersSetupDesktop();
     return (
     <View>
+      {readOnly && (
+        <Text style={styles.readOnlyNote}>Tournament completed — player registration is locked.</Text>
+      )}
       <View style={styles.searchRow}>
         <TextInput allowFontScaling={false} style={styles.searchInput} value={rosterQuery} onChangeText={setRosterQuery} placeholder="Search by player or team name…" placeholderTextColor={COLORS.textMuted} autoCapitalize="none" autoCorrect={false} />
-        <TouchableOpacity style={styles.addBtn} onPress={() => setPicker({ mode: "new" })}>
-          <Text style={styles.addBtnText}>+ Add {doubles ? "Team" : "Player"}</Text>
-        </TouchableOpacity>
+        {!readOnly && (
+          <TouchableOpacity style={styles.addBtn} onPress={() => (doubles ? setUnifiedOpen({ resumeTeam: null }) : setPicker({ mode: "new" }))}>
+            <Text style={styles.addBtnText}>+ Add {doubles ? "Team" : "Player"}</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <TouchableOpacity style={styles.statusDrop} onPress={() => setStatusMenuOpen(true)}>
         <Text style={styles.statusDropText}>Status: <Text style={styles.statusDropVal}>{STATUS_LABELS[rosterFilter]}</Text>  ▾</Text>
@@ -1623,9 +1745,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               (hasPartner(e) ? (
                 renderPlayerRow(e, 2)
               ) : (
-                <TouchableOpacity style={styles.partnerBtn} onPress={() => setPicker({ mode: "partner", entryId: e.id })}>
-                  <Text style={styles.partnerBtnText}>+ Select Partner</Text>
-                </TouchableOpacity>
+                <View style={styles.partnerActionsRow}>
+                  <TouchableOpacity style={styles.partnerBtn} onPress={() => (e.teamId != null ? setUnifiedOpen({ resumeTeam: { teamId: e.teamId, captainName: e.p1Name ?? null } }) : setPicker({ mode: "partner", entryId: e.id }))}>
+                    <Text style={styles.partnerBtnText}>Add Player 2</Text>
+                  </TouchableOpacity>
+                  {e.teamId != null && (
+                    <TouchableOpacity style={styles.invitePartnerBtn} onPress={() => openInvite(e)}>
+                      <Text style={styles.invitePartnerBtnText}>Invite Partner</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
 
             {editing && e.teamId != null && (
@@ -1694,9 +1823,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </View>
 
             <View style={styles.tfooter}>
-              <TouchableOpacity style={styles.actionsBtn} onPress={() => (editing ? setEditEntryId(null) : setMenuEntryId(e.id))}>
-                <Text style={styles.actionsBtnText}>{editing ? "Done" : "Actions"}</Text>
-              </TouchableOpacity>
+              {!readOnly && (
+                <TouchableOpacity style={styles.actionsBtn} onPress={() => (editing ? setEditEntryId(null) : setMenuEntryId(e.id))}>
+                  <Text style={styles.actionsBtnText}>{editing ? "Done" : "Actions"}</Text>
+                </TouchableOpacity>
+              )}
               {renderPrimary(e, st)}
             </View>
           </View>
@@ -1850,7 +1981,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const aliveTeams = chip.entries.filter((e) => e.status !== "eliminated");
     const remainingSet = new Set(chip.roundRemaining ?? []);
     const totalCount = aliveTeams.length;
-    const playedCount = aliveTeams.filter((e) => !remainingSet.has(e.id)).length;
+    // Countdown toward the next shuffle: alive teams still waiting to play their
+    // round match (i.e. still in roundRemaining). Ticks down as each is seated.
+    const remainingCount = aliveTeams.filter((e) => remainingSet.has(e.id)).length;
     const stateLabel = ready
       ? roundNum > 0 ? "Round Complete — Ready to Shuffle" : "Ready to Shuffle"
       : round
@@ -1875,9 +2008,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </View>
         <Text style={[styles.shufState, { color: accent }]}>{stateLabel}</Text>
         {round && (
-          <Text style={styles.shufSub}>
-            {playedCount} of {totalCount} teams have played this round. Every team plays once, then it is ready to shuffle again.
-          </Text>
+          <>
+            <Text style={styles.shufCount}>
+              {remainingCount} of {totalCount} Team{remainingCount === 1 ? "" : "s"} Remaining
+            </Text>
+            <Text style={styles.shufSub}>Every team plays once before the next shuffle.</Text>
+          </>
         )}
         {draining && (
           <Text style={styles.shufSub}>
@@ -1949,8 +2085,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }).filter(Boolean) as { label: string; clock: string }[];
     const streamAvail = chip.tables.some((t) => t.isStream && !t.matchId && !t.inactive);
 
+    // Alerts are for conditions that need the TD's attention only. A normal
+    // waiting queue is expected during a chip tournament and is already shown in
+    // the Queue summary card + the Queue section, so it is NOT an alert.
     const alerts: { text: string; sub?: string; onPress?: () => void; cta?: string; urgent?: boolean }[] = [];
-    if (d.queueCount > 0) alerts.push({ text: `${d.queueCount} team${d.queueCount === 1 ? "" : "s"} waiting` });
     if (overStaffed) alerts.push({ text: `Recommended tables: ${rec}`, sub: `Currently active: ${activeCount}`, onPress: openReduce, cta: "Reduce" });
     if (streamAvail) alerts.push({ text: "Stream table available" });
     for (const lm of longNow) alerts.push({ text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
@@ -2004,8 +2142,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const championEl = chip.winnerId ? (
       <View style={styles.champCard}>
         <Ionicons name="trophy" size={webMs(18)} color={COLORS.primary} />
-        <Text style={styles.champText} numberOfLines={1}>{teamName(entryById(chip.winnerId)!)} wins</Text>
-        <TouchableOpacity style={styles.champBtn} onPress={confirmEndTournament}><Text style={styles.champBtnText}>Finish</Text></TouchableOpacity>
+        <View style={styles.champTextWrap}>
+          {vm.isFinished && <Text style={styles.champKicker}>WINNING TEAM</Text>}
+          <Text style={styles.champText} numberOfLines={1}>
+            {teamName(entryById(chip.winnerId)!)}{vm.isFinished ? "" : " wins"}
+          </Text>
+        </View>
+        {!vm.isFinished && (
+          <TouchableOpacity
+            style={[styles.champBtn, vm.finishing && styles.champBtnDisabled]}
+            onPress={doFinishTournament}
+            disabled={vm.finishing}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.champBtnText}>{vm.finishing ? "Finishing…" : "Finish"}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     ) : null;
 
@@ -2174,6 +2326,37 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </DashSection>
     );
 
+    // Completed: a dedicated recap dashboard — champion + completed metrics + a
+    // link to the final standings. Every active element (shuffle banner, chip
+    // leader, queue, active tables, alerts, activity, auto-run) is omitted, and
+    // the state itself is already torn down (reconcileCompleted) so nothing here
+    // can be revived.
+    if (vm.isFinished) {
+      const completedCards = [
+        { val: String(chip.entries.length), lbl: "Final Teams" },
+        { val: String(d.matchesPlayed), lbl: "Matches Played" },
+        { val: String(chip.tables.length), lbl: "Tables Used" },
+      ];
+      return (
+        <View>
+          {championEl}
+          <View style={styles.sumCardsRow}>
+            {completedCards.map((c) => (
+              <View key={c.lbl} style={styles.sumCard}>
+                <Text style={styles.sumCardVal}>{c.val}</Text>
+                <Text style={styles.sumCardLbl} numberOfLines={2}>{c.lbl}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.completedStandingsBtn} onPress={() => onOpenResults?.()} activeOpacity={0.8}>
+            <Ionicons name="podium-outline" size={webMs(16)} color={COLORS.primary} />
+            <Text style={styles.completedStandingsText}>View Final Standings</Text>
+            <Ionicons name="chevron-forward" size={webMs(16)} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     // Desktop: main column (queue/tables/activity) + side column (leader/alerts/
     // standings). Mobile/narrow: the original single-column order (unchanged).
     if (dashTwoCol) {
@@ -2224,6 +2407,21 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     inactive: { label: "Inactive", color: COLORS.textMuted },
   };
   const renderLiveTables = () => {
+    // Completed: no operational table controls or leftover table state — the live
+    // layout is cleared. Just a completed message + a link to the history.
+    if (readOnly) {
+      return (
+        <View style={styles.completedWrap}>
+          <Ionicons name="checkmark-circle-outline" size={webMs(44)} color={COLORS.textMuted} />
+          <Text style={styles.completedTitle}>Tournament Completed</Text>
+          <Text style={styles.completedSub}>All tables have been cleared.</Text>
+          <TouchableOpacity style={styles.completedStandingsBtn} onPress={() => onOpenResults?.()} activeOpacity={0.8}>
+            <Ionicons name="time-outline" size={webMs(16)} color={COLORS.primary} />
+            <Text style={styles.completedStandingsText}>View Match History</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     const d = dashboard(chip);
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const inactiveTables = chip.tables.filter((t) => t.inactive);
@@ -2380,18 +2578,32 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const renderLivePlayers = () => {
     const alive = chip.entries.filter((e) => e.status !== "eliminated");
     const out = chip.entries.filter((e) => e.status === "eliminated");
+    // Completed: read-only. Replace the active status ("queued"/"playing") with a
+    // final placement label and hide the per-team action menu.
+    const placeById = new Map(readOnly ? finalPlacements(chip).map((p) => [p.entryId, p.place]) : []);
+    const finalLabel = (e: ChipEntry): string => {
+      const p = placeById.get(e.id);
+      if (p === 1) return "Winner";
+      if (p != null) return `${ordSuffix(p)} Place`;
+      return "Eliminated";
+    };
     return (
       <>
+        {readOnly && (
+          <Text style={styles.readOnlyNote}>Tournament completed — this roster is final and read-only.</Text>
+        )}
         <Section title={`Players (${alive.length})`}>
           {alive.map((e) => (
             <View key={e.id} style={styles.playerRow}>
               <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
                 <Text style={styles.playerName} numberOfLines={1}>{shortTeam(e)} <Text style={styles.playerChevron}>›</Text></Text>
-                <Text style={styles.playerMeta}>{e.chips} chips · {e.wins}-{e.losses} · {e.status}</Text>
+                <Text style={styles.playerMeta}>{e.chips} chips · {e.wins}-{e.losses} · {readOnly ? finalLabel(e) : e.status}</Text>
               </TouchableOpacity>
-              <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-              </TouchableOpacity>
+              {!readOnly && (
+                <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </Section>
@@ -2401,11 +2613,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <View key={e.id} style={styles.playerRow}>
                 <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
                   <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1}>{shortTeam(e)}</Text>
-                  <Text style={[styles.playerMeta, styles.playerMetaOut]}>{e.wins}-{e.losses}</Text>
+                  <Text style={[styles.playerMeta, styles.playerMetaOut]}>{readOnly ? `${finalLabel(e)} · ${e.wins}-${e.losses}` : `${e.wins}-${e.losses}`}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-                </TouchableOpacity>
+                {!readOnly && (
+                  <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </Section>
@@ -2466,12 +2680,71 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       <Text style={styles.sumGroupTitle}>{title}</Text>
       {rows.map(([l, v], i) => (
         <View key={l} style={[styles.sumRow, i > 0 && styles.sumRowDiv]}>
-          <Text style={styles.sumLbl}>{l}</Text>
+          <Text style={styles.sumLbl} numberOfLines={1}>{l}</Text>
           <Text style={styles.sumVal} numberOfLines={1}>{v}</Text>
         </View>
       ))}
     </View>
   );
+  // Results · Payouts — connects final placements (exact elimination order) to the
+  // TD's configured payout positions. Reuses the same prize-pool math as the
+  // bracket flow; no paid/unpaid tracking or splitting yet.
+  const renderPayouts = () => {
+    const money = (n: number): string => `$${Math.round(n).toLocaleString()}`;
+    const ordinal = (n: number): string => {
+      const s = ["th", "st", "nd", "rd"], v = n % 100;
+      return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+    };
+    const placements = finalPlacements(chip);
+    const teamAtPlace = (place: number): string => {
+      const p = placements.find((x) => x.place === place);
+      const e = p ? entryById(p.entryId) : null;
+      return e ? teamName(e) : "—";
+    };
+    const paidPlayers = chip.entries.filter((e) => e.paid).length;
+    const entryFee = Number(tournament.entry_fee) || 0;
+    const addedMoney = Number(tournament.added_money) || 0;
+    const ls: any = tournament.live_settings ?? {};
+    const fees = (ls.fees ?? []).filter((f: any) => f.enabled);
+    const cfg = ls.prizePool ?? null;
+    const includeAdded = cfg?.includeAddedMoney ?? true;
+    const pool = entryPoolTotal(paidPlayers, entryFee, feesPerPlayer(fees), !!ls.feesAddedOnTop, includeAdded, addedMoney);
+    const payoutPlaces = cfg?.entryPlaces?.length ? computeBreakdown(pool, cfg.entryPlaces).places : null;
+    return (
+      <View>
+        <Text style={styles.sumHeader}>Payouts</Text>
+        <Text style={styles.sumSubHeader}>Final placements → payout positions</Text>
+        <SumGroup
+          title="PRIZE POOL"
+          rows={[
+            ["Entry Fee", entryFee ? money(entryFee) : "—"],
+            ["Added Money", addedMoney ? money(addedMoney) : "—"],
+            ["Paid Entries", String(paidPlayers)],
+            ["Prize Pool", pool ? money(pool) : "—"],
+          ]}
+        />
+        {payoutPlaces && payoutPlaces.length && pool > 0 ? (
+          <View style={styles.sumGroup}>
+            <Text style={styles.sumGroupTitle}>PAYOUT BREAKDOWN</Text>
+            {payoutPlaces.map((row, i) => (
+              <View key={row.place} style={[styles.sumRow, i > 0 && styles.sumRowDiv]}>
+                <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
+                <Text style={styles.payName} numberOfLines={1}>{teamAtPlace(row.place)}</Text>
+                <Text style={styles.payAmt}>{money(row.amount)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <Text style={styles.hint}>
+              Set up the prize structure in Setup → Prize Pool to populate payouts. Until then, payouts will be announced by the tournament director.
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const renderSummary = () => {
     const alive = chip.entries.filter((e) => e.status !== "eliminated");
     const out = chip.entries.filter((e) => e.status === "eliminated");
@@ -2501,7 +2774,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       ...alive.sort((a, b) => b.chips - a.chips || b.wins - a.wins),
       ...out.sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime()),
     ];
-    const medals = ["🥇", "🥈", "🥉", "4th", "5th"];
     return (
       <View>
         <Text style={styles.sumHeader}>{tournament.name || "Chip Tournament"}</Text>
@@ -2568,13 +2840,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
         <View style={styles.sumGroup}>
           <Text style={styles.sumGroupTitle}>FINAL STANDINGS</Text>
-          {standings.slice(0, 5).map((e, i) => (
+          {standings.slice(0, resultsStandingsExpanded ? standings.length : 5).map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.sumRow, i > 0 && styles.sumRowDiv]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-              <Text style={styles.sumMedal}>{medals[i]}</Text>
+              <Text style={styles.sumMedal}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ordSuffix(i + 1)}</Text>
               <Text style={styles.sumStandName} numberOfLines={1}>{shortTeam(e)}</Text>
-              <Text style={styles.sumVal}>{e.wins}-{e.losses}</Text>
+              <Text style={styles.sumRecord}>{e.wins}-{e.losses}</Text>
             </TouchableOpacity>
           ))}
+          {standings.length > 5 && (
+            <TouchableOpacity style={styles.sumStandToggle} onPress={() => setResultsStandingsExpanded((v) => !v)} activeOpacity={0.7}>
+              <Text style={styles.sumStandToggleText}>{resultsStandingsExpanded ? "Hide Full Standings" : "View Full Standings"}</Text>
+              <Ionicons name={resultsStandingsExpanded ? "chevron-up" : "chevron-down"} size={webMs(15)} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <TouchableOpacity style={styles.exportBtn} onPress={() => Alert.alert("Export PDF", "Exporting the official tournament report as a PDF is coming soon.")}>
@@ -2625,6 +2903,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         case "live-queue": return renderLiveQueue();
         case "live-players": return renderLivePlayers();
         case "standings": return renderStandings();
+        case "payouts": return renderPayouts();
         case "history": return renderHistory();
         case "summary": return renderSummary();
         default: return renderPlayersSetup();
@@ -2641,6 +2920,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (page === "Players") return renderLivePlayers();
       return renderLiveTables();
     }
+    if (page === "Payouts") return renderPayouts();
     if (page === "History") return renderHistory();
     if (page === "Summary") return renderSummary();
     return renderStandings();
@@ -2649,6 +2929,24 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // The two overlays (player picker + Fargo confirm) render in both modes.
   const modals = (
     <>
+      {/* Phase 5: unified Scotch-Doubles Add Team flow (search-first, ACTIVE+PENDING,
+          inline Create, inline Fargo, Continue/Save-as-Waiting, Team Review). Replaces
+          the legacy picker + Fargo popup for doubles; singles still uses the picker
+          below. onTeamSaved reloads the roster so chip calcs/status recompute. */}
+      {doubles && (
+        <UnifiedRegisterModal
+          visible={unifiedOpen != null}
+          onClose={() => setUnifiedOpen(null)}
+          tournamentId={id}
+          mode="doubles"
+          resumeTeam={unifiedOpen?.resumeTeam ?? null}
+          onTeamSaved={() => {
+            setUnifiedOpen(null);
+            vm.reload();
+          }}
+        />
+      )}
+
       <Modal
         visible={picker != null}
         transparent
@@ -2671,7 +2969,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           >
             <View style={styles.sheetHandle} />
               <Text style={styles.sheetTitle}>
-                {picker?.mode === "partner" ? "Select Partner" : doubles ? "Add Captain" : "Add Player"}
+                {picker?.mode === "partner" ? "Add Player 2" : doubles ? "Add Player 1" : "Add Player"}
               </Text>
               <TextInput
                 allowFontScaling={false}
@@ -2855,7 +3153,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setAddFargo(null)}>
           <Pressable style={styles.pickerCard} onPress={() => {}}>
-            <Text style={styles.pickerTitle}>{addFargo?.mode === "partner" ? "Add Partner" : doubles ? "Add Captain" : "Add Player"}</Text>
+            <Text style={styles.pickerTitle}>{addFargo?.mode === "partner" ? "Add Player 2" : doubles ? "Add Player 1" : "Add Player"}</Text>
             {addFargo && <Text style={styles.approveName}>{profileName(addFargo.player)}</Text>}
             <Text style={styles.approveHelp}>Enter their Fargo. You can Verify it after adding.</Text>
             <Text style={styles.approveFargoLabel}>Fargo</Text>
@@ -3975,6 +4273,34 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </View>
       </Modal>
 
+      {/* Champion confirmation — shown once a winner is decided (still pending
+          completion until the TD taps Finish). Winner only; no prize amounts. */}
+      <Modal visible={championModalOpen} transparent animationType="fade" onRequestClose={() => setChampionModalOpen(false)}>
+        <View style={styles.centerRoot}>
+          <Pressable style={styles.centerDim} onPress={() => setChampionModalOpen(false)} />
+          <View style={styles.centerCard}>
+            {(() => {
+              const champ = chip.winnerId ? entryById(chip.winnerId) : null;
+              return (
+                <>
+                  <Text style={styles.champWinTrophy}>🏆</Text>
+                  <Text style={styles.champWinKicker}>TOURNAMENT WINNER</Text>
+                  <Text style={styles.champWinName} numberOfLines={2}>{champ ? teamName(champ) : "—"}</Text>
+                  <Text style={styles.champWinSub}>has won the tournament.</Text>
+                  <TouchableOpacity style={styles.champWinPrimary} onPress={doFinishTournament} activeOpacity={0.85}>
+                    <Text style={styles.champWinPrimaryText}>Finish Tournament</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.champWinSecondary} onPress={() => setChampionModalOpen(false)} activeOpacity={0.7}>
+                    <Text style={styles.champWinSecondaryText}>Review Results</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+      <ConfettiBurst ref={confettiRef} />
+
       {/* Queue manager — centered floating modal */}
       <Modal visible={queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueModalOpen(false)}>
         <View style={styles.centerRoot}>
@@ -4500,8 +4826,17 @@ const styles = StyleSheet.create({
   leaderChipsN: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   // Champion + reshuffle-pending (neutral).
   champCard: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), backgroundColor: COLORS.primary + "12", borderWidth: 1, borderColor: COLORS.primary + "40", borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
-  champText: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
+  completedStandingsBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: COLORS.primary + "14", borderWidth: 1, borderColor: COLORS.primary + "40", borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), marginTop: webSc(SPACING.md) },
+  completedStandingsText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  completedWrap: { alignItems: "center", justifyContent: "center", paddingVertical: webSc(SPACING.xl), paddingHorizontal: webSc(SPACING.lg) },
+  completedTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "900", marginTop: webSc(SPACING.sm) },
+  completedSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), marginTop: 2, textAlign: "center" },
+  readOnlyNote: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontStyle: "italic", marginBottom: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.xs) },
+  champTextWrap: { flex: 1, minWidth: 0 },
+  champKicker: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
+  champText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
   champBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.sm, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
+  champBtnDisabled: { opacity: 0.6 },
   champBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   pendCard: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md), backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
   pendCardTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -4624,6 +4959,15 @@ const styles = StyleSheet.create({
   npStartText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
   npNotYet: { marginTop: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   npNotYetText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Champion confirmation modal
+  champWinTrophy: { fontSize: webMs(40), textAlign: "center" },
+  champWinKicker: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.6, textAlign: "center", marginTop: webSc(SPACING.sm) },
+  champWinName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xl), fontWeight: "900", textAlign: "center", marginTop: webSc(SPACING.xs) },
+  champWinSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), textAlign: "center", marginTop: 2 },
+  champWinPrimary: { marginTop: webSc(SPACING.lg), backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center" },
+  champWinPrimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  champWinSecondary: { marginTop: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  champWinSecondaryText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   // Chip leaders rows.
   clRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, paddingHorizontal: webSc(SPACING.xs) },
   clRowTop: { borderTopWidth: 0, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm },
@@ -4674,10 +5018,17 @@ const styles = StyleSheet.create({
   sumGroupTitle: { color: COLORS.primaryLight, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5, paddingVertical: webSc(SPACING.sm) },
   sumRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm) },
   sumRowDiv: { borderTopWidth: 1, borderTopColor: COLORS.border },
-  sumLbl: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
-  sumVal: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", maxWidth: "60%", textAlign: "right" },
-  sumMedal: { fontSize: webMs(FONT_SIZES.md), width: webSc(32) },
-  sumStandName: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  sumLbl: { flexShrink: 1, color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
+  sumVal: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", textAlign: "right" },
+  sumMedal: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", width: webSc(34) },
+  sumStandName: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  sumRecord: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", flexShrink: 0, textAlign: "right" },
+  // Payout breakdown: fixed place + fixed amount, flexible truncating team name.
+  payPlace: { width: webSc(40), color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  payName: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  payAmt: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "900", flexShrink: 0, textAlign: "right" },
+  sumStandToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
+  sumStandToggleText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   exportBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center", marginTop: webSc(SPACING.xs), marginBottom: webSc(SPACING.lg) },
   exportBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
   statCard: { backgroundColor: COLORS.background, borderRadius: RADIUS.md, padding: webSc(SPACING.md), alignItems: "center", minWidth: 90, flexGrow: 1 },
@@ -4778,6 +5129,7 @@ const styles = StyleSheet.create({
   shufTitleWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
   shufTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
   shufState: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginTop: webSc(SPACING.xs) },
+  shufCount: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", marginTop: webSc(SPACING.xs) },
   shufSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 2, lineHeight: webMs(FONT_SIZES.xs) * 1.4 },
   shufPrimary: { marginTop: webSc(SPACING.sm), minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
   shufPrimaryWeb: { alignSelf: "center", width: 260, marginTop: SPACING.xs, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
@@ -5357,8 +5709,11 @@ const styles = StyleSheet.create({
   approveConfirmOff: { opacity: 0.5 },
   approveConfirmText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   teamFargoLine: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
-  partnerBtn: { borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  partnerBtn: { flex: 1, borderWidth: 1, borderStyle: "dashed", borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   partnerBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  partnerActionsRow: { flexDirection: "row", gap: webSc(SPACING.sm) },
+  invitePartnerBtn: { flex: 1, borderWidth: 1, borderColor: COLORS.primary, backgroundColor: COLORS.primary, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  invitePartnerBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
 
   pickerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-start", paddingHorizontal: webSc(SPACING.lg), paddingTop: webSc(70) },
   pickerCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: webSc(SPACING.md), maxWidth: 460, width: "100%" as any, alignSelf: "center" as any, maxHeight: "70%" as any },

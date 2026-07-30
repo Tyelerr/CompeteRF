@@ -291,6 +291,9 @@ export const UnifiedRegisterModal = ({
           selected[1].player_id,
           parseFargo(1),
         );
+        // Persist immediately so a retry after a later RPC failure (addTeamMember /
+        // setTeamName) REUSES this team instead of creating a duplicate.
+        setTeamId(effectiveTeamId);
       }
       await playerRegistrationService.addTeamMember(
         effectiveTeamId,

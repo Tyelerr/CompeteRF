@@ -22,6 +22,17 @@ export interface ChipTournamentBundle {
   chip: ChipState;
 }
 
+// One persisted final-placement row (chip_results). Deliberately just the durable
+// relationship — tournament ↔ place ↔ team ↔ members — with no payout amount /
+// split / lock yet (those derive from the prize structure + placement later).
+export interface ChipResultRow {
+  entryId: string;
+  place: number;
+  teamName: string | null;
+  p1ProfileId: number | null;
+  p2ProfileId: number | null;
+}
+
 // ── row ↔ model mappers ────────────────────────────────────────────────────────
 const rowToEntry = (r: any): ChipEntry => ({
   id: r.id,
@@ -346,7 +357,10 @@ export const chipService = {
       importedEntries = [...byTeam.values()]
         .filter((tm) => {
           const cap = tm.members.find((m) => m.role === "captain");
-          return cap && cap.player_id != null && !linkedProfileIds.has(cap.player_id);
+          // Include the team unless its captain is already listed as a chip_entry.
+          // A PENDING captain has no id_auto (player_id null) and is never in
+          // linkedProfileIds, so the team must still be shown.
+          return cap && (cap.player_id == null || !linkedProfileIds.has(cap.player_id));
         })
         .map(rosterTeamToEntry);
     } else {
@@ -480,6 +494,10 @@ export const chipService = {
     if (error) throw error;
   },
 
+  // Pure live_state setter (start/registration transitions). Completion and reopen
+  // do NOT go through here — they route through tournamentService.completeTournament
+  // / reopenTournament, the single source of truth for status + completed_at, so the
+  // lifecycle fields can never drift. See use.chip.tournament.ts endTournament/reopen.
   async setLiveState(id: number, state: TournamentLiveState): Promise<void> {
     const { error } = await supabase
       .from("tournaments")
@@ -487,6 +505,48 @@ export const chipService = {
       .eq("id", id)
       .select("id")
       .single();
+    if (error) throw error;
+  },
+
+  // ── final placements (chip_results) ─────────────────────────────────────────
+  // Idempotent: one row per (tournament, entry), upserted on Finish. Rewriting
+  // the same placements is a no-op-equivalent (no duplicate rows).
+  async saveResults(id: number, placements: ChipResultRow[]): Promise<void> {
+    if (placements.length === 0) return;
+    const rows = placements.map((p) => ({
+      tournament_id: id,
+      entry_id: p.entryId,
+      place: p.place,
+      team_name: p.teamName ?? null,
+      p1_profile_id: p.p1ProfileId ?? null,
+      p2_profile_id: p.p2ProfileId ?? null,
+    }));
+    const { error } = await supabase
+      .from("chip_results")
+      .upsert(rows, { onConflict: "tournament_id,entry_id" });
+    if (error) throw error;
+  },
+
+  async loadResults(id: number): Promise<ChipResultRow[]> {
+    const { data, error } = await supabase
+      .from("chip_results")
+      .select("*")
+      .eq("tournament_id", id)
+      .order("place", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      entryId: r.entry_id,
+      place: r.place,
+      teamName: r.team_name ?? null,
+      p1ProfileId: r.p1_profile_id ?? null,
+      p2ProfileId: r.p2_profile_id ?? null,
+    }));
+  },
+
+  // Undo/reopen: drop this tournament's persisted placements so it can finish
+  // fresh again.
+  async clearResults(id: number): Promise<void> {
+    const { error } = await supabase.from("chip_results").delete().eq("tournament_id", id);
     if (error) throw error;
   },
 
