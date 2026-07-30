@@ -36,6 +36,7 @@ export interface TeamCardPlayerVM {
   editingRow?: boolean; // display edit mode: name editable + remove
   onChangeName?: (v: string) => void;
   onRemove?: () => void;
+  removable?: boolean; // draft: show a "Change" affordance on the row
 }
 
 export interface TeamCardSidePotVM {
@@ -53,6 +54,7 @@ export interface TeamCardProps {
   statusColor: string;
   chipsPillText: string; // "5 Chips"
   teamName?: string | null;
+  onChangeTeamName?: (v: string) => void; // draft: editable team name in the card
 
   player1: TeamCardPlayerVM;
   player2?: TeamCardPlayerVM | null;
@@ -149,7 +151,11 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => (
     </View>
     {!p.editingRow && (
       <View style={styles.pverifyCol}>
-        {p.verified ? (
+        {p.removable && p.onRemove ? (
+          <TouchableOpacity style={styles.pverifyBtn} onPress={p.onRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text allowFontScaling={false} style={styles.pchangeText}>Change</Text>
+          </TouchableOpacity>
+        ) : p.verified ? (
           <Text allowFontScaling={false} style={styles.pverified}>✓ Verified</Text>
         ) : p.canVerify && p.onVerify ? (
           <TouchableOpacity style={styles.pverifyBtn} onPress={p.onVerify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -165,7 +171,7 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => (
 
 export const TeamCard = (props: TeamCardProps) => {
   const {
-    mode, doubles, label, statusLabel, statusColor, chipsPillText, teamName,
+    mode, doubles, label, statusLabel, statusColor, chipsPillText, teamName, onChangeTeamName,
     player1, player2, showAddPartner, onAddPlayer2, onInvitePartner,
     showTeamFargo, teamFargo, assignedChipsText, paid, checkedIn, onTogglePaid, sidePots,
     showChipOverride, chipOverrideDefault, chipAutoPlaceholder, onChipOverrideEnd,
@@ -185,7 +191,18 @@ export const TeamCard = (props: TeamCardProps) => {
         <View style={styles.tchipPill}><Text allowFontScaling={false} style={styles.tchipText}>{chipsPillText}</Text></View>
       </View>
 
-      {teamName ? <Text allowFontScaling={false} style={styles.tcardName} numberOfLines={2}>{teamName}</Text> : null}
+      {onChangeTeamName ? (
+        <TextInput
+          allowFontScaling={false}
+          style={styles.tcardNameInput}
+          value={teamName ?? ""}
+          onChangeText={onChangeTeamName}
+          placeholder="Team name (optional)"
+          placeholderTextColor={COLORS.textMuted}
+        />
+      ) : teamName ? (
+        <Text allowFontScaling={false} style={styles.tcardName} numberOfLines={2}>{teamName}</Text>
+      ) : null}
 
       <PlayerRow p={player1} />
       {doubles &&
@@ -295,6 +312,7 @@ const styles = StyleSheet.create({
   tcardHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.xs) },
   tcardNum: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   tcardName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", marginTop: 1, marginBottom: webSc(SPACING.xs), lineHeight: webMs(FONT_SIZES.lg + 3) },
+  tcardNameInput: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs), backgroundColor: COLORS.surfaceLight, marginBottom: webSc(SPACING.xs), ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   flexSpacer2: { flex: 1 },
   tbadge: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
   tbadgeText: { fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "800" },
@@ -312,6 +330,7 @@ const styles = StyleSheet.create({
   pneeds: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
   pverifyBtn: { paddingVertical: 2, paddingHorizontal: 2 },
   pverifyText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", textDecorationLine: "underline" },
+  pchangeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   peditRow: { flexDirection: "row", gap: webSc(SPACING.sm), alignItems: "center" },
   peditName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: COLORS.surfaceLight, ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   peditFargoWrap: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: 8, backgroundColor: COLORS.surfaceLight, height: webSc(34), minWidth: webSc(88) },

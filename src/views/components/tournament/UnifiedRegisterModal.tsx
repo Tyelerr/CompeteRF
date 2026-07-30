@@ -40,6 +40,7 @@ import { Input } from "../common/input";
 import { useUnifiedPlayerSearch } from "../../../viewmodels/hooks/use.unified.player.search";
 import { playerRegistrationService } from "../../../models/services/player.registration.service";
 import { PlayerSearchResult } from "../../../models/types/player.registration.types";
+import { TeamCard } from "./TeamCard";
 
 export type RegisterMode = "singles" | "doubles";
 
@@ -56,7 +57,7 @@ export interface UnifiedRegisterModalProps {
   computeChips?: (p1Fargo: number | null, p2Fargo: number | null) => number | null;
 }
 
-type Step = "search" | "create" | "fargo" | "team" | "review";
+type Step = "search" | "create" | "fargo" | "draft" | "p2search";
 type Slot = 1 | 2;
 
 const initials = (name: string): string =>
@@ -122,7 +123,7 @@ export const UnifiedRegisterModal = ({
     if (resumeTeam) {
       setTeamId(resumeTeam.teamId);
       setSlot(2);
-      setStep("team"); // straight to Player 2 for an existing waiting team
+      setStep("draft"); // open the existing waiting team's card; Add Player 2 from it
     } else {
       setTeamId(null);
       setSlot(1);
@@ -135,11 +136,11 @@ export const UnifiedRegisterModal = ({
 
   const title = isDoubles ? "Add Team" : "Add Player";
   const stepLabel = useMemo(() => {
-    if (step === "review") return "Team Review";
     if (!isDoubles) return "Player 1 of 1";
-    if (slot === 2 || step === "team") return "Player 2 of 2";
+    if (step === "draft") return ""; // the card shows its own status
+    if (step === "p2search") return "Player 2 of 2";
     return "Player 1 of 2";
-  }, [step, isDoubles, slot]);
+  }, [step, isDoubles]);
 
   // Exclude the already-picked Player 1 from Player 2 results (no same player twice).
   const excludeId = slot === 2 ? selected[1]?.player_id : undefined;
@@ -173,16 +174,14 @@ export const UnifiedRegisterModal = ({
     prefill(slot, player);
     if (slot === 1) {
       if (isDoubles) {
-        setSlot(2);
-        search.reset();
-        search.loadRecents();
-        setStep("team");
+        setStep("draft"); // show the editable New Team card
       } else {
         setStep("fargo");
       }
+    } else {
+      // Player 2 chosen from the p2 search -> back to the draft card (now complete).
+      setStep("draft");
     }
-    // slot === 2: stay on the team step; the teammate area switches to the
-    // selected-player view (P2 Fargo + Continue to Review).
   };
 
   const clearTeammate = () => {
@@ -208,7 +207,7 @@ export const UnifiedRegisterModal = ({
   const backFromCreate = () => {
     // Return to the previous search WITHOUT clearing the term.
     setErrorMsg(null);
-    setStep(slot === 2 ? "team" : "search");
+    setStep(slot === 2 ? "p2search" : "search");
   };
 
   const submitCreate = async () => {
@@ -255,14 +254,11 @@ export const UnifiedRegisterModal = ({
       setSelected((s) => ({ ...s, [slot]: picked }));
       setFargo((f) => ({ ...f, [slot]: "" }));
       if (slot === 1 && isDoubles) {
-        setSlot(2);
-        search.reset();
-        search.loadRecents();
-        setStep("team");
+        setStep("draft"); // P1 created -> editable New Team card
       } else if (slot === 1) {
         setStep("fargo");
       } else {
-        setStep("team"); // P2 created -> back to team step (selected-player view)
+        setStep("draft"); // P2 created -> back to the (now complete) draft card
       }
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Could not create the player.");
@@ -527,117 +523,71 @@ export const UnifiedRegisterModal = ({
     </View>
   );
 
-  const renderTeam = () => {
-    const p1Name = selected[1]?.display_name ?? resumeTeam?.captainName ?? "Player 1";
-    const p2 = selected[2];
-    return (
-      <View style={styles.stepBody}>
-        {/* Player 1 — compact selected card + inline Fargo (editable when we picked
-            P1 this session; read-only name when resuming an existing team). */}
-        <View style={styles.p1Block}>
-          <View style={styles.p1Header}>
-            <Text allowFontScaling={false} style={styles.p1Label}>Player 1</Text>
-            <View style={styles.p1HeaderRight}>
-              {selected[1] && badge(selected[1].account_status)}
-              {selected[1] && !resumeTeam && (
-                <TouchableOpacity
-                  onPress={() => { setErrorMsg(null); setSlot(1); search.reset(); search.loadRecents(); setStep("search"); }}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text allowFontScaling={false} style={styles.changeLink}>Change</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-          <Text allowFontScaling={false} style={styles.p1Name}>{p1Name}</Text>
-          {selected[1] && (
-            <View style={styles.p1FargoRow}>
-              <Text allowFontScaling={false} style={styles.p1FargoLabel}>Fargo</Text>
-              <TextInput
-                allowFontScaling={false}
-                style={styles.p1FargoInput}
-                value={fargo[1]}
-                onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
-                keyboardType="numeric"
-                placeholder="—"
-                placeholderTextColor={COLORS.textMuted}
-              />
-            </View>
-          )}
-        </View>
-
-        <Text allowFontScaling={false} style={styles.teammateLabel}>Teammate</Text>
-
-        {!p2 ? (
-          <>
-            {renderResults(true, "Search teammate by name, username, or email…")}
-            {renderFooter(!resumeTeam)}
-          </>
-        ) : (
-          <View style={styles.results}>
-            <View style={styles.selectedCard}>
-              <View style={{ flex: 1 }}>
-                <Text allowFontScaling={false} style={styles.selectedName}>{p2.display_name}</Text>
-                <TouchableOpacity onPress={clearTeammate} activeOpacity={0.7}>
-                  <Text allowFontScaling={false} style={styles.changeLink}>Change teammate</Text>
-                </TouchableOpacity>
-              </View>
-              {badge(p2.account_status, true)}
-            </View>
-            <Input
-              label="Player 2 Fargo (optional)"
-              value={fargo[2]}
-              onChangeText={(t) => setFargo((f) => ({ ...f, 2: t.replace(/[^0-9]/g, "") }))}
-              keyboardType="numeric"
-              helper="You can verify it after adding."
-            />
-            {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-            <View style={styles.actionsRow}>
-              <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={clearTeammate} /></View>
-              <View style={styles.actionBtn}><Button title="Continue to Review" onPress={() => { setErrorMsg(null); setStep("review"); }} /></View>
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderReview = () => {
+  // Doubles: the editable New Team card IS the review — no wizard steps.
+  const renderDraft = () => {
     const p1Name = selected[1]?.display_name ?? resumeTeam?.captainName ?? "Player 1";
     const p2 = selected[2];
     const chips = computeChips ? computeChips(parseFargo(1), parseFargo(2)) : null;
     return (
       <View style={styles.stepBody}>
         <ScrollView style={styles.results} keyboardShouldPersistTaps="handled">
-          <Text allowFontScaling={false} style={styles.createHeading}>Team review</Text>
-          <View style={styles.reviewMember}>
-            <Text allowFontScaling={false} style={styles.reviewName}>{p1Name}</Text>
-            <Text allowFontScaling={false} style={styles.reviewMeta}>{fargo[1].trim() ? `Fargo ${fargo[1].trim()}` : "No Fargo"}</Text>
-          </View>
-          <Text allowFontScaling={false} style={styles.plus}>+</Text>
-          <View style={styles.reviewMember}>
-            <Text allowFontScaling={false} style={styles.reviewName}>{p2?.display_name}</Text>
-            <Text allowFontScaling={false} style={styles.reviewMeta}>
-              {fargo[2].trim() ? `Fargo ${fargo[2].trim()}` : "No Fargo"}
-              {"  ·  "}{p2?.account_status === "ACTIVE" ? "Compete" : "Pending"}
-            </Text>
-          </View>
-          {chips != null && (
-            <Text allowFontScaling={false} style={styles.chipsLine}>Assigned chips: {chips}</Text>
-          )}
-          <Input label="Team name (optional)" value={teamName} onChangeText={setTeamName} placeholder={`${p1Name} / ${p2?.display_name ?? ""}`} />
+          <TeamCard
+            mode="draft"
+            doubles
+            label="New Team"
+            statusLabel={p2 ? "Ready" : "Waiting"}
+            statusColor={p2 ? COLORS.secondary : COLORS.warning}
+            chipsPillText={`${chips ?? 0} Chips`}
+            teamName={teamName || null}
+            onChangeTeamName={setTeamName}
+            player1={{
+              name: p1Name,
+              idLabel: null,
+              fargo: parseFargo(1),
+              fargoEditable: !!selected[1],
+              onChangeFargo: (v) => setFargo((f) => ({ ...f, 1: v.replace(/[^0-9]/g, "") })),
+              removable: !!selected[1] && !resumeTeam,
+              onRemove: () => { setErrorMsg(null); setSlot(1); search.reset(); search.loadRecents(); setStep("search"); },
+            }}
+            player2={
+              p2
+                ? {
+                    name: p2.display_name,
+                    idLabel: null,
+                    fargo: parseFargo(2),
+                    fargoEditable: true,
+                    onChangeFargo: (v) => setFargo((f) => ({ ...f, 2: v.replace(/[^0-9]/g, "") })),
+                    removable: true,
+                    onRemove: clearTeammate,
+                  }
+                : null
+            }
+            showAddPartner={!p2}
+            onAddPlayer2={() => { setErrorMsg(null); setSlot(2); search.reset(); search.loadRecents(); setStep("p2search"); }}
+            assignedChipsText={String(chips ?? 0)}
+            paid={false}
+            checkedIn={false}
+            onSaveWaiting={doSaveWaiting}
+            onCreateTeam={doCreateTeam}
+            onCancel={onClose}
+            saving={busy}
+          />
           {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
         </ScrollView>
-        <View style={[styles.footer, { paddingBottom: insets.bottom + webSc(SPACING.sm) }]}>
-          <View style={styles.actionsRow}>
-            <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("team"); }} /></View>
-            <View style={styles.actionBtn}><Button title="Create Team" onPress={doCreateTeam} loading={busy} /></View>
-          </View>
-        </View>
       </View>
     );
   };
+
+  // Player 2 search, opened from the draft card's "Add Player 2".
+  const renderP2Search = () => (
+    <View style={styles.stepBody}>
+      <Text allowFontScaling={false} style={styles.p1Reminder}>
+        Player 1 ✓  {selected[1]?.display_name ?? resumeTeam?.captainName ?? ""}
+      </Text>
+      {renderResults(true, "Search teammate by name, username, or email…")}
+      {renderFooter(false)}
+    </View>
+  );
 
   return (
     <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -659,8 +609,8 @@ export const UnifiedRegisterModal = ({
             {step === "search" && renderSearch()}
             {step === "create" && renderCreate()}
             {step === "fargo" && renderFargo()}
-            {step === "team" && renderTeam()}
-            {step === "review" && renderReview()}
+            {step === "draft" && renderDraft()}
+            {step === "p2search" && renderP2Search()}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -692,6 +642,7 @@ const styles = StyleSheet.create({
   flash: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
 
   stepBody: { flex: 1, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+  p1Reminder: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.xs) },
 
   searchBar: {
     flexDirection: "row",
