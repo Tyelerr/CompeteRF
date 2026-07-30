@@ -49,6 +49,10 @@ export interface TeamCardSidePotVM {
 export interface TeamCardProps {
   mode: "display" | "draft";
   doubles: boolean;
+  // When set (draft-as-modal), the card renders its own title + X header so it can
+  // BE the modal surface (no outer sheet).
+  title?: string;
+  onClose?: () => void;
   label: string; // "Team #1" | "Player #1" | "New Team"
   statusLabel: string;
   statusColor: string;
@@ -200,7 +204,7 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => {
 
 export const TeamCard = (props: TeamCardProps) => {
   const {
-    mode, doubles, label, statusLabel, statusColor, chipsPillText, teamName, onChangeTeamName,
+    mode, doubles, title, onClose, label, statusLabel, statusColor, chipsPillText, teamName, onChangeTeamName,
     player1, player2, showAddPartner, onAddPlayer2, onInvitePartner,
     showTeamFargo, teamFargo, assignedChipsText, paid, checkedIn, onTogglePaid, sidePots,
     showChipOverride, chipOverrideDefault, chipAutoPlaceholder, onChipOverrideEnd,
@@ -211,6 +215,16 @@ export const TeamCard = (props: TeamCardProps) => {
 
   return (
     <View style={styles.tcard}>
+      {title ? (
+        <View style={styles.cardTitleRow}>
+          <Text allowFontScaling={false} style={styles.cardTitle}>{title}</Text>
+          {onClose && (
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text allowFontScaling={false} style={styles.cardClose}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
       <View style={styles.tcardHead}>
         <Text allowFontScaling={false} style={styles.tcardNum}>{label}</Text>
         <View style={styles.flexSpacer2} />
@@ -338,6 +352,9 @@ export const TeamCard = (props: TeamCardProps) => {
 
 const styles = StyleSheet.create({
   tcard: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
+  cardTitleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: webSc(SPACING.sm) },
+  cardTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
+  cardClose: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "700" },
   tcardHead: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.xs) },
   tcardNum: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   tcardName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", marginTop: 1, marginBottom: webSc(SPACING.xs), lineHeight: webMs(FONT_SIZES.lg + 3) },

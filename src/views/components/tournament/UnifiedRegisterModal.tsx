@@ -529,9 +529,11 @@ export const UnifiedRegisterModal = ({
     const p2 = selected[2];
     const chips = computeChips ? computeChips(parseFargo(1), parseFargo(2)) : null;
     return (
-      <View style={styles.draftBody}>
+      <>
           <TeamCard
             mode="draft"
+            title={title}
+            onClose={onClose}
             doubles
             label="New Team"
             statusLabel={p2 ? "Ready" : "Waiting"}
@@ -572,7 +574,7 @@ export const UnifiedRegisterModal = ({
             saving={busy}
           />
           {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-      </View>
+      </>
     );
   };
 
@@ -588,28 +590,38 @@ export const UnifiedRegisterModal = ({
   );
 
   return (
-    <RNModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <RNModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
-          <View style={[styles.sheet, step === "draft" ? { maxHeight: Math.round(winH * 0.85) } : { height: Math.round(winH * 0.75) }]}>
-            <View style={styles.header}>
-              <View>
-                <Text allowFontScaling={false} style={styles.title}>{title}</Text>
-                <Text allowFontScaling={false} style={styles.subtitle}>{stepLabel}</Text>
+          {step === "draft" ? (
+            // The gray card IS the modal surface here — no outer sheet/header/border.
+            <ScrollView
+              style={{ maxHeight: Math.round(winH * 0.85) }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {renderDraft()}
+            </ScrollView>
+          ) : (
+            <View style={[styles.sheet, { height: Math.round(winH * 0.75) }]}>
+              <View style={styles.header}>
+                <View>
+                  <Text allowFontScaling={false} style={styles.title}>{title}</Text>
+                  <Text allowFontScaling={false} style={styles.subtitle}>{stepLabel}</Text>
+                </View>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text allowFontScaling={false} style={styles.closeText}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text allowFontScaling={false} style={styles.closeText}>✕</Text>
-              </TouchableOpacity>
+
+              {flash && <Text allowFontScaling={false} style={styles.flash}>{flash}</Text>}
+
+              {step === "search" && renderSearch()}
+              {step === "create" && renderCreate()}
+              {step === "fargo" && renderFargo()}
+              {step === "p2search" && renderP2Search()}
             </View>
-
-            {flash && <Text allowFontScaling={false} style={styles.flash}>{flash}</Text>}
-
-            {step === "search" && renderSearch()}
-            {step === "create" && renderCreate()}
-            {step === "fargo" && renderFargo()}
-            {step === "draft" && renderDraft()}
-            {step === "p2search" && renderP2Search()}
-          </View>
+          )}
         </KeyboardAvoidingView>
       </View>
     </RNModal>
@@ -630,7 +642,6 @@ const styles = StyleSheet.create({
   },
   // Draft step sizes to the card's content (sheet uses a pixel maxHeight inline so
   // it caps + scrolls only when the card is tall, e.g. a complete team + side pots).
-  draftBody: { paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
