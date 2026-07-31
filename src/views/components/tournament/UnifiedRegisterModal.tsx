@@ -15,16 +15,14 @@
 // above it, it stays above the keyboard + safe-area inset). Phone uses the shared
 // US formatter (formatUsPhoneInput/digitsOnly) and submits E.164 (+1XXXXXXXXXX).
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Modal as RNModal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -90,9 +88,6 @@ export const UnifiedRegisterModal = ({
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
-  // Cap the scrollable results/recents area so the card sizes to its content (no dead
-  // space with a short recents list) but still scrolls when there are many results.
-  const listMax = Math.round(winH * 0.5);
 
   const [step, setStep] = useState<Step>("search");
   const [slot, setSlot] = useState<Slot>(1);
@@ -422,25 +417,22 @@ export const UnifiedRegisterModal = ({
     return q.length >= 2 ? `+ Create “${q}”` : "+ Create a new player";
   };
 
-  // Fixed footer create link (+ optional secondary "Save as Waiting").
-  const renderFooter = (showSaveWaiting: boolean) => (
-    <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
-      <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
-        <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
-      </TouchableOpacity>
-      {showSaveWaiting && (
-        <TouchableOpacity onPress={doSaveWaiting} activeOpacity={0.7} style={styles.waitingWrap} disabled={busy}>
-          <Text allowFontScaling={false} style={styles.waitingLink}>Save as Waiting for Teammate</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
-  const renderResults = (autoFocusInput: boolean, placeholder: string) => {
+  // Search + recents inside a keyboard-aware scroll. The header stays fixed above;
+  // the create link lives at the end of the scroll so it's always reachable above the
+  // keyboard (no outer push that shoves the modal off the top).
+  const renderSearchScroll = (placeholder: string, topNode?: ReactNode) => {
     const trimmed = search.query.trim();
     const showRecents = trimmed.length < 2;
     return (
-      <>
+      <KeyboardAwareScrollView
+        style={{ maxHeight: Math.round(winH * 0.66) }}
+        contentContainerStyle={styles.searchContent}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={20}
+        showsVerticalScrollIndicator={false}
+      >
+        {topNode}
         <View style={styles.searchBar}>
           <TextInput
             allowFontScaling={false}
@@ -449,45 +441,44 @@ export const UnifiedRegisterModal = ({
             onChangeText={search.setQuery}
             placeholder={placeholder}
             placeholderTextColor={COLORS.textMuted}
-            autoFocus={autoFocusInput}
+            autoFocus
             autoCapitalize="none"
             autoCorrect={false}
+            returnKeyType="search"
           />
           {search.isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
         </View>
-        <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
-          {showRecents ? (
-            search.isLoadingRecents ? (
-              <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
-            ) : visibleRecents.length > 0 ? (
-              <>
-                <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
-                {visibleRecents.map(renderRow)}
-              </>
-            ) : (
-              <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
-            )
-          ) : (
+
+        {showRecents ? (
+          search.isLoadingRecents ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
+          ) : visibleRecents.length > 0 ? (
             <>
-              {visibleResults.map(renderRow)}
-              {!search.isSearching && visibleResults.length === 0 && (
-                <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
-              )}
+              <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
+              {visibleRecents.map(renderRow)}
             </>
-          )}
-        </ScrollView>
-      </>
+          ) : (
+            <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
+          )
+        ) : (
+          <>
+            {visibleResults.map(renderRow)}
+            {!search.isSearching && visibleResults.length === 0 && (
+              <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
+            )}
+          </>
+        )}
+
+        <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
+          <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
     );
   };
 
   // --- Steps ------------------------------------------------------------------
 
-  const renderSearch = () => (
-    <View style={styles.stepBody}>
-      {renderResults(true, "Search by name, username, or email…")}
-      {renderFooter(false)}
-    </View>
-  );
+  const renderSearch = () => renderSearchScroll("Search by name, username, or email…");
 
   const renderCreate = () => (
     <KeyboardAwareScrollView
@@ -588,30 +579,33 @@ export const UnifiedRegisterModal = ({
   );
 
   const renderFargo = () => (
-    <View style={styles.stepBody}>
-      <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
-        <View style={styles.selectedCard}>
-          <Text allowFontScaling={false} style={styles.selectedName}>{selected[1]?.display_name}</Text>
-          {selected[1] && badge(selected[1].account_status, true)}
-        </View>
-        <Input
-          label="Fargo rating (optional)"
-          value={fargo[1]}
-          onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
-          keyboardType="numeric"
-          helper="You can verify it after adding."
-        />
-        {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-      </ScrollView>
-      <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
-        <View style={styles.actionsRow}>
-          <View style={styles.actionBtn}>
-            <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
-          </View>
-          <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
-        </View>
+    <KeyboardAwareScrollView
+      style={{ maxHeight: Math.round(winH * 0.6) }}
+      contentContainerStyle={styles.searchContent}
+      keyboardShouldPersistTaps="handled"
+      enableOnAndroid
+      extraScrollHeight={20}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.selectedCard}>
+        <Text allowFontScaling={false} style={styles.selectedName}>{selected[1]?.display_name}</Text>
+        {selected[1] && badge(selected[1].account_status, true)}
       </View>
-    </View>
+      <Input
+        label="Fargo rating (optional)"
+        value={fargo[1]}
+        onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
+        keyboardType="numeric"
+        helper="You can verify it after adding."
+      />
+      {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+      <View style={styles.actionsRow}>
+        <View style={styles.actionBtn}>
+          <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
+        </View>
+        <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
+      </View>
+    </KeyboardAwareScrollView>
   );
 
   // Doubles: the editable New Team card IS the review — no wizard steps.
@@ -670,32 +664,29 @@ export const UnifiedRegisterModal = ({
   };
 
   // Player 2 search, opened from the draft card's "Add Player 2".
-  const renderP2Search = () => (
-    <View style={styles.stepBody}>
+  const renderP2Search = () =>
+    renderSearchScroll(
+      "Search teammate by name, username, or email…",
       <Text allowFontScaling={false} style={styles.p1Reminder}>
         Player 1 ✓  {selected[1]?.display_name ?? resumeTeam?.captainName ?? ""}
-      </Text>
-      {renderResults(true, "Search teammate by name, username, or email…")}
-      {renderFooter(false)}
-    </View>
-  );
+      </Text>,
+    );
 
   return (
     <RNModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={() => Keyboard.dismiss()}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" && step !== "create" ? "padding" : undefined}
-          style={styles.kav}
-        >
+        <View style={styles.kav}>
           {step === "draft" ? (
             // The gray card IS the modal surface here — no outer sheet/header/border.
-            <ScrollView
+            <KeyboardAwareScrollView
               style={{ maxHeight: Math.round(winH * 0.85) }}
               keyboardShouldPersistTaps="handled"
+              enableOnAndroid
+              extraScrollHeight={20}
               showsVerticalScrollIndicator={false}
             >
               {renderDraft()}
-            </ScrollView>
+            </KeyboardAwareScrollView>
           ) : (
             <View style={[styles.sheet, { maxHeight: Math.round(winH * 0.85) }]}>
               <View style={styles.header}>
@@ -716,7 +707,7 @@ export const UnifiedRegisterModal = ({
               {step === "p2search" && renderP2Search()}
             </View>
           )}
-        </KeyboardAvoidingView>
+        </View>
       </Pressable>
     </RNModal>
   );
@@ -751,6 +742,7 @@ const styles = StyleSheet.create({
   flash: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
 
   stepBody: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+  searchContent: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md) },
   p1Reminder: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.xs) },
 
   searchBar: {
@@ -761,6 +753,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
     paddingHorizontal: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.sm),
   },
   searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), paddingVertical: webSc(SPACING.md) },
   results: { marginTop: webSc(SPACING.sm) },
