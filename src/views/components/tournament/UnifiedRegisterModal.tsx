@@ -23,6 +23,7 @@ import {
   Modal as RNModal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -76,6 +77,23 @@ const splitName = (q: string): { first: string; last: string } => {
   return { first: parts[0], last: parts.slice(1).join(" ") };
 };
 
+// Live keyboard height so the results list (and only the results list) can shrink,
+// keeping the header + search field fixed and fully visible.
+const useKeyboardHeight = (): number => {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvt, (e) => setHeight(e.endCoordinates?.height ?? 0));
+    const hide = Keyboard.addListener(hideEvt, () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+};
+
 export const UnifiedRegisterModal = ({
   visible,
   onClose,
@@ -88,6 +106,7 @@ export const UnifiedRegisterModal = ({
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
+  const kb = useKeyboardHeight();
 
   const [step, setStep] = useState<Step>("search");
   const [slot, setSlot] = useState<Slot>(1);
@@ -105,6 +124,15 @@ export const UnifiedRegisterModal = ({
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+
+  const isSearchStep = step === "search" || step === "p2search";
+  // Top offset when the search step is top-anchored (so it shrinks from the bottom
+  // when the keyboard opens instead of sliding up under the header).
+  const topOffset = Math.round(winH * 0.07);
+  // Results list cap: fills the room below the fixed header+search and above the
+  // keyboard+footer. RESERVE ≈ header + search + footer + paddings (a layout reserve,
+  // not a keyboard push offset). Sizes to content when short, scrolls when long.
+  const resultsMax = Math.max(webSc(140), Math.round(winH - topOffset - kb - webSc(240)));
 
   const search = useUnifiedPlayerSearch(tournamentId);
   const lastRef = useRef<TextInput>(null);
@@ -417,68 +445,72 @@ export const UnifiedRegisterModal = ({
     return q.length >= 2 ? `+ Create “${q}”` : "+ Create a new player";
   };
 
-  // Search + recents inside a keyboard-aware scroll. The header stays fixed above;
-  // the create link lives at the end of the scroll so it's always reachable above the
-  // keyboard (no outer push that shoves the modal off the top).
-  const renderSearchScroll = (placeholder: string, topNode?: ReactNode) => {
+  // Fixed search field + scrollable results + fixed create footer. The search field
+  // sits directly below the (fixed) header and is NOT inside the scroll, so it stays
+  // fully visible when the keyboard opens; only the results list shrinks (resultsMax).
+  const renderSearchStep = (placeholder: string, topNode?: ReactNode) => {
     const trimmed = search.query.trim();
     const showRecents = trimmed.length < 2;
     return (
-      <KeyboardAwareScrollView
-        style={{ maxHeight: Math.round(winH * 0.66) }}
-        contentContainerStyle={styles.searchContent}
-        keyboardShouldPersistTaps="handled"
-        enableOnAndroid
-        extraScrollHeight={20}
-        showsVerticalScrollIndicator={false}
-      >
-        {topNode}
-        <View style={styles.searchBar}>
-          <TextInput
-            allowFontScaling={false}
-            style={styles.searchInput}
-            value={search.query}
-            onChangeText={search.setQuery}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.textMuted}
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-          {search.isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
+      <>
+        <View style={styles.searchWrap}>
+          {topNode}
+          <View style={styles.searchBar}>
+            <TextInput
+              allowFontScaling={false}
+              style={styles.searchInput}
+              value={search.query}
+              onChangeText={search.setQuery}
+              placeholder={placeholder}
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {search.isSearching && <ActivityIndicator size="small" color={COLORS.primary} />}
+          </View>
         </View>
 
-        {showRecents ? (
-          search.isLoadingRecents ? (
-            <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
-          ) : visibleRecents.length > 0 ? (
-            <>
-              <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
-              {visibleRecents.map(renderRow)}
-            </>
+        <ScrollView
+          style={{ maxHeight: resultsMax }}
+          contentContainerStyle={styles.resultsContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {showRecents ? (
+            search.isLoadingRecents ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginTop: webSc(SPACING.lg) }} />
+            ) : visibleRecents.length > 0 ? (
+              <>
+                <Text allowFontScaling={false} style={styles.sectionLabel}>Recent players</Text>
+                {visibleRecents.map(renderRow)}
+              </>
+            ) : (
+              <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
+            )
           ) : (
-            <Text allowFontScaling={false} style={styles.hint}>Start typing to search players.</Text>
-          )
-        ) : (
-          <>
-            {visibleResults.map(renderRow)}
-            {!search.isSearching && visibleResults.length === 0 && (
-              <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
-            )}
-          </>
-        )}
+            <>
+              {visibleResults.map(renderRow)}
+              {!search.isSearching && visibleResults.length === 0 && (
+                <Text allowFontScaling={false} style={styles.hint}>No players found for “{trimmed}”.</Text>
+              )}
+            </>
+          )}
+        </ScrollView>
 
-        <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
-          <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
-        </TouchableOpacity>
-      </KeyboardAwareScrollView>
+        <View style={styles.searchFooter}>
+          <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
+            <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
+          </TouchableOpacity>
+        </View>
+      </>
     );
   };
 
   // --- Steps ------------------------------------------------------------------
 
-  const renderSearch = () => renderSearchScroll("Search by name, username, or email…");
+  const renderSearch = () => renderSearchStep("Search by name, username, or email…");
 
   const renderCreate = () => (
     <KeyboardAwareScrollView
@@ -665,7 +697,7 @@ export const UnifiedRegisterModal = ({
 
   // Player 2 search, opened from the draft card's "Add Player 2".
   const renderP2Search = () =>
-    renderSearchScroll(
+    renderSearchStep(
       "Search teammate by name, username, or email…",
       <Text allowFontScaling={false} style={styles.p1Reminder}>
         Player 1 ✓  {selected[1]?.display_name ?? resumeTeam?.captainName ?? ""}
@@ -674,7 +706,10 @@ export const UnifiedRegisterModal = ({
 
   return (
     <RNModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={() => Keyboard.dismiss()}>
+      <Pressable
+        style={[styles.overlay, isSearchStep && { justifyContent: "flex-start", paddingTop: topOffset }]}
+        onPress={() => Keyboard.dismiss()}
+      >
         <View style={styles.kav}>
           {step === "draft" ? (
             // The gray card IS the modal surface here — no outer sheet/header/border.
@@ -688,7 +723,7 @@ export const UnifiedRegisterModal = ({
               {renderDraft()}
             </KeyboardAwareScrollView>
           ) : (
-            <View style={[styles.sheet, { maxHeight: Math.round(winH * 0.85) }]}>
+            <View style={[styles.sheet, { maxHeight: isSearchStep ? Math.round(winH - topOffset - kb - webSc(16)) : Math.round(winH * 0.85) }]}>
               <View style={styles.header}>
                 <View>
                   <Text allowFontScaling={false} style={styles.title}>{title}</Text>
@@ -743,6 +778,11 @@ const styles = StyleSheet.create({
 
   stepBody: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
   searchContent: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md) },
+  // Fixed search section (below the header, always visible).
+  searchWrap: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
+  resultsContent: { paddingHorizontal: webSc(SPACING.md) },
+  // Fixed create-player footer (stays above the keyboard / below the results).
+  searchFooter: { borderTopWidth: 1, borderTopColor: COLORS.border },
   p1Reminder: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.xs) },
 
   searchBar: {
