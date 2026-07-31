@@ -62,13 +62,14 @@ begin
   else
     select outcome into v_out from public.update_pending_player(v_tid, v_pending, 'Edited','Name', v_active_email, '+14805551234');
     select * into v_row from public.players where id = v_pending;
-    insert into _p5e values (3,'collide ACTIVE -> reject', v_out='EMAIL_BELONGS_TO_ACTIVE_PLAYER' and v_row.email=v_new_email, format('outcome=%s', v_out));
+    -- Record must be UNCHANGED on collision (compare normalized, since email is stored as-entered).
+    insert into _p5e values (3,'collide ACTIVE -> reject', v_out='EMAIL_BELONGS_TO_ACTIVE_PLAYER' and v_row.email_normalized=lower(v_new_email), format('outcome=%s norm=%s', v_out, v_row.email_normalized));
   end if;
 
   -- 4. Collision with PENDING (no change).
   select outcome into v_out from public.update_pending_player(v_tid, v_pending, 'Edited','Name', 'o.'||v_claim_email, '+14805551234');
   select * into v_row from public.players where id = v_pending;
-  insert into _p5e values (4,'collide PENDING -> reject', v_out='EMAIL_BELONGS_TO_PENDING_PLAYER' and v_row.email=v_new_email, format('outcome=%s', v_out));
+  insert into _p5e values (4,'collide PENDING -> reject', v_out='EMAIL_BELONGS_TO_PENDING_PLAYER' and v_row.email_normalized=lower(v_new_email), format('outcome=%s norm=%s', v_out, v_row.email_normalized));
 
   -- 5. Edit an ACTIVE player -> rejected.
   begin
