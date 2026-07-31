@@ -15,13 +15,15 @@
 // above it, it stays above the keyboard + safe-area inset). Phone uses the shared
 // US formatter (formatUsPhoneInput/digitsOnly) and submits E.164 (+1XXXXXXXXXX).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal as RNModal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,6 +32,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -109,6 +112,9 @@ export const UnifiedRegisterModal = ({
   const [flash, setFlash] = useState<string | null>(null);
 
   const search = useUnifiedPlayerSearch(tournamentId);
+  const lastRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const phoneRef = useRef<TextInput>(null);
 
   // Reset all state whenever the modal (re)opens.
   useEffect(() => {
@@ -463,40 +469,101 @@ export const UnifiedRegisterModal = ({
   );
 
   const renderCreate = () => (
-    <View style={styles.stepBody}>
-      <ScrollView style={[styles.results, { maxHeight: listMax }]} keyboardShouldPersistTaps="handled">
-        <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
-        <Text allowFontScaling={false} style={styles.hint}>
-          We’ll reuse an existing player if this email already exists.
-        </Text>
-        <Input label="First name" value={firstName} onChangeText={setFirstName} autoCapitalize="words" />
-        <Input label="Last name" value={lastName} onChangeText={setLastName} autoCapitalize="words" />
-        <Input label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-        <Text allowFontScaling={false} style={styles.phoneLabel}>Phone (optional)</Text>
-        <View style={styles.phoneRow}>
-          <View style={styles.countryPrefix}>
-            <Text allowFontScaling={false} style={styles.countryPrefixText}>🇺🇸 +1</Text>
-          </View>
-          <TextInput
-            allowFontScaling={false}
-            style={styles.phoneInput}
-            value={formatUsPhoneInput(phoneDigits)}
-            onChangeText={(t) => setPhoneDigits(digitsOnly(t).slice(0, 10))}
-            placeholder="(555) 123-4567"
-            placeholderTextColor={COLORS.textMuted}
-            keyboardType="number-pad"
-            textContentType="telephoneNumber"
-          />
+    <KeyboardAwareScrollView
+      style={{ maxHeight: Math.round(winH * 0.62) }}
+      contentContainerStyle={styles.createContent}
+      keyboardShouldPersistTaps="handled"
+      enableOnAndroid
+      enableAutomaticScroll
+      extraScrollHeight={24}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
+      <Text allowFontScaling={false} style={styles.hint}>
+        We’ll reuse an existing player if this email already exists.
+      </Text>
+
+      <Text allowFontScaling={false} style={styles.fieldLabel}>First name</Text>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.fieldInput}
+        value={firstName}
+        onChangeText={setFirstName}
+        autoCapitalize="words"
+        autoFocus
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => lastRef.current?.focus()}
+      />
+
+      <Text allowFontScaling={false} style={styles.fieldLabel}>Last name</Text>
+      <TextInput
+        ref={lastRef}
+        allowFontScaling={false}
+        style={styles.fieldInput}
+        value={lastName}
+        onChangeText={setLastName}
+        autoCapitalize="words"
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => emailRef.current?.focus()}
+      />
+
+      <Text allowFontScaling={false} style={styles.fieldLabel}>Email</Text>
+      <TextInput
+        ref={emailRef}
+        allowFontScaling={false}
+        style={styles.fieldInput}
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => phoneRef.current?.focus()}
+      />
+
+      <Text allowFontScaling={false} style={styles.fieldLabel}>Phone (optional)</Text>
+      <View style={styles.phoneRow}>
+        <View style={styles.countryPrefix}>
+          <Text allowFontScaling={false} style={styles.countryPrefixText}>🇺🇸 +1</Text>
         </View>
-        {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
-      </ScrollView>
-      <View style={[styles.footer, { paddingBottom: webSc(SPACING.md) }]}>
-        <View style={styles.actionsRow}>
-          <View style={styles.actionBtn}><Button title="Back" variant="ghost" onPress={backFromCreate} /></View>
-          <View style={styles.actionBtn}><Button title="Create & Continue" onPress={submitCreate} loading={busy} /></View>
-        </View>
+        <TextInput
+          ref={phoneRef}
+          allowFontScaling={false}
+          style={styles.phoneInput}
+          value={formatUsPhoneInput(phoneDigits)}
+          onChangeText={(t) => setPhoneDigits(digitsOnly(t).slice(0, 10))}
+          placeholder="(555) 123-4567"
+          placeholderTextColor={COLORS.textMuted}
+          keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+          returnKeyType="done"
+          onSubmitEditing={() => Keyboard.dismiss()}
+        />
       </View>
-    </View>
+
+      {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+
+      <View style={styles.createFooter}>
+        <TouchableOpacity style={styles.backBtn} onPress={backFromCreate} disabled={busy} activeOpacity={0.7}>
+          <Text allowFontScaling={false} style={styles.backBtnText}>Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.createBtn, busy && styles.createBtnDisabled]}
+          onPress={submitCreate}
+          disabled={busy}
+          activeOpacity={0.85}
+        >
+          {busy ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <Text allowFontScaling={false} style={styles.createBtnText} numberOfLines={1}>Create &amp; Continue</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </KeyboardAwareScrollView>
   );
 
   const renderFargo = () => (
@@ -594,8 +661,11 @@ export const UnifiedRegisterModal = ({
 
   return (
     <RNModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.kav}>
+      <Pressable style={styles.overlay} onPress={() => Keyboard.dismiss()}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" && step !== "create" ? "padding" : undefined}
+          style={styles.kav}
+        >
           {step === "draft" ? (
             // The gray card IS the modal surface here — no outer sheet/header/border.
             <ScrollView
@@ -626,7 +696,7 @@ export const UnifiedRegisterModal = ({
             </View>
           )}
         </KeyboardAvoidingView>
-      </View>
+      </Pressable>
     </RNModal>
   );
 };
@@ -700,6 +770,27 @@ const styles = StyleSheet.create({
   waitingLink: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), textAlign: "center" },
 
   createHeading: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
+
+  // Compact Create-player form (tighter than the shared Input so the modal stays small).
+  createContent: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md) },
+  fieldLabel: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginTop: webSc(SPACING.sm), marginBottom: webSc(SPACING.xs) },
+  fieldInput: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: webSc(10),
+    paddingHorizontal: webSc(SPACING.md),
+    fontSize: webMs(FONT_SIZES.md),
+    color: COLORS.text,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+  },
+  createFooter: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md), marginTop: webSc(SPACING.md) },
+  backBtn: { paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md) },
+  backBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
+  createBtn: { flex: 1, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), minHeight: webSc(44), alignItems: "center", justifyContent: "center" },
+  createBtnDisabled: { opacity: 0.6 },
+  createBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
 
   // Phone field (matches the SMS-verify visual; reuses the shared US formatter).
   phoneLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, marginBottom: webSc(SPACING.xs), fontWeight: "500" },
