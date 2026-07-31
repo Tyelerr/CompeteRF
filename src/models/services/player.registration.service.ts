@@ -13,8 +13,11 @@ import {
   CreatePendingResult,
   InvitationStatus,
   IssuedInvitation,
+  PendingPlayerEditFields,
   PlayerSearchResult,
   RosterPlayerDisplay,
+  UpdatePendingInput,
+  UpdatePendingResult,
 } from "../types/player.registration.types";
 
 export const playerRegistrationService = {
@@ -82,6 +85,44 @@ export const playerRegistrationService = {
     // RETURNS TABLE -> array with a single row.
     const row = (Array.isArray(data) ? data[0] : data) as CreatePendingResult;
     if (!row) throw new Error("create_pending_player returned no row");
+    return row;
+  },
+
+  // Raw contact fields of a PENDING player, for prefilling the edit form. Manager-
+  // gated + tournament-scoped server-side; returns null if not editable/among this
+  // tournament. Never log the returned email/phone in analytics or console.
+  async getPendingPlayer(
+    tournamentId: number,
+    playerId: string,
+  ): Promise<PendingPlayerEditFields | null> {
+    const { data, error } = await supabase.rpc("get_pending_player", {
+      p_tournament_id: tournamentId,
+      p_player_id: playerId,
+    });
+    if (error) throw error;
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | PendingPlayerEditFields
+      | undefined;
+    return row ?? null;
+  },
+
+  // Edit a PENDING player's contact fields on the same players.id. Structured outcome
+  // (UPDATED | EMAIL_BELONGS_TO_ACTIVE_PLAYER | EMAIL_BELONGS_TO_PENDING_PLAYER); never
+  // merges/deletes on collision.
+  async updatePendingPlayer(
+    input: UpdatePendingInput,
+  ): Promise<UpdatePendingResult> {
+    const { data, error } = await supabase.rpc("update_pending_player", {
+      p_tournament_id: input.tournamentId,
+      p_player_id: input.playerId,
+      p_first_name: input.firstName,
+      p_last_name: input.lastName,
+      p_email: input.email,
+      p_phone: input.phone ?? null,
+    });
+    if (error) throw error;
+    const row = (Array.isArray(data) ? data[0] : data) as UpdatePendingResult;
+    if (!row) throw new Error("update_pending_player returned no row");
     return row;
   },
 

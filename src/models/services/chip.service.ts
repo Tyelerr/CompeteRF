@@ -155,6 +155,8 @@ const rosterTeamToEntry = (tm: RosterTeam): ChipEntry => {
     p1Phone: null,
     p1ProfileId: cap.player_id ?? null,
     p2ProfileId: par?.player_id ?? null,
+    p1PlayerId: cap.player_uuid ?? null,
+    p2PlayerId: par?.player_uuid ?? null,
     p2Name: par ? par.member_name ?? "" : null,
     p2Fargo,
     teamFargo: (p1Fargo ?? 0) + (p2Fargo ?? 0),

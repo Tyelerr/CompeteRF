@@ -47,6 +47,37 @@ export interface CreatePendingInput {
   phone?: string | null;
 }
 
+// Edit of an existing PENDING player (attached to the tournament, manager-gated).
+export type UpdatePendingOutcome =
+  | "UPDATED"
+  | "EMAIL_BELONGS_TO_ACTIVE_PLAYER"
+  | "EMAIL_BELONGS_TO_PENDING_PLAYER";
+
+export interface UpdatePendingResult {
+  player_id: string; // on collision this is the OTHER (existing) player's id
+  outcome: UpdatePendingOutcome;
+  account_status: PlayerAccountStatus;
+  display_name: string;
+  email_masked: string | null;
+}
+
+export interface UpdatePendingInput {
+  tournamentId: number;
+  playerId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string | null;
+}
+
+// Raw fields for prefilling the edit form (manager-gated getter; PENDING only).
+export interface PendingPlayerEditFields {
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
 // Roster display resolver row (get_registration_players_display). Lets a screen
 // render PENDING players by name despite the RLS-locked players table. No email/phone.
 export interface RosterPlayerDisplay {

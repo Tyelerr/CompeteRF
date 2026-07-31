@@ -37,6 +37,7 @@ export interface TeamCardPlayerVM {
   onChangeName?: (v: string) => void;
   onRemove?: () => void;
   removable?: boolean; // draft: show a "Change" affordance on the row
+  onEdit?: () => void; // display: show an "Edit" affordance (attached PENDING members)
 }
 
 export interface TeamCardSidePotVM {
@@ -197,6 +198,11 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => {
         ) : p.fargo == null ? (
           <Text allowFontScaling={false} style={styles.pneeds}>No Fargo</Text>
         ) : null}
+        {p.onEdit && (
+          <TouchableOpacity style={styles.pverifyBtn} onPress={p.onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text allowFontScaling={false} style={styles.pchangeText}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

@@ -40,6 +40,10 @@ export interface ChipEntry {
   // players are disambiguated by player id. p2 for the scotch-doubles partner.
   p1ProfileId?: number | null;
   p2ProfileId?: number | null;
+  // Phase 5: stable players.id for each member (present for team roster entries).
+  // Used to edit/identify PENDING members (who have no id_auto).
+  p1PlayerId?: string | null;
+  p2PlayerId?: string | null;
   p2Name?: string | null;
   p2Fargo?: number | null;
   teamFargo: number | null; // p1Fargo (+ p2Fargo for doubles)

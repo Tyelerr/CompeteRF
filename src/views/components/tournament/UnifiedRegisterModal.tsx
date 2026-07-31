@@ -53,8 +53,12 @@ export interface UnifiedRegisterModalProps {
   mode: RegisterMode;
   // Resume doubles at Player 2 for an existing waiting team ("+ Add Teammate").
   resumeTeam?: { teamId: number; captainName?: string | null } | null;
+  // Open directly in edit mode for an existing PENDING player (attached to this
+  // tournament). Prefills the form via get_pending_player and saves via update.
+  editPlayer?: { playerId: string } | null;
   onRegistered?: (playerId: string, registrationId: number) => void;
   onTeamSaved?: (teamId: number) => void;
+  onEdited?: (playerId: string) => void;
   // Optional chip preview for Team Review (chip tournaments pass chipsForFargo).
   computeChips?: (p1Fargo: number | null, p2Fargo: number | null) => number | null;
 }
@@ -100,8 +104,10 @@ export const UnifiedRegisterModal = ({
   tournamentId,
   mode,
   resumeTeam = null,
+  editPlayer = null,
   onRegistered,
   onTeamSaved,
+  onEdited,
   computeChips,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
@@ -114,6 +120,8 @@ export const UnifiedRegisterModal = ({
   const [fargo, setFargo] = useState<Record<Slot, string>>({ 1: "", 2: "" });
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState<number | null>(null);
+  // Non-null while editing an existing PENDING player (submit calls update, not create).
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
 
   // Inline create-player form. phoneDigits holds up to 10 US digits; we submit E.164.
   const [firstName, setFirstName] = useState("");
@@ -152,27 +160,46 @@ export const UnifiedRegisterModal = ({
     setFargo({ 1: "", 2: "" });
     setTeamName("");
     setSelected({ 1: null, 2: null });
-    if (resumeTeam) {
+    if (editPlayer && tournamentId != null) {
+      // Edit an existing PENDING player: jump to the form, prefill from the server.
+      setEditingPlayerId(editPlayer.playerId);
+      setTeamId(null);
+      setSlot(1);
+      setStep("create");
+      playerRegistrationService
+        .getPendingPlayer(tournamentId, editPlayer.playerId)
+        .then((f) => {
+          if (!f) return;
+          setFirstName(f.first_name ?? "");
+          setLastName(f.last_name ?? "");
+          setEmail(f.email ?? "");
+          setPhoneDigits(digitsOnly(f.phone ?? "").slice(-10));
+        })
+        .catch(() => {});
+    } else if (resumeTeam) {
+      setEditingPlayerId(null);
       setTeamId(resumeTeam.teamId);
       setSlot(2);
       setStep("draft"); // open the existing waiting team's card; Add Player 2 from it
     } else {
+      setEditingPlayerId(null);
       setTeamId(null);
       setSlot(1);
       setStep("search");
     }
     search.reset();
-    search.loadRecents();
+    if (!editPlayer) search.loadRecents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, resumeTeam]);
+  }, [visible, resumeTeam, editPlayer]);
 
-  const title = isDoubles ? "Add Team" : "Add Player";
+  const title = editPlayer ? "Edit Player" : isDoubles ? "Add Team" : "Add Player";
   const stepLabel = useMemo(() => {
+    if (editPlayer) return "";
     if (!isDoubles) return "Player 1 of 1";
     if (step === "draft") return ""; // the card shows its own status
     if (step === "p2search") return "Player 2 of 2";
     return "Player 1 of 2";
-  }, [step, isDoubles]);
+  }, [step, isDoubles, editPlayer]);
 
   // Exclude the already-picked Player 1 from Player 2 results (no same player twice).
   const excludeId = slot === 2 ? selected[1]?.player_id : undefined;
@@ -238,12 +265,57 @@ export const UnifiedRegisterModal = ({
   };
 
   const backFromCreate = () => {
-    // Return to the previous search WITHOUT clearing the term.
     setErrorMsg(null);
+    // Standalone edit has no prior step — Back closes the modal.
+    if (editingPlayerId) {
+      onClose();
+      return;
+    }
+    // Otherwise return to the previous search WITHOUT clearing the term.
     setStep(slot === 2 ? "p2search" : "search");
   };
 
+  const submitEdit = async () => {
+    if (tournamentId == null || !editingPlayerId) return;
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorMsg("First and last name are required.");
+      return;
+    }
+    if (!email.trim()) {
+      setErrorMsg("A valid email is required.");
+      return;
+    }
+    setBusy(true);
+    setErrorMsg(null);
+    try {
+      const e164 = phoneDigits.length === 10 ? `+1${phoneDigits}` : null;
+      const res = await playerRegistrationService.updatePendingPlayer({
+        tournamentId,
+        playerId: editingPlayerId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: e164,
+      });
+      if (res.outcome === "UPDATED") {
+        onEdited?.(editingPlayerId);
+        onClose();
+        return;
+      }
+      // Collision — do NOT auto-switch; show a clear, actionable message.
+      const who = res.outcome === "EMAIL_BELONGS_TO_ACTIVE_PLAYER" ? "an existing Compete" : "another pending";
+      setErrorMsg(
+        `That email already belongs to ${who} player (${res.display_name}${res.email_masked ? ` · ${res.email_masked}` : ""}). Use a different email, or cancel and add that player instead.`,
+      );
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Could not save the player.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submitCreate = async () => {
+    if (editingPlayerId) return submitEdit();
     if (tournamentId == null) return;
     if (!firstName.trim() || !lastName.trim()) {
       setErrorMsg("First and last name are required.");
@@ -522,9 +594,11 @@ export const UnifiedRegisterModal = ({
       extraScrollHeight={24}
       showsVerticalScrollIndicator={false}
     >
-      <Text allowFontScaling={false} style={styles.createHeading}>Create player</Text>
+      <Text allowFontScaling={false} style={styles.createHeading}>{editingPlayerId ? "Edit player" : "Create player"}</Text>
       <Text allowFontScaling={false} style={styles.hint}>
-        We’ll reuse an existing player if this email already exists.
+        {editingPlayerId
+          ? "Update this pending player’s details. Their history and team stay intact."
+          : "We’ll reuse an existing player if this email already exists."}
       </Text>
 
       <Text allowFontScaling={false} style={styles.fieldLabel}>First name</Text>
@@ -603,7 +677,7 @@ export const UnifiedRegisterModal = ({
           {busy ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
-            <Text allowFontScaling={false} style={styles.createBtnText} numberOfLines={1}>Create &amp; Continue</Text>
+            <Text allowFontScaling={false} style={styles.createBtnText} numberOfLines={1}>{editingPlayerId ? "Save" : "Create & Continue"}</Text>
           )}
         </TouchableOpacity>
       </View>

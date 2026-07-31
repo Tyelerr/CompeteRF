@@ -388,6 +388,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [unifiedOpen, setUnifiedOpen] = useState<
     { resumeTeam: { teamId: number; captainName: string | null } | null } | null
   >(null);
+  // Edit an attached PENDING team member (players.id) via the shared modal.
+  const [editPlayerId, setEditPlayerId] = useState<string | null>(null);
   // The picker sheet has two content-driven heights: a compact state before the
   // user types, and an expanded state once results appear. Animate the switch so
   // the sheet grows/shrinks smoothly instead of snapping.
@@ -1707,6 +1709,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const verified = which === 1 ? (e.isTeam ? !!e.p1FargoVerified : e.regStatus === "approved") : !!e.p2FargoVerified;
     const memberId = which === 1 ? e.p1MemberId : e.p2MemberId;
     const canVerify = ((e.isTeam && memberId != null) || (!e.isTeam && e.regId != null)) && !readOnly;
+    // A PENDING member has a stable players.id but no id_auto — offer Edit (attached).
+    const playerUuid = which === 1 ? e.p1PlayerId : e.p2PlayerId;
+    const isPending = playerUuid != null && pid == null;
     return {
       name,
       idLabel: pid != null ? `Player ID #${pid}` : null,
@@ -1732,6 +1737,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           vm.removeEntry(e.id);
         }
       },
+      onEdit: isPending && !readOnly ? () => setEditPlayerId(playerUuid!) : undefined,
     };
   };
 
@@ -2917,14 +2923,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           below. onTeamSaved reloads the roster so chip calcs/status recompute. */}
       {doubles && (
         <UnifiedRegisterModal
-          visible={unifiedOpen != null}
-          onClose={() => setUnifiedOpen(null)}
+          visible={unifiedOpen != null || editPlayerId != null}
+          onClose={() => {
+            setUnifiedOpen(null);
+            setEditPlayerId(null);
+          }}
           tournamentId={id}
           mode="doubles"
-          resumeTeam={unifiedOpen?.resumeTeam ?? null}
+          resumeTeam={editPlayerId ? null : unifiedOpen?.resumeTeam ?? null}
+          editPlayer={editPlayerId ? { playerId: editPlayerId } : null}
           computeChips={(f1, f2) => chipsForFargo(chip.settings.tiers, (f1 ?? 0) + (f2 ?? 0))}
           onTeamSaved={() => {
             setUnifiedOpen(null);
+            vm.reload();
+          }}
+          onEdited={() => {
+            setEditPlayerId(null);
             vm.reload();
           }}
         />
