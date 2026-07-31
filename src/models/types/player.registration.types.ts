@@ -19,7 +19,9 @@ export interface PlayerSearchResult {
   username: string | null; // profiles.user_name (ACTIVE only)
   avatar_url: string | null; // profiles.avatar_url (ACTIVE only)
   fargo: number | null; // verified profile Fargo (ACTIVE only)
-  is_registered: boolean; // already on THIS tournament (non-cancelled)
+  is_registered: boolean; // already on THIS tournament as a player (singles)
+  on_team: boolean; // already on a (non-declined) team in THIS tournament (doubles)
+  team_name: string | null; // that team's custom name, if any
 }
 
 // Structured outcome of create_pending_player — lets the UI distinguish a fresh

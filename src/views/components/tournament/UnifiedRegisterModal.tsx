@@ -177,7 +177,8 @@ export const UnifiedRegisterModal = ({
   // --- Selection --------------------------------------------------------------
 
   const pickPlayer = (player: PlayerSearchResult) => {
-    if (slot === 1 && !isDoubles && player.is_registered) return;
+    if (!isDoubles && player.is_registered) return; // already registered (singles)
+    if (isDoubles && player.on_team) return; // already on a team (doubles)
     if (slot === 2 && selected[1]?.player_id === player.player_id) return;
     setErrorMsg(null);
     prefill(slot, player);
@@ -251,6 +252,8 @@ export const UnifiedRegisterModal = ({
         avatar_url: null,
         fargo: null,
         is_registered: false,
+        on_team: false,
+        team_name: null,
       };
       if (slot === 2 && selected[1]?.player_id === picked.player_id) {
         setErrorMsg("That player is already Player 1.");
@@ -365,13 +368,16 @@ export const UnifiedRegisterModal = ({
   );
 
   const renderRow = (r: PlayerSearchResult) => {
-    const disabled = slot === 1 && !isDoubles && r.is_registered;
+    // Unavailable at the point of selection: doubles → already on a team; singles →
+    // already registered. Shown disabled (not a late error).
+    const unavailable = isDoubles ? r.on_team : r.is_registered;
+    const unavailableLabel = isDoubles ? "Already on a team" : "Already registered";
     return (
       <TouchableOpacity
         key={r.player_id}
-        style={[styles.row, disabled && styles.rowDisabled]}
+        style={[styles.row, unavailable && styles.rowDisabled]}
         activeOpacity={0.7}
-        disabled={disabled}
+        disabled={unavailable}
         onPress={() => pickPlayer(r)}
       >
         {r.avatar_url ? (
@@ -382,15 +388,30 @@ export const UnifiedRegisterModal = ({
           </View>
         )}
         <View style={styles.rowMain}>
-          <Text allowFontScaling={false} style={styles.rowName} numberOfLines={1}>{r.display_name}</Text>
+          <View style={styles.rowNameLine}>
+            <Text allowFontScaling={false} style={styles.rowName} numberOfLines={1}>{r.display_name}</Text>
+            {r.account_status === "PENDING" && (
+              <View style={styles.pendingTag}>
+                <Text allowFontScaling={false} style={styles.pendingTagText}>Pending</Text>
+              </View>
+            )}
+          </View>
           <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
             {r.username ? `@${r.username}` : r.email_masked ?? ""}
             {r.fargo != null ? `  ·  Fargo ${r.fargo}` : ""}
+            {unavailable && isDoubles && r.team_name ? `  ·  On ${r.team_name}` : ""}
           </Text>
         </View>
         <View style={styles.rowRight}>
-          {badge(r.account_status)}
-          {disabled && <Text allowFontScaling={false} style={styles.registeredTag}>Registered</Text>}
+          {unavailable ? (
+            <View style={styles.unavailBadge}>
+              <Text allowFontScaling={false} style={styles.unavailBadgeText}>{unavailableLabel}</Text>
+            </View>
+          ) : (
+            <View style={styles.selectBadge}>
+              <Text allowFontScaling={false} style={styles.selectBadgeText}>Select</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -754,6 +775,13 @@ const styles = StyleSheet.create({
   rowName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   rowSub: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
   rowRight: { alignItems: "flex-end" },
+  rowNameLine: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  pendingTag: { backgroundColor: "#3a2f0d", borderWidth: 1, borderColor: COLORS.warning, borderRadius: RADIUS.full, paddingHorizontal: 6, paddingVertical: 1 },
+  pendingTagText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "700" },
+  selectBadge: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.md), paddingVertical: 4 },
+  selectBadgeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  unavailBadge: { borderWidth: 1, borderColor: COLORS.warning + "66", backgroundColor: COLORS.warning + "22", borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 4 },
+  unavailBadgeText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   badge: { paddingHorizontal: webSc(SPACING.sm), paddingVertical: 2, borderRadius: RADIUS.full },
   badgeActive: { backgroundColor: "#0d2f22", borderWidth: 1, borderColor: COLORS.secondary },
   badgePending: { backgroundColor: "#3a2f0d", borderWidth: 1, borderColor: COLORS.warning },
