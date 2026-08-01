@@ -527,6 +527,7 @@ export const UnifiedRegisterModal = ({
           </View>
           <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
             {r.username ? `@${r.username}` : r.email_masked ?? ""}
+            {r.id_auto != null ? `  ·  #${r.id_auto}` : ""}
             {r.fargo != null ? `  ·  Fargo ${r.fargo}` : ""}
             {unavailable && isDoubles && r.team_name ? `  ·  On ${r.team_name}` : ""}
           </Text>
@@ -739,7 +740,24 @@ export const UnifiedRegisterModal = ({
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.selectedCard}>
-        <Text allowFontScaling={false} style={styles.selectedName}>{selected[1]?.display_name}</Text>
+        {selected[1]?.avatar_url ? (
+          <Image source={{ uri: selected[1].avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <Text allowFontScaling={false} style={styles.avatarInitials}>
+              {initials(selected[1]?.display_name ?? "")}
+            </Text>
+          </View>
+        )}
+        <View style={styles.selectedMain}>
+          <Text allowFontScaling={false} style={styles.selectedName} numberOfLines={1}>
+            {selected[1]?.display_name}
+          </Text>
+          <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
+            {selected[1]?.username ? `@${selected[1].username}` : selected[1]?.email_masked ?? ""}
+            {selected[1]?.id_auto != null ? `  ·  #${selected[1].id_auto}` : ""}
+          </Text>
+        </View>
         {selected[1] && badge(selected[1].account_status, true)}
       </View>
       <Input
@@ -999,7 +1017,8 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  selectedCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  selectedCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  selectedMain: { flex: 1, marginLeft: webSc(SPACING.sm) },
   selectedName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "600" },
   changeLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
