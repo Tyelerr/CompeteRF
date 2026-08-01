@@ -72,9 +72,6 @@ export interface UnifiedRegisterModalProps {
   // chip_entries (players.id primary, id_auto fallback). When provided, it drives the
   // singles "Already in tournament" disabled state instead of is_registered.
   isPlayerEntered?: (player: PlayerSearchResult) => boolean;
-  // Chip Singles: add a name-only "walk-in" (no account, no email) — preserved from
-  // the legacy picker. When provided, a secondary link appears under Create Player.
-  onAddWalkIn?: (name: string) => void;
 }
 
 type Step = "search" | "create" | "fargo" | "draft" | "p2search";
@@ -125,7 +122,6 @@ export const UnifiedRegisterModal = ({
   computeChips,
   onAddSingles,
   isPlayerEntered,
-  onAddWalkIn,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
@@ -610,17 +606,6 @@ export const UnifiedRegisterModal = ({
           <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
             <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
           </TouchableOpacity>
-          {onAddWalkIn && (
-            <TouchableOpacity
-              onPress={() => onAddWalkIn(search.query.trim())}
-              activeOpacity={0.7}
-              style={styles.waitingWrap}
-            >
-              <Text allowFontScaling={false} style={styles.waitingLink}>
-                + Add walk-in (no account)
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       </>
     );

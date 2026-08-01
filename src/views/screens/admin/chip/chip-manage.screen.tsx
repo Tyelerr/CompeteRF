@@ -2970,14 +2970,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 })
         }
         isPlayerEntered={doubles ? undefined : isSinglesPlayerEntered}
-        onAddWalkIn={
-          doubles
-            ? undefined
-            : (name) => {
-                vm.addEntry(name ? { p1Name: name } : undefined);
-                setUnifiedOpen(null);
-              }
-        }
         onEdited={(playerId, displayName) => {
           setEditPlayerId(null);
           if (doubles) {
@@ -3055,18 +3047,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   ))}
                   {!playerSearch.isSearching && playerSearch.results.length === 0 && (
                     <Text style={styles.hint}>No players found.</Text>
-                  )}
-                  {picker?.mode === "new" && (
-                    <TouchableOpacity
-                      style={styles.pickerManual}
-                      onPress={() => {
-                        vm.addEntry();
-                        setPicker(null);
-                        playerSearch.reset();
-                      }}
-                    >
-                      <Text style={styles.pickerManualText}>+ Add walk-in (no account — type manually)</Text>
-                    </TouchableOpacity>
                   )}
                 </ScrollView>
               )}
