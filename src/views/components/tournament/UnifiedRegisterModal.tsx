@@ -58,9 +58,23 @@ export interface UnifiedRegisterModalProps {
   editPlayer?: { playerId: string } | null;
   onRegistered?: (playerId: string, registrationId: number) => void;
   onTeamSaved?: (teamId: number) => void;
-  onEdited?: (playerId: string) => void;
+  // displayName is the player's new name after a successful edit — callers that
+  // hold a denormalized copy (chip Singles p1_name) use it to resync immediately.
+  onEdited?: (playerId: string, displayName?: string) => void;
   // Optional chip preview for Team Review (chip tournaments pass chipsForFargo).
   computeChips?: (p1Fargo: number | null, p2Fargo: number | null) => number | null;
+  // Chip Singles: add the selected player directly to chip_entries instead of
+  // creating a tournament_players registration. When provided, singles "Add Player"
+  // calls this (the modal stays open + resets to search so the TD can add more).
+  // The result carries player_id (uuid), id_auto (null for pending) and fargo.
+  onAddSingles?: (player: PlayerSearchResult, fargo: number | null) => void | Promise<void>;
+  // Chip Singles: is this player already entered in THIS chip tournament? Built from
+  // chip_entries (players.id primary, id_auto fallback). When provided, it drives the
+  // singles "Already in tournament" disabled state instead of is_registered.
+  isPlayerEntered?: (player: PlayerSearchResult) => boolean;
+  // Chip Singles: add a name-only "walk-in" (no account, no email) — preserved from
+  // the legacy picker. When provided, a secondary link appears under Create Player.
+  onAddWalkIn?: (name: string) => void;
 }
 
 type Step = "search" | "create" | "fargo" | "draft" | "p2search";
@@ -109,6 +123,9 @@ export const UnifiedRegisterModal = ({
   onTeamSaved,
   onEdited,
   computeChips,
+  onAddSingles,
+  isPlayerEntered,
+  onAddWalkIn,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
@@ -226,8 +243,13 @@ export const UnifiedRegisterModal = ({
 
   // --- Selection --------------------------------------------------------------
 
+  // Singles unavailability: chip tournaments pass isPlayerEntered (chip_entries
+  // membership); bracket singles fall back to the server is_registered flag.
+  const singlesUnavailable = (player: PlayerSearchResult): boolean =>
+    isPlayerEntered ? isPlayerEntered(player) : player.is_registered;
+
   const pickPlayer = (player: PlayerSearchResult) => {
-    if (!isDoubles && player.is_registered) return; // already registered (singles)
+    if (!isDoubles && singlesUnavailable(player)) return; // already entered (singles)
     if (isDoubles && player.on_team) return; // already on a team (doubles)
     if (slot === 2 && selected[1]?.player_id === player.player_id) return;
     setErrorMsg(null);
@@ -298,7 +320,7 @@ export const UnifiedRegisterModal = ({
         phone: e164,
       });
       if (res.outcome === "UPDATED") {
-        onEdited?.(editingPlayerId);
+        onEdited?.(editingPlayerId, res.display_name);
         onClose();
         return;
       }
@@ -338,6 +360,7 @@ export const UnifiedRegisterModal = ({
       });
       const picked: PlayerSearchResult = {
         player_id: res.player_id,
+        id_auto: null, // pending player — no linked profile yet
         account_status: res.account_status,
         display_name: res.display_name,
         first_name: firstName.trim(),
@@ -381,12 +404,18 @@ export const UnifiedRegisterModal = ({
     setBusy(true);
     setErrorMsg(null);
     try {
-      const regId = await playerRegistrationService.registerPlayer(
-        tournamentId,
-        selected[1].player_id,
-        parseFargo(1),
-      );
-      onRegistered?.(selected[1].player_id, regId);
+      if (onAddSingles) {
+        // Chip Singles: add directly to chip_entries via the screen's callback
+        // (players.id identity), NOT a tournament_players registration.
+        await onAddSingles(selected[1], parseFargo(1));
+      } else {
+        const regId = await playerRegistrationService.registerPlayer(
+          tournamentId,
+          selected[1].player_id,
+          parseFargo(1),
+        );
+        onRegistered?.(selected[1].player_id, regId);
+      }
       setFlash(`${selected[1].display_name} added.`);
       setSelected({ 1: null, 2: null });
       setFargo({ 1: "", 2: "" });
@@ -464,9 +493,14 @@ export const UnifiedRegisterModal = ({
 
   const renderRow = (r: PlayerSearchResult) => {
     // Unavailable at the point of selection: doubles → already on a team; singles →
-    // already registered. Shown disabled (not a late error).
-    const unavailable = isDoubles ? r.on_team : r.is_registered;
-    const unavailableLabel = isDoubles ? "Already on a team" : "Already registered";
+    // already entered (chip: in this chip tournament; bracket: already registered).
+    // Shown disabled (not a late error).
+    const unavailable = isDoubles ? r.on_team : singlesUnavailable(r);
+    const unavailableLabel = isDoubles
+      ? "Already on a team"
+      : onAddSingles
+        ? "Already in tournament"
+        : "Already registered";
     return (
       <TouchableOpacity
         key={r.player_id}
@@ -575,6 +609,17 @@ export const UnifiedRegisterModal = ({
           <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
             <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
           </TouchableOpacity>
+          {onAddWalkIn && (
+            <TouchableOpacity
+              onPress={() => onAddWalkIn(search.query.trim())}
+              activeOpacity={0.7}
+              style={styles.waitingWrap}
+            >
+              <Text allowFontScaling={false} style={styles.waitingLink}>
+                + Add walk-in (no account)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </>
     );

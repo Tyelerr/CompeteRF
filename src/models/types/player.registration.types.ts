@@ -11,6 +11,8 @@ export type PlayerAccountStatus = "ACTIVE" | "PENDING" | "DISABLED";
 // exact matching happens server-side on the normalized email. No phone.
 export interface PlayerSearchResult {
   player_id: string; // players.id (uuid) — the stable identity used everywhere
+  id_auto: number | null; // profiles.id_auto (ACTIVE only; NULL for PENDING). Needed by
+  // the chip Singles add so an ACTIVE player still writes chip_entries.p1_profile_id.
   account_status: PlayerAccountStatus;
   display_name: string;
   first_name: string | null;

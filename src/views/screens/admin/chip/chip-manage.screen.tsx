@@ -55,6 +55,7 @@ import { computeBreakdown, entryPoolTotal, feesPerPlayer } from "../../../../uti
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
+import { PlayerSearchResult } from "../../../../models/types/player.registration.types";
 import { TeamCard, TeamCardPlayerVM, TeamCardProps } from "../../../components/tournament/TeamCard";
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
@@ -1610,7 +1611,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Ionicons name="chevron-down" size={15} color={COLORS.textSecondary} />
           </TouchableOpacity>
           {!readOnly && (
-            <TouchableOpacity style={styles.ptAddBtn} onPress={() => (doubles ? setUnifiedOpen({ resumeTeam: null }) : setPicker({ mode: "new" }))} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.ptAddBtn} onPress={() => setUnifiedOpen({ resumeTeam: null })} activeOpacity={0.85}>
               <Ionicons name="add" size={18} color="#FFFFFF" />
               <Text style={styles.ptAddText}>Add {doubles ? "Team" : "Player"}</Text>
             </TouchableOpacity>
@@ -1798,7 +1799,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       <View style={styles.searchRow}>
         <TextInput allowFontScaling={false} style={styles.searchInput} value={rosterQuery} onChangeText={setRosterQuery} placeholder="Search by player or team name…" placeholderTextColor={COLORS.textMuted} autoCapitalize="none" autoCorrect={false} />
         {!readOnly && (
-          <TouchableOpacity style={styles.addBtn} onPress={() => (doubles ? setUnifiedOpen({ resumeTeam: null }) : setPicker({ mode: "new" }))}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setUnifiedOpen({ resumeTeam: null })}>
             <Text style={styles.addBtnText}>+ Add {doubles ? "Team" : "Player"}</Text>
           </TouchableOpacity>
         )}
@@ -2915,34 +2916,89 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   // The two overlays (player picker + Fargo confirm) render in both modes.
+  // Singles duplicate detection at point-of-selection: players.id is primary (covers
+  // PENDING players, who have no id_auto); id_auto is the compatibility fallback for
+  // older rows that only carry p1_profile_id. Plain compute (not a hook — this runs
+  // after the loading early-return) over a small entries list.
+  const isSinglesPlayerEntered = (r: PlayerSearchResult): boolean => {
+    for (const e of chip.entries) {
+      if (e.p1PlayerId === r.player_id || e.p2PlayerId === r.player_id) return true;
+      if (r.id_auto != null && (e.p1ProfileId === r.id_auto || e.p2ProfileId === r.id_auto)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const modals = (
     <>
-      {/* Phase 5: unified Scotch-Doubles Add Team flow (search-first, ACTIVE+PENDING,
-          inline Create, inline Fargo, Continue/Save-as-Waiting, Team Review). Replaces
-          the legacy picker + Fargo popup for doubles; singles still uses the picker
-          below. onTeamSaved reloads the roster so chip calcs/status recompute. */}
-      {doubles && (
-        <UnifiedRegisterModal
-          visible={unifiedOpen != null || editPlayerId != null}
-          onClose={() => {
-            setUnifiedOpen(null);
-            setEditPlayerId(null);
-          }}
-          tournamentId={id}
-          mode="doubles"
-          resumeTeam={editPlayerId ? null : unifiedOpen?.resumeTeam ?? null}
-          editPlayer={editPlayerId ? { playerId: editPlayerId } : null}
-          computeChips={(f1, f2) => chipsForFargo(chip.settings.tiers, (f1 ?? 0) + (f2 ?? 0))}
-          onTeamSaved={() => {
-            setUnifiedOpen(null);
+      {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
+          inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
+          Add Player directly into chip_entries via onAddSingles (players.id identity),
+          NOT a tournament_players registration. Replaces the legacy picker + Fargo popup
+          for singles too; the legacy picker below now only serves the doubles "Add
+          Player 2" fallback for a team that has no teamId yet. */}
+      <UnifiedRegisterModal
+        visible={unifiedOpen != null || editPlayerId != null}
+        onClose={() => {
+          setUnifiedOpen(null);
+          setEditPlayerId(null);
+        }}
+        tournamentId={id}
+        mode={doubles ? "doubles" : "singles"}
+        resumeTeam={editPlayerId ? null : unifiedOpen?.resumeTeam ?? null}
+        editPlayer={editPlayerId ? { playerId: editPlayerId } : null}
+        computeChips={(f1, f2) =>
+          chipsForFargo(chip.settings.tiers, doubles ? (f1 ?? 0) + (f2 ?? 0) : f1 ?? 0)
+        }
+        onTeamSaved={() => {
+          setUnifiedOpen(null);
+          vm.reload();
+        }}
+        onAddSingles={
+          doubles
+            ? undefined
+            : (player, fargo) =>
+                // Add straight to chip_entries. Store BOTH identities: players.id
+                // (always) + id_auto (active only; null for pending). vm.addEntry has a
+                // final duplicate guard. Modal stays open + resets so the TD adds more.
+                vm.addEntry({
+                  p1Name: player.display_name,
+                  p1ProfileId: player.id_auto ?? null,
+                  p1PlayerId: player.player_id,
+                  p1Fargo: fargo,
+                })
+        }
+        isPlayerEntered={doubles ? undefined : isSinglesPlayerEntered}
+        onAddWalkIn={
+          doubles
+            ? undefined
+            : (name) => {
+                vm.addEntry(name ? { p1Name: name } : undefined);
+                setUnifiedOpen(null);
+              }
+        }
+        onEdited={(playerId, displayName) => {
+          setEditPlayerId(null);
+          if (doubles) {
+            // Doubles: pending member name is resolved from the DB roster RPC on reload.
             vm.reload();
-          }}
-          onEdited={() => {
-            setEditPlayerId(null);
-            vm.reload();
-          }}
-        />
-      )}
+          } else if (displayName) {
+            // Singles: chip_entries.p1_name is denormalized — resync it in place so the
+            // roster shows the new name immediately (auto-save persists it).
+            const ent = chip.entries.find(
+              (e) => e.p1PlayerId === playerId || e.p2PlayerId === playerId,
+            );
+            if (ent) {
+              vm.updateEntry(
+                ent.id,
+                ent.p1PlayerId === playerId ? { p1Name: displayName } : { p2Name: displayName },
+              );
+            }
+          }
+        }}
+      />
+
 
       <Modal
         visible={picker != null}
