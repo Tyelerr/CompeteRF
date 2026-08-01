@@ -33,6 +33,7 @@ export interface TeamCardPlayerVM {
   onVerify?: () => void;
   fargoEditable?: boolean; // draft (always) / display edit mode
   onChangeFargo?: (v: string) => void;
+  onCommitFargo?: () => void; // fired when the inline Fargo edit is committed (blur/done)
   editingRow?: boolean; // display edit mode: name editable + remove
   onChangeName?: (v: string) => void;
   onRemove?: () => void;
@@ -123,6 +124,7 @@ const PlayerRow = ({ p }: { p: TeamCardPlayerVM }) => {
               style={styles.peditFargo}
               value={p.fargo != null ? String(p.fargo) : ""}
               onChangeText={p.onChangeFargo}
+              onEndEditing={() => p.onCommitFargo?.()}
               keyboardType="number-pad"
               placeholder="Fargo"
               placeholderTextColor={COLORS.textMuted}

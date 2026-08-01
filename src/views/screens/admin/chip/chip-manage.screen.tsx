@@ -56,6 +56,7 @@ import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.t
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
 import { PlayerSearchResult } from "../../../../models/types/player.registration.types";
+import { playerRegistrationService } from "../../../../models/services/player.registration.service";
 import { TeamCard, TeamCardPlayerVM, TeamCardProps } from "../../../components/tournament/TeamCard";
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
@@ -720,12 +721,52 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const d = v.replace(/\D/g, "");
     vm.updateEntry(entryId, { [key]: d === "" ? null : parseInt(d, 10) } as any);
   };
+  // Singles: when the TD commits an inline Fargo edit, promote it to the player's
+  // GLOBAL verified rating (profiles/players, server-gated). Retryable, non-blocking:
+  // the chip entry already holds the value; a failure only means the global promotion
+  // didn't save. Doubles verification runs inside the team RPCs, so skip it here.
+  const commitSinglesFargo = (e: ChipEntry) => {
+    if (doubles || e.isTeam || readOnly) return;
+    if (!e.p1PlayerId || e.p1Fargo == null) return;
+    playerRegistrationService.verifyPlayerFargo(id, e.p1PlayerId, e.p1Fargo).catch(() => {
+      Alert.alert(
+        "Fargo not verified",
+        "The Fargo verification could not be saved. Retry from the player card.",
+      );
+    });
+  };
   // ── Players page: state machine + card renderers ─────────────────────────────
   const hasPartner = (e: ChipEntry) =>
     !e.isTeam || e.p2MemberId != null || (!!e.p2Name && e.p2Name !== "") || e.p2ProfileId != null;
+  // Per-side Fargo verification. Doubles: the member's own fargo_verified flag.
+  // Singles: a TD-added entry (a real chip_entries row, NOT projected from a
+  // self-service registration) had its Fargo entered BY the TD, so it counts as
+  // verified the moment a value exists — no separate confirm step. A self-registered
+  // entry (fromRegistration) was entered by the PLAYER and stays unverified until the
+  // TD reviews it (profile fargo_status verified / registration approved).
+  const sideVerified = (e: ChipEntry, which: 1 | 2): boolean => {
+    if (e.isTeam) return which === 1 ? !!e.p1FargoVerified : !!e.p2FargoVerified;
+    if (e.fromRegistration) return e.fargoStatus === "verified" || e.regStatus === "approved";
+    return e.p1Fargo != null;
+  };
   const allVerified = (e: ChipEntry) =>
-    e.isTeam ? !!e.p1FargoVerified && !!e.p2FargoVerified : e.regStatus === "approved";
-  const isApproved = (e: ChipEntry) => (e.isTeam ? !!e.teamApproved : e.regStatus === "approved");
+    e.isTeam ? sideVerified(e, 1) && sideVerified(e, 2) : sideVerified(e, 1);
+  // Reviewed/ready gate. A TD-added singles entry needs no separate review — a
+  // TD-entered Fargo makes it ready immediately; self-registered entries still
+  // require TD approval.
+  const isApproved = (e: ChipEntry) =>
+    e.isTeam
+      ? !!e.teamApproved
+      : e.fromRegistration
+        ? e.regStatus === "approved"
+        : e.p1Fargo != null;
+  // Contextual hint shown under a still-blocked Approve button.
+  const approveHint = (e: ChipEntry): string =>
+    e.isTeam
+      ? "Verify both Fargo ratings before approving."
+      : !e.fromRegistration && e.p1Fargo == null
+        ? "Enter a Fargo rating to continue."
+        : "Verify the Fargo rating before approving.";
   const entryState = (e: ChipEntry): EntryState => {
     if (e.isTeam && !hasPartner(e)) return "waiting";
     if (e.checkedIn) return "checkedin";
@@ -1419,7 +1460,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const name = which === 1 ? e.p1Name : e.p2Name ?? "";
     const pid = which === 1 ? e.p1ProfileId : e.p2ProfileId;
     const fargo = which === 1 ? e.p1Fargo : e.p2Fargo;
-    const verified = which === 1 ? (e.isTeam ? !!e.p1FargoVerified : e.regStatus === "approved") : !!e.p2FargoVerified;
+    const verified = sideVerified(e, which);
     const memberId = which === 1 ? e.p1MemberId : e.p2MemberId;
     const canVerify = (e.isTeam && memberId != null) || (!e.isTeam && e.regId != null);
     const onVerify = () => {
@@ -1447,7 +1488,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <TextInput allowFontScaling={false} style={[styles.peditName, { flex: 1 }]} value={name} onChangeText={(v) => vm.updateEntry(e.id, which === 1 ? { p1Name: v } : { p2Name: v })} placeholder={`Player ${which}`} placeholderTextColor={COLORS.textMuted} />
               <View style={styles.peditFargoWrap}>
                 <Text style={styles.phash}>#</Text>
-                <TextInput allowFontScaling={false} style={styles.peditFargo} value={fargoOf(fargo)} onChangeText={(v) => setFargo(e.id, which === 1 ? "p1Fargo" : "p2Fargo", v)} keyboardType="number-pad" placeholder="Fargo" placeholderTextColor={COLORS.textMuted} maxLength={4} />
+                <TextInput allowFontScaling={false} style={styles.peditFargo} value={fargoOf(fargo)} onChangeText={(v) => setFargo(e.id, which === 1 ? "p1Fargo" : "p2Fargo", v)} onEndEditing={() => commitSinglesFargo(e)} keyboardType="number-pad" placeholder="Fargo" placeholderTextColor={COLORS.textMuted} maxLength={4} />
               </View>
               <TouchableOpacity style={styles.premoveBtn} onPress={onRemovePlayer} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={styles.premoveText}>✕</Text>
@@ -1494,7 +1535,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <TouchableOpacity style={[styles.tprimary, !verified && styles.tprimaryOff]} disabled={!verified} onPress={() => approveEntry(e)}>
           <Text style={styles.tprimaryText}>Approve {doubles ? "Team" : "Player"}</Text>
         </TouchableOpacity>
-        {!verified && <Text style={styles.tprimaryHint}>Verify both Fargo ratings before approving.</Text>}
+        {!verified && <Text style={styles.tprimaryHint}>{approveHint(e)}</Text>}
       </View>
     );
   };
@@ -1608,7 +1649,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <TouchableOpacity style={[styles.ptApprove, !allVerified(e) && styles.tprimaryOff]} disabled={!allVerified(e)} onPress={() => approveEntry(e)}>
             <Text style={styles.ptApproveText}>Approve {doubles ? "Team" : "Player"}</Text>
           </TouchableOpacity>
-          {!allVerified(e) && <Text style={styles.tprimaryHint}>Verify both Fargo ratings before approving.</Text>}
+          {!allVerified(e) && <Text style={styles.tprimaryHint}>{approveHint(e)}</Text>}
         </>
       )}
     </View>
@@ -1737,7 +1778,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const name = which === 1 ? e.p1Name : e.p2Name ?? "";
     const pid = which === 1 ? e.p1ProfileId : e.p2ProfileId;
     const fg = which === 1 ? e.p1Fargo : e.p2Fargo;
-    const verified = which === 1 ? (e.isTeam ? !!e.p1FargoVerified : e.regStatus === "approved") : !!e.p2FargoVerified;
+    const verified = sideVerified(e, which);
     const memberId = which === 1 ? e.p1MemberId : e.p2MemberId;
     const canVerify = ((e.isTeam && memberId != null) || (!e.isTeam && e.regId != null)) && !readOnly;
     // A PENDING member has a stable players.id but no id_auto — offer Edit (attached).
@@ -1756,6 +1797,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       editingRow: editing,
       onChangeName: (v) => vm.updateEntry(e.id, which === 1 ? { p1Name: v } : { p2Name: v }),
       onChangeFargo: (v) => setFargo(e.id, which === 1 ? "p1Fargo" : "p2Fargo", v),
+      onCommitFargo: () => commitSinglesFargo(e),
       onRemove: () => {
         if (memberId != null) {
           Alert.alert("Remove player", `Remove ${name || "this player"} from the team?`, [
@@ -2993,7 +3035,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         onAddSingles={
           doubles
             ? undefined
-            : (player, fargo) =>
+            : async (player, fargo) => {
                 // Add straight to chip_entries. Store BOTH identities: players.id
                 // (always) + id_auto (active only; null for pending). vm.addEntry has a
                 // final duplicate guard. Modal stays open + resets so the TD adds more.
@@ -3002,7 +3044,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   p1ProfileId: player.id_auto ?? null,
                   p1PlayerId: player.player_id,
                   p1Fargo: fargo,
-                })
+                });
+                // A TD-entered Fargo is trusted → promote it to the player's global
+                // verified rating. Non-blocking + retryable: the player is already on
+                // the roster, so on failure we surface a clear warning rather than
+                // duplicating the player or rolling the entry back.
+                if (fargo != null) {
+                  try {
+                    await playerRegistrationService.verifyPlayerFargo(id, player.player_id, fargo);
+                  } catch {
+                    Alert.alert(
+                      "Fargo not verified",
+                      "Player added, but the Fargo verification could not be saved. Retry verification from the player card.",
+                    );
+                  }
+                }
+              }
         }
         isPlayerEntered={doubles ? undefined : isSinglesPlayerEntered}
         onEdited={(playerId, displayName) => {

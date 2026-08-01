@@ -52,6 +52,23 @@ export const playerRegistrationService = {
     return (data ?? []) as PlayerSearchResult[];
   },
 
+  // TD/admin marks a player's TD-entered Fargo as verified (chip Singles). Promotes
+  // the value to the player's GLOBAL verified rating — profiles.fargo for a linked
+  // account, or players.fargo for a PENDING identity (which is promoted to the profile
+  // at claim). Manager-gated server-side. Blank fargo is a server-side no-op.
+  async verifyPlayerFargo(
+    tournamentId: number,
+    playerId: string,
+    fargo: number | null,
+  ): Promise<void> {
+    const { error } = await supabase.rpc("td_verify_player_fargo", {
+      p_tournament_id: tournamentId,
+      p_player_id: playerId,
+      p_fargo: fargo,
+    });
+    if (error) throw error;
+  },
+
   // Display info (name/status/avatar/fargo — no email/phone) for every
   // uuid-registered player in a tournament. Used to render PENDING players in the
   // roster, since the players table is RLS-locked (no PostgREST embed).
