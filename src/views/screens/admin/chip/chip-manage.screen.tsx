@@ -555,7 +555,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // edit mode, and the three-dot menu target.
   const [rosterQuery, setRosterQuery] = useState("");
   const [rosterFilter, setRosterFilter] = useState<"all" | "pending" | "approved" | "checkedin">("all");
+  const [rosterSort, setRosterSort] = useState<
+    "default" | "name" | "fargoDesc" | "fargoAsc" | "chipsDesc" | "recent"
+  >("default");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [editEntryId, setEditEntryId] = useState<string | null>(null);
   const [menuEntryId, setMenuEntryId] = useState<string | null>(null);
 
@@ -1510,12 +1514,38 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       }
       return true;
     })
-    .sort((a, b) => rank(entryState(a)) - rank(entryState(b)));
+    .sort((a, b) => {
+      // "Default" keeps the attention order (Pending → Approved → Checked In); any
+      // explicit sort overrides it. Singles Fargo lives on p1Fargo; teams on teamFargo.
+      const fargoOf = (e: ChipEntry) => e.teamFargo ?? e.p1Fargo ?? 0;
+      switch (rosterSort) {
+        case "name":
+          return (a.p1Name || "").localeCompare(b.p1Name || "");
+        case "fargoDesc":
+          return fargoOf(b) - fargoOf(a);
+        case "fargoAsc":
+          return fargoOf(a) - fargoOf(b);
+        case "chipsDesc":
+          return chipPreview(b) - chipPreview(a);
+        case "recent":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        default:
+          return rank(entryState(a)) - rank(entryState(b));
+      }
+    });
   const STATUS_LABELS: Record<typeof rosterFilter, string> = {
     all: "All",
     pending: "Pending Approval",
     approved: "Approved",
     checkedin: "Checked In",
+  };
+  const SORT_LABELS: Record<typeof rosterSort, string> = {
+    default: "Default",
+    name: "Name A–Z",
+    fargoDesc: "Fargo High–Low",
+    fargoAsc: "Fargo Low–High",
+    chipsDesc: "Chips High–Low",
+    recent: "Recently Added",
   };
 
   // Expanded detail body for the desktop players table — reuses the existing
@@ -1804,9 +1834,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           </TouchableOpacity>
         )}
       </View>
-      <TouchableOpacity style={styles.statusDrop} onPress={() => setStatusMenuOpen(true)}>
-        <Text style={styles.statusDropText}>Status: <Text style={styles.statusDropVal}>{STATUS_LABELS[rosterFilter]}</Text>  ▾</Text>
-      </TouchableOpacity>
+      <View style={styles.rosterFilterRow}>
+        <TouchableOpacity style={styles.rosterFilterCol} onPress={() => setStatusMenuOpen(true)}>
+          <Text style={styles.statusDropText} numberOfLines={1}>Status: <Text style={styles.statusDropVal}>{STATUS_LABELS[rosterFilter]}</Text>  ▾</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.rosterFilterCol} onPress={() => setSortMenuOpen(true)}>
+          <Text style={styles.statusDropText} numberOfLines={1}>Sort: <Text style={styles.statusDropVal}>{SORT_LABELS[rosterSort]}</Text>  ▾</Text>
+        </TouchableOpacity>
+      </View>
 
       {rosterFiltered.length === 0 && (
         <Text style={styles.hint}>
@@ -3171,6 +3206,30 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 <Text style={[styles.menuItemText, rosterFilter === key && styles.menuItemOn]}>
                   {rosterFilter === key ? "✓  " : ""}
                   {{ all: "All", pending: "Pending Approval", approved: "Approved", checkedin: "Checked In" }[key]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={sortMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortMenuOpen(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setSortMenuOpen(false)}>
+          <Pressable style={styles.menuCard} onPress={() => {}}>
+            {(["default", "name", "fargoDesc", "fargoAsc", "chipsDesc", "recent"] as const).map((key) => (
+              <TouchableOpacity
+                key={key}
+                style={styles.menuItem}
+                onPress={() => { setRosterSort(key); setSortMenuOpen(false); }}
+              >
+                <Text style={[styles.menuItemText, rosterSort === key && styles.menuItemOn]}>
+                  {rosterSort === key ? "✓  " : ""}
+                  {SORT_LABELS[key]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -5719,6 +5778,9 @@ const styles = StyleSheet.create({
 
   // Status dropdown + refined card internals
   statusDrop: { alignSelf: "flex-start", paddingVertical: 6, paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: webSc(SPACING.md) },
+  // Balanced 2-column filter row: Status + Sort (each an equal-width dropdown).
+  rosterFilterRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
+  rosterFilterCol: { flex: 1, paddingVertical: 8, paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   statusDropText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   statusDropVal: { color: COLORS.text, fontWeight: "800" },
   flexSpacer2: { flex: 1 },
