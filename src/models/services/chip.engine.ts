@@ -193,20 +193,19 @@ const seatAllTables = (s: ChipState): void => {
       if (table.holderId) {
         const challenger = takeChallenger(s, table);
         if (challenger) {
-          if (s.shuffleRound) {
-            // In a round, the winner-stays rotation runs automatically (no Start
-            // Match gate) so teams cycle through and the last match finishes live.
-            startMatch(s, table, table.holderId, challenger);
-          } else {
-            // Normal play: assign but wait for the TD to tap Start Match (0:00).
-            table.pendingChallengerId = challenger;
-            const ce = entryById(s, challenger);
-            if (ce) {
-              ce.status = "playing";
-              ce.tableId = table.id;
-            }
-            roundSeat(s, challenger);
+          // Assign the next opponent but WAIT for the TD to tap Start Match
+          // (0:00) — in normal play AND during a shuffle round. Every winner-stays
+          // matchup is announced before it begins; the timer never auto-starts.
+          // (roundSeat still fires here so the round countdown / completion track
+          // the assignment; the round only drains once no pending matchup remains
+          // — see recordWinner.)
+          table.pendingChallengerId = challenger;
+          const ce = entryById(s, challenger);
+          if (ce) {
+            ce.status = "playing";
+            ce.tableId = table.id;
           }
+          roundSeat(s, challenger);
           progressed = true;
         }
       } else {
@@ -799,10 +798,15 @@ export const recordWinner = (
     return s;
   }
 
-  // Shuffle round complete: once no round-remaining team is still waiting to be
-  // seated, stop creating new matches and drain the rest. The match that just
-  // seated the last team keeps playing — draining only clears WAITING winners.
-  if (s.shuffleRound && !s.roundRemaining?.some((id) => entryById(s, id)?.status !== "eliminated")) {
+  // Shuffle round complete: once every alive team has been seated for the round
+  // (nothing left in roundRemaining) AND no table is still holding a pending
+  // challenger awaiting Start Match, stop creating new matches and drain the
+  // rest. The pending guard matters now that winner-stays matchups wait for Start
+  // Match — without it the last announced matchup would be released before it is
+  // played. Draining only clears WAITING winners; live matches finish first.
+  const roundAllSeated = !s.roundRemaining?.some((id) => entryById(s, id)?.status !== "eliminated");
+  const anyPending = s.tables.some((t) => !!t.pendingChallengerId);
+  if (s.shuffleRound && roundAllSeated && !anyPending) {
     startDrain(s, by, "round");
   }
   return s;
@@ -1461,6 +1465,100 @@ export const assignSpecificTeam = (
     table.lastLoserId = null;
     startMatch(s, table, entryId, other);
   }
+  return s;
+};
+
+// ── final placements ──────────────────────────────────────────────────────────
+export const TOURNAMENT_FINISHED_TEXT = "Tournament Finished";
+// Placement is by EXACT elimination order and nothing else (never chips, Fargo,
+// or record): the last team standing is 1st; the team eliminated most recently is
+// 2nd; … the first team eliminated is last. Timestamp ties fall back to a stable
+// id order so the sequence is always deterministic. Derivable at any time from the
+// committed state — persisted on Finish for durable career/earnings data.
+export interface ChipPlacement { entryId: string; place: number }
+export const finalPlacements = (s: ChipState): ChipPlacement[] => {
+  const champ = s.winnerId ? entryById(s, s.winnerId) : null;
+  // Elimination order comes from the COMMITTED event log, not eliminatedAt: two
+  // eliminations in the same millisecond share a timestamp, so ordering by time
+  // is non-deterministic. Events are appended newest-first (unshift), so the
+  // first elimination event is the most-recent elimination and ranks 2nd, the
+  // next ranks 3rd, … the oldest ranks last. Superseded (restored-past) events
+  // are skipped so a rolled-back elimination never affects placement.
+  const orderedElim: ChipEntry[] = [];
+  const seen = new Set<string>();
+  for (const ev of s.events) {
+    if (ev.type !== "elimination" || ev.superseded) continue;
+    const eid = (ev.payload?.entryId as string | undefined) ?? undefined;
+    if (!eid || eid === s.winnerId || seen.has(eid)) continue;
+    const e = entryById(s, eid);
+    if (e) { seen.add(eid); orderedElim.push(e); }
+  }
+  // Safety net: any eliminated entry without a surviving event (edge case) is
+  // appended by eliminatedAt desc, then a stable id order.
+  const leftover = s.entries
+    .filter((e) => e.id !== s.winnerId && e.eliminatedAt && !seen.has(e.id))
+    .sort((a, b) => {
+      const d = new Date(b.eliminatedAt as string).getTime() - new Date(a.eliminatedAt as string).getTime();
+      return d !== 0 ? d : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  const ordered = [...(champ ? [champ] : []), ...orderedElim, ...leftover];
+  return ordered.map((e, i) => ({ entryId: e.id, place: i + 1 }));
+};
+
+// Fully tear down the live board for a completed tournament: Shuffle Mode + round
+// state OFF, queue emptied, tables/timers/pending cleared, any lingering match
+// closed, champion off the board. Pure + IDEMPOTENT — returns input unchanged
+// when already clean. Used both by finishTournament AND on load of an
+// already-finished tournament, so stale saved state is normalized and the ACTIVE
+// reconcile guards (reconcileQueue would re-add the alive winner to the queue) are
+// bypassed. This is what keeps the completed state from being revived.
+export const reconcileCompleted = (input: ChipState): ChipState => {
+  const dirty =
+    !!input.shuffleMode || !!input.shuffleRound || !!input.reshufflePending || !!input.shuffleReady ||
+    (input.roundRemaining?.length ?? 0) > 0 || input.reshuffleTableCount != null ||
+    input.queue.length > 0 ||
+    input.matches.some((m) => m.status === "in_progress") ||
+    input.tables.some((t) => !!t.matchId || !!t.holderId || !!t.pendingChallengerId || !!t.lastLoserId);
+  if (!dirty) return input;
+  const s = clone(input);
+  s.shuffleMode = false;
+  s.shuffleRound = false;
+  s.reshufflePending = false;
+  s.shuffleReady = false;
+  s.roundRemaining = [];
+  s.reshuffleTableCount = null;
+  const now = new Date().toISOString();
+  for (const m of s.matches) {
+    if (m.status === "in_progress") { m.status = "finished"; m.endedAt = m.endedAt ?? now; }
+  }
+  for (const t of s.tables) {
+    t.matchId = null;
+    t.holderId = null;
+    t.pendingChallengerId = null;
+    t.lastLoserId = null;
+    if (!t.inactive) t.status = "open";
+  }
+  s.queue = [];
+  const champ = s.winnerId ? entryById(s, s.winnerId) : null;
+  if (champ) champ.tableId = null;
+  return s;
+};
+
+// Mark the champion's tournament finished: fully tear down the live board (via
+// reconcileCompleted), stamp finishedAt, and log the distinct "Tournament
+// Finished" audit event ONCE. Idempotent — the finished-event check makes repeated
+// calls no-ops. Only valid once a champion is decided (winnerId); the tournament
+// ROW status is flipped separately by the vm.
+export const finishTournament = (input: ChipState, by?: number | null): ChipState => {
+  if (!input.winnerId) return input;
+  if (input.events.some((e) => e.type === "manual" && e.text === TOURNAMENT_FINISHED_TEXT)) return input;
+  const base = reconcileCompleted(input);
+  const s = base === input ? clone(input) : base;
+  if (!s.finishedAt) s.finishedAt = new Date().toISOString();
+  const placements = finalPlacements(s);
+  pushEvent(s, "manual", TOURNAMENT_FINISHED_TEXT, by, {
+    placements: placements.map((p) => ({ entryId: p.entryId, place: p.place })),
+  });
   return s;
 };
 

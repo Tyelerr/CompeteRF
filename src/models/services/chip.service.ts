@@ -31,6 +31,11 @@ export interface ChipResultRow {
   teamName: string | null;
   p1ProfileId: number | null;
   p2ProfileId: number | null;
+  // Phase 5: stable players.id per member so a PENDING player's placement/history
+  // survives account claim (p1ProfileId may be null for pending; p1PlayerId is the
+  // durable link). Optional for back-compat with older callers/rows.
+  p1PlayerId?: string | null;
+  p2PlayerId?: string | null;
 }
 
 // ── row ↔ model mappers ────────────────────────────────────────────────────────
@@ -41,6 +46,11 @@ const rowToEntry = (r: any): ChipEntry => ({
   p1Phone: r.p1_phone,
   p1ProfileId: r.p1_profile_id ?? null,
   p2ProfileId: r.p2_profile_id ?? null,
+  // Phase 5: stable players.id identity (present for active rows via the Phase-4A
+  // sync trigger, and for PENDING players who have no id_auto). Read alongside the
+  // legacy id_auto so round-trips preserve it.
+  p1PlayerId: r.p1_player_id ?? null,
+  p2PlayerId: r.p2_player_id ?? null,
   p2Name: r.p2_name,
   p2Fargo: r.p2_fargo,
   teamFargo: r.team_fargo,
@@ -66,6 +76,12 @@ const entryToRow = (tid: number, e: ChipEntry) => ({
   p1_phone: e.p1Phone ?? null,
   p1_profile_id: e.p1ProfileId ?? null,
   p2_profile_id: e.p2ProfileId ?? null,
+  // Phase 5: always persist players.id when we have it (active AND pending). For an
+  // active player p1_profile_id + p1_player_id are the same person (from one search
+  // row) so the sync trigger stays consistent; for a pending player p1_profile_id is
+  // null and this uuid is the only identity.
+  p1_player_id: e.p1PlayerId ?? null,
+  p2_player_id: e.p2PlayerId ?? null,
   p2_name: e.p2Name ?? null,
   p2_fargo: e.p2Fargo ?? null,
   team_fargo: e.teamFargo,
@@ -105,6 +121,8 @@ const regToEntry = (r: any): ChipEntry => {
     p1Phone: null,
     p1ProfileId: r.player_id ?? null,
     p2ProfileId: null,
+    p1PlayerId: r.player_uuid ?? null,
+    p2PlayerId: null,
     p2Name: null,
     p2Fargo: null,
     teamFargo: fargo,
@@ -333,10 +351,16 @@ export const chipService = {
     // registrations (tournament_players) not yet represented as a chip entry —
     // deduped by linked player id so a player is never listed twice.
     const chipEntries = (entries.data ?? []).map(rowToEntry);
+    // Dedupe by BOTH identities: players.id (uuid) is primary — it covers PENDING
+    // players (no id_auto) and is the stable identity — with id_auto as the
+    // compatibility fallback for old rows that only carry p1_profile_id.
     const linkedProfileIds = new Set<number>();
+    const linkedPlayerIds = new Set<string>();
     for (const e of chipEntries) {
       if (e.p1ProfileId != null) linkedProfileIds.add(e.p1ProfileId);
       if (e.p2ProfileId != null) linkedProfileIds.add(e.p2ProfileId);
+      if (e.p1PlayerId) linkedPlayerIds.add(e.p1PlayerId);
+      if (e.p2PlayerId) linkedPlayerIds.add(e.p2PlayerId);
     }
 
     // Doubles → each registered TEAM is one chip entry (captain P1 / partner P2).
@@ -360,14 +384,21 @@ export const chipService = {
         .filter((tm) => {
           const cap = tm.members.find((m) => m.role === "captain");
           // Include the team unless its captain is already listed as a chip_entry.
-          // A PENDING captain has no id_auto (player_id null) and is never in
-          // linkedProfileIds, so the team must still be shown.
-          return cap && (cap.player_id == null || !linkedProfileIds.has(cap.player_id));
+          // Match on uuid first (covers PENDING captains, who have no id_auto), then
+          // fall back to id_auto for old rows.
+          if (!cap) return false;
+          if (cap.player_uuid && linkedPlayerIds.has(cap.player_uuid)) return false;
+          if (cap.player_id != null && linkedProfileIds.has(cap.player_id)) return false;
+          return true;
         })
         .map(rosterTeamToEntry);
     } else {
       importedEntries = (regs.data ?? [])
-        .filter((r: any) => r.player_id == null || !linkedProfileIds.has(r.player_id))
+        .filter((r: any) => {
+          if (r.player_uuid && linkedPlayerIds.has(r.player_uuid)) return false;
+          if (r.player_id != null && linkedProfileIds.has(r.player_id)) return false;
+          return true;
+        })
         .map(regToEntry);
     }
 
@@ -522,6 +553,10 @@ export const chipService = {
       team_name: p.teamName ?? null,
       p1_profile_id: p.p1ProfileId ?? null,
       p2_profile_id: p.p2ProfileId ?? null,
+      // Always persist the stable identity when known (active AND pending). For a
+      // pending player p1_profile_id is null and this uuid is the only link.
+      p1_player_id: p.p1PlayerId ?? null,
+      p2_player_id: p.p2PlayerId ?? null,
     }));
     const { error } = await supabase
       .from("chip_results")
@@ -542,6 +577,8 @@ export const chipService = {
       teamName: r.team_name ?? null,
       p1ProfileId: r.p1_profile_id ?? null,
       p2ProfileId: r.p2_profile_id ?? null,
+      p1PlayerId: r.p1_player_id ?? null,
+      p2PlayerId: r.p2_player_id ?? null,
     }));
   },
 

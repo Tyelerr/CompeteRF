@@ -127,30 +127,73 @@ export const tournamentService = {
     return normalizeTournament(data);
   },
 
+  // Archival is organizational only and NEVER changes the tournament's status
+  // (it stays "completed" so it keeps counting in analytics). It just flags
+  // archived_at so the UI moves it to the Archived list. Early-archives a
+  // tournament that hasn't yet hit the 30-day auto-archive window.
   async archiveTournament(id: number, archivedBy: number): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
-      .update({ status: "archived", archived_at: new Date().toISOString(), archived_by: archivedBy, updated_at: new Date().toISOString() })
+      .update({ archived_at: new Date().toISOString(), archived_by: archivedBy, updated_at: new Date().toISOString() })
       .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
 
+  // Restore = clear the archived / cancelled flags and put the tournament back to
+  // its real lifecycle: a finished event returns to "completed" (NOT "active"),
+  // otherwise "active". Note: once 30 days have elapsed a completed tournament is
+  // still shown under Archived (derived) even after archived_at is cleared.
   async restoreTournament(id: number): Promise<Tournament> {
+    const { data: cur } = await supabase
+      .from("tournaments")
+      .select("status, live_state, completed_at")
+      .eq("id", id).single();
+    const wasCompleted = cur?.status === "completed" || cur?.live_state === "finished" || !!cur?.completed_at;
     const { data, error } = await supabase
       .from("tournaments")
-      .update({ status: "active", archived_at: null, archived_by: null, cancelled_at: null, cancelled_by: null, cancellation_reason: null, updated_at: new Date().toISOString() })
+      .update({ status: wasCompleted ? "completed" : "active", archived_at: null, archived_by: null, cancelled_at: null, cancelled_by: null, cancellation_reason: null, updated_at: new Date().toISOString() })
       .eq("id", id).select().single();
     if (error) throw error;
     return normalizeTournament(data);
   },
 
+  // ── THE canonical tournament finalizer ────────────────────────────────────
+  // Every completion path — chip Finish, bracket finish, manual "Complete" from
+  // Actions, admin complete — MUST route through this so status / live_state /
+  // completed_at can never drift apart. It atomically sets all three:
+  //     status = "completed", live_state = "finished", completed_at = <first time>
+  // Idempotent: it PRESERVES an existing completed_at (so re-running never resets
+  // the 30-day archive clock) and only stamps it the first time. It touches none
+  // of the finalization data (bracket, live_settings, matchState, chip_results),
+  // so calling it again after finalization is safe and non-destructive.
   async completeTournament(id: number): Promise<Tournament> {
+    const { data: cur } = await supabase
+      .from("tournaments")
+      .select("completed_at")
+      .eq("id", id).maybeSingle();
+    const completedAt = cur?.completed_at ?? new Date().toISOString();
     const { data, error } = await supabase
       .from("tournaments")
-      .update({ status: "completed", updated_at: new Date().toISOString() })
-      .eq("id", id).select().single();
+      .update({ status: "completed", live_state: "finished", completed_at: completedAt, updated_at: new Date().toISOString() })
+      .eq("id", id).select("*, venues(*)").single();
     if (error) throw error;
+    if (!data) throw new Error("Complete failed - no rows modified (possible RLS block).");
+    return normalizeTournament(data);
+  },
+
+  // Reverse of completeTournament: return a finished tournament to Live (undo an
+  // accidental completion). Clears the completion stamp so it leaves the Completed
+  // list, and sets live_state back to in_progress. Preserves bracket/live_settings
+  // /placements so play can resume. Callers that own finalization rows (e.g. chip
+  // reopen clearing chip_results) do that separately.
+  async reopenTournament(id: number): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({ status: "active", live_state: "in_progress", completed_at: null, updated_at: new Date().toISOString() })
+      .eq("id", id).select("*, venues(*)").single();
+    if (error) throw error;
+    if (!data) throw new Error("Reopen failed - no rows modified (possible RLS block).");
     return normalizeTournament(data);
   },
 
@@ -221,8 +264,11 @@ export const tournamentService = {
     return tournamentService.setLiveState(id, "in_progress");
   },
 
+  // Bracket "Finish" routes through the canonical finalizer (NOT a bare live_state
+  // flip) so a finished bracket tournament gets status="completed" + completed_at
+  // exactly like a chip one — they can't drift.
   finishLiveTournament(id: number): Promise<Tournament> {
-    return tournamentService.setLiveState(id, "finished");
+    return tournamentService.completeTournament(id);
   },
 
   // Pause/resume drive a boolean, NOT a live_state value (the engine stays
