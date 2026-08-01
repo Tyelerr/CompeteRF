@@ -38,7 +38,6 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 import { digitsOnly, formatUsPhoneInput } from "../../../utils/phone";
 import { Button } from "../common/button";
-import { Input } from "../common/input";
 import { useUnifiedPlayerSearch } from "../../../viewmodels/hooks/use.unified.player.search";
 import { playerRegistrationService } from "../../../models/services/player.registration.service";
 import { PlayerSearchResult } from "../../../models/types/player.registration.types";
@@ -715,15 +714,10 @@ export const UnifiedRegisterModal = ({
     </KeyboardAwareScrollView>
   );
 
+  // Fargo step: short, stable content — NOT an internal scroll (so the keyboard
+  // can't squash it). The modal as a whole rises above the keyboard (see overlay).
   const renderFargo = () => (
-    <KeyboardAwareScrollView
-      style={{ maxHeight: Math.round(winH * 0.6) }}
-      contentContainerStyle={styles.searchContent}
-      keyboardShouldPersistTaps="handled"
-      enableOnAndroid
-      extraScrollHeight={20}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.fargoBody}>
       <View style={styles.selectedCard}>
         {selected[1]?.avatar_url ? (
           <Image source={{ uri: selected[1].avatar_url }} style={styles.avatar} />
@@ -745,21 +739,31 @@ export const UnifiedRegisterModal = ({
         </View>
         {selected[1] && badge(selected[1].account_status, true)}
       </View>
-      <Input
-        label="Fargo rating (optional)"
+
+      <Text allowFontScaling={false} style={styles.fieldLabel}>Fargo rating (optional)</Text>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.fargoInput}
         value={fargo[1]}
-        onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "") }))}
-        keyboardType="numeric"
-        helper="You can verify it after adding."
+        onChangeText={(t) => setFargo((f) => ({ ...f, 1: t.replace(/[^0-9]/g, "").slice(0, 4) }))}
+        keyboardType="number-pad"
+        maxLength={4}
+        placeholder="e.g. 550"
+        placeholderTextColor={COLORS.textMuted}
+        returnKeyType="done"
+        onSubmitEditing={() => Keyboard.dismiss()}
       />
+      <Text allowFontScaling={false} style={styles.fargoHelper}>You can verify it after adding.</Text>
+
       {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+
       <View style={styles.actionsRow}>
         <View style={styles.actionBtn}>
           <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
         </View>
         <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
       </View>
-    </KeyboardAwareScrollView>
+    </View>
   );
 
   // Doubles: the editable New Team card IS the review — no wizard steps.
@@ -829,7 +833,13 @@ export const UnifiedRegisterModal = ({
   return (
     <RNModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable
-        style={[styles.overlay, isSearchStep && { justifyContent: "flex-start", paddingTop: topOffset }]}
+        style={[
+          styles.overlay,
+          isSearchStep && { justifyContent: "flex-start", paddingTop: topOffset },
+          // Fargo step stays centered but RISES above the keyboard as a whole unit
+          // (bottom-padding = keyboard height) instead of squashing its content.
+          step === "fargo" && kb > 0 && { paddingBottom: kb },
+        ]}
         onPress={() => Keyboard.dismiss()}
       >
         <View style={styles.kav}>
@@ -1005,6 +1015,22 @@ const styles = StyleSheet.create({
   selectedCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
   selectedMain: { flex: 1, marginLeft: webSc(SPACING.sm) },
   selectedName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "600" },
+
+  // Fargo step: compact, stable layout (a 3–4 digit input never needs full width).
+  fargoBody: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md) },
+  fargoInput: {
+    width: webSc(120),
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: webSc(10),
+    paddingHorizontal: webSc(SPACING.md),
+    fontSize: webMs(FONT_SIZES.lg),
+    color: COLORS.text,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+  },
+  fargoHelper: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.xs) },
   changeLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
   // Player 1 compact block on the Player-2 step.
