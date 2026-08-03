@@ -147,8 +147,10 @@ export const UnifiedRegisterModal = ({
 
   const isSearchStep = step === "search" || step === "p2search";
   // Top offset when the search step is top-anchored (so it shrinks from the bottom
-  // when the keyboard opens instead of sliding up under the header).
-  const topOffset = Math.round(winH * 0.07);
+  // when the keyboard opens instead of sliding up under the header). ~13% of height
+  // rests it in the upper-middle rather than hugging the top — proportional, so it
+  // adapts to smaller phones. The keyboard-aware shrink (resultsMax) is unaffected.
+  const topOffset = Math.round(winH * 0.13);
   // Results list cap: fills the room below the fixed header+search and above the
   // keyboard+footer. RESERVE ≈ header + search + footer + paddings (a layout reserve,
   // not a keyboard push offset). Sizes to content when short, scrolls when long.
@@ -207,7 +209,7 @@ export const UnifiedRegisterModal = ({
   const title = editPlayer ? "Edit Player" : isDoubles ? "Add Team" : "Add Player";
   const stepLabel = useMemo(() => {
     if (editPlayer) return "";
-    if (!isDoubles) return "Player 1 of 1";
+    if (!isDoubles) return ""; // Singles is one player — the step indicator adds nothing
     if (step === "draft") return ""; // the card shows its own status
     if (step === "p2search") return "Player 2 of 2";
     return "Player 1 of 2";
@@ -231,9 +233,39 @@ export const UnifiedRegisterModal = ({
     return Number.isFinite(n) ? n : null;
   };
 
+  // Prefill the Fargo field from the player's current rating so a verified player can
+  // be added without retyping. If the TD changes it, the new value wins (trusted-TD).
   const prefill = (slotKey: Slot, player: PlayerSearchResult) => {
     setSelected((s) => ({ ...s, [slotKey]: player }));
     setFargo((f) => ({ ...f, [slotKey]: player.fargo != null ? String(player.fargo) : "" }));
+  };
+
+  // --- Shared identity hierarchy (search rows + selected card) -----------------
+  // Compact home location for disambiguation: "Phoenix, AZ" | "Arizona" | "".
+  const locationText = (p: PlayerSearchResult): string => {
+    const city = p.home_city?.trim();
+    const state = p.home_state?.trim();
+    if (city && state) return `${city}, ${state}`;
+    return state || city || "";
+  };
+  // Secondary line: "@username · #75" (falls back to masked email when no username).
+  const identitySecondary = (p: PlayerSearchResult): string =>
+    [p.username ? `@${p.username}` : p.email_masked ?? "", p.id_auto != null ? `#${p.id_auto}` : ""]
+      .filter(Boolean)
+      .join("  ·  ");
+  // Tertiary line: location · Fargo (verification-aware) · Pending account.
+  const identityTertiary = (p: PlayerSearchResult): string => {
+    const fargoBit =
+      p.fargo == null
+        ? "No Fargo"
+        : p.fargo_status === "verified"
+          ? `Fargo ${p.fargo} ✓`
+          : p.fargo_status === "unverified"
+            ? `Fargo ${p.fargo} · Needs Verification`
+            : `Fargo ${p.fargo}`; // status not surfaced yet (pre-RPC-extension) → no qualifier
+    return [locationText(p), fargoBit, p.account_status === "PENDING" ? "Pending account" : ""]
+      .filter(Boolean)
+      .join("  ·  ");
   };
 
   // --- Selection --------------------------------------------------------------
@@ -478,14 +510,6 @@ export const UnifiedRegisterModal = ({
 
   // --- Small render helpers ---------------------------------------------------
 
-  const badge = (status: string, long = false) => (
-    <View style={[styles.badge, status === "ACTIVE" ? styles.badgeActive : styles.badgePending]}>
-      <Text allowFontScaling={false} style={styles.badgeText}>
-        {status === "ACTIVE" ? (long ? "Compete Account" : "Compete") : long ? "Pending Account" : "Pending"}
-      </Text>
-    </View>
-  );
-
   const renderRow = (r: PlayerSearchResult) => {
     // Unavailable at the point of selection: doubles → already on a team; singles →
     // already entered (chip: in this chip tournament; bracket: already registered).
@@ -512,18 +536,10 @@ export const UnifiedRegisterModal = ({
           </View>
         )}
         <View style={styles.rowMain}>
-          <View style={styles.rowNameLine}>
-            <Text allowFontScaling={false} style={styles.rowName} numberOfLines={1}>{r.display_name}</Text>
-            {r.account_status === "PENDING" && (
-              <View style={styles.pendingTag}>
-                <Text allowFontScaling={false} style={styles.pendingTagText}>Pending</Text>
-              </View>
-            )}
-          </View>
-          <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
-            {r.username ? `@${r.username}` : r.email_masked ?? ""}
-            {r.id_auto != null ? `  ·  #${r.id_auto}` : ""}
-            {r.fargo != null ? `  ·  Fargo ${r.fargo}` : ""}
+          <Text allowFontScaling={false} style={styles.rowName} numberOfLines={1}>{r.display_name}</Text>
+          <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>{identitySecondary(r)}</Text>
+          <Text allowFontScaling={false} style={styles.rowSub2} numberOfLines={1}>
+            {identityTertiary(r)}
             {unavailable && isDoubles && r.team_name ? `  ·  On ${r.team_name}` : ""}
           </Text>
         </View>
@@ -604,6 +620,9 @@ export const UnifiedRegisterModal = ({
         <View style={styles.searchFooter}>
           <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
             <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.closeBtnBottom}>
+            <Text allowFontScaling={false} style={styles.closeBtnBottomText}>Close</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -732,12 +751,17 @@ export const UnifiedRegisterModal = ({
           <Text allowFontScaling={false} style={styles.selectedName} numberOfLines={1}>
             {selected[1]?.display_name}
           </Text>
-          <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
-            {selected[1]?.username ? `@${selected[1].username}` : selected[1]?.email_masked ?? ""}
-            {selected[1]?.id_auto != null ? `  ·  #${selected[1].id_auto}` : ""}
-          </Text>
+          {selected[1] ? (
+            <>
+              <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
+                {identitySecondary(selected[1])}
+              </Text>
+              <Text allowFontScaling={false} style={styles.rowSub2} numberOfLines={1}>
+                {identityTertiary(selected[1])}
+              </Text>
+            </>
+          ) : null}
         </View>
-        {selected[1] && badge(selected[1].account_status, true)}
       </View>
 
       <Text allowFontScaling={false} style={styles.fieldLabel}>Fargo rating (optional)</Text>
@@ -840,9 +864,15 @@ export const UnifiedRegisterModal = ({
           // (bottom-padding = keyboard height) instead of squashing its content.
           step === "fargo" && kb > 0 && { paddingBottom: kb },
         ]}
-        onPress={() => Keyboard.dismiss()}
+        // Backdrop tap: dismiss the keyboard first if it's open, otherwise close the
+        // modal. Taps INSIDE are swallowed by the kav Pressable below, so normal form
+        // taps never close anything.
+        onPress={() => {
+          if (kb > 0) Keyboard.dismiss();
+          else onClose();
+        }}
       >
-        <View style={styles.kav}>
+        <Pressable style={styles.kav} onPress={() => {}}>
           {step === "draft" ? (
             // The gray card IS the modal surface here — no outer sheet/header/border.
             <KeyboardAwareScrollView
@@ -859,7 +889,9 @@ export const UnifiedRegisterModal = ({
               <View style={styles.header}>
                 <View>
                   <Text allowFontScaling={false} style={styles.title}>{title}</Text>
-                  <Text allowFontScaling={false} style={styles.subtitle}>{stepLabel}</Text>
+                  {stepLabel ? (
+                    <Text allowFontScaling={false} style={styles.subtitle}>{stepLabel}</Text>
+                  ) : null}
                 </View>
                 <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text allowFontScaling={false} style={styles.closeText}>✕</Text>
@@ -874,7 +906,7 @@ export const UnifiedRegisterModal = ({
               {step === "p2search" && renderP2Search()}
             </View>
           )}
-        </View>
+        </Pressable>
       </Pressable>
     </RNModal>
   );
@@ -937,30 +969,23 @@ const styles = StyleSheet.create({
   avatarFallback: { width: webSc(40), height: webSc(40), borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight, alignItems: "center", justifyContent: "center" },
   avatarInitials: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.sm) },
   rowMain: { flex: 1, marginLeft: webSc(SPACING.sm) },
-  rowName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
+  rowName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
   rowSub: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
-  rowRight: { alignItems: "flex-end" },
-  rowNameLine: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
-  pendingTag: { backgroundColor: "#3a2f0d", borderWidth: 1, borderColor: COLORS.warning, borderRadius: RADIUS.full, paddingHorizontal: 6, paddingVertical: 1 },
-  pendingTagText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "700" },
+  rowSub2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
+  rowRight: { alignItems: "flex-end", marginLeft: webSc(SPACING.sm) },
   selectBadge: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.md), paddingVertical: 4 },
   selectBadgeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   unavailBadge: { borderWidth: 1, borderColor: COLORS.warning + "66", backgroundColor: COLORS.warning + "22", borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 4 },
   unavailBadgeText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
-  badge: { paddingHorizontal: webSc(SPACING.sm), paddingVertical: 2, borderRadius: RADIUS.full },
-  badgeActive: { backgroundColor: "#0d2f22", borderWidth: 1, borderColor: COLORS.secondary },
-  badgePending: { backgroundColor: "#3a2f0d", borderWidth: 1, borderColor: COLORS.warning },
-  badgeText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
-  registeredTag: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
   hint: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.md) },
 
-  // Fixed footer (create link stays put while results scroll above it).
+  // Fixed footer (create link + a secondary Close, above the keyboard / below results).
   footer: { paddingTop: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   createLinkWrap: { alignItems: "center", paddingVertical: webSc(SPACING.sm) },
   createLink: { color: COLORS.primary, fontWeight: "600", fontSize: webMs(FONT_SIZES.md), textAlign: "center" },
-  waitingWrap: { alignItems: "center", paddingVertical: webSc(SPACING.xs) },
-  waitingLink: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), textAlign: "center" },
+  closeBtnBottom: { alignItems: "center", justifyContent: "center", paddingVertical: webSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border, minHeight: webSc(48) },
+  closeBtnBottomText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
 
   createHeading: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
 

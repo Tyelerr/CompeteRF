@@ -20,7 +20,12 @@ export interface PlayerSearchResult {
   email_masked: string | null; // e.g. "j***@g***.com"
   username: string | null; // profiles.user_name (ACTIVE only)
   avatar_url: string | null; // profiles.avatar_url (ACTIVE only)
-  fargo: number | null; // verified profile Fargo (ACTIVE only)
+  fargo: number | null; // profile Fargo value (ACTIVE only)
+  // Identity/disambiguation extras (surfaced by the search + recents RPCs). Optional
+  // so the client renders gracefully before the RPC extension is applied.
+  fargo_status?: "verified" | "unverified" | null; // distinguishes ✓ vs Needs Verification
+  home_city?: string | null; // profiles.home_city
+  home_state?: string | null; // profiles.home_state
   is_registered: boolean; // already on THIS tournament as a player (singles)
   on_team: boolean; // already on a (non-declined) team in THIS tournament (doubles)
   team_name: string | null; // that team's custom name, if any
