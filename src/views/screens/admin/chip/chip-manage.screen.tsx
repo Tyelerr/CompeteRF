@@ -57,7 +57,7 @@ import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search"
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
 import { PlayerSearchResult } from "../../../../models/types/player.registration.types";
 import { playerRegistrationService } from "../../../../models/services/player.registration.service";
-import { TeamCard, TeamCardPlayerVM, TeamCardProps } from "../../../components/tournament/TeamCard";
+import { TeamCard, TeamCardPlayerVM, TeamCardProps, ActionsAnchor } from "../../../components/tournament/TeamCard";
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
 import { ConfettiBurst, ConfettiBurstRef } from "../../../components/common/ConfettiBurst";
@@ -370,7 +370,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [page, setPage] = useState<string>("Players");
   const initedRef = useRef(false);
   const [now, setNow] = useState(Date.now());
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
   // Desktop two-column dashboard layout (web only, roomy widths).
   const dashTwoCol = isWeb && winW >= 980;
   // Ultra-wide: Active Tables can fit three cards per row.
@@ -563,6 +563,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [editEntryId, setEditEntryId] = useState<string | null>(null);
   const [menuEntryId, setMenuEntryId] = useState<string | null>(null);
+  // Screen rect of the Actions button that opened the menu, so the popover anchors to it.
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const closeMenu = () => {
+    setMenuEntryId(null);
+    setMenuAnchor(null);
+  };
 
   useEffect(() => {
     if (vm.phase !== "live") return;
@@ -751,15 +757,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
   const allVerified = (e: ChipEntry) =>
     e.isTeam ? sideVerified(e, 1) && sideVerified(e, 2) : sideVerified(e, 1);
-  // Reviewed/ready gate. A TD-added singles entry needs no separate review — a
-  // TD-entered Fargo makes it ready immediately; self-registered entries still
-  // require TD approval.
+  // Registration-review gate (an axis of its own — NEVER derived from Fargo).
+  //  • TD-added singles (owned chip_entries): the TD adding the player IS the review,
+  //    so they are auto-approved — with or without a Fargo (Fargo is a separate axis).
+  //  • Self-registered singles: still require TD approval (tournament_players.status).
+  //  • Doubles: the team's approved flag.
   const isApproved = (e: ChipEntry) =>
     e.isTeam
       ? !!e.teamApproved
       : e.fromRegistration
         ? e.regStatus === "approved"
-        : e.p1Fargo != null;
+        : true;
   // Contextual hint shown under a still-blocked Approve button.
   const approveHint = (e: ChipEntry): string =>
     e.isTeam
@@ -773,10 +781,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (isApproved(e)) return "approved";
     return "pending";
   };
+  // Primary status = the operational progression ("what does the TD do next?"), NOT
+  // raw DB flags. Fargo + account are separate axes shown elsewhere on the card.
   const STATE_META: Record<EntryState, { label: string; color: string }> = {
-    waiting: { label: "Waiting", color: COLORS.warning },
-    pending: { label: "Pending", color: COLORS.warning },
-    approved: { label: "Approved", color: COLORS.success },
+    waiting: { label: "Waiting for Partner", color: COLORS.warning },
+    pending: { label: "Needs Review", color: COLORS.warning },
+    approved: { label: "Ready to Check In", color: COLORS.primary },
     checkedin: { label: "Checked In", color: COLORS.success },
   };
   const approveEntry = async (e: ChipEntry) => {
@@ -789,13 +799,56 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
   // Check-in / paid persist on the team (survives roster reloads); singles stay
   // local. Both are optimistic, so the card updates in place.
-  const setCheckIn = (e: ChipEntry, next: boolean) => {
-    if (e.teamId != null) vm.setTeamCheckedIn(e.teamId, next);
-    else vm.updateEntry(e.id, { checkedIn: next });
+  // Single approval gate for EVERY check-in entry point (pill, primary, menu,
+  // desktop). You can only check in an approved entry (or undo an existing check-in).
+  const canCheckIn = (e: ChipEntry) => !readOnly && (isApproved(e) || e.checkedIn);
+  // Check-in persistence is source-aware so it always survives a reload:
+  //  • Doubles → tournament_teams.checked_in (set_team_checked_in).
+  //  • Self-registered singles (projected) → tournament_players.status (checkIn/approve).
+  //  • TD-added singles (owned chip_entries) → chip_entries.checked_in (updateEntry).
+  const setCheckIn = async (e: ChipEntry, next: boolean) => {
+    try {
+      if (e.teamId != null) {
+        await vm.setTeamCheckedIn(e.teamId, next);
+      } else if (e.regId != null && e.fromRegistration) {
+        await vm.checkInRegistration(e.regId, next);
+      } else {
+        vm.updateEntry(e.id, { checkedIn: next });
+      }
+    } catch {
+      Alert.alert("Check-in failed", "Unable to update check-in. Please try again.");
+    }
   };
   const setPaid = (e: ChipEntry, next: boolean) => {
     if (e.teamId != null) vm.setTeamPaid(e.teamId, next);
     else vm.updateEntry(e.id, { paid: next });
+  };
+  // Player-level remove (the red X in a card's edit mode) — always confirms first, and
+  // only ever removes THAT player/member (never the whole team). Format-aware wording:
+  // Singles → "from this tournament"; Doubles member → "from this team".
+  const removePlayerWithConfirm = (
+    e: ChipEntry,
+    which: 1 | 2,
+    memberId: number | null | undefined,
+    name: string,
+  ) => {
+    Alert.alert(
+      "Remove Player?",
+      `Remove ${name || "this player"} from this ${doubles ? "team" : "tournament"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove Player",
+          style: "destructive",
+          onPress: () => {
+            if (memberId != null) vm.removeTeamMember(memberId);
+            else if (which === 2)
+              vm.updateEntry(e.id, { p2Name: null, p2Fargo: null, p2ProfileId: null, p2PlayerId: null });
+            else vm.removeEntry(e.id);
+          },
+        },
+      ],
+    );
   };
 
   // ── Tables setup handlers (rename dialog + bulk-add sheet) ────────────────────
@@ -1467,18 +1520,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (e.isTeam && memberId != null) openConfirmMember(memberId, name || "Player", fargo ?? null);
       else if (!e.isTeam && e.regId != null) openApprove(e.regId, name || "Player", fargo ?? null);
     };
-    const onRemovePlayer = () => {
-      if (memberId != null) {
-        Alert.alert("Remove player", `Remove ${name || "this player"} from the team?`, [
-          { text: "Cancel", style: "cancel" },
-          { text: "Remove", style: "destructive", onPress: () => vm.removeTeamMember(memberId) },
-        ]);
-      } else if (which === 2) {
-        vm.updateEntry(e.id, { p2Name: null, p2Fargo: null, p2ProfileId: null });
-      } else {
-        vm.removeEntry(e.id);
-      }
-    };
+    const onRemovePlayer = () => removePlayerWithConfirm(e, which, memberId, name);
     return (
       <View style={styles.prow}>
         <View style={styles.pavatar}><Text style={styles.pavatarText}>{(name || "?").charAt(0).toUpperCase()}</Text></View>
@@ -1526,17 +1568,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (st === "waiting")
       return <View style={[styles.tprimary, styles.tprimaryDim]}><Text style={styles.tprimaryDimText}>Waiting for Partner</Text></View>;
     if (st === "checkedin")
-      return <TouchableOpacity style={[styles.tprimary, styles.tprimaryDone]} onPress={() => setCheckIn(e, false)}><Text style={styles.tprimaryDoneText}>✓ Checked In · Ready</Text></TouchableOpacity>;
+      return <TouchableOpacity style={[styles.tprimary, styles.tprimaryDone]} onPress={() => setCheckIn(e, false)}><Text style={styles.tprimaryDoneText}>✓ Checked In</Text></TouchableOpacity>;
     if (st === "approved")
-      return <TouchableOpacity style={styles.tprimary} onPress={() => setCheckIn(e, true)}><Text style={styles.tprimaryText}>Check In {doubles ? "Team" : "Player"}</Text></TouchableOpacity>;
+      return <TouchableOpacity style={styles.tprimary} onPress={() => setCheckIn(e, true)}><Text style={styles.tprimaryText}>Check In</Text></TouchableOpacity>;
+    // Pending: a single slot-filling button. The blocked-reason warning is rendered as
+    // its own full-width row by TeamCard (via the `warning` prop), NOT under this button.
     const verified = allVerified(e);
     return (
-      <View style={{ flex: 1 }}>
-        <TouchableOpacity style={[styles.tprimary, !verified && styles.tprimaryOff]} disabled={!verified} onPress={() => approveEntry(e)}>
-          <Text style={styles.tprimaryText}>Approve {doubles ? "Team" : "Player"}</Text>
-        </TouchableOpacity>
-        {!verified && <Text style={styles.tprimaryHint}>{approveHint(e)}</Text>}
-      </View>
+      <TouchableOpacity style={[styles.tprimary, !verified && styles.tprimaryOff]} disabled={!verified} onPress={() => approveEntry(e)}>
+        <Text style={styles.tprimaryText}>Approve</Text>
+      </TouchableOpacity>
     );
   };
 
@@ -1798,19 +1839,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       onChangeName: (v) => vm.updateEntry(e.id, which === 1 ? { p1Name: v } : { p2Name: v }),
       onChangeFargo: (v) => setFargo(e.id, which === 1 ? "p1Fargo" : "p2Fargo", v),
       onCommitFargo: () => commitSinglesFargo(e),
-      onRemove: () => {
-        if (memberId != null) {
-          Alert.alert("Remove player", `Remove ${name || "this player"} from the team?`, [
-            { text: "Cancel", style: "cancel" },
-            { text: "Remove", style: "destructive", onPress: () => vm.removeTeamMember(memberId) },
-          ]);
-        } else if (which === 2) {
-          vm.updateEntry(e.id, { p2Name: null, p2Fargo: null, p2ProfileId: null });
-        } else {
-          vm.removeEntry(e.id);
-        }
-      },
+      onRemove: () => removePlayerWithConfirm(e, which, memberId, name),
       onEdit: isPending && !readOnly ? () => setEditPlayerId(playerUuid!) : undefined,
+      // Account axis (tertiary): a PENDING player has a players.id but no linked
+      // profile (id_auto). Active accounts get no badge.
+      pendingAccount: isPending,
     };
   };
 
@@ -1838,6 +1871,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       paid: !!e.paid,
       checkedIn: !!e.checkedIn,
       onTogglePaid: () => setPaid(e, !e.paid),
+      // Check-in is a tappable pill once the entry is approved (or already checked in);
+      // before that it stays a static status pill (approve first via the footer).
+      onToggleCheckIn: canCheckIn(e) ? () => setCheckIn(e, !e.checkedIn) : undefined,
       sidePots:
         tournamentSidePots.length > 0 && e.teamId != null
           ? tournamentSidePots.map((p) => {
@@ -1856,8 +1892,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       },
       readOnly,
       actionsLabel: editing ? "Done" : "Actions",
-      onActions: () => (editing ? setEditEntryId(null) : setMenuEntryId(e.id)),
+      onActions: (anchor: ActionsAnchor) => {
+        if (editing) { setEditEntryId(null); return; }
+        setMenuAnchor(anchor);
+        setMenuEntryId(e.id);
+      },
       primary: renderPrimary(e, st),
+      // Blocked-approve reason, shown as a full-width row under both footer buttons.
+      warning: !readOnly && st === "pending" && !allVerified(e) ? approveHint(e) : undefined,
     };
   };
 
@@ -3194,55 +3236,76 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Pressable>
       </Modal>
 
+      {/* Actions menu = a compact popover anchored to the Actions button (not a
+          full-screen modal). Transparent backdrop (no dim) closes on outside tap;
+          opens below the button when there's room, else above. Same items + logic. */}
       <Modal
         visible={menuEntryId != null}
         transparent
         animationType="fade"
-        onRequestClose={() => setMenuEntryId(null)}
+        onRequestClose={closeMenu}
       >
-        <Pressable style={styles.menuBackdrop} onPress={() => setMenuEntryId(null)}>
-          <Pressable style={styles.menuCard} onPress={() => {}}>
-            {(() => {
-              const e = entryById(menuEntryId);
-              if (!e) return null;
-              return (
-                <>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { setEditEntryId(e.id); setMenuEntryId(null); }}>
-                    <Text style={styles.menuItemText}>Edit {e.isTeam ? "Team" : "Player"}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { setPaid(e, !e.paid); setMenuEntryId(null); }}>
-                    <Text style={styles.menuItemText}>{e.paid ? "Mark Unpaid" : "Mark Paid"}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { setCheckIn(e, !e.checkedIn); setMenuEntryId(null); }}>
+        <Pressable style={styles.popoverBackdrop} onPress={closeMenu}>
+          {(() => {
+            const e = entryById(menuEntryId);
+            if (!e || !menuAnchor) return null;
+            const MENU_W = webSc(210);
+            const ITEM_H = webSc(48);
+            const GAP = 6;
+            const MARGIN = webSc(12);
+            const extra =
+              (e.isTeam && e.teamId != null && e.teamApproved ? 1 : 0) +
+              (e.teamLocked && e.teamId != null ? 1 : 0);
+            const estH = (4 + extra) * ITEM_H + webSc(8); // Edit, Pay, Check In, Remove + extras
+            const spaceBelow = winH - (menuAnchor.y + menuAnchor.height);
+            const openBelow = spaceBelow >= estH + GAP + MARGIN;
+            const top = openBelow
+              ? menuAnchor.y + menuAnchor.height + GAP
+              : Math.max(MARGIN, menuAnchor.y - estH - GAP);
+            const left = Math.min(Math.max(menuAnchor.x, MARGIN), winW - MENU_W - MARGIN);
+            return (
+              <Pressable style={[styles.popover, { top, left, width: MENU_W }]} onPress={() => {}}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setEditEntryId(e.id); closeMenu(); }}>
+                  <Text style={styles.menuItemText}>Edit {e.isTeam ? "Team" : "Player"}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setPaid(e, !e.paid); closeMenu(); }}>
+                  <Text style={styles.menuItemText}>{e.paid ? "Mark Unpaid" : "Mark Paid"}</Text>
+                </TouchableOpacity>
+                {canCheckIn(e) ? (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { setCheckIn(e, !e.checkedIn); closeMenu(); }}>
                     <Text style={styles.menuItemText}>{e.checkedIn ? "Undo Check In" : "Check In"}</Text>
                   </TouchableOpacity>
-                  {e.isTeam && e.teamId != null && e.teamApproved && (
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { vm.approveTeam(e.teamId as number, false); setMenuEntryId(null); }}>
-                      <Text style={styles.menuItemText}>Unlock Fargo</Text>
-                    </TouchableOpacity>
-                  )}
-                  {e.teamLocked && e.teamId != null && (
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { vm.unlockTeam(e.teamId as number); setMenuEntryId(null); }}>
-                      <Text style={styles.menuItemText}>Unlock Registration</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => {
-                      const label = e.isTeam ? "team" : "player";
-                      Alert.alert("Remove", `Remove this ${label} from the tournament?`, [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Remove", style: "destructive", onPress: () => vm.removeEntry(e.id) },
-                      ]);
-                      setMenuEntryId(null);
-                    }}
-                  >
-                    <Text style={[styles.menuItemText, styles.menuItemDanger]}>Remove {e.isTeam ? "Team" : "Player"}</Text>
+                ) : (
+                  <View style={styles.menuItem}>
+                    <Text style={[styles.menuItemText, styles.menuItemDisabled]}>Check In (approve first)</Text>
+                  </View>
+                )}
+                {e.isTeam && e.teamId != null && e.teamApproved && (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { vm.approveTeam(e.teamId as number, false); closeMenu(); }}>
+                    <Text style={styles.menuItemText}>Unlock Fargo</Text>
                   </TouchableOpacity>
-                </>
-              );
-            })()}
-          </Pressable>
+                )}
+                {e.teamLocked && e.teamId != null && (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { vm.unlockTeam(e.teamId as number); closeMenu(); }}>
+                    <Text style={styles.menuItemText}>Unlock Registration</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.menuItem, styles.menuItemLast]}
+                  onPress={() => {
+                    const label = e.isTeam ? "team" : "player";
+                    Alert.alert("Remove", `Remove this ${label} from the tournament?`, [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Remove", style: "destructive", onPress: () => vm.removeEntry(e.id) },
+                    ]);
+                    closeMenu();
+                  }}
+                >
+                  <Text style={[styles.menuItemText, styles.menuItemDanger]}>Remove {e.isTeam ? "Team" : "Player"}</Text>
+                </TouchableOpacity>
+              </Pressable>
+            );
+          })()}
         </Pressable>
       </Modal>
 
@@ -5818,8 +5881,11 @@ const styles = StyleSheet.create({
   tpaidOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1F" },
   tpaidText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   tpaidTextOn: { color: COLORS.success },
-  tprimary: { flex: 1, backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
-  tprimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Primary fills its footer slot (width:100%, NO flex) with the SAME chrome + height
+  // as the Actions button (TeamCard's footerButton: width 100%, minHeight 46, radius
+  // md). Hierarchy is the GREEN TEXT, not a fill or a wider size.
+  tprimary: { width: "100%", minHeight: webSc(46), backgroundColor: COLORS.transparent, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: "center", justifyContent: "center" },
+  tprimaryText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   tprimaryOff: { opacity: 0.4 },
   tprimaryDim: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.warning },
   tprimaryDimText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -5829,8 +5895,26 @@ const styles = StyleSheet.create({
   menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: webSc(SPACING.xl) },
   menuCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden", maxWidth: 360, width: "100%" as any, alignSelf: "center" as any },
   menuItem: { paddingVertical: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.lg), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  menuItemLast: { borderBottomWidth: 0 }, // last popover row — no trailing divider
   menuItemText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   menuItemDanger: { color: COLORS.error },
+  menuItemDisabled: { color: COLORS.textMuted },
+  // Anchored Actions popover: transparent backdrop (no screen dim) + a compact dark
+  // card positioned at the button. Elevation/shadow so it reads above the roster.
+  popoverBackdrop: { flex: 1, backgroundColor: "transparent" },
+  popover: {
+    position: "absolute",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   menuItemOn: { color: COLORS.primaryLight, fontWeight: "800" },
 
   // Status dropdown + refined card internals

@@ -657,8 +657,32 @@ export const useChipTournament = (id: number) => {
       }));
       try {
         await teamService.setTeamCheckedIn(teamId, checkedIn);
-      } catch {
+      } catch (err) {
+        // Revert to server truth, then rethrow so the screen can show a retry alert.
         await load();
+        throw err;
+      }
+    },
+    [update, load, locked],
+  );
+
+  // Self-registered SINGLES live in tournament_players (projected via regToEntry), so
+  // check-in must persist there — a local chip_entries flag would not be saved. Undo
+  // reverts to the approved state. Optimistic + rethrow-on-failure like the team path.
+  const checkInRegistration = useCallback(
+    async (registrationId: number, checkedIn: boolean) => {
+      if (locked()) return;
+      update((c) => ({
+        ...c,
+        entries: c.entries.map((e) => (e.regId === registrationId ? { ...e, checkedIn } : e)),
+      }));
+      try {
+        if (checkedIn) await registrationService.checkIn(registrationId);
+        else await registrationService.approve(registrationId);
+        await load();
+      } catch (err) {
+        await load();
+        throw err;
       }
     },
     [update, load, locked],
@@ -813,6 +837,7 @@ export const useChipTournament = (id: number) => {
     setTeamChips,
     setTeamSidePots,
     setTeamCheckedIn,
+    checkInRegistration,
     setTeamPaid,
     removeTeamMember,
     tdCreateTeam,
