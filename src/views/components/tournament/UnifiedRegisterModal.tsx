@@ -18,6 +18,7 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Keyboard,
   Modal as RNModal,
@@ -42,6 +43,9 @@ import { useUnifiedPlayerSearch } from "../../../viewmodels/hooks/use.unified.pl
 import { playerRegistrationService } from "../../../models/services/player.registration.service";
 import { PlayerSearchResult } from "../../../models/types/player.registration.types";
 import { TeamCard } from "./TeamCard";
+import { TournamentEntrySection } from "./TournamentEntrySection";
+import { SidePotDef } from "../../../utils/side-pots";
+import { fargoOverBy } from "../../../utils/registration-lifecycle";
 
 export type RegisterMode = "singles" | "doubles";
 
@@ -65,8 +69,25 @@ export interface UnifiedRegisterModalProps {
   // Chip Singles: add the selected player directly to chip_entries instead of
   // creating a tournament_players registration. When provided, singles "Add Player"
   // calls this (the modal stays open + resets to search so the TD can add more).
-  // The result carries player_id (uuid), id_auto (null for pending) and fargo.
-  onAddSingles?: (player: PlayerSearchResult, fargo: number | null) => void | Promise<void>;
+  // The result carries player_id (uuid), id_auto (null for pending), fargo, the side-pot
+  // NAMES the TD entered this player into (paid_side_pots — membership), and paidEntry
+  // (whether the TD collected the entry fee — defaults false/Unpaid). These are
+  // separate concepts: entered ≠ collected.
+  onAddSingles?: (
+    player: PlayerSearchResult,
+    fargo: number | null,
+    paidSidePots: string[],
+    paidEntry: boolean,
+  ) => void | Promise<void>;
+  // Tournament entry config for the Add flow's Tournament Entry section (Singles):
+  // the required entry fee + the side pots a player can be entered into. Optional —
+  // when absent the section shows only the entry fee (or nothing if fee is 0).
+  entryFee?: number | null;
+  sidePots?: SidePotDef[];
+  // Tournament Maximum Fargo. When set, the Add flow shows an amber over-cap warning under
+  // the Fargo input and does NOT let an over-cap player be added as Ready (they enter as
+  // Registered and go through the override flow later). Does not block registering.
+  maxFargo?: number | null;
   // Chip Singles: is this player already entered in THIS chip tournament? Built from
   // chip_entries (players.id primary, id_auto fallback). When provided, it drives the
   // singles "Already in tournament" disabled state instead of is_registered.
@@ -121,6 +142,9 @@ export const UnifiedRegisterModal = ({
   computeChips,
   onAddSingles,
   isPlayerEntered,
+  entryFee = null,
+  sidePots = [],
+  maxFargo = null,
 }: UnifiedRegisterModalProps) => {
   const isDoubles = mode === "doubles";
   const { height: winH } = useWindowDimensions();
@@ -132,6 +156,11 @@ export const UnifiedRegisterModal = ({
   const [fargo, setFargo] = useState<Record<Slot, string>>({ 1: "", 2: "" });
   const [teamName, setTeamName] = useState("");
   const [teamId, setTeamId] = useState<number | null>(null);
+  // Singles Add flow: side-pot NAMES the TD is entering this player into (membership),
+  // and whether the entry fee has been COLLECTED (defaults false = Unpaid). The
+  // tournament requiring a fee is separate from the player having paid it.
+  const [enteredPots, setEnteredPots] = useState<string[]>([]);
+  const [entryPaid, setEntryPaid] = useState(false);
   // Non-null while editing an existing PENDING player (submit calls update, not create).
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
 
@@ -174,6 +203,8 @@ export const UnifiedRegisterModal = ({
     setFargo({ 1: "", 2: "" });
     setTeamName("");
     setSelected({ 1: null, 2: null });
+    setEnteredPots([]);
+    setEntryPaid(false);
     if (editPlayer && tournamentId != null) {
       // Edit an existing PENDING player: jump to the form, prefill from the server.
       setEditingPlayerId(editPlayer.playerId);
@@ -426,16 +457,37 @@ export const UnifiedRegisterModal = ({
 
   // --- Terminal writes (the ONLY row-creating actions) ------------------------
 
-  const doRegisterSingles = async () => {
+  // For chip, Fargo drives Assigned Chips, so adding without one keeps the player
+  // Registered (never Ready). Confirm first so the TD knows chips can't be assigned yet.
+  const doRegisterSingles = () => {
+    if (tournamentId == null || !selected[1]) return;
+    if (onAddSingles && parseFargo(1) == null) {
+      Alert.alert(
+        "Add player without Fargo?",
+        "A Fargo rating is required before this player can be marked Ready and assigned starting chips. You can add them now and enter their Fargo later.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Add Without Fargo", onPress: () => { void performAddSingles(); } },
+        ],
+      );
+      return;
+    }
+    void performAddSingles();
+  };
+
+  const performAddSingles = async () => {
     if (tournamentId == null || !selected[1]) return;
     setBusy(true);
     setErrorMsg(null);
     try {
       if (onAddSingles) {
         // Chip Singles: add directly to chip_entries via the screen's callback
-        // (players.id identity), NOT a tournament_players registration.
-        await onAddSingles(selected[1], parseFargo(1));
+        // (players.id identity), NOT a tournament_players registration. Entered side
+        // pots + the entry-fee-paid flag ride along (paid defaults Unpaid).
+        await onAddSingles(selected[1], parseFargo(1), enteredPots, entryPaid);
       } else {
+        // Bracket singles: register_player_for_tournament has no side-pot param yet,
+        // so pots aren't persisted on this path (elim Add flow is a separate surface).
         const regId = await playerRegistrationService.registerPlayer(
           tournamentId,
           selected[1].player_id,
@@ -446,6 +498,8 @@ export const UnifiedRegisterModal = ({
       setFlash(`${selected[1].display_name} added.`);
       setSelected({ 1: null, 2: null });
       setFargo({ 1: "", 2: "" });
+      setEnteredPots([]);
+      setEntryPaid(false);
       setSlot(1);
       search.reset();
       search.loadRecents();
@@ -735,7 +789,37 @@ export const UnifiedRegisterModal = ({
 
   // Fargo step: short, stable content — NOT an internal scroll (so the keyboard
   // can't squash it). The modal as a whole rises above the keyboard (see overlay).
-  const renderFargo = () => (
+  const renderFargo = () => {
+    // Dynamic CTA + helper so the label ALWAYS matches the state that will be created.
+    // Chip path (onAddSingles) is lifecycle-aware; the bracket path keeps "Add Player"
+    // (elimination lifecycle is Phase 3). Chip needs a Fargo to compute chips, so a
+    // missing Fargo is a hard blocker even when the fee is marked paid.
+    const feeRequired = (Number(entryFee) || 0) > 0;
+    const paymentOk = !feeRequired || entryPaid;
+    const hardBlocker = !!onAddSingles && parseFargo(1) == null;
+    // Over the tournament Maximum Fargo? (chip path only.) Doesn't block registering, but
+    // an over-cap player can't be added as Ready — they need the override flow later.
+    const overBy = onAddSingles ? fargoOverBy(parseFargo(1), maxFargo) : 0;
+    const overCap = overBy > 0;
+    const willBeReady = paymentOk && !hardBlocker && !overCap;
+    const fieldWord = onAddSingles ? "live field" : "bracket";
+    const ctaLabel = !onAddSingles
+      ? "Add Player"
+      : willBeReady
+        ? "Add as Ready"
+        : "Register Player";
+    const ctaHelper = !onAddSingles
+      ? ""
+      : overCap && paymentOk && !hardBlocker
+        ? "Over the Fargo cap — this player will be registered and needs override approval before they can be Ready."
+        : hardBlocker && paymentOk
+          ? "Entry fee is marked paid, but a Fargo rating is required before this player can be Ready."
+          : !paymentOk
+            ? `Entry fee has not been collected. This player will be registered but will not be included in the ${fieldWord}.`
+            : feeRequired
+              ? "Entry fee collected. This player will be marked Ready for the tournament."
+              : "This player will be marked Ready for the tournament.";
+    return (
     <View style={styles.fargoBody}>
       <View style={styles.selectedCard}>
         {selected[1]?.avatar_url ? (
@@ -778,17 +862,44 @@ export const UnifiedRegisterModal = ({
         onSubmitEditing={() => Keyboard.dismiss()}
       />
       <Text allowFontScaling={false} style={styles.fargoHelper}>You can verify it after adding.</Text>
+      {overCap ? (
+        <Text allowFontScaling={false} style={styles.fargoOverCap}>
+          ⚠ {overBy} {overBy === 1 ? "point" : "points"} over the tournament maximum of {maxFargo}.
+        </Text>
+      ) : null}
+
+      {/* Tournament Entry: entry-fee PAYMENT (Unpaid by default; tap to mark Paid) +
+          the side pots the TD enters this player into, with a live Total Selected
+          (amount owed/entered — payment state does not change it). Pots persist only on
+          the chip path (onAddSingles); the bracket RPC has no side-pot param yet. */}
+      <TournamentEntrySection
+        variant="select"
+        entryFee={entryFee}
+        sidePots={onAddSingles ? sidePots : []}
+        enteredPots={enteredPots}
+        paidEntry={entryPaid}
+        onTogglePaidEntry={() => setEntryPaid((v) => !v)}
+        onToggleSidePot={(name, entered) =>
+          setEnteredPots((prev) =>
+            entered ? [...prev, name] : prev.filter((n) => n !== name),
+          )
+        }
+      />
 
       {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
 
+      {ctaHelper ? (
+        <Text allowFontScaling={false} style={styles.ctaHelper}>{ctaHelper}</Text>
+      ) : null}
       <View style={styles.actionsRow}>
         <View style={styles.actionBtn}>
           <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
         </View>
-        <View style={styles.actionBtn}><Button title="Add Player" onPress={doRegisterSingles} loading={busy} /></View>
+        <View style={styles.actionBtn}><Button title={ctaLabel} onPress={doRegisterSingles} loading={busy} /></View>
       </View>
     </View>
-  );
+    );
+  };
 
   // Doubles: the editable New Team card IS the review — no wizard steps.
   const renderDraft = () => {
@@ -834,7 +945,6 @@ export const UnifiedRegisterModal = ({
             onAddPlayer2={() => { setErrorMsg(null); setSlot(2); search.reset(); search.loadRecents(); setStep("p2search"); }}
             assignedChipsText={String(chips ?? 0)}
             paid={false}
-            checkedIn={false}
             onSaveWaiting={doSaveWaiting}
             onCreateTeam={doCreateTeam}
             onCancel={onClose}
@@ -1056,6 +1166,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
   },
   fargoHelper: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.xs) },
+  fargoOverCap: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: webSc(SPACING.xs), lineHeight: webMs(FONT_SIZES.xs + 4) },
   changeLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
   // Player 1 compact block on the Player-2 step.
@@ -1085,7 +1196,8 @@ const styles = StyleSheet.create({
   plus: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.lg), textAlign: "center", paddingVertical: webSc(SPACING.xs) },
   chipsLine: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginTop: webSc(SPACING.md) },
 
-  actionsRow: { flexDirection: "row", marginTop: webSc(SPACING.md), gap: webSc(SPACING.sm) },
+  ctaHelper: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.md), lineHeight: webMs(FONT_SIZES.xs + 4) },
+  actionsRow: { flexDirection: "row", marginTop: webSc(SPACING.sm), gap: webSc(SPACING.sm) },
   actionBtn: { flex: 1 },
   error: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.sm) },
 });

@@ -31,6 +31,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
@@ -55,6 +56,18 @@ import { computeBreakdown, entryPoolTotal, feesPerPlayer } from "../../../../uti
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
+import {
+  deriveLifecycle,
+  LifecyclePhase,
+  LifecycleStatus,
+  LIFECYCLE_META,
+  LIFECYCLE_RANK,
+  paymentSatisfied,
+  readyGate,
+  fargoOverBy,
+  isFargoOverCap,
+} from "../../../../utils/registration-lifecycle";
+import { parseSidePots } from "../../../../utils/side-pots";
 import { PlayerSearchResult } from "../../../../models/types/player.registration.types";
 import { playerRegistrationService } from "../../../../models/services/player.registration.service";
 import { TeamCard, TeamCardPlayerVM, TeamCardProps, ActionsAnchor } from "../../../components/tournament/TeamCard";
@@ -118,7 +131,9 @@ const DEFAULT_PAGE: Record<string, string> = {
 };
 
 // Registration lifecycle shown on the Players cards.
-type EntryState = "waiting" | "pending" | "approved" | "checkedin";
+// Visible lifecycle status for a chip entry. Aliased to the shared lifecycle type so
+// chip and elimination converge on one vocabulary (Pre-Registered → Registered → Ready).
+type EntryState = LifecycleStatus;
 
 const fmtClock = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -555,19 +570,124 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Players page (registration manager) UI state: search, status filter, per-card
   // edit mode, and the three-dot menu target.
   const [rosterQuery, setRosterQuery] = useState("");
-  const [rosterFilter, setRosterFilter] = useState<"all" | "pending" | "approved" | "checkedin">("all");
+  const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show">("all");
   const [rosterSort, setRosterSort] = useState<
-    "default" | "name" | "fargoDesc" | "fargoAsc" | "chipsDesc" | "recent"
+    "default" | "name" | "fargoDesc" | "fargoAsc" | "chipsDesc" | "recent" | "status"
   >("default");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [editEntryId, setEditEntryId] = useState<string | null>(null);
+  // Fargo-cap override modals: confirm (Allow over cap?) → reason (chips + notes); plus a
+  // resolve prompt when a Ready entry's rating/cap changes past its override coverage.
+  const [capConfirm, setCapConfirm] = useState<{ entryId: string } | null>(null);
+  const [capResolve, setCapResolve] = useState<{ entryId: string } | null>(null);
+  const [capReason, setCapReason] = useState<{ entryId: string } | null>(null);
+  const [capReasonChoice, setCapReasonChoice] = useState<string>("Point Cushion");
+  const [capReasonNotes, setCapReasonNotes] = useState<string>("");
+  const [capReasonMenuOpen, setCapReasonMenuOpen] = useState(false);
   const [menuEntryId, setMenuEntryId] = useState<string | null>(null);
-  // Screen rect of the Actions button that opened the menu, so the popover anchors to it.
+  // Window rect of the Actions button that opened the menu (for above/below math) +
+  // the screen-root's window origin (so we can position the in-tree overlay, which
+  // lives inside the scroll content, in the root's coordinate space).
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [menuRoot, setMenuRoot] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const rootRef = useRef<View>(null);
+  // ── Card-focused Edit Player positioning (non-embedded) — ONE controller ─────
+  // The single owner of scrolling for this feature is positionEditingCard(). Everything
+  // else (edit-enter, Fargo focus, Fargo blur) just requests it once at a known-good
+  // moment. It targets an ABSOLUTE content offset derived from the card's onLayout y
+  // (stable, scroll-offset-independent) — NOT a delta from the live scroll offset — so it
+  // can never accumulate error or clamp to 0 and jump to the top.
+  const rosterScrollRef = useRef<KeyboardAwareScrollView>(null);
+  const scrollAreaRef = useRef<View>(null);
+  const cardTops = useRef<Record<string, number>>({}); // onLayout y within the roster content
+  const cardHeights = useRef<Record<string, number>>({}); // onLayout height
+  const kbNumRef = useRef(0); // numeric keyboard height (px)
+  const pendingSnapRef = useRef<string | null>(null); // card awaiting its first edit-mode snap
+  // Latest editEntryId for use inside the (once-registered) keyboard listeners.
+  const editEntryIdRef = useRef<string | null>(null);
+  editEntryIdRef.current = editEntryId;
+
+  // THE one place that scrolls for Edit Player. mode "edit" = keyboard closed (usable
+  // bottom = pinned footer top); mode "keyboard" = usable bottom = keyboard top. Fits →
+  // top-anchor the card just below the header; too tall → bottom-anchor so Done / Ready
+  // stay visible. Invalid measurement → do nothing (never falls back to y=0).
+  const positionEditingCard = (entryId: string | null, mode: "edit" | "keyboard") => {
+    if (entryId == null) return;
+    const cardTop = cardTops.current[entryId];
+    const cardH = cardHeights.current[entryId];
+    const areaNode = scrollAreaRef.current;
+    // Guard: without a valid card layout + scroll area, bail rather than scroll to 0.
+    if (cardTop == null || !(cardH > 0) || !areaNode?.measureInWindow) return;
+    areaNode.measureInWindow((_ax, areaTopWin, _aw, areaH) => {
+      if (!(areaH > 0)) return;
+      const GAP = webSc(14);
+      const CONTENT_PAD = webSc(SPACING.md); // roster content container top padding
+      const screenH = Dimensions.get("window").height;
+      const kb = mode === "keyboard" ? kbNumRef.current : 0;
+      // Portion of the scroll area covered by the keyboard (0 when closed).
+      const overlap = Math.max(0, areaTopWin + areaH - (screenH - kb));
+      const usableH = areaH - overlap;
+      const cardContentTop = CONTENT_PAD + cardTop; // absolute offset in the scroll content
+      // Fits → top-anchor (card top GAP below the viewport top). Too tall → bottom-anchor
+      // (card bottom GAP above the usable bottom) so the footer controls stay visible.
+      const target =
+        cardH + GAP * 2 <= usableH
+          ? cardContentTop - GAP
+          : cardContentTop + cardH - usableH + GAP;
+      if (!Number.isFinite(target)) return;
+      rosterScrollRef.current?.scrollToPosition(0, Math.max(0, target), true);
+    });
+  };
+
+  // Enter Edit Player → ONE snap once the edit-mode layout is ready. The card's onLayout
+  // (below) fires the snap when it lands; this rAF is a fallback for when the height is
+  // unchanged and onLayout doesn't re-fire. The pending flag guarantees exactly one.
+  useEffect(() => {
+    if (editEntryId == null) { pendingSnapRef.current = null; return; }
+    pendingSnapRef.current = editEntryId;
+    const raf = requestAnimationFrame(() => {
+      if (pendingSnapRef.current === editEntryId) {
+        pendingSnapRef.current = null;
+        positionEditingCard(editEntryId, "edit");
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [editEntryId]);
+
+  // Keyboard listeners (registered ONCE). Fargo focus → keyboardWillShow (final height is
+  // known) → snap for the keyboard viewport. Fargo blur → keyboardDidHide (keyboard fully
+  // gone, layout settled) → re-settle in the edit viewport. Both guarded by the live
+  // editEntryId so leaving edit mode (Done) never triggers a stray snap.
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", (e: { endCoordinates?: { height?: number } }) => {
+      kbNumRef.current = e?.endCoordinates?.height ?? 0;
+      if (editEntryIdRef.current != null) positionEditingCard(editEntryIdRef.current, "keyboard");
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      kbNumRef.current = 0;
+      if (editEntryIdRef.current != null) positionEditingCard(editEntryIdRef.current, "edit");
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const closeMenu = () => {
     setMenuEntryId(null);
     setMenuAnchor(null);
+  };
+  const openActionsMenu = (entryId: string, anchor: ActionsAnchor) => {
+    // Capture the root's window origin so the overlay (inside the scroll content) can
+    // convert the button's window rect into root-relative coordinates.
+    if (rootRef.current?.measureInWindow) {
+      rootRef.current.measureInWindow((rx, ry) => {
+        setMenuRoot({ x: rx, y: ry });
+        setMenuAnchor(anchor);
+        setMenuEntryId(entryId);
+      });
+    } else {
+      setMenuRoot({ x: 0, y: 0 });
+      setMenuAnchor(anchor);
+      setMenuEntryId(entryId);
+    }
   };
 
   useEffect(() => {
@@ -709,16 +829,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // single/double-elim flow. A team's entries live on tournament_teams
   // .paid_side_pots (mirrors tournament_players.paid_side_pots). Tapping a chip
   // enters/removes the team.
-  const tournamentSidePots = (tournament?.side_pots ?? []).filter((p) =>
-    (p.name ?? "").trim(),
-  );
+  // Single source of truth for this tournament's configured side pots (name + numeric
+  // amount, robustly coerced) — used by the cards, the Add flow, and Review & Start.
+  const tournamentSidePots = parseSidePots(tournament?.side_pots);
+  // Toggle a side-pot ENTRY (membership). Doubles/team persist via tournament_teams
+  // (setTeamSidePots); Singles have no teamId, so persist on the chip_entries row itself
+  // (updateEntry → chip_entries.paid_side_pots). Both are auto-saved by the viewmodel.
   const toggleSidePot = (e: ChipEntry, name: string) => {
-    if (e.teamId == null) return;
     const cur = e.paidSidePots ?? [];
     const next = cur.includes(name)
       ? cur.filter((n) => n !== name)
       : [...cur, name];
-    vm.setTeamSidePots(e.teamId, next);
+    if (e.teamId != null) vm.setTeamSidePots(e.teamId, next);
+    else vm.updateEntry(e.id, { paidSidePots: next });
   };
 
   // ── Setup · Players (registration) ───────────────────────────────────────────
@@ -733,95 +856,266 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // didn't save. Doubles verification runs inside the team RPCs, so skip it here.
   const commitSinglesFargo = (e: ChipEntry) => {
     if (doubles || e.isTeam || readOnly) return;
-    if (!e.p1PlayerId || e.p1Fargo == null) return;
-    playerRegistrationService.verifyPlayerFargo(id, e.p1PlayerId, e.p1Fargo).catch(() => {
+    // Read fresh state (the value was just typed via onChangeFargo → updateEntry).
+    const cur = entryById(e.id) ?? e;
+    // Fargo-cap reconciliation on edit:
+    if (isOverCap(cur)) {
+      // Ready player whose new rating is no longer covered → make them deal with it now.
+      if (cur.checkedIn && !overrideCovers(cur)) setCapResolve({ entryId: cur.id });
+    } else if (cur.fargoCapOverride) {
+      // Back under the cap → the override no longer applies; clear it (keep Ready as-is).
+      void clearOverride(cur, false);
+    }
+    if (!cur.p1PlayerId || cur.p1Fargo == null) return;
+    playerRegistrationService.verifyPlayerFargo(id, cur.p1PlayerId, cur.p1Fargo).catch(() => {
       Alert.alert(
         "Fargo not verified",
         "The Fargo verification could not be saved. Retry from the player card.",
       );
     });
   };
-  // ── Players page: state machine + card renderers ─────────────────────────────
+  // ── Players page: lifecycle + card renderers ─────────────────────────────────
   const hasPartner = (e: ChipEntry) =>
     !e.isTeam || e.p2MemberId != null || (!!e.p2Name && e.p2Name !== "") || e.p2ProfileId != null;
-  // Per-side Fargo verification. Doubles: the member's own fargo_verified flag.
-  // Singles: a TD-added entry (a real chip_entries row, NOT projected from a
-  // self-service registration) had its Fargo entered BY the TD, so it counts as
-  // verified the moment a value exists — no separate confirm step. A self-registered
-  // entry (fromRegistration) was entered by the PLAYER and stays unverified until the
-  // TD reviews it (profile fargo_status verified / registration approved).
+  // Per-side Fargo verification — kept ONLY for the doubles per-member rows. Fargo
+  // verification is not part of the visible lifecycle anymore.
   const sideVerified = (e: ChipEntry, which: 1 | 2): boolean => {
     if (e.isTeam) return which === 1 ? !!e.p1FargoVerified : !!e.p2FargoVerified;
     if (e.fromRegistration) return e.fargoStatus === "verified" || e.regStatus === "approved";
     return e.p1Fargo != null;
   };
-  const allVerified = (e: ChipEntry) =>
-    e.isTeam ? sideVerified(e, 1) && sideVerified(e, 2) : sideVerified(e, 1);
-  // Registration-review gate (an axis of its own — NEVER derived from Fargo).
-  //  • TD-added singles (owned chip_entries): the TD adding the player IS the review,
-  //    so they are auto-approved — with or without a Fargo (Fargo is a separate axis).
-  //  • Self-registered singles: still require TD approval (tournament_players.status).
-  //  • Doubles: the team's approved flag.
-  const isApproved = (e: ChipEntry) =>
+
+  // ── Maximum-Fargo cap (soft gate + override) ─────────────────────────────────
+  // The tournament's cap. Doubles compares the TEAM rating (sum), using the same
+  // team-rating logic the chip engine uses; singles compares the player's Fargo. A
+  // missing rating is NOT over-cap — that's the separate "No Fargo" hard blocker.
+  const maxFargo = tournament?.max_fargo ?? null;
+  const ratingForCap = (e: ChipEntry): number | null =>
+    doubles
+      ? e.p1Fargo != null && e.p2Fargo != null
+        ? e.p1Fargo + e.p2Fargo
+        : null
+      : e.p1Fargo ?? null;
+  const isOverCap = (e: ChipEntry): boolean => isFargoOverCap(ratingForCap(e), maxFargo);
+  const overByOf = (e: ChipEntry): number => fargoOverBy(ratingForCap(e), maxFargo);
+  // The override is a SNAPSHOT: it only covers the entry while the rating AND cap it was
+  // granted for still match the current values.
+  const overrideCovers = (e: ChipEntry): boolean =>
+    !!e.fargoCapOverride && e.playerFargoAtOverride === ratingForCap(e) && e.fargoCapAtOverride === maxFargo;
+  const hasValidOverride = (e: ChipEntry): boolean => isOverCap(e) && overrideCovers(e);
+  // Over cap with no valid override → cannot become (or remain trustworthy as) Ready.
+  const overCapBlocking = (e: ChipEntry): boolean => isOverCap(e) && !overrideCovers(e);
+
+  // ── Shared registration lifecycle: Pre-Registered → Registered → Ready ───────
+  // Does this tournament require an entry fee?
+  const entryFeeRequired = (Number(tournament?.entry_fee) || 0) > 0;
+  // Format hard blocker: chip needs a Fargo to assign starting chips, so a MISSING
+  // Fargo blocks Ready. (Fargo is otherwise a separate axis, not a status.)
+  const hardBlockerOf = (e: ChipEntry): boolean =>
+    doubles ? e.p1Fargo == null || e.p2Fargo == null : e.p1Fargo == null;
+  // Has the TD intentionally processed this entry (vs an untouched self-signup)?
+  //  • TD-added singles / any team → processed.
+  //  • Self-registered singles → processed once approved/checked_in (preregistered = not).
+  const processedOf = (e: ChipEntry): boolean =>
     e.isTeam
-      ? !!e.teamApproved
+      ? true
       : e.fromRegistration
-        ? e.regStatus === "approved"
+        ? e.regStatus === "approved" || e.regStatus === "checked_in"
         : true;
-  // Contextual hint shown under a still-blocked Approve button.
-  const approveHint = (e: ChipEntry): string =>
-    e.isTeam
-      ? "Verify both Fargo ratings before approving."
-      : !e.fromRegistration && e.p1Fargo == null
-        ? "Enter a Fargo rating to continue."
-        : "Verify the Fargo rating before approving.";
-  const entryState = (e: ChipEntry): EntryState => {
-    if (e.isTeam && !hasPartner(e)) return "waiting";
-    if (e.checkedIn) return "checkedin";
-    if (isApproved(e)) return "approved";
-    return "pending";
-  };
-  // Primary status = the operational progression ("what does the TD do next?"), NOT
-  // raw DB flags. Fargo + account are separate axes shown elsewhere on the card.
-  const STATE_META: Record<EntryState, { label: string; color: string }> = {
-    waiting: { label: "Waiting for Partner", color: COLORS.warning },
-    pending: { label: "Needs Review", color: COLORS.warning },
-    approved: { label: "Ready to Check In", color: COLORS.primary },
-    checkedin: { label: "Checked In", color: COLORS.success },
-  };
-  const approveEntry = async (e: ChipEntry) => {
-    try {
-      if (e.isTeam && e.teamId != null) await vm.approveTeam(e.teamId, true);
-      else if (!e.isTeam && e.regId != null && e.p1Fargo != null) await vm.approveRegistration(e.regId, e.p1Fargo);
-    } catch {
-      Alert.alert("Error", "Couldn't approve. Please try again.");
-    }
-  };
-  // Check-in / paid persist on the team (survives roster reloads); singles stay
-  // local. Both are optimistic, so the card updates in place.
-  // Single approval gate for EVERY check-in entry point (pill, primary, menu,
-  // desktop). You can only check in an approved entry (or undo an existing check-in).
-  const canCheckIn = (e: ChipEntry) => !readOnly && (isApproved(e) || e.checkedIn);
-  // Check-in persistence is source-aware so it always survives a reload:
-  //  • Doubles → tournament_teams.checked_in (set_team_checked_in).
-  //  • Self-registered singles (projected) → tournament_players.status (checkIn/approve).
-  //  • TD-added singles (owned chip_entries) → chip_entries.checked_in (updateEntry).
-  const setCheckIn = async (e: ChipEntry, next: boolean) => {
+  // Exception state from a self-reg source (owned TD entries have none — Remove deletes).
+  const exceptionOf = (e: ChipEntry): "no_show" | "removed" | null =>
+    e.fromRegistration
+      ? e.regStatus === "no_show"
+        ? "no_show"
+        : e.regStatus === "cancelled"
+          ? "removed"
+          : null
+      : null;
+  // Phase-aware derivation (see registration-lifecycle): setup uses the new invariant;
+  // live/completed reflect real participation and never reinterpret history.
+  const lifecyclePhase: LifecyclePhase = readOnly
+    ? "completed"
+    : vm.phase === "setup"
+      ? "setup"
+      : "live";
+  // Canonical visible status. (Name kept as entryState so existing call sites stand.)
+  const entryState = (e: ChipEntry): EntryState =>
+    deriveLifecycle({
+      phase: lifecyclePhase,
+      exception: exceptionOf(e),
+      waiting: doubles && !hasPartner(e),
+      processed: processedOf(e),
+      paymentSatisfied: paymentSatisfied(!!e.paid, entryFeeRequired),
+      hardBlocker: hardBlockerOf(e),
+      checkedIn: !!e.checkedIn,
+    });
+
+  // Whether an entry is ELIGIBLE to be Ready (payment satisfied + no hard blocker + a
+  // partner for doubles). Ready still additionally requires an explicit TD decision.
+  const eligibleForReady = (e: ChipEntry): boolean =>
+    paymentSatisfied(!!e.paid, entryFeeRequired) && !hardBlockerOf(e) && (!doubles || hasPartner(e));
+
+  // PAYMENT control (Entry Fee row). Payment is now SEPARATE from readiness: paying does
+  // NOT auto-mark Ready (that's an explicit action); UNpaying clears Ready because Ready
+  // requires payment. Side-pot changes use toggleSidePot and never call this.
+  const setPaid = async (e: ChipEntry, nextPaid: boolean) => {
+    if (readOnly) return;
+    const nextCheckedIn = nextPaid ? !!e.checkedIn : false; // pay: unchanged · unpay: clear Ready
     try {
       if (e.teamId != null) {
-        await vm.setTeamCheckedIn(e.teamId, next);
+        await vm.setTeamPaid(e.teamId, nextPaid);
+        if (!nextCheckedIn && e.checkedIn) await vm.setTeamCheckedIn(e.teamId, false);
       } else if (e.regId != null && e.fromRegistration) {
-        await vm.checkInRegistration(e.regId, next);
+        await vm.setRegistrationReady(e.regId, { paid: nextPaid, ready: nextCheckedIn });
       } else {
-        vm.updateEntry(e.id, { checkedIn: next });
+        vm.updateEntry(e.id, { paid: nextPaid, checkedIn: nextCheckedIn });
       }
     } catch {
-      Alert.alert("Check-in failed", "Unable to update check-in. Please try again.");
+      Alert.alert("Update failed", "Couldn't update this player. Please try again.");
     }
   };
-  const setPaid = (e: ChipEntry, next: boolean) => {
-    if (e.teamId != null) vm.setTeamPaid(e.teamId, next);
-    else vm.updateEntry(e.id, { paid: next });
+
+  // READINESS control (the ✓ Ready / Mark Ready button) — explicit TD decision, does NOT
+  // touch payment. Only sets the engine's checkedIn flag.
+  const setExplicitReady = async (e: ChipEntry, ready: boolean) => {
+    if (readOnly) return;
+    try {
+      if (e.teamId != null) {
+        if (ready && !e.teamApproved) {
+          try { await vm.approveTeam(e.teamId, true); } catch { /* approval is internal */ }
+        }
+        await vm.setTeamCheckedIn(e.teamId, ready);
+      } else if (e.regId != null && e.fromRegistration) {
+        await vm.setRegistrationReady(e.regId, { paid: !!e.paid, ready });
+      } else {
+        vm.updateEntry(e.id, { checkedIn: ready });
+      }
+    } catch {
+      Alert.alert("Update failed", "Couldn't update this player. Please try again.");
+    }
+  };
+  // Mark Ready: payment is still a requirement, but no longer identical to Ready. Explain
+  // exactly what's missing rather than silently doing nothing.
+  const markReady = (e: ChipEntry) => {
+    if (readOnly) return;
+    if (!paymentSatisfied(!!e.paid, entryFeeRequired)) {
+      Alert.alert("Entry fee required", "Mark the entry fee paid before this player can be Ready.");
+      return;
+    }
+    if (hardBlockerOf(e)) {
+      Alert.alert("Fargo required", `Enter a Fargo rating before this ${doubles ? "team" : "player"} can be Ready.`);
+      return;
+    }
+    if (doubles && !hasPartner(e)) return;
+    // Over the Fargo cap with no valid override → route through the override flow instead
+    // of marking Ready directly.
+    if (overCapBlocking(e)) { setCapConfirm({ entryId: e.id }); return; }
+    void setExplicitReady(e, true);
+  };
+
+  // ── Fargo-cap override flow ───────────────────────────────────────────────────
+  // Persist an override snapshot on the right source AND mark the entry Ready, then log
+  // an audit event. reason = quick choice; notes = optional free text.
+  const applyOverrideAndReady = async (e: ChipEntry, reason: string, notes: string) => {
+    const rating = ratingForCap(e);
+    const cap = maxFargo;
+    const snap = { cap, rating, reason, notes: notes.trim() || null, overriddenBy: profile?.id ?? null };
+    try {
+      if (e.teamId != null) {
+        await vm.setTeamFargoOverride(e.teamId, true, snap);
+        if (!e.teamApproved) { try { await vm.approveTeam(e.teamId, true); } catch { /* internal */ } }
+        await vm.setTeamCheckedIn(e.teamId, true);
+      } else if (e.regId != null && e.fromRegistration) {
+        await vm.setRegistrationFargoOverride(e.regId, true, snap);
+        await vm.setRegistrationReady(e.regId, { paid: !!e.paid, ready: true });
+      } else {
+        vm.updateEntry(e.id, {
+          fargoCapOverride: true,
+          fargoCapAtOverride: cap,
+          playerFargoAtOverride: rating,
+          fargoCapOverrideReason: reason,
+          fargoCapOverrideNotes: notes.trim() || null,
+          overriddenBy: profile?.id ?? null,
+          overriddenAt: new Date().toISOString(),
+          checkedIn: true,
+        });
+      }
+      vm.logEvent(
+        "fargo_cap_override",
+        `${shortTeam(e)} allowed at Fargo ${rating} (max ${cap}, over by ${overByOf(e)}) — ${reason}`,
+        { entryId: e.id, rating, cap, overBy: overByOf(e), reason, notes: notes.trim() || null, overriddenBy: profile?.id ?? null },
+      ).catch(() => {});
+    } catch {
+      Alert.alert("Update failed", "Couldn't save the override. Please try again.");
+    }
+  };
+  // Clear an override snapshot on the right source (used when back under cap, or when the
+  // TD chooses "Make Registered"). Optionally also clear Ready.
+  const clearOverride = async (e: ChipEntry, alsoUnready: boolean) => {
+    const empty = { cap: null, rating: null, reason: null, notes: null, overriddenBy: null };
+    try {
+      if (e.teamId != null) {
+        await vm.setTeamFargoOverride(e.teamId, false, empty);
+        if (alsoUnready) await vm.setTeamCheckedIn(e.teamId, false);
+      } else if (e.regId != null && e.fromRegistration) {
+        await vm.setRegistrationFargoOverride(e.regId, false, empty);
+        if (alsoUnready) await vm.setRegistrationReady(e.regId, { paid: !!e.paid, ready: false });
+      } else {
+        vm.updateEntry(e.id, {
+          fargoCapOverride: false,
+          fargoCapAtOverride: null,
+          playerFargoAtOverride: null,
+          fargoCapOverrideReason: null,
+          fargoCapOverrideNotes: null,
+          overriddenBy: null,
+          overriddenAt: null,
+          ...(alsoUnready ? { checkedIn: false } : {}),
+        });
+      }
+    } catch {
+      Alert.alert("Update failed", "Couldn't update this player. Please try again.");
+    }
+  };
+
+  // Tapping ✓ Ready makes the player Unready WITHOUT touching payment / pots / Fargo.
+  const confirmMakeUnready = (e: ChipEntry) => {
+    Alert.alert(
+      "Make player unready?",
+      "This player will remain registered and their entry fee will stay marked Paid, but they will not be included in the live field until they are marked Ready again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Make Unready", style: "destructive", onPress: () => void setExplicitReady(e, false) },
+      ],
+    );
+  };
+
+  // Checking Entry Fee is instant; UNCHECKING (Paid → Unpaid) confirms first because it
+  // also clears Ready when the player was Ready.
+  const confirmTogglePaid = (e: ChipEntry) => {
+    if (!e.paid) { void setPaid(e, true); return; } // checking → instant
+    const wasReady = entryState(e) === "ready";
+    Alert.alert(
+      "Mark entry fee unpaid?",
+      wasReady
+        ? "This player will move from Ready to Registered and will not be included in the live field."
+        : "This player's entry fee will be marked unpaid.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark Unpaid", style: "destructive", onPress: () => void setPaid(e, false) },
+      ],
+    );
+  };
+  const confirmToggleSidePot = (e: ChipEntry, name: string) => {
+    const entered = (e.paidSidePots ?? []).includes(name);
+    if (!entered) { toggleSidePot(e, name); return; } // entering → instant
+    Alert.alert(
+      `Remove from ${name}?`,
+      `This player will no longer be entered in ${name}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: () => toggleSidePot(e, name) },
+      ],
+    );
   };
   // Player-level remove (the red X in a card's edit mode) — always confirms first, and
   // only ever removes THAT player/member (never the whole team). Format-aware wording:
@@ -847,6 +1141,32 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             else vm.removeEntry(e.id);
           },
         },
+      ],
+    );
+  };
+
+  // Entry-level removal, source-aware: teams remove the captain (cascades to the team),
+  // self-reg cancels the registration (stops re-projecting), TD-added singles delete the
+  // chip_entries row. ONE function so the card Actions menu and the over-cap modal can't
+  // behave differently.
+  const removeEntryNow = (e: ChipEntry) => {
+    if (e.isTeam && e.teamId != null) {
+      if (e.p1MemberId != null) void vm.removeTeamMember(e.p1MemberId);
+      else vm.removeEntry(e.id);
+    } else if (e.fromRegistration && e.regId != null) {
+      void vm.cancelRegistration(e.regId);
+    } else {
+      vm.removeEntry(e.id);
+    }
+  };
+  // Shared "Remove Player" confirmation (used by the Actions menu AND the over-cap modal).
+  const confirmRemovePlayer = (e: ChipEntry) => {
+    Alert.alert(
+      `Remove ${e.isTeam ? "Team" : "Player"}?`,
+      `Remove ${shortTeam(e)} from this tournament?\n\nTheir tournament entry, Ready status, and current chip assignment will be removed.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: `Remove ${e.isTeam ? "Team" : "Player"}`, style: "destructive", onPress: () => removeEntryNow(e) },
       ],
     );
   };
@@ -1560,35 +1880,59 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
   };
 
-  // The single large workflow button (+ a hint when approval is still blocked).
+  // The footer workflow button. Ready is an explicit toggle: ✓ Ready (green outline) taps
+  // to Make Unready; otherwise Mark Ready (which explains any blocker on tap). Payment is
+  // handled separately by the Entry Fee row.
   const renderPrimary = (e: ChipEntry, st: EntryState) => {
-    // Completed: no workflow action — just a static final status badge.
-    if (readOnly)
-      return <View style={[styles.tprimary, styles.tprimaryDone]}><Text style={styles.tprimaryDoneText}>{e.checkedIn ? "✓ Checked In" : "Registered"}</Text></View>;
+    // Live / completed: reflect participation only — no setup workflow action.
+    if (readOnly || vm.phase !== "setup") {
+      const inField = st === "ready" || e.checkedIn;
+      return (
+        <View style={[styles.tprimary, styles.tprimaryDone]}>
+          <Text style={styles.tprimaryDoneText}>{inField ? "✓ In Field" : LIFECYCLE_META[st].label}</Text>
+        </View>
+      );
+    }
     if (st === "waiting")
       return <View style={[styles.tprimary, styles.tprimaryDim]}><Text style={styles.tprimaryDimText}>Waiting for Partner</Text></View>;
-    if (st === "checkedin")
-      return <TouchableOpacity style={[styles.tprimary, styles.tprimaryDone]} onPress={() => setCheckIn(e, false)}><Text style={styles.tprimaryDoneText}>✓ Checked In</Text></TouchableOpacity>;
-    if (st === "approved")
-      return <TouchableOpacity style={styles.tprimary} onPress={() => setCheckIn(e, true)}><Text style={styles.tprimaryText}>Check In</Text></TouchableOpacity>;
-    // Pending: a single slot-filling button. The blocked-reason warning is rendered as
-    // its own full-width row by TeamCard (via the `warning` prop), NOT under this button.
-    const verified = allVerified(e);
+    if (st === "ready") {
+      // Ready but the rating/cap moved past the override coverage → amber "⚠ Over Cap"
+      // that opens the resolve prompt (Make Registered / Allow Override) instead of the
+      // normal unready confirm. Otherwise green outlined ✓ Ready (tap → make Unready).
+      if (overCapBlocking(e)) {
+        return (
+          <TouchableOpacity style={[styles.tprimary, styles.tprimaryDim]} onPress={() => setCapResolve({ entryId: e.id })}>
+            <Text style={styles.tprimaryDimText}>⚠ Over Cap</Text>
+          </TouchableOpacity>
+        );
+      }
+      return (
+        <TouchableOpacity style={[styles.tprimary, styles.tprimaryReady]} onPress={() => confirmMakeUnready(e)}>
+          <Text style={styles.tprimaryReadyText}>✓ Ready</Text>
+        </TouchableOpacity>
+      );
+    }
+    // Registered / Pre-Registered: Mark Ready. Dimmed when not eligible; markReady()
+    // explains what's missing (entry fee / Fargo) rather than silently failing.
+    const eligible = eligibleForReady(e);
     return (
-      <TouchableOpacity style={[styles.tprimary, !verified && styles.tprimaryOff]} disabled={!verified} onPress={() => approveEntry(e)}>
-        <Text style={styles.tprimaryText}>Approve</Text>
+      <TouchableOpacity style={[styles.tprimary, !eligible && styles.tprimaryOff]} onPress={() => markReady(e)}>
+        <Text style={styles.tprimaryText}>Mark Ready</Text>
       </TouchableOpacity>
     );
   };
 
-  // Attention first: Pending → Approved → Checked In (applies even under "All").
-  const rank = (st: EntryState) => (st === "checkedin" ? 2 : st === "approved" ? 1 : 0);
+  // Attention order for "Default" sort: Ready first, then Registered, then Pre-Reg, etc.
+  const rank = (st: EntryState) => LIFECYCLE_RANK[st];
   const rosterFiltered = chip.entries
     .filter((e) => {
       const st = entryState(e);
-      if (rosterFilter === "pending" && !(st === "pending" || st === "waiting")) return false;
-      if (rosterFilter === "approved" && st !== "approved") return false;
-      if (rosterFilter === "checkedin" && st !== "checkedin") return false;
+      // Exact-status filters. "prereg" also surfaces Waiting-for-Partner teams (both
+      // need TD attention before they can advance).
+      if (rosterFilter === "prereg" && !(st === "prereg" || st === "waiting")) return false;
+      if (rosterFilter === "registered" && st !== "registered") return false;
+      if (rosterFilter === "ready" && st !== "ready") return false;
+      if (rosterFilter === "no_show" && st !== "no_show") return false;
       const q = rosterQuery.trim().toLowerCase();
       if (q) {
         const hay = `${e.p1Name} ${e.p2Name ?? ""} ${e.p1ProfileId ?? ""} ${e.p2ProfileId ?? ""}`.toLowerCase();
@@ -1597,9 +1941,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       return true;
     })
     .sort((a, b) => {
-      // "Default" keeps the attention order (Pending → Approved → Checked In); any
-      // explicit sort overrides it. Singles Fargo lives on p1Fargo; teams on teamFargo.
+      // Default = REGISTRATION ORDER (createdAt asc): a STABLE order that never shifts as
+      // the TD edits payment / side pots / Fargo / Ready, so a card can't jump away
+      // mid-interaction. Status sorting is opt-in only (rosterSort === "status").
       const fargoOf = (e: ChipEntry) => e.teamFargo ?? e.p1Fargo ?? 0;
+      const registrationOrder = () =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       switch (rosterSort) {
         case "name":
           return (a.p1Name || "").localeCompare(b.p1Name || "");
@@ -1611,24 +1958,49 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           return chipPreview(b) - chipPreview(a);
         case "recent":
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "status":
+          return rank(entryState(a)) - rank(entryState(b)) || registrationOrder();
         default:
-          return rank(entryState(a)) - rank(entryState(b));
+          return registrationOrder();
       }
     });
   const STATUS_LABELS: Record<typeof rosterFilter, string> = {
     all: "All",
-    pending: "Pending Approval",
-    approved: "Approved",
-    checkedin: "Checked In",
+    prereg: "Pre-Registered",
+    registered: "Registered",
+    ready: "Ready",
+    no_show: "No Show",
   };
   const SORT_LABELS: Record<typeof rosterSort, string> = {
-    default: "Default",
+    default: "Registration Order",
     name: "Name A–Z",
     fargoDesc: "Fargo High–Low",
     fargoAsc: "Fargo Low–High",
     chipsDesc: "Chips High–Low",
     recent: "Recently Added",
+    status: "Status",
   };
+  // Lifecycle counters across the whole roster (Waiting-for-Partner folds into Pre-Reg
+  // since both still need TD attention before they can advance).
+  const statusCounts = chip.entries.reduce(
+    (acc, e) => {
+      const st = entryState(e);
+      if (st === "prereg" || st === "waiting") acc.prereg += 1;
+      else if (st === "registered") acc.registered += 1;
+      else if (st === "ready") acc.ready += 1;
+      else if (st === "no_show") acc.no_show += 1;
+      return acc;
+    },
+    { prereg: 0, registered: 0, ready: 0, no_show: 0 },
+  );
+  const readyCount = statusCounts.ready;
+  // Tappable counter chip: taps set the matching status filter (Pre-Reg toggles).
+  const STATUS_COUNTERS: { key: typeof rosterFilter; label: string; n: number }[] = [
+    { key: "prereg", label: "Pre-Reg", n: statusCounts.prereg },
+    { key: "registered", label: "Registered", n: statusCounts.registered },
+    { key: "ready", label: "Ready", n: statusCounts.ready },
+    { key: "no_show", label: "No Show", n: statusCounts.no_show },
+  ];
 
   // Expanded detail body for the desktop players table — reuses the existing
   // player rows (verify / Fargo / IDs), chip-override edit, side pots, and the
@@ -1677,7 +2049,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             const inPot = (e.paidSidePots ?? []).includes(name);
             const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
             return (
-              <TouchableOpacity key={name} disabled={readOnly} style={styles.potRow} onPress={() => toggleSidePot(e, name)} activeOpacity={0.7}>
+              <TouchableOpacity key={name} disabled={readOnly} style={styles.potRow} onPress={() => confirmToggleSidePot(e, name)} activeOpacity={0.7}>
                 <View style={[styles.potCheckbox, inPot && styles.potCheckboxOn]}>{inPot && <Text style={styles.potCheckMark}>✓</Text>}</View>
                 <Text style={[styles.potLabel, inPot && styles.potLabelOn]}>{name}{amt}{inPot ? " · Entered" : ""}</Text>
               </TouchableOpacity>
@@ -1685,13 +2057,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           })}
         </View>
       )}
-      {st === "pending" && !readOnly && (
-        <>
-          <TouchableOpacity style={[styles.ptApprove, !allVerified(e) && styles.tprimaryOff]} disabled={!allVerified(e)} onPress={() => approveEntry(e)}>
-            <Text style={styles.ptApproveText}>Approve {doubles ? "Team" : "Player"}</Text>
+      {/* Mark Ready (setup only). The Ready gate = entry fee satisfied + no hard blocker;
+          the row's Status column also offers this — kept here for the expanded view. */}
+      {lifecyclePhase === "setup" && !readOnly && st !== "ready" && st !== "waiting" && (
+        hardBlockerOf(e) ? (
+          <Text style={styles.tprimaryHint}>Enter a Fargo rating before this {doubles ? "team" : "player"} can be Ready.</Text>
+        ) : (
+          <TouchableOpacity style={styles.ptApprove} onPress={() => markReady(e)}>
+            <Text style={styles.ptApproveText}>Mark Ready</Text>
           </TouchableOpacity>
-          {!allVerified(e) && <Text style={styles.tprimaryHint}>{approveHint(e)}</Text>}
-        </>
+        )
       )}
     </View>
   );
@@ -1749,7 +2124,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </View>
             {rosterFiltered.map((e, i) => {
               const st = entryState(e);
-              const meta = STATE_META[st];
+              const meta = LIFECYCLE_META[st];
               const editing = editEntryId === e.id;
               const expanded = expandedEntryId === e.id;
               const combined = doubles ? (e.p1Fargo ?? 0) + (e.p2Fargo ?? 0) : e.p1Fargo;
@@ -1768,28 +2143,32 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     <Text allowFontScaling={false} style={[styles.ptChips, styles.ptcChips]}>{chipPreview(e)}</Text>
                     {showPay && (
                       <View style={styles.ptcPay}>
-                        <TouchableOpacity disabled={readOnly} onPress={() => setPaid(e, !e.paid)} style={[styles.ptBadge, e.paid ? styles.ptBadgeGood : styles.ptBadgeMuted]} activeOpacity={0.7}>
+                        <TouchableOpacity disabled={readOnly} onPress={() => confirmTogglePaid(e)} style={[styles.ptBadge, e.paid ? styles.ptBadgeGood : styles.ptBadgeMuted]} activeOpacity={0.7}>
                           <Text allowFontScaling={false} style={[styles.ptBadgeText, e.paid ? styles.ptBadgeTextGood : styles.ptBadgeTextMuted]}>{e.paid ? "Paid" : "Unpaid"}</Text>
                         </TouchableOpacity>
                       </View>
                     )}
                     <View style={styles.ptcStatus}>
-                      {readOnly ? (
-                        <View style={[styles.ptBadge, e.checkedIn ? styles.ptBadgeGood : { borderColor: meta.color + "88", backgroundColor: meta.color + "22" }]}>
-                          <Text allowFontScaling={false} style={[styles.ptBadgeText, e.checkedIn ? styles.ptBadgeTextGood : { color: meta.color }]}>{e.checkedIn ? "Checked In" : meta.label}</Text>
+                      {readOnly || lifecyclePhase !== "setup" ? (
+                        <View style={[styles.ptBadge, st === "ready" ? styles.ptBadgeGood : { borderColor: meta.color + "88", backgroundColor: meta.color + "22" }]}>
+                          <Text allowFontScaling={false} style={[styles.ptBadgeText, st === "ready" ? styles.ptBadgeTextGood : { color: meta.color }]}>{st === "ready" ? "In Field" : meta.label}</Text>
                         </View>
-                      ) : st === "checkedin" ? (
-                        <TouchableOpacity onPress={() => setCheckIn(e, false)} style={[styles.ptBadge, styles.ptBadgeGood]} activeOpacity={0.7}>
-                          <Text allowFontScaling={false} style={[styles.ptBadgeText, styles.ptBadgeTextGood]}>Checked In</Text>
+                      ) : st === "ready" ? (
+                        <TouchableOpacity onPress={() => confirmMakeUnready(e)} style={[styles.ptBadge, styles.ptBadgeGood]} activeOpacity={0.7}>
+                          <Text allowFontScaling={false} style={[styles.ptBadgeText, styles.ptBadgeTextGood]}>✓ Ready</Text>
                         </TouchableOpacity>
-                      ) : st === "approved" ? (
-                        <TouchableOpacity onPress={() => setCheckIn(e, true)} style={styles.ptCheckBtn} activeOpacity={0.85}>
-                          <Text allowFontScaling={false} style={styles.ptCheckBtnText}>Check In</Text>
-                        </TouchableOpacity>
-                      ) : (
+                      ) : st === "waiting" ? (
                         <View style={[styles.ptBadge, { borderColor: meta.color + "88", backgroundColor: meta.color + "22" }]}>
                           <Text allowFontScaling={false} style={[styles.ptBadgeText, { color: meta.color }]}>{meta.label}</Text>
                         </View>
+                      ) : hardBlockerOf(e) ? (
+                        <View style={[styles.ptBadge, { borderColor: meta.color + "88", backgroundColor: meta.color + "22" }]}>
+                          <Text allowFontScaling={false} style={[styles.ptBadgeText, { color: meta.color }]}>{meta.label} · Needs Fargo</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity onPress={() => markReady(e)} style={styles.ptCheckBtn} activeOpacity={0.85}>
+                          <Text allowFontScaling={false} style={styles.ptCheckBtnText}>Mark Ready</Text>
+                        </TouchableOpacity>
                       )}
                     </View>
                     <View style={styles.ptcActions}>
@@ -1849,15 +2228,33 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   const toTeamCardProps = (e: ChipEntry, i: number): TeamCardProps => {
     const st = entryState(e);
-    const meta = STATE_META[st];
+    const meta = LIFECYCLE_META[st];
     const editing = editEntryId === e.id;
     const partner = doubles && hasPartner(e);
+    // Show the Ready blocker only in setup, only when the fee is satisfied but a hard
+    // blocker (missing Fargo) still stands between the entry and Ready.
+    const blockedButPaid =
+      lifecyclePhase === "setup" &&
+      st !== "ready" &&
+      st !== "waiting" &&
+      paymentSatisfied(!!e.paid, entryFeeRequired) &&
+      hardBlockerOf(e);
     return {
       mode: "display",
       doubles,
       label: `${doubles ? "Team" : "Player"} #${i + 1}`,
       statusLabel: meta.label,
       statusColor: meta.color,
+      // Subtle whole-card outline encodes status at a glance so we don't need green
+      // everywhere: green = Ready, amber = needs attention, red = No Show, gray = other.
+      cardBorderColor:
+        st === "ready"
+          ? COLORS.success
+          : st === "no_show"
+            ? COLORS.error
+            : st === "prereg" || st === "waiting"
+              ? COLORS.warning
+              : undefined,
       chipsPillText: `${chipPreview(e)} Chips`,
       teamName: e.teamName,
       player1: teamCardPlayerVM(e, 1),
@@ -1869,20 +2266,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       teamFargo: (e.p1Fargo ?? 0) + (e.p2Fargo ?? 0),
       assignedChipsText: `${chipPreview(e)}${e.chipOverride != null ? " · manual" : ""}`,
       paid: !!e.paid,
-      checkedIn: !!e.checkedIn,
-      onTogglePaid: () => setPaid(e, !e.paid),
-      // Check-in is a tappable pill once the entry is approved (or already checked in);
-      // before that it stays a static status pill (approve first via the footer).
-      onToggleCheckIn: canCheckIn(e) ? () => setCheckIn(e, !e.checkedIn) : undefined,
-      sidePots:
-        tournamentSidePots.length > 0 && e.teamId != null
-          ? tournamentSidePots.map((p) => {
-              const nm = p.name.trim();
-              const inPot = (e.paidSidePots ?? []).includes(nm);
-              const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
-              return { name: nm, label: `${nm}${amt}${inPot ? " · Entered" : ""}`, entered: inPot, onToggle: () => toggleSidePot(e, nm) };
-            })
-          : undefined,
+      // Entry Fee row is the payment control; it reconciles Ready internally. Unchecking
+      // (Ready → Registered) confirms first; checking is instant.
+      onTogglePaid: readOnly ? undefined : () => confirmTogglePaid(e),
+      // Shared Tournament Entry section: entry fee (Paid/Unpaid ← chip_entries.paid) +
+      // every defined side pot (Entered/Not Entered ← paid_side_pots). Removing a pot
+      // confirms; entering is instant. Side pots never affect Ready.
+      entryFee: Number(tournament?.entry_fee) || 0,
+      sidePots: tournamentSidePots,
+      enteredPots: e.paidSidePots ?? [],
+      onToggleSidePot: readOnly ? undefined : (name: string) => confirmToggleSidePot(e, name),
       showChipOverride: editing && !readOnly && e.teamId != null,
       chipOverrideDefault: e.chipOverride != null ? String(e.chipOverride) : "",
       chipAutoPlaceholder: `Auto (${autoChips(e)})`,
@@ -1893,13 +2286,32 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       readOnly,
       actionsLabel: editing ? "Done" : "Actions",
       onActions: (anchor: ActionsAnchor) => {
-        if (editing) { setEditEntryId(null); return; }
-        setMenuAnchor(anchor);
-        setMenuEntryId(e.id);
+        // In edit mode the Actions button reads "Done" → exit edit + Fargo-input, dismiss
+        // the keyboard, and release the card-focused scroll behavior.
+        if (editing) { Keyboard.dismiss(); setEditEntryId(null); return; }
+        openActionsMenu(e.id, anchor);
       },
       primary: renderPrimary(e, st),
-      // Blocked-approve reason, shown as a full-width row under both footer buttons.
-      warning: !readOnly && st === "pending" && !allVerified(e) ? approveHint(e) : undefined,
+      // Full-width note under the footer. Fargo-cap messages take priority: a valid
+      // override shows the override indicator; over-cap-without-override shows the amber
+      // warning (worded for a stale-Ready entry vs a Registered one). Otherwise the
+      // paid-but-no-Fargo blocker.
+      warning: (() => {
+        if (lifecyclePhase === "setup" && hasValidOverride(e)) {
+          const reason = e.fargoCapOverrideReason ? ` • ${e.fargoCapOverrideReason}` : "";
+          return `⚠ Fargo Cap Override — ${overByOf(e)} over maximum${reason}`;
+        }
+        if (lifecyclePhase === "setup" && overCapBlocking(e)) {
+          const over = overByOf(e);
+          const pts = over === 1 ? "point" : "points";
+          return st === "ready"
+            ? `⚠ Now over the Fargo cap — ${over} ${pts} over ${maxFargo}. Approve override or make Registered.`
+            : `⚠ ${over} ${pts} over the tournament maximum of ${maxFargo}.`;
+        }
+        return blockedButPaid
+          ? "Entry fee is marked paid, but a Fargo rating is required before this player can be Ready."
+          : undefined;
+      })(),
     };
   };
 
@@ -1917,6 +2329,23 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Text style={styles.addBtnText}>+ Add {doubles ? "Team" : "Player"}</Text>
           </TouchableOpacity>
         )}
+      </View>
+      {/* Lifecycle counters — tap a chip to filter to that status (tap again = All). */}
+      <View style={styles.counterRow}>
+        {STATUS_COUNTERS.map((c) => {
+          const active = rosterFilter === c.key;
+          return (
+            <TouchableOpacity
+              key={c.key}
+              style={[styles.counterChip, active && styles.counterChipActive]}
+              onPress={() => setRosterFilter(active ? "all" : c.key)}
+              activeOpacity={0.7}
+            >
+              <Text allowFontScaling={false} style={[styles.counterNum, active && styles.counterNumActive]}>{c.n}</Text>
+              <Text allowFontScaling={false} style={[styles.counterLabel, active && styles.counterLabelActive]} numberOfLines={1}>{c.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
       <View style={styles.rosterFilterRow}>
         <TouchableOpacity style={styles.rosterFilterCol} onPress={() => setStatusMenuOpen(true)}>
@@ -1939,11 +2368,42 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           same component the Add Team modal uses in draft mode, so they can't drift.
           Business logic stays here and is passed via toTeamCardProps(). */}
       {rosterFiltered.map((e, i) => (
-        <TeamCard key={e.id} {...toTeamCardProps(e, i)} />
+        // onLayout captures the card's offset + height in roster content coords (the
+        // single scroll target for card-focused edit mode). When this card is awaiting
+        // its first edit-mode snap, fire it here — onLayout guarantees the edit layout
+        // is measured.
+        <View
+          key={e.id}
+          onLayout={(ev) => {
+            cardTops.current[e.id] = ev.nativeEvent.layout.y;
+            cardHeights.current[e.id] = ev.nativeEvent.layout.height;
+            if (pendingSnapRef.current === e.id) {
+              pendingSnapRef.current = null;
+              positionEditingCard(e.id, "edit");
+            }
+          }}
+        >
+          <TeamCard {...toTeamCardProps(e, i)} />
+        </View>
       ))}
     </View>
     );
   };
+
+  // Pinned "Review & Start →" CTA for the NON-embedded Players setup page — rendered below
+  // the screen's own ScrollView so it floats above the roster. In embedded mode the host
+  // (manage-tournament) owns scroll + nav and renders its own pinned footer.
+  const showReviewCta =
+    !embedded && !readOnly && selectedPhase === "setup" && page === "Players";
+  const reviewCta = (
+    <View style={styles.reviewCtaBar}>
+      <TouchableOpacity style={styles.reviewCta} onPress={() => setPage("Review")} activeOpacity={0.85}>
+        <Text allowFontScaling={false} style={styles.reviewCtaText}>
+          Review &amp; Start{readyCount > 0 ? `  (${readyCount} Ready)` : ""}  →
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   // ── Setup · Tables (incl. stream marking) ────────────────────────────────────
   const renderTablesSetup = () => {
@@ -2047,11 +2507,44 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // ── Setup · Review & Start ───────────────────────────────────────────────────
   const renderReview = () => {
     const started = vm.phase !== "setup";
-    const ready = chip.entries.filter((e) => e.checkedIn).length >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1;
+    const unit = doubles ? "teams" : "players";
+    const nameOf = (e: ChipEntry) => teamName(e) || (doubles ? "Team" : "Player");
+    // Categorize the roster so the TD sees exactly who is in the field and who is not.
+    // The high-value case is PAID BUT NOT READY — money collected, about to be excluded.
+    const paidNotReady = chip.entries.filter((e) => entryState(e) === "registered" && !!e.paid);
+    const unpaid = chip.entries.filter((e) => entryState(e) === "registered" && !e.paid);
+    const prereg = chip.entries.filter((e) => entryState(e) === "prereg" || entryState(e) === "waiting");
+    // Ready entries that are over the Fargo cap without a valid override — a stale/
+    // inconsistent Ready state. Do NOT silently exclude these; BLOCK Start until resolved.
+    const overCapReady = chip.entries.filter((e) => entryState(e) === "ready" && overCapBlocking(e));
+    const canStart =
+      readyCount >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1 && overCapReady.length === 0;
+
+    // Start: if any paid players aren't Ready, force an explicit Proceed Anyway so the TD
+    // can't accidentally exclude someone they already collected money from.
+    const doStart = () => {
+      // Over-cap Ready entries hard-block Start (canStart already false); guard anyway.
+      if (overCapReady.length > 0) return;
+      if (paidNotReady.length > 0) {
+        const names = paidNotReady.slice(0, 8).map(nameOf).join("\n");
+        const more = paidNotReady.length > 8 ? `\n…and ${paidNotReady.length - 8} more` : "";
+        Alert.alert(
+          "Some paid players are not Ready",
+          `${paidNotReady.length} ${paidNotReady.length === 1 ? `${doubles ? "team has" : "player has"}` : `${unit} have`} paid but ${paidNotReady.length === 1 ? "is" : "are"} not marked Ready. They will NOT be included in the live field if you continue.\n\n${names}${more}`,
+          [
+            { text: "Go Back", style: "cancel" },
+            { text: "Proceed Anyway", style: "destructive", onPress: () => void vm.start() },
+          ],
+        );
+        return;
+      }
+      void vm.start();
+    };
+
     return (
       <Section title={started ? "Tournament" : "Review & Start"}>
         <View style={styles.reviewRow}>
-          <Review label="Checked in" value={chip.entries.filter((e) => e.checkedIn).length} sub={`${chip.entries.length} registered`} />
+          <Review label="Ready (live field)" value={readyCount} sub={`${chip.entries.length} registered`} />
           <Review label="Tables" value={chip.tables.length} />
           <Review label="Tiers" value={chip.settings.tiers.length} />
         </View>
@@ -2066,9 +2559,77 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </TouchableOpacity>
           </>
         ) : (
-          <TouchableOpacity style={[styles.startBtn, !ready && styles.startBtnDisabled]} disabled={!ready || vm.starting} onPress={vm.start}>
-            {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{ready ? "Start Tournament" : "Need 2+ checked-in players, a table, and a chip tier"}</Text>}
-          </TouchableOpacity>
+          <>
+            <Text style={styles.reviewLead}>
+              {readyCount === 0
+                ? `No ${unit} are Ready yet. Mark ${unit} Ready (Entry Fee paid + Fargo) to build the field.`
+                : `${readyCount} Ready ${readyCount === 1 ? (doubles ? "team" : "player") : unit} will enter the live field when you start.`}
+            </Text>
+
+            {/* BLOCKING: Ready entries over the Fargo cap without a valid override. Start
+                is disabled until the TD resolves each one (never silently excluded). */}
+            {overCapReady.length > 0 && (
+              <View style={styles.reviewBlock}>
+                <Text allowFontScaling={false} style={styles.reviewBlockHead}>
+                  ⛔ {overCapReady.length} {overCapReady.length === 1 ? (doubles ? "team is" : "player is") : `${unit} are`} over the Fargo limit and need approval before the tournament can start.
+                </Text>
+                {overCapReady.map((e) => (
+                  <View key={e.id} style={styles.reviewBlockRow}>
+                    <Text allowFontScaling={false} style={styles.reviewBlockName} numberOfLines={1}>
+                      {nameOf(e)} — {overByOf(e)} over ({ratingForCap(e)} / max {maxFargo})
+                    </Text>
+                    <View style={styles.reviewBlockBtns}>
+                      <TouchableOpacity style={styles.reviewFixSecondary} onPress={() => void clearOverride(e, true)}>
+                        <Text allowFontScaling={false} style={styles.reviewFixSecondaryText}>Make Registered</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.reviewFixPrimary}
+                        onPress={() => { setCapReasonChoice("Point Cushion"); setCapReasonNotes(e.fargoCapOverrideNotes ?? ""); setCapReason({ entryId: e.id }); }}
+                      >
+                        <Text allowFontScaling={false} style={styles.reviewFixPrimaryText}>Approve Override</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* HIGH-VALUE warning: paid but not Ready → money collected, being excluded. */}
+            {paidNotReady.length > 0 && (
+              <View style={styles.reviewWarn}>
+                <Text allowFontScaling={false} style={styles.reviewWarnHead}>
+                  ⚠ Paid but Not Ready — {paidNotReady.length}
+                </Text>
+                {paidNotReady.map((e) => (
+                  <Text allowFontScaling={false} key={e.id} style={styles.reviewWarnRow} numberOfLines={1}>
+                    {nameOf(e)} — Paid • Not Ready · will not be included
+                  </Text>
+                ))}
+                <Text allowFontScaling={false} style={styles.reviewWarnNote}>
+                  Mark them Ready to include them, or Proceed Anyway to exclude them.
+                </Text>
+              </View>
+            )}
+
+            {(unpaid.length > 0 || prereg.length > 0) && (
+              <View style={styles.reviewExcluded}>
+                <Text allowFontScaling={false} style={styles.reviewExcludedHead}>Also not included:</Text>
+                {unpaid.length > 0 && (
+                  <Text allowFontScaling={false} style={styles.reviewExcludedRow}>• {unpaid.length} Registered / Unpaid — entry fee not collected</Text>
+                )}
+                {prereg.length > 0 && (
+                  <Text allowFontScaling={false} style={styles.reviewExcludedRow}>• {prereg.length} Pre-Registered — need review</Text>
+                )}
+                <Text allowFontScaling={false} style={styles.reviewExcludedNote}>
+                  Only Ready {unit} are added. Others stay in setup and can be brought in later.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.startBtn, !canStart && styles.startBtnDisabled]} disabled={!canStart || vm.starting} onPress={doStart}>
+              {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{canStart ? "Start Tournament" : overCapReady.length > 0 ? "Resolve over-cap players to start" : "Need 2+ Ready, a table, and a chip tier"}</Text>}
+            </TouchableOpacity>
+          </>
         )}
       </Section>
     );
@@ -3070,6 +3631,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         computeChips={(f1, f2) =>
           chipsForFargo(chip.settings.tiers, doubles ? (f1 ?? 0) + (f2 ?? 0) : f1 ?? 0)
         }
+        entryFee={Number(tournament?.entry_fee) || 0}
+        sidePots={tournamentSidePots}
+        maxFargo={maxFargo}
         onTeamSaved={() => {
           setUnifiedOpen(null);
           vm.reload();
@@ -3077,15 +3641,25 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         onAddSingles={
           doubles
             ? undefined
-            : async (player, fargo) => {
+            : async (player, fargo, paidSidePots, paidEntry) => {
                 // Add straight to chip_entries. Store BOTH identities: players.id
                 // (always) + id_auto (active only; null for pending). vm.addEntry has a
                 // final duplicate guard. Modal stays open + resets so the TD adds more.
+                // paidSidePots = side pots entered (membership); paid = entry fee
+                // collected. Ready (checkedIn) uses the SAME gates as the card: payment
+                // satisfied + Fargo present + NOT over the Fargo cap. An over-cap player is
+                // added as Registered and must go through the override flow to be Ready.
+                const ready =
+                  readyGate({ paid: paidEntry, entryFeeRequired, hardBlocker: fargo == null }) &&
+                  !isFargoOverCap(fargo, maxFargo);
                 vm.addEntry({
                   p1Name: player.display_name,
                   p1ProfileId: player.id_auto ?? null,
                   p1PlayerId: player.player_id,
                   p1Fargo: fargo,
+                  paidSidePots,
+                  paid: paidEntry,
+                  checkedIn: ready,
                 });
                 // A TD-entered Fargo is trusted → promote it to the player's global
                 // verified rating. Non-blocking + retryable: the player is already on
@@ -3236,78 +3810,67 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Pressable>
       </Modal>
 
-      {/* Actions menu = a compact popover anchored to the Actions button (not a
-          full-screen modal). Transparent backdrop (no dim) closes on outside tap;
-          opens below the button when there's room, else above. Same items + logic. */}
-      <Modal
-        visible={menuEntryId != null}
-        transparent
-        animationType="fade"
-        onRequestClose={closeMenu}
-      >
-        <Pressable style={styles.popoverBackdrop} onPress={closeMenu}>
-          {(() => {
-            const e = entryById(menuEntryId);
-            if (!e || !menuAnchor) return null;
-            const MENU_W = webSc(210);
-            const ITEM_H = webSc(48);
-            const GAP = 6;
-            const MARGIN = webSc(12);
-            const extra =
-              (e.isTeam && e.teamId != null && e.teamApproved ? 1 : 0) +
-              (e.teamLocked && e.teamId != null ? 1 : 0);
-            const estH = (4 + extra) * ITEM_H + webSc(8); // Edit, Pay, Check In, Remove + extras
-            const spaceBelow = winH - (menuAnchor.y + menuAnchor.height);
-            const openBelow = spaceBelow >= estH + GAP + MARGIN;
-            const top = openBelow
-              ? menuAnchor.y + menuAnchor.height + GAP
-              : Math.max(MARGIN, menuAnchor.y - estH - GAP);
-            const left = Math.min(Math.max(menuAnchor.x, MARGIN), winW - MENU_W - MARGIN);
-            return (
-              <Pressable style={[styles.popover, { top, left, width: MENU_W }]} onPress={() => {}}>
-                <TouchableOpacity style={styles.menuItem} onPress={() => { setEditEntryId(e.id); closeMenu(); }}>
-                  <Text style={styles.menuItemText}>Edit {e.isTeam ? "Team" : "Player"}</Text>
+      {/* Actions menu = an IN-TREE anchored popover, NOT a Modal — a Modal renders in a
+          separate window and blocks the host roster ScrollView underneath. This is a
+          box-none overlay (taps/scrolls pass through to the roster, which closes it via
+          the content wrapper's onTouchStart and keeps scrolling); only the popover
+          itself captures touches. Positioned in the screen-root's coord space
+          (window rect − root origin). Opens below the button with room, else above. */}
+      {menuEntryId != null && menuAnchor != null && (() => {
+        const e = entryById(menuEntryId);
+        if (!e) return null;
+        const MENU_W = webSc(210);
+        const ITEM_H = webSc(48);
+        const GAP = 6;
+        const MARGIN = webSc(12);
+        const extra =
+          (e.isTeam && e.teamId != null && e.teamApproved ? 1 : 0) +
+          (e.teamLocked && e.teamId != null ? 1 : 0);
+        const estH = (4 + extra) * ITEM_H + webSc(8); // Edit, Pay, Check In, Remove + extras
+        const spaceBelow = winH - (menuAnchor.y + menuAnchor.height);
+        const openBelow = spaceBelow >= estH + GAP + MARGIN;
+        const topWin = openBelow
+          ? menuAnchor.y + menuAnchor.height + GAP
+          : Math.max(MARGIN, menuAnchor.y - estH - GAP);
+        const leftWin = Math.min(Math.max(menuAnchor.x, MARGIN), winW - MENU_W - MARGIN);
+        return (
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View style={[styles.popover, { top: topWin - menuRoot.y, left: leftWin - menuRoot.x, width: MENU_W }]}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setEditEntryId(e.id); closeMenu(); }}>
+                <Text style={styles.menuItemText}>Edit {e.isTeam ? "Team" : "Player"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); confirmTogglePaid(e); }}>
+                <Text style={styles.menuItemText}>{e.paid ? "Mark Unpaid" : "Mark Paid"}</Text>
+              </TouchableOpacity>
+              {lifecyclePhase === "setup" && entryState(e) === "ready" ? (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); confirmMakeUnready(e); }}>
+                  <Text style={styles.menuItemText}>Make Unready</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={() => { setPaid(e, !e.paid); closeMenu(); }}>
-                  <Text style={styles.menuItemText}>{e.paid ? "Mark Unpaid" : "Mark Paid"}</Text>
+              ) : lifecyclePhase === "setup" && entryState(e) !== "waiting" ? (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); markReady(e); }}>
+                  <Text style={styles.menuItemText}>Mark Ready</Text>
                 </TouchableOpacity>
-                {canCheckIn(e) ? (
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { setCheckIn(e, !e.checkedIn); closeMenu(); }}>
-                    <Text style={styles.menuItemText}>{e.checkedIn ? "Undo Check In" : "Check In"}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.menuItem}>
-                    <Text style={[styles.menuItemText, styles.menuItemDisabled]}>Check In (approve first)</Text>
-                  </View>
-                )}
-                {e.isTeam && e.teamId != null && e.teamApproved && (
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { vm.approveTeam(e.teamId as number, false); closeMenu(); }}>
-                    <Text style={styles.menuItemText}>Unlock Fargo</Text>
-                  </TouchableOpacity>
-                )}
-                {e.teamLocked && e.teamId != null && (
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { vm.unlockTeam(e.teamId as number); closeMenu(); }}>
-                    <Text style={styles.menuItemText}>Unlock Registration</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.menuItem, styles.menuItemLast]}
-                  onPress={() => {
-                    const label = e.isTeam ? "team" : "player";
-                    Alert.alert("Remove", `Remove this ${label} from the tournament?`, [
-                      { text: "Cancel", style: "cancel" },
-                      { text: "Remove", style: "destructive", onPress: () => vm.removeEntry(e.id) },
-                    ]);
-                    closeMenu();
-                  }}
-                >
-                  <Text style={[styles.menuItemText, styles.menuItemDanger]}>Remove {e.isTeam ? "Team" : "Player"}</Text>
+              ) : null}
+              {e.isTeam && e.teamId != null && e.teamApproved && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { vm.approveTeam(e.teamId as number, false); closeMenu(); }}>
+                  <Text style={styles.menuItemText}>Unlock Fargo</Text>
                 </TouchableOpacity>
-              </Pressable>
-            );
-          })()}
-        </Pressable>
-      </Modal>
+              )}
+              {e.teamLocked && e.teamId != null && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { vm.unlockTeam(e.teamId as number); closeMenu(); }}>
+                  <Text style={styles.menuItemText}>Unlock Registration</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.menuItem, styles.menuItemLast]}
+                onPress={() => { closeMenu(); confirmRemovePlayer(e); }}
+              >
+                <Text style={[styles.menuItemText, styles.menuItemDanger]}>Remove {e.isTeam ? "Team" : "Player"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })()}
 
       <Modal
         visible={statusMenuOpen}
@@ -3317,7 +3880,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       >
         <Pressable style={styles.menuBackdrop} onPress={() => setStatusMenuOpen(false)}>
           <Pressable style={styles.menuCard} onPress={() => {}}>
-            {(["all", "pending", "approved", "checkedin"] as const).map((key) => (
+            {(["all", "prereg", "registered", "ready", "no_show"] as const).map((key) => (
               <TouchableOpacity
                 key={key}
                 style={styles.menuItem}
@@ -3325,7 +3888,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               >
                 <Text style={[styles.menuItemText, rosterFilter === key && styles.menuItemOn]}>
                   {rosterFilter === key ? "✓  " : ""}
-                  {{ all: "All", pending: "Pending Approval", approved: "Approved", checkedin: "Checked In" }[key]}
+                  {STATUS_LABELS[key]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -3341,7 +3904,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       >
         <Pressable style={styles.menuBackdrop} onPress={() => setSortMenuOpen(false)}>
           <Pressable style={styles.menuCard} onPress={() => {}}>
-            {(["default", "name", "fargoDesc", "fargoAsc", "chipsDesc", "recent"] as const).map((key) => (
+            {(["default", "status", "name", "fargoDesc", "fargoAsc", "chipsDesc", "recent"] as const).map((key) => (
               <TouchableOpacity
                 key={key}
                 style={styles.menuItem}
@@ -3353,6 +3916,104 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 </Text>
               </TouchableOpacity>
             ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Fargo cap — "Allow over cap?" confirm (from Mark Ready on an over-cap entry). */}
+      <Modal visible={capConfirm != null} transparent animationType="fade" onRequestClose={() => setCapConfirm(null)}>
+        <Pressable style={styles.capBackdrop} onPress={() => setCapConfirm(null)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            {(() => {
+              const e = entryById(capConfirm?.entryId);
+              if (!e) return null;
+              return (
+                <>
+                  <Text style={styles.pickerTitle}>Allow Player Over Fargo Cap?</Text>
+                  <Text style={styles.capBody}>{shortTeam(e)} has a Fargo rating of {ratingForCap(e)}.</Text>
+                  <View style={styles.capStatRow}><Text style={styles.capStatLabel}>Tournament Maximum</Text><Text style={styles.capStatVal}>{maxFargo}</Text></View>
+                  <View style={styles.capStatRow}><Text style={styles.capStatLabel}>Over Cap By</Text><Text style={[styles.capStatVal, { color: COLORS.warning }]}>{overByOf(e)}</Text></View>
+                  <Text style={styles.capNote}>This {doubles ? "team" : "player"} exceeds the tournament Fargo limit.</Text>
+                  <View style={styles.capBtnRow}>
+                    <TouchableOpacity style={styles.capCancel} onPress={() => setCapConfirm(null)}><Text numberOfLines={1} style={styles.capCancelText}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.capPrimary} onPress={() => { setCapReasonChoice("Point Cushion"); setCapReasonNotes(""); setCapReason({ entryId: e.id }); setCapConfirm(null); }}><Text numberOfLines={1} style={styles.capPrimaryText}>Allow Anyway</Text></TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Fargo cap — a Ready entry's rating/cap moved past its override: resolve. */}
+      <Modal visible={capResolve != null} transparent animationType="fade" onRequestClose={() => setCapResolve(null)}>
+        <Pressable style={styles.capCenterBackdrop} onPress={() => setCapResolve(null)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            {(() => {
+              const e = entryById(capResolve?.entryId);
+              if (!e) return null;
+              return (
+                <>
+                  <Text style={styles.pickerTitle}>Fargo Now Over the Cap</Text>
+                  <Text style={styles.capBody}>{shortTeam(e)} is now {ratingForCap(e)}, which is {overByOf(e)} above the tournament maximum of {maxFargo}. This {doubles ? "team" : "player"} is currently Ready.</Text>
+                  <View style={styles.capBtnRow}>
+                    <TouchableOpacity style={styles.capDanger} onPress={() => { setCapResolve(null); confirmRemovePlayer(e); }}><Text numberOfLines={1} style={styles.capDangerText}>Remove {e.isTeam ? "Team" : "Player"}</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.capPrimary} onPress={() => { setCapReasonChoice(e.fargoCapOverrideReason ?? "Point Cushion"); setCapReasonNotes(e.fargoCapOverrideNotes ?? ""); setCapReason({ entryId: e.id }); setCapResolve(null); }}><Text numberOfLines={1} style={styles.capPrimaryText}>Allow Override</Text></TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Fargo cap — reason (single-select dropdown + optional notes) then apply + Ready. */}
+      <Modal visible={capReason != null} transparent animationType="fade" onRequestClose={() => { setCapReasonMenuOpen(false); setCapReason(null); }}>
+        <Pressable style={styles.capBackdrop} onPress={() => { setCapReasonMenuOpen(false); setCapReason(null); }}>
+          <Pressable style={styles.pickerCard} onPress={() => setCapReasonMenuOpen(false)}>
+            {(() => {
+              const e = entryById(capReason?.entryId);
+              if (!e) return null;
+              return (
+                <>
+                  <Text style={styles.pickerTitle}>Reason for Override</Text>
+                  <Text style={styles.capNotesLabel}>Reason</Text>
+                  <TouchableOpacity style={styles.capSelect} onPress={() => setCapReasonMenuOpen((o) => !o)} activeOpacity={0.8}>
+                    <Text style={styles.capSelectText}>{capReasonChoice}</Text>
+                    <Text style={styles.capSelectChevron}>▾</Text>
+                  </TouchableOpacity>
+                  {capReasonMenuOpen && (
+                    <View style={styles.capSelectMenu}>
+                      {["Point Cushion", "Local Rule", "Rating Adjustment", "Other"].map((r, i) => (
+                        <TouchableOpacity
+                          key={r}
+                          style={[styles.capSelectOption, i > 0 && styles.capSelectOptionDiv]}
+                          onPress={() => { setCapReasonChoice(r); setCapReasonMenuOpen(false); }}
+                        >
+                          <Text style={[styles.capSelectOptionText, capReasonChoice === r && styles.capSelectOptionTextOn]}>{r}</Text>
+                          {capReasonChoice === r ? <Text style={styles.capSelectCheck}>✓</Text> : null}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <Text style={styles.capNotesLabel}>Notes (optional)</Text>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={styles.capNotesInput}
+                    value={capReasonNotes}
+                    onChangeText={setCapReasonNotes}
+                    placeholder="e.g. house rule, agreed cushion…"
+                    placeholderTextColor={COLORS.textMuted}
+                    onFocus={() => setCapReasonMenuOpen(false)}
+                    multiline
+                  />
+                  <View style={styles.capBtnRow}>
+                    <TouchableOpacity style={styles.capCancel} onPress={() => { setCapReasonMenuOpen(false); setCapReason(null); }}><Text numberOfLines={1} style={styles.capCancelText}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.capPrimary} onPress={() => { void applyOverrideAndReady(e, capReasonChoice, capReasonNotes); setCapReasonMenuOpen(false); setCapReason(null); }}><Text numberOfLines={1} style={styles.capPrimaryText}>Confirm</Text></TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
           </Pressable>
         </Pressable>
       </Modal>
@@ -4791,18 +5452,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   );
 
   // Embedded: just the page content + overlays; the host manager supplies the
-  // header, phase nav, and scroll container.
+  // header, phase nav, and scroll container. onTouchStart on the content wrapper is a
+  // PASSIVE handler — any touch (tap or scroll-start) closes an open Actions popover
+  // WITHOUT consuming the gesture, so the host ScrollView keeps scrolling.
   if (embedded) {
     return (
-      <View>
-        {content()}
+      <View ref={rootRef}>
+        <View onTouchStart={() => { if (menuEntryId != null) closeMenu(); }}>{content()}</View>
         {modals}
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} ref={rootRef}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -4847,10 +5510,37 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         }
       />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, isWeb && styles.contentWeb]} keyboardShouldPersistTaps="handled">
-        {content()}
-      </ScrollView>
+      {/* Scroll-area wrapper — measured (window rect) to get the usable band between the
+          fixed header and the pinned footer for card-focused Edit Player positioning. */}
+      <View style={styles.scroll} ref={scrollAreaRef}>
+        <KeyboardAwareScrollView
+          ref={rosterScrollRef}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+            isWeb && styles.contentWeb,
+            showReviewCta && styles.contentWithCta,
+            // While editing, reserve keyboard-sized bottom room so a tall card can be
+            // scrolled far enough to keep its footer (Done / Mark Ready) above the keyboard.
+            editEntryId != null ? { paddingBottom: webSc(320) } : null,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          enableOnAndroid
+          // ONE source of truth = positionEditingCard (absolute content target). Neuter
+          // ALL of the library's keyboard scrolling so nothing competes:
+          //  • enableAutomaticScroll=false → no scroll-to-focused-input on focus.
+          //  • enableResetScrollToCoords=false → no scroll-back (toward y=0) on keyboard
+          //    HIDE. That built-in reset was fighting our blur snap and causing the
+          //    jump-to-top while Fargo was being edited.
+          enableAutomaticScroll={false}
+          enableResetScrollToCoords={false}
+        >
+          <View onTouchStart={() => { if (menuEntryId != null) closeMenu(); }}>{content()}</View>
+        </KeyboardAwareScrollView>
+      </View>
 
+      {showReviewCta && reviewCta}
       {modals}
     </View>
   );
@@ -4919,6 +5609,7 @@ const styles = StyleSheet.create({
 
   scroll: { flex: 1 },
   content: { padding: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2) },
+  contentWithCta: { paddingBottom: webSc(96) }, // clear the pinned Review & Start bar
   contentWeb: { width: "100%" as any },
 
   section: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
@@ -4986,6 +5677,25 @@ const styles = StyleSheet.create({
   streamRemoveText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
 
   reviewRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
+  reviewLead: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.sm + 5) },
+  // Blocking over-cap panel (red) — must be resolved before Start.
+  reviewBlock: { backgroundColor: COLORS.error + "18", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.error, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  reviewBlockHead: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", marginBottom: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.sm + 5) },
+  reviewBlockRow: { marginTop: webSc(SPACING.sm), paddingTop: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  reviewBlockName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
+  reviewBlockBtns: { flexDirection: "row", gap: webSc(SPACING.sm) },
+  reviewFixSecondary: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  reviewFixSecondaryText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  reviewFixPrimary: { flex: 1, backgroundColor: COLORS.warning, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  reviewFixPrimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  reviewWarn: { backgroundColor: COLORS.warning + "18", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  reviewWarnHead: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", marginBottom: webSc(SPACING.xs) },
+  reviewWarnRow: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), marginTop: 2 },
+  reviewWarnNote: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.xs + 4) },
+  reviewExcluded: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  reviewExcludedHead: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, marginBottom: webSc(SPACING.xs) },
+  reviewExcludedRow: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), marginTop: 2 },
+  reviewExcludedNote: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.xs + 4) },
   reviewCard: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.md, padding: webSc(SPACING.md), alignItems: "center" },
   reviewValue: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
   reviewLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
@@ -5889,8 +6599,13 @@ const styles = StyleSheet.create({
   tprimaryOff: { opacity: 0.4 },
   tprimaryDim: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.warning },
   tprimaryDimText: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
-  tprimaryDone: { backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.success },
-  tprimaryDoneText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Live "In Field" state — quiet neutral outline (participation is already established).
+  tprimaryDone: { backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.borderLight },
+  tprimaryDoneText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Setup Ready state — green outlined ✓ Ready: clearly Ready without a loud filled button
+  // (the subtle green card border reinforces it).
+  tprimaryReady: { backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.success },
+  tprimaryReadyText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
 
   menuBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", padding: webSc(SPACING.xl) },
   menuCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden", maxWidth: 360, width: "100%" as any, alignSelf: "center" as any },
@@ -5899,9 +6614,9 @@ const styles = StyleSheet.create({
   menuItemText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
   menuItemDanger: { color: COLORS.error },
   menuItemDisabled: { color: COLORS.textMuted },
-  // Anchored Actions popover: transparent backdrop (no screen dim) + a compact dark
-  // card positioned at the button. Elevation/shadow so it reads above the roster.
-  popoverBackdrop: { flex: 1, backgroundColor: "transparent" },
+  // Anchored Actions popover: a compact dark card positioned at the button, rendered
+  // in-tree as a box-none overlay (no full-screen touch layer). Elevation/shadow so it
+  // reads above the roster; the roster stays scrollable underneath.
   popover: {
     position: "absolute",
     backgroundColor: COLORS.surface,
@@ -5920,6 +6635,18 @@ const styles = StyleSheet.create({
   // Status dropdown + refined card internals
   statusDrop: { alignSelf: "flex-start", paddingVertical: 6, paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: webSc(SPACING.md) },
   // Balanced 2-column filter row: Status + Sort (each an equal-width dropdown).
+  // Pinned bar sits below the ScrollView (flex sibling) so it floats above the roster and
+  // the app's bottom nav. contentWithCta reserves matching space so the last card clears it.
+  reviewCtaBar: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.lg), backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: COLORS.border },
+  reviewCta: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center" },
+  reviewCtaText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  counterRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
+  counterChip: { flex: 1, alignItems: "center", paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  counterChipActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "18" },
+  counterNum: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
+  counterNumActive: { color: COLORS.primaryLight },
+  counterLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 1 },
+  counterLabelActive: { color: COLORS.primaryLight },
   rosterFilterRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
   rosterFilterCol: { flex: 1, paddingVertical: 8, paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   statusDropText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -5954,6 +6681,37 @@ const styles = StyleSheet.create({
   pickerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-start", paddingHorizontal: webSc(SPACING.lg), paddingTop: webSc(70) },
   pickerCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, padding: webSc(SPACING.md), maxWidth: 460, width: "100%" as any, alignSelf: "center" as any, maxHeight: "70%" as any },
   pickerTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", marginBottom: webSc(SPACING.sm) },
+  // Fargo-cap override modals. Sit a little lower than the picker so they don't feel
+  // pushed against the top (and clear the notch/header comfortably).
+  capBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-start", paddingHorizontal: webSc(SPACING.lg), paddingTop: webSc(150) },
+  // Vertically centered variant for the short, keyboard-less confirm modals (e.g. Fargo
+  // Now Over the Cap) so they don't sit high with empty space below.
+  capCenterBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", paddingHorizontal: webSc(SPACING.lg) },
+  capBody: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), lineHeight: webMs(FONT_SIZES.sm + 5), marginBottom: webSc(SPACING.sm) },
+  capStatRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
+  capStatLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  capStatVal: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  capNote: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.xs + 4) },
+  // Balanced two-up buttons: equal width (flex:1) + equal height (minHeight), one line.
+  capBtnRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.md) },
+  capCancel: { flex: 1, minHeight: webSc(48), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.sm), alignItems: "center", justifyContent: "center" },
+  capCancelText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  capDanger: { flex: 1, minHeight: webSc(48), borderWidth: 1, borderColor: COLORS.error, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.sm), alignItems: "center", justifyContent: "center" },
+  capDangerText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  capPrimary: { flex: 1, minHeight: webSc(48), backgroundColor: COLORS.warning, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.sm), alignItems: "center", justifyContent: "center" },
+  capPrimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Reason single-select dropdown (replaces the reason chips — one reason only).
+  capSelect: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
+  capSelectText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  capSelectChevron: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
+  capSelectMenu: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, marginTop: webSc(-SPACING.sm), marginBottom: webSc(SPACING.md), overflow: "hidden" },
+  capSelectOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md) },
+  capSelectOptionDiv: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  capSelectOptionText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  capSelectOptionTextOn: { color: COLORS.primaryLight, fontWeight: "800" },
+  capSelectCheck: { color: COLORS.primaryLight, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  capNotesLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
+  capNotesInput: { minHeight: webSc(64), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), textAlignVertical: "top", ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   pickerInput: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingVertical: webSc(SPACING.sm), paddingHorizontal: 10, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
   pickerResults: { marginTop: webSc(SPACING.sm), maxHeight: webSc(320) },
   pickerRow: { paddingVertical: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },

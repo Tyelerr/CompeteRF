@@ -388,6 +388,23 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.send-sms]
 verify_jwt = true
 
+# sms-verify-start / sms-verify-check: phone verification via Telnyx Verify.
+# verify_jwt=true — both derive the user id from the validated JWT; they then use
+# a service-role client internally for the rate-limit/verify writes.
+[functions.sms-verify-start]
+verify_jwt = true
+
+[functions.sms-verify-check]
+verify_jwt = true
+
+# sms-send-test / sms-send-match-ready: server-authorized sending. verify_jwt=true;
+# they derive identity from the JWT and destination/opponent/table server-side.
+[functions.sms-send-test]
+verify_jwt = true
+
+[functions.sms-send-match-ready]
+verify_jwt = true
+
 [functions.scan-image]
 enabled = true
 verify_jwt = true

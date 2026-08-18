@@ -19,6 +19,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../../../src/lib/supabase";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
+import { isTournamentArchived, isTournamentCompleted } from "../../../../src/utils/tournament.archive";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
@@ -62,6 +63,15 @@ const statusColor = (s: string): string =>
       : s === "cancelled" ? COLORS.error
         : COLORS.textSecondary;
 
+// Derived, user-facing status label: completion is status="completed" OR
+// live_state="finished", and archival is derived (archived_at / 30-day). Keeps the
+// desktop table in lockstep with the shared card + list filters.
+const displayStatusOf = (t: BarTournamentWithStats): string =>
+  t.status === "cancelled" ? "cancelled"
+    : isTournamentArchived(t) ? "archived"
+      : isTournamentCompleted(t) ? "completed"
+        : t.status;
+
 // One desktop table row (web only): scannable columns + Open Manager + ⋯ menu,
 // with a subtle hover state. Mobile keeps the TournamentCard.
 const DesktopRow = ({
@@ -75,7 +85,8 @@ const DesktopRow = ({
   processing: boolean;
   onOpen: () => void;
 }) => {
-  const sc = statusColor(t.status);
+  const displayStatus = displayStatusOf(t);
+  const sc = statusColor(displayStatus);
   return (
     <Pressable
       onPress={onOpen}
@@ -99,7 +110,7 @@ const DesktopRow = ({
       </View>
       <View style={styles.colStatus}>
         <View style={[styles.dtStatusBadge, { backgroundColor: sc + "22" }]}>
-          <Text allowFontScaling={false} style={[styles.dtStatusText, { color: sc }]}>{t.status}</Text>
+          <Text allowFontScaling={false} style={[styles.dtStatusText, { color: sc }]}>{displayStatus}</Text>
         </View>
       </View>
       <View style={styles.colActions}>
@@ -377,9 +388,12 @@ export default function BarTournamentManagerScreen() {
     if (t.can_edit) a.push({ label: "Edit", onPress: () => handleEditTournament(t.id) });
     a.push({ label: "Reassign Director", onPress: () => { setTournamentToReassign(t); setReassignModalVisible(true); } });
     if (t.can_delete) {
-      if (t.status === "active") a.push({ label: "Delete", destructive: true, onPress: () => handleDeleteTournament(t) });
-      if (t.status === "active" || t.status === "completed") a.push({ label: "Archive", onPress: () => handleArchiveTournament(t) });
-      if (t.status === "cancelled" || t.status === "archived") a.push({ label: "Restore", onPress: () => handleRestoreTournament(t) });
+      const archived = isTournamentArchived(t);
+      const completed = isTournamentCompleted(t);
+      const active = t.status === "active" && !completed;
+      if (active) a.push({ label: "Delete", destructive: true, onPress: () => handleDeleteTournament(t) });
+      if ((active || completed) && !archived) a.push({ label: "Archive", onPress: () => handleArchiveTournament(t) });
+      if (t.status === "cancelled" || archived) a.push({ label: "Restore", onPress: () => handleRestoreTournament(t) });
     }
     return a;
   };

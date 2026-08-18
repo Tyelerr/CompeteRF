@@ -231,6 +231,14 @@ export const registrationService = {
     });
   },
 
+  // TD removes a registration from a tournament (status cancelled → filtered out of the
+  // chip roster / bracket). Used by the chip "Remove Player" action for self-reg entries.
+  async markCancelled(id: number): Promise<Registration> {
+    return registrationService.updateRegistration(id, {
+      status: "cancelled" as RegistrationStatus,
+    });
+  },
+
   // TD sets the entered Fargo (or a starter rating when the player has none).
   async setFargo(
     id: number,
@@ -253,6 +261,37 @@ export const registrationService = {
       paid_entry: paidEntry,
       paid_side_pots: paidSidePots,
     });
+  },
+
+  // TD sets / clears a self-registered player's Fargo-cap override (tournament_players).
+  // Direct update (RLS lets the TD write). override=false clears the snapshot. The columns
+  // aren't in the generated RegistrationUpdate type, so this writes them directly.
+  async setFargoOverride(
+    id: number,
+    override: boolean,
+    snap: { cap: number | null; rating: number | null; reason: string | null; notes: string | null; overriddenBy: string | null },
+  ): Promise<void> {
+    const updates = override
+      ? {
+          fargo_cap_override: true,
+          fargo_cap_at_override: snap.cap,
+          player_fargo_at_override: snap.rating,
+          fargo_cap_override_reason: snap.reason,
+          fargo_cap_override_notes: snap.notes,
+          overridden_by: snap.overriddenBy,
+          overridden_at: new Date().toISOString(),
+        }
+      : {
+          fargo_cap_override: false,
+          fargo_cap_at_override: null,
+          player_fargo_at_override: null,
+          fargo_cap_override_reason: null,
+          fargo_cap_override_notes: null,
+          overridden_by: null,
+          overridden_at: null,
+        };
+    const { error } = await supabase.from("tournament_players").update(updates).eq("id", id);
+    if (error) throw error;
   },
 
   // Generic TD update (used by the helpers above). .select().single() catches

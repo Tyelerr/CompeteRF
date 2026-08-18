@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
 import { useAuthContext } from "../providers/AuthProvider";
+import { isTournamentArchived, isTournamentCompleted } from "../utils/tournament.archive";
 
 export type TournamentStatusFilter =
   | "active"
@@ -22,6 +23,8 @@ export interface AdminTournamentWithStats {
   tournament_date: string;
   start_time: string;
   status: string;
+  live_state: string | null;
+  completed_at: string | null;
   venue_id: number;
   venue_name: string;
   director_name: string;
@@ -69,7 +72,7 @@ export const useAdminTournaments = () => {
         .from("tournaments")
         .select(`
           id, name, game_type, tournament_format, tournament_date,
-          start_time, status, venue_id, director_id,
+          start_time, status, live_state, completed_at, venue_id, director_id,
           venues (venue),
           director:profiles!tournaments_director_id_fkey (name),
           cancelled_at, cancelled_by,
@@ -125,6 +128,8 @@ export const useAdminTournaments = () => {
           tournament_date: t.tournament_date,
           start_time: t.start_time,
           status: t.status,
+          live_state: t.live_state ?? null,
+          completed_at: t.completed_at ?? null,
           venue_id: t.venue_id,
           venue_name: t.venues?.venue || "Unknown",
           director_name: t.director?.name || "Unknown Director",
@@ -222,8 +227,9 @@ export const useAdminTournaments = () => {
     setProcessing(tournamentId);
     try {
       await tournamentService.archiveTournament(tournamentId, profile.id_auto);
+      // Archival flags archived_at only; status stays as-is so it keeps counting.
       setTournaments((prev) => prev.map((t) => t.id === tournamentId
-        ? { ...t, status: "archived", archived_at: new Date().toISOString(), archived_by: profile.id_auto, archived_by_name: profile.name || null }
+        ? { ...t, archived_at: new Date().toISOString(), archived_by: profile.id_auto, archived_by_name: profile.name || null }
         : t));
       return true;
     } catch (error) { console.error("Error archiving:", error); return false; }
@@ -247,8 +253,10 @@ export const useAdminTournaments = () => {
     setProcessing(tournamentId);
     try {
       await tournamentService.restoreTournament(tournamentId);
+      // Clearing archived_at un-archives it; a completed event returns to
+      // "completed" (not "active") so its analytics/label stay correct.
       setTournaments((prev) => prev.map((t) => t.id === tournamentId
-        ? { ...t, status: "active", archived_at: null, archived_by: null, archived_by_name: null, cancelled_at: null, cancelled_by: null, cancelled_by_name: null, cancellation_reason: null }
+        ? { ...t, status: isTournamentCompleted(t) ? "completed" : "active", archived_at: null, archived_by: null, archived_by_name: null, cancelled_at: null, cancelled_by: null, cancelled_by_name: null, cancellation_reason: null }
         : t));
       return true;
     } catch (error) { console.error("Error restoring:", error); return false; }
@@ -259,16 +267,26 @@ export const useAdminTournaments = () => {
     setProcessing(tournamentId);
     try {
       await tournamentService.completeTournament(tournamentId);
-      setTournaments((prev) => prev.map((t) => t.id === tournamentId ? { ...t, status: "completed" } : t));
+      setTournaments((prev) => prev.map((t) => t.id === tournamentId ? { ...t, status: "completed", live_state: "finished", completed_at: t.completed_at ?? new Date().toISOString() } : t));
       return true;
     } catch (error) { console.error("Error completing:", error); return false; }
     finally { setProcessing(null); }
   }, []);
 
   // ── Filtering / sorting ───────────────────────────────────────────────────
+  // Completion vs archival are decoupled (src/utils/tournament.archive.ts):
+  // completed rows stay status="completed" and only move to Archived once
+  // archived_at is set OR 30 days pass. So bucket derives the visible tab.
+  const bucketOf = (t: AdminTournamentWithStats): TournamentStatusFilter => {
+    if (t.status === "cancelled") return "cancelled";
+    if (isTournamentArchived(t)) return "archived";
+    if (isTournamentCompleted(t)) return "completed";
+    return "active";
+  };
+
   const filteredTournaments = useMemo(() => {
     let result = [...tournaments];
-    if (statusFilter !== "all") result = result.filter((t) => t.status === statusFilter);
+    if (statusFilter !== "all") result = result.filter((t) => bucketOf(t) === statusFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter((t) =>
@@ -288,10 +306,10 @@ export const useAdminTournaments = () => {
   }, [tournaments, statusFilter, sortOption, searchQuery]);
 
   const statusCounts = useMemo(() => ({
-    active: tournaments.filter((t) => t.status === "active").length,
-    completed: tournaments.filter((t) => t.status === "completed").length,
-    cancelled: tournaments.filter((t) => t.status === "cancelled").length,
-    archived: tournaments.filter((t) => t.status === "archived").length,
+    active: tournaments.filter((t) => bucketOf(t) === "active").length,
+    completed: tournaments.filter((t) => bucketOf(t) === "completed").length,
+    cancelled: tournaments.filter((t) => bucketOf(t) === "cancelled").length,
+    archived: tournaments.filter((t) => bucketOf(t) === "archived").length,
     all: tournaments.length,
   }), [tournaments]);
 

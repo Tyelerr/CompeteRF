@@ -62,6 +62,9 @@ export interface Tournament {
   cancelled_by?: number;
   created_at: string;
   updated_at: string;
+  // When the tournament finished (status → completed). Drives the 30-day
+  // retention clock before it auto-moves to Archived.
+  completed_at?: string;
   archived_at?: string;
   archived_by?: number;
   // Computed (attached by viewmodels): active registration count for status badges.

@@ -31,6 +31,15 @@ export interface Profile {
   fargo_last_verified_at?: string | null;
   fargo_verified_by?: number | null; // id_auto of the TD who confirmed it
   is_disabled?: boolean;       // App Store compliance: eject user
+  // Canonical SMS phone identity — see 20260729120000_sms_phone_consent.sql.
+  // Server-authoritative: phone_number changes ONLY via the set_sms_phone() RPC,
+  // and phone_verified_at/provider/method are set ONLY by the Phase-3 verify path
+  // (a DB trigger blocks direct client writes). Deliberately absent from
+  // ProfileUpdate so the type system also forbids client writes.
+  phone_number?: string | null;             // E.164
+  phone_verified_at?: string | null;        // set on successful verification
+  phone_verification_provider?: string | null; // e.g. 'telnyx'
+  phone_verification_method?: string | null;    // e.g. 'verify_api'
   notify_saved_search_matches: boolean;
   notify_favorite_updates: boolean;
   notify_tournament_reminders: boolean;

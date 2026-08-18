@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
+import { isTournamentArchived, isTournamentCompleted } from "../utils/tournament.archive";
 
 export type TournamentStatusFilter =
   | "active"
@@ -17,6 +18,9 @@ export interface BarOwnerTournamentWithStats {
   tournament_date: string;
   start_time: string;
   status: string;
+  live_state: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
   venue_id: number;
   venue_name: string;
   director_name: string;
@@ -128,6 +132,9 @@ export const useBarOwnerTournaments = (): UseBarOwnerTournamentsReturn => {
           tournament_date,
           start_time,
           status,
+          live_state,
+          completed_at,
+          archived_at,
           venue_id,
           director_id,
           venues (venue),
@@ -170,6 +177,9 @@ export const useBarOwnerTournaments = (): UseBarOwnerTournamentsReturn => {
               tournament_date: t.tournament_date,
               start_time: t.start_time,
               status: t.status,
+              live_state: t.live_state ?? null,
+              completed_at: t.completed_at ?? null,
+              archived_at: t.archived_at ?? null,
               venue_id: t.venue_id,
               venue_name: t.venues?.venue || "Unknown",
               director_name: t.profiles?.name || "Unknown Director",
@@ -194,13 +204,21 @@ export const useBarOwnerTournaments = (): UseBarOwnerTournamentsReturn => {
     let result = [...tournaments];
     const today = new Date().toISOString().split("T")[0];
 
-    // Status filter
+    // Status filter. Completion = status="completed" OR live_state="finished"
+    // (chip tournaments finish via live_state); a completed tournament drops out
+    // of the Completed tab once it auto-archives (30 days past completed_at) — this
+    // screen has no Archived tab, so those remain visible only under "all".
     if (statusFilter === "active") {
       result = result.filter(
-        (t) => t.status === "active" && t.tournament_date >= today,
+        (t) =>
+          t.status === "active" &&
+          !isTournamentCompleted(t) &&
+          t.tournament_date >= today,
       );
     } else if (statusFilter === "completed") {
-      result = result.filter((t) => t.status === "completed");
+      result = result.filter(
+        (t) => isTournamentCompleted(t) && !isTournamentArchived(t),
+      );
     } else if (statusFilter === "cancelled") {
       result = result.filter((t) => t.status === "cancelled");
     }
@@ -247,11 +265,14 @@ export const useBarOwnerTournaments = (): UseBarOwnerTournamentsReturn => {
     const today = new Date().toISOString().split("T")[0];
 
     const active = tournaments.filter(
-      (t) => t.status === "active" && t.tournament_date >= today,
+      (t) =>
+        t.status === "active" &&
+        !isTournamentCompleted(t) &&
+        t.tournament_date >= today,
     ).length;
 
     const completed = tournaments.filter(
-      (t) => t.status === "completed",
+      (t) => isTournamentCompleted(t) && !isTournamentArchived(t),
     ).length;
 
     const cancelled = tournaments.filter(

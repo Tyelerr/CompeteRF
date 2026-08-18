@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { isTournamentArchived, isTournamentCompleted } from "../utils/tournament.archive";
 
 export interface TournamentDirectorWithStats extends Tournament {
   views_count: number;
@@ -173,13 +174,24 @@ export const useTournamentDirectorManager = () => {
     }
   };
 
+  // A tournament's *completion* lives in status="completed" OR live_state="finished"
+  // (chip tournaments finish via live_state), and *archival* is derived (archived_at
+  // set OR 30 days past completed_at). So the visible tab is derived, not raw status.
+  // See src/utils/tournament.archive.ts.
+  const bucketOf = (t: TournamentDirectorWithStats): keyof StatusCounts => {
+    if (t.status === "cancelled") return "cancelled";
+    if (isTournamentArchived(t)) return "archived";
+    if (isTournamentCompleted(t)) return "completed";
+    return "active";
+  };
+
   const calculateStatusCounts = (
     tournamentList: TournamentDirectorWithStats[],
   ) => {
     const counts = tournamentList.reduce(
       (acc, tournament) => {
         acc.all++;
-        acc[tournament.status as keyof StatusCounts]++;
+        acc[bucketOf(tournament)]++;
         return acc;
       },
       { active: 0, completed: 0, cancelled: 0, archived: 0, all: 0 },
@@ -192,7 +204,7 @@ export const useTournamentDirectorManager = () => {
 
     // Status filter
     if (statusFilter !== "all") {
-      filtered = filtered.filter((t) => t.status === statusFilter);
+      filtered = filtered.filter((t) => bucketOf(t) === statusFilter);
     }
 
     // Search filter

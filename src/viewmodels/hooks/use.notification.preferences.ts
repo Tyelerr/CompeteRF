@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { notificationService } from "../../models/services/notification.service";
-import { sendSms } from "../../services/sms/smsService";
 import {
   NotificationPreferences,
   PREFERENCE_CATEGORIES,
@@ -31,8 +30,6 @@ interface UseNotificationPreferencesReturn {
   savePreferences: (
     updates: Partial<NotificationPreferences>,
   ) => Promise<void>;
-  isSendingTest: boolean;
-  sendTestSms: () => Promise<void>;
   setQuietHours: (
     start: string | null,
     end: string | null,
@@ -52,7 +49,6 @@ export function useNotificationPreferences(
   const [devicePermission, setDevicePermission] = useState<
     "granted" | "denied" | "undetermined"
   >("undetermined");
-  const [isSendingTest, setIsSendingTest] = useState(false);
 
   const loadPreferences = useCallback(async () => {
     if (!userId) return;
@@ -130,35 +126,8 @@ export function useNotificationPreferences(
     }
   }
 
-  // Fire a one-off test text to the saved number so the user can confirm
-  // delivery (e.g. once toll-free verification clears).
-  async function sendTestSms(): Promise<void> {
-    const to = preferences?.sms_phone?.trim();
-    if (!to) {
-      Alert.alert(
-        "Add a number first",
-        "Enter your mobile number above before sending a test.",
-      );
-      return;
-    }
-    setIsSendingTest(true);
-    try {
-      const res = await sendSms({
-        to,
-        body: "Compete: your text alerts are set up correctly. Reply STOP to opt out.",
-      });
-      if (res.success) {
-        Alert.alert(
-          "Test sent",
-          "Check your phone. If it doesn't arrive, your sending number may still be pending carrier (toll-free) verification.",
-        );
-      } else {
-        Alert.alert("Couldn't send", res.error ?? "Please try again.");
-      }
-    } finally {
-      setIsSendingTest(false);
-    }
-  }
+  // NOTE: the test-SMS flow now lives in use.phone.verification (it sends to the
+  // VERIFIED canonical profiles.phone_number, not the deprecated sms_phone).
 
   async function setQuietHours(
     start: string | null,
@@ -203,8 +172,6 @@ export function useNotificationPreferences(
     categories: PREFERENCE_CATEGORIES,
     togglePreference,
     savePreferences,
-    isSendingTest,
-    sendTestSms,
     setQuietHours,
     openDeviceSettings,
     refresh,

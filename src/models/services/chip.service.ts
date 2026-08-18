@@ -16,6 +16,7 @@ import {
 } from "../types/chip.types";
 import { Tournament } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
+import { safePaidSidePots } from "../../utils/side-pots";
 
 export interface ChipTournamentBundle {
   tournament: Tournament;
@@ -38,8 +39,30 @@ export interface ChipResultRow {
   p2PlayerId?: string | null;
 }
 
+// Fargo-cap override columns are identical on chip_entries / tournament_players /
+// tournament_teams (migration 20260817120000), so one pair of mappers serves all three.
+const overrideFromRow = (r: any): Partial<ChipEntry> => ({
+  fargoCapOverride: !!r?.fargo_cap_override,
+  fargoCapAtOverride: r?.fargo_cap_at_override ?? null,
+  playerFargoAtOverride: r?.player_fargo_at_override ?? null,
+  fargoCapOverrideReason: r?.fargo_cap_override_reason ?? null,
+  fargoCapOverrideNotes: r?.fargo_cap_override_notes ?? null,
+  overriddenBy: r?.overridden_by ?? null,
+  overriddenAt: r?.overridden_at ?? null,
+});
+const overrideToRow = (e: ChipEntry) => ({
+  fargo_cap_override: !!e.fargoCapOverride,
+  fargo_cap_at_override: e.fargoCapAtOverride ?? null,
+  player_fargo_at_override: e.playerFargoAtOverride ?? null,
+  fargo_cap_override_reason: e.fargoCapOverrideReason ?? null,
+  fargo_cap_override_notes: e.fargoCapOverrideNotes ?? null,
+  overridden_by: e.overriddenBy ?? null,
+  overridden_at: e.overriddenAt ?? null,
+});
+
 // ── row ↔ model mappers ────────────────────────────────────────────────────────
 const rowToEntry = (r: any): ChipEntry => ({
+  ...overrideFromRow(r),
   id: r.id,
   p1Name: r.p1_name ?? "",
   p1Fargo: r.p1_fargo,
@@ -58,6 +81,10 @@ const rowToEntry = (r: any): ChipEntry => ({
   chips: r.chips ?? 0,
   paid: !!r.paid,
   checkedIn: !!r.checked_in,
+  // Side pots this entry is ENTERED in (names). Singles now record them on
+  // chip_entries.paid_side_pots, mirroring tournament_teams (doubles). Membership,
+  // not collection — see src/utils/side-pots.ts.
+  paidSidePots: safePaidSidePots(r.paid_side_pots),
   status: r.status,
   wins: r.wins ?? 0,
   losses: r.losses ?? 0,
@@ -69,6 +96,7 @@ const rowToEntry = (r: any): ChipEntry => ({
   createdAt: r.created_at,
 });
 const entryToRow = (tid: number, e: ChipEntry) => ({
+  ...overrideToRow(e),
   id: e.id,
   tournament_id: tid,
   p1_name: e.p1Name,
@@ -89,6 +117,9 @@ const entryToRow = (tid: number, e: ChipEntry) => ({
   chips: e.chips,
   paid: e.paid,
   checked_in: e.checkedIn,
+  // Persist singles side-pot entries (names). Defensively coerced so a legacy
+  // undefined never writes a non-array. Column added 20260816120000.
+  paid_side_pots: e.paidSidePots ?? [],
   status: e.status,
   wins: e.wins,
   losses: e.losses,
@@ -115,6 +146,7 @@ const regToEntry = (r: any): ChipEntry => {
   // player's verified profile Fargo (the default for a returning verified player).
   const fargo = r.fargo_at_registration ?? r.fargo_rating ?? p?.fargo ?? null;
   return {
+    ...overrideFromRow(r), // tournament_players carries the same override columns
     id: `reg_${r.id}`,
     p1Name: name,
     p1Fargo: fargo,
@@ -130,6 +162,8 @@ const regToEntry = (r: any): ChipEntry => {
     chips: 0,
     paid: !!r.paid_entry,
     checkedIn: r.status === "checked_in",
+    // Self-reg singles carry their side-pot entries on tournament_players.
+    paidSidePots: safePaidSidePots(r.paid_side_pots),
     status: "queued",
     wins: 0,
     losses: 0,
@@ -305,6 +339,26 @@ const syncTable = async (
 };
 
 export const chipService = {
+  // Append an audit row to chip_events (history timeline). Used e.g. for Fargo-cap
+  // overrides so the decision is auditable even though the current state also lives on
+  // the registration record.
+  async logEvent(
+    tournamentId: number,
+    type: string,
+    text: string,
+    payload?: Record<string, unknown> | null,
+  ): Promise<void> {
+    const eid = `ev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const { error } = await supabase.from("chip_events").insert({
+      id: eid,
+      tournament_id: tournamentId,
+      type,
+      text,
+      payload: payload ?? null,
+    });
+    if (error) throw error;
+  },
+
   // Hydrate the tournament + its chip state from the relational tables.
   async load(id: number): Promise<ChipTournamentBundle> {
     const { data: t, error } = await supabase
@@ -371,6 +425,17 @@ export const chipService = {
       // Roster comes from a SECURITY DEFINER RPC (member rows are RLS-restricted,
       // so a direct embed returns empty members[] and the team would drop).
       const { data: roster } = await supabase.rpc("get_tournament_team_roster", { p_tid: id });
+      // Fargo-cap override lives on tournament_teams (the roster RPC predates it and
+      // doesn't return it). The TEAM row is directly selectable, so read it separately
+      // and merge by team id below.
+      const { data: teamOverrides } = await supabase
+        .from("tournament_teams")
+        .select(
+          "id, fargo_cap_override, fargo_cap_at_override, player_fargo_at_override, fargo_cap_override_reason, fargo_cap_override_notes, overridden_by, overridden_at",
+        )
+        .eq("tournament_id", id);
+      const overrideByTeam = new Map<number, Partial<ChipEntry>>();
+      for (const to of (teamOverrides ?? []) as any[]) overrideByTeam.set(to.id, overrideFromRow(to));
       const byTeam = new Map<number, RosterTeam>();
       for (const r of (roster ?? []) as any[]) {
         let t = byTeam.get(r.team_id);
@@ -391,7 +456,8 @@ export const chipService = {
           if (cap.player_id != null && linkedProfileIds.has(cap.player_id)) return false;
           return true;
         })
-        .map(rosterTeamToEntry);
+        .map(rosterTeamToEntry)
+        .map((e) => (e.teamId != null && overrideByTeam.has(e.teamId) ? { ...e, ...overrideByTeam.get(e.teamId) } : e));
     } else {
       importedEntries = (regs.data ?? [])
         .filter((r: any) => {

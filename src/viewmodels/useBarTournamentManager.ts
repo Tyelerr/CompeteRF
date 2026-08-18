@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { isTournamentArchived, isTournamentCompleted } from "../utils/tournament.archive";
 import { getNavCache, setNavCache } from "./nav-cache";
 
 export interface BarTournamentWithStats extends Tournament {
@@ -158,9 +159,20 @@ export const useBarTournamentManager = () => {
     return map;
   };
 
+  // Completion and archival are decoupled (see src/utils/tournament.archive.ts):
+  // a completed tournament keeps status="completed" and only shows under Archived
+  // once archived_at is set OR 30 days have elapsed. So the Completed tab is
+  // "completed & NOT archived" and Archived is derived, not a status value.
+  const bucketOf = (t: BarTournamentWithStats): keyof StatusCounts => {
+    if (t.status === "cancelled") return "cancelled";
+    if (isTournamentArchived(t)) return "archived";
+    if (isTournamentCompleted(t)) return "completed";
+    return "active";
+  };
+
   const calculateStatusCounts = (tournamentList: BarTournamentWithStats[]): StatusCounts => {
     const counts = tournamentList.reduce(
-      (acc, t) => { acc.all++; acc[t.status as keyof StatusCounts]++; return acc; },
+      (acc, t) => { acc.all++; acc[bucketOf(t)]++; return acc; },
       { active: 0, completed: 0, cancelled: 0, archived: 0, all: 0 } as StatusCounts,
     );
     setStatusCounts(counts);
@@ -169,7 +181,7 @@ export const useBarTournamentManager = () => {
 
   const applyFilters = () => {
     let filtered = [...tournaments];
-    if (statusFilter !== "all") filtered = filtered.filter((t) => t.status === statusFilter);
+    if (statusFilter !== "all") filtered = filtered.filter((t) => bucketOf(t) === statusFilter);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(

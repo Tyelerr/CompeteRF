@@ -15,6 +15,7 @@ import {
   View,
   Platform,
 } from "react-native";
+import { isTournamentArchived, isTournamentCompleted } from "../../../../src/utils/tournament.archive";
 import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
@@ -152,11 +153,14 @@ const TournamentCard = ({
   onReassign: () => void;
   isProcessing: boolean;
 }) => {
-  const sc = getStatusColor(t.status);
-  const arch = t.status === "archived";
+  // Completion = status="completed" OR live_state="finished"; archival is derived
+  // (archived_at / 30-day). Keep this card in lockstep with the shared helpers.
   const canc = t.status === "cancelled";
-  const act = t.status === "active";
-  const comp = t.status === "completed";
+  const arch = isTournamentArchived(t);
+  const comp = isTournamentCompleted(t);
+  const act = t.status === "active" && !comp;
+  const displayStatus = canc ? "cancelled" : arch ? "archived" : comp ? "completed" : t.status;
+  const sc = getStatusColor(displayStatus);
 
   return (
     <TouchableOpacity
@@ -173,7 +177,7 @@ const TournamentCard = ({
             <Text style={styles.idBadgeText}>ID: {t.id}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: sc + "20" }]}>
-            <Text style={[styles.statusText, { color: sc }]}>{t.status}</Text>
+            <Text style={[styles.statusText, { color: sc }]}>{displayStatus}</Text>
           </View>
         </View>
       </View>
@@ -299,7 +303,7 @@ const TournamentCard = ({
             </TouchableOpacity>
           </>
         )}
-        {comp && (
+        {comp && !arch && (
           <TouchableOpacity
             style={[styles.btn, styles.archiveBtn]}
             onPress={(e) => {

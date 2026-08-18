@@ -1,8 +1,11 @@
 ﻿// app/(tabs)/notification-preferences.tsx
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
+  Keyboard,
   Platform,
   RefreshControl,
   ScrollView,
@@ -13,6 +16,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Haptics from "expo-haptics";
+import { OtpInput } from "../../src/views/components/common/otp-input";
+import { digitsOnly, formatUsPhoneInput } from "../../src/utils/phone";
 import { useAuthContext } from "../../src/providers/AuthProvider";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
@@ -20,10 +26,14 @@ import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
 import { SMS_PREFERENCE_CATEGORIES } from "../../src/models/types/notification.types";
 import { useNotificationPreferences } from "../../src/viewmodels/hooks/use.notification.preferences";
+import { usePhoneVerification } from "../../src/viewmodels/hooks/use.phone.verification";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
+
+// Telnyx Verify profile issues a 5-digit code. Keep the UI in lockstep.
+const OTP_LENGTH = 5;
 
 export default function NotificationPreferencesScreen() {
   const router = useRouter();
@@ -37,29 +47,148 @@ export default function NotificationPreferencesScreen() {
     categories,
     togglePreference,
     savePreferences,
-    isSendingTest,
-    sendTestSms,
     openDeviceSettings,
     refresh,
   } = useNotificationPreferences(user?.id);
+  const pv = usePhoneVerification();
 
-  const onRefresh = useCallback(async () => { await refresh(); }, [refresh]);
+  const onRefresh = useCallback(async () => {
+    await refresh();
+    await pv.refresh();
+  }, [refresh, pv]);
 
-  // Local copy of the SMS phone so typing is smooth; saved on blur.
-  const [phone, setPhone] = useState("");
+  // Explicit UI step. Verification is bound to the exact phone number, never to
+  // the account: "verified" is ONLY ever reached through a successful verifyCode
+  // (or an initial load where the server already considers the canonical number
+  // verified). A freshly typed number therefore can never inherit verified state.
+  type Step = "phone" | "code" | "verified";
+  const [step, setStep] = useState<Step | null>(null);
+  const [phoneDigits, setPhoneDigits] = useState("");
+  const [code, setCode] = useState("");
+  const [verifyFailed, setVerifyFailed] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [autoFocusPhone, setAutoFocusPhone] = useState(false);
+  const successAnim = useRef(new Animated.Value(0)).current;
+
+  const verified = step === "verified";
+
+  // Initialize the step once the hook has loaded; keep it honest if the server
+  // later reports the number is no longer verified. Never auto-promote to
+  // "verified" — that transition only happens on a successful verifyCode.
   useEffect(() => {
-    setPhone(preferences?.sms_phone ?? "");
-  }, [preferences?.sms_phone]);
+    if (pv.loading) return;
+    if (step === null) {
+      setStep(pv.isVerified ? "verified" : "phone");
+      return;
+    }
+    if (step === "verified" && !pv.isVerified) setStep("phone");
+  }, [pv.loading, pv.isVerified, step]);
 
-  const smsOn = preferences?.sms_enabled ?? false;
+  // Resend countdown (60s) after a code is sent.
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const t = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendSeconds]);
+
+  // Success-checkmark pop when the verified card appears.
+  useEffect(() => {
+    if (step !== "verified") return;
+    successAnim.setValue(0);
+    Animated.spring(successAnim, {
+      toValue: 1,
+      friction: 5,
+      tension: 140,
+      useNativeDriver: Platform.OS !== "web",
+    }).start();
+  }, [step, successAnim]);
+
+  // SMS toggles are gated on the LOCAL verified step, so changing/clearing the
+  // number disables them immediately — before the server-side clear lands.
+  const smsOn = verified && pv.smsEnabled;
   const smsCategories = SMS_PREFERENCE_CATEGORIES.filter(
     (c) => !c.directorOnly || canSubmitTournaments,
   );
 
-  const savePhone = () => {
-    const trimmed = phone.trim();
-    if (trimmed === (preferences?.sms_phone ?? "")) return;
-    savePreferences({ sms_phone: trimmed || null });
+  const successHaptic = () => {
+    if (!isWeb) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  };
+  const warningHaptic = () => {
+    if (!isWeb) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  };
+
+  const onSendCode = async () => {
+    if (phoneDigits.length !== 10 || sending) return;
+    setSending(true);
+    const res = await pv.sendCode(phoneDigits);
+    setSending(false);
+    if (res.success) {
+      setCode("");
+      setVerifyFailed(false);
+      setResendSeconds(60);
+      setAutoFocusPhone(false);
+      setStep("code");
+    } else {
+      warningHaptic();
+      Alert.alert("Couldn't send code", res.error ?? "Please try again.");
+    }
+  };
+  const onVerify = async (submitted?: string) => {
+    if (verifying) return;
+    setVerifying(true);
+    const res = await pv.verifyCode(submitted ?? code);
+    setVerifying(false);
+    if (res.success) {
+      Keyboard.dismiss();
+      setCode("");
+      setVerifyFailed(false);
+      setResendSeconds(0);
+      successHaptic();
+      setStep("verified");
+    } else {
+      setVerifyFailed(true);
+      warningHaptic();
+      Alert.alert("Not verified", res.error ?? "Please try again.");
+    }
+  };
+  // Return to phone entry, wiping every trace of the prior number's flow. Used by
+  // the code-step "Change" link (nothing verified yet → no confirm) and, after
+  // the confirmation dialog, from the verified card.
+  const startChange = () => {
+    pv.resetCodeSent();
+    setPhoneDigits("");
+    setCode("");
+    setVerifyFailed(false);
+    setResendSeconds(0);
+    setAutoFocusPhone(true);
+    setStep("phone");
+  };
+  const onChangeNumber = () => {
+    Alert.alert(
+      "Change phone number?",
+      "Changing your phone number will require verifying the new number before SMS alerts can be used again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", style: "destructive", onPress: startChange },
+      ],
+    );
+  };
+  const onToggleSms = async (value: boolean) => {
+    const res = value ? await pv.enableAlerts() : await pv.disableAlerts();
+    if (!res.success) {
+      warningHaptic();
+      Alert.alert("Couldn't update", res.error ?? "Please try again.");
+    }
+  };
+  const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const onSendTest = async () => {
+    const res = await pv.sendTest();
+    Alert.alert(
+      res.success ? "Test sent" : "Couldn't send",
+      res.success ? "Check your phone." : res.error ?? "Please try again.",
+    );
   };
 
   if (isLoading) {
@@ -145,29 +274,125 @@ export default function NotificationPreferencesScreen() {
           <View style={styles.section}>
             <Text allowFontScaling={false} style={styles.sectionTitle}>TEXT MESSAGE ALERTS</Text>
 
-            {/* Phone number */}
-            <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
-              <View style={styles.preferenceInfo}>
-                <View style={styles.preferenceHeader}>
-                  <Text allowFontScaling={false} style={styles.preferenceIcon}>{"📱"}</Text>
-                  <Text allowFontScaling={false} style={styles.preferenceLabel}>Mobile Number</Text>
-                </View>
-                <TextInput
-                  allowFontScaling={false}
-                  style={styles.phoneInput}
-                  value={phone}
-                  onChangeText={setPhone}
-                  onBlur={savePhone}
-                  placeholder="(555) 123-4567"
-                  placeholderTextColor={COLORS.textMuted}
-                  keyboardType="phone-pad"
-                  returnKeyType="done"
-                  onSubmitEditing={savePhone}
-                />
+            {/* ── Phone verification: one obvious action per step ─────────── */}
+            {step === null ? (
+              <View style={styles.verifyBlock}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
               </View>
-            </View>
+            ) : step === "verified" ? (
+              <View style={styles.verifiedCard}>
+                <Animated.Text
+                  allowFontScaling={false}
+                  style={[
+                    styles.verifiedCheck,
+                    {
+                      opacity: successAnim,
+                      transform: [
+                        { scale: successAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+                      ],
+                    },
+                  ]}
+                >
+                  ✅
+                </Animated.Text>
+                <View style={styles.verifiedBody}>
+                  <Text allowFontScaling={false} style={styles.verifiedTitle}>Phone Verified</Text>
+                  <Text allowFontScaling={false} style={styles.verifiedPhone}>{pv.maskedPhone}</Text>
+                  <Text allowFontScaling={false} style={styles.verifiedSub}>
+                    {"We'll text you when your matches are ready."}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.verifiedChangeBtn}
+                    onPress={onChangeNumber}
+                    disabled={pv.busy}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text allowFontScaling={false} style={styles.changeLink}>Change Phone Number</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : step === "code" ? (
+              <View style={styles.verifyBlock}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>Verification Code</Text>
+                <Text allowFontScaling={false} style={styles.fieldHint}>
+                  Enter the {OTP_LENGTH}-digit code we texted to {formatUsPhoneInput(phoneDigits) || "your phone"}.
+                </Text>
+                <OtpInput
+                  value={code}
+                  onChange={setCode}
+                  onComplete={(c) => onVerify(c)}
+                  length={OTP_LENGTH}
+                  disabled={verifying}
+                  autoFocus
+                />
+                {(verifyFailed || verifying) && (
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, (verifying || code.length < OTP_LENGTH) && styles.primaryBtnDisabled]}
+                    onPress={() => onVerify()}
+                    disabled={verifying || code.length < OTP_LENGTH}
+                    activeOpacity={0.8}
+                  >
+                    <Text allowFontScaling={false} style={styles.primaryBtnText}>
+                      {verifying ? "Verifying…" : "Verify Code"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <View style={styles.resendRow}>
+                  {resendSeconds > 0 ? (
+                    <Text allowFontScaling={false} style={styles.resendMuted}>Resend code in {mmss(resendSeconds)}</Text>
+                  ) : (
+                    <TouchableOpacity onPress={onSendCode} disabled={sending} activeOpacity={0.7}>
+                      <Text allowFontScaling={false} style={styles.resendActive}>
+                        {sending ? "Sending…" : "Resend Code"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.changeLinkRow}
+                  onPress={startChange}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text allowFontScaling={false} style={styles.changeLink}>Change Phone Number</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.verifyBlock}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>Mobile Number</Text>
+                <View style={styles.phoneRow}>
+                  <View style={styles.countryPrefix}>
+                    <Text allowFontScaling={false} style={styles.countryPrefixText}>🇺🇸 +1</Text>
+                  </View>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.phoneInput, styles.phoneInputFlex]}
+                    value={formatUsPhoneInput(phoneDigits)}
+                    onChangeText={(t) => setPhoneDigits(digitsOnly(t).slice(0, 10))}
+                    placeholder="(555) 123-4567"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="number-pad"
+                    textContentType="telephoneNumber"
+                    returnKeyType="done"
+                    editable={!sending}
+                    autoFocus={autoFocusPhone}
+                    onSubmitEditing={onSendCode}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={[styles.primaryBtn, (sending || phoneDigits.length !== 10) && styles.primaryBtnDisabled]}
+                  onPress={onSendCode}
+                  disabled={sending || phoneDigits.length !== 10}
+                  activeOpacity={0.8}
+                >
+                  <Text allowFontScaling={false} style={styles.primaryBtnText}>
+                    {sending ? "Sending…" : "Send Verification Code"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {/* Master SMS opt-in */}
+            {/* Master SMS opt-in — requires a verified number; routed through the
+                consent RPCs. Verification alone never opts the user in. */}
             <View style={[styles.preferenceRow, styles.preferenceRowBorder]}>
               <View style={styles.preferenceInfo}>
                 <View style={styles.preferenceHeader}>
@@ -175,15 +400,17 @@ export default function NotificationPreferencesScreen() {
                   <Text allowFontScaling={false} style={styles.preferenceLabel}>Enable Text Alerts</Text>
                 </View>
                 <Text allowFontScaling={false} style={styles.preferenceDescription}>
-                  Get text alerts for your matches. Reply STOP to opt out.
+                  {verified
+                    ? "Get text alerts for your matches. Reply STOP to opt out."
+                    : "Verify your mobile number to enable text alerts."}
                 </Text>
               </View>
               <Switch
                 value={smsOn}
-                onValueChange={(value) => savePreferences({ sms_enabled: value })}
+                onValueChange={onToggleSms}
                 trackColor={{ false: COLORS.border, true: COLORS.primary + "80" }}
                 thumbColor={smsOn ? COLORS.primary : COLORS.textMuted}
-                disabled={isSaving || !phone.trim()}
+                disabled={pv.busy || !verified}
               />
             </View>
 
@@ -226,13 +453,13 @@ export default function NotificationPreferencesScreen() {
             <TouchableOpacity
               style={[
                 styles.testSmsBtn,
-                (!smsOn || isSendingTest) && styles.testSmsBtnDisabled,
+                (!verified || pv.busy) && styles.testSmsBtnDisabled,
               ]}
-              onPress={sendTestSms}
-              disabled={!smsOn || isSendingTest}
+              onPress={onSendTest}
+              disabled={!verified || pv.busy}
               activeOpacity={0.7}
             >
-              {isSendingTest ? (
+              {pv.busy ? (
                 <ActivityIndicator size="small" color={COLORS.primary} />
               ) : (
                 <Text allowFontScaling={false} style={styles.testSmsText}>
@@ -379,6 +606,70 @@ const styles = StyleSheet.create({
     fontSize: wxMs(FONT_SIZES.md),
     color: COLORS.text,
   },
+  // ── Verification flow ──
+  verifyBlock: {
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.md),
+  },
+  fieldLabel: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: wxSc(SPACING.xs),
+  },
+  fieldHint: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    lineHeight: wxMs(FONT_SIZES.xs) * 1.5,
+    marginBottom: wxSc(SPACING.xs),
+  },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm) },
+  countryPrefix: {
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.sm),
+    backgroundColor: COLORS.background,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  countryPrefixText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", color: COLORS.text },
+  phoneInputFlex: { flex: 1, marginTop: 0, marginLeft: 0 },
+  primaryBtn: {
+    marginTop: wxSc(SPACING.md),
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: wxSc(SPACING.md),
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: wxSc(48),
+  },
+  primaryBtnDisabled: { opacity: 0.4 },
+  primaryBtnText: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: "#fff" },
+  resendRow: { alignItems: "center", marginTop: wxSc(SPACING.md) },
+  resendMuted: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted },
+  resendActive: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.primary },
+  // Compact verified card: ✅  Phone Verified / •••• 5766 / sub / Change link.
+  verifiedCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: wxSc(SPACING.sm),
+    marginHorizontal: wxSc(SPACING.md),
+    marginVertical: wxSc(SPACING.sm),
+    paddingHorizontal: wxSc(SPACING.md),
+    paddingVertical: wxSc(SPACING.sm),
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.success + "14",
+    borderWidth: 1,
+    borderColor: COLORS.success + "40",
+  },
+  verifiedCheck: { fontSize: wxMs(FONT_SIZES.lg), marginTop: wxSc(1) },
+  verifiedBody: { flex: 1 },
+  verifiedTitle: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.success },
+  verifiedPhone: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, marginTop: wxSc(1) },
+  verifiedSub: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: wxSc(2) },
+  changeLink: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.primary },
+  changeLinkRow: { alignItems: "center", marginTop: wxSc(SPACING.md) },
+  verifiedChangeBtn: { marginTop: wxSc(SPACING.sm), alignSelf: "flex-start" },
   preferenceDescription: {
     fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary,
     lineHeight: wxMs(FONT_SIZES.xs) * 1.5,

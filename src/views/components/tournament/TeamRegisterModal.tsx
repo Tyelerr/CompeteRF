@@ -25,7 +25,10 @@ import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { useTeamRegistration } from "../../../viewmodels/hooks/use.team.registration";
+import { usePlayerSearch } from "../../../viewmodels/hooks/use.player.search";
 import { Tournament } from "../../../models/types/tournament.types";
+import { Profile } from "../../../models/types/profile.types";
+import { teamInviteLink, teamInviteMessage } from "../../../utils/team.invite";
 
 interface Props {
   visible: boolean;
@@ -47,6 +50,12 @@ export function TeamRegisterModal({ visible, tournament, playerId, onClose }: Pr
   const [fargoMode, setFargoMode] = useState<"enter" | "none">("enter");
   const [captainFargo, setCaptainFargo] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Partner sub-flow once the team exists but has no partner:
+  //  "menu"   → Add Partner Now | Invite Partner
+  //  "search" → shared existing-player search (Create New Player arrives in Phase 5)
+  //  "invite" → the shareable-link actions (Text / Share / Copy)
+  const [partnerMode, setPartnerMode] = useState<"menu" | "search" | "invite">("menu");
+  const search = usePlayerSearch();
 
   const num = (s: string) => {
     const d = s.replace(/\D/g, "");
@@ -70,10 +79,8 @@ export function TeamRegisterModal({ visible, tournament, playerId, onClose }: Pr
 
   // Shareable HTTPS invite link (Universal/App Link) carrying the team's token.
   const inviteLink =
-    tournament && vm.team?.invite_token
-      ? `https://www.thecompeteapp.com/join/${tournament.id}?invite=${vm.team.invite_token}`
-      : "";
-  const inviteMessage = `🎱 Join my team for ${tournament?.name} on Compete!\n\nTap below to join:\n${inviteLink}`;
+    tournament && vm.team?.invite_token ? teamInviteLink(tournament.id, vm.team.invite_token) : "";
+  const inviteMessage = teamInviteMessage(vm.captainName, tournament?.name, inviteLink);
 
   const handleTextInvite = async () => {
     if (!inviteLink) return;
@@ -92,6 +99,47 @@ export function TeamRegisterModal({ visible, tournament, playerId, onClose }: Pr
       await Share.share({ message: inviteMessage });
     } catch {
       /* dismissed */
+    }
+  };
+
+  // Copy Link — dependency-free: web uses the Clipboard API; native falls back to
+  // the share sheet (which offers "Copy"). A true native clipboard copy would need
+  // expo-clipboard (intentionally not added in Phase I).
+  const handleCopyLink = async () => {
+    if (!inviteLink) return;
+    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(inviteLink);
+        return;
+      } catch {
+        /* fall through to share */
+      }
+    }
+    await handleShareLink();
+  };
+
+  // "Add Partner Now" → invite a specific existing account by username (they accept
+  // in-app). Create-New-Player (a pending account) is added here after Phase 5.
+  const handleAddExisting = async (p: Profile) => {
+    setError(null);
+    try {
+      await vm.invitePartner({ method: "username", value: p.user_name });
+      setPartnerMode("menu");
+      search.reset();
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't invite that player.");
+    }
+  };
+
+  // Cancel Invite / Add Different Player → clear the current partner slot (captain
+  // action via cancel_team_partner), returning to "Waiting for Partner".
+  const handleCancelInvite = async () => {
+    setError(null);
+    try {
+      await vm.cancelPartner();
+      setPartnerMode("menu");
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't cancel the invite.");
     }
   };
 
@@ -186,30 +234,105 @@ export function TeamRegisterModal({ visible, tournament, playerId, onClose }: Pr
 
               <View style={s.memberRow}>
                 <Text allowFontScaling={false} style={s.memberName}>{vm.captainName}</Text>
-                <Text allowFontScaling={false} style={s.memberRole}>Teammate</Text>
+                <Text allowFontScaling={false} style={s.memberRole}>Player 1</Text>
               </View>
               <View style={s.memberRow}>
                 <Text allowFontScaling={false} style={s.memberName}>
-                  {vm.partner ? vm.partnerName : "No teammate yet"}
+                  {vm.partner ? vm.partnerName : "Waiting for Partner"}
                 </Text>
-                {vm.partner && (
-                  <Text allowFontScaling={false} style={[s.memberRole, { color: statusMeta?.color }]}>
-                    {vm.state === "registered" ? "Confirmed" : "Pending"}
-                  </Text>
-                )}
+                <Text
+                  allowFontScaling={false}
+                  style={[s.memberRole, vm.partner && statusMeta ? { color: statusMeta.color } : null]}
+                >
+                  {vm.partner
+                    ? vm.state === "registered"
+                      ? "Player 2 · Confirmed"
+                      : "Player 2 · Invite Pending"
+                    : "Player 2"}
+                </Text>
               </View>
 
-              {/* Share the invite while the partner slot is open */}
-              {!vm.partner && (
+              {/* Open partner slot → choose how to add Player 2 */}
+              {!vm.partner && partnerMode === "menu" && (
                 <>
-                  <Text allowFontScaling={false} style={[s.label, s.shareLabel]}>Invite your teammate</Text>
-                  <TouchableOpacity style={s.sharePrimary} onPress={handleTextInvite} disabled={!inviteLink}>
-                    <Text allowFontScaling={false} style={s.sharePrimaryText}>💬 Text the invite</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.shareSecondary} onPress={handleShareLink} disabled={!inviteLink}>
-                    <Text allowFontScaling={false} style={s.shareSecondaryText}>🔗 Share / copy link</Text>
+                  <Text allowFontScaling={false} style={[s.label, s.shareLabel]}>Add your partner</Text>
+                  <View style={s.forkRow}>
+                    <TouchableOpacity style={s.forkBtn} onPress={() => setPartnerMode("search")}>
+                      <Text allowFontScaling={false} style={s.forkBtnText}>Add Partner Now</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.forkBtn} onPress={() => setPartnerMode("invite")}>
+                      <Text allowFontScaling={false} style={s.forkBtnText}>Invite Partner</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {!vm.partner && partnerMode === "search" && (
+                <>
+                  <Text allowFontScaling={false} style={[s.label, s.shareLabel]}>Add Partner Now</Text>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={s.searchInput}
+                    value={search.query}
+                    onChangeText={search.setQuery}
+                    placeholder="Search by name or username…"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoFocus
+                  />
+                  {search.results.slice(0, 6).map((p) => (
+                    <TouchableOpacity
+                      key={p.id_auto}
+                      style={s.resultRow}
+                      onPress={() => handleAddExisting(p)}
+                      disabled={vm.busy}
+                    >
+                      <Text allowFontScaling={false} style={s.resultName}>
+                        {[p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.name || p.user_name}
+                      </Text>
+                      <Text allowFontScaling={false} style={s.resultMeta}>#{p.id_auto}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {search.query.trim().length >= 2 && !search.isSearching && search.results.length === 0 && (
+                    <Text allowFontScaling={false} style={s.hint}>No players found. (Creating a new player arrives soon.)</Text>
+                  )}
+                  <TouchableOpacity style={s.shareSecondary} onPress={() => { setPartnerMode("menu"); search.reset(); }}>
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>← Back</Text>
                   </TouchableOpacity>
                 </>
+              )}
+
+              {!vm.partner && partnerMode === "invite" && (
+                <>
+                  <Text allowFontScaling={false} style={[s.label, s.shareLabel]}>Invite Partner</Text>
+                  <TouchableOpacity style={s.sharePrimary} onPress={handleTextInvite} disabled={!inviteLink}>
+                    <Text allowFontScaling={false} style={s.sharePrimaryText}>💬 Text Invite</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.shareSecondary} onPress={handleShareLink} disabled={!inviteLink}>
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>🔗 Share Invite</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.shareSecondary} onPress={handleCopyLink} disabled={!inviteLink}>
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>📋 Copy Link</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.shareSecondary} onPress={() => setPartnerMode("menu")}>
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>← Back</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {/* Pending invite → cancel or swap the partner (captain action) */}
+              {vm.partner && vm.state === "invited" && (
+                <View style={s.stackButtons}>
+                  <TouchableOpacity style={s.shareSecondary} onPress={handleCancelInvite} disabled={vm.busy}>
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>{vm.busy ? "Working…" : "Cancel Invite"}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.shareSecondary}
+                    onPress={async () => { await handleCancelInvite(); setPartnerMode("search"); }}
+                    disabled={vm.busy}
+                  >
+                    <Text allowFontScaling={false} style={s.shareSecondaryText}>Add Different Player</Text>
+                  </TouchableOpacity>
+                </View>
               )}
 
               {error && <Text allowFontScaling={false} style={s.error}>{error}</Text>}
@@ -291,4 +414,12 @@ const s = StyleSheet.create({
   stackButtons: { marginTop: scale(SPACING.lg), gap: scale(SPACING.sm) },
   dangerBtn: { paddingVertical: scale(11), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.error },
   dangerBtnText: { color: COLORS.error, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
+
+  forkRow: { flexDirection: "row", gap: scale(SPACING.sm) },
+  forkBtn: { flex: 1, backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center", shadowColor: COLORS.primary, shadowOpacity: 0.5, shadowRadius: scale(12), shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  forkBtnText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
+  searchInput: { height: scale(48), backgroundColor: COLORS.surfaceLight, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: scale(12), paddingHorizontal: scale(SPACING.md), color: COLORS.text, fontSize: moderateScale(FONT_SIZES.md), marginBottom: scale(SPACING.sm) },
+  resultRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: scale(SPACING.sm), paddingHorizontal: scale(SPACING.sm), borderRadius: scale(10), backgroundColor: COLORS.surface, marginBottom: scale(SPACING.xs) },
+  resultName: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.text, fontWeight: "600", flex: 1 },
+  resultMeta: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700" },
 });

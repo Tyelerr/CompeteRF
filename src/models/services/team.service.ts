@@ -109,6 +109,21 @@ export const teamService = {
     return (row as TeamInviteInfo) ?? null;
   },
 
+  // A team's shareable invite token. Lean read used by the TD chip-manage
+  // "Invite Partner" action, which has the team id (from the roster) but not the
+  // token (the roster RPC omits it). RLS on tournament_teams already permits this
+  // read; no backend change. (See PENDING_ACCOUNTS_MIGRATION.md §O + the invite_token
+  // exposure follow-up.)
+  async getTeamInviteToken(teamId: number): Promise<string | null> {
+    const { data, error } = await supabase
+      .from("tournament_teams")
+      .select("invite_token")
+      .eq("id", teamId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as { invite_token: string | null } | null)?.invite_token ?? null;
+  },
+
   // All teams for a tournament (TD manager view).
   async getTeams(tournamentId: number): Promise<TournamentTeam[]> {
     const { data, error } = await supabase
@@ -241,6 +256,24 @@ export const teamService = {
     const { error } = await supabase.rpc("set_team_paid", {
       p_team_id: teamId,
       p_paid: paid,
+    });
+    if (error) throw error;
+  },
+
+  // TD sets / clears a team's Fargo-cap override (tournament_teams). override=false clears
+  // the whole snapshot. overridden_by/at are stamped server-side (auth.uid() / now()).
+  async setTeamFargoOverride(
+    teamId: number,
+    override: boolean,
+    snap: { cap: number | null; rating: number | null; reason: string | null; notes: string | null },
+  ): Promise<void> {
+    const { error } = await supabase.rpc("set_team_fargo_override", {
+      p_team_id: teamId,
+      p_override: override,
+      p_cap: snap.cap,
+      p_rating: snap.rating,
+      p_reason: snap.reason,
+      p_notes: snap.notes,
     });
     if (error) throw error;
   },

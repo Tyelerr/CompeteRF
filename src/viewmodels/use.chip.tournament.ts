@@ -54,12 +54,66 @@ import {
   ChipTier,
 } from "../models/types/chip.types";
 import { Tournament } from "../models/types/tournament.types";
+import { readyGate } from "../utils/registration-lifecycle";
 
 // The "parent" (cause) of a transaction is the FIRST event the action logged —
 // its automatic side-effects were pushed after it. Events are stored newest-first
 // (unshift), so within one action's slice the cause sits at the END.
 const txParent = (newestFirst: ChipEvent[]): ChipEvent =>
   newestFirst[newestFirst.length - 1] ?? newestFirst[0];
+
+// Fargo-cap override snapshot shape + local ChipEntry patch, shared by all three write
+// paths. Module-scoped (pure) so the vm's useCallbacks don't need it as a dependency.
+type OverrideSnap = { cap: number | null; rating: number | null; reason: string | null; notes: string | null; overriddenBy: string | null };
+const overrideFields = (on: boolean, snap: OverrideSnap): Partial<ChipEntry> =>
+  on
+    ? {
+        fargoCapOverride: true,
+        fargoCapAtOverride: snap.cap,
+        playerFargoAtOverride: snap.rating,
+        fargoCapOverrideReason: snap.reason,
+        fargoCapOverrideNotes: snap.notes,
+        overriddenBy: snap.overriddenBy,
+        overriddenAt: new Date().toISOString(),
+      }
+    : {
+        fargoCapOverride: false,
+        fargoCapAtOverride: null,
+        playerFargoAtOverride: null,
+        fargoCapOverrideReason: null,
+        fargoCapOverrideNotes: null,
+        overriddenBy: null,
+        overriddenAt: null,
+      };
+
+const EMPTY_OVERRIDE_SNAP: OverrideSnap = { cap: null, rating: null, reason: null, notes: null, overriddenBy: null };
+
+// Auto-clear stale Fargo-cap overrides: if an entry has an override but its CURRENT
+// rating is at/under the cap, the override no longer applies and must be wiped so a later
+// return to the same rating is treated as a NEW over-cap condition. Returns the healed
+// state + the entries whose override was cleared (so non-owned sources — doubles/self-reg
+// — can be persisted explicitly; owned singles persist via the normal auto-save).
+const reconcileOverrides = (
+  c: ChipState,
+  maxFargo: number | null,
+): { chip: ChipState; cleared: ChipEntry[] } => {
+  const isDoubles = c.settings.format === "scotch_doubles";
+  const ratingOf = (e: ChipEntry): number | null =>
+    isDoubles ? (e.p1Fargo != null && e.p2Fargo != null ? e.p1Fargo + e.p2Fargo : null) : e.p1Fargo ?? null;
+  const isOver = (e: ChipEntry): boolean => {
+    const r = ratingOf(e);
+    return r != null && maxFargo != null && r > maxFargo;
+  };
+  const cleared: ChipEntry[] = [];
+  const entries = c.entries.map((e) => {
+    if (e.fargoCapOverride && !isOver(e)) {
+      cleared.push(e);
+      return { ...e, ...overrideFields(false, EMPTY_OVERRIDE_SNAP) };
+    }
+    return e;
+  });
+  return cleared.length ? { chip: { ...c, entries }, cleared } : { chip: c, cleared };
+};
 
 const blankEntry = (): ChipEntry => ({
   id: newId("e"),
@@ -73,6 +127,7 @@ const blankEntry = (): ChipEntry => ({
   chips: 0,
   paid: false,
   checkedIn: false,
+  paidSidePots: [],
   status: "queued",
   wins: 0,
   losses: 0,
@@ -133,8 +188,18 @@ export const useChipTournament = (id: number) => {
       } else {
         // Self-heal on load: (1) void ghost matches whose teams are gone, (2) settle
         // a stuck shuffle drain, (3) re-attach any alive team that fell out of the
-        // queue (e.g. from a stale/failed config save while a migration was pending).
-        setChip(reconcileQueue(settleShuffleDrain(reconcileMatches(b.chip))));
+        // queue (e.g. from a stale/failed config save while a migration was pending),
+        // (4) auto-clear stale Fargo-cap overrides now at/under the cap (rating or the
+        // tournament max changed). Owned singles persist via auto-save; doubles/self-reg
+        // are projected (auto-save skips them), so clear those sources explicitly.
+        const healed = reconcileQueue(settleShuffleDrain(reconcileMatches(b.chip)));
+        const { chip: reconciled, cleared } = reconcileOverrides(healed, b.tournament?.max_fargo ?? null);
+        setChip(reconciled);
+        for (const e of cleared) {
+          if (e.teamId != null) teamService.setTeamFargoOverride(e.teamId, false, { cap: null, rating: null, reason: null, notes: null }).catch(() => {});
+          else if (e.regId != null && e.fromRegistration)
+            registrationService.setFargoOverride(e.regId, false, { cap: null, rating: null, reason: null, notes: null, overriddenBy: null }).catch(() => {});
+        }
       }
       loadedRef.current = true;
     } catch (e: any) {
@@ -688,6 +753,53 @@ export const useChipTournament = (id: number) => {
     [update, load, locked],
   );
 
+  // TD removes a self-registered player from the tournament (tournament_players): cancel
+  // the registration so it stops projecting into the chip roster (load filters cancelled).
+  const cancelRegistration = useCallback(
+    async (registrationId: number) => {
+      if (locked()) return;
+      update((c) => ({ ...c, entries: c.entries.filter((e) => e.regId !== registrationId) }));
+      try {
+        await registrationService.markCancelled(registrationId);
+        await load();
+      } catch (err) {
+        await load();
+        throw err;
+      }
+    },
+    [update, load, locked],
+  );
+
+  // Unified lifecycle write for a self-registered SINGLES entry (tournament_players):
+  // sets entry-fee paid AND the Ready-derived status in ONE update (mirrors elim's
+  // handleReady). ready=true → status checked_in (in the field); ready=false → approved
+  // (Registered). Optimistic + rethrow-on-failure so the card can retry.
+  const setRegistrationReady = useCallback(
+    async (registrationId: number, opts: { paid: boolean; ready: boolean }) => {
+      if (locked()) return;
+      update((c) => ({
+        ...c,
+        entries: c.entries.map((e) =>
+          e.regId === registrationId
+            ? { ...e, paid: opts.paid, checkedIn: opts.ready, regStatus: opts.ready ? "checked_in" : "approved" }
+            : e,
+        ),
+      }));
+      try {
+        await registrationService.updateRegistration(registrationId, {
+          paid_entry: opts.paid,
+          status: opts.ready ? "checked_in" : "approved",
+          checked_in_at: opts.ready ? new Date().toISOString() : null,
+        });
+        await load();
+      } catch (err) {
+        await load();
+        throw err;
+      }
+    },
+    [update, load, locked],
+  );
+
   // TD marks a team paid / unpaid (persisted, survives roster reloads).
   const setTeamPaid = useCallback(
     async (teamId: number, paid: boolean) => {
@@ -703,6 +815,43 @@ export const useChipTournament = (id: number) => {
       }
     },
     [update, load, locked],
+  );
+
+  // ── Fargo-cap override writes (per source) ────────────────────────────────────
+  // Doubles team override (tournament_teams via RPC; overridden_by stamped server-side).
+  const setTeamFargoOverride = useCallback(
+    async (teamId: number, on: boolean, snap: OverrideSnap) => {
+      if (locked()) return;
+      update((c) => ({ ...c, entries: c.entries.map((e) => (e.teamId === teamId ? { ...e, ...overrideFields(on, snap) } : e)) }));
+      try {
+        await teamService.setTeamFargoOverride(teamId, on, { cap: snap.cap, rating: snap.rating, reason: snap.reason, notes: snap.notes });
+      } catch {
+        await load();
+      }
+    },
+    [update, load, locked],
+  );
+
+  // Self-registered singles override (tournament_players direct update).
+  const setRegistrationFargoOverride = useCallback(
+    async (registrationId: number, on: boolean, snap: OverrideSnap) => {
+      if (locked()) return;
+      update((c) => ({ ...c, entries: c.entries.map((e) => (e.regId === registrationId ? { ...e, ...overrideFields(on, snap) } : e)) }));
+      try {
+        await registrationService.setFargoOverride(registrationId, on, { cap: snap.cap, rating: snap.rating, reason: snap.reason, notes: snap.notes, overriddenBy: snap.overriddenBy });
+        await load();
+      } catch (err) {
+        await load();
+        throw err;
+      }
+    },
+    [update, load, locked],
+  );
+
+  // Append an audit-log event (e.g. Fargo-cap override) to chip_events.
+  const logEvent = useCallback(
+    (type: string, text: string, payload?: Record<string, unknown> | null) => chipService.logEvent(id, type, text, payload),
+    [id],
   );
 
   // TD removes one player from a team.
@@ -748,15 +897,39 @@ export const useChipTournament = (id: number) => {
     if (!chip) return;
     setStarting(true);
     try {
-      // Materialize any registration-backed entries into owned chip entries so
-      // they persist (clear the transient bridge flag before the snapshot).
+      // SINGLE explicit normalization point (setup → live only): reconcile checkedIn to
+      // the derived Ready set (Entry Fee satisfied + no hard blocker) BEFORE the engine
+      // consumes it. This clears any stale legacy checkedIn=true on unpaid/blocked setup
+      // rows so nobody unexpectedly enters the field, and never runs while live/completed
+      // (start() is the setup→live transition). Also materializes registration-backed
+      // entries into owned chip entries so they persist.
+      const feeRequired = (Number(tournament?.entry_fee) || 0) > 0;
+      const isDoubles = chip.settings.format === "scotch_doubles";
+      // Final live field = EXPLICITLY Ready (checkedIn) AND still eligible (payment +
+      // no hard blocker + a partner for doubles). This respects the TD's manual-Unready
+      // decision — a paid, eligible player who was not marked Ready is NOT auto-included —
+      // while still clearing anyone explicitly Ready who has since become ineligible
+      // (e.g. a legacy checkedIn=true + unpaid row).
+      const readyForField = (e: ChipEntry): boolean => {
+        if (!e.checkedIn) return false;
+        const hasPartner = isDoubles
+          ? e.p2MemberId != null || (!!e.p2Name && e.p2Name !== "") || e.p2ProfileId != null
+          : true;
+        if (isDoubles && !hasPartner) return false;
+        const hardBlocker = isDoubles
+          ? e.p1Fargo == null || e.p2Fargo == null
+          : e.p1Fargo == null;
+        return readyGate({ paid: !!e.paid, entryFeeRequired: feeRequired, hardBlocker });
+      };
       const owned: ChipState = {
         ...chip,
-        entries: chip.entries.map((e) =>
-          e.fromRegistration
-            ? { ...e, fromRegistration: false, regId: null, regStatus: null, fargoStatus: null }
-            : e,
-        ),
+        entries: chip.entries.map((e) => ({
+          ...e,
+          ...(e.fromRegistration
+            ? { fromRegistration: false, regId: null, regStatus: null, fargoStatus: null }
+            : {}),
+          checkedIn: readyForField(e),
+        })),
       };
       const started = startChipTournament(owned);
       setChip(started);
@@ -767,7 +940,7 @@ export const useChipTournament = (id: number) => {
     } finally {
       setStarting(false);
     }
-  }, [chip, id, load]);
+  }, [chip, id, load, tournament]);
 
   const liveState = tournament?.live_state ?? "not_started";
   const isLive = liveState === "in_progress";
@@ -831,6 +1004,11 @@ export const useChipTournament = (id: number) => {
     endTournament,
     reopen,
     approveRegistration,
+    setRegistrationReady,
+    cancelRegistration,
+    setTeamFargoOverride,
+    setRegistrationFargoOverride,
+    logEvent,
     confirmTeamMemberFargo,
     unlockTeam,
     approveTeam,

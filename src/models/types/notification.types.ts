@@ -48,14 +48,101 @@ export interface NotificationPreferences {
   giveaway_updates: boolean;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
-  // SMS (text message) channel — see 20260617120000_sms_notifications.sql.
+  // SMS (text message) channel — see 20260617120000_sms_notifications.sql +
+  // 20260729120000_sms_phone_consent.sql.
+  // sms_enabled + all sms_consent_* / sms_opted_out_at are SERVER-SET (via the
+  // enable_sms_alerts / disable_sms_alerts RPCs), never written directly by clients.
   sms_enabled: boolean;
-  sms_phone: string | null;
   sms_match_alerts: boolean;
+  sms_tournament_reminders: boolean;
   sms_weekly_report: boolean;
+  sms_consent_at: string | null;
+  sms_consent_source: string | null;
+  sms_consent_version: string | null;
+  sms_opted_out_at: string | null;
+  /**
+   * @deprecated Canonical phone now lives on `profiles.phone_number`. Kept as a
+   * read-only compatibility field until the app is repointed, then removed in a
+   * follow-up migration. Do not write new values.
+   */
+  sms_phone?: string | null;
   created_at: string;
   updated_at: string;
 }
+
+// ── SMS consent audit + delivery (20260729120000_sms_phone_consent.sql) ──
+
+export type SmsConsentAction =
+  | "phone_changed"
+  | "verification_completed"
+  | "opted_in"
+  | "opted_out";
+
+export type SmsConsentSource =
+  | "app_settings"
+  | "onboarding"
+  | "web_opt_in"
+  | "sms_start_keyword"
+  | "admin_migration";
+
+/** Immutable row in sms_consent_events — the full SMS lifecycle history. */
+export interface SmsConsentEvent {
+  id: number;
+  user_id: string;
+  phone_number: string | null;
+  action: SmsConsentAction;
+  consent_version: string | null;
+  consent_source: SmsConsentSource | null;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export type SmsMessageType =
+  | "verification"
+  | "test_message"
+  | "match_ready"
+  | "tournament_reminder"
+  | "account_update";
+
+export type SmsDeliveryStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "sending_failed"
+  | "delivery_failed";
+
+/** Row in sms_messages — outbound delivery log (populated from Phase 5). */
+export interface SmsMessage {
+  id: number;
+  user_id: string | null;
+  tournament_id: number | null;
+  match_id: string | null;
+  to_e164: string; // FULL number — mask everywhere outside trusted backend/logs
+  message_type: SmsMessageType;
+  telnyx_message_id: string | null;
+  provider: string | null;
+  provider_message_id: string | null;
+  status: SmsDeliveryStatus | null;
+  error_code: string | null;
+  error_detail: string | null;
+  retry_count: number | null;
+  last_status_at: string | null;
+  created_at: string;
+  accepted_at: string | null;
+  delivered_at: string | null;
+}
+
+/**
+ * Frozen SMS consent wording. A MATERIAL wording change must create a NEW version
+ * (e.g. "sms-consent-v2"); never change the meaning of an existing version.
+ */
+export const SMS_CONSENT = {
+  version: "sms-consent-v1",
+  text:
+    "By enabling SMS notifications, you agree to receive automated text messages " +
+    "from Compete about match assignments, tournament reminders, and account " +
+    "updates. Message and data rates may apply. Reply STOP to opt out and HELP for help.",
+} as const;
 
 export interface MessageRateLimit {
   id: string;
@@ -198,7 +285,7 @@ export const PREFERENCE_CATEGORIES: PreferenceCategory[] = [
 export interface SmsPreferenceCategory {
   key: keyof Pick<
     NotificationPreferences,
-    "sms_match_alerts" | "sms_weekly_report"
+    "sms_match_alerts" | "sms_tournament_reminders" | "sms_weekly_report"
   >;
   label: string;
   description: string;
@@ -215,6 +302,13 @@ export const SMS_PREFERENCE_CATEGORIES: SmsPreferenceCategory[] = [
     description:
       "Get a text when it's your turn to play — your table number and opponent.",
     icon: "🎱",
+  },
+  {
+    key: "sms_tournament_reminders",
+    label: "Tournament Reminders",
+    description:
+      "Reminders about tournaments you're registered for — start times and updates.",
+    icon: "⏰",
   },
   {
     key: "sms_weekly_report",

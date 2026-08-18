@@ -21,6 +21,8 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
+import { TournamentEntrySection } from "./TournamentEntrySection";
+import { SidePotDef } from "../../../utils/side-pots";
 
 const isWeb = Platform.OS === "web";
 
@@ -48,13 +50,10 @@ export interface TeamCardPlayerVM {
   removable?: boolean; // draft: show a "Change" affordance on the row
   onEdit?: () => void; // display: show an "Edit" affordance (attached PENDING members)
   pendingAccount?: boolean; // subtle tertiary: this player has no Compete account yet
-}
-
-export interface TeamCardSidePotVM {
-  name: string;
-  label: string;
-  entered: boolean;
-  onToggle: () => void;
+  // Singles display: render identity ONLY (name + Player ID + pending/Edit). Status and
+  // Fargo are shown by the card as their own dedicated rows (elimination-card style),
+  // not crammed into this row's right side.
+  identityOnly?: boolean;
 }
 
 export interface TeamCardProps {
@@ -67,6 +66,9 @@ export interface TeamCardProps {
   label: string; // "Team #1" | "New Team" (Singles hides the "Player #1" label)
   statusLabel: string;
   statusColor: string;
+  // Subtle whole-card outline that encodes the lifecycle at a glance (green=Ready,
+  // amber=needs attention, red=No Show). Omit for the neutral gray border.
+  cardBorderColor?: string;
   chipsPillText?: string; // deprecated: chips now live only in the Assigned Chips row
   teamName?: string | null;
   onChangeTeamName?: (v: string) => void; // draft: editable team name in the card
@@ -81,10 +83,16 @@ export interface TeamCardProps {
   teamFargo?: number;
   assignedChipsText: string; // "5" or "5 · manual"
   paid: boolean;
-  checkedIn: boolean;
-  onTogglePaid?: () => void; // display interactive; omit for static (draft)
-  onToggleCheckIn?: () => void; // display interactive; omit for static / not-yet-approved
-  sidePots?: TeamCardSidePotVM[];
+  onTogglePaid?: () => void; // display interactive; omit for static (draft). Drives the
+  // Entry Fee row in the shared Tournament Entry section (payment = chip_entries.paid).
+  // Tournament Entry (display, shared with the Add flow): required entry fee + side pots.
+  // entryFee → the fee amount; sidePots → all defined pots (name+amount); enteredPots →
+  // the NAMES this entry is in (paid_side_pots). onToggleSidePot persists membership
+  // (Singles: updateEntry; Doubles: team side pots — the caller decides).
+  entryFee?: number | null;
+  sidePots?: SidePotDef[];
+  enteredPots?: string[];
+  onToggleSidePot?: (name: string, entered: boolean) => void;
 
   // display edit chip override
   showChipOverride?: boolean;
@@ -123,6 +131,32 @@ const PlayerRow = ({
       <Text allowFontScaling={false} style={styles.pavatarText}>{(p.name || "?").charAt(0).toUpperCase()}</Text>
     </View>
   );
+
+  // Singles display: identity ONLY — name on the left, Player ID on the right (like the
+  // elimination card). Status + Fargo are separate card rows, so nothing is crammed
+  // here. A PENDING player shows a subtle tag + an Edit affordance (opens the modal).
+  if (p.identityOnly) {
+    // Name is the priority: it may wrap to 2 lines. Player ID rides beneath it as a
+    // muted secondary line rather than competing on the same row (so a long name never
+    // gets crushed into an ugly truncation). Edit stays a small right-side affordance.
+    return (
+      <View style={[styles.prow, first && styles.prowFirst]}>
+        {avatar}
+        <View style={styles.pinfo}>
+          <Text allowFontScaling={false} style={styles.pnameDisplay} numberOfLines={2}>{p.name || "Player"}</Text>
+          {p.idLabel ? <Text allowFontScaling={false} style={styles.identityIdSub} numberOfLines={1}>{p.idLabel}</Text> : null}
+          {p.pendingAccount ? (
+            <Text allowFontScaling={false} style={styles.pAccountPending} numberOfLines={1}>Pending account</Text>
+          ) : null}
+        </View>
+        {p.onEdit ? (
+          <TouchableOpacity style={styles.identityEdit} onPress={p.onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text allowFontScaling={false} style={styles.pEditLink}>Edit</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  }
 
   // Display edit mode (Actions → editing a saved row): stacked so nothing is cramped.
   // Row 1: avatar + name + remove. Row 2: a compact Fargo field (3–4 digits).
@@ -249,9 +283,10 @@ const PlayerRow = ({
 
 export const TeamCard = (props: TeamCardProps) => {
   const {
-    mode, doubles, title, onClose, label, statusLabel, statusColor, teamName, onChangeTeamName,
+    mode, doubles, title, onClose, label, statusLabel, statusColor, cardBorderColor, teamName, onChangeTeamName,
     player1, player2, showAddPartner, onAddPlayer2, onInvitePartner,
-    showTeamFargo, teamFargo, assignedChipsText, paid, checkedIn, onTogglePaid, onToggleCheckIn, sidePots,
+    showTeamFargo, teamFargo, assignedChipsText, paid, onTogglePaid,
+    entryFee, sidePots, enteredPots, onToggleSidePot,
     showChipOverride, chipOverrideDefault, chipAutoPlaceholder, onChipOverrideEnd,
     readOnly, actionsLabel, onActions, primary, warning,
     onCancel, onSaveWaiting, onCreateTeam, saving,
@@ -272,8 +307,18 @@ export const TeamCard = (props: TeamCardProps) => {
     }
   };
 
+  // Fargo caption under the singles Fargo value. ATTENTION-ONLY: verified/normal shows
+  // nothing (the number speaks for itself) — we never plaster "✓ Verified" everywhere.
+  // The only surfaced state is a missing Fargo, which is the hard blocker for chips.
+  const fargoCaption = () => {
+    if (player1.fargo == null) {
+      return <Text allowFontScaling={false} style={styles.fargoNeeds}>No Fargo</Text>;
+    }
+    return null;
+  };
+
   return (
-    <View style={styles.tcard}>
+    <View style={[styles.tcard, cardBorderColor ? { borderColor: cardBorderColor, borderWidth: 1.5 } : null]}>
       {title ? (
         <View style={styles.cardTitleRow}>
           <Text allowFontScaling={false} style={styles.cardTitle}>{title}</Text>
@@ -285,8 +330,8 @@ export const TeamCard = (props: TeamCardProps) => {
         </View>
       ) : null}
       {/* Doubles/draft keep a compact team header (Team #N + team status). Singles has
-          NO header — the status pill rides on the player's identity row instead, so the
-          top has no awkward empty space and chips are shown only in the summary. */}
+          NO header — identity, operational status, and Fargo are stacked as their own
+          rows below (elimination-card style). */}
       {showTeamHeader ? (
         <View style={styles.tcardHead}>
           {doubles ? <Text allowFontScaling={false} style={styles.tcardNum}>{label}</Text> : null}
@@ -310,11 +355,20 @@ export const TeamCard = (props: TeamCardProps) => {
         <Text allowFontScaling={false} style={styles.tcardName} numberOfLines={2}>{teamName}</Text>
       ) : null}
 
-      <PlayerRow
-        p={player1}
-        first={singlesDisplay}
-        statusPill={singlesDisplay ? { label: statusLabel, color: statusColor } : undefined}
-      />
+      {singlesDisplay ? (
+        <>
+          {/* Identity + operational status. The identity ALWAYS stays normal — Edit
+              Player edits the existing Fargo row in place (below), so there is only ever
+              one Fargo field and the name area is never duplicated into an input. */}
+          <PlayerRow p={{ ...player1, identityOnly: true }} first />
+          <View style={styles.statusLine}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            <Text allowFontScaling={false} style={[styles.statusLineText, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+        </>
+      ) : (
+        <PlayerRow p={player1} first={singlesDisplay} />
+      )}
       {doubles &&
         (player2 ? (
           <PlayerRow p={player2} />
@@ -348,59 +402,73 @@ export const TeamCard = (props: TeamCardProps) => {
       )}
 
       <View style={styles.tsummary}>
+        {/* Singles: Fargo is the first row of the grouped section — prominent value +
+            attention-only caption, tight against the entry rows below. */}
+        {singlesDisplay && (
+          <View style={styles.fargoSumRow}>
+            <Text allowFontScaling={false} style={styles.tsumLabel}>Fargo</Text>
+            {player1.editingRow ? (
+              // Edit Player: the displayed Fargo value is replaced by an input box IN
+              // PLACE (one Fargo field only, no pencil). It shows the current value, or a
+              // "Fargo" placeholder when there is none. NO autoFocus — the box appears
+              // immediately but the keyboard opens only when the TD taps it.
+              <TextInput
+                allowFontScaling={false}
+                style={styles.fargoEditInput}
+                value={player1.fargo != null ? String(player1.fargo) : ""}
+                onChangeText={player1.onChangeFargo}
+                onEndEditing={() => player1.onCommitFargo?.()}
+                keyboardType="number-pad"
+                maxLength={4}
+                placeholder="Fargo"
+                placeholderTextColor={COLORS.textMuted}
+                returnKeyType="done"
+              />
+            ) : (
+              <View style={styles.fargoRowRight}>
+                <Text allowFontScaling={false} style={styles.fargoBig}>{player1.fargo ?? "—"}</Text>
+                {fargoCaption()}
+              </View>
+            )}
+          </View>
+        )}
         {showTeamFargo && (
           <View style={styles.tsumRow}>
             <Text allowFontScaling={false} style={styles.tsumLabel}>Team Fargo</Text>
             <Text allowFontScaling={false} style={styles.tsumVal}>{teamFargo}</Text>
           </View>
         )}
+
+        {/* Tournament Entry (display): Entry Fee (Paid/Unpaid) + each side pot
+            (Entered/Not Entered), all tappable. Shared with the Add flow so the visual
+            language matches. Draft keeps its own static Payment row below instead. */}
+        {!isDraft && ((Number(entryFee) || 0) > 0 || (sidePots?.length ?? 0) > 0) && (
+          <TournamentEntrySection
+            variant="display"
+            entryFee={entryFee}
+            sidePots={sidePots ?? []}
+            enteredPots={enteredPots ?? []}
+            paidEntry={paid}
+            onTogglePaidEntry={onTogglePaid}
+            onToggleSidePot={onToggleSidePot}
+            readOnly={readOnly}
+          />
+        )}
+
         <View style={styles.tsumRow}>
           <Text allowFontScaling={false} style={styles.tsumLabel}>Assigned Chips</Text>
           <Text allowFontScaling={false} style={[styles.tsumVal, { color: COLORS.primaryLight }]}>{assignedChipsText}</Text>
         </View>
-        <View style={styles.tsumRow}>
-          <Text allowFontScaling={false} style={styles.tsumLabel}>Payment</Text>
-          {onTogglePaid ? (
-            <TouchableOpacity
-              style={[styles.sumPill, paid && styles.sumPillOn]}
-              onPress={onTogglePaid}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text allowFontScaling={false} style={[styles.sumPillText, paid && styles.sumPillTextOn]}>{paid ? "Paid ✓" : "Unpaid"}</Text>
-            </TouchableOpacity>
-          ) : (
+
+        {/* Draft (Add Team) keeps a static Payment row; display shows payment inside the
+            Tournament Entry section above. Check-In is retired — Ready (the footer action)
+            is the single eligibility state now. */}
+        {isDraft && (
+          <View style={styles.tsumRow}>
+            <Text allowFontScaling={false} style={styles.tsumLabel}>Payment</Text>
             <View style={[styles.sumPill, paid && styles.sumPillOn]}>
               <Text allowFontScaling={false} style={[styles.sumPillText, paid && styles.sumPillTextOn]}>{paid ? "Paid ✓" : "Unpaid"}</Text>
             </View>
-          )}
-        </View>
-        <View style={styles.tsumRow}>
-          <Text allowFontScaling={false} style={styles.tsumLabel}>Check In</Text>
-          {onToggleCheckIn ? (
-            <TouchableOpacity
-              style={[styles.sumPill, checkedIn && styles.sumPillOn]}
-              onPress={onToggleCheckIn}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text allowFontScaling={false} style={[styles.sumPillText, checkedIn && styles.sumPillTextOn]}>{checkedIn ? "Checked In ✓" : "Not Checked In"}</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[styles.sumPill, checkedIn && styles.sumPillOn]}>
-              <Text allowFontScaling={false} style={[styles.sumPillText, checkedIn && styles.sumPillTextOn]}>{checkedIn ? "Checked In ✓" : "Not Checked In"}</Text>
-            </View>
-          )}
-        </View>
-        {sidePots && sidePots.length > 0 && (
-          <View style={styles.tpotsBlock}>
-            <Text allowFontScaling={false} style={styles.tpotsHead}>Side Pots</Text>
-            {sidePots.map((p) => (
-              <TouchableOpacity key={p.name} style={styles.potRow} onPress={p.onToggle} activeOpacity={0.7}>
-                <View style={[styles.potCheckbox, p.entered && styles.potCheckboxOn]}>{p.entered && <Text allowFontScaling={false} style={styles.potCheckMark}>✓</Text>}</View>
-                <Text allowFontScaling={false} style={[styles.potLabel, p.entered && styles.potLabelOn]}>{p.label}</Text>
-              </TouchableOpacity>
-            ))}
           </View>
         )}
       </View>
@@ -463,7 +531,7 @@ const styles = StyleSheet.create({
   pavatar: { width: webSc(44), height: webSc(44), borderRadius: webSc(22), backgroundColor: COLORS.surfaceLight, alignItems: "center", justifyContent: "center" },
   pavatarText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
   pname: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
-  pnameDisplay: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" }, // identity is the focus
+  pnameDisplay: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", lineHeight: webMs(FONT_SIZES.lg + 4) }, // identity is the focus; wraps to 2 lines
   pmeta: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.xs) },
   pAccountPending: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontStyle: "italic", marginTop: 1 },
   pchangeText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
@@ -477,6 +545,25 @@ const styles = StyleSheet.create({
   pfargoVerified: { color: COLORS.success, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   pfargoNeeds: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   pEditLink: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 1 },
+
+  // Singles identity: Player ID is a muted SECONDARY line under the (up-to-2-line) name;
+  // Edit is a small right-side affordance that stays top-aligned with the name.
+  identityIdSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginTop: 2 },
+  identityEdit: { marginLeft: webSc(SPACING.sm), alignSelf: "flex-start" },
+  // Operational status line directly under the identity (dot + colored label). Kept tight
+  // so the Fargo/Entry/Chips block reads as one grouped section below it.
+  statusLine: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), paddingTop: webSc(SPACING.xs), paddingBottom: webSc(SPACING.xs) },
+  statusDot: { width: webSc(9), height: webSc(9), borderRadius: webSc(5) },
+  statusLineText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Fargo as the first grouped-summary row: prominent value + attention caption, tight.
+  fargoSumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
+  fargoRowRight: { alignItems: "flex-end" },
+  fargoBig: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "800", lineHeight: webMs(FONT_SIZES.xxl + 2) },
+  // In-place Fargo editor — replaces the value in the same row. Compact fixed width
+  // sized for a short numeric value (≤4 digits); sits on the right of the row, text
+  // left-aligned inside. NOT flex-filled.
+  fargoEditInput: { width: webSc(72), backgroundColor: COLORS.surfaceLight, borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.sm, paddingHorizontal: webSc(8), paddingVertical: webSc(SPACING.xs), color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", textAlign: "left", ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
+  fargoNeeds: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", marginTop: 1 },
   // Compact Fargo pill (normal state) → expands to fargoInput on tap.
   fargoPill: { backgroundColor: COLORS.surfaceLight, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 5 },
   fargoPillText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -504,7 +591,7 @@ const styles = StyleSheet.create({
   editChipInput: { width: webSc(96), height: webSc(38), backgroundColor: COLORS.surfaceLight, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: webSc(SPACING.md), color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
 
   // Flat summary: no nested card — subtle top dividers between rows instead.
-  tsummary: { marginTop: webSc(SPACING.sm) },
+  tsummary: { marginTop: webSc(SPACING.xs) },
   tsumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   tsumLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
   tsumVal: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
@@ -513,15 +600,6 @@ const styles = StyleSheet.create({
   sumPillOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "22" },
   sumPillText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   sumPillTextOn: { color: COLORS.success },
-
-  tpotsBlock: { marginTop: 4, paddingTop: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
-  tpotsHead: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginBottom: 2 },
-  potRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
-  potCheckbox: { width: webSc(22), height: webSc(22), borderRadius: RADIUS.sm, borderWidth: 1.5, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
-  potCheckboxOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
-  potCheckMark: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
-  potLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
-  potLabelOn: { color: COLORS.success, fontWeight: "600" },
 
   tfooter: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.sm) },
   actionsBtn: { paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderLight, alignItems: "center", justifyContent: "center" },

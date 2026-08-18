@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { registrationService } from "../../models/services/registration.service";
 import { teamService } from "../../models/services/team.service";
 import { PlayerTournament } from "../../models/types/registration.types";
+import { isTournamentCompleted } from "../../utils/tournament.archive";
 
 // Team-format (Scotch Doubles) events register as a TEAM, not an individual
 // tournament_players row. A leftover players row (e.g. after a partner swap
@@ -24,8 +25,10 @@ const isTeamFormat = (t: PlayerTournament) =>
 const isLive = (t: PlayerTournament) =>
   t.tournament?.live_state === "in_progress" ||
   t.tournament?.live_state === "registration_closed";
+// Profile history keeps ALL completed tournaments (no 30-day archive split) so a
+// player's career/top-finishes never lose data. Uses the shared completion helper.
 const isCompleted = (t: PlayerTournament) =>
-  t.tournament?.status === "completed" || t.tournament?.live_state === "finished";
+  isTournamentCompleted(t.tournament ?? {});
 
 export const useProfileTournaments = (playerId?: number) => {
   const { data, isLoading, refetch } = useQuery({

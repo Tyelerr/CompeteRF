@@ -75,13 +75,27 @@ export interface ChipEntry {
   teamId?: number | null;
   teamName?: string | null; // custom team name (e.g. "Desert Sharks"); usually null
   chipOverride?: number | null; // TD manual chip-count override (null = auto)
-  paidSidePots?: string[]; // side-pot names this team bought into (tournament_teams.paid_side_pots)
+  // Side-pot names this entry is ENTERED in (membership, not collection). Singles →
+  // chip_entries.paid_side_pots; teams → tournament_teams.paid_side_pots.
+  paidSidePots?: string[];
   teamLocked?: boolean;
   teamApproved?: boolean;
   p1MemberId?: number | null;
   p2MemberId?: number | null;
   p1FargoVerified?: boolean;
   p2FargoVerified?: boolean;
+  // ── Fargo-cap override (per registration record; see migration 20260817120000) ──
+  // A TD exception letting this entry be Ready over tournament.max_fargo. Snapshot: only
+  // valid while playerFargoAtOverride === current rating AND fargoCapAtOverride ===
+  // current max. Doubles compares the TEAM rating. Read from chip_entries (singles),
+  // tournament_players (self-reg), or tournament_teams (doubles).
+  fargoCapOverride?: boolean;
+  fargoCapAtOverride?: number | null;
+  playerFargoAtOverride?: number | null;
+  fargoCapOverrideReason?: string | null;
+  fargoCapOverrideNotes?: string | null;
+  overriddenBy?: string | null;
+  overriddenAt?: string | null;
 }
 
 export interface ChipTable {

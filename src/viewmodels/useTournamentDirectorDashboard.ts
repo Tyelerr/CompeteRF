@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
+import { isTournamentCompleted } from "../utils/tournament.archive";
 
 export interface TDDashboardStats {
   totalTournaments: number;
@@ -139,7 +140,7 @@ export const useTournamentDirectorDashboard = () => {
       const { data: tournaments } = await supabase
         .from("tournaments")
         .select(
-          "id, status, venue_id, tournament_date, views_count, favorites_count",
+          "id, status, live_state, venue_id, tournament_date, views_count, favorites_count",
         )
         .eq("director_id", profile.id_auto)
         .gte("tournament_date", selectedTimeFilter.startDate)
@@ -150,10 +151,10 @@ export const useTournamentDirectorDashboard = () => {
       // Calculate basic stats
       const totalTournaments = tournaments.length;
       const activeTournaments = tournaments.filter(
-        (t) => t.status === "active",
+        (t) => t.status === "active" && !isTournamentCompleted(t),
       ).length;
-      const completedTournaments = tournaments.filter(
-        (t) => t.status === "completed",
+      const completedTournaments = tournaments.filter((t) =>
+        isTournamentCompleted(t),
       ).length;
       const totalViews = tournaments.reduce(
         (sum, t) => sum + (t.views_count || 0),

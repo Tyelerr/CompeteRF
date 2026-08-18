@@ -4,6 +4,7 @@ import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Platform, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { analyticsService } from "../src/models/services/analytics.service";
 import { AuthProvider } from "../src/providers/AuthProvider";
@@ -83,6 +84,14 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider style={styles.root}>
+      {/* App-wide native status bar. Rendered once at the root so every screen and
+          modal inherits it — the phone's time, battery, signal and Wi-Fi stay visible
+          throughout the app. style="light" forces light (readable) icons/text over our
+          dark UI regardless of the device's system light/dark setting. It is never
+          hidden here; a full-screen experience that truly needs it gone must opt out
+          locally. translucent lets content sit edge-to-edge while safe-area insets
+          (from SafeAreaProvider) keep real content out from under it. */}
+      <StatusBar style="light" translucent />
       <QueryProvider>
         <AuthProvider>
           <ThemeProvider value={NAV_THEME}>

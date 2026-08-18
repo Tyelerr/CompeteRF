@@ -6,6 +6,7 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
+import { isTournamentArchived, isTournamentCompleted } from "../../../utils/tournament.archive";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
@@ -17,6 +18,7 @@ export interface TournamentCardData {
   favorites_count: number; thumbnail?: string; can_edit: boolean;
   can_delete: boolean; cancelled_at?: string; cancelled_by_name?: string;
   cancellation_reason?: string; archived_at?: string; archived_by_name?: string;
+  completed_at?: string | null; live_state?: string | null;
 }
 
 interface TournamentCardProps {
@@ -59,11 +61,14 @@ const getStatusColor = (status: string): string => {
 };
 
 export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCancel, onRestore, onReassign, isProcessing = false, showActions = true }: TournamentCardProps) => {
-  const statusColor = getStatusColor(tournament.status);
-  const isArchived = tournament.status === "archived";
+  // Archival is derived (archived_at set OR 30 days since completed_at) and is
+  // separate from the lifecycle status, which stays "completed".
+  const isArchived = isTournamentArchived(tournament);
   const isCancelled = tournament.status === "cancelled";
-  const isActive = tournament.status === "active";
-  const isCompleted = tournament.status === "completed";
+  const isCompleted = isTournamentCompleted(tournament);
+  const isActive = !isCancelled && !isCompleted && tournament.status === "active";
+  const displayStatus = isArchived ? "archived" : isCompleted ? "completed" : tournament.status;
+  const statusColor = getStatusColor(displayStatus);
 
   const actions: ActionMenuItem[] = [];
   if (showActions) {
@@ -71,7 +76,7 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
     if (onReassign) actions.push({ label: "Reassign Director", onPress: onReassign });
     if (tournament.can_delete) {
       if (isActive && onCancel) actions.push({ label: "Delete", destructive: true, onPress: onCancel });
-      if ((isActive || isCompleted) && onArchive) actions.push({ label: "Archive", onPress: onArchive });
+      if ((isActive || isCompleted) && !isArchived && onArchive) actions.push({ label: "Archive", onPress: onArchive });
       if ((isCancelled || isArchived) && onRestore) actions.push({ label: "Restore", onPress: onRestore });
     }
   }
@@ -82,7 +87,7 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
         <Text allowFontScaling={false} style={[styles.tournamentName, isArchived && styles.textArchived]} numberOfLines={1}>{tournament.name}</Text>
         <View style={styles.headerRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
-            <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>{tournament.status}</Text>
+            <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>{displayStatus}</Text>
           </View>
           <View style={styles.idBadge}>
             <Text allowFontScaling={false} style={styles.idText}>ID: {tournament.id}</Text>

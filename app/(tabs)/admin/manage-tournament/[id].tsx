@@ -32,6 +32,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
@@ -2026,7 +2027,7 @@ export default function ManageTournamentScreen() {
   const prizeSavedRef = useRef<string | null>(null);
   // The page ScrollView — chip pages ask to jump to the top (e.g. when a shuffle
   // round completes) so the Shuffle Mode banner / Start Shuffle is in reach.
-  const pageScrollRef = useRef<ScrollView>(null);
+  const pageScrollRef = useRef<KeyboardAwareScrollView>(null);
   useEffect(() => {
     if (prizeSeededRef.current || !hub.tournament) return;
     const base = hub.prizePool ?? defaultPrizePoolConfig(sidePotNames);
@@ -5079,7 +5080,7 @@ export default function ManageTournamentScreen() {
             embeddedPage={cp}
             actionsOpen={chipActionsOpen}
             onActionsOpenChange={setChipActionsOpen}
-            onRequestScrollTop={() => pageScrollRef.current?.scrollTo({ y: 0, animated: true })}
+            onRequestScrollTop={() => pageScrollRef.current?.scrollToPosition(0, 0, true)}
             onNavigate={(tab) => {
               setSelectedPhase("live");
               handleTabPress(tab);
@@ -5615,13 +5616,20 @@ export default function ManageTournamentScreen() {
           </View>
         </ScrollView>
       ) : (
-        <ScrollView
+        <KeyboardAwareScrollView
           ref={pageScrollRef}
           style={styles.scrollFlex}
           contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          enableOnAndroid
+          // Chip's in-card Fargo edit: a modest extra offset lifts the card's lower
+          // controls (Done / Mark Ready) above the keyboard without over-scrolling the
+          // card top off screen. Non-chip keeps default behavior so elimination is
+          // unaffected.
+          extraScrollHeight={isChip ? webSc(72) : 0}
+          keyboardOpeningTime={0}
           onScrollBeginDrag={() => Keyboard.dismiss()}
           refreshControl={
             isWeb ? undefined : (
@@ -5634,7 +5642,7 @@ export default function ManageTournamentScreen() {
           }
         >
           {renderTab()}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
 
       {/* Fixed footer: Close Registration stays pinned while the list scrolls */}
@@ -5646,6 +5654,21 @@ export default function ManageTournamentScreen() {
           >
             <Text allowFontScaling={false} style={styles.lockBtnText}>
               Add Players to Bracket →
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Chip analog: pinned Review & Start → on the embedded chip Players setup page. Just
+          navigates to the chip Review page (the actual Start lives there). */}
+      {isChip && selectedPhase === "setup" && activeTab === "players" && (
+        <View style={styles.playersFooter}>
+          <TouchableOpacity
+            style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
+            onPress={() => handleTabPress("review")}
+          >
+            <Text allowFontScaling={false} style={styles.lockBtnText}>
+              Review &amp; Start →
             </Text>
           </TouchableOpacity>
         </View>
