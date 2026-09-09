@@ -369,7 +369,11 @@ export const chipService = {
   },
 
   // Hydrate the tournament + its chip state from the relational tables.
-  async load(id: number): Promise<ChipTournamentBundle> {
+  // `publicRead` routes chip_entries reads to the spectator-safe view chip_entries_public
+  // (no p1_phone / private fields) — for spectator + player-hub surfaces whose viewers are
+  // NOT tournament managers. Manager surfaces (admin manage screen, host) omit it and read
+  // the base table (full row, incl. p1_phone) under is_chip_manager RLS. (Audit item 39.)
+  async load(id: number, opts?: { publicRead?: boolean }): Promise<ChipTournamentBundle> {
     const { data: t, error } = await supabase
       .from("tournaments")
       .select("*, venues(*)")
@@ -378,9 +382,20 @@ export const chipService = {
     if (error) throw error;
     if (!t) throw new Error("Tournament not found.");
 
+    // Public (spectator/player) reads use the PII-safe view chip_entries_public. It is
+    // resilient to the migration not yet being applied: if the view is missing, fall back
+    // to the base table (which is still public until the RLS migration lands). Manager
+    // reads always use the base table (full row incl. p1_phone).
+    const entriesQuery = (async () => {
+      if (opts?.publicRead) {
+        const r = await supabase.from("chip_entries_public").select("*").eq("tournament_id", id);
+        if (!r.error) return r;
+      }
+      return supabase.from("chip_entries").select("*").eq("tournament_id", id);
+    })();
     const [cfg, entries, tables, matches, events, regs] = await Promise.all([
       supabase.from("chip_config").select("*").eq("tournament_id", id).maybeSingle(),
-      supabase.from("chip_entries").select("*").eq("tournament_id", id),
+      entriesQuery,
       supabase.from("chip_tables").select("*").eq("tournament_id", id).order("sort", { ascending: true }),
       supabase.from("chip_matches").select("*").eq("tournament_id", id),
       supabase.from("chip_events").select("*").eq("tournament_id", id).order("created_at", { ascending: false }),

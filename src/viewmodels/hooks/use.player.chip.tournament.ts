@@ -435,7 +435,7 @@ export const usePlayerChipTournament = (
 
   const stateQuery = useQuery({
     queryKey: ["player-chip-hub", tournamentId, playerId],
-    queryFn: () => chipService.load(tournamentId!),
+    queryFn: () => chipService.load(tournamentId!, { publicRead: true }),
     enabled: !!tournamentId && !!playerId,
     // Poll while live so the player's status/queue stays fresh (no realtime yet).
     refetchInterval: tournamentId ? 8000 : false,

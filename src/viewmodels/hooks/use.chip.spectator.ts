@@ -688,7 +688,7 @@ export const specMatchElapsedMs = (
 export const useChipSpectator = (tournamentId?: number, viewerProfileId?: number | null) => {
   const query = useQuery({
     queryKey: ["chip-spectator", tournamentId],
-    queryFn: () => chipService.load(tournamentId!),
+    queryFn: () => chipService.load(tournamentId!, { publicRead: true }),
     enabled: !!tournamentId,
     // Poll while open so queue/chips/tables/standings stay live — no realtime
     // channel exists, and the spectator makes no writes, so polling is enough.
