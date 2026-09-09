@@ -73,7 +73,11 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
     id: ev.id,
     at: ev.at,
     text,
-    actor: readStr("actorName"),
+    // Show the actor to spectators ONLY for director OVERRIDES — which always carry a
+    // reason (chip adjust, forfeit, restore, etc.). Routine play-by-play now also stamps
+    // an actor for the admin audit trail (item 21), but surfacing "Director: X" on every
+    // match result / elimination would spam the spectator feed, so gate it on `reason`.
+    actor: reason ? readStr("actorName") : null,
     reason,
     notes: readStr("notes"),
   };

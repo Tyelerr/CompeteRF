@@ -147,9 +147,23 @@ const blankEntry = (): ChipEntry => ({
   createdAt: new Date().toISOString(),
 });
 
-export const useChipTournament = (id: number) => {
+export const useChipTournament = (
+  id: number,
+  actorId?: number | null,
+  actorName?: string | null,
+) => {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [chip, setChip] = useState<ChipState | null>(null);
+  // The acting director (D/item 21). Threaded onto gameplay events that don't already
+  // carry an actor (match results, chip loss, eliminations, table events, auto-seeds) so
+  // audit attribution is reliable — reason-gated actions still set their own actor/reason.
+  const actorRef = useRef<{ id: number | null; name: string | null }>({
+    id: actorId ?? null,
+    name: actorName ?? null,
+  });
+  useEffect(() => {
+    actorRef.current = { id: actorId ?? null, name: actorName ?? null };
+  }, [actorId, actorName]);
   // `loading` = the INITIAL, never-loaded-yet state that shows the full takeover.
   // `refreshing` = a BACKGROUND revalidation after a mutation: the roster stays on
   // screen (no takeover, no list clearing) while the server state is reconciled.
@@ -331,20 +345,30 @@ export const useChipTournament = (id: number) => {
       let next = assignFinals(reconcileEliminations(settleShuffleDrain(materializeLive(fn(c)))));
       if (next === c) return c; // no-op — nothing to record
       const added = Math.max(0, next.events.length - c.events.length);
-      let newEvents = added > 0 ? next.events.slice(0, added) : [];
-      // A single action that logged MULTIPLE events (e.g. a completed match →
-      // match_result + chip_loss + elimination) is one transaction: stamp them all
-      // with a shared txId so the Audit Log folds them into one parent row.
-      if (newEvents.length > 1) {
-        const txId = newId("tx");
+      if (added > 0) {
+        // Events are stored newest-first, so the new ones are the first `added`. Stamp the
+        // acting director (item 21) on any that didn't set their own actor, and share one
+        // txId across a multi-event action (match_result + chip_loss + elimination) so the
+        // Audit Log folds them into one row.
+        const actor = actorRef.current;
+        const txId = added > 1 ? newId("tx") : null;
         const evs = next.events.slice();
-        for (let k = 0; k < added; k++) evs[k] = { ...evs[k], txId };
+        for (let k = 0; k < added; k++) {
+          let ev = evs[k];
+          if (actor.id != null && ev.by == null) {
+            ev = {
+              ...ev,
+              by: actor.id,
+              payload: { ...(ev.payload ?? {}), actorName: ev.payload?.actorName ?? actor.name },
+            };
+          }
+          if (txId) ev = { ...ev, txId };
+          evs[k] = ev;
+        }
         next = { ...next, events: evs };
-        newEvents = evs.slice(0, added);
-      }
-      // Append a PERSISTED restore point (pre-action snapshot). Label it from the
-      // PARENT event (the cause) so confirm prompts read "…beat…", not "…lost a chip".
-      if (newEvents.length) {
+        // Append a PERSISTED restore point (pre-action snapshot). Label it from the
+        // PARENT event (the cause) so confirm prompts read "…beat…", not "…lost a chip".
+        const newEvents = evs.slice(0, added);
         const parent = txParent(newEvents);
         return withRestorePoint(next, c, newEvents.map((e) => e.id), parent.text);
       }

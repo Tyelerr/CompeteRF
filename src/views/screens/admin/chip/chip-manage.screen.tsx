@@ -544,7 +544,22 @@ const ShuffleBallsAnimation = ({ onDone }: { onDone: () => void }) => {
 };
 
 export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
-  const vm = useChipTournament(id);
+  // Acting director identity (from auth) — passed into the VM so it can stamp gameplay
+  // audit events, and reused by reason-gated actions. Computed BEFORE the VM call.
+  const { profile } = useAuthContext();
+  const actorId = profile?.id_auto ?? null;
+  const actorName = (() => {
+    const full = profile
+      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
+        profile.name ||
+        profile.user_name ||
+        ""
+      : "";
+    const parts = full.trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "Tournament Director";
+    return parts.length < 2 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
+  })();
+  const vm = useChipTournament(id, actorId, actorName);
   // Host bumps `reloadSignal` when its tournament-scoped registration Realtime channel
   // sees a change. Silently reload so a cross-client registration surfaces here without
   // a spinner/scroll reset. Refs keep reload stable and skip the initial mount value
@@ -572,19 +587,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const setupLocked = readOnly || vm.isLive;
   const router = useRouter();
   // Acting Tournament Director — recorded on restores as "Performed by".
-  const { profile } = useAuthContext();
-  const actorId = profile?.id_auto ?? null;
-  const actorName = (() => {
-    const full = profile
-      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() ||
-        profile.name ||
-        profile.user_name ||
-        ""
-      : "";
-    const parts = full.trim().split(/\s+/).filter(Boolean);
-    if (!parts.length) return "Tournament Director";
-    return parts.length < 2 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
-  })();
   // Consistent display names: First name + Last initial ("Brandee Ogunjobi" →
   // "Brandee O."). When two DISTINCT players would collapse to the same short
   // form (e.g. "Tyler Braun" + "Tyler Brown" → "Tyler B."), those specific names

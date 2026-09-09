@@ -14,6 +14,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -311,7 +312,18 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
   // Viewer's own profile id (id_auto) so their entry can be marked "(You)". null for
   // spectators/admins who aren't entered.
   const viewerProfileId = useAuthStore((st) => st.profile?.id_auto ?? null);
-  const { view, isLoading } = useChipSpectator(tournamentId, viewerProfileId);
+  const { view, isLoading, refetch } = useChipSpectator(tournamentId, viewerProfileId);
+  // Pull-to-refresh for every spectator tab (item 23): one RefreshControl on the shared
+  // body ScrollView targets the live tournament query only (background polling stays on).
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   const [tab, setTab] = useState<Tab>("overview");
   const [now, setNow] = useState(() => 0);
@@ -491,7 +503,7 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
             <Text allowFontScaling={false} style={styles.empty}>Tournament not found.</Text>
           </View>
         ) : (
-          <ScrollView ref={bodyRef} style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false}>
+          <ScrollView ref={bodyRef} style={styles.body} contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}>
             {tab === "overview" && (
               <OverviewTab
                 view={view}
