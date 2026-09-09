@@ -1,5 +1,5 @@
 ﻿import { Stack } from "expo-router";
-import { useNavigationContainerRef } from "@react-navigation/native";
+import { useNavigationContainerRef } from "expo-router/react-navigation";
 
 export default function SearchAlertsLayout() {
   return (

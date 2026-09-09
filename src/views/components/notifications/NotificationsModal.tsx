@@ -1,8 +1,11 @@
 ﻿import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../../../lib/supabase";
 import { ConversationPreview, RecipientOption, conversationService } from "../../../models/services/conversation.service";
+import { reviewService } from "../../../models/services/review.service";
+import { ConversationThread } from "./ConversationThread";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -282,27 +285,44 @@ const NotificationCard = ({ item, isExpanded, onPress, onDelete, onTournamentPre
   );
 };
 
-const ConversationCard = ({ convo, onPress, onDelete }: { convo: ConversationPreview; onPress: () => void; onDelete: () => void }) => {
+const ConversationCard = ({ convo, onPress, onDelete, reviewInfo }: { convo: ConversationPreview; onPress: () => void; onDelete: () => void; reviewInfo?: { venueName?: string | null; tournamentName?: string | null } }) => {
   const hasUnread = convo.unread_count > 0;
   const roleInfo = convo.other_participant_role ? getConvoRoleInfo(convo.other_participant_role) : { color: "#95A5A6", icon: "💬" };
+  // Review conversations get a venue-flavored row: which venue replied + which tournament. The
+  // player gets NO destructive delete here (archive lives in the conversation's ••• menu).
+  const isReview = convo.category === "review";
+  const reviewVenue = reviewInfo?.venueName || convo.other_participant_name || "Management";
+  const reviewTournament =
+    reviewInfo?.tournamentName ||
+    (convo.subject || "").replace(/^re:\s*your review of\s*/i, "").trim() ||
+    "your tournament";
   return (
-    <TouchableOpacity style={[s.card, hasUnread && s.cardUnread]} onPress={onPress} onLongPress={() => Alert.alert("Delete", "Remove this conversation?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: onDelete }])} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[s.card, hasUnread && s.cardUnread]}
+      onPress={onPress}
+      onLongPress={isReview ? undefined : () => Alert.alert("Delete", "Remove this conversation?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: onDelete }])}
+      activeOpacity={0.7}
+    >
       {hasUnread && <View style={[s.accentBar, { backgroundColor: roleInfo.color }]} />}
       <View style={s.cardContent}>
         <View style={s.cardTopRow}>
           <View style={s.senderRow}>
             <View style={[s.senderDot, { backgroundColor: roleInfo.color }]} />
-            <Text allowFontScaling={false} style={s.senderText}>{convo.is_support ? "📢 Compete Support" : `${roleInfo.icon} ${convo.other_participant_name || "Unknown"}`}</Text>
+            <Text allowFontScaling={false} style={s.senderText}>
+              {isReview ? `⭐ ${reviewVenue}` : convo.is_support ? "📢 Compete Support" : `${roleInfo.icon} ${convo.other_participant_name || "Unknown"}`}
+            </Text>
           </View>
           <View style={s.timeRow}>
             {hasUnread && <View style={s.unreadBadge}><Text allowFontScaling={false} style={s.unreadBadgeText}>{convo.unread_count}</Text></View>}
             <Text allowFontScaling={false} style={s.timeText}>{getTimeAgo(convo.last_message_at || convo.updated_at)}</Text>
-          {isWeb && <TouchableOpacity onPress={onDelete} style={s.trashButton} hitSlop={{top:8,bottom:8,left:8,right:8}}><Text style={s.trashIcon}>Delete</Text></TouchableOpacity>}
+          {isWeb && !isReview && <TouchableOpacity onPress={onDelete} style={s.trashButton} hitSlop={{top:8,bottom:8,left:8,right:8}}><Text style={s.trashIcon}>Delete</Text></TouchableOpacity>}
           </View>
         </View>
-        <Text allowFontScaling={false} style={[s.subjectText, hasUnread && s.subjectTextUnread]}>{convo.subject || getCategoryLabel(convo.category) || "Message"}</Text>
+        <Text allowFontScaling={false} style={[s.subjectText, hasUnread && s.subjectTextUnread]}>
+          {isReview ? `Replied to your review of ${reviewTournament}` : (convo.subject || getCategoryLabel(convo.category) || "Message")}
+        </Text>
         {convo.last_message && <Text allowFontScaling={false} style={s.previewText} numberOfLines={1}>{convo.last_message}</Text>}
-        {convo.category && <View style={s.categoryBadgeRow}><View style={s.categoryBadge}><Text allowFontScaling={false} style={s.categoryBadgeText}>{getCategoryLabel(convo.category)}</Text></View></View>}
+        {convo.category && !isReview && <View style={s.categoryBadgeRow}><View style={s.categoryBadge}><Text allowFontScaling={false} style={s.categoryBadgeText}>{getCategoryLabel(convo.category)}</Text></View></View>}
       </View>
     </TouchableOpacity>
   );
@@ -312,12 +332,32 @@ interface NotificationsModalProps {
   visible: boolean; onClose: () => void; userId: string | undefined;
   userIdAuto: number | undefined; onViewTournament?: (id: string) => void;
   initialTab?: "conversations" | "notifications";
+  // Active/Archived state is owned by the parent so it survives the Inbox closing when a
+  // conversation route opens, and resets to Active only on a fresh Inbox open.
+  convView?: "active" | "archived";
+  onConvViewChange?: (v: "active" | "archived") => void;
+  // Called when a conversation is opened (Inbox closes + a route pushes) so the parent can
+  // reopen the Inbox — in the same Active/Archived view — when the user comes back.
+  onOpenConversation?: () => void;
 }
 
-export function NotificationsModal({ visible, onClose, userId, userIdAuto, onViewTournament, initialTab = "conversations" }: NotificationsModalProps) {
+export function NotificationsModal({ visible, onClose, userId, userIdAuto, onViewTournament, initialTab = "conversations", convView: convViewProp, onConvViewChange, onOpenConversation }: NotificationsModalProps) {
   const router = useRouter();
   const [showCompose, setShowCompose] = useState(false);
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<"conversations" | "notifications">(initialTab);
+  // Parent-owned when provided; local fallback keeps the component usable standalone.
+  const [convViewLocal, setConvViewLocal] = useState<"active" | "archived">("active");
+  const convView = convViewProp ?? convViewLocal;
+  const setConvView = (v: "active" | "archived") => { setConvViewLocal(v); onConvViewChange?.(v); };
+  // Player's own reviews keyed by tournament_id → venue/tournament/rating for review-row context.
+  const [reviewMap, setReviewMap] = useState<Record<number, { venueName: string | null; tournamentName: string | null }>>({});
+  // Compact Active/Archived popover anchored to the "Active ▾" trigger.
+  const [convMenuOpen, setConvMenuOpen] = useState(false);
+  const [convMenuPos, setConvMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const convMenuRef = useRef<View>(null);
+  // A Tournament Review conversation opened INLINE inside the Inbox (no route navigation).
+  const [openThread, setOpenThread] = useState<{ conversationId: string; title: string; tournamentId: number | null; manager: string | null } | null>(null);
 
   // Open to the requested tab each time the inbox is shown (message icon ->
   // conversations, bell -> notifications).
@@ -355,6 +395,13 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
   const loadConversations = useCallback(async () => {
     if (!userId) return;
     try { const convos = await conversationService.getConversations(userId); setConversations(convos); } catch {}
+    // Enrich review rows with venue/tournament from the player's own reviews (RLS-own).
+    try {
+      const rs = await reviewService.getMyReviews();
+      const m: Record<number, { venueName: string | null; tournamentName: string | null }> = {};
+      for (const r of rs) if (r.tournamentId != null) m[r.tournamentId] = { venueName: r.venueName, tournamentName: r.tournamentName };
+      setReviewMap(m);
+    } catch { /* non-blocking */ }
   }, [userId]);
 
   const loadAll = useCallback(async () => {
@@ -366,6 +413,8 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
   }, [loadBroadcasts, loadPushNotifications, loadConversations]);
 
   const handleOpen = useCallback(() => { if (!loaded) loadAll(); }, [loaded, loadAll]);
+  // The mobile Inbox is now an in-Profile overlay (not a native Modal), so load on visibility.
+  useEffect(() => { if (visible) handleOpen(); }, [visible, handleOpen]);
   const onRefresh = useCallback(async () => { setRefreshing(true); await loadAll(); setRefreshing(false); }, [loadAll]);
 
   const markNotifAsRead = async (item: UnifiedNotification) => {
@@ -394,10 +443,29 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
   };
 
   const openConversation = (convo: ConversationPreview) => {
+    // Tournament Review conversations render INLINE inside this Inbox (no route navigation, no
+    // Profile flash) — the Inbox becomes the container for the thread.
+    if (convo.category === "review") {
+      setOpenThread({
+        conversationId: convo.id,
+        title: "Tournament Review",
+        tournamentId: convo.tournament_id ?? null,
+        manager: convo.other_participant_name ?? null,
+      });
+      return;
+    }
+    // Other conversations keep the existing standalone route behavior.
     const title = convo.subject || convo.other_participant_name || (convo.is_support ? "Support" : "Conversation");
+    onOpenConversation?.(); // let the parent reopen the Inbox (same view) on return
     onClose();
     router.push(`/conversation-detail?id=${convo.id}&title=${encodeURIComponent(title)}` as any);
   };
+
+  // Closing the inline thread returns to the conversation list (refreshing read/unread state).
+  const closeThread = useCallback(() => { setOpenThread(null); loadConversations(); }, [loadConversations]);
+
+  // A fully-closed Inbox forgets any open thread, so reopening lands on the conversation list.
+  useEffect(() => { if (!visible) setOpenThread(null); }, [visible]);
 
   const handleTournamentPress = (id: number) => {
     onClose();
@@ -408,18 +476,32 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
   const handleComposeSent = useCallback(async () => { setShowCompose(false); await loadConversations(); }, [loadConversations]);
 
   const unreadNotifCount = unifiedNotifications.filter((n) => !n.read_at).length;
-  const unreadConvoCount = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+  // Active unread only — archived conversations don't count toward the badge.
+  const unreadConvoCount = conversations.reduce((sum, c) => sum + (c.archived ? 0 : c.unread_count), 0);
+  const visibleConversations = conversations.filter((c) => (convView === "archived" ? c.archived : !c.archived));
 
   if (!visible) return null;
 
   const inboxContent = showCompose && userId ? (
     <ComposeView userId={userId} onBack={() => setShowCompose(false)} onSent={handleComposeSent} />
+  ) : openThread ? (
+    <ConversationThread
+      embedded
+      conversationId={openThread.conversationId}
+      title={openThread.title}
+      isReview
+      tournamentId={openThread.tournamentId}
+      manager={openThread.manager}
+      onBack={closeThread}
+    />
   ) : (
     <>
-      <View style={s.header}>
-        <TouchableOpacity style={s.closeButton} onPress={onClose}><Text allowFontScaling={false} style={s.closeButtonText}>✕</Text></TouchableOpacity>
+      <View style={[s.header, { paddingTop: (isWeb ? 0 : insets.top) + wxSc(SPACING.md) }]}>
+        <TouchableOpacity style={s.backBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text allowFontScaling={false} style={s.backBtnText}>← Back</Text>
+        </TouchableOpacity>
         <Text allowFontScaling={false} style={s.headerTitle}>INBOX</Text>
-        <View style={{ width: 40 }} />
+        <View style={s.backBtn} />
       </View>
       <View style={s.divider} />
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}
@@ -475,21 +557,46 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
             )}
             {activeTab === "conversations" && (
               <>
-                {conversations.length === 0 ? (
+                {/* Compact Active ▾ / Archived ▾ status popover (anchored, no bottom sheet) */}
+                <View style={s.statusRow}>
+                  <View ref={convMenuRef} collapsable={false}>
+                    <TouchableOpacity
+                      style={s.statusTrigger}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        convMenuRef.current?.measureInWindow((x, y, w, h) => {
+                          setConvMenuPos({ top: y + h + 4, left: x, width: Math.max(w, wxSc(160)) });
+                          setConvMenuOpen(true);
+                        });
+                      }}
+                    >
+                      <Text allowFontScaling={false} style={s.statusTriggerText}>{convView === "active" ? "Active" : "Archived"}</Text>
+                      <Text allowFontScaling={false} style={s.statusTriggerChevron}>▾</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {visibleConversations.length === 0 ? (
                   <View style={s.emptyState}>
                     <Text allowFontScaling={false} style={s.emptyIcon}>💬</Text>
-                    <Text allowFontScaling={false} style={s.emptyTitle}>No conversations yet</Text>
-                    <Text allowFontScaling={false} style={s.emptySubtitle}>Send a message to a tournament director, venue owner, or Compete support.</Text>
-                    <TouchableOpacity style={s.emptyComposeButton} onPress={() => setShowCompose(true)}>
-                      <Text allowFontScaling={false} style={s.emptyComposeText}>✏️ Start a Conversation</Text>
-                    </TouchableOpacity>
+                    <Text allowFontScaling={false} style={s.emptyTitle}>{convView === "archived" ? "No archived conversations" : "No conversations yet"}</Text>
+                    <Text allowFontScaling={false} style={s.emptySubtitle}>{convView === "archived" ? "Conversations you archive appear here." : "Send a message to a tournament director, venue owner, or Compete support."}</Text>
+                    {convView === "active" && (
+                      <TouchableOpacity style={s.emptyComposeButton} onPress={() => setShowCompose(true)}>
+                        <Text allowFontScaling={false} style={s.emptyComposeText}>✏️ Start a Conversation</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <>
-                    {conversations.map((convo) => (
-                      <ConversationCard key={convo.id} convo={convo} onPress={() => openConversation(convo)} onDelete={() => deleteConversation(convo.id)} />
+                    {visibleConversations.map((convo) => (
+                      <ConversationCard
+                        key={convo.id}
+                        convo={convo}
+                        onPress={() => openConversation(convo)}
+                        onDelete={() => deleteConversation(convo.id)}
+                        reviewInfo={convo.tournament_id != null ? reviewMap[convo.tournament_id] : undefined}
+                      />
                     ))}
-                    {!isWeb && <Text allowFontScaling={false} style={s.hintText}>Long press to delete</Text>}
                   </>
                 )}
               </>
@@ -498,6 +605,23 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
         )}
         <View style={{ height: wxSc(SPACING.xl * 2) }} />
       </ScrollView>
+
+      {/* Active/Archived popover (anchored, closes on select / outside tap) */}
+      <Modal transparent visible={convMenuOpen} animationType="fade" statusBarTranslucent onRequestClose={() => setConvMenuOpen(false)}>
+        <Pressable style={s.popBackdrop} onPress={() => setConvMenuOpen(false)}>
+          {convMenuPos && (
+            <View style={[s.popMenu, { top: convMenuPos.top, left: convMenuPos.left, width: convMenuPos.width }]}>
+              {(["active", "archived"] as const).map((v) => (
+                <TouchableOpacity key={v} style={s.popOption} onPress={() => { setConvView(v); setConvMenuOpen(false); }}>
+                  <Text allowFontScaling={false} style={[s.popOptionText, convView === v && s.popOptionTextOn]}>
+                    {convView === v ? "✓ " : "   "}{v === "active" ? "Active" : "Archived"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </Pressable>
+      </Modal>
     </>
   );
 
@@ -512,19 +636,17 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
     );
   }
 
+  // Mobile: an in-Profile bounded overlay (NOT a native Modal). It fills only Profile's screen
+  // area, which already sits ABOVE the bottom tab dock — so the dock stays visible AND clickable
+  // (nothing intercepts its touches). pointerEvents="box-none" lets touches outside the card pass
+  // through; the scrim + card capture their own taps.
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose} onShow={handleOpen}>
-      <View style={s.mobileOverlay}>
-        <View style={s.mobileContainer}>
-          {inboxContent}
-          {!showCompose && (
-            <TouchableOpacity style={s.externalCloseButton} onPress={onClose}>
-              <Text allowFontScaling={false} style={s.externalCloseText}>✕ Close</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+    <View style={[s.mobileOverlay, { paddingTop: insets.top + wxSc(SPACING.xs) }]} pointerEvents="box-none">
+      <Pressable style={s.mobileScrim} onPress={() => (openThread ? closeThread() : onClose())} />
+      <View style={s.mobileContainer}>
+        {inboxContent}
       </View>
-    </Modal>
+    </View>
   );
 }
 
@@ -532,9 +654,21 @@ const s = StyleSheet.create({
   backdrop: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)", zIndex: 2000 },
   dialogWrap: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2001, alignItems: "center", justifyContent: "center", padding: 24 },
   dialog: { width: 700, maxWidth: "92%" as any, height: "82vh" as any, backgroundColor: "#000000", borderRadius: RADIUS.xl, borderWidth: 1, borderColor: "#2C2C2E", overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24, display: "flex" as any, flexDirection: "column" },
-  mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20, paddingTop: 50, paddingBottom: 110 },
-  externalCloseButton: { margin: 12, paddingVertical: wxSc(14), alignItems: "center", backgroundColor: "#E74C3C", borderRadius: wxSc(12) },
-  externalCloseText: { color: "#FFFFFF", fontSize: wxMs(16), fontWeight: "700" },
+  // In-Profile bounded overlay: absolute-fill of Profile's screen area (which sits ABOVE the
+  // bottom tab dock), so the dock is never covered. A tappable scrim child dims + closes.
+  mobileOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", paddingHorizontal: 12, paddingBottom: 12, zIndex: 50 },
+  mobileScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.75)" },
+  backBtn: { minWidth: 64, paddingVertical: 6, justifyContent: "center" },
+  backBtnText: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
+  statusRow: { flexDirection: "row", marginHorizontal: wxSc(SPACING.md), marginBottom: wxSc(SPACING.sm) },
+  statusTrigger: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: wxSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.xs), gap: wxSc(6) },
+  statusTriggerText: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  statusTriggerChevron: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  popBackdrop: { flex: 1 },
+  popMenu: { position: "absolute", backgroundColor: COLORS.surface, borderRadius: wxSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, paddingVertical: wxSc(SPACING.xs), shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  popOption: { paddingVertical: wxSc(SPACING.sm), paddingHorizontal: wxSc(SPACING.md) },
+  popOptionText: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  popOptionTextOn: { color: COLORS.primary, fontWeight: "700" },
   mobileContainer: { backgroundColor: COLORS.background, borderRadius: wxSc(20), width: "100%" as any, maxWidth: 500, flex: 1, overflow: "hidden" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.lg), paddingTop: wxSc(SPACING.lg), paddingBottom: wxSc(SPACING.md) },
   closeButton: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
@@ -548,6 +682,11 @@ const s = StyleSheet.create({
   tabActive: { backgroundColor: COLORS.primary },
   tabText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.textSecondary },
   tabTextActive: { color: "#fff" },
+  convSegment: { flexDirection: "row", backgroundColor: COLORS.surface, borderRadius: wxSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, padding: wxSc(3), marginHorizontal: wxSc(SPACING.md), marginBottom: wxSc(SPACING.sm) },
+  convSegBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: wxSc(SPACING.xs), borderRadius: wxSc(RADIUS.md - 2), minHeight: wxSc(32) },
+  convSegBtnOn: { backgroundColor: COLORS.primary },
+  convSegText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.textSecondary },
+  convSegTextOn: { color: "#fff" },
   tabBadge: { backgroundColor: "#E74C3C", borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
   tabBadgeText: { fontSize: wxMs(10), fontWeight: "700", color: "#fff" },
   newMessageButton: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: wxSc(SPACING.sm), alignItems: "center", marginBottom: wxSc(SPACING.sm) },

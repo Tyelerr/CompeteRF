@@ -63,7 +63,7 @@ export const teamService = {
     const { data, error } = await supabase
       .from("tournament_team_members")
       .select(
-        "id, created_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, thumbnail, venues:venue_id (venue, city, state))",
+        "id, created_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, gameplay_started_at, thumbnail, venues:venue_id (venue, city, state))",
       )
       .eq("player_id", playerId)
       .eq("invite_status", "accepted")

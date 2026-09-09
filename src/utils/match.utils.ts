@@ -341,6 +341,25 @@ export const buildLiveMatches = (
   return out;
 };
 
+// Registration ids the BRACKET ENGINE has officially eliminated. Authoritative and
+// routing-based (NOT loss-counting): a player is eliminated when they lose a COMPLETED match
+// whose loser has no onward path in the graph (loserToLabel === null). This naturally covers
+// single-elim (any final loss) and double-elim (only the second/decisive loss, since a first
+// winners-bracket loss routes to the losers bracket and keeps loserToLabel set) as well as
+// grand finals — the resolver decides, not the caller. The champion is never a loser, so they
+// are never in this set (they get their review opportunity at completion instead).
+export const computeEliminatedRegIds = (matches: LiveMatch[]): number[] => {
+  const out = new Set<number>();
+  for (const m of matches) {
+    if (m.empty || m.bye) continue;
+    if (m.status !== "completed" || m.winner == null) continue;
+    if (m.loserToLabel != null) continue; // loser still has a path → not eliminated
+    const loserReg = m.winner === 1 ? m.p2RegId : m.p1RegId;
+    if (loserReg != null) out.add(loserReg);
+  }
+  return [...out];
+};
+
 // mm:ss (or h:mm:ss) for a positive seconds count.
 export const formatClock = (totalSeconds: number): string => {
   const s = Math.max(0, Math.floor(totalSeconds));

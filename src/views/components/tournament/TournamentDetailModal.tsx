@@ -2,8 +2,8 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert, Image, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, Share,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Alert, Animated, Image, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, Share,
+  StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View,
 } from "react-native";
 import { analyticsService } from "../../../models/services/analytics.service";
 import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
@@ -45,6 +45,7 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
   // Self-registration (player registers themselves from this modal).
   const reg = useSelfRegistration(vm.tournament?.id, profile?.id_auto);
   const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+  const [showUnregisterConfirm, setShowUnregisterConfirm] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showTeamInvite, setShowTeamInvite] = useState(false);
   const teamInvite = usePendingTeamInvite(vm.tournament?.id, profile?.id_auto);
@@ -52,6 +53,44 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
   const [fargoFocused, setFargoFocused] = useState(false);
   const [fargoMode, setFargoMode] = useState<"enter" | "none">("enter");
   const fargoRef = useRef<TextInput>(null);
+
+  // Keyboard-aware lift for the register-confirm card (iOS). The card is centered
+  // inside mobileCard, so the on-screen keyboard would cover Cancel/Register. We
+  // translate ONLY the confirm card up by the minimal amount needed to clear the
+  // keyboard, animated in step with it, and back to 0 when it hides — no resize.
+  const { height: winH } = useWindowDimensions();
+  const [liftAnim] = useState(() => new Animated.Value(0));
+  const confirmCardH = useRef(0);
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    const onShow = (e: any) => {
+      const kb = e?.endCoordinates?.height ?? 0;
+      const margin = scale(12);
+      // Overlap of the (centered) card's bottom with the keyboard top.
+      const overlap = kb + confirmCardH.current / 2 + margin - winH / 2;
+      // Don't lift so far the card's top slips under the status bar / notch.
+      const maxLift = winH / 2 - confirmCardH.current / 2 - scale(48);
+      const lift = Math.min(Math.max(0, overlap), Math.max(0, maxLift));
+      Animated.timing(liftAnim, {
+        toValue: -lift,
+        duration: e?.duration ?? 250,
+        useNativeDriver: true,
+      }).start();
+    };
+    const onHide = (e: any) => {
+      Animated.timing(liftAnim, {
+        toValue: 0,
+        duration: e?.duration ?? 200,
+        useNativeDriver: true,
+      }).start();
+    };
+    const showSub = Keyboard.addListener("keyboardWillShow", onShow);
+    const hideSub = Keyboard.addListener("keyboardWillHide", onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [winH, liftAnim]);
 
   // The modal stays mounted (only `visible` toggles), so re-fetch the player's
   // registration each time it opens — otherwise a TD removing the player leaves
@@ -87,6 +126,17 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
       );
     } catch {
       Alert.alert("Error", "Couldn't complete registration. Please try again.");
+    }
+  };
+
+  const handleConfirmUnregister = async () => {
+    try {
+      await reg.unregister();       // soft-cancel via cancelOwnRegistration
+      await reg.refresh();          // re-sync registration state from the server
+      setShowUnregisterConfirm(false);
+      Alert.alert("Unregistered", "You've been removed from the tournament registration list.");
+    } catch {
+      Alert.alert("Error", "Couldn't unregister. Please try again.");
     }
   };
 
@@ -138,6 +188,12 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
   const director = tournament?.profiles ?? null;
   const directorName = getDirectorName(director);
   const directorId = getDirectorId(director);
+  // Read-only player name shown in the register modal — the signed-in player's
+  // profile first + last name (falls back to legacy name / @username). Display only.
+  const playerName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
+    profile?.name ||
+    (profile?.user_name ? `@${profile.user_name}` : "Player");
   // Registration is open through Compete (players self-register as preregistered).
   const canRegister = tournament?.live_state === "registration_open";
   // Once a tournament has started (or finished), anyone can open the read-only
@@ -339,9 +395,15 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
                   </TouchableOpacity>
                 )
               ) : reg.isRegistered ? (
-                <View style={s.registeredPill}>
+                <TouchableOpacity
+                  style={s.registeredPill}
+                  onPress={() => setShowUnregisterConfirm(true)}
+                  disabled={reg.loading || reg.unregistering}
+                  activeOpacity={0.8}
+                >
                   <Text allowFontScaling={false} style={s.registeredPillText}>✓ Registered</Text>
-                </View>
+                  <Text allowFontScaling={false} style={s.registeredPillHint}>Tap to Unregister</Text>
+                </TouchableOpacity>
               ) : (
                 <TouchableOpacity style={s.registerButton} onPress={handleRegisterPress} disabled={reg.loading}>
                   <Text allowFontScaling={false} style={s.registerButtonText}>Register for Tournament</Text>
@@ -366,45 +428,56 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
           {showRegisterConfirm && (
             <View style={s.confirmOverlay}>
               <Pressable style={s.confirmBackdrop} onPress={() => Keyboard.dismiss()} />
-              <Pressable style={s.confirmCard} onPress={() => Keyboard.dismiss()}>
+              <Animated.View style={[s.confirmCardShift, { transform: [{ translateY: liftAnim }] }]}>
+              <Pressable
+                style={s.confirmCard}
+                onPress={() => Keyboard.dismiss()}
+                onLayout={(e) => { confirmCardH.current = e.nativeEvent.layout.height; }}
+              >
                 <Text allowFontScaling={false} style={s.confirmTitle}>REGISTER FOR TOURNAMENT</Text>
                 <Text allowFontScaling={false} style={s.confirmName}>{tournament.name}</Text>
 
-                <View style={s.confirmDivider} />
+                {/* Read-only player name (profile first + last). Display only — not a
+                    TextInput, not tappable; muted so it reads as a disabled field. */}
+                <Text allowFontScaling={false} style={s.confirmFieldLabel}>Player Name</Text>
+                <View style={s.readonlyField} pointerEvents="none">
+                  <Text allowFontScaling={false} style={s.readonlyValue} numberOfLines={1}>
+                    {playerName}
+                  </Text>
+                </View>
 
-                <View style={s.radioRow}>
+                {/* Enter Fargo / No Fargo — segmented pill toggle */}
+                <View style={s.segment}>
                   <TouchableOpacity
-                    style={s.radioOpt}
-                    activeOpacity={0.7}
+                    style={[s.segmentBtn, fargoMode === "enter" && s.segmentBtnOn]}
+                    activeOpacity={0.85}
                     onPress={() => setFargoMode("enter")}
                   >
-                    <View style={[s.radioDot, fargoMode === "enter" && s.radioDotOn]}>
-                      {fargoMode === "enter" && <View style={s.radioInner} />}
-                    </View>
-                    <Text allowFontScaling={false} style={s.radioLabel}>Enter Fargo</Text>
+                    <Text allowFontScaling={false} style={[s.segmentText, fargoMode === "enter" && s.segmentTextOn]}>
+                      Enter Fargo
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={s.radioOpt}
-                    activeOpacity={0.7}
+                    style={[s.segmentBtn, fargoMode === "none" && s.segmentBtnOn]}
+                    activeOpacity={0.85}
                     onPress={() => {
                       setFargoMode("none");
                       Keyboard.dismiss();
                     }}
                   >
-                    <View style={[s.radioDot, fargoMode === "none" && s.radioDotOn]}>
-                      {fargoMode === "none" && <View style={s.radioInner} />}
-                    </View>
-                    <Text allowFontScaling={false} style={s.radioLabel}>No Fargo</Text>
+                    <Text allowFontScaling={false} style={[s.segmentText, fargoMode === "none" && s.segmentTextOn]}>
+                      No Fargo
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
-                {fargoMode === "enter" && (
-                  <>
+                {fargoMode === "enter" ? (
+                  <View style={s.fargoBlock}>
+                    <Text allowFontScaling={false} style={s.confirmFieldLabel}>Fargo Rating</Text>
                     <Pressable
                       style={[s.confirmFargoField, fargoFocused && s.confirmFargoFieldFocused]}
                       onPress={() => fargoRef.current?.focus()}
                     >
-                      <Text allowFontScaling={false} style={s.confirmFargoHash}>#</Text>
                       <TextInput
                         ref={fargoRef}
                         allowFontScaling={false}
@@ -419,10 +492,20 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
                         maxLength={4}
                       />
                     </Pressable>
-                    <Text allowFontScaling={false} style={s.confirmFargoHint}>
-                      Your Fargo will be verified by the Tournament Director.
+                    <View style={s.helperRow}>
+                      <Ionicons name="information-circle-outline" size={scale(14)} color={COLORS.textMuted} />
+                      <Text allowFontScaling={false} style={s.confirmFargoHint}>
+                        Your Fargo will be verified by the Tournament Director.
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={s.noFargoBlock}>
+                    <Ionicons name="ban-outline" size={scale(30)} color={COLORS.textMuted} />
+                    <Text allowFontScaling={false} style={s.noFargoText}>
+                      The Tournament Director will confirm your Fargo status or eligibility to play.
                     </Text>
-                  </>
+                  </View>
                 )}
 
                 <View style={s.confirmButtons}>
@@ -444,6 +527,38 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
                   </TouchableOpacity>
                 </View>
               </Pressable>
+              </Animated.View>
+            </View>
+          )}
+
+          {showUnregisterConfirm && (
+            <View style={s.confirmOverlay}>
+              <Pressable style={s.confirmBackdrop} onPress={() => setShowUnregisterConfirm(false)} />
+              <View style={s.confirmCard}>
+                <Text allowFontScaling={false} style={s.confirmTitle}>UNREGISTER</Text>
+                <Text allowFontScaling={false} style={s.confirmName}>Unregister from this tournament?</Text>
+                <Text allowFontScaling={false} style={s.unregisterBody}>
+                  You will be removed from the tournament registration list.
+                </Text>
+                <View style={s.confirmButtons}>
+                  <TouchableOpacity
+                    style={s.confirmCancel}
+                    onPress={() => setShowUnregisterConfirm(false)}
+                    disabled={reg.unregistering}
+                  >
+                    <Text allowFontScaling={false} style={s.confirmCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.unregisterConfirmBtn}
+                    onPress={handleConfirmUnregister}
+                    disabled={reg.unregistering}
+                  >
+                    <Text allowFontScaling={false} style={s.unregisterConfirmText}>
+                      {reg.unregistering ? "Unregistering..." : "Unregister"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           )}
         </>
@@ -533,10 +648,13 @@ const s = StyleSheet.create({
   viewTournamentText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   registerButton: { backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center" },
   registerButtonText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
-  registeredPill: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.success + "20", borderColor: COLORS.success, borderWidth: 1, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
+  registeredPill: { justifyContent: "center", alignItems: "center", gap: scale(2), backgroundColor: COLORS.success + "20", borderColor: COLORS.success, borderWidth: 1, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
   registeredPillText: { color: COLORS.success, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
+  registeredPillHint: { color: COLORS.success, fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "600", opacity: 0.85 },
   confirmOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center", padding: scale(SPACING.lg) },
   confirmBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.7)" },
+  // Wrapper that carries the keyboard-aware translateY (card keeps its own size).
+  confirmCardShift: { width: "100%" },
   confirmCard: {
     width: "100%",
     backgroundColor: COLORS.backgroundCard,
@@ -555,21 +673,49 @@ const s = StyleSheet.create({
   confirmTitle: { fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "700", letterSpacing: 1, color: COLORS.textSecondary, marginBottom: scale(SPACING.xs) },
   // 2 — tournament name (largest, blue for emphasis)
   confirmName: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "800", color: COLORS.primaryLight, lineHeight: moderateScale(26) },
-  confirmDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: scale(SPACING.sm) },
-  // radio selector (Enter Fargo / No Fargo)
-  radioRow: { flexDirection: "row", gap: scale(SPACING.lg), marginBottom: scale(SPACING.sm) },
-  radioOpt: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.sm), paddingVertical: scale(SPACING.xs) },
-  radioDot: { width: scale(20), height: scale(20), borderRadius: scale(10), borderWidth: 2, borderColor: COLORS.borderLight, alignItems: "center", justifyContent: "center" },
-  radioDotOn: { borderColor: COLORS.primaryLight },
-  radioInner: { width: scale(10), height: scale(10), borderRadius: scale(5), backgroundColor: COLORS.primaryLight },
-  radioLabel: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
-  // input — compact numeric field (~half width), "#" prefix, blue focus
+  // Field label (Player Name / Fargo Rating) — small, muted eyebrow above a field.
+  confirmFieldLabel: {
+    fontSize: moderateScale(FONT_SIZES.xs),
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginTop: scale(SPACING.md),
+    marginBottom: scale(SPACING.xs),
+  },
+  // Read-only player name — recessed (darker) + muted text so it reads disabled.
+  // Rendered as a View (never a TextInput) with pointerEvents="none": not tappable.
+  readonlyField: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: scale(12),
+    paddingHorizontal: scale(SPACING.md),
+    paddingVertical: scale(SPACING.md),
+  },
+  readonlyValue: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "600", color: COLORS.textSecondary },
+
+  // Segmented pill toggle (Enter Fargo / No Fargo) — active half fills blue.
+  segment: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: scale(999),
+    padding: scale(3),
+    marginTop: scale(SPACING.md),
+  },
+  segmentBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: scale(9), borderRadius: scale(999) },
+  segmentBtnOn: { backgroundColor: COLORS.primary },
+  segmentText: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textSecondary },
+  segmentTextOn: { color: COLORS.white },
+
+  // Fargo input — compact numeric field (not a wide form field), blue focus ring.
+  // minHeight matches noFargoBlock so switching modes never resizes the modal.
+  fargoBlock: { minHeight: scale(150) },
   confirmFargoField: {
     flexDirection: "row",
     alignItems: "center",
-    gap: scale(SPACING.xs),
-    width: "50%",
-    height: scale(50),
+    width: scale(96),
+    height: scale(48),
     backgroundColor: COLORS.surfaceLight,
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -585,7 +731,6 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 6,
   },
-  confirmFargoHash: { fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700", color: COLORS.textMuted },
   confirmFargoInput: {
     flex: 1,
     height: "100%",
@@ -594,8 +739,13 @@ const s = StyleSheet.create({
     fontWeight: "600",
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
   },
-  // helper text (small, light)
-  confirmFargoHint: { fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: scale(SPACING.sm) },
+  // Helper text (subtle info row).
+  helperRow: { flexDirection: "row", alignItems: "center", gap: scale(SPACING.xs), marginTop: scale(SPACING.sm) },
+  confirmFargoHint: { flex: 1, fontSize: moderateScale(FONT_SIZES.xs), color: COLORS.textMuted },
+  // No-Fargo state — centered message. minHeight matches fargoBlock so switching
+  // between Enter Fargo / No Fargo never resizes or shifts the modal vertically.
+  noFargoBlock: { minHeight: scale(150), alignItems: "center", justifyContent: "center", gap: scale(SPACING.sm) },
+  noFargoText: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textMuted, textAlign: "center", lineHeight: moderateScale(20) },
   confirmButtons: { flexDirection: "row", gap: scale(SPACING.sm), marginTop: scale(SPACING.md) },
   confirmCancel: { flex: 1, paddingVertical: scale(9), borderRadius: scale(12), alignItems: "center", backgroundColor: COLORS.transparent, borderWidth: 1, borderColor: COLORS.borderLight },
   confirmCancelText: { color: COLORS.textSecondary, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },
@@ -612,6 +762,21 @@ const s = StyleSheet.create({
     elevation: 8,
   },
   confirmConfirmText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
+  // Unregister confirmation — body copy + a destructive (red) confirm button.
+  unregisterBody: { fontSize: moderateScale(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: scale(SPACING.sm), lineHeight: moderateScale(20) },
+  unregisterConfirmBtn: {
+    flex: 1,
+    paddingVertical: scale(9),
+    borderRadius: scale(12),
+    alignItems: "center",
+    backgroundColor: COLORS.error,
+    shadowColor: COLORS.error,
+    shadowOpacity: 0.5,
+    shadowRadius: scale(12),
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  unregisterConfirmText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "700" },
   bottomBar: { flexDirection: "row", padding: scale(SPACING.md), gap: scale(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, paddingBottom: Platform.OS === "ios" ? 20 : scale(SPACING.md) },
   shareButton: { flex: 1, backgroundColor: COLORS.surface, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center", borderWidth: 1, borderColor: COLORS.primary },
   shareButtonText: { color: COLORS.primary, fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600" },

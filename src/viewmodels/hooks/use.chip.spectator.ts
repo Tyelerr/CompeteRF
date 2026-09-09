@@ -13,7 +13,6 @@ import { chipService } from "../../models/services/chip.service";
 import { dashboard, teamName } from "../../models/services/chip.engine";
 import {
   ChipEntry,
-  ChipEventType,
   ChipFormat,
   ChipState,
 } from "../../models/types/chip.types";
@@ -22,7 +21,15 @@ import {
   computeBreakdown,
   entryPoolTotal,
   feesPerPlayer,
+  sidePotTotal,
+  sidePotPayoutViews,
 } from "../../utils/prize-pool";
+import { parseSidePots } from "../../utils/side-pots";
+import {
+  PublicActivityKind,
+  toPublicActivityFeed,
+} from "../../utils/chip-activity";
+import { computePerformance, PerfGame } from "../../utils/performance";
 
 export type SpecPlayerStatus =
   | "playing"
@@ -47,6 +54,7 @@ export interface SpecLeader {
   id: string;
   name: string;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   fargo: number | null;
   wins: number;
   losses: number;
@@ -58,44 +66,60 @@ export interface SpecTable {
   isStream: boolean;
   aName: string | null;
   aChips: number | null;
+  aStartChips: number | null; // starting-stack snapshot → live chip-health color
   bName: string | null;
   bChips: number | null;
+  bStartChips: number | null;
   aId: string | null;
   bId: string | null;
   startedAt: string | null; // set when live → screen renders the elapsed timer
   waitingText: string | null; // e.g. "Waiting for a challenger"
+  // The a-side is the table holder/defender (holder+pending, or a live match's aId).
+  // aStreak is that entry's authoritative consecutive-win count (ChipEntry.streak);
+  // > 0 means a genuine defending holder (opening-match players are 0 → no badge).
+  aStreak: number | null;
 }
 export interface SpecQueueRow {
   id: string;
   position: number;
   name: string;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   fargo: number | null;
   wins: number;
   losses: number;
+  // Round turn-status during a Shuffle round (null when not in a shuffle round):
+  // "waiting" = not yet seated for its turn this round; "played" = already had its turn.
+  roundStatus: "waiting" | "played" | null;
 }
 export interface SpecStandingRow {
   id: string;
   rank: number;
   name: string;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
+  fargo: number | null; // tournament Fargo (entry snapshot) — for the Fargo sort
   wins: number;
   losses: number;
+  eliminated: boolean; // show "Eliminated" instead of a chip count
+  isMe: boolean;
 }
 export interface SpecActivity {
   id: string;
   text: string;
   at: string;
-  kind: ChipEventType;
+  kind: PublicActivityKind;
 }
 export interface SpecPlayerRow {
   id: string;
   name: string;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   fargo: number | null;
   wins: number;
   losses: number;
   status: SpecPlayerStatus;
+  isMe: boolean; // the viewing user's own entry (team-level for doubles)
 }
 export interface SpecPerf {
   label: ChipPerfLabel;
@@ -106,6 +130,7 @@ export interface SpecPerf {
 export interface SpecHistoryRow {
   id: string;
   opponentName: string;
+  opponentFargo: number | null; // the opponent's TOURNAMENT Fargo (entry snapshot), not live/global
   won: boolean;
   tableLabel: string | null;
   durationMs: number | null;
@@ -134,6 +159,13 @@ export interface SpecPayoutRow {
   amount: number;
   percent: number;
 }
+export interface SpecSidePot {
+  name: string;
+  amount: number; // buy-in per entrant (from the TD's side-pot config)
+  pool: number; // $ collected so far (entrants × buy-in)
+  entrants: number; // how many teams/players entered — aggregate, never individuals
+  places: SpecPayoutRow[] | null; // split rows when a split is configured AND pool > 0
+}
 export interface SpecPayouts {
   entryFee: number;
   addedMoney: number;
@@ -141,6 +173,7 @@ export interface SpecPayouts {
   paidPlayers: number;
   finalized: boolean;
   places: SpecPayoutRow[] | null; // null → not finalized (show TD-announce fallback)
+  sidePots: SpecSidePot[]; // configured side pots with a real pool + split (may be empty)
 }
 export interface SpecPlacement {
   place: number;
@@ -165,7 +198,8 @@ export interface ChipSpectatorView {
   fullQueue: SpecQueueRow[];
   standingsPreview: SpecStandingRow[];
   fullStandings: SpecStandingRow[];
-  activity: SpecActivity[];
+  activity: SpecActivity[]; // full public feed (newest first)
+  activityPreview: SpecActivity[]; // first 5 for the Overview section
   players: SpecPlayerRow[];
   payouts: SpecPayouts;
   finalPlacements: SpecPlacement[] | null;
@@ -174,24 +208,12 @@ export interface ChipSpectatorView {
 
 const isAlive = (e: ChipEntry) => e.status !== "eliminated";
 
-// Activity-feed whitelist: spectator-meaningful events only. Anything the TD-only
-// audit log needs (table add/remove, chip adjust, moves, undo/redo/restore,
-// manual notes, player_added) is intentionally excluded.
-const SPECTATOR_EVENTS = new Set<ChipEventType>([
-  "match_result",
-  "elimination",
-  "chip_loss",
-  "shuffle",
-  "forfeit",
-]);
-
 const perfLabelFor = (delta: number): ChipPerfLabel =>
   delta > 50 ? "exceptional"
     : delta > 15 ? "above"
       : delta >= -15 ? "expected"
         : delta >= -50 ? "below"
           : "under";
-const TPR_K = -100 / Math.log(2);
 
 // Per-entry status for the players list / profile.
 const statusFor = (
@@ -241,6 +263,7 @@ const buildProfile = (
     return {
       id: m.id,
       opponentName: nameOf(oppId),
+      opponentFargo: (oppId ? s.entries.find((y) => y.id === oppId) : null)?.teamFargo ?? null,
       won: m.winnerId === e.id,
       tableLabel: tableLabelOf(m.tableId),
       durationMs: dur != null && dur > 0 ? dur : null,
@@ -259,33 +282,22 @@ const buildProfile = (
   const matchesPlayed = e.wins + e.losses;
   const winPct = matchesPlayed ? e.wins / matchesPlayed : 0;
 
-  // Tournament Performance Rating (same formula as the profile hub / stats util).
-  let tprWins = 0;
-  let tprGames = 0;
-  let tprOppSum = 0;
-  let tprWeighted = 0;
-  for (const m of finishedMatches) {
+  // Performance Rating (expected-vs-actual, Fargo-anchored) via the shared helper
+  // (utils/performance.ts). Chip has no rack scores → one finished match = one game.
+  const specGamesRows: PerfGame[] = finishedMatches.map((m) => {
     const oppId = m.aId === e.id ? m.bId : m.aId;
     const opp = s.entries.find((x) => x.id === oppId);
-    tprGames += 1;
-    if (m.winnerId === e.id) tprWins += 1;
-    const of = opp?.teamFargo ?? null;
-    if (of != null) {
-      tprOppSum += of;
-      tprWeighted += 1;
-    }
-  }
-  const avgOpponentFargo =
-    tprWeighted > 0 ? Math.round(tprOppSum / tprWeighted) : null;
-  let rating: number | null = null;
-  if (tprGames > 0 && tprWeighted > 0) {
-    const cap = Math.min(0.99, Math.max(0.01, tprWins / tprGames));
-    rating = Math.round(
-      tprOppSum / tprWeighted + TPR_K * Math.log((1 - cap) / cap),
-    );
-  }
-  const ownFargo = e.teamFargo ?? null;
-  const delta = rating != null && ownFargo != null ? rating - ownFargo : null;
+    const won = m.winnerId === e.id;
+    return {
+      opponentFargo: opp?.teamFargo ?? null,
+      gamesWon: won ? 1 : 0,
+      gamesLost: won ? 0 : 1,
+    };
+  });
+  const specPerf = computePerformance(specGamesRows, e.teamFargo ?? null);
+  const avgOpponentFargo = specPerf.avgOpponentFargo;
+  const rating = specPerf.rating;
+  const delta = specPerf.delta;
   const perf: SpecPerf | null =
     rating != null && delta != null
       ? { label: perfLabelFor(delta), rating, delta, avgOpponentFargo }
@@ -314,8 +326,15 @@ const buildProfile = (
 const buildSpectatorView = (
   tournament: Tournament,
   s: ChipState,
+  viewerProfileId?: number | null,
 ): ChipSpectatorView => {
   const d = dashboard(s);
+  // "(You)" — the viewing user's OWN entry (team-level for doubles: either partner's
+  // profile id matches → the one team row is theirs). null for spectators/admins who
+  // aren't entered. Matches the player hub's own p1/p2ProfileId test.
+  const isMine = (e: ChipEntry) =>
+    viewerProfileId != null &&
+    (e.p1ProfileId === viewerProfileId || e.p2ProfileId === viewerProfileId);
   const format = s.settings.format;
   const finished = !!s.finishedAt || !!s.winnerId;
   const started =
@@ -344,6 +363,7 @@ const buildSpectatorView = (
         id: leaderEntry.id,
         name: teamName(leaderEntry),
         chips: leaderEntry.chips,
+        startChips: leaderEntry.startChips,
         fargo: leaderEntry.teamFargo,
         wins: leaderEntry.wins,
         losses: leaderEntry.losses,
@@ -354,6 +374,10 @@ const buildSpectatorView = (
   const activeTables = s.tables
     .filter((t) => !t.inactive)
     .sort((a, b) => (a.label > b.label ? 1 : a.label < b.label ? -1 : 0));
+  // Board is between rounds (draining or ready for the redraw): an empty active table
+  // is intentionally empty awaiting the next redraw → "Waiting for Shuffle" (derived
+  // from authoritative chip state; no new state).
+  const shuffleTransitioning = !!s.reshufflePending || !!s.shuffleReady;
   const tables: SpecTable[] = activeTables.map((t) => {
     const m = s.matches.find(
       (mm) => mm.id === t.matchId && mm.status === "in_progress",
@@ -368,12 +392,15 @@ const buildSpectatorView = (
         isStream: !!t.isStream,
         aName: a ? teamName(a) : "—",
         aChips: a?.chips ?? null,
+        aStartChips: a?.startChips ?? null,
         bName: b ? teamName(b) : "—",
         bChips: b?.chips ?? null,
+        bStartChips: b?.startChips ?? null,
         aId: a?.id ?? null,
         bId: b?.id ?? null,
         startedAt: m.startedAt,
         waitingText: null,
+        aStreak: a?.streak ?? null,
       };
     }
     // No live match: a winner may be holding, waiting for a challenger.
@@ -387,12 +414,15 @@ const buildSpectatorView = (
         isStream: !!t.isStream,
         aName: teamName(holder),
         aChips: holder.chips,
+        aStartChips: holder.startChips,
         bName: teamName(pending),
         bChips: pending.chips,
+        bStartChips: pending.startChips,
         aId: holder.id,
         bId: pending.id,
         startedAt: null,
-        waitingText: "About to start",
+        waitingText: "Waiting to Start",
+        aStreak: holder.streak ?? null,
       };
     }
     if (holder) {
@@ -403,12 +433,15 @@ const buildSpectatorView = (
         isStream: !!t.isStream,
         aName: teamName(holder),
         aChips: holder.chips,
+        aStartChips: holder.startChips,
         bName: null,
         bChips: null,
+        bStartChips: null,
         aId: holder.id,
         bId: null,
         startedAt: null,
         waitingText: "Waiting for a challenger",
+        aStreak: holder.streak ?? null,
       };
     }
     return {
@@ -418,16 +451,40 @@ const buildSpectatorView = (
       isStream: !!t.isStream,
       aName: null,
       aChips: null,
+      aStartChips: null,
       bName: null,
       bChips: null,
+      bStartChips: null,
       aId: null,
       bId: null,
       startedAt: null,
-      waitingText: "Open",
+      waitingText: shuffleTransitioning ? "Waiting for Shuffle" : "Open",
+      aStreak: null,
     };
   });
 
-  // Queue (front = next up).
+  // Queue (front = next up). Round turn-status is TEAM-level. Authoritative 3-state
+  // derivation (no new state): "waiting" = still in roundRemaining (not yet seated);
+  // seated/live (holder/pending of an active table OR an in-progress match participant)
+  // = null (at-table, NOT played — these aren't in the queue anyway, but the derivation
+  // must never call a seated/live entry "played"); "played" = otherwise (had its turn
+  // and returned). NOT derived from !roundRemaining alone.
+  const roundRemainingSet = new Set(s.roundRemaining ?? []);
+  const onTableIds = new Set<string>();
+  for (const t of s.tables) {
+    if (t.inactive) continue;
+    if (t.holderId) onTableIds.add(t.holderId);
+    if (t.pendingChallengerId) onTableIds.add(t.pendingChallengerId);
+  }
+  for (const mm of s.matches) {
+    if (mm.status === "in_progress") { onTableIds.add(mm.aId); onTableIds.add(mm.bId); }
+  }
+  const roundStatusFor = (id: string): "waiting" | "played" | null => {
+    if (!s.shuffleRound) return null;
+    if (roundRemainingSet.has(id)) return "waiting";
+    if (onTableIds.has(id)) return null; // seated / live — at table, not yet completed
+    return "played";
+  };
   const fullQueue: SpecQueueRow[] = s.queue
     .map((id, i) => {
       const e = entryById(id);
@@ -437,30 +494,41 @@ const buildSpectatorView = (
         position: i + 1,
         name: teamName(e),
         chips: e.chips,
+        startChips: e.startChips,
         fargo: e.teamFargo,
         wins: e.wins,
         losses: e.losses,
+        roundStatus: roundStatusFor(e.id),
       };
     })
     .filter((r): r is SpecQueueRow => !!r);
   const queuePreview = fullQueue.slice(0, 5);
 
   // Standings by chips.
-  const fullStandings: SpecStandingRow[] = byChips.map((e, i) => ({
+  // Standings = alive ranked by chips, then eliminated below (most-recently-out first,
+  // i.e. higher placement). Eliminated rows render "Eliminated" instead of a chip count.
+  const eliminatedRanked = s.entries
+    .filter((e) => !isAlive(e))
+    .sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime());
+  const fullStandings: SpecStandingRow[] = [...byChips, ...eliminatedRanked].map((e, i) => ({
     id: e.id,
     rank: i + 1,
     name: teamName(e),
     chips: e.chips,
+    startChips: e.startChips,
+    fargo: e.teamFargo,
     wins: e.wins,
     losses: e.losses,
+    eliminated: !isAlive(e),
+    isMe: isMine(e),
   }));
   const standingsPreview = fullStandings.slice(0, 5);
 
-  // Activity feed — whitelisted events, newest first, dropping reverted ones.
-  const activity: SpecActivity[] = s.events
-    .filter((ev) => SPECTATOR_EVENTS.has(ev.type) && !ev.superseded && ev.text)
-    .slice(0, 40)
-    .map((ev) => ({ id: ev.id, text: ev.text, at: ev.at, kind: ev.type }));
+  // Activity feed — one centralized event→public mapper (utils/chip-activity),
+  // newest first, TD-only noise + reverted events dropped, wording humanized. The
+  // FULL feed backs the "View Full Log" modal + its count; the preview shows 5.
+  const activity: SpecActivity[] = toPublicActivityFeed(s.events, Number.POSITIVE_INFINITY);
+  const activityPreview = activity.slice(0, 5);
 
   // Players list — sorted by current chip standings (most chips first), with
   // eliminated teams always pinned to the bottom regardless of chips. Status is
@@ -470,10 +538,12 @@ const buildSpectatorView = (
       id: e.id,
       name: teamName(e),
       chips: e.chips,
+      startChips: e.startChips,
       fargo: e.teamFargo,
       wins: e.wins,
       losses: e.losses,
       status: statusFor(s, e, finished),
+      isMe: isMine(e),
     }))
     .sort((a, b) => {
       const aOut = a.status === "eliminated" ? 1 : 0;
@@ -507,6 +577,35 @@ const buildSpectatorView = (
         percent: p.percent,
       }))
     : null;
+  // Side pots — surface EVERY configured pot (parseSidePots = the authoritative TD
+  // config), not only pots that already have a split + non-empty pool. Spectators
+  // should see a pot exists and its buy-in even before anyone has entered. Only
+  // aggregate entrant COUNT and pool are exposed — never individual payment status.
+  const parsedPots = parseSidePots(tournament.side_pots);
+  const sidePotEntrantsByName: Record<string, number> = {};
+  const sidePotPoolByName: Record<string, number> = {};
+  for (const sp of parsedPots) {
+    const entrants = s.entries.filter((e) => (e.paidSidePots ?? []).includes(sp.name)).length;
+    sidePotEntrantsByName[sp.name] = entrants;
+    sidePotPoolByName[sp.name] = sidePotTotal(entrants, sp.amount);
+  }
+  // Split rows come from the shared payout model — only when a split is configured
+  // AND the pool > 0. Pots without that still render (pool/buy-in) with no split.
+  const splitByName = new Map(
+    sidePotPayoutViews(cfg, sidePotPoolByName).map((v) => [v.name, v]),
+  );
+  const sidePots: SpecSidePot[] = parsedPots.map((sp) => {
+    const view = splitByName.get(sp.name);
+    return {
+      name: sp.name,
+      amount: sp.amount,
+      pool: sidePotPoolByName[sp.name] ?? 0,
+      entrants: sidePotEntrantsByName[sp.name] ?? 0,
+      places: view
+        ? view.places.map((p) => ({ place: p.place, amount: p.amount, percent: p.percent }))
+        : null,
+    };
+  });
   const payouts: SpecPayouts = {
     entryFee,
     addedMoney,
@@ -514,6 +613,7 @@ const buildSpectatorView = (
     paidPlayers,
     finalized: hasSplit && pool > 0,
     places: hasSplit && pool > 0 ? payoutRows : null,
+    sidePots,
   };
 
   // Final placements when the tournament is over: 1st = champion, then the rest
@@ -562,6 +662,7 @@ const buildSpectatorView = (
     standingsPreview,
     fullStandings,
     activity,
+    activityPreview,
     players,
     payouts,
     finalPlacements,
@@ -582,7 +683,7 @@ export const specMatchElapsedMs = (
   return Math.max(0, nowMs - new Date(startedAt).getTime());
 };
 
-export const useChipSpectator = (tournamentId?: number) => {
+export const useChipSpectator = (tournamentId?: number, viewerProfileId?: number | null) => {
   const query = useQuery({
     queryKey: ["chip-spectator", tournamentId],
     queryFn: () => chipService.load(tournamentId!),
@@ -596,9 +697,9 @@ export const useChipSpectator = (tournamentId?: number) => {
   const view = useMemo<ChipSpectatorView | null>(
     () =>
       query.data
-        ? buildSpectatorView(query.data.tournament, query.data.chip)
+        ? buildSpectatorView(query.data.tournament, query.data.chip, viewerProfileId)
         : null,
-    [query.data],
+    [query.data, viewerProfileId],
   );
 
   return {

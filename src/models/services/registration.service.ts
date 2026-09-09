@@ -80,12 +80,26 @@ export const registrationService = {
     const { data, error } = await supabase
       .from("tournament_players")
       .select(
-        "id, status, registered_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, thumbnail, venues:venue_id (venue, city, state))",
+        "id, status, registered_at, eliminated_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, gameplay_started_at, thumbnail, venues:venue_id (venue, city, state))",
       )
       .eq("player_id", playerId)
       .order("registered_at", { ascending: false });
     if (error) throw error;
     return (data || []) as unknown as PlayerTournament[];
+  },
+
+  // The authoritative "am I in a LIVE tournament right now?" lookup. A single
+  // SECURITY DEFINER RPC (get_my_live_tournament) resolves the caller from
+  // auth.uid() server-side and checks ONLY their own participation across every
+  // roster path (tournament_players, tournament_team_members, chip_entries p1/p2),
+  // returning just tournaments with live_state='in_progress' — deduped and ordered
+  // most-recently-started first. Scoped to the current user and indexed, so it
+  // scales regardless of how many tournaments the platform has. Shaped like
+  // PlayerTournament so the Profile live bucket consumes it unchanged.
+  async getMyLiveTournament(): Promise<PlayerTournament[]> {
+    const { data, error } = await supabase.rpc("get_my_live_tournament");
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as unknown as PlayerTournament[];
   },
 
   // A player's full tournament history (with bracket + match state) for the

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   InputAccessoryView,
   Keyboard,
   KeyboardAvoidingView,
@@ -32,7 +33,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { KeyboardAwareScroll } from "../../../../src/views/components/common/keyboard-aware-scroll";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
@@ -44,8 +45,14 @@ import {
   GAME_TYPES,
   RECURRENCE_TYPES,
   START_TIMES,
+  THUMBNAIL_OPTIONS,
   TOURNAMENT_FORMATS,
 } from "../../../../src/utils/tournament-form-data";
+import {
+  defaultThumbnailIdForGameType,
+  getTournamentImageUrl,
+} from "../../../../src/utils/tournament-helpers";
+import { useTournamentImage } from "../../../../src/viewmodels/hooks/use.tournament.image";
 import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import {
   GameType,
@@ -108,10 +115,17 @@ import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.setti
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
-import { buildLiveMatches, LiveMatch } from "../../../../src/utils/match.utils";
+import { buildLiveMatches, computeEliminatedRegIds, LiveMatch } from "../../../../src/utils/match.utils";
+import { tournamentService } from "../../../../src/models/services/tournament.service";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
 import { teamService } from "../../../../src/models/services/team.service";
+import { chipService } from "../../../../src/models/services/chip.service";
+import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-lifecycle";
+import { buildReadinessSummary, needsReadinessWarning, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
+import { missingSettingsFields, settingsComplete, SettingsCompleteInput } from "../../../../src/utils/settings-complete";
+import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
+import { LifecyclePhase, deriveLifecycle, paymentSatisfied } from "../../../../src/utils/registration-lifecycle";
 import { useQuery } from "@tanstack/react-query";
 import {
   useVenuesByDirector,
@@ -172,12 +186,15 @@ const TAB_LABELS: Record<TabKey, string> = {
 
 // The ordered setup flow the TD must complete in sequence. A later step can't
 // be opened until every earlier step is complete (gated with a friendly prompt).
+// Elimination (bracket) setup order. Mirrors PHASE_DEFS.setup: Prize Pool is a
+// real gate before Generate Bracket (the terminal). Chip uses its own order (it
+// ends at Review & Start) — see setupOrder in the component.
 const SETUP_ORDER: TabKey[] = [
   "settings",
   "players",
   "tables",
+  "prizepool",
   "bracket",
-  "review",
 ];
 
 // ── Phase presentation ───────────────────────────────────────────────────────
@@ -445,6 +462,8 @@ interface SettingsForm {
   phoneNumber: string;
   contactName: string;
   externalBracketUrl: string;
+  // Image: a THUMBNAIL_OPTIONS id (game-type default) or "custom:<publicUrl>".
+  thumbnail: string;
   venueId: number | null;
   recurrenceType: string;
   raceMode: RaceMode;
@@ -506,7 +525,7 @@ const TABLE_SIZE_OPTIONS = [
   { label: "Select table size", value: "" },
   { label: "7 Foot (Bar Box)", value: "7ft" },
   { label: "8 Foot", value: "8ft" },
-  { label: "9 Foot (Pro)", value: "9ft" },
+  { label: "9 Foot", value: "9ft" },
 ];
 
 // paid_side_pots should always be a string[], but legacy/seed rows may store a
@@ -547,6 +566,10 @@ const toForm = (t: Tournament): SettingsForm => {
     phoneNumber: t.phone_number ?? "",
     contactName: t.contact_name ?? "",
     externalBracketUrl: t.external_bracket_url ?? "",
+    // Existing image wins; otherwise fall back to the game-type default so a
+    // preview always shows immediately (mirrors the submit flow).
+    thumbnail:
+      t.thumbnail ?? defaultThumbnailIdForGameType(t.game_type) ?? "",
     venueId: t.venue_id ?? null,
     recurrenceType: t.recurrence_type ?? "",
     // Race is configured fresh in the hub — do NOT inherit the free-text race
@@ -617,6 +640,25 @@ const feesToForm = (saved: TournamentFee[]): FeeForm[] => {
   return [...builtIns, ...customs];
 };
 
+// Map the live Settings form to the SHARED completion-check shape (utils/settings-
+// complete). Venue can be set on the saved tournament, so fall back to it.
+const formToSettingsInput = (
+  f: SettingsForm,
+  fallbackVenueId?: number | null,
+): SettingsCompleteInput => ({
+  name: f.name,
+  gameType: f.gameType,
+  format: f.tournamentFormat,
+  venueId: f.venueId ?? fallbackVenueId ?? null,
+  date: f.tournamentDate,
+  time: f.startTime,
+  tableSize: f.tableSize,
+  equipment: f.equipment,
+  entryFee: f.entryFee,
+  maxFargo: f.maxFargo,
+  open: f.openTournament,
+});
+
 const toPatch = (f: SettingsForm): Partial<Tournament> => {
   const hasLosers = formatHasLosersSide(f.tournamentFormat);
   // Keep the legacy `race` text column readable for cards/detail.
@@ -656,6 +698,7 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   phone_number: f.phoneNumber.trim() || undefined,
   contact_name: f.contactName.trim() || undefined,
   external_bracket_url: f.externalBracketUrl.trim() || undefined,
+  thumbnail: f.thumbnail.trim() || undefined,
   venue_id: f.venueId ?? undefined,
   recurrence_type: f.isRecurring ? f.recurrenceType.trim() || undefined : undefined,
   // Any save commits the tournament — it's no longer an unsaved draft.
@@ -710,6 +753,37 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
   };
 };
 
+// Settings columns surfaced in the chip Activity Log when a director edits while the
+// tournament is running. Column name → human label, used to build "Label: from → to"
+// change summaries. Only fields toPatch actually writes are listed.
+const SETTINGS_AUDIT_FIELDS: { key: keyof Tournament; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "game_type", label: "Game" },
+  { key: "tournament_format", label: "Format" },
+  { key: "description", label: "Description" },
+  { key: "max_fargo", label: "Max Fargo" },
+];
+// Diff two settings patches over the audited fields → structured changes (for the event
+// payload) + a human-readable one-line summary (for the event text). Only changed fields
+// are included, so unchanged fields are never logged.
+const diffSettingsPatches = (
+  before: Partial<Tournament>,
+  after: Partial<Tournament>,
+): { changes: Record<string, { from: unknown; to: unknown }>; summary: string } => {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  const parts: string[] = [];
+  const fmt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
+  for (const { key, label } of SETTINGS_AUDIT_FIELDS) {
+    const from = (before as Record<string, unknown>)[key as string] ?? null;
+    const to = (after as Record<string, unknown>)[key as string] ?? null;
+    if (JSON.stringify(from) !== JSON.stringify(to)) {
+      changes[key as string] = { from, to };
+      parts.push(`${label}: ${fmt(from)} → ${fmt(to)}`);
+    }
+  }
+  return { changes, summary: parts.join(" · ") };
+};
+
 // Fields that belong to THIS event (not a reusable template) — excluded when
 // saving / applying a settings template so the TD keeps their own name + schedule.
 const TEMPLATE_EXCLUDED_KEYS: (keyof SettingsForm)[] = [
@@ -718,6 +792,9 @@ const TEMPLATE_EXCLUDED_KEYS: (keyof SettingsForm)[] = [
   "startTime",
   "description",
   "phoneNumber",
+  // Added Money is per-event prize money — never carry it over from a template;
+  // the TD must re-enter it for each tournament.
+  "addedMoney",
 ];
 const templatableSettings = (f: SettingsForm): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -1741,11 +1818,50 @@ export default function ManageTournamentScreen() {
 
   const hub = useManageTournament(tournamentId);
 
-  // Chip (team) tournaments register as TEAMS, not tournament_players — so the
-  // Prize Pool tab counts teams from here (entry pool + side pots) the same way
-  // the elim flow counts registrations. Only fetched for chip events.
   const isChipTournament =
     hub.tournament?.tournament_format === "chip-tournament";
+  // Chip Prize Pool counts come from the SAME unified roster the chip Players tab and
+  // Review & Start use — chipService.load() owns the dedupe across chip_entries +
+  // tournament_players (self-reg singles) + tournament_teams (doubles). Counting a single
+  // source here (e.g. tournament_teams only) is what made a singles event read 0 players.
+  const chipRosterQuery = useQuery({
+    queryKey: ["chip-roster", tournamentId],
+    queryFn: () => chipService.load(tournamentId),
+    enabled: !!tournamentId && isChipTournament,
+  });
+  // Phase mirrors use.chip.tournament: finished → completed, in_progress → live, else setup.
+  // deriveLifecycle treats live/completed identically, so a Ready entry counts the same in
+  // setup (paid + eligible + explicitly Ready) and once the field is live.
+  const chipRosterPhase: LifecyclePhase =
+    hub.tournament?.status === "completed" || hub.tournament?.live_state === "finished"
+      ? "completed"
+      : hub.tournament?.live_state === "in_progress"
+        ? "live"
+        : "setup";
+  // Ready-only entrants — the prize pool reflects players actually paid/eligible and
+  // entering the live field (Registered-not-Ready, Pre-Reg, Waiting, No-Show, Removed are
+  // all excluded; an approved Fargo-cap-override Ready entry still counts).
+  const chipLifecycleCtx = useMemo(
+    () => ({
+      phase: chipRosterPhase,
+      doubles: chipRosterQuery.data?.chip.settings.format === "scotch_doubles",
+      entryFeeRequired: (Number(hub.tournament?.entry_fee) || 0) > 0,
+    }),
+    [chipRosterQuery.data, chipRosterPhase, hub.tournament?.entry_fee],
+  );
+  const chipReady = useMemo(() => {
+    const chip = chipRosterQuery.data?.chip;
+    if (!chip) return [];
+    return chipReadyEntries(chip.entries, chipLifecycleCtx);
+  }, [chipRosterQuery.data, chipLifecycleCtx]);
+  // Active roster (excludes cancelled / no-show / removed) — the basis for side-pot counts,
+  // which reflect collected buy-in money and so do NOT require Ready.
+  const chipActive = useMemo(() => {
+    const chip = chipRosterQuery.data?.chip;
+    if (!chip) return [];
+    return chipActiveEntries(chip.entries, chipLifecycleCtx);
+  }, [chipRosterQuery.data, chipLifecycleCtx]);
+  // Still fetched for doubles-only paths (side-pot payout keys below). Not a count source.
   const chipTeamsQuery = useQuery({
     queryKey: ["tournament-teams", tournamentId],
     queryFn: () => teamService.getTeams(tournamentId),
@@ -1879,10 +1995,13 @@ export default function ManageTournamentScreen() {
   // registrations/removals made elsewhere show up without a manual refresh.
   useEffect(() => {
     if (activeTab === "players") hub.refetchRegistrations();
-    // Chip side-pot entries are made on the (embedded) chip Players tab, which
-    // uses a separate data source — refresh teams when the Prize Pool tab opens
-    // so its entry pool + side-pot counts reflect the latest entries.
-    if (isChipTournament && activeTab === "prizepool") chipTeamsQuery.refetch();
+    // Chip entries/Ready state are edited on the (embedded) chip Players tab — refresh the
+    // unified roster (and teams) when the Prize Pool tab opens so its entry pool + side-pot
+    // counts reflect the latest entries.
+    if (isChipTournament && activeTab === "prizepool") {
+      chipRosterQuery.refetch();
+      chipTeamsQuery.refetch();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -1904,33 +2023,45 @@ export default function ManageTournamentScreen() {
     };
   }, [hub.registrations, tournamentId]);
 
+  // Live Ready count published by the embedded chip screen (authoritative roster).
+  // Drives chip Players-step gating so it updates the instant a player is marked
+  // Ready, instead of waiting on a stale roster refetch.
+  const [embeddedChipReady, setEmbeddedChipReady] = useState<number | null>(null);
+  // Live table count published by the embedded chip screen (chip tables live in the
+  // chip state, NOT hub.tables) — drives chip Tables-step gating live.
+  const [embeddedChipTables, setEmbeddedChipTables] = useState<number | null>(null);
+  // Live readiness summary published by the embedded chip screen (its VM owns the
+  // authoritative chip edits) — the readiness modal reads THIS, not the stale query.
+  const [embeddedChipReadiness, setEmbeddedChipReadiness] = useState<PlayerReadinessSummary | null>(null);
+
   // Guided-setup prompt shown when the TD jumps ahead of an incomplete step.
   const [gatePrompt, setGatePrompt] = useState<{
     blocking: TabKey;
     target: TabKey;
   } | null>(null);
+  // Player-readiness summary prompt shown when leaving Players forward with some
+  // players/teams not yet Ready (informational — the TD can continue anyway).
+  const [readinessPrompt, setReadinessPrompt] = useState<{ target: TabKey } | null>(null);
 
   // Per-step completion — drives the sequential gating + the Review checklist.
   const stepComplete = useMemo(() => {
     const t = hub.tournament;
     const ls = t?.live_settings ?? {};
-    const raceMode = ls.raceMode ?? "fixed";
-    const raceOk =
-      raceMode === "groups"
-        ? (ls.raceGroups?.length ?? 0) >= 1
-        : raceMode === "differential"
-          ? ls.fargoDiffMinRace != null && ls.fargoDiffPerGame != null
-          : ls.fixedRaceWinners != null;
-    const settings =
-      !!(
-        t &&
-        t.name &&
-        t.game_type &&
-        t.tournament_format &&
-        t.venue_id &&
-        t.tournament_date &&
-        t.start_time
-      ) && raceOk;
+    // Settings completeness = the SHARED source of truth (utils/settings-complete),
+    // so the badge, this gate, and Begin Registration never disagree.
+    const settings = !!t && settingsComplete({
+      name: t.name,
+      gameType: t.game_type,
+      format: t.tournament_format,
+      venueId: t.venue_id,
+      date: t.tournament_date,
+      time: t.start_time,
+      tableSize: t.table_size,
+      equipment: t.equipment,
+      entryFee: t.entry_fee,
+      maxFargo: t.max_fargo,
+      open: t.open_tournament,
+    });
     const checkedIn = hub.registrations.filter(
       (r) => r.status === "checked_in",
     ).length;
@@ -1953,11 +2084,12 @@ export default function ManageTournamentScreen() {
     () => hub.registrations.filter((r) => r.status === "checked_in").length,
     [hub.registrations],
   );
-  // Live Ready count while open; the drawn field once locked (so a closed
-  // field's pool stops moving). Chip (team) events count each registered TEAM as
-  // one entrant (teams don't flow through tournament_players).
+  // Live Ready count while open; the drawn field once locked (so a closed field's pool
+  // stops moving). Chip events count READY entrants from the unified roster (singles,
+  // self-reg and doubles alike) — the pool reflects players actually paid/eligible and
+  // entering the live field, matching the chip Players tab's Ready counter.
   const prizePlayers = isChipTournament
-    ? chipTeams.length
+    ? chipReady.length
     : prizeLocked
       ? hub.bracket?.players ?? readyCount
       : readyCount;
@@ -1988,9 +2120,13 @@ export default function ManageTournamentScreen() {
     prizeFeesOnTop,
   );
 
-  // Side pots come from the tournament; entrant counts from paid_side_pots. For a
-  // chip (team) event the membership lives on the team (tournament_teams
-  // .paid_side_pots) instead of the player registration.
+  // Side pots come from the tournament; entrant counts from paid_side_pots. Chip events read
+  // side-pot membership from the SAME unified roster — but from the ACTIVE set (not Ready):
+  // a side-pot buy-in is money already collected, so it counts even for a Registered player
+  // who is not Ready yet (e.g. still missing a Fargo). paidSidePots is populated uniformly
+  // for singles chip_entries, self-reg tournament_players, and doubles teams by
+  // chipService.load, so all three formats count identically. Cancelled / no-show / removed
+  // entries are excluded by chipActive.
   const prizeSidePots = useMemo(() => {
     const pots = (hub.tournament?.side_pots ?? []).filter((p) =>
       (p.name ?? "").trim(),
@@ -1999,8 +2135,8 @@ export default function ManageTournamentScreen() {
       return pots.map((p) => ({
         name: p.name.trim(),
         amount: Number(p.amount) || 0,
-        players: chipTeams.filter((t) =>
-          (t.paid_side_pots ?? []).includes(p.name.trim()),
+        players: chipActive.filter((e) =>
+          (e.paidSidePots ?? []).includes(p.name.trim()),
         ).length,
       }));
     }
@@ -2014,7 +2150,7 @@ export default function ManageTournamentScreen() {
         safePaidSidePots(r.paid_side_pots).includes(p.name.trim()),
       ).length,
     }));
-  }, [hub.tournament, hub.registrations, isChipTournament, chipTeams]);
+  }, [hub.tournament, hub.registrations, isChipTournament, chipActive]);
   const sidePotNames = useMemo(
     () => prizeSidePots.map((s) => s.name),
     [prizeSidePots],
@@ -2027,7 +2163,7 @@ export default function ManageTournamentScreen() {
   const prizeSavedRef = useRef<string | null>(null);
   // The page ScrollView — chip pages ask to jump to the top (e.g. when a shuffle
   // round completes) so the Shuffle Mode banner / Start Shuffle is in reach.
-  const pageScrollRef = useRef<KeyboardAwareScrollView>(null);
+  const pageScrollRef = useRef<ScrollView>(null);
   useEffect(() => {
     if (prizeSeededRef.current || !hub.tournament) return;
     const base = hub.prizePool ?? defaultPrizePoolConfig(sidePotNames);
@@ -2094,6 +2230,67 @@ export default function ManageTournamentScreen() {
     prizeFeesOk &&
     isPrizePoolComplete(prizeForm, prizeEntryPool, prizeSidePotPools);
 
+  // Compact Prize Pool summary handed to the chip Review & Start screen (the split +
+  // fee math lives here, so the embedded review reads it rather than recomputing).
+  const chipReviewPrize = useMemo(
+    () => ({
+      total:
+        prizeEntryPool +
+        Object.values(prizeSidePotPools).reduce((a, b) => a + b, 0),
+      paidPlaces: prizeForm?.entryPlaces.length ?? 0,
+      complete: prizeComplete,
+    }),
+    [prizeEntryPool, prizeSidePotPools, prizeForm, prizeComplete],
+  );
+
+  // ── Guided setup sequence ───────────────────────────────────────────────────
+  // Per-step completion for the guided flow (Settings → Players → Tables → Prize
+  // Pool → Review/Bracket). Derived from LIVE state, so editing an earlier step
+  // (clearing a required Setting, an invalid payout, etc.) instantly re-locks the
+  // later steps — no parallel state to keep in sync. The terminal step
+  // (review for chip, bracket for elimination) carries no flag of its own; it
+  // unlocks once everything before it is complete.
+  // Chip Ready count: prefer the LIVE value published by the embedded chip screen
+  // (updates the instant the TD marks a player Ready). Fall back to the roster
+  // query only before that screen has mounted. Both the guided-flow footer and the
+  // Setup dropdown read setupStepComplete.players, so they share this one source.
+  const chipReadyCount = embeddedChipReady ?? chipReady.length;
+  // Chip tables live in the chip state (embedded screen), not hub.tables — prefer the
+  // live count it publishes, falling back to the roster query before it mounts. Both
+  // the Tables footer and the dropdown read setupStepComplete.tables, so they share it.
+  const chipTableCount =
+    embeddedChipTables ?? chipRosterQuery.data?.chip.tables.length ?? 0;
+  const setupStepComplete: Record<string, boolean> = {
+    settings: stepComplete.settings,
+    players: isChipTournament ? chipReadyCount >= 2 : stepComplete.players,
+    tables: isChipTournament ? chipTableCount >= 1 : stepComplete.tables,
+    prizepool: prizeComplete,
+    bracket: stepComplete.bracket,
+  };
+  // The ordered flow for THIS tournament kind. Chip ends at Review & Start with
+  // Prize Pool as the last gate; elimination keeps its existing registration-driven
+  // order (Prize Pool stays ungated there, as before).
+  const setupOrder: TabKey[] = isChipTournament
+    ? ["settings", "players", "tables", "prizepool", "review"]
+    : SETUP_ORDER;
+  // The final setup step for this format: chip → Review & Start; elimination →
+  // Generate Bracket. Same guided sequence, different terminal page.
+  const terminalTab: TabKey = isChipTournament ? "review" : "bracket";
+  // Whether the terminal step is reachable (every earlier step complete).
+  const reviewUnlocked = setupOrder
+    .slice(0, Math.max(0, setupOrder.length - 1))
+    .every((s) => setupStepComplete[s]);
+  // Dropdown glyph for a setup page: 🔒 while an earlier step is incomplete, then
+  // the page's own lead (⚡ terminal) or ✓ / ○ by completion.
+  const setupPageGlyph = (tab: TabKey, lead?: string): string | undefined => {
+    const idx = setupOrder.indexOf(tab);
+    if (idx > 0 && setupOrder.slice(0, idx).some((s) => !setupStepComplete[s])) {
+      return GLYPH.lock;
+    }
+    if (lead) return lead;
+    return setupStepComplete[tab] ? GLYPH.check : "○"; // ○
+  };
+
   const handleSavePrizePool = async () => {
     if (!prizeForm) return;
     try {
@@ -2131,20 +2328,17 @@ export default function ManageTournamentScreen() {
     );
 
   // Gate forward navigation: a setup step can't open until earlier ones are done.
+  // Backward moves are always allowed — an earlier step's own predecessors are, by
+  // definition, already complete, so editing a finished step is never blocked.
   const goToTab = (target: TabKey) => {
-    // Chip tournaments have no bracket-completion order — every page is reachable.
-    if (isChip) {
+    if (!setupOrder.includes(target)) {
       setActiveTab(target);
       return;
     }
-    if (!SETUP_ORDER.includes(target)) {
-      setActiveTab(target);
-      return;
-    }
-    const idx = SETUP_ORDER.indexOf(target);
+    const idx = setupOrder.indexOf(target);
     for (let i = 0; i < idx; i++) {
-      const step = SETUP_ORDER[i];
-      if (!(stepComplete as Record<string, boolean>)[step]) {
+      const step = setupOrder[i];
+      if (!setupStepComplete[step]) {
         setGatePrompt({ blocking: step, target });
         return;
       }
@@ -2160,7 +2354,7 @@ export default function ManageTournamentScreen() {
       [
         { text: "Keep Editing", style: "cancel" },
         {
-          text: "Discard",
+          text: "Discard Changes",
           style: "destructive",
           onPress: () => {
             if (hub.tournament) {
@@ -2193,27 +2387,98 @@ export default function ManageTournamentScreen() {
     );
   };
 
-  const handleTabPress = (target: TabKey) => {
-    if (activeTab === "settings" && target !== "settings" && settingsDirty) {
-      confirmLeaveSettings(() => goToTab(target));
-      return;
+  // ── Centralized Setup navigation ────────────────────────────────────────────
+  // Two clearly different paths (never disable the dirty guard globally):
+  //   • advanceToNextStep()      — the page's OWN forward CTA (Continue / Review &
+  //     Start): save the dirty page, await it, and only navigate on success. Never
+  //     shows the unsaved prompt; on save failure it stays put and shows the error.
+  //   • attemptExternalNavigation() — leaving another way (Back, Setup dropdown,
+  //     phase switch, close): keep the Save / Discard / Keep Editing prompt.
+
+  // Save whichever Setup page is currently dirty. Returns false if a save failed (the
+  // caller must NOT navigate). Silent success (no "Saved" popup) so a forward CTA
+  // flows straight through. Players/Tables/Bracket have no deferred save (their edits
+  // persist immediately), so they report clean.
+  const saveCurrentPage = async (): Promise<boolean> => {
+    if (activeTab === "settings" && settingsDirty && form) {
+      const prevForm = prevFormSnapshot();
+      try {
+        await hub.saveSettings(toPatch(form));
+        savedSnapshotRef.current = JSON.stringify(form);
+        await propagateSidePotChanges(prevForm);
+        return true;
+      } catch {
+        Alert.alert("Error", "Failed to save — your changes were kept.");
+        return false;
+      }
     }
-    if (activeTab === "prizepool" && target !== "prizepool" && prizeDirty) {
-      confirmLeavePrize(() => goToTab(target));
-      return;
+    if (activeTab === "prizepool" && prizeDirty && prizeForm) {
+      try {
+        await hub.savePrizePool(prizeForm);
+        prizeSavedRef.current = JSON.stringify(prizeForm);
+        return true;
+      } catch {
+        Alert.alert("Error", "Failed to save the prize pool.");
+        return false;
+      }
     }
-    goToTab(target);
+    return true;
   };
 
-  const handleBack = () => {
-    if (activeTab === "settings" && settingsDirty) {
-      confirmLeaveSettings(() => router.back());
-    } else if (activeTab === "prizepool" && prizeDirty) {
-      confirmLeavePrize(() => router.back());
-    } else {
-      router.back();
+  // Forward CTA: save-and-advance. Save succeeds → mark clean (done inside save) and
+  // move on; save fails → stay on the page, error already shown.
+  const advanceToNextStep = async (target: TabKey) => {
+    const ok = await saveCurrentPage();
+    if (ok) goToTab(target);
+  };
+
+  // Settings' own forward CTA (Begin Registration / Start Registration / View Players):
+  // validate the LIVE form → save → mark clean → open registration (badge flips
+  // immediately via the optimistic live-state update) → go straight to Players. It
+  // validates from the form (not stale saved state) and navigates with setActiveTab
+  // (not goToTab), so it never trips the "You're almost there / Go to Settings" gate.
+  const beginRegistration = async () => {
+    if (!form) return;
+    const missing = missingSettingsFields(
+      formToSettingsInput(form, hub.tournament?.venue_id ?? null),
+    );
+    if (missing.length) {
+      Alert.alert(
+        "Finish Settings",
+        `Please complete the following before opening registration:\n\n• ${missing.join("\n• ")}`,
+      );
+      return; // stay on Settings, no save, no navigate
+    }
+    try {
+      const prevForm = prevFormSnapshot();
+      await hub.saveSettings(toPatch(form));
+      savedSnapshotRef.current = JSON.stringify(form); // mark Settings clean
+      await propagateSidePotChanges(prevForm);
+      if (hub.phase !== "registration_open") await hub.startRegistration();
+      setSelectedPhase("setup");
+      setActiveTab("players"); // validated here → bypass the predecessor gate
+    } catch {
+      Alert.alert("Error", "Failed to open registration — your changes were kept.");
     }
   };
+
+  // External navigation guard: prompt only when leaving a DIRTY page another way.
+  const attemptExternalNavigation = (proceed: () => void) => {
+    // An open unlock session takes priority: relock (discarding unsaved edits) instead of
+    // the normal Save/Discard prompt — an unlock session must never save on exit.
+    if (activeTab === "settings" && settingsUnlocked) confirmLeaveUnlocked(proceed);
+    else if (activeTab === "settings" && settingsDirty) confirmLeaveSettings(proceed);
+    else if (activeTab === "prizepool" && prizeDirty) confirmLeavePrize(proceed);
+    else proceed();
+  };
+
+  // Tab changes from the Setup dropdown / other tabs are EXTERNAL navigation.
+  const handleTabPress = (target: TabKey) => {
+    if (target === activeTab) return;
+    attemptExternalNavigation(() => goToTab(target));
+  };
+
+  const handleBack = () => attemptExternalNavigation(() => router.back());
 
   // ---- Tables handlers ----------------------------------------------------
   const handleAddTable = async () => {
@@ -2281,7 +2546,17 @@ export default function ManageTournamentScreen() {
     ]);
 
   // ---- Status-flow actions ------------------------------------------------
-  const handleStartTournament = () =>
+  const handleStartTournament = () => {
+    // Stale-schedule gate (shared helper — same rule everywhere, no bypass): a
+    // not-yet-started tournament whose saved date/time is already in the past must
+    // be corrected first. Keep the TD on Setup so they can fix Date/Start Time.
+    const staleErr = scheduleStaleError(hub.tournament);
+    if (staleErr) {
+      Alert.alert("Update the schedule", staleErr, [
+        { text: "OK", onPress: () => setActiveTab("settings") },
+      ]);
+      return;
+    }
     Alert.alert(
       "Start Tournament",
       "Start the tournament now? Status changes to Running and the Matches tab becomes the live control area.",
@@ -2296,10 +2571,75 @@ export default function ManageTournamentScreen() {
         },
       ],
     );
+  };
 
   const isExternal = hub.tournament?.bracket_source === "external";
   // Chip Tournament format: no game spot, and the race is a simple "Race To" (1+).
   const isChip = form?.tournamentFormat === "chip-tournament";
+
+  // Setup UX flag: the CURRENT form schedule (live edits) is stale — pre-start and in
+  // the past (combined date+time, tournament timezone). Drives the inline warning on
+  // the Schedule card so the TD sees Date/Time needs attention while editing. The
+  // authoritative block lives in the start actions (shared helper), not this flag.
+  const scheduleNeedsAttention = isScheduleStale({
+    tournament_date: form?.tournamentDate || null,
+    start_time: form?.startTime || null,
+    timezone: hub.tournament?.timezone,
+    live_state: hub.tournament?.live_state,
+    status: hub.tournament?.status,
+  });
+
+  // Shared player-readiness summary (utils/player-readiness), derived from the SAME
+  // authoritative roster/lifecycle logic each format's Players screen uses — chip via
+  // chipEntryLifecycle, elimination via deriveLifecycle — so the modal never disagrees.
+  const readinessSummary = useMemo<PlayerReadinessSummary | null>(() => {
+    const feeRequired = (Number(hub.tournament?.entry_fee) || 0) > 0;
+    const hasSidePots = (form?.sidePots?.length ?? 0) > 0;
+    if (isChip) {
+      // Chip's Players tab is the EMBEDDED ChipManageScreen with its own VM; use the
+      // summary IT publishes live (the host's chipRosterQuery is a separate, stale copy).
+      return embeddedChipReadiness;
+    }
+    // Elimination (single/double/scotch): tournament_players registrations.
+    const isTeam = String(hub.tournament?.game_type ?? "").includes("scotch-doubles");
+    const rows: ReadinessRow[] = hub.registrations.map((r) => ({
+      status: deriveLifecycle({
+        phase: "setup",
+        exception:
+          r.status === "no_show" ? "no_show" : r.status === "cancelled" ? "removed" : null,
+        waiting: false,
+        processed: r.status === "approved" || r.status === "checked_in",
+        paymentSatisfied: paymentSatisfied(!!r.paid_entry, feeRequired),
+        hardBlocker: false,
+        checkedIn: r.status === "checked_in",
+      }),
+      paid: !!r.paid_entry,
+      entryFeeRequired: feeRequired,
+      inAnySidePot: (r.paid_side_pots?.length ?? 0) > 0,
+    }));
+    return buildReadinessSummary(rows, isTeam, hasSidePots);
+  }, [
+    isChip,
+    embeddedChipReadiness,
+    hub.registrations,
+    hub.tournament?.entry_fee,
+    hub.tournament?.game_type,
+    form?.sidePots,
+  ]);
+
+  // Players page forward CTA: if any playable player/team is Not Ready, show the
+  // informational summary first (never hard-blocks); otherwise advance in one tap.
+  const advanceFromPlayers = (target: TabKey) => {
+    if (
+      activeTab === "players" &&
+      readinessSummary &&
+      needsReadinessWarning(readinessSummary)
+    ) {
+      setReadinessPrompt({ target });
+      return;
+    }
+    advanceToNextStep(target);
+  };
   // Whether a chip tournament has already begun registration (drives Begin vs View).
   const chipRegistrationStarted =
     isChip &&
@@ -2398,17 +2738,9 @@ export default function ManageTournamentScreen() {
         key: t.tab,
         label: t.label,
         divider: t.divider,
-        glyph:
-          t.lead ??
-          (pk === "setup"
-            ? (
-                t.tab === "prizepool"
-                  ? prizeComplete
-                  : (stepComplete as Record<string, boolean>)[t.tab]
-              )
-              ? "✓"
-              : "○"
-            : undefined),
+        // Setup pages reflect completed (✓) / locked (🔒) / terminal (⚡) / todo (○).
+        // Other phases keep their lead glyph (⚡ Actions) or none.
+        glyph: pk === "setup" ? setupPageGlyph(t.tab, t.lead) : t.lead,
       })),
     };
   });
@@ -2480,19 +2812,41 @@ export default function ManageTournamentScreen() {
       return;
     }
     if (p === selectedPhase) return;
-    const proceed = () => {
+    // Switching Setup ↔ Live ↔ Results is EXTERNAL navigation — guard unsaved
+    // Settings AND Prize Pool edits (both, via the shared helper).
+    attemptExternalNavigation(() => {
       setSelectedPhase(p);
       setActiveTab(defaultTabForPhase(p));
-    };
-    if (activeTab === "settings" && settingsDirty) confirmLeaveSettings(proceed);
-    else proceed();
+    });
   };
 
+  // Settings unlock-with-reason (chip, running): a controlled escape hatch. Flipping
+  // this local flag makes `settingsLocked` false so the Tournament Details form becomes
+  // editable and the Save footer reappears — WITHOUT touching live_state or the chip
+  // roster (that stays locked via its own gate). Gated behind a required-reason modal
+  // whose reason/notes are audit-logged to chip_events with the director's id_auto.
+  const [settingsUnlocked, setSettingsUnlocked] = useState(false);
+  const [unlockVisible, setUnlockVisible] = useState(false);
+  const [unlockReason, setUnlockReason] = useState<string | null>(null);
+  const [unlockNotes, setUnlockNotes] = useState("");
+  // Active unlock EDIT SESSION (chip, running). Held in a ref so the relock-on-exit and
+  // unmount cleanup can read it without stale-closure issues. Set on unlock, cleared on
+  // Save & Lock or relock. `baseline` is the settings patch captured at unlock so Save &
+  // Lock can diff exactly what changed. `sessionId` links the unlock → save/relock events.
+  const unlockSessionRef = useRef<{
+    sessionId: string;
+    reason: string;
+    notes: string;
+    actorName: string;
+    baseline: Partial<Tournament>;
+  } | null>(null);
   // Settings lock once the bracket is drawn — editing format/race/entry after a
-  // draw would desync the bracket. Editing requires undoing the draw (reopen).
-  const settingsLocked = (
-    ["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]
-  ).includes(hub.phase);
+  // draw would desync the bracket. Editing requires undoing the draw (reopen). A
+  // director may deliberately unlock while running via the reason-gated flow above
+  // (settingsUnlocked); that unlocks ONLY settings, never the chip Players roster.
+  const settingsLocked =
+    (["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]).includes(hub.phase) &&
+    !settingsUnlocked;
 
   const handleUndoDraw = () =>
     Alert.alert(
@@ -2570,9 +2924,14 @@ export default function ManageTournamentScreen() {
 
   // ---- Settings templates (save/apply the whole settings form, max 5) ----
   const settingsTemplates = useSettingsTemplates(tdProfile?.id_auto);
+  // Shared image picker/upload (same behavior as the submit flow).
+  const tournamentImage = useTournamentImage(tdProfile?.id_auto?.toString());
   const [tplSaveOpen, setTplSaveOpen] = useState(false);
   const applyTemplate = (settings: Record<string, unknown>) =>
-    patchForm(settings as Partial<SettingsForm>);
+    // Added Money is intentionally excluded from templates (see
+    // TEMPLATE_EXCLUDED_KEYS). Force it blank on apply so a template can never
+    // reintroduce stale prize money — the TD re-enters it per event.
+    patchForm({ ...(settings as Partial<SettingsForm>), addedMoney: "" });
   const [drawType, setDrawType] = useState<DrawType>("random");
   const [redrawVisible, setRedrawVisible] = useState(false);
   const [redrawReason, setRedrawReason] = useState("");
@@ -2616,6 +2975,20 @@ export default function ManageTournamentScreen() {
       ),
     [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
   );
+
+  // Operator-side persistence of the bracket engine's elimination set (covers the case where
+  // the TD runs the event on this screen and no participant is viewing their own Tournament
+  // View). Idempotent + self-correcting server-side; guarded per session so it only writes when
+  // the set actually changes. Elimination-format only (chip uses its own eliminated status).
+  const elimSyncRef = useRef<string>("");
+  useEffect(() => {
+    if (isChipTournament || !tournamentId || hub.tournament?.live_state !== "in_progress") return;
+    const ids = computeEliminatedRegIds(liveMatches);
+    const key = [...ids].sort((a, b) => a - b).join(",");
+    if (key === elimSyncRef.current) return;
+    elimSyncRef.current = key;
+    tournamentService.syncEliminations(tournamentId, ids).catch(() => {});
+  }, [liveMatches, isChipTournament, tournamentId, hub.tournament?.live_state]);
 
   // Which active (assigned or in-progress, not yet completed) match each table is
   // on (tableId -> match). A table is "in use" while such a match sits on it; this
@@ -2918,9 +3291,185 @@ export default function ManageTournamentScreen() {
       .catch(() => Alert.alert("Error", "Failed to reopen registration."));
   };
 
+  // Confirm the reason-gated Settings unlock (chip, running). Requires a reason; writes
+  // an audit row to chip_events with the acting director threaded as actor_id (id_auto),
+  // then flips the local unlock flag so the Tournament Details form + Save footer become
+  // editable. Never touches live_state or the chip Players roster (separate lock).
+  const handleConfirmUnlock = () => {
+    const reason = unlockReason;
+    if (!reason) {
+      Alert.alert("Reason Required", "Choose a reason to unlock settings.");
+      return;
+    }
+    if (!form) return;
+    const notes = unlockNotes.trim();
+    const sessionId = `unl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    // Open the edit session: snapshot the current (clean) settings so Save & Lock can diff
+    // exactly what changed, and remember the reason/notes/actor for the linked events.
+    unlockSessionRef.current = {
+      sessionId,
+      reason,
+      notes,
+      actorName: tdFullName || "Tournament Director",
+      baseline: toPatch(form),
+    };
+    chipService
+      .logEvent(
+        tournamentId,
+        "settings_unlocked",
+        `Settings unlocked for editing — reason: ${reason}`,
+        {
+          sessionId,
+          reason,
+          notes: notes || null,
+          actorName: tdFullName || null,
+          at: new Date().toISOString(),
+        },
+        tdProfile?.id_auto ?? null,
+      )
+      .catch(() => {});
+    setUnlockVisible(false);
+    setSettingsUnlocked(true);
+  };
+
+  // Save & Lock: persist the edited settings, log the change diff (old → new) linked to
+  // the unlock session, then IMMEDIATELY relock. Does NOT touch live_state / registration
+  // / the chip roster — only the settings form is saved. Relocks even if nothing changed.
+  const handleSaveAndLock = async () => {
+    if (!form) return;
+    const session = unlockSessionRef.current;
+    const prevForm = prevFormSnapshot();
+    try {
+      const after = toPatch(form);
+      const { changes, summary } = session
+        ? diffSettingsPatches(session.baseline, after)
+        : { changes: {}, summary: "" };
+      await hub.saveSettings(after);
+      savedSnapshotRef.current = JSON.stringify(form);
+      await propagateSidePotChanges(prevForm);
+      const hasChanges = Object.keys(changes).length > 0;
+      chipService
+        .logEvent(
+          tournamentId,
+          "settings_updated_locked",
+          hasChanges
+            ? `Settings updated and relocked — ${summary}`
+            : "Settings saved and relocked with no field changes",
+          {
+            sessionId: session?.sessionId ?? null,
+            reason: session?.reason ?? null,
+            notes: session?.notes || null,
+            actorName: tdFullName || null,
+            changes,
+            at: new Date().toISOString(),
+          },
+          tdProfile?.id_auto ?? null,
+        )
+        .catch(() => {});
+      unlockSessionRef.current = null;
+      setSettingsUnlocked(false);
+    } catch {
+      Alert.alert("Error", "Failed to save settings. Please try again.");
+    }
+  };
+
+  // Relock WITHOUT saving (leaving the settings context mid-session): discard in-progress
+  // edits back to the last saved snapshot, log a "no changes saved" row linked to the
+  // session, and clear it. An unlock session must never persist edits on the way out.
+  const relockSettingsNoSave = () => {
+    const session = unlockSessionRef.current;
+    if (!session) return;
+    unlockSessionRef.current = null;
+    if (hub.tournament) {
+      const seeded = toForm(hub.tournament);
+      setForm(seeded);
+      savedSnapshotRef.current = JSON.stringify(seeded);
+    }
+    setSettingsUnlocked(false);
+    chipService
+      .logEvent(
+        tournamentId,
+        "settings_relocked_no_save",
+        "Settings relocked — no changes saved this session",
+        {
+          sessionId: session.sessionId,
+          reason: session.reason,
+          notes: session.notes || null,
+          actorName: tdFullName || null,
+          at: new Date().toISOString(),
+        },
+        tdProfile?.id_auto ?? null,
+      )
+      .catch(() => {});
+  };
+
+  // Leaving the Settings tab/screen with an unlock session open: discard + relock (a
+  // confirm guards accidental loss when there are unsaved edits). Never saves on exit.
+  const confirmLeaveUnlocked = (proceed: () => void) => {
+    // Dirtiness measured against the session baseline (not the ref-derived settingsDirty)
+    // so an unsaved edit prompts, but leaving a session with no edits relocks silently.
+    const session = unlockSessionRef.current;
+    const hasEdits =
+      !!session && !!form && diffSettingsPatches(session.baseline, toPatch(form)).summary !== "";
+    if (!hasEdits) {
+      relockSettingsNoSave();
+      proceed();
+      return;
+    }
+    Alert.alert(
+      "Discard unsaved changes?",
+      "Your unlocked settings changes haven't been saved. Leaving will discard them and relock settings.",
+      [
+        { text: "Keep Editing", style: "cancel" },
+        {
+          text: "Discard & Relock",
+          style: "destructive",
+          onPress: () => {
+            relockSettingsNoSave();
+            proceed();
+          },
+        },
+      ],
+    );
+  };
+
+  // Safety net: if the screen unmounts (hardware back, route change) with an unlock
+  // session still open — bypassing the tab/back guards — audit a "no changes saved"
+  // relock. Fire-and-forget (the component is gone; no state update, edits are discarded
+  // by unmount anyway since they were never saved).
+  useEffect(() => {
+    return () => {
+      const session = unlockSessionRef.current;
+      if (!session) return;
+      unlockSessionRef.current = null;
+      chipService
+        .logEvent(
+          tournamentId,
+          "settings_relocked_no_save",
+          "Settings relocked — no changes saved this session",
+          {
+            sessionId: session.sessionId,
+            reason: session.reason,
+            notes: session.notes || null,
+            actorName: session.actorName || null,
+            at: new Date().toISOString(),
+          },
+          tdProfile?.id_auto ?? null,
+        )
+        .catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---- Settings handlers --------------------------------------------------
   const patchForm = (patch: Partial<SettingsForm>) =>
     setForm((f) => (f ? { ...f, ...patch } : f));
+
+  // Pick + upload a custom tournament image, then store it on the form.
+  const handleUploadCustomImage = async () => {
+    const value = await tournamentImage.pickAndUploadCustomImage();
+    if (value) patchForm({ thumbnail: value });
+  };
 
   const handleSave = async () => {
     if (!form) return;
@@ -2962,31 +3511,6 @@ export default function ManageTournamentScreen() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submitCountdown]);
-
-  const handleStartRegistration = () => {
-    Alert.alert(
-      "Start Registration",
-      "Save settings and open registration? Players will be able to register once this is on.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Start Registration",
-          onPress: async () => {
-            if (!form) return;
-            const prevForm = prevFormSnapshot();
-            try {
-              await hub.saveSettings(toPatch(form));
-              savedSnapshotRef.current = JSON.stringify(form);
-              await propagateSidePotChanges(prevForm);
-              await hub.startRegistration();
-            } catch {
-              Alert.alert("Error", "Failed to start registration.");
-            }
-          },
-        },
-      ],
-    );
-  };
 
   // Side pots
   const addSidePot = () =>
@@ -3591,21 +4115,21 @@ export default function ManageTournamentScreen() {
             </View>
           ) : (
             <View key={i} style={styles.sidePotListItem}>
-              <Text
-                allowFontScaling={false}
-                style={styles.sidePotListText}
-                numberOfLines={1}
-              >
-                {pot.name.trim() || "Untitled pot"}
-                {pot.amount ? ` — $${pot.amount}` : ""}
-              </Text>
+              <View style={styles.sidePotListInfo}>
+                <Text allowFontScaling={false} style={styles.sidePotListName} numberOfLines={1}>
+                  {pot.name.trim() || "Untitled pot"}
+                </Text>
+                <Text allowFontScaling={false} style={styles.sidePotListAmt} numberOfLines={1}>
+                  {pot.amount ? `$${pot.amount}` : "No amount set"}
+                </Text>
+              </View>
               <View style={styles.sidePotListActions}>
-                <TouchableOpacity onPress={() => setEditingSidePot(i)}>
+                <TouchableOpacity onPress={() => setEditingSidePot(i)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
                   <Text allowFontScaling={false} style={styles.sidePotLink}>
                     Edit
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => removeSidePot(i)}>
+                <TouchableOpacity onPress={() => removeSidePot(i)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
                   <Text allowFontScaling={false} style={styles.sidePotLinkDanger}>
                     Delete
                   </Text>
@@ -3695,6 +4219,11 @@ export default function ManageTournamentScreen() {
                 onSelect={(v) => patchForm({ startTime: v })}
               />
             </View>
+            {scheduleNeedsAttention && (
+              <Text allowFontScaling={false} style={styles.scheduleStaleWarn}>
+                ⚠ {SCHEDULE_STALE_MESSAGE}
+              </Text>
+            )}
             <ToggleSwitch
               label="Recurring Tournament"
               value={form.isRecurring}
@@ -3809,9 +4338,9 @@ export default function ManageTournamentScreen() {
               {GLYPH.lock} Settings locked
             </Text>
             <Text allowFontScaling={false} style={styles.settingsLockBody}>
-              The bracket has been drawn, so settings are locked to keep it in
-              sync. To make changes, undo the draw — this reopens registration and
-              you&apos;ll re-draw the bracket afterward.
+              {isChipTournament && hub.phase === "running"
+                ? "This tournament is already running, so settings are locked to protect the live tournament. You can unlock them with a reason to make a correction — this does not change the live roster or queue."
+                : "The bracket has been drawn, so settings are locked to keep it in sync. To make changes, undo the draw — this reopens registration and you'll re-draw the bracket afterward."}
             </Text>
             {hub.phase === "bracket_drawn" && (
               <TouchableOpacity
@@ -3821,6 +4350,20 @@ export default function ManageTournamentScreen() {
               >
                 <Text allowFontScaling={false} style={styles.settingsLockBtnText}>
                   Undo Draw &amp; Edit
+                </Text>
+              </TouchableOpacity>
+            )}
+            {isChipTournament && hub.phase === "running" && (
+              <TouchableOpacity
+                style={styles.settingsLockBtn}
+                onPress={() => {
+                  setUnlockReason(null);
+                  setUnlockNotes("");
+                  setUnlockVisible(true);
+                }}
+              >
+                <Text allowFontScaling={false} style={styles.settingsLockBtnText}>
+                  Unlock Settings
                 </Text>
               </TouchableOpacity>
             )}
@@ -3851,6 +4394,17 @@ export default function ManageTournamentScreen() {
                   ...(isChip && chipTiersAreDefault(form.chipTiers)
                     ? { chipTiers: defaultChipTiers(v) }
                     : {}),
+                  // Keep the auto-selected image in sync with the game type, but
+                  // never clobber a custom upload or a deliberate image pick — only
+                  // swap while the TD is still on the auto default.
+                  ...(!form.thumbnail.startsWith("custom:") &&
+                  (!form.thumbnail ||
+                    form.thumbnail === defaultThumbnailIdForGameType(form.gameType))
+                    ? {
+                        thumbnail:
+                          defaultThumbnailIdForGameType(v) ?? form.thumbnail,
+                      }
+                    : {}),
                 })
               }
             />
@@ -3866,6 +4420,12 @@ export default function ManageTournamentScreen() {
                   tournamentFormat: v,
                   // Chip matches default to a single short race.
                   ...(v === "chip-tournament" ? { raceWinners: 1 } : {}),
+                  // Populate the Fargo chip table with defaults the moment the TD
+                  // switches INTO chip format (so tiers are visible immediately),
+                  // unless they've already customized the table.
+                  ...(v === "chip-tournament" && chipTiersAreDefault(form.chipTiers)
+                    ? { chipTiers: defaultChipTiers(form.gameType) }
+                    : {}),
                 })
               }
             />
@@ -4158,6 +4718,11 @@ export default function ManageTournamentScreen() {
                     {fmtMoney(feeCollectedPerPlayer)}/player collected total
                   </Text>
                 )}
+                {/* Player/spectator payouts show the entry fee + prize pool total
+                    (verified: chip-live PayoutsTab), never this per-fee split. */}
+                <Text allowFontScaling={false} style={styles.feeBreakNote}>
+                  Internal fee breakdown — players see the entry fee and prize pool, not this organizer fee split.
+                </Text>
               </View>
             )}
           </View>
@@ -4187,6 +4752,11 @@ export default function ManageTournamentScreen() {
           <Text allowFontScaling={false} style={styles.hint}>
             Timezone: {hub.tournament?.timezone || "—"}
           </Text>
+          {scheduleNeedsAttention && (
+            <Text allowFontScaling={false} style={styles.scheduleStaleWarn}>
+              ⚠ {SCHEDULE_STALE_MESSAGE}
+            </Text>
+          )}
           <ToggleSwitch
             label="Recurring Tournament"
             value={form.isRecurring}
@@ -4249,9 +4819,66 @@ export default function ManageTournamentScreen() {
             placeholder="Contact phone number"
             keyboardType="phone-pad"
           />
+          <View style={styles.field}>
+            <FieldLabel label="Tournament Image" />
+            {(() => {
+              const previewUri = getTournamentImageUrl({
+                thumbnail: form.thumbnail || undefined,
+                game_type: form.gameType,
+              } as Tournament);
+              // Custom uploads/flyers: show the WHOLE image (contain + black
+              // letterbox) so nothing is cropped. Default game-type images keep cover.
+              const isCustom = form.thumbnail.startsWith("custom:");
+              return previewUri ? (
+                <Image
+                  source={{ uri: previewUri }}
+                  style={[
+                    styles.tournamentImagePreview,
+                    isCustom && styles.tournamentImagePreviewContain,
+                  ]}
+                  resizeMode={isCustom ? "contain" : "cover"}
+                />
+              ) : (
+                <View style={styles.tournamentImagePlaceholder}>
+                  <Text
+                    allowFontScaling={false}
+                    style={styles.tournamentImageEmoji}
+                  >
+                    🎱
+                  </Text>
+                </View>
+              );
+            })()}
+            <View style={styles.imageActions}>
+              <View style={styles.imageDropdown}>
+                <Dropdown
+                  placeholder="Default by game type"
+                  options={THUMBNAIL_OPTIONS.filter(
+                    (o) => o.id !== "upload-custom",
+                  ).map((o) => ({ label: o.name, value: o.id }))}
+                  value={
+                    form.thumbnail.startsWith("custom:") ? "" : form.thumbnail
+                  }
+                  onSelect={(v) => patchForm({ thumbnail: v })}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.imageUploadBtn, tournamentImage.uploading && styles.btnDisabled]}
+                onPress={handleUploadCustomImage}
+                disabled={tournamentImage.uploading}
+              >
+                <Text allowFontScaling={false} style={styles.addRowBtnText}>
+                  {tournamentImage.uploading ? "Uploading…" : "Upload Image"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text allowFontScaling={false} style={styles.hint}>
+              A default image is chosen from the game type. Upload a custom image
+              to override it.
+            </Text>
+          </View>
           <Text allowFontScaling={false} style={styles.hint}>
-            To change the venue or tournament image, use the Edit Tournament
-            screen.
+            To change the venue, use the Edit Tournament screen.
           </Text>
         </Section>
         </View>
@@ -5080,10 +5707,11 @@ export default function ManageTournamentScreen() {
             embeddedPage={cp}
             actionsOpen={chipActionsOpen}
             onActionsOpenChange={setChipActionsOpen}
-            onRequestScrollTop={() => pageScrollRef.current?.scrollToPosition(0, 0, true)}
+            onRequestScrollTop={() => pageScrollRef.current?.scrollTo({ x: 0, y: 0, animated: true })}
             onNavigate={(tab) => {
               setSelectedPhase("live");
-              handleTabPress(tab);
+              // "dashboard" is the Live "matches" tab (the shuffle-transition hub).
+              handleTabPress(tab === "dashboard" ? "matches" : tab);
             }}
             onGoLive={() => {
               setSelectedPhase("live");
@@ -5091,6 +5719,12 @@ export default function ManageTournamentScreen() {
             }}
             onOpenSettings={() => handleSelectPage("setup", "settings")}
             onOpenResults={() => handleSelectPage("results", "standings")}
+            onOpenSetupPage={(tab) => handleSelectPage("setup", tab)}
+            reviewPrize={chipReviewPrize}
+            onReadyCountChange={setEmbeddedChipReady}
+            onReadinessChange={setEmbeddedChipReadiness}
+            onStarted={() => hub.setLiveStateLocal("in_progress")}
+            onTableCountChange={setEmbeddedChipTables}
           />
         );
       }
@@ -5193,14 +5827,11 @@ export default function ManageTournamentScreen() {
   // tournament — the button saves first, so a fully-filled form can open
   // registration without a separate Save + refresh. Venue is set at creation
   // (not in this form), so it comes from the loaded tournament.
-  const formRequiredComplete =
-    !!form &&
-    !!form.name.trim() &&
-    !!form.gameType &&
-    !!form.tournamentFormat &&
-    !!form.tournamentDate &&
-    !!form.startTime &&
-    !!hub.tournament?.venue_id;
+  // SHARED completion check on the LIVE form (same rules as the badge / Players gate).
+  const formMissingFields = form
+    ? missingSettingsFields(formToSettingsInput(form, hub.tournament?.venue_id ?? null))
+    : ["Tournament Name"];
+  const formRequiredComplete = !!form && formMissingFields.length === 0;
   const regNotYetOpen =
     hub.phase === "setup_incomplete" || hub.phase === "ready_to_open";
   const canStartRegistration =
@@ -5420,6 +6051,116 @@ export default function ManageTournamentScreen() {
         </Modal>
       )}
 
+      {/* Unlock Settings (chip, running) — required reason + optional notes, audited */}
+      {unlockVisible && (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setUnlockVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.flexOne}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                  <View style={styles.modalContent}>
+                    <Text allowFontScaling={false} style={styles.redrawTitle}>
+                      Unlock Tournament Settings?
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.gateBody}>
+                      This tournament is already running. Changes may affect the live
+                      tournament. Unlocking is logged with your name and reason, and does
+                      not change the live roster or queue.
+                    </Text>
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.fieldLabel, { marginTop: webSc(SPACING.md) }]}
+                    >
+                      Reason for unlocking *
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: webSc(SPACING.sm),
+                        marginTop: webSc(SPACING.sm),
+                      }}
+                    >
+                      {["Correction", "Tournament rule change", "Venue change", "Other"].map((r) => {
+                        const active = unlockReason === r;
+                        return (
+                          <TouchableOpacity
+                            key={r}
+                            onPress={() => setUnlockReason(r)}
+                            activeOpacity={0.8}
+                            style={{
+                              paddingHorizontal: webSc(SPACING.md),
+                              paddingVertical: webSc(SPACING.sm),
+                              borderRadius: RADIUS.md,
+                              borderWidth: 1,
+                              borderColor: active ? COLORS.primary : COLORS.border,
+                              backgroundColor: active ? COLORS.primary + "22" : "transparent",
+                            }}
+                          >
+                            <Text
+                              allowFontScaling={false}
+                              style={{
+                                fontSize: webMs(FONT_SIZES.sm),
+                                color: active ? COLORS.primary : COLORS.textSecondary,
+                                fontWeight: active ? "700" : "500",
+                              }}
+                            >
+                              {r}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.fieldLabel, { marginTop: webSc(SPACING.md) }]}
+                    >
+                      Notes (optional)
+                    </Text>
+                    <TextInput
+                      allowFontScaling={false}
+                      style={[styles.input, styles.inputMultiline]}
+                      value={unlockNotes}
+                      onChangeText={setUnlockNotes}
+                      placeholder="Add any details for the record"
+                      placeholderTextColor={COLORS.textMuted}
+                      multiline
+                    />
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity
+                        style={styles.modalButtonCancel}
+                        onPress={() => setUnlockVisible(false)}
+                      >
+                        <Text allowFontScaling={false} style={styles.modalButtonCancelText}>
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.modalButtonConfirm, !unlockReason && { opacity: 0.5 }]}
+                        onPress={handleConfirmUnlock}
+                        disabled={!unlockReason}
+                      >
+                        <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>
+                          Unlock Settings
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
+
       {/* Draw history */}
       {showDrawHistory && (
         <Modal
@@ -5526,6 +6267,87 @@ export default function ManageTournamentScreen() {
         </Modal>
       )}
 
+      {/* Player-readiness summary (Players → next step). Informational; never blocks. */}
+      {readinessPrompt && readinessSummary && (
+        <Modal
+          transparent
+          visible
+          animationType="fade"
+          onRequestClose={() => setReadinessPrompt(null)}
+        >
+          <TouchableWithoutFeedback onPress={() => setReadinessPrompt(null)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text allowFontScaling={false} style={styles.modalTitle}>
+                  {readinessSummary.entityLabel} Not Ready
+                </Text>
+                <View style={styles.readinessRows}>
+                  <Text allowFontScaling={false} style={styles.readinessLine}>
+                    {readinessSummary.total}{" "}
+                    {readinessSummary.total === 1
+                      ? readinessSummary.entitySingular
+                      : readinessSummary.entityLabel}
+                  </Text>
+                  <Text allowFontScaling={false} style={[styles.readinessLine, { color: COLORS.success }]}>
+                    {readinessSummary.ready} Ready
+                  </Text>
+                  <Text allowFontScaling={false} style={[styles.readinessLine, { color: COLORS.warning }]}>
+                    {readinessSummary.notReady} Not Ready
+                  </Text>
+                  {readinessSummary.unpaid > 0 && (
+                    <Text allowFontScaling={false} style={styles.readinessSub}>
+                      {readinessSummary.unpaid} Entry {readinessSummary.unpaid === 1 ? "Fee" : "Fees"} Unpaid
+                    </Text>
+                  )}
+                  {readinessSummary.waitingForPartner > 0 && (
+                    <Text allowFontScaling={false} style={styles.readinessSub}>
+                      {readinessSummary.waitingForPartner} Waiting for Partner
+                    </Text>
+                  )}
+                  {readinessSummary.noShows > 0 && (
+                    <Text allowFontScaling={false} style={styles.readinessSub}>
+                      {readinessSummary.noShows} No Show{readinessSummary.noShows === 1 ? "" : "s"}
+                    </Text>
+                  )}
+                  {readinessSummary.sidePotNotEntered != null &&
+                    readinessSummary.sidePotNotEntered > 0 && (
+                      <Text allowFontScaling={false} style={styles.readinessSub}>
+                        {readinessSummary.sidePotNotEntered} Side Pot Not Entered
+                      </Text>
+                    )}
+                </View>
+                <Text allowFontScaling={false} style={styles.gateBody}>
+                  You can continue setting up the tournament. {readinessSummary.entityLabel}{" "}
+                  must be Ready before they can play.
+                </Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalButtonCancel}
+                    onPress={() => setReadinessPrompt(null)}
+                  >
+                    <Text allowFontScaling={false} style={styles.modalButtonCancelText}>
+                      Review {readinessSummary.entityLabel}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalButtonConfirm}
+                    onPress={() => {
+                      const target = readinessPrompt.target;
+                      setReadinessPrompt(null);
+                      advanceToNextStep(target);
+                    }}
+                  >
+                    <Text allowFontScaling={false} style={styles.modalButtonConfirmText}>
+                      Continue Anyway
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
@@ -5584,16 +6406,26 @@ export default function ManageTournamentScreen() {
         />
       )}
 
-      {!isChip &&
-      (activeTab === "matches" ||
-        activeTab === "queue" ||
-        activeTab === "stats" ||
-        activeTab === "standings" ||
-        activeTab === "payouts" ||
-        activeTab === "history" ||
-        activeTab === "summary") ? (
+      {(!isChip &&
+        (activeTab === "matches" ||
+          activeTab === "queue" ||
+          activeTab === "stats" ||
+          activeTab === "standings" ||
+          activeTab === "payouts" ||
+          activeTab === "history" ||
+          activeTab === "summary")) ||
+      // Chip LIVE pages own their scrolling and fill the available height. Keeping ALL
+      // of them (Dashboard/Tables/Queue/Players) in this ONE stable slot preserves the
+      // single embedded ChipManageScreen instance across live-tab switches (no reload
+      // flash), and lets Live → Tables pin its 2×2 toolbar as a sticky header.
+      (isChip &&
+        selectedPhase === "live" &&
+        (activeTab === "matches" ||
+          activeTab === "tables" ||
+          activeTab === "queue" ||
+          activeTab === "players")) ? (
         // These own their scrolling and fill the available height, so they live
-        // outside the page ScrollView. (Chip pages use the page ScrollView below.)
+        // outside the page ScrollView. (Chip setup/results pages use it below.)
         <View style={styles.scrollFlex}>{renderTab()}</View>
       ) : isWeb && winW >= 980 && activeTab === "settings" && form ? (
         // Wide web: event-builder two-column. The whole page scrolls (so you can
@@ -5616,21 +6448,20 @@ export default function ManageTournamentScreen() {
           </View>
         </ScrollView>
       ) : (
-        <KeyboardAwareScrollView
+        <KeyboardAwareScroll
           ref={pageScrollRef}
           style={styles.scrollFlex}
           contentContainerStyle={[styles.content, isWeb && styles.contentWeb]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          enableOnAndroid
-          // Chip's in-card Fargo edit: a modest extra offset lifts the card's lower
-          // controls (Done / Mark Ready) above the keyboard without over-scrolling the
-          // card top off screen. Non-chip keeps default behavior so elimination is
-          // unaffected.
-          extraScrollHeight={isChip ? webSc(72) : 0}
-          keyboardOpeningTime={0}
-          onScrollBeginDrag={() => Keyboard.dismiss()}
+          // Keyboard inset avoidance is only needed on the SETUP pages (the ones with
+          // text inputs). On the LIVE/RESULTS pages there are no page-scroll inputs, and
+          // iOS's automaticallyAdjustKeyboardInsets mishandles content-size changes there
+          // — after a queue reorder / recorded winner the scroll view could blank until a
+          // full remount (all chip live subpages share this one ScrollView instance, so
+          // they all went black). Scoping the flag to setup fixes that without touching
+          // the keyboard behavior forms rely on.
+          automaticallyAdjustKeyboardInsets={
+            Platform.OS === "ios" && selectedPhase === "setup"
+          }
           refreshControl={
             isWeb ? undefined : (
               <RefreshControl
@@ -5642,33 +6473,67 @@ export default function ManageTournamentScreen() {
           }
         >
           {renderTab()}
-        </KeyboardAwareScrollView>
+        </KeyboardAwareScroll>
       )}
 
-      {/* Fixed footer: Close Registration stays pinned while the list scrolls */}
+      {/* Guided flow — Players step. Both formats advance to Tables once the field
+          is valid (≥2 Ready/checked-in); disabled until then so the sequence stays
+          in order. Elimination shows it while registration is open (when players
+          are actually added); chip shows it throughout the setup Players page. */}
       {!isChip && activeTab === "players" && hub.liveState === "registration_open" && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
-            style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
-            onPress={() => handleTabPress("bracket")}
+            style={[
+              styles.lockBtn,
+              styles.lockBtnFooter,
+              styles.lockBtnFooterInner,
+              !setupStepComplete.players && styles.btnDisabled,
+            ]}
+            onPress={() => advanceFromPlayers("tables")}
+            disabled={!setupStepComplete.players}
           >
             <Text allowFontScaling={false} style={styles.lockBtnText}>
-              Add Players to Bracket →
+              Continue to Tables →
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Chip analog: pinned Review & Start → on the embedded chip Players setup page. Just
-          navigates to the chip Review page (the actual Start lives there). */}
       {isChip && selectedPhase === "setup" && activeTab === "players" && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
-            style={[styles.lockBtn, styles.lockBtnFooter, styles.lockBtnFooterInner]}
-            onPress={() => handleTabPress("review")}
+            style={[
+              styles.lockBtn,
+              styles.lockBtnFooter,
+              styles.lockBtnFooterInner,
+              !setupStepComplete.players && styles.btnDisabled,
+            ]}
+            onPress={() => advanceFromPlayers("tables")}
+            disabled={!setupStepComplete.players}
           >
             <Text allowFontScaling={false} style={styles.lockBtnText}>
-              Review &amp; Start →
+              Continue to Tables →
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Guided flow — Tables step advances to Prize Pool once tables are
+          configured (both formats). */}
+      {selectedPhase === "setup" && activeTab === "tables" && (
+        <View style={styles.playersFooter}>
+          <TouchableOpacity
+            style={[
+              styles.lockBtn,
+              styles.lockBtnFooter,
+              styles.lockBtnFooterInner,
+              !setupStepComplete.tables && styles.btnDisabled,
+            ]}
+            onPress={() => advanceToNextStep("prizepool")}
+            disabled={!setupStepComplete.tables}
+          >
+            <Text allowFontScaling={false} style={styles.lockBtnText}>
+              Continue to Prize Pool →
             </Text>
           </TouchableOpacity>
         </View>
@@ -5679,66 +6544,76 @@ export default function ManageTournamentScreen() {
         <View style={styles.settingsFooter}>
           {!isExternal && !formRequiredComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
-              Complete the required fields (name, game, format, venue, date,
-              time) to start registration.
+              Still needed to open registration: {formMissingFields.join(", ")}.
             </Text>
           )}
           <View style={[styles.saveRow, styles.settingsFooterInner]}>
-            <TouchableOpacity
-              style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
-              onPress={isExternal ? () => setSubmitCountdown(5) : handleSave}
-              disabled={hub.isSaving}
-            >
-              <Text allowFontScaling={false} style={styles.saveBtnText}>
-                {isExternal
-                  ? "Submit Tournament"
-                  : hub.isSaving
-                    ? "Saving..."
-                    : "Save Settings"}
-              </Text>
-            </TouchableOpacity>
-            {!isExternal && isChip && (
-              <TouchableOpacity
-                style={[
-                  styles.startBtn,
-                  !chipRegistrationStarted && !formRequiredComplete && styles.btnDisabled,
-                ]}
-                onPress={async () => {
-                  if (form) {
-                    try {
-                      await hub.saveSettings(toPatch(form));
-                      // First time through, open registration so the tournament
-                      // reflects it.
-                      if (!chipRegistrationStarted) await hub.startRegistration();
-                    } catch {
-                      Alert.alert("Error", "Failed to save settings.");
-                      return;
+            {settingsUnlocked ? (
+              // Temporary unlock edit session: the footer focuses only on completing or
+              // cancelling it. Cancel (secondary/outline) discards unsaved edits + relocks
+              // (existing "relocked — no changes saved" audit; never saves). Save & Lock
+              // (primary blue, larger) persists + relocks. No View Players here.
+              <>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
+                  onPress={relockSettingsNoSave}
+                  disabled={hub.isSaving}
+                >
+                  <Text allowFontScaling={false} style={styles.saveBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.startBtn, { flex: 2 }, hub.isSaving && styles.btnDisabled]}
+                  onPress={handleSaveAndLock}
+                  disabled={hub.isSaving}
+                >
+                  <Text allowFontScaling={false} style={styles.startBtnText}>
+                    {hub.isSaving ? "Saving..." : "Save & Lock"}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
+                  onPress={isExternal ? () => setSubmitCountdown(5) : handleSave}
+                  disabled={hub.isSaving}
+                >
+                  <Text allowFontScaling={false} style={styles.saveBtnText}>
+                    {isExternal
+                      ? "Submit Tournament"
+                      : hub.isSaving
+                        ? "Saving..."
+                        : "Save Settings"}
+                  </Text>
+                </TouchableOpacity>
+                {!isExternal && isChip && (
+                  <TouchableOpacity
+                    style={[
+                      styles.startBtn,
+                      !chipRegistrationStarted && !formRequiredComplete && styles.btnDisabled,
+                    ]}
+                    onPress={beginRegistration}
+                    disabled={
+                      hub.isSaving || (!chipRegistrationStarted && !formRequiredComplete)
                     }
-                  }
-                  // Chip lives in THIS shell now — go to the Players page, not a
-                  // separate chip manager.
-                  setSelectedPhase("setup");
-                  handleTabPress("players");
-                }}
-                disabled={
-                  hub.isSaving || (!chipRegistrationStarted && !formRequiredComplete)
-                }
-              >
-                <Text allowFontScaling={false} style={styles.startBtnText}>
-                  {chipRegistrationStarted ? "View Players →" : "Begin Registration →"}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {!isExternal && !isChip && (
-              <TouchableOpacity
-                style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
-                onPress={handleStartRegistration}
-                disabled={!canStartRegistration}
-              >
-                <Text allowFontScaling={false} style={styles.startBtnText}>
-                  Start Registration
-                </Text>
-              </TouchableOpacity>
+                  >
+                    <Text allowFontScaling={false} style={styles.startBtnText}>
+                      {chipRegistrationStarted ? "View Players →" : "Begin Registration →"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {!isExternal && !isChip && (
+                  <TouchableOpacity
+                    style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
+                    onPress={beginRegistration}
+                    disabled={!canStartRegistration}
+                  >
+                    <Text allowFontScaling={false} style={styles.startBtnText}>
+                      Start Registration
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
         </View>
@@ -5766,6 +6641,20 @@ export default function ManageTournamentScreen() {
                 {hub.isSavingPrizePool ? "Saving..." : "Save Prize Pool"}
               </Text>
             </TouchableOpacity>
+            {/* Guided flow: advance to the terminal step once payouts are valid and
+                every earlier step is complete — Review & Start (chip) or Generate
+                Bracket (elimination). */}
+            {!isExternal && (
+              <TouchableOpacity
+                style={[styles.startBtn, !reviewUnlocked && styles.btnDisabled]}
+                onPress={() => advanceToNextStep(terminalTab)}
+                disabled={!reviewUnlocked}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  {isChip ? "Review & Start →" : "Continue to Bracket →"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}
@@ -6273,11 +7162,52 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.xs),
     paddingHorizontal: webSc(SPACING.md),
   },
+  // Upload Image button — sized to match the Game Type dropdown selector beside it
+  // (fixed height, centered, same radius) so the two controls align.
+  imageUploadBtn: {
+    height: webSc(44),
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.md),
+    paddingHorizontal: webSc(SPACING.md),
+  },
   addRowBtnText: {
     color: COLORS.primary,
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
+
+  // Tournament image
+  tournamentImagePreview: {
+    width: "100%",
+    height: webSc(200),
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.surface,
+    marginBottom: webSc(SPACING.sm),
+  },
+  // Custom uploads use contain; a black ground shows as clean letterboxing when the
+  // image's aspect ratio doesn't fill the preview.
+  tournamentImagePreviewContain: {
+    backgroundColor: COLORS.background,
+  },
+  tournamentImagePlaceholder: {
+    width: "100%",
+    height: webSc(160),
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: webSc(SPACING.sm),
+  },
+  tournamentImageEmoji: { fontSize: webMs(48) },
+  imageActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+  },
+  imageDropdown: { flex: 1 },
 
   // Side pots
   sidePotHeader: {
@@ -6324,21 +7254,31 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: webMs(FONT_SIZES.sm),
   },
+  // Configured side pot: a proper rounded dark row (not one thin text line) with a
+  // clear name/amount hierarchy and accessible Edit/Delete.
   sidePotListItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: webSc(SPACING.sm),
-    paddingHorizontal: 10,
-    borderRadius: webSc(RADIUS.sm),
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.md),
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.md),
     backgroundColor: COLORS.background,
-    marginBottom: webSc(SPACING.xs),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: webSc(SPACING.sm),
   },
-  sidePotListText: {
-    flex: 1,
-    fontSize: webMs(FONT_SIZES.sm),
+  sidePotListInfo: { flex: 1, minWidth: 0, gap: webSc(2) },
+  sidePotListName: {
+    fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  sidePotListAmt: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.success,
+    fontWeight: "700",
   },
   sidePotListActions: {
     flexDirection: "row",
@@ -6496,6 +7436,19 @@ const styles = StyleSheet.create({
     marginTop: webSc(SPACING.sm),
   },
   feeRemainderWarn: { color: COLORS.error },
+  feeBreakNote: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    marginTop: webSc(SPACING.sm),
+    lineHeight: webMs(FONT_SIZES.xs) * 1.4,
+  },
+  scheduleStaleWarn: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.warning,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
+    lineHeight: webMs(FONT_SIZES.sm) * 1.4,
+  },
 
   // Read-only cards (venue)
   readOnlyCard: {
@@ -6888,6 +7841,22 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     lineHeight: webMs(FONT_SIZES.sm) * 1.5,
+  },
+  // Player-readiness summary rows.
+  readinessRows: {
+    marginVertical: webSc(SPACING.sm),
+    gap: webSc(2),
+  },
+  readinessLine: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "800",
+    color: COLORS.text,
+  },
+  readinessSub: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginTop: webSc(2),
   },
 
   // Players

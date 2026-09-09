@@ -372,4 +372,29 @@ export const isPrizePoolComplete = (
   return true;
 };
 
+// ── Read-only side-pot payout model (shared by every payout/results display) ────
+// ONE normalized model so the TD setup, TD results, and player/spectator payout
+// screens never drift. Given the SAVED payout config (config.sidePots — the
+// percentage splits) and each pot's pool ($ collected, name→pool via sidePotTotal),
+// it returns the display rows using the same computeBreakdown as the editor. Only
+// side pots that actually have a pool AND a configured split are returned — so an
+// empty/removed/unconfigured pot never renders a misleading payout section.
+export interface SidePotPayoutView {
+  name: string;
+  pool: number;
+  places: PlaceBreakdown[]; // { place, percent, amount, custom }
+}
+export const sidePotPayoutViews = (
+  config: { sidePots?: SidePotPayout[] } | null | undefined,
+  poolByName: Record<string, number>,
+): SidePotPayoutView[] => {
+  if (!config?.sidePots?.length) return [];
+  return config.sidePots
+    .map((sp) => {
+      const pool = round2(poolByName[sp.name] ?? 0);
+      return { name: sp.name, pool, places: computeBreakdown(pool, sp.places).places };
+    })
+    .filter((sp) => sp.pool > 0 && sp.places.length > 0);
+};
+
 export { round2 as roundMoney, clampPct };

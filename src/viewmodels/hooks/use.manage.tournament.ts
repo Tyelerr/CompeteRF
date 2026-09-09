@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import { Tournament } from "../../models/types/tournament.types";
+import { settingsComplete } from "../../utils/settings-complete";
 import {
   AutoAssignMode,
   DrawLogEntry,
@@ -37,15 +38,21 @@ export type ManagePhase =
   | "completed"
   | "archived";
 
+// The badge (Setup Incomplete vs Ready) uses the SHARED Settings-completion check.
 const requiredComplete = (t: Tournament): boolean =>
-  !!(
-    t.name &&
-    t.game_type &&
-    t.tournament_format &&
-    t.venue_id &&
-    t.tournament_date &&
-    t.start_time
-  );
+  settingsComplete({
+    name: t.name,
+    gameType: t.game_type,
+    format: t.tournament_format,
+    venueId: t.venue_id,
+    date: t.tournament_date,
+    time: t.start_time,
+    tableSize: t.table_size,
+    equipment: t.equipment,
+    entryFee: t.entry_fee,
+    maxFargo: t.max_fargo,
+    open: t.open_tournament,
+  });
 
 const derivePhase = (t: Tournament | null): ManagePhase => {
   if (!t) return "setup_incomplete";
@@ -122,7 +129,25 @@ export const useManageTournament = (tournamentId?: number) => {
   const liveStateMutation = useMutation({
     mutationFn: (state: TournamentLiveState) =>
       tournamentService.setLiveState(tournamentId!, state),
-    onSuccess: invalidateTournament,
+    // Optimistically flip the cached live_state so the header badge (e.g. Setup
+    // Incomplete → Registration Open) updates IMMEDIATELY, before the refetch. On
+    // error, roll back; always revalidate afterward.
+    onMutate: async (state: TournamentLiveState) => {
+      await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
+      const prev = queryClient.getQueryData<Tournament>(["tournament", tournamentId]);
+      if (prev) {
+        queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+          ...prev,
+          live_state: state,
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, _state, ctx) => {
+      if (ctx?.prev)
+        queryClient.setQueryData(["tournament", tournamentId], ctx.prev);
+    },
+    onSettled: invalidateTournament,
   });
 
   const pauseMutation = useMutation({
@@ -298,6 +323,20 @@ export const useManageTournament = (tournamentId?: number) => {
     closeRegistration: () =>
       liveStateMutation.mutateAsync("registration_closed"),
     start: () => liveStateMutation.mutateAsync("in_progress"),
+    // Reflect a live_state change made OUTSIDE this hook (e.g. the embedded chip VM's
+    // own Start Tournament persist) into the cached tournament IMMEDIATELY, then
+    // reconcile in the background. Keeps the header badge / phase in sync without a
+    // full-screen reload or manual refresh.
+    setLiveStateLocal: (state: TournamentLiveState) => {
+      const prev = queryClient.getQueryData<Tournament>(["tournament", tournamentId]);
+      if (prev) {
+        queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+          ...prev,
+          live_state: state,
+        });
+      }
+      invalidateTournament();
+    },
     pause: () => pauseMutation.mutateAsync(true),
     resume: () => pauseMutation.mutateAsync(false),
     complete: () => completeMutation.mutateAsync(),

@@ -1,8 +1,8 @@
 ﻿import "../src/utils/web-alert"; // patch RN-web's no-op Alert.alert (side effect)
 import { Stack } from "expo-router";
-import { DarkTheme, ThemeProvider } from "@react-navigation/native";
+import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Platform, StyleSheet } from "react-native";
+import { Animated, Easing, Platform, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -30,30 +30,29 @@ const NAV_THEME = {
 };
 
 function AnimatedSplash({ onComplete }: { onComplete: () => void }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.82)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
+  // Logo is visible and at normal size from the first frame — the animation is a
+  // pronounced grow, then a fade-out reveal (no entrance fade).
+  const scale = useRef(new Animated.Value(1)).current;
   const containerOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.sequence([
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 350,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scale, {
-          toValue: 1,
-          friction: 7,
-          tension: 70,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.delay(750),
+      // 1) GROW: normal size → ~2.3x. Ease-out cubic makes the growth smooth and
+      //    obvious (fast start, gentle settle).
+      Animated.timing(scale, {
+        toValue: 2.3,
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      // 2) HOLD briefly at full size.
+      Animated.delay(150),
+      // 3) FADE OUT the whole splash (black + grown logo), revealing the app
+      //    underneath. onComplete fires only after this finishes → clean unmount.
       Animated.timing(containerOpacity, {
         toValue: 0,
-        duration: 400,
+        duration: 500,
+        easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start(() => onComplete());
@@ -63,10 +62,7 @@ function AnimatedSplash({ onComplete }: { onComplete: () => void }) {
     <Animated.View style={[styles.splash, { opacity: containerOpacity }]}>
       <Animated.Image
         source={require("../assets/images/icon.png")}
-        style={[
-          styles.splashIcon,
-          { opacity, transform: [{ scale }, { translateY }] },
-        ]}
+        style={[styles.splashIcon, { transform: [{ scale }] }]}
         resizeMode="contain"
       />
     </Animated.View>
@@ -121,11 +117,20 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background },
   splash: {
-    ...StyleSheet.absoluteFillObject,
+    // Explicit full-screen positioning. NOTE: RN 0.86 (SDK 57) removed
+    // StyleSheet.absoluteFillObject — spreading it yielded `undefined`, which dropped
+    // the absolute positioning and let the splash collapse into normal layout at the
+    // bottom of the screen. Positioning explicitly is version-proof.
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "#000000",
     alignItems: "center",
     justifyContent: "center",
     zIndex: 999,
+    elevation: 999,
   },
   splashIcon: {
     width: 180,

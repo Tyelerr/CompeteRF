@@ -12,6 +12,32 @@ function normalizeTournament<T extends { game_type?: any }>(t: T): T {
   return { ...t, game_type: normalizeGameType(t.game_type) };
 }
 
+// ── Public discovery predicate (single source of truth) ───────────────────────
+// Shared by BOTH tournament listings — the main Billiards discovery and the venue
+// tournament list — so they can never drift. A tournament is discoverable when:
+//   status = "active" AND is_hidden = false AND is_draft = false
+//   AND (tournament_date >= today  OR  live_state = "in_progress")
+// i.e. upcoming OR currently live. Format-agnostic (chip included). Never exposes
+// private/hidden/draft rows, and completed tournaments (status != "active") stay
+// out even if they were previously live.
+type DiscoveryFilterable = {
+  eq: (column: string, value: unknown) => DiscoveryFilterable;
+  or: (filters: string) => DiscoveryFilterable;
+};
+const applyPublicDiscovery = <Q>(query: Q): Q => {
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // PostgREST filter builders mutate and return the same instance, so applying the
+  // predicate through a loose local view still mutates `query`. The caller keeps its
+  // concrete builder type Q (so it can chain .order/.range/.eq afterwards).
+  (query as DiscoveryFilterable)
+    .eq("status", "active")
+    .eq("is_hidden", false)
+    .eq("is_draft", false)
+    .or(`tournament_date.gte.${today},live_state.eq.in_progress`);
+  return query;
+};
+
 export { normalizeGameType };
 
 export const tournamentService = {
@@ -20,13 +46,11 @@ export const tournamentService = {
     page: number = 1,
     limit: number = 20,
   ): Promise<{ data: Tournament[]; count: number }> {
-    let query = supabase
-      .from("tournaments")
-      .select("*, venues(*), profiles!director_id(*)", { count: "exact" })
-      .eq("status", "active")
-      .eq("is_hidden", false)
-      .eq("is_draft", false)
-      .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
+    let query = applyPublicDiscovery(
+      supabase
+        .from("tournaments")
+        .select("*, venues(*), profiles!director_id(*)", { count: "exact" }),
+    )
       .order("tournament_date", { ascending: true })
       .range((page - 1) * limit, page * limit - 1);
 
@@ -57,14 +81,13 @@ export const tournamentService = {
   },
 
   async getTournamentsByVenue(venueId: number): Promise<Tournament[]> {
-    const { data, error } = await supabase
-      .from("tournaments")
-      .select("*")
-      .eq("venue_id", venueId)
-      .eq("status", "active")
-      .eq("is_hidden", false)
-      .gte("tournament_date", (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })())
-      .order("tournament_date", { ascending: true });
+    // Same public-discovery rule as the main Billiards query (upcoming OR live,
+    // active/not-hidden/not-draft) — via the shared applyPublicDiscovery predicate
+    // so the two lists stay in lockstep. (This also adds the is_draft exclusion the
+    // venue list was previously missing.)
+    const { data, error } = await applyPublicDiscovery(
+      supabase.from("tournaments").select("*").eq("venue_id", venueId),
+    ).order("tournament_date", { ascending: true });
     if (error) throw error;
     return (data || []).map(normalizeTournament);
   },
@@ -235,6 +258,21 @@ export const tournamentService = {
       p_tournament_id: tournamentId,
       p_match_id: matchId,
       p_patch: patch,
+    });
+    if (error) throw error;
+  },
+
+  // Persist the elimination-format eliminated set (registration ids) computed by the bracket
+  // engine. Idempotent + self-correcting server-side; safe to call whenever the live match
+  // graph changes. gameplay_started_at is set by a DB trigger on the in_progress transition,
+  // so there is no client setter for it.
+  async syncEliminations(
+    tournamentId: number,
+    eliminatedRegIds: number[],
+  ): Promise<void> {
+    const { error } = await supabase.rpc("sync_tournament_eliminations", {
+      p_tournament_id: tournamentId,
+      p_eliminated_reg_ids: eliminatedRegIds,
     });
     if (error) throw error;
   },

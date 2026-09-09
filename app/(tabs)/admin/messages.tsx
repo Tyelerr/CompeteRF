@@ -32,6 +32,8 @@ import { RADIUS, SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { moderateScale, scale } from "../../../src/utils/scaling";
 import { useMessageCenter } from "../../../src/viewmodels/hooks/use.message.center";
+import { reviewService } from "../../../src/models/services/review.service";
+import { ReviewsManager } from "../../../src/views/components/reviews/ReviewsManager";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -228,9 +230,10 @@ export default function AdminMessagesScreen() {
   const { user, profile } = useAuthContext();
   const role = profile?.role || "basic_user";
 
-  const [activeTab, setActiveTab] = useState<"inbox" | "send" | "sent">(
+  const [activeTab, setActiveTab] = useState<"inbox" | "reviews" | "send" | "sent">(
     "inbox",
   );
+  const [reviewsUnread, setReviewsUnread] = useState(0);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [inboxLoading, setInboxLoading] = useState(true);
   const [inboxRefreshing, setInboxRefreshing] = useState(false);
@@ -256,6 +259,7 @@ export default function AdminMessagesScreen() {
       if (user?.id) {
         loadInbox();
         mc.refresh();
+        reviewService.getUnreadCount().then(setReviewsUnread).catch(() => {});
       }
     }, [user?.id, loadInbox, mc.refresh]),
   );
@@ -753,56 +757,37 @@ export default function AdminMessagesScreen() {
         </Text>
       </View>
 
-      {/* Tabs */}
+      {/* Tabs — four tabs fit cleanly with icon-over-label (spec §19). */}
       <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "inbox" && styles.tabActive]}
-          onPress={() => setActiveTab("inbox")}
-        >
-          <Text
-            allowFontScaling={false}
-            style={[
-              styles.tabText,
-              activeTab === "inbox" && styles.tabTextActive,
-            ]}
-          >
-            📥 Inbox
-          </Text>
-          {totalUnread > 0 && (
-            <View style={styles.tabBadge}>
-              <Text allowFontScaling={false} style={styles.tabBadgeText}>{totalUnread}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "send" && styles.tabActive]}
-          onPress={() => setActiveTab("send")}
-        >
-          <Text
-            allowFontScaling={false}
-            style={[
-              styles.tabText,
-              activeTab === "send" && styles.tabTextActive,
-            ]}
-          >
-            📢 Broadcast
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === "sent" && styles.tabActive]}
-          onPress={() => setActiveTab("sent")}
-        >
-          <Text
-            allowFontScaling={false}
-            style={[
-              styles.tabText,
-              activeTab === "sent" && styles.tabTextActive,
-            ]}
-          >
-            📨 Sent
-          </Text>
-        </TouchableOpacity>
+        {([
+          { key: "inbox", icon: "📥", label: "Inbox", badge: totalUnread },
+          { key: "reviews", icon: "⭐", label: "Reviews", badge: reviewsUnread },
+          { key: "send", icon: "📢", label: "Broadcast", badge: 0 },
+          { key: "sent", icon: "📨", label: "Sent", badge: 0 },
+        ] as const).map((t) => {
+          const on = activeTab === t.key;
+          return (
+            <TouchableOpacity
+              key={t.key}
+              style={[styles.tab, on && styles.tabActive]}
+              onPress={() => setActiveTab(t.key)}
+            >
+              <Text allowFontScaling={false} style={styles.tabIcon}>{t.icon}</Text>
+              <Text allowFontScaling={false} style={[styles.tabText, on && styles.tabTextActive]}>
+                {t.label}
+              </Text>
+              {t.badge > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text allowFontScaling={false} style={styles.tabBadgeText}>{t.badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </View>
+
+      {/* ═══ REVIEWS TAB ═══ */}
+      {activeTab === "reviews" && <ReviewsManager senderAuthUuid={user?.id} />}
 
       {/* ═══ INBOX TAB ═══ */}
       {activeTab === "inbox" && (
@@ -1042,14 +1027,15 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: SPACING.sm,
+    paddingVertical: wxSc(6),
     borderRadius: RADIUS.md - 2,
-    gap: wxSc(4),
+    gap: wxSc(2),
   },
   tabActive: { backgroundColor: COLORS.primary },
+  tabIcon: { fontSize: wxMs(FONT_SIZES.md) },
   tabText: {
     fontSize: wxMs(FONT_SIZES.xs),
     fontWeight: "600",
@@ -1057,6 +1043,9 @@ const styles = StyleSheet.create({
   },
   tabTextActive: { color: "#FFFFFF" },
   tabBadge: {
+    position: "absolute",
+    top: wxSc(2),
+    right: wxSc(8),
     backgroundColor: "#E74C3C",
     borderRadius: wxSc(10),
     minWidth: wxSc(18),

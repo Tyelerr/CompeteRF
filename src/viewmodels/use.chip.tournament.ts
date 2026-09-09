@@ -12,6 +12,7 @@ import {
   addTable as engineAddTable,
   addTables as engineAddTables,
   adjustChips as engineAdjustChips,
+  type ChipAdjustMeta,
   reorderQueue as engineReorderQueue,
   forfeitEntry as engineForfeitEntry,
   buyBackEntry as engineBuyBack,
@@ -24,17 +25,23 @@ import {
   resetTableTimer as engineResetTableTimer,
   clearTable as engineClearTable,
   startPendingMatch as engineStartPendingMatch,
+  startAllMatches as engineStartAllMatches,
+  startAllState,
   newId,
   reactivateTable as engineReactivateTable,
   setTableLocked as engineSetTableLocked,
+  setAllTablesLocked as engineSetAllTablesLocked,
   recordWinner as engineRecordWinner,
   removeTable as engineRemoveTable,
   reshuffle as engineReshuffle,
   setShuffleMode as engineSetShuffleMode,
   beginShuffle as engineBeginShuffle,
+  startShuffleCycle as engineStartShuffleCycle,
   startShuffle as engineStartShuffle,
   settleShuffleDrain,
+  assignFinals,
   reconcileQueue,
+  reconcileEliminations,
   reconcileMatches,
   withRestorePoint,
   restoreToPoint as engineRestoreToPoint,
@@ -55,6 +62,7 @@ import {
 } from "../models/types/chip.types";
 import { Tournament } from "../models/types/tournament.types";
 import { readyGate } from "../utils/registration-lifecycle";
+import { scheduleStaleError } from "../utils/schedule";
 
 // The "parent" (cause) of a transaction is the FIRST event the action logged —
 // its automatic side-effects were pushed after it. Events are stored newest-first
@@ -140,7 +148,11 @@ const blankEntry = (): ChipEntry => ({
 export const useChipTournament = (id: number) => {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [chip, setChip] = useState<ChipState | null>(null);
+  // `loading` = the INITIAL, never-loaded-yet state that shows the full takeover.
+  // `refreshing` = a BACKGROUND revalidation after a mutation: the roster stays on
+  // screen (no takeover, no list clearing) while the server state is reconciled.
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const loadedRef = useRef(false);
@@ -162,16 +174,29 @@ export const useChipTournament = (id: number) => {
   }, [tournament]);
   const finishingRef = useRef(false);
   const [finishing, setFinishing] = useState(false);
-  // Completed-tournament lock. A finished/completed tournament is read-only: this
-  // gates every mutation (in `update` and the async team/registration actions that
-  // bypass it) so a completed tournament can't be changed via stale UI or retries.
-  const locked = useCallback(
-    () => tournamentRef.current?.live_state === "finished" || tournamentRef.current?.status === "completed",
+  // Setup-roster lock. Once the tournament is LIVE (in_progress) — or finished — the
+  // SETUP roster is read-only: Add/Remove/Fargo/starting-chips/Ready/Paid/side-pots/
+  // check-in must go through the controlled "Add Late Player" live flow, never the
+  // setup editor. This is defense-in-depth: even if stale or another component calls a
+  // setup-roster mutation, it no-ops while live. GAMEPLAY mutations (record winner,
+  // adjust chips, tables, shuffle, forfeit, buy-back, restore, reorder queue…) are NOT
+  // gated here — they flow through `update()`'s completed-only lock and stay valid
+  // during live play. Reuses `tournamentRef` (authoritative live state), never local UI.
+  const rosterLocked = useCallback(
+    () =>
+      tournamentRef.current?.live_state === "in_progress" ||
+      tournamentRef.current?.live_state === "finished" ||
+      tournamentRef.current?.status === "completed",
     [],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `silent` reconciles server state WITHOUT the full-screen takeover — used after a
+  // row-level mutation that already updated `chip` optimistically. Only the very first
+  // load (never-loaded) uses the blocking `loading` flag.
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       const b = await chipService.load(id);
@@ -192,7 +217,12 @@ export const useChipTournament = (id: number) => {
         // (4) auto-clear stale Fargo-cap overrides now at/under the cap (rating or the
         // tournament max changed). Owned singles persist via auto-save; doubles/self-reg
         // are projected (auto-save skips them), so clear those sources explicitly.
-        const healed = reconcileQueue(settleShuffleDrain(reconcileMatches(b.chip)));
+        // …and (5) auto-seat the finals if the board was left at two-alive-no-match
+        // (e.g. the app was reopened mid-finals between games) so the final two are
+        // never stranded waiting for a manual restart.
+        const healed = assignFinals(
+          reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip)))),
+        );
         const { chip: reconciled, cleared } = reconcileOverrides(healed, b.tournament?.max_fargo ?? null);
         setChip(reconciled);
         for (const e of cleared) {
@@ -205,7 +235,8 @@ export const useChipTournament = (id: number) => {
     } catch (e: any) {
       setError(e?.message ?? "Failed to load tournament.");
     } finally {
-      setLoading(false);
+      if (silent) setRefreshing(false);
+      else setLoading(false);
     }
   }, [id]);
 
@@ -264,7 +295,10 @@ export const useChipTournament = (id: number) => {
     if (t?.live_state === "finished" || t?.status === "completed") return;
     setChip((c) => {
       if (!c) return c;
-      let next = settleShuffleDrain(materializeLive(fn(c)));
+      // assignFinals runs LAST so that once a mutation leaves exactly two players
+      // alive with no active match, the final heads-up game is auto-seated here in
+      // the state transition (never from render) — no manual "Start Final Match".
+      let next = assignFinals(reconcileEliminations(settleShuffleDrain(materializeLive(fn(c)))));
       if (next === c) return c; // no-op — nothing to record
       const added = Math.max(0, next.events.length - c.events.length);
       let newEvents = added > 0 ? next.events.slice(0, added) : [];
@@ -386,7 +420,8 @@ export const useChipTournament = (id: number) => {
   // (fallback) — that a current entry already holds on either side, skip the add so
   // stale modal state can't create a duplicate. Identity-less walk-ins always add.
   const addEntry = useCallback(
-    (patch?: Partial<ChipEntry>) =>
+    (patch?: Partial<ChipEntry>) => {
+      if (rosterLocked()) return; // live/finished: use the Add Late Player flow, not setup
       update((c) => {
         const uuid = patch?.p1PlayerId ?? null;
         const idAuto = patch?.p1ProfileId ?? null;
@@ -399,21 +434,26 @@ export const useChipTournament = (id: number) => {
           if (dup) return c;
         }
         return { ...c, entries: [...c.entries, { ...blankEntry(), ...patch }] };
-      }),
-    [update],
+      });
+    },
+    [update, rosterLocked],
   );
   const updateEntry = useCallback(
-    (entryId: string, patch: Partial<ChipEntry>) =>
+    (entryId: string, patch: Partial<ChipEntry>) => {
+      if (rosterLocked()) return; // live/finished: setup roster is read-only
       update((c) => ({
         ...c,
         entries: c.entries.map((e) => (e.id === entryId ? { ...e, ...patch } : e)),
-      })),
-    [update],
+      }));
+    },
+    [update, rosterLocked],
   );
   const removeEntry = useCallback(
-    (entryId: string) =>
-      update((c) => ({ ...c, entries: c.entries.filter((e) => e.id !== entryId) })),
-    [update],
+    (entryId: string) => {
+      if (rosterLocked()) return; // live/finished: setup roster is read-only
+      update((c) => ({ ...c, entries: c.entries.filter((e) => e.id !== entryId) }));
+    },
+    [update, rosterLocked],
   );
 
   // ── Tables (engine-backed: seats players automatically when live) ─────────────
@@ -455,6 +495,12 @@ export const useChipTournament = (id: number) => {
     () => update((c) => engineBeginShuffle(c)),
     [update],
   );
+  // Shuffle modal confirm: apply the TD's table-removal selection AND begin the cycle
+  // in ONE authoritative step, recording shuffle-owned closings for a safe cancel.
+  const startShuffleCycle = useCallback(
+    (removeTableIds: string[]) => update((c) => engineStartShuffleCycle(c, removeTableIds)),
+    [update],
+  );
   const startShuffle = useCallback(
     (tableCount?: number | null) =>
       update((c) => engineStartShuffle(c, tableCount ?? null)),
@@ -477,15 +523,27 @@ export const useChipTournament = (id: number) => {
     [update],
   );
   const clearTable = useCallback(
-    (tableId: string) => update((c) => engineClearTable(c, tableId)),
+    (tableId: string, destination: "next" | "end" = "end") =>
+      update((c) => engineClearTable(c, tableId, destination)),
     [update],
   );
   const startPendingMatch = useCallback(
     (tableId: string) => update((c) => engineStartPendingMatch(c, tableId)),
     [update],
   );
+  // "Start All": start every announced-but-not-started opening matchup at once.
+  const startAllMatches = useCallback(
+    () => update((c) => engineStartAllMatches(c)),
+    [update],
+  );
   const setTableLocked = useCallback(
     (tableId: string, locked: boolean) => update((c) => engineSetTableLocked(c, tableId, locked)),
+    [update],
+  );
+  // Lock/Unlock ALL active tables at once (pure availability — never seats). `actorId`
+  // (id_auto) is threaded so the single summary audit event records who did it.
+  const setAllTablesLocked = useCallback(
+    (locked: boolean, actorId?: number | null) => update((c) => engineSetAllTablesLocked(c, locked, actorId ?? null)),
     [update],
   );
   const assignNextTeam = useCallback(
@@ -500,9 +558,12 @@ export const useChipTournament = (id: number) => {
     (tableId: string, entryId: string) => update((c) => engineAssignSpecificTeam(c, tableId, entryId)),
     [update],
   );
+  // Manual chip override. `meta` carries the required reason/notes + acting director
+  // (id_auto) for the audit row; the engine rejects a live adjustment with no reason and
+  // refuses to zero an actively-playing player (defense-in-depth).
   const adjustChips = useCallback(
-    (entryId: string, delta: number) =>
-      update((c) => engineAdjustChips(c, entryId, delta)),
+    (entryId: string, delta: number, meta?: ChipAdjustMeta | null) =>
+      update((c) => engineAdjustChips(c, entryId, delta, meta)),
     [update],
   );
   // TD forfeits an entry out of the whole tournament (eliminated regardless of
@@ -569,7 +630,7 @@ export const useChipTournament = (id: number) => {
       // live_state="finished" + completed_at are set atomically — identical to
       // bracket completion (they can't drift). Idempotent: preserves completed_at.
       await tournamentService.completeTournament(id);
-      await load();
+      await load({ silent: true });
     } finally {
       finishingRef.current = false;
       setFinishing(false);
@@ -593,7 +654,7 @@ export const useChipTournament = (id: number) => {
     // Canonical reopen: clears status/live_state/completed_at together so it leaves
     // the Completed list cleanly (mirror of tournamentService.completeTournament).
     await tournamentService.reopenTournament(id);
-    await load();
+    await load({ silent: true });
   }, [chip, id, load]);
 
   // ── Approve a self-service registration (TD confirms Fargo) ────────────────────
@@ -602,7 +663,7 @@ export const useChipTournament = (id: number) => {
   // reflects the new verified state.
   const approveRegistration = useCallback(
     async (registrationId: number, fargo: number) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       // Optimistic: reflect the confirmed Fargo + approved state locally so the
       // card updates in place instead of blanking + reloading the whole page.
       update((c) => ({
@@ -616,16 +677,16 @@ export const useChipTournament = (id: number) => {
       try {
         await registrationService.approveWithFargo(registrationId, fargo);
       } catch {
-        await load(); // revert to server truth on failure
+        await load({ silent: true }); // revert to server truth on failure
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD confirms a team member's Fargo (verified profile Fargo + event snapshot).
   const confirmTeamMemberFargo = useCallback(
     async (memberId: number, fargo: number) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       // Optimistic: mark that member verified (+ its Fargo) locally so the row
       // flips to "✓ Verified" and chips recompute without a full reload.
       update((c) => ({
@@ -641,27 +702,27 @@ export const useChipTournament = (id: number) => {
       try {
         await teamService.confirmMemberFargo(memberId, fargo);
       } catch {
-        await load(); // revert to server truth on failure
+        await load({ silent: true }); // revert to server truth on failure
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD/admin unlocks a locked team so the captain can change the partner.
   const unlockTeam = useCallback(
     async (teamId: number) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       await teamService.unlockTeam(teamId);
-      await load();
+      await load({ silent: true });
     },
-    [load, locked],
+    [load, rosterLocked],
   );
 
   // TD approves / un-approves a team (a step after Fargo verification). Optimistic
   // so the card flips approved → "Check In" in place instead of reloading the page.
   const approveTeam = useCallback(
     async (teamId: number, approved: boolean) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) =>
@@ -671,20 +732,20 @@ export const useChipTournament = (id: number) => {
       try {
         await teamService.setTeamApproved(teamId, approved);
       } catch {
-        await load(); // revert to server truth on failure
+        await load({ silent: true }); // revert to server truth on failure
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD manual chip override for a team (null = auto from the chart).
   const setTeamChips = useCallback(
     async (teamId: number, chips: number | null) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       await teamService.setTeamChips(teamId, chips);
-      await load();
+      await load({ silent: true });
     },
-    [load, locked],
+    [load, rosterLocked],
   );
 
   // TD sets which side pots a team has entered (full replacement list). Optimistic
@@ -692,7 +753,7 @@ export const useChipTournament = (id: number) => {
   // only reload from the server if the write fails.
   const setTeamSidePots = useCallback(
     async (teamId: number, pots: string[]) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) =>
@@ -702,10 +763,10 @@ export const useChipTournament = (id: number) => {
       try {
         await teamService.setTeamSidePots(teamId, pots);
       } catch {
-        await load();
+        await load({ silent: true });
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD checks a team in / out. Persisted server-side (optimistic locally) so it
@@ -713,7 +774,7 @@ export const useChipTournament = (id: number) => {
   // reload) reset every team's check-in.
   const setTeamCheckedIn = useCallback(
     async (teamId: number, checkedIn: boolean) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) =>
@@ -724,11 +785,11 @@ export const useChipTournament = (id: number) => {
         await teamService.setTeamCheckedIn(teamId, checkedIn);
       } catch (err) {
         // Revert to server truth, then rethrow so the screen can show a retry alert.
-        await load();
+        await load({ silent: true });
         throw err;
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // Self-registered SINGLES live in tournament_players (projected via regToEntry), so
@@ -736,7 +797,7 @@ export const useChipTournament = (id: number) => {
   // reverts to the approved state. Optimistic + rethrow-on-failure like the team path.
   const checkInRegistration = useCallback(
     async (registrationId: number, checkedIn: boolean) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) => (e.regId === registrationId ? { ...e, checkedIn } : e)),
@@ -744,30 +805,30 @@ export const useChipTournament = (id: number) => {
       try {
         if (checkedIn) await registrationService.checkIn(registrationId);
         else await registrationService.approve(registrationId);
-        await load();
+        await load({ silent: true });
       } catch (err) {
-        await load();
+        await load({ silent: true });
         throw err;
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD removes a self-registered player from the tournament (tournament_players): cancel
   // the registration so it stops projecting into the chip roster (load filters cancelled).
   const cancelRegistration = useCallback(
     async (registrationId: number) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({ ...c, entries: c.entries.filter((e) => e.regId !== registrationId) }));
       try {
         await registrationService.markCancelled(registrationId);
-        await load();
+        await load({ silent: true });
       } catch (err) {
-        await load();
+        await load({ silent: true });
         throw err;
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // Unified lifecycle write for a self-registered SINGLES entry (tournament_players):
@@ -776,7 +837,7 @@ export const useChipTournament = (id: number) => {
   // (Registered). Optimistic + rethrow-on-failure so the card can retry.
   const setRegistrationReady = useCallback(
     async (registrationId: number, opts: { paid: boolean; ready: boolean }) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) =>
@@ -791,19 +852,19 @@ export const useChipTournament = (id: number) => {
           status: opts.ready ? "checked_in" : "approved",
           checked_in_at: opts.ready ? new Date().toISOString() : null,
         });
-        await load();
+        await load({ silent: true });
       } catch (err) {
-        await load();
+        await load({ silent: true });
         throw err;
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // TD marks a team paid / unpaid (persisted, survives roster reloads).
   const setTeamPaid = useCallback(
     async (teamId: number, paid: boolean) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({
         ...c,
         entries: c.entries.map((e) => (e.teamId === teamId ? { ...e, paid } : e)),
@@ -811,41 +872,41 @@ export const useChipTournament = (id: number) => {
       try {
         await teamService.setTeamPaid(teamId, paid);
       } catch {
-        await load();
+        await load({ silent: true });
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // ── Fargo-cap override writes (per source) ────────────────────────────────────
   // Doubles team override (tournament_teams via RPC; overridden_by stamped server-side).
   const setTeamFargoOverride = useCallback(
     async (teamId: number, on: boolean, snap: OverrideSnap) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({ ...c, entries: c.entries.map((e) => (e.teamId === teamId ? { ...e, ...overrideFields(on, snap) } : e)) }));
       try {
         await teamService.setTeamFargoOverride(teamId, on, { cap: snap.cap, rating: snap.rating, reason: snap.reason, notes: snap.notes });
       } catch {
-        await load();
+        await load({ silent: true });
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // Self-registered singles override (tournament_players direct update).
   const setRegistrationFargoOverride = useCallback(
     async (registrationId: number, on: boolean, snap: OverrideSnap) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       update((c) => ({ ...c, entries: c.entries.map((e) => (e.regId === registrationId ? { ...e, ...overrideFields(on, snap) } : e)) }));
       try {
         await registrationService.setFargoOverride(registrationId, on, { cap: snap.cap, rating: snap.rating, reason: snap.reason, notes: snap.notes, overriddenBy: snap.overriddenBy });
-        await load();
+        await load({ silent: true });
       } catch (err) {
-        await load();
+        await load({ silent: true });
         throw err;
       }
     },
-    [update, load, locked],
+    [update, load, rosterLocked],
   );
 
   // Append an audit-log event (e.g. Fargo-cap override) to chip_events.
@@ -857,32 +918,32 @@ export const useChipTournament = (id: number) => {
   // TD removes one player from a team.
   const removeTeamMember = useCallback(
     async (memberId: number) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       await teamService.removeTeamMember(memberId);
-      await load();
+      await load({ silent: true });
     },
-    [load, locked],
+    [load, rosterLocked],
   );
 
   // TD creates a real team (chosen player = captain). Returns team id.
   const tdCreateTeam = useCallback(
     async (captainPlayerId: number, fargo: number | null) => {
-      if (locked()) return null;
+      if (rosterLocked()) return null;
       const teamId = await teamService.tdCreateTeam(id, captainPlayerId, fargo);
-      await load();
+      await load({ silent: true });
       return teamId;
     },
-    [id, load, locked],
+    [id, load, rosterLocked],
   );
 
   // TD adds a real (verifiable) partner to a team.
   const addTeamMember = useCallback(
     async (teamId: number, playerId: number, fargo: number | null) => {
-      if (locked()) return;
+      if (rosterLocked()) return;
       await teamService.addTeamMember(teamId, playerId, fargo);
-      await load();
+      await load({ silent: true });
     },
-    [load, locked],
+    [load, rosterLocked],
   );
 
   // Lazy read of a team's shareable invite token (for the "Invite Partner"
@@ -893,8 +954,16 @@ export const useChipTournament = (id: number) => {
   );
 
   // ── Review & Start ────────────────────────────────────────────────────────────
-  const start = useCallback(async () => {
-    if (!chip) return;
+  // Returns true only when the engine start AND the persisted start both succeed, so
+  // the caller can navigate to Live ONLY after a confirmed start (never optimistically).
+  const start = useCallback(async (): Promise<boolean> => {
+    if (!chip) return false;
+    // Stale-schedule gate (shared helper — same rule as every other start path): a
+    // not-yet-started tournament whose saved date/time is already in the past is never
+    // started. Authoritative block (returns false → chipService.start is never called);
+    // the user-facing message is shown by the caller (doStart) so we don't trip the
+    // screen's full-screen vm.error takeover, which is reserved for load failures.
+    if (scheduleStaleError(tournament)) return false;
     setStarting(true);
     try {
       // SINGLE explicit normalization point (setup → live only): reconcile checkedIn to
@@ -934,9 +1003,11 @@ export const useChipTournament = (id: number) => {
       const started = startChipTournament(owned);
       setChip(started);
       await chipService.start(id, started);
-      await load();
+      await load({ silent: true });
+      return true;
     } catch (e: any) {
       setError(e?.message ?? "Failed to start tournament.");
+      return false;
     } finally {
       setStarting(false);
     }
@@ -944,6 +1015,10 @@ export const useChipTournament = (id: number) => {
 
   const liveState = tournament?.live_state ?? "not_started";
   const isLive = liveState === "in_progress";
+  // Opening kickoff control: "all" (nothing started → Start All), "remaining" (some
+  // opening tables live, others still waiting → Start Remaining), or null (no opening
+  // table waiting → the control reverts to Shuffle Mode).
+  const startAllMode = chip ? startAllState(chip) : null;
   const isFinished = liveState === "finished" || tournament?.status === "completed";
   const phase: "setup" | "live" | "results" = isFinished
     ? "results"
@@ -953,10 +1028,13 @@ export const useChipTournament = (id: number) => {
 
   return {
     loading,
+    refreshing,
     error,
     starting,
     finishing,
+    isLive,
     isFinished,
+    startAllMode,
     tournament,
     chip,
     phase,
@@ -985,6 +1063,7 @@ export const useChipTournament = (id: number) => {
     reshuffle,
     setShuffleMode,
     beginShuffle,
+    startShuffleCycle,
     startShuffle,
     cancelReshuffle,
     closeTables,
@@ -992,7 +1071,9 @@ export const useChipTournament = (id: number) => {
     resetTableTimer,
     clearTable,
     startPendingMatch,
+    startAllMatches,
     setTableLocked,
+    setAllTablesLocked,
     assignNextTeam,
     assignSpecificTeam,
     moveTable,

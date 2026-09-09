@@ -32,7 +32,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { KeyboardAwareScroll } from "../common/keyboard-aware-scroll";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -614,7 +614,7 @@ export const UnifiedRegisterModal = ({
 
   const createLinkLabel = () => {
     const q = search.query.trim();
-    return q.length >= 2 ? `+ Create “${q}”` : "+ Create a new player";
+    return q.length >= 2 ? `+ Create “${q}”` : "+ Create a New Player";
   };
 
   // Fixed search field + scrollable results + fixed create footer. The search field
@@ -648,6 +648,7 @@ export const UnifiedRegisterModal = ({
           style={{ maxHeight: resultsMax }}
           contentContainerStyle={styles.resultsContent}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {showRecents ? (
@@ -672,12 +673,9 @@ export const UnifiedRegisterModal = ({
         </ScrollView>
 
         <View style={styles.searchFooter}>
-          <TouchableOpacity onPress={openCreate} activeOpacity={0.7} style={styles.createLinkWrap}>
-            <Text allowFontScaling={false} style={styles.createLink}>{createLinkLabel()}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.closeBtnBottom}>
-            <Text allowFontScaling={false} style={styles.closeBtnBottomText}>Close</Text>
-          </TouchableOpacity>
+          <Button title={createLinkLabel()} variant="outline" size="md" fullWidth onPress={openCreate} />
+          <View style={styles.searchFooterGap} />
+          <Button title="Close" variant="primary" size="md" fullWidth onPress={onClose} />
         </View>
       </>
     );
@@ -688,14 +686,9 @@ export const UnifiedRegisterModal = ({
   const renderSearch = () => renderSearchStep("Search by name, username, or email…");
 
   const renderCreate = () => (
-    <KeyboardAwareScrollView
+    <KeyboardAwareScroll
       style={{ maxHeight: Math.round(winH * 0.62) }}
       contentContainerStyle={styles.createContent}
-      keyboardShouldPersistTaps="handled"
-      enableOnAndroid
-      enableAutomaticScroll
-      extraScrollHeight={24}
-      showsVerticalScrollIndicator={false}
     >
       <Text allowFontScaling={false} style={styles.createHeading}>{editingPlayerId ? "Edit player" : "Create player"}</Text>
       <Text allowFontScaling={false} style={styles.hint}>
@@ -784,7 +777,7 @@ export const UnifiedRegisterModal = ({
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAwareScrollView>
+    </KeyboardAwareScroll>
   );
 
   // Fargo step: short, stable content — NOT an internal scroll (so the keyboard
@@ -985,15 +978,9 @@ export const UnifiedRegisterModal = ({
         <Pressable style={styles.kav} onPress={() => {}}>
           {step === "draft" ? (
             // The gray card IS the modal surface here — no outer sheet/header/border.
-            <KeyboardAwareScrollView
-              style={{ maxHeight: Math.round(winH * 0.85) }}
-              keyboardShouldPersistTaps="handled"
-              enableOnAndroid
-              extraScrollHeight={20}
-              showsVerticalScrollIndicator={false}
-            >
+            <KeyboardAwareScroll style={{ maxHeight: Math.round(winH * 0.85) }}>
               {renderDraft()}
-            </KeyboardAwareScrollView>
+            </KeyboardAwareScroll>
           ) : (
             <View style={[styles.sheet, { maxHeight: isSearchStep ? Math.round(winH - topOffset - kb - webSc(16)) : Math.round(winH * 0.85) }]}>
               <View style={styles.header}>
@@ -1055,8 +1042,10 @@ const styles = StyleSheet.create({
   // Fixed search section (below the header, always visible).
   searchWrap: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.sm) },
   resultsContent: { paddingHorizontal: webSc(SPACING.md) },
-  // Fixed create-player footer (stays above the keyboard / below the results).
-  searchFooter: { borderTopWidth: 1, borderTopColor: COLORS.border },
+  // Fixed action footer (stays above the keyboard / below the results): a secondary
+  // outline "Create a New Player" over a primary "Close", both full-width buttons.
+  searchFooter: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.md) },
+  searchFooterGap: { height: webSc(10) },
   p1Reminder: { color: COLORS.secondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.xs) },
 
   searchBar: {
@@ -1092,10 +1081,6 @@ const styles = StyleSheet.create({
 
   // Fixed footer (create link + a secondary Close, above the keyboard / below results).
   footer: { paddingTop: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  createLinkWrap: { alignItems: "center", paddingVertical: webSc(SPACING.sm) },
-  createLink: { color: COLORS.primary, fontWeight: "600", fontSize: webMs(FONT_SIZES.md), textAlign: "center" },
-  closeBtnBottom: { alignItems: "center", justifyContent: "center", paddingVertical: webSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border, minHeight: webSc(48) },
-  closeBtnBottomText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
 
   createHeading: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", marginBottom: webSc(SPACING.xs) },
 

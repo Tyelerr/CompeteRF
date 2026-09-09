@@ -17,11 +17,40 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// ── Auth storage: one adapter per runtime, so auth-js never invokes a storage
+// backend that reads `window` where it doesn't exist ─────────────────────────
+// Expo Router's web build uses `web.output: "static"`, which renders every route
+// in Node (no `window`/`localStorage`) to emit static HTML. Passing AsyncStorage
+// there makes auth-js call AsyncStorage's WEB getItem during init, which reads
+// `window` → `ReferenceError: window is not defined` at startup. Select by context:
+//   • iOS/Android → AsyncStorage (persistent session + auto-refresh preserved).
+//   • Web browser → window.localStorage (Supabase's default web store).
+//   • Node/static render → no persistence: auth-js uses its in-memory adapter and
+//     never touches `window` (persistSession/autoRefresh off for the render pass).
+const isNative = Platform.OS !== "web";
+const hasWindow = typeof window !== "undefined";
+
+// Minimal no-op used only for the Node render pass (nothing to persist there).
+const memoryStorage = {
+  getItem: async (_key: string): Promise<string | null> => null,
+  setItem: async (_key: string, _value: string): Promise<void> => {},
+  removeItem: async (_key: string): Promise<void> => {},
+};
+
+const authStorage = isNative
+  ? AsyncStorage
+  : hasWindow
+    ? window.localStorage
+    : memoryStorage;
+// Persist + auto-refresh everywhere a real storage exists (native + browser);
+// off only during the windowless Node render.
+const canPersist = isNative || hasWindow;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    storage: authStorage,
+    autoRefreshToken: canPersist,
+    persistSession: canPersist,
     detectSessionInUrl: false,
   },
 });

@@ -16,6 +16,7 @@ import {
   ChipState,
 } from "../../models/types/chip.types";
 import { useProfileTournaments } from "./use.profile.tournaments";
+import { computePerformance, PerfGame } from "../../utils/performance";
 
 export type ChipStatus = "waiting" | "next" | "playing" | "eliminated";
 export type ChipStreakType = "win" | "loss" | "none";
@@ -31,7 +32,11 @@ export interface ChipQueueSlot {
   name: string;
   fargo: number | null;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   isMe: boolean;
+  // Round turn-status during a Shuffle round (null otherwise): "waiting" = not yet
+  // seated for its turn this round; "played" = already had its turn.
+  roundStatus: "waiting" | "played" | null;
 }
 export interface ChipRecent {
   id: string;
@@ -46,6 +51,7 @@ export interface ChipLeaderRow {
   rank: number;
   name: string;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   wins: number;
   losses: number;
   isMe: boolean;
@@ -57,6 +63,26 @@ export interface ChipLiveRow {
   tableLabel: string | null;
   isStream: boolean;
   startedAt: string;
+}
+
+// Read-only table view for the Profile hub (mirrors the spectator SpecTable). The
+// a-side is the holder/defender; aStreak (>0) is the authoritative win streak. No
+// admin controls — presentation only.
+export interface ChipHubTable {
+  id: string;
+  label: string;
+  live: boolean;
+  isStream: boolean;
+  closing: boolean; // will close after the current match
+  aName: string | null;
+  aChips: number | null;
+  aStartChips: number | null; // starting-stack snapshot → live chip-health color
+  aStreak: number | null;
+  bName: string | null;
+  bChips: number | null;
+  bStartChips: number | null;
+  startedAt: string | null; // set when live → the screen renders the elapsed timer
+  waitingText: string | null; // "Waiting to Start" / "Waiting for a challenger" / "Open"
 }
 export interface ChipPerf {
   label: ChipPerfLabel;
@@ -78,6 +104,7 @@ export interface ChipPlayerHub {
   // Headline
   status: ChipStatus;
   chips: number;
+  startChips: number; // starting-stack snapshot → live chip-health color
   queuePosition: number | null; // 1-based; null when playing/eliminated
   tableLabel: string | null; // when playing
   isStreamed: boolean; // playing on a stream table
@@ -98,7 +125,9 @@ export interface ChipPlayerHub {
   fullQueue: ChipQueueSlot[]; // the whole queue (for the View Full Queue modal)
   youreNext: boolean;
   recentMatches: ChipRecent[];
-  leaderboard: ChipLeaderRow[];
+  leaderboard: ChipLeaderRow[]; // top-10 preview
+  fullLeaderboard: ChipLeaderRow[]; // all ranked entries (for the View Full modal + count)
+  tables: ChipHubTable[]; // read-only active tables (preview 2 + View All modal)
   liveMatches: ChipLiveRow[];
 }
 
@@ -111,8 +140,6 @@ const perfLabelFor = (delta: number): ChipPerfLabel =>
       : delta >= -15 ? "expected"
         : delta >= -50 ? "below"
           : "under";
-// Same Tournament Performance Rating formula as utils/tournament.stats.ts.
-const TPR_K = -100 / Math.log(2);
 
 // Build the player/team hub from a loaded chip state, or null if the viewer
 // isn't one of its entries.
@@ -204,31 +231,23 @@ const buildChipHub = (
 
   const matchesPlayed = me.wins + me.losses;
   const winPct = matchesPlayed ? me.wins / matchesPlayed : 0;
-  // Tournament Performance Rating — weighted avg opponent Fargo shifted by win
-  // rate (each chip match = one game, weighted by the opponent's team Fargo).
-  let tprWins = 0;
-  let tprGames = 0;
-  let tprOppSum = 0;
-  let tprWeighted = 0;
-  for (const m of myFinished) {
+  // Performance Rating (expected-vs-actual, Fargo-anchored) via the shared helper
+  // (utils/performance.ts). Chip has no rack scores → one finished match = one game
+  // (1/0 or 0/1) vs that opponent's team Fargo.
+  const chipGamesRows: PerfGame[] = myFinished.map((m) => {
     const oppId = m.aId === me.id ? m.bId : m.aId;
     const opp = s.entries.find((x) => x.id === oppId);
-    tprGames += 1;
-    if (m.winnerId === me.id) tprWins += 1;
-    const of = opp?.teamFargo ?? null;
-    if (of != null) {
-      tprOppSum += of;
-      tprWeighted += 1;
-    }
-  }
-  const avgOpponentFargo = tprWeighted > 0 ? Math.round(tprOppSum / tprWeighted) : null;
-  let rating: number | null = null;
-  if (tprGames > 0 && tprWeighted > 0) {
-    const cap = Math.min(0.99, Math.max(0.01, tprWins / tprGames));
-    rating = Math.round(tprOppSum / tprWeighted + TPR_K * Math.log((1 - cap) / cap));
-  }
-  const ownFargo = me.teamFargo ?? null;
-  const delta = rating != null && ownFargo != null ? rating - ownFargo : null;
+    const won = m.winnerId === me.id;
+    return {
+      opponentFargo: opp?.teamFargo ?? null,
+      gamesWon: won ? 1 : 0,
+      gamesLost: won ? 0 : 1,
+    };
+  });
+  const chipPerf = computePerformance(chipGamesRows, me.teamFargo ?? null);
+  const avgOpponentFargo = chipPerf.avgOpponentFargo;
+  const rating = chipPerf.rating;
+  const delta = chipPerf.delta;
   const perf: ChipPerf | null =
     rating != null && delta != null
       ? { label: perfLabelFor(delta), winPct, sample: matchesPlayed, rating, delta, avgOpponentFargo }
@@ -238,7 +257,26 @@ const buildChipHub = (
   const rankIdx = byChips.findIndex((e) => e.id === me.id);
   const chipRank = rankIdx >= 0 ? rankIdx + 1 : null;
 
-  // Queue preview (next 5), highlighting me.
+  // Queue preview (next 5), highlighting me. Round turn-status is TEAM-level. 3-state
+  // derivation (no new state): "waiting" = still in roundRemaining; seated/live
+  // (holder/pending of an active table OR an in-progress match participant) = null
+  // (at-table, NOT played); "played" = otherwise. NOT derived from !roundRemaining alone.
+  const roundRemainingSet = new Set(s.roundRemaining ?? []);
+  const onTableIds = new Set<string>();
+  for (const t of s.tables) {
+    if (t.inactive) continue;
+    if (t.holderId) onTableIds.add(t.holderId);
+    if (t.pendingChallengerId) onTableIds.add(t.pendingChallengerId);
+  }
+  for (const mm of s.matches) {
+    if (mm.status === "in_progress") { onTableIds.add(mm.aId); onTableIds.add(mm.bId); }
+  }
+  const roundStatusFor = (id: string): "waiting" | "played" | null => {
+    if (!s.shuffleRound) return null;
+    if (roundRemainingSet.has(id)) return "waiting";
+    if (onTableIds.has(id)) return null;
+    return "played";
+  };
   const fullQueue: ChipQueueSlot[] = s.queue
     .map((id) => s.entries.find((e) => e.id === id))
     .filter((e): e is ChipEntry => !!e)
@@ -247,19 +285,26 @@ const buildChipHub = (
       name: teamNameOf(e),
       fargo: e.teamFargo,
       chips: e.chips,
+      startChips: e.startChips,
       isMe: e.id === me.id,
+      roundStatus: roundStatusFor(e.id),
     }));
   const queuePreview: ChipQueueSlot[] = fullQueue.slice(0, 5);
 
-  const leaderboard: ChipLeaderRow[] = byChips.slice(0, 10).map((e, i) => ({
+  // Full ranked leaderboard (all alive entries, by chips) + a top-10 preview. The
+  // full list backs the "View Full Leaderboard" count + modal; the preview is shown
+  // inline. Mirrors the fullQueue / queuePreview split.
+  const fullLeaderboard: ChipLeaderRow[] = byChips.map((e, i) => ({
     id: e.id,
     rank: i + 1,
     name: teamNameOf(e),
     chips: e.chips,
+    startChips: e.startChips,
     wins: e.wins,
     losses: e.losses,
     isMe: e.id === me.id,
   }));
+  const leaderboard: ChipLeaderRow[] = fullLeaderboard.slice(0, 10);
 
   const liveMatches: ChipLiveRow[] = s.matches
     .filter((m) => m.status === "in_progress")
@@ -277,6 +322,52 @@ const buildChipHub = (
 
   const myTable = me.tableId ? s.tables.find((t) => t.id === me.tableId) : null;
 
+  // Read-only active tables (mirrors the spectator's table build): a-side = holder/
+  // defender, aStreak = ChipEntry.streak. Presentation only — no admin state.
+  const entryOf = (id: string | null | undefined) =>
+    id ? s.entries.find((e) => e.id === id) ?? null : null;
+  const activeTables = s.tables
+    .filter((t) => !t.inactive)
+    .sort((a, b) => (a.label > b.label ? 1 : a.label < b.label ? -1 : 0));
+  // Between-rounds (draining or ready for redraw): an empty active table is awaiting
+  // the next redraw → "Waiting for Shuffle" (derived; no new state).
+  const shuffleTransitioning = !!s.reshufflePending || !!s.shuffleReady;
+  const tables: ChipHubTable[] = activeTables.map((t) => {
+    const live = s.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
+    if (live) {
+      const a = entryOf(live.aId);
+      const b = entryOf(live.bId);
+      return {
+        id: t.id, label: t.label, live: true, isStream: !!t.isStream, closing: !!t.closing,
+        aName: a ? teamNameOf(a) : null, aChips: a?.chips ?? null, aStartChips: a?.startChips ?? null, aStreak: a?.streak ?? null,
+        bName: b ? teamNameOf(b) : null, bChips: b?.chips ?? null, bStartChips: b?.startChips ?? null,
+        startedAt: live.startedAt, waitingText: null,
+      };
+    }
+    const holder = entryOf(t.holderId);
+    const pending = entryOf(t.pendingChallengerId);
+    if (holder && pending) {
+      return {
+        id: t.id, label: t.label, live: false, isStream: !!t.isStream, closing: !!t.closing,
+        aName: teamNameOf(holder), aChips: holder.chips, aStartChips: holder.startChips, aStreak: holder.streak ?? null,
+        bName: teamNameOf(pending), bChips: pending.chips, bStartChips: pending.startChips,
+        startedAt: null, waitingText: "Waiting to Start",
+      };
+    }
+    if (holder) {
+      return {
+        id: t.id, label: t.label, live: false, isStream: !!t.isStream, closing: !!t.closing,
+        aName: teamNameOf(holder), aChips: holder.chips, aStartChips: holder.startChips, aStreak: holder.streak ?? null,
+        bName: null, bChips: null, bStartChips: null, startedAt: null, waitingText: "Waiting for a challenger",
+      };
+    }
+    return {
+      id: t.id, label: t.label, live: false, isStream: !!t.isStream, closing: !!t.closing,
+      aName: null, aChips: null, aStartChips: null, aStreak: null, bName: null, bChips: null, bStartChips: null,
+      startedAt: null, waitingText: shuffleTransitioning ? "Waiting for Shuffle" : "Open",
+    };
+  });
+
   return {
     tournamentId,
     tournamentName,
@@ -287,6 +378,7 @@ const buildChipHub = (
     myFargo: me.teamFargo,
     status,
     chips: me.chips,
+    startChips: me.startChips,
     queuePosition,
     tableLabel: status === "playing" ? tableLabelOf(me.tableId) : null,
     isStreamed: status === "playing" && !!myTable?.isStream,
@@ -305,21 +397,31 @@ const buildChipHub = (
     youreNext: qi === 0 && isAlive(me),
     recentMatches: recentMatches.slice(0, 5),
     leaderboard,
+    fullLeaderboard,
+    tables,
     liveMatches,
   };
 };
 
-export const usePlayerChipTournament = (playerId?: number) => {
+export const usePlayerChipTournament = (
+  playerId?: number,
+  preferredTournamentId?: number | null,
+) => {
   const { live } = useProfileTournaments(playerId);
 
-  // First LIVE chip tournament the player is in.
-  const chipEntry = useMemo(
-    () =>
-      live.find(
-        (t) => t.tournament?.tournament_format === "chip-tournament",
-      ) ?? null,
-    [live],
-  );
+  // The live chip tournament to surface. When the caller has explicitly selected a live
+  // tournament (multiple-live switcher), only resolve it if THAT tournament is a chip event —
+  // otherwise return null so the elimination hub handles the selection. With no selection,
+  // fall back to the first live chip tournament.
+  const chipEntry = useMemo(() => {
+    const isChip = (t: (typeof live)[number]) =>
+      t.tournament?.tournament_format === "chip-tournament";
+    if (preferredTournamentId != null) {
+      const sel = live.find((t) => t.tournament?.id === preferredTournamentId);
+      return sel && isChip(sel) ? sel : null;
+    }
+    return live.find(isChip) ?? null;
+  }, [live, preferredTournamentId]);
   const tournamentId = chipEntry?.tournament?.id;
   const tournamentName = chipEntry?.tournament?.name ?? "Chip Tournament";
 

@@ -426,7 +426,7 @@ export const TeamCard = (props: TeamCardProps) => {
               />
             ) : (
               <View style={styles.fargoRowRight}>
-                <Text allowFontScaling={false} style={styles.fargoBig}>{player1.fargo ?? "—"}</Text>
+                <Text allowFontScaling={false} style={[styles.fargoBig, readOnly && styles.dimValue]}>{player1.fargo ?? "—"}</Text>
                 {fargoCaption()}
               </View>
             )}
@@ -457,7 +457,7 @@ export const TeamCard = (props: TeamCardProps) => {
 
         <View style={styles.tsumRow}>
           <Text allowFontScaling={false} style={styles.tsumLabel}>Assigned Chips</Text>
-          <Text allowFontScaling={false} style={[styles.tsumVal, { color: COLORS.primaryLight }]}>{assignedChipsText}</Text>
+          <Text allowFontScaling={false} style={[styles.tsumVal, { color: readOnly ? COLORS.textSecondary : COLORS.primaryLight }]}>{assignedChipsText}</Text>
         </View>
 
         {/* Draft (Add Team) keeps a static Payment row; display shows payment inside the
@@ -559,6 +559,9 @@ const styles = StyleSheet.create({
   fargoSumRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
   fargoRowRight: { alignItems: "flex-end" },
   fargoBig: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "800", lineHeight: webMs(FONT_SIZES.xxl + 2) },
+  // Read-only (tournament live/finished): value text dims to signal "not editable"
+  // while staying legible. The green status pill + card border stay full strength.
+  dimValue: { color: COLORS.textSecondary },
   // In-place Fargo editor — replaces the value in the same row. Compact fixed width
   // sized for a short numeric value (≤4 digits); sits on the right of the row, text
   // left-aligned inside. NOT flex-filled.

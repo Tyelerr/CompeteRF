@@ -31,11 +31,15 @@ export const DatePicker = ({ value, onChange, placeholder = "Select Date" }: Dat
   }, [showModal]);
 
   const handleConfirm = () => {
-    // DateTimePicker returns UTC midnight — extract using UTC methods to avoid
-    // local timezone shifting the date back by one day in US timezones.
-    const y = tempDate.getUTCFullYear();
-    const m = String(tempDate.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(tempDate.getUTCDate()).padStart(2, "0");
+    // tempDate is a LOCAL wall-clock Date: it starts as new Date() (local now) or
+    // parseLocalDate(value) (local midnight), and the native picker returns the
+    // selected day in local time. So read LOCAL parts to get exactly the calendar
+    // day the TD tapped. (Reading getUTC* here converted to UTC first, which rolled
+    // the date to an adjacent day depending on offset/time-of-day — e.g. an evening
+    // selection in a negative-offset zone could jump forward a day.)
+    const y = tempDate.getFullYear();
+    const m = String(tempDate.getMonth() + 1).padStart(2, "0");
+    const d = String(tempDate.getDate()).padStart(2, "0");
     onChange(y + "-" + m + "-" + d);
     setShowModal(false);
   };

@@ -61,15 +61,18 @@ export const TournamentEntrySection = ({
     onPress?: () => void,
   ) => {
     const tappable = !!onPress && !readOnly;
+    // Read-only (tournament live/finished): the row is inert AND visibly muted — the
+    // green "collected/entered" checkbox becomes a grey box, and label/status dim so the
+    // control reads as disabled while the value stays legible.
     const body = (
       <>
-        <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-          {checked && <Text allowFontScaling={false} style={styles.checkboxMark}>✓</Text>}
+        <View style={[styles.checkbox, checked && (readOnly ? styles.checkboxOnRO : styles.checkboxOn)]}>
+          {checked && <Text allowFontScaling={false} style={[styles.checkboxMark, readOnly && styles.checkboxMarkRO]}>✓</Text>}
         </View>
-        <Text allowFontScaling={false} style={styles.rowLabel} numberOfLines={1}>{label}</Text>
+        <Text allowFontScaling={false} style={[styles.rowLabel, readOnly && styles.rowTextRO]} numberOfLines={1}>{label}</Text>
         <Text
           allowFontScaling={false}
-          style={[styles.rowStatus, checked ? styles.rowStatusOn : styles.rowStatusOff]}
+          style={[styles.rowStatus, checked ? styles.rowStatusOn : styles.rowStatusOff, readOnly && styles.rowTextRO]}
         >
           {checked ? onText : offText}
         </Text>
@@ -167,6 +170,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   checkboxOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  // Read-only muted variants (live/finished): grey box + dimmed mark/text.
+  checkboxOnRO: { backgroundColor: COLORS.surfaceLight, borderColor: COLORS.borderLight },
+  checkboxMarkRO: { color: COLORS.textMuted },
+  rowTextRO: { color: COLORS.textMuted },
   checkboxMark: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   rowLabel: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginLeft: webSc(SPACING.sm) },
   rowStatus: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginLeft: webSc(SPACING.sm) },

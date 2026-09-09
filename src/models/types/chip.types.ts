@@ -119,10 +119,17 @@ export interface ChipTable {
   // when a match ends but no eligible challenger is queued yet; cleared when the
   // next match starts.
   holderId?: string | null;
-  // Table-specific anti-repeat: the entry that just lost HERE. The next challenger
-  // pulled from the queue skips this entry (they can still face the holder on a
-  // different table). Cleared on reshuffle.
+  // Table-specific anti-repeat: the entry that just lost HERE. (Legacy single-loser
+  // field — the authoritative anti-repeat is now derived per player by
+  // mostRecentOpponent: a queued team is blocked only if its most-recent completed
+  // opponent is this table's current holder.)
   lastLoserId?: string | null;
+  // TRANSIENT (not persisted): the entries the seater actually passed over for the
+  // CURRENT pending assignment because their most-recent opponent was this holder (an
+  // immediate rematch). Drives the Next Match modal's "Rematch skipped" note and the
+  // queue chip. Cleared when the match starts / the table clears; recomputed on the
+  // next assignment.
+  rematchSkipped?: string[];
   // Winner-stays confirmation: a challenger has been pulled from the queue and
   // assigned to face the holder, but the match has NOT started yet (no timer).
   // The TD confirms with Start Match, which starts the match at 0:00. Cleared
@@ -156,6 +163,10 @@ export type ChipEventType =
   | "undo"
   | "redo"
   | "restore"
+  // Director settings-override audit trail (chip, running): unlock → save&lock / relock.
+  | "settings_unlocked"
+  | "settings_updated_locked"
+  | "settings_relocked_no_save"
   | "manual";
 
 export interface ChipEvent {
@@ -248,6 +259,11 @@ export interface ChipState {
   // shuffleReady (below) awaiting Start Shuffle. See beginShuffle/startShuffle.
   reshufflePending?: boolean;
   reshuffleTableCount?: number | null; // desired active tables after the redraw
+  // Table ids THIS shuffle cycle marked "closing after match" via the Reduce-tables
+  // step (live tables selected for removal). Cancel Shuffle reopens ONLY these — never
+  // tables closed by a manual "Close After Current Match". Cleared when the cycle ends
+  // (redraw / cancel / disable). Persisted so the distinction survives a reload.
+  reshuffleRemovingIds?: string[];
   // Shuffle Mode: a persistent TD-controlled mode (banner at top). When enabled,
   // the TD can start a shuffle cycle: matches drain (reshufflePending), tables
   // clear, and once every active table is empty the cycle enters the "ready"

@@ -22,6 +22,7 @@ export interface ConversationPreview {
   other_participant_email: string | null;
   other_participant_id_auto: number | null;
   unread_count: number;
+  archived?: boolean; // this participant has archived the conversation
 }
 
 export interface ConversationMessage {
@@ -80,7 +81,7 @@ export const conversationService = {
     // Get all conversation IDs the user participates in
     const { data: participations, error: partError } = await supabase
       .from("conversation_participants")
-      .select("conversation_id, last_read_at")
+      .select("conversation_id, last_read_at, archived_at")
       .eq("user_id", userId);
 
     if (partError) throw partError;
@@ -96,6 +97,13 @@ export const conversationService = {
           p.last_read_at,
         ],
       ),
+    );
+    // Per-participant archive state (this user's own archived_at for each conversation).
+    const archivedMap = new Map(
+      participations.map((p: { conversation_id: string; archived_at?: string | null }) => [
+        p.conversation_id,
+        p.archived_at ?? null,
+      ]),
     );
 
     // Get conversations
@@ -204,6 +212,7 @@ export const conversationService = {
         other_participant_email: otherEmail,
         other_participant_id_auto: otherIdAuto,
         unread_count: unreadCount,
+        archived: archivedMap.get(convo.id) != null,
       });
     }
 
@@ -258,6 +267,30 @@ export const conversationService = {
   },
 
   // ── Send a reply ──
+  // Archive / unarchive THIS participant's view of a conversation (per-user). Blocks the other
+  // participant from replying while archived (review conversations); does not delete anything.
+  async setConversationArchived(
+    conversationId: string,
+    archived: boolean,
+  ): Promise<void> {
+    const { error } = await supabase.rpc("set_conversation_archived", {
+      p_conversation_id: conversationId,
+      p_archived: archived,
+    });
+    if (error) throw error;
+  },
+
+  // Whether THIS user has archived a single conversation (for the conversation screen's state).
+  async isConversationArchived(conversationId: string, userId: string): Promise<boolean> {
+    const { data } = await supabase
+      .from("conversation_participants")
+      .select("archived_at")
+      .eq("conversation_id", conversationId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    return (data as { archived_at?: string | null } | null)?.archived_at != null;
+  },
+
   async sendReply(
     conversationId: string,
     senderId: string,

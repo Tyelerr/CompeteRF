@@ -61,7 +61,7 @@ export function TermsModal({ visible, onClose }: TermsModalProps) {
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={s.mobileOverlay}>
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={s.mobileContainer}>{innerContent}</View>
       </View>
     </Modal>

@@ -3,7 +3,7 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import { ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { Alert,
   Animated,
@@ -38,6 +38,10 @@ import { EditProfileModal } from "../../src/views/components/profile/EditProfile
 import { MyTournaments } from "../../src/views/components/profile/MyTournaments";
 import { TournamentHubView } from "../../src/views/components/profile/TournamentHubView";
 import { ChipTournamentHubView } from "../../src/views/components/profile/ChipTournamentHubView";
+import { Dropdown } from "../../src/views/components/common/dropdown";
+import { ReviewPromptModal } from "../../src/views/components/reviews/ReviewPromptModal";
+import { ReviewConfetti } from "../../src/views/components/reviews/ReviewConfetti";
+import { useReviewPrompt } from "../../src/viewmodels/hooks/use.review.prompt";
 import { usePlayerChipTournament } from "../../src/viewmodels/hooks/use.player.chip.tournament";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
 import { WebTournamentDetailOverlay } from "../../src/views/screens/billiards/WebTournamentDetailOverlay";
@@ -197,11 +201,54 @@ export default function ProfileScreen() {
     toggleFavorite: toggleFav,
     refetch: refetchFavorites,
   } = useFavorites(storeProfile?.id_auto);
-  const { live, registered, completed } = useProfileTournaments(storeProfile?.id_auto);
-  const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto);
-  const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto);
+  // Whether Profile is the active tab — gates the adaptive live-tournament poll so
+  // background/unfocused Profiles contribute zero steady-state DB load.
+  const profileFocused = useIsFocused();
+  const {
+    live,
+    registered,
+    completed,
+    isLoading: liveCheckLoading,
+    refetch: refetchProfileTournaments,
+  } = useProfileTournaments(storeProfile?.id_auto, { focused: profileFocused });
+  // Which live tournament Tournament View is focused on. Defaults to the first; the
+  // switcher (shown only when the player is in >1 live event) lets them change it, so a
+  // newly-started Tournament B never gets locked out by a still-running Tournament A.
+  const [selectedLiveId, setSelectedLiveId] = useState<number | null>(null);
+  const effectiveLiveId =
+    (selectedLiveId != null && live.some((t) => t.tournament?.id === selectedLiveId)
+      ? selectedLiveId
+      : live[0]?.tournament?.id) ?? null;
+  const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto, effectiveLiveId);
+  const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto, effectiveLiveId);
   const performance = usePlayerPerformance(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
+  // Live tournaments where the player's participation has AUTHORITATIVELY ended: chip → engine
+  // eliminated status; elimination → persisted registration eliminated_at (set by the bracket
+  // engine, never loss-inference). Used for both the review opportunity and the live label.
+  const endedLiveTournamentIds = useMemo(() => {
+    const ids = new Set<number>();
+    if (chipHub?.status === "eliminated") ids.add(chipHub.tournamentId);
+    for (const t of live) {
+      if (t.eliminated_at != null && t.tournament?.id != null) ids.add(t.tournament.id);
+    }
+    return [...ids];
+  }, [chipHub, live]);
+  // Subtle "eliminated but event still live" flag for the currently-focused tournament.
+  const focusedEliminated =
+    (chipHub?.status === "eliminated" && chipHub.tournamentId === effectiveLiveId) ||
+    (effectiveLiveId != null && endedLiveTournamentIds.includes(effectiveLiveId));
+
+  // One-time review prompt (one review per player per tournament). Eligibility is AUTHORITATIVE:
+  // a player is prompted when their participation officially ends — chip/elim elimination
+  // (persisted, via endedLiveTournamentIds) or tournament completion (winner + everyone else).
+  const reviewPrompt = useReviewPrompt({
+    playerId: storeProfile?.id_auto,
+    completed,
+    endedLiveTournamentIds,
+  });
+  // Screen-level confetti that keeps falling briefly AFTER the review modal closes on submit.
+  const [showReviewConfetti, setShowReviewConfetti] = useState(false);
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
   const [loading, setLoading] = useState(true);
@@ -215,13 +262,42 @@ export default function ProfileScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [inboxVisible, setInboxVisible] = useState(false);
   const [inboxTab, setInboxTab] = useState<"conversations" | "notifications">("conversations");
+  // Inbox Active/Archived view, owned here so it survives opening a conversation (which closes
+  // the Inbox modal) and reopening on return; resets to Active on a fresh Inbox open.
+  const [inboxConvView, setInboxConvView] = useState<"active" | "archived">("active");
+  const [inboxReopen, setInboxReopen] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [searchAlertsVisible, setSearchAlertsVisible] = useState(false);
   const [detailTournamentId, setDetailTournamentId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   // Hide the detail modal while this tab is unfocused (e.g. the chip live view is
   // open) so it doesn't float above it; it re-shows on return so Back lands here.
-  const detailIsFocused = useIsFocused();
+  const detailIsFocused = profileFocused; // same active-tab signal (single useIsFocused above)
+
+  // Revalidate the player's live-tournament state whenever Profile regains focus
+  // (returning from another tab or from a tournament screen). React Query's
+  // AppState↔focusManager bridge covers app foreground/background; this covers the
+  // in-app tab/route focus that AppState does not signal, so a tournament that went
+  // live while the player was elsewhere flips Profile into Tournament View on return
+  // without waiting on the 10s poll. Reuses the existing per-user query (no new fetch
+  // path); refetch is a no-op when data is already fresh.
+  useEffect(() => {
+    if (detailIsFocused) void refetchProfileTournaments();
+  }, [detailIsFocused, refetchProfileTournaments]);
+
+  // Coming back from a conversation route → reopen the Inbox in the same Active/Archived view.
+  useEffect(() => {
+    if (detailIsFocused && inboxReopen) {
+      setInboxReopen(false);
+      setInboxVisible(true);
+    }
+  }, [detailIsFocused, inboxReopen]);
+
+  // The Inbox is an in-Profile overlay, so navigating away (e.g. tapping another bottom tab)
+  // should close it naturally rather than leaving it floating on return.
+  useEffect(() => {
+    if (!detailIsFocused && inboxVisible && !inboxReopen) setInboxVisible(false);
+  }, [detailIsFocused, inboxVisible, inboxReopen]);
 
   const favoritedIds = useMemo(
     () => new Set(favorites.map((f) => f.tournament_id)),
@@ -341,6 +417,12 @@ export default function ProfileScreen() {
 
   if (loading && !profile) return <Loading fullScreen message="Loading..." />;
   if (!user) return <LoggedOutView router={router} />;
+  // Resolve the live-tournament check before the first paint so we render the correct
+  // view once (normal Profile vs Tournament View) instead of flashing Profile then
+  // swapping in Tournament View. `liveCheckLoading` is true ONLY on the initial fetch
+  // (and false on error / when no profile id yet), so this can't get stuck on a spinner.
+  if (profile && liveCheckLoading && live.length === 0)
+    return <Loading fullScreen message="Loading..." />;
 
   return (
     <View style={styles.container}>
@@ -362,7 +444,7 @@ export default function ProfileScreen() {
             <View style={styles.cardIcons}>
               <TouchableOpacity
                 style={styles.cardIconBtn}
-                onPress={() => { setInboxTab("conversations"); setInboxVisible(true); }}
+                onPress={() => { setInboxTab("conversations"); setInboxConvView("active"); setInboxReopen(false); setInboxVisible(true); }}
                 hitSlop={6}
               >
                 <Ionicons name="mail-outline" size={wxMs(20)} color={COLORS.text} />
@@ -372,7 +454,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.cardIconBtn}
-                onPress={() => { setInboxTab("notifications"); setInboxVisible(true); }}
+                onPress={() => { setInboxTab("notifications"); setInboxConvView("active"); setInboxReopen(false); setInboxVisible(true); }}
                 hitSlop={6}
               >
                 <Ionicons name="notifications-outline" size={wxMs(20)} color={COLORS.text} />
@@ -473,6 +555,29 @@ export default function ProfileScreen() {
             </View>
           )}
 
+          {/* 2+ live tournaments → one compact dropdown (reuses the shared Dropdown)
+              instead of a crowded chip row. 1 tournament → nothing (shown normally). */}
+          {inLiveTournament && profileTab === "tournament" && live.length > 1 && (
+            <View style={styles.liveSwitcherWrap}>
+              <Dropdown
+                label="Tournament"
+                options={live
+                  .map((t) => ({ label: t.tournament?.name ?? "Tournament", value: String(t.tournament?.id ?? "") }))
+                  .filter((o) => o.value !== "")}
+                value={effectiveLiveId != null ? String(effectiveLiveId) : undefined}
+                onSelect={(v) => setSelectedLiveId(Number(v))}
+              />
+            </View>
+          )}
+
+          {inLiveTournament && profileTab === "tournament" && focusedEliminated && (
+            <View style={styles.elimNote}>
+              <Text allowFontScaling={false} style={styles.elimNoteText}>
+                Eliminated · Tournament still live
+              </Text>
+            </View>
+          )}
+
           {inLiveTournament && profileTab === "tournament" ? (
             chipHub ? (
               <ChipTournamentHubView
@@ -535,15 +640,33 @@ export default function ProfileScreen() {
 
       <NotificationsModal
         visible={inboxVisible}
-        onClose={() => setInboxVisible(false)}
+        onClose={() => { setInboxReopen(false); setInboxVisible(false); }}
         userId={user?.id}
         userIdAuto={profile?.id_auto}
         initialTab={inboxTab}
+        convView={inboxConvView}
+        onConvViewChange={setInboxConvView}
+        onOpenConversation={() => setInboxReopen(true)}
         onViewTournament={(id) => { setInboxVisible(false); setTimeout(() => openDetailModal(id), 150); }}
       />
 
       {isWeb && showDetailModal && detailTournamentId && <WebTournamentDetailOverlay id={detailTournamentId} onClose={closeDetailModal} />}
       {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal && detailIsFocused} onClose={closeDetailModal} origin="profile" />}
+
+      {reviewPrompt.pending && detailIsFocused && (
+        <ReviewPromptModal
+          visible
+          context={reviewPrompt.pending}
+          onSubmit={async (rating, reasons, comment) => {
+            // Persist + close the modal (optimistic), then start the brief screen-level confetti.
+            await reviewPrompt.submit(rating, reasons, comment);
+            setShowReviewConfetti(true);
+          }}
+          onDismiss={reviewPrompt.dismiss}
+        />
+      )}
+
+      {showReviewConfetti && <ReviewConfetti onDone={() => setShowReviewConfetti(false)} />}
     </View>
   );
 }
@@ -553,6 +676,25 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   pageWrapper: { flex: 1, paddingBottom: wxSc(SPACING.xl) },
   pageWrapperWeb: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
+
+  // Multiple currently-live tournaments: a compact switcher (only when >1) that picks
+  // which one Tournament View focuses on, so a newer live event isn't locked out.
+  // Block container for the compact tournament dropdown (2+ live tournaments).
+  liveSwitcherWrap: {
+    marginHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.sm),
+  },
+  // Subtle "eliminated but the event is still live" note (no "your run has ended").
+  elimNote: {
+    marginHorizontal: wxSc(SPACING.md),
+    marginTop: wxSc(SPACING.sm),
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.warning + "1F",
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: wxSc(SPACING.sm),
+    paddingVertical: wxSc(4),
+  },
+  elimNoteText: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.warning, fontWeight: "700" },
 
   // Tournament | Profile top toggle (shown only when in a live tournament)
   topToggle: {

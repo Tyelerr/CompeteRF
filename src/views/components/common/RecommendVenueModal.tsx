@@ -113,7 +113,7 @@ export const RecommendVenueModal = ({ vm }: Props) => {
         </>
       ) : (
         <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-          <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={vm.close} />
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={vm.close} />
           <View style={styles.cardWrapper}>
             <View style={styles.card}>{inner}</View>
           </View>

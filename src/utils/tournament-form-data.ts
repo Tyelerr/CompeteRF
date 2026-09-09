@@ -145,11 +145,41 @@ export const START_TIMES = [
   { label: "10:00 PM", value: "22:00" },
 ];
 
+// Sensible default schedule for a NEW tournament: the current LOCAL date + the next
+// clean 30-minute START_TIMES slot from now (so the suggested time is in the future),
+// never a fixed 7:00 PM. Built from LOCAL date parts (new Date(y, m, d)) so date-only
+// handling can never shift the calendar day backward (the America/Phoenix "prior day"
+// UTC pitfall). Range mirrors START_TIMES: 09:00 (first) … 22:00 (last); before 9am →
+// today 9:00 AM; past 10pm → tomorrow 9:00 AM.
+const SCHEDULE_FIRST_MIN = 9 * 60; // 09:00
+const SCHEDULE_LAST_MIN = 22 * 60; // 22:00
+export const suggestedSchedule = (): { tournamentDate: Date; startTime: string } => {
+  const now = new Date();
+  // Advance to the STRICTLY-next 30-minute slot (floor+1, never the current instant),
+  // so 6:42→7:00, exactly 7:00→7:30, exactly 7:30→8:00. Seconds don't matter — any
+  // time inside a slot moves to the next boundary.
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const rounded = (Math.floor(nowMin / 30) + 1) * 30;
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // local midnight today
+  let slot: number;
+  if (rounded < SCHEDULE_FIRST_MIN) {
+    slot = SCHEDULE_FIRST_MIN; // early morning → today 9:00 AM
+  } else if (rounded <= SCHEDULE_LAST_MIN) {
+    slot = rounded; // next clean slot today
+  } else {
+    slot = SCHEDULE_FIRST_MIN; // past the last slot → tomorrow 9:00 AM
+    day.setDate(day.getDate() + 1);
+  }
+  const hh = String(Math.floor(slot / 60)).padStart(2, "0");
+  const mm = String(slot % 60).padStart(2, "0");
+  return { tournamentDate: day, startTime: `${hh}:${mm}` };
+};
+
 export const TABLE_SIZES = [
   { label: "Select Table Size", value: "" },
   { label: "7 Foot (Bar Box)", value: "7-foot" },
   { label: "8 Foot",           value: "8-foot" },
-  { label: "9 Foot (Pro)",     value: "9-foot" },
+  { label: "9 Foot",           value: "9-foot" },
 ];
 
 export const EQUIPMENT_OPTIONS = [

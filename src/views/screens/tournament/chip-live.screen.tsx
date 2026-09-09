@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Dimensions,
   Modal,
   Platform,
   Pressable,
@@ -25,6 +26,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { formatElapsedClock } from "../../../utils/formatters";
+import { chipStatusColor } from "../../../utils/chip-colors";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipSpectatorView,
@@ -35,6 +38,7 @@ import {
   useChipSpectator,
 } from "../../../viewmodels/hooks/use.chip.spectator";
 import { Loading } from "../../components/common/loading";
+import { useAuthStore } from "../../../viewmodels/stores/auth.store";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -48,20 +52,118 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "payouts", label: "Payouts" },
 ];
 
-type PlayerFilter = "all" | "playing" | "waiting" | "eliminated";
+type PlayerFilter = "all" | "playing" | "next" | "waiting" | "eliminated";
 const PLAYER_FILTERS: { key: PlayerFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "playing", label: "Playing" },
+  { key: "next", label: "Up Next" },
   { key: "waiting", label: "Waiting" },
   { key: "eliminated", label: "Eliminated" },
 ];
+type PlayerSort = "chips" | "name" | "record" | "fargo" | "status";
+const PLAYER_SORTS: { key: PlayerSort; label: string }[] = [
+  { key: "chips", label: "Chips" },
+  { key: "name", label: "Name" },
+  { key: "record", label: "Record" },
+  { key: "fargo", label: "Fargo" },
+  { key: "status", label: "Status" },
+];
+type StandingsFilter = "all" | "active" | "eliminated";
+const STANDINGS_FILTERS: { key: StandingsFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "eliminated", label: "Eliminated" },
+];
+type StandingsSort = "standings" | "chips" | "record" | "winpct" | "fargo" | "name";
+const STANDINGS_SORTS: { key: StandingsSort; label: string }[] = [
+  { key: "standings", label: "Rank" },
+  { key: "chips", label: "Chips" },
+  { key: "record", label: "Record" },
+  { key: "winpct", label: "Win %" },
+  { key: "fargo", label: "Fargo" },
+  { key: "name", label: "Name" },
+];
+const STATUS_RANK: Record<string, number> = { playing: 0, next: 1, waiting: 2, completed: 3, eliminated: 4 };
+const recordScore = (w: number, l: number) => w - l;
+const winPct = (w: number, l: number) => (w + l > 0 ? w / (w + l) : 0);
 
-const fmtClock = (ms: number): string => {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+// Reusable compact anchored popover for the Filter/Sort controls. Opens OVER the page
+// (a transparent Modal — no inline expand, no layout shift), positioned by measuring
+// the trigger in the window: downward when there's room below (accounting for the
+// bottom nav/safe area), upward otherwise, clamped on-screen, with an internal
+// ScrollView if the menu is tall. Tap-outside (the backdrop) closes it; because it's a
+// Modal, only one menu can be open at a time.
+const AnchoredMenu = ({
+  prefix,
+  value,
+  options,
+  onSelect,
+}: {
+  prefix: string;
+  value: string;
+  options: { key: string; label: string }[];
+  onSelect: (v: string) => void;
+}) => {
+  const ref = useRef<View>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; width: number; maxH: number } | null>(null);
+  const selectedLabel = options.find((o) => o.key === value)?.label ?? options[0]?.label ?? "";
+  const openMenu = () => {
+    const node = ref.current as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void };
+    if (node?.measureInWindow) {
+      node.measureInWindow((x, y, w, h) => {
+        const { height: screenH, width: screenW } = Dimensions.get("window");
+        const bottomGuard = 96; // bottom tab bar + safe area
+        const topGuard = 60;
+        const estH = Math.min(options.length * wxSc(44) + wxSc(10), wxSc(320));
+        const below = screenH - (y + h) - bottomGuard;
+        const above = y - topGuard;
+        const down = below >= estH || below >= above;
+        const width = Math.max(w, wxSc(170));
+        const left = Math.max(8, Math.min(x, screenW - width - 8)); // keep on-screen
+        setPos(
+          down
+            ? { left, top: y + h + 4, width, maxH: Math.max(wxSc(120), below - 4) }
+            : { left, bottom: screenH - (y - 4), width, maxH: Math.max(wxSc(120), above - 4) },
+        );
+        setOpen(true);
+      });
+    } else {
+      setOpen(true);
+    }
+  };
+  return (
+    <>
+      <TouchableOpacity ref={ref} style={styles.ctrlTrigger} activeOpacity={0.7} onPress={openMenu}>
+        <Text allowFontScaling={false} style={styles.ctrlTriggerText} numberOfLines={1}>
+          {prefix}: <Text style={styles.ctrlTriggerValue}>{selectedLabel}</Text>
+        </Text>
+        <Ionicons name="chevron-down" size={wxMs(14)} color={COLORS.textSecondary} />
+      </TouchableOpacity>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.ctrlBackdrop} onPress={() => setOpen(false)}>
+          {pos && (
+            <Pressable style={[styles.ctrlMenu, { left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.width, maxHeight: pos.maxH }]} onPress={() => {}}>
+              <ScrollView showsVerticalScrollIndicator bounces={false}>
+                {options.map((o) => (
+                  <TouchableOpacity key={o.key} style={styles.ctrlMenuItem} activeOpacity={0.7} onPress={() => { onSelect(o.key); setOpen(false); }}>
+                    <Text allowFontScaling={false} style={[styles.ctrlMenuText, value === o.key && styles.ctrlMenuTextOn]}>
+                      {value === o.key ? "✓  " : ""}{o.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Pressable>
+          )}
+        </Pressable>
+      </Modal>
+    </>
+  );
 };
+
+// Strict zero-padded HH:MM:SS from the shared formatter (matches Admin exactly).
+// Previously `${totalMinutes}:${sec}` with no hour rollover → "1231:55".
+const fmtClock = (ms: number): string => formatElapsedClock(ms);
 const money = (n: number): string => `$${Math.round(n).toLocaleString()}`;
 const fargoText = (f: number | null): string => (f != null ? `Fargo ${f}` : "Fargo —");
 
@@ -172,7 +274,10 @@ const TableCard = ({
           <TouchableOpacity style={styles.teamSide} activeOpacity={0.7} onPress={() => onTapTeam(t.aId)}>
             <Text allowFontScaling={false} style={styles.teamName} numberOfLines={2}>{t.aName}</Text>
             {t.aChips != null && (
-              <Text allowFontScaling={false} style={styles.teamChips}>{t.aChips} {t.aChips === 1 ? "chip" : "chips"}</Text>
+              <Text allowFontScaling={false} style={[styles.teamChips, { color: chipStatusColor(t.aChips, t.aStartChips) }]}>{t.aChips} {t.aChips === 1 ? "chip" : "chips"}</Text>
+            )}
+            {t.aStreak != null && t.aStreak > 0 && (
+              <Text allowFontScaling={false} style={styles.teamStreak} numberOfLines={1}>🔥 {t.aStreak}-win streak</Text>
             )}
           </TouchableOpacity>
           <Text allowFontScaling={false} style={styles.vs}>VS</Text>
@@ -180,7 +285,7 @@ const TableCard = ({
             <TouchableOpacity style={styles.teamSide} activeOpacity={0.7} onPress={() => onTapTeam(t.bId)}>
               <Text allowFontScaling={false} style={styles.teamName} numberOfLines={2}>{t.bName}</Text>
               {t.bChips != null && (
-                <Text allowFontScaling={false} style={styles.teamChips}>{t.bChips} {t.bChips === 1 ? "chip" : "chips"}</Text>
+                <Text allowFontScaling={false} style={[styles.teamChips, { color: chipStatusColor(t.bChips, t.bStartChips) }]}>{t.bChips} {t.bChips === 1 ? "chip" : "chips"}</Text>
               )}
             </TouchableOpacity>
           ) : (
@@ -202,15 +307,24 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tournamentId = id ? Number(id) : undefined;
-  const { view, isLoading } = useChipSpectator(tournamentId);
+  // Viewer's own profile id (id_auto) so their entry can be marked "(You)". null for
+  // spectators/admins who aren't entered.
+  const viewerProfileId = useAuthStore((st) => st.profile?.id_auto ?? null);
+  const { view, isLoading } = useChipSpectator(tournamentId, viewerProfileId);
 
   const [tab, setTab] = useState<Tab>("overview");
   const [now, setNow] = useState(() => 0);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [standingsOpen, setStandingsOpen] = useState(false);
+  // Players tab sub-view: full-page Player/Team List vs full-page Standings.
+  const [playersView, setPlayersView] = useState<"list" | "standings">("list");
+  const [logOpen, setLogOpen] = useState(false);
   const [playerQuery, setPlayerQuery] = useState("");
   const [playerFilter, setPlayerFilter] = useState<PlayerFilter>("all");
+  const [playerSort, setPlayerSort] = useState<PlayerSort>("chips");
+  const [standingsFilter, setStandingsFilter] = useState<StandingsFilter>("all");
+  const [standingsSort, setStandingsSort] = useState<StandingsSort>("standings");
   const bodyRef = useRef<ScrollView>(null);
 
   // Tick every second for the live match timers (cheap; only affects timers).
@@ -267,17 +381,58 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
     [view, profileId],
   );
 
+  // Player/Team List: search + status filter, then a PRESENTATION-ONLY sort over a COPY
+  // (never mutates view.players). Defaults to Chips (high→low).
   const filteredPlayers = useMemo(() => {
     if (!view) return [];
     const q = playerQuery.trim().toLowerCase();
-    return view.players.filter((p) => {
+    const rows = view.players.filter((p) => {
       if (q && !p.name.toLowerCase().includes(q)) return false;
       if (playerFilter === "all") return true;
       if (playerFilter === "playing") return p.status === "playing";
-      if (playerFilter === "waiting") return p.status === "waiting" || p.status === "next";
+      if (playerFilter === "next") return p.status === "next";
+      if (playerFilter === "waiting") return p.status === "waiting";
       return p.status === "eliminated";
     });
-  }, [view, playerQuery, playerFilter]);
+    const sorted = [...rows];
+    sorted.sort((a, b) => {
+      switch (playerSort) {
+        case "name": return a.name.localeCompare(b.name);
+        case "record": return recordScore(b.wins, b.losses) - recordScore(a.wins, a.losses) || b.wins - a.wins;
+        case "fargo": return (b.fargo ?? -1) - (a.fargo ?? -1) || a.name.localeCompare(b.name);
+        case "status": return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || b.chips - a.chips;
+        case "chips":
+        default: return b.chips - a.chips || a.name.localeCompare(b.name);
+      }
+    });
+    return sorted;
+  }, [view, playerQuery, playerFilter, playerSort]);
+
+  // Standings: shared search + Active/Eliminated filter, then a presentation-only sort
+  // over a COPY. "standings" preserves the authoritative rank order.
+  const filteredStandings = useMemo(() => {
+    if (!view) return [];
+    const q = playerQuery.trim().toLowerCase();
+    const rows = view.fullStandings.filter((r) => {
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (standingsFilter === "active") return !r.eliminated;
+      if (standingsFilter === "eliminated") return r.eliminated;
+      return true;
+    });
+    if (standingsSort === "standings") return rows;
+    const sorted = [...rows];
+    sorted.sort((a, b) => {
+      switch (standingsSort) {
+        case "chips": return b.chips - a.chips || a.rank - b.rank;
+        case "record": return recordScore(b.wins, b.losses) - recordScore(a.wins, a.losses) || a.rank - b.rank;
+        case "winpct": return winPct(b.wins, b.losses) - winPct(a.wins, a.losses) || a.rank - b.rank;
+        case "fargo": return (b.fargo ?? -1) - (a.fargo ?? -1) || a.rank - b.rank;
+        case "name": return a.name.localeCompare(b.name);
+        default: return 0;
+      }
+    });
+    return sorted;
+  }, [view, playerQuery, standingsFilter, standingsSort]);
 
   return (
     <View style={styles.root}>
@@ -343,17 +498,28 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
                 onTapTeam={openProfile}
                 onViewQueue={() => setQueueOpen(true)}
                 onViewStandings={() => setStandingsOpen(true)}
+                onViewLog={() => setLogOpen(true)}
               />
             )}
             {tab === "tables" && <TablesTab view={view} now={now} onTapTeam={openProfile} />}
             {tab === "players" && (
               <PlayersTab
+                isTeam={view.isTeam}
+                subView={playersView}
+                onSubView={setPlayersView}
                 players={filteredPlayers}
+                standings={filteredStandings}
                 total={view.players.length}
                 query={playerQuery}
                 onQuery={setPlayerQuery}
                 filter={playerFilter}
                 onFilter={setPlayerFilter}
+                sort={playerSort}
+                onSort={setPlayerSort}
+                stFilter={standingsFilter}
+                onStFilter={setStandingsFilter}
+                stSort={standingsSort}
+                onStSort={setStandingsSort}
                 onTap={openProfile}
               />
             )}
@@ -375,8 +541,9 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
           id: q.id,
           left: `${q.position}`,
           title: q.name,
-          sub: <><FargoInline fargo={q.fargo} /><MetaDot /><RecordInline wins={q.wins} losses={q.losses} /></>,
+          sub: <><FargoInline fargo={q.fargo} /><MetaDot /><RecordInline wins={q.wins} losses={q.losses} />{q.roundStatus ? <Text style={{ color: q.roundStatus === "waiting" ? COLORS.primary : COLORS.textMuted, fontWeight: "700" }}>{"  ·  "}{q.roundStatus === "waiting" ? "Waiting for turn" : "✓ Played"}</Text> : null}</>,
           right: `${q.chips} ${q.chips === 1 ? "chip" : "chips"}`,
+          rightColor: chipStatusColor(q.chips, q.startChips),
         }))}
         emptyText="The queue is empty."
         onTap={openProfileFromList}
@@ -390,12 +557,20 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
         rows={(view?.fullStandings ?? []).map((r) => ({
           id: r.id,
           left: `${r.rank}`,
-          title: r.name,
+          title: `${r.name}${r.isMe ? "  (You)" : ""}`,
           sub: <RecordInline wins={r.wins} losses={r.losses} />,
-          right: `${r.chips} ${r.chips === 1 ? "chip" : "chips"}`,
+          right: r.eliminated ? "Eliminated" : `${r.chips} ${r.chips === 1 ? "chip" : "chips"}`,
+          rightColor: r.eliminated ? undefined : chipStatusColor(r.chips, r.startChips),
         }))}
         emptyText="No standings yet."
         onTap={openProfileFromList}
+      />
+
+      {/* Full activity log */}
+      <ActivityModal
+        visible={logOpen}
+        activity={view?.activity ?? []}
+        onClose={() => setLogOpen(false)}
       />
     </View>
   );
@@ -409,12 +584,14 @@ const OverviewTab = ({
   onTapTeam,
   onViewQueue,
   onViewStandings,
+  onViewLog,
 }: {
   view: ChipSpectatorView;
   now: number;
   onTapTeam: (id: string | null) => void;
   onViewQueue: () => void;
   onViewStandings: () => void;
+  onViewLog: () => void;
 }) => {
   const s = view.summary;
   const summaryCards = view.finished
@@ -454,7 +631,7 @@ const OverviewTab = ({
             <Text allowFontScaling={false} style={styles.leaderMeta}>
               <FargoInline fargo={view.chipLeader.fargo} /><MetaDot /><RecordInline wins={view.chipLeader.wins} losses={view.chipLeader.losses} />
             </Text>
-            <Text allowFontScaling={false} style={styles.leaderChips}>{view.chipLeader.chips} chips</Text>
+            <Text allowFontScaling={false} style={[styles.leaderChips, { color: chipStatusColor(view.chipLeader.chips, view.chipLeader.startChips) }]}>{view.chipLeader.chips} chips</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -489,8 +666,13 @@ const OverviewTab = ({
                     <Text allowFontScaling={false} style={styles.qSub} numberOfLines={1}>
                       <FargoInline fargo={q.fargo} /><MetaDot /><RecordInline wins={q.wins} losses={q.losses} />
                     </Text>
-                    <Text allowFontScaling={false} style={styles.qChips}>{q.chips} {q.chips === 1 ? "chip" : "chips"}</Text>
+                    <Text allowFontScaling={false} style={[styles.qChips, { color: chipStatusColor(q.chips, q.startChips) }]}>{q.chips} {q.chips === 1 ? "chip" : "chips"}</Text>
                   </View>
+                  {q.roundStatus && (
+                    <Text allowFontScaling={false} style={[styles.qRoundStatus, { color: q.roundStatus === "waiting" ? COLORS.primary : COLORS.textMuted }]} numberOfLines={1}>
+                      {q.roundStatus === "waiting" ? "Waiting for turn" : "✓ Played this round"}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -512,8 +694,10 @@ const OverviewTab = ({
             {view.standingsPreview.map((r) => (
               <TouchableOpacity key={r.id} style={[styles.clRow, r.rank === 1 && styles.clRowTop]} activeOpacity={0.7} onPress={() => onTapTeam(r.id)}>
                 <Text allowFontScaling={false} style={[styles.clRank, r.rank === 1 && styles.clRankTop]}>{r.rank}</Text>
-                <Text allowFontScaling={false} style={styles.clName} numberOfLines={1}>{r.name}</Text>
-                <Text allowFontScaling={false} style={styles.clChips}>{r.chips} chips</Text>
+                <Text allowFontScaling={false} style={styles.clName} numberOfLines={1}>{r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}</Text>
+                {r.eliminated
+                  ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
+                  : <Text allowFontScaling={false} style={[styles.clChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} chips</Text>}
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.viewAll} activeOpacity={0.7} onPress={onViewStandings}>
@@ -524,32 +708,42 @@ const OverviewTab = ({
         )}
       </View>
 
-      {/* 6 — Recent Activity */}
+      {/* 6 — Recent Activity (5-row preview + View Full Log) */}
       <View style={styles.section}>
         <SectionHeader icon="pulse-outline" title="Recent Activity" />
-        {view.activity.length === 0 ? (
+        {view.activityPreview.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyLine}>Nothing yet — the action will show up here.</Text>
         ) : (
-          view.activity.map((a, i) => (
-            <View key={a.id} style={[styles.actRow, i === view.activity.length - 1 && styles.noBorder]}>
-              <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
-              <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
-            </View>
-          ))
+          <>
+            {view.activityPreview.map((a) => (
+              <View key={a.id} style={styles.actRow}>
+                <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
+                <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
+              </View>
+            ))}
+            {/* Only when there is MORE than the 5-row preview (≤5 events shows all inline). */}
+            {view.activity.length > view.activityPreview.length && (
+              <TouchableOpacity style={styles.viewAll} activeOpacity={0.7} onPress={onViewLog}>
+                <Text allowFontScaling={false} style={styles.viewAllText}>View Full Log ({view.activity.length})</Text>
+                <Ionicons name="chevron-forward" size={wxMs(15)} color={COLORS.primary} />
+              </TouchableOpacity>
+            )}
+          </>
         )}
       </View>
     </View>
   );
 };
 
+// Dot colour per public activity kind (see utils/chip-activity PublicActivityKind).
 const activityColor = (kind: string): string =>
   kind === "elimination" || kind === "forfeit"
     ? COLORS.error
-    : kind === "match_result"
+    : kind === "result" || kind === "champion" || kind === "buyback"
       ? COLORS.success
-      : kind === "shuffle"
+      : kind === "shuffle" || kind === "match_start" || kind === "tournament" || kind === "table"
         ? COLORS.primary
-        : COLORS.textSecondary;
+        : COLORS.textSecondary; // chip_loss
 
 // ── Tables tab ────────────────────────────────────────────────────────────────
 
@@ -579,79 +773,147 @@ const TablesTab = ({
 // ── Players tab ───────────────────────────────────────────────────────────────
 
 const PlayersTab = ({
+  isTeam,
+  subView,
+  onSubView,
   players,
+  standings,
   total,
   query,
   onQuery,
   filter,
   onFilter,
+  sort,
+  onSort,
+  stFilter,
+  onStFilter,
+  stSort,
+  onStSort,
   onTap,
 }: {
+  isTeam: boolean;
+  subView: "list" | "standings";
+  onSubView: (v: "list" | "standings") => void;
   players: ChipSpectatorView["players"];
+  standings: ChipSpectatorView["fullStandings"];
   total: number;
   query: string;
   onQuery: (v: string) => void;
   filter: PlayerFilter;
   onFilter: (f: PlayerFilter) => void;
+  sort: PlayerSort;
+  onSort: (s: PlayerSort) => void;
+  stFilter: StandingsFilter;
+  onStFilter: (f: StandingsFilter) => void;
+  stSort: StandingsSort;
+  onStSort: (s: StandingsSort) => void;
   onTap: (id: string | null) => void;
-}) => (
-  <View style={styles.section}>
-    <View style={styles.searchWrap}>
-      <Ionicons name="search" size={wxMs(16)} color={COLORS.textMuted} />
-      <TextInput
-        style={styles.searchInput}
-        placeholder={`Search ${total} players...`}
-        placeholderTextColor={COLORS.textMuted}
-        value={query}
-        onChangeText={onQuery}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      {query.length > 0 && (
-        <TouchableOpacity onPress={() => onQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close-circle" size={wxMs(16)} color={COLORS.textMuted} />
+}) => {
+  const listLabel = isTeam ? "Team List" : "Player List";
+  const noun = isTeam ? "teams" : "players";
+  return (
+    <View style={styles.section}>
+      {/* Full-page toggle: List | Standings (each uses the whole content area) */}
+      <View style={styles.pvSeg}>
+        <TouchableOpacity style={[styles.pvSegBtn, subView === "list" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("list")}>
+          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "list" && styles.pvSegTextOn]}>{listLabel}</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.pvSegBtn, subView === "standings" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("standings")}>
+          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>Standings</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Shared search (matches tournament entry/team names, both views) */}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={wxMs(16)} color={COLORS.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search ${total} ${noun}...`}
+          placeholderTextColor={COLORS.textMuted}
+          value={query}
+          onChangeText={onQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => onQuery("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={wxMs(16)} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Compact Filter + Sort — anchored popovers over the page (no inline expand). */}
+      <View style={styles.ctrlRow}>
+        {subView === "list" ? (
+          <>
+            <AnchoredMenu prefix="Filter" value={filter} options={PLAYER_FILTERS} onSelect={(v) => onFilter(v as PlayerFilter)} />
+            <AnchoredMenu prefix="Sort" value={sort} options={PLAYER_SORTS} onSelect={(v) => onSort(v as PlayerSort)} />
+          </>
+        ) : (
+          <>
+            <AnchoredMenu prefix="Filter" value={stFilter} options={STANDINGS_FILTERS} onSelect={(v) => onStFilter(v as StandingsFilter)} />
+            <AnchoredMenu prefix="Sort" value={stSort} options={STANDINGS_SORTS} onSelect={(v) => onStSort(v as StandingsSort)} />
+          </>
+        )}
+      </View>
+
+      {subView === "list" ? (
+        <>
+          <View style={styles.plHeadRow}>
+            <Text allowFontScaling={false} style={styles.plHeadLabel}>{isTeam ? "TEAM" : "PLAYER"}</Text>
+          </View>
+
+          {players.length === 0 ? (
+            <Text allowFontScaling={false} style={styles.emptyLine}>No {noun} match.</Text>
+          ) : (
+            players.map((p) => (
+              <TouchableOpacity key={p.id} style={styles.plRow} activeOpacity={0.7} onPress={() => onTap(p.id)}>
+                <View style={styles.plNameRow}>
+                  <Text allowFontScaling={false} style={styles.plName} numberOfLines={2}>
+                    {p.name}{p.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
+                  </Text>
+                  <StatusBadge status={p.status} />
+                </View>
+                <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
+                  <FargoInline fargo={p.fargo} /><MetaDot /><RecordInline wins={p.wins} losses={p.losses} /><MetaDot />
+                  {p.status === "eliminated"
+                    ? <Text style={styles.plMetaElim}>Eliminated</Text>
+                    : <Text style={[styles.plMetaChips, { color: chipStatusColor(p.chips, p.startChips) }]}>{p.chips} Chips</Text>}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </>
+      ) : (
+        <>
+          <View style={styles.plHeadRow}>
+            <Text allowFontScaling={false} style={styles.plHeadLabel}>STANDINGS</Text>
+          </View>
+          {standings.length === 0 ? (
+            <Text allowFontScaling={false} style={styles.emptyLine}>No {noun} match.</Text>
+          ) : (
+            standings.map((r) => (
+              <TouchableOpacity key={r.id} style={styles.stRow} activeOpacity={0.7} onPress={() => onTap(r.id)}>
+                <Text allowFontScaling={false} style={styles.stRank}>{r.rank}</Text>
+                <View style={styles.stMain}>
+                  <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
+                    {r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
+                  </Text>
+                  <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
+                    <RecordInline wins={r.wins} losses={r.losses} />
+                  </Text>
+                </View>
+                {r.eliminated
+                  ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
+                  : <Text allowFontScaling={false} style={[styles.stChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} {r.chips === 1 ? "chip" : "chips"}</Text>}
+              </TouchableOpacity>
+            ))
+          )}
+        </>
       )}
     </View>
-
-    {/* Quick status filters */}
-    <View style={styles.filterRow}>
-      {PLAYER_FILTERS.map((f) => (
-        <TouchableOpacity
-          key={f.key}
-          style={[styles.filterChip, filter === f.key && styles.filterChipActive]}
-          activeOpacity={0.8}
-          onPress={() => onFilter(f.key)}
-        >
-          <Text allowFontScaling={false} style={[styles.filterChipText, filter === f.key && styles.filterChipTextActive]}>{f.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-
-    {/* Column header — just PLAYER; chips moved onto the row's second line and
-        the status badge is the only right-aligned element */}
-    <View style={styles.plHeadRow}>
-      <Text allowFontScaling={false} style={styles.plHeadLabel}>PLAYER</Text>
-    </View>
-
-    {players.length === 0 ? (
-      <Text allowFontScaling={false} style={styles.emptyLine}>No players match.</Text>
-    ) : (
-      players.map((p) => (
-        <TouchableOpacity key={p.id} style={styles.plRow} activeOpacity={0.7} onPress={() => onTap(p.id)}>
-          <View style={styles.plNameRow}>
-            <Text allowFontScaling={false} style={styles.plName} numberOfLines={2}>{p.name}</Text>
-            <StatusBadge status={p.status} />
-          </View>
-          <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
-            <FargoInline fargo={p.fargo} /><MetaDot /><RecordInline wins={p.wins} losses={p.losses} /><MetaDot />
-            <Text style={styles.plMetaChips}>{p.chips} Chips</Text>
-          </Text>
-        </TouchableOpacity>
-      ))
-    )}
-  </View>
-);
+  );
+};
 
 // ── Payouts tab ───────────────────────────────────────────────────────────────
 
@@ -701,6 +963,42 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
           </View>
         )}
       </View>
+
+      {p.sidePots.map((sp) => (
+        <View key={sp.name} style={styles.section}>
+          <SectionHeader icon="cash-outline" title={sp.name} />
+          <View style={styles.payRow}>
+            <Text allowFontScaling={false} style={styles.payLbl}>Buy-in</Text>
+            <Text allowFontScaling={false} style={styles.payVal}>{sp.amount > 0 ? money(sp.amount) : "—"}</Text>
+          </View>
+          <View style={styles.payRow}>
+            <Text allowFontScaling={false} style={styles.payLbl}>Entered</Text>
+            <Text allowFontScaling={false} style={styles.payVal}>{sp.entrants}</Text>
+          </View>
+          <View style={[styles.payRow, styles.payRowTotal]}>
+            <Text allowFontScaling={false} style={styles.payLblTotal}>Pool</Text>
+            <Text allowFontScaling={false} style={styles.payValTotal}>{sp.pool > 0 ? money(sp.pool) : "—"}</Text>
+          </View>
+          {sp.places && sp.places.length > 0 ? (
+            sp.places.map((row, i) => (
+              <View key={row.place} style={[styles.payoutRow, i === (sp.places!.length - 1) && styles.noBorder]}>
+                <View style={[styles.payoutPlace, row.place <= 3 && styles.payoutPlaceTop]}>
+                  <Text allowFontScaling={false} style={[styles.payoutPlaceText, row.place <= 3 && styles.payoutPlaceTextTop]}>{ordinal(row.place)}</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.payoutPct}>{row.percent}%</Text>
+                <Text allowFontScaling={false} style={styles.payoutAmt}>{money(row.amount)}</Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.payFallback}>
+              <Ionicons name="megaphone-outline" size={wxMs(20)} color={COLORS.textMuted} />
+              <Text allowFontScaling={false} style={styles.payFallbackText}>
+                Payouts will be announced by the tournament director.
+              </Text>
+            </View>
+          )}
+        </View>
+      ))}
     </View>
   );
 };
@@ -780,7 +1078,7 @@ const ProfileModal = ({
 
         {/* Stat grid */}
         <View style={styles.pStatGrid}>
-          <PStat val={`${profile.chips}`} lbl="Chips" color={COLORS.primary} />
+          <PStat val={`${profile.chips}`} lbl="Chips" color={chipStatusColor(profile.chips, profile.startChips)} />
           <PStat val={<RecordInline wins={profile.wins} losses={profile.losses} />} lbl="Record" />
           <PStat val={`${Math.round(profile.winPct * 100)}%`} lbl="Win Rate" />
           <PStat val={`${profile.startChips}`} lbl="Started With" />
@@ -845,7 +1143,11 @@ const ProfileModal = ({
               <View style={{ flex: 1 }}>
                 <Text allowFontScaling={false} style={styles.histOpp} numberOfLines={1}>vs {h.opponentName}</Text>
                 <Text allowFontScaling={false} style={styles.histMeta} numberOfLines={1}>
-                  {[h.tableLabel, h.durationMs != null ? fmtClock(h.durationMs) : null].filter(Boolean).join(" · ") || "—"}
+                  {[
+                    h.opponentFargo != null ? `Fargo ${h.opponentFargo}` : null,
+                    h.tableLabel,
+                    h.durationMs != null ? fmtClock(h.durationMs) : null,
+                  ].filter(Boolean).join(" · ") || "—"}
                 </Text>
               </View>
             </View>
@@ -866,7 +1168,7 @@ const PStat = ({ val, lbl, color }: { val: React.ReactNode; lbl: string; color?:
 
 // ── Generic list modal (Full Queue / Full Standings) ─────────────────────────
 
-interface ListRow { id: string; left: string; title: string; sub: React.ReactNode; right: string }
+interface ListRow { id: string; left: string; title: string; sub: React.ReactNode; right: string; rightColor?: string }
 const ListModal = ({
   visible,
   title,
@@ -893,12 +1195,59 @@ const ListModal = ({
             <Text allowFontScaling={false} style={styles.qName} numberOfLines={1}>{r.title}</Text>
             <Text allowFontScaling={false} style={styles.qSub} numberOfLines={1}>{r.sub}</Text>
           </View>
-          <Text allowFontScaling={false} style={styles.qChips}>{r.right}</Text>
+          <Text allowFontScaling={false} style={[styles.qChips, r.rightColor ? { color: r.rightColor } : null]}>{r.right}</Text>
         </TouchableOpacity>
       ))
     )}
   </SpectatorModal>
 );
+
+// ── Full activity log (View Full Log) ─────────────────────────────────────────
+// Reuses the SpectatorModal shell — same UX as Full Queue / Full Standings. The
+// full public feed is already in memory (one chip blob, polled), so there is no
+// server pagination; this renders an incrementally-growing window (LOG_PAGE rows
+// at a time via "Load older activity") instead of the entire history at once.
+const LOG_PAGE = 30;
+const ActivityModal = ({
+  visible,
+  activity,
+  onClose,
+}: {
+  visible: boolean;
+  activity: ChipSpectatorView["activity"];
+  onClose: () => void;
+}) => {
+  const [count, setCount] = useState(LOG_PAGE);
+  // Reset the window on close (avoids a setState-in-effect); next open starts fresh.
+  const close = () => {
+    setCount(LOG_PAGE);
+    onClose();
+  };
+  const shown = activity.slice(0, count);
+  const hasMore = activity.length > shown.length;
+  return (
+    <SpectatorModal visible={visible} title="Activity Log" onClose={close}>
+      {activity.length === 0 ? (
+        <Text allowFontScaling={false} style={styles.emptyLine}>Nothing yet — the action will show up here.</Text>
+      ) : (
+        <>
+          {shown.map((a) => (
+            <View key={a.id} style={styles.actRow}>
+              <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
+              <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
+            </View>
+          ))}
+          {hasMore && (
+            <TouchableOpacity style={styles.viewAll} activeOpacity={0.7} onPress={() => setCount((c) => c + LOG_PAGE)}>
+              <Text allowFontScaling={false} style={styles.viewAllText}>Load older activity</Text>
+              <Ionicons name="chevron-down" size={wxMs(15)} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+    </SpectatorModal>
+  );
+};
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -940,6 +1289,16 @@ const styles = StyleSheet.create({
   emptyLine: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), paddingVertical: wxSc(SPACING.sm) },
   noBorder: { borderBottomWidth: 0 },
   noBorderTop: { borderTopWidth: 0 },
+  // Filter/Sort control row + anchored popover.
+  ctrlRow: { flexDirection: "row", gap: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.xs) },
+  ctrlTrigger: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.xs), paddingHorizontal: wxSc(SPACING.md), height: wxSc(34), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  ctrlTriggerText: { flexShrink: 1, color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600" },
+  ctrlTriggerValue: { color: COLORS.text, fontWeight: "800" },
+  ctrlBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
+  ctrlMenu: { position: "absolute", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: wxSc(SPACING.xs), overflow: "hidden" },
+  ctrlMenuItem: { paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  ctrlMenuText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
+  ctrlMenuTextOn: { color: COLORS.primary, fontWeight: "800" },
 
   // Summary cards
   sumRow: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.md) },
@@ -977,6 +1336,7 @@ const styles = StyleSheet.create({
   teamSide: { flex: 1, alignItems: "center" },
   teamName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center" },
   teamChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
+  teamStreak: { color: COLORS.warning, fontSize: wxMs(FONT_SIZES.xs - 1), fontWeight: "800", marginTop: 2 },
   teamWaiting: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontStyle: "italic", textAlign: "center" },
   vs: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", marginTop: wxSc(2) },
   tableEmpty: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontStyle: "italic", textAlign: "center", paddingVertical: wxSc(SPACING.sm) },
@@ -989,6 +1349,7 @@ const styles = StyleSheet.create({
   qMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.sm), marginTop: 2 },
   qSub: { flexShrink: 1, color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: 1 },
   qChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
+  qRoundStatus: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 1 },
 
   viewAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: wxSc(SPACING.sm), marginTop: wxSc(SPACING.xs) },
   viewAllText: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -1013,6 +1374,14 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.xs) },
   filterChip: { paddingHorizontal: wxSc(SPACING.sm), height: wxSc(30), borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
   filterChipActive: { backgroundColor: COLORS.primary + "22", borderColor: COLORS.primary },
+  // Compact status-filter dropdown (Player List only).
+  filterTrigger: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.xs), alignSelf: "flex-start", paddingHorizontal: wxSc(SPACING.sm), height: wxSc(32), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  filterTriggerText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600" },
+  filterTriggerValue: { color: COLORS.text, fontWeight: "800" },
+  filterMenuCard: { alignSelf: "flex-start", minWidth: wxSc(180), marginBottom: wxSc(SPACING.sm), backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: wxSc(SPACING.xs), overflow: "hidden" },
+  filterMenuItem: { paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  filterMenuText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600" },
+  filterMenuTextOn: { color: COLORS.primary, fontWeight: "800" },
   filterChipText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700" },
   filterChipTextActive: { color: COLORS.primary },
   // Column header
@@ -1025,6 +1394,20 @@ const styles = StyleSheet.create({
   plName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "600", lineHeight: wxMs(FONT_SIZES.lg) * 1.25 },
   plMeta: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), marginTop: wxSc(SPACING.xs) },
   plMetaChips: { color: COLORS.primary, fontWeight: "700" },
+  plMetaElim: { color: COLORS.error, fontWeight: "800" },
+  plYou: { color: COLORS.primary, fontWeight: "800" },
+  // Players tab List | Standings segmented control.
+  pvSeg: { flexDirection: "row", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: 3, marginBottom: wxSc(SPACING.sm) },
+  pvSegBtn: { flex: 1, height: wxSc(34), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  pvSegBtnOn: { backgroundColor: COLORS.primary + "22" },
+  pvSegText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  pvSegTextOn: { color: COLORS.primary },
+  // Standings row.
+  stRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border },
+  stRank: { width: wxSc(26), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
+  stMain: { flex: 1, minWidth: 0 },
+  stName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
+  stChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
   badge: { paddingHorizontal: wxSc(SPACING.xs), height: wxSc(22), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
   badgeText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
 

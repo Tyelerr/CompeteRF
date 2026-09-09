@@ -42,42 +42,44 @@ export const imageUploadService = {
     return result.assets[0].uri;
   },
 
+  // Normalize a picked image extension (HEIC/HEIF are re-encoded to JPEG by the
+  // picker) and its Storage contentType.
+  _imageExt(uri: string): { ext: string; contentType: string } {
+    let ext = (uri.split(".").pop()?.toLowerCase() || "jpg").split("?")[0];
+    if (ext === "heic" || ext === "heif") ext = "jpg";
+    return { ext, contentType: `image/${ext === "jpg" ? "jpeg" : ext}` };
+  },
+
   /**
-   * Upload an image to Supabase storage.
+   * THE single native-safe binary upload. Reads the local Expo file URI into an
+   * ArrayBuffer (no browser FormData/File — those throw "Unsupported FormDataPart
+   * implementation" on RN/Expo) and uploads the raw bytes to Storage at an EXPLICIT
+   * path. Every image upload path in the app goes through this so the file conversion
+   * lives in one place.
    */
-  async uploadImage(
+  async uploadBinary(
     uri: string,
     bucket: string,
-    folder?: string,
-  ): Promise<{ success: boolean; url?: string; error?: string }> {
+    path: string,
+    opts?: { upsert?: boolean },
+  ): Promise<{ success: boolean; url?: string; path?: string; error?: string }> {
     try {
-      let ext = uri.split(".").pop()?.toLowerCase() || "jpg";
-      if (ext === "heic" || ext === "heif") {
-        ext = "jpg";
-      }
-      const fileName = `${folder ? folder + "/" : ""}${Date.now()}.${ext}`;
-
+      const { contentType } = this._imageExt(uri);
       const response = await fetch(uri);
       const blob = await response.blob();
       const arrayBuffer = await new Response(blob).arrayBuffer();
 
       const { data, error } = await supabase.storage
         .from(bucket)
-        .upload(fileName, arrayBuffer, {
-          contentType: `image/${ext === "jpg" ? "jpeg" : ext}`,
-          upsert: false,
-        });
+        .upload(path, arrayBuffer, { contentType, upsert: opts?.upsert ?? false });
 
       if (error) {
         console.error("Upload error:", error);
         return { success: false, error: error.message };
       }
 
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(data.path);
-
-      return { success: true, url: urlData.publicUrl };
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+      return { success: true, url: urlData.publicUrl, path: data.path };
     } catch (error) {
       console.error("Image upload error:", error);
       return {
@@ -85,6 +87,20 @@ export const imageUploadService = {
         error: error instanceof Error ? error.message : "Upload failed",
       };
     }
+  },
+
+  /**
+   * Convenience wrapper: auto-generates a timestamped filename under `folder` and
+   * delegates to uploadBinary (the shared native-safe uploader).
+   */
+  async uploadImage(
+    uri: string,
+    bucket: string,
+    folder?: string,
+  ): Promise<{ success: boolean; url?: string; path?: string; error?: string }> {
+    const { ext } = this._imageExt(uri);
+    const fileName = `${folder ? folder + "/" : ""}${Date.now()}.${ext}`;
+    return this.uploadBinary(uri, bucket, fileName);
   },
 
   /**

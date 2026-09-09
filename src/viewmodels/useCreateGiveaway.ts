@@ -3,6 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { giveawayService } from "../models/services/giveaway.service";
 import { imageUploadService } from "../models/services/image-upload.services";
+import { moderateStoredImage, MODERATION_UNAVAILABLE_MESSAGE } from "../models/services/image-moderation.service";
+import { normalizeImageForUpload } from "../utils/image-normalize";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export type EndType = "date" | "entries" | "both";
@@ -80,13 +82,28 @@ export const useCreateGiveaway = () => {
       setImageUri(uri);
       setIsUploadingImage(true);
 
+      // Normalize FIRST — HEIC/HEIF → JPEG so Vision can decode it (never send raw HEIC).
+      const normalized = await normalizeImageForUpload(uri);
       const result = await imageUploadService.uploadImage(
-        uri,
+        normalized.uri,
         "giveaway-images",
         "prizes",
       );
 
-      if (result.success && result.url) {
+      if (result.success && result.url && result.path) {
+        // Moderate before linking (shared SafeSearch service). FAIL CLOSED.
+        const scan = await moderateStoredImage("giveaway-images", result.path);
+        if (scan.status !== "approved") {
+          await imageUploadService.deleteImage(result.url, "giveaway-images");
+          Alert.alert(
+            scan.status === "rejected" ? "Image Not Allowed" : "Image review unavailable",
+            scan.status === "rejected"
+              ? "This image was rejected by content moderation."
+              : MODERATION_UNAVAILABLE_MESSAGE,
+          );
+          setImageUri(null);
+          return;
+        }
         setImageUrl(result.url);
       } else {
         Alert.alert("Upload Failed", result.error || "Could not upload image");

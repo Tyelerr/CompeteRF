@@ -97,11 +97,20 @@ const pickMatch = (matches: LiveMatch[], myRegId: number): LiveMatch | null => {
   return withOpponent ?? mine[0];
 };
 
-export const usePlayerLiveMatch = (playerId?: number) => {
+export const usePlayerLiveMatch = (
+  playerId?: number,
+  preferredTournamentId?: number | null,
+) => {
   const { live } = useProfileTournaments(playerId);
 
-  // First live tournament the player is in (Match Center surfaces one at a time).
-  const liveEntry = live[0] ?? null;
+  // The live tournament to surface: the caller's chosen one (multiple-live switcher) if it's
+  // present, otherwise the first (most-recently-registered) live tournament.
+  const liveEntry =
+    (preferredTournamentId != null
+      ? live.find((t) => t.tournament?.id === preferredTournamentId)
+      : null) ??
+    live[0] ??
+    null;
   const tournamentId = liveEntry?.tournament?.id;
   const myRegId = liveEntry?.id;
 
@@ -267,6 +276,13 @@ export const usePlayerLiveMatch = (playerId?: number) => {
       history,
     };
   }, [tournament, myRegId, tablesQuery.data, raceConfig]);
+
+  // NOTE: elimination persistence is intentionally NOT done here. Reconciling
+  // tournament_players.eliminated_at is restricted to authorized management (the TD/operator
+  // manage screen calls sync_tournament_eliminations, which is manager-only) so a normal
+  // participant can never set/clear another player's elimination state. This hook only reads
+  // live state for the player's own Tournament View; the review prompt reads the persisted
+  // eliminated_at from the profile query.
 
   // Adjust one side's score by +/-1. The score is capped at that side's race, and
   // when a side reaches its race the match auto-completes (winner set) so the

@@ -12,7 +12,7 @@ import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
 import { PrizePoolConfig } from "../../../../models/types/tournament-settings.types";
-import { computeBreakdown } from "../../../../utils/prize-pool";
+import { computeBreakdown, sidePotPayoutViews } from "../../../../utils/prize-pool";
 import { computeStandings } from "../../../../utils/tournament.stats";
 
 const money = (n: number): string =>
@@ -114,8 +114,7 @@ export const PayoutsView = ({
       {/* Side pots — only the players who ENTERED the pot are eligible, ordered by
           their overall finish, so a higher-placing non-entrant is skipped and the
           money falls to the next entrant. */}
-      {config.sidePots.map((sp) => {
-        const b = computeBreakdown(sidePotPools[sp.name] ?? 0, sp.places);
+      {sidePotPayoutViews(config, sidePotPools).map((sp) => {
         const entered = new Set(sidePotEntrants?.[sp.name] ?? []);
         const finishers = standings.filter((s) => entered.has(s.key));
         return (
@@ -125,10 +124,10 @@ export const PayoutsView = ({
                 {sp.name}
               </Text>
               <Text allowFontScaling={false} style={styles.poolTotal}>
-                {money(b.pool)}
+                {money(sp.pool)}
               </Text>
             </View>
-            {b.places.map((pl, i) => {
+            {sp.places.map((pl, i) => {
               const winner = finished ? finishers[i] : undefined;
               return (
                 <View key={pl.place}>

@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   image: { width: "100%", height: "100%" },
   imagePlaceholder: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center", backgroundColor: COLORS.surfaceLight },
   imagePlaceholderText: { fontSize: wxMs(40) },
-  imageClosedOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.40)" },
+  imageClosedOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.40)" },
   info: { flex: 1 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: wxSc(SPACING.xs) },
   name: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text, flex: 1, marginRight: wxSc(SPACING.sm) },

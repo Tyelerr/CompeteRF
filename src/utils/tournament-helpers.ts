@@ -1,6 +1,27 @@
 import { Tournament } from "../models/types/tournament.types";
+import { THUMBNAIL_OPTIONS } from "./tournament-form-data";
 
 // ─── Image URL mapping ──────────────────────────────────────────────────────
+
+/**
+ * Resolve the default THUMBNAIL_OPTIONS id for a game type (e.g. "9-ball" and
+ * "9-ball-scotch-doubles" → "9-ball"). Shared by every tournament creation flow
+ * so the auto-selected image is identical everywhere. Returns null when no
+ * option matches (the caller keeps whatever the TD already chose).
+ */
+export function defaultThumbnailIdForGameType(
+  gameType: string | null | undefined,
+): string | null {
+  if (!gameType) return null;
+  const normalized = gameType.replace("-scotch-doubles", "");
+  const match = THUMBNAIL_OPTIONS.find(
+    (thumb) =>
+      thumb.gameType === gameType ||
+      thumb.gameType === normalized ||
+      (!!thumb.gameType && normalized.toLowerCase().includes(thumb.gameType)),
+  );
+  return match ? match.id : null;
+}
 
 const GAME_TYPE_IMAGE_MAP: Record<string, string> = {
   "8-ball": "8-ball.jpeg",

@@ -45,7 +45,7 @@ function LegalViewerModal({ visible, title, sections, customRulesText, onClose }
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={legalStyles.mobileModalOuter}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={legalStyles.mobileCard}>
           <View style={legalStyles.header}>
             <Pressable onPress={onClose} style={legalStyles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
@@ -260,7 +260,7 @@ function renderShell(content: React.ReactNode, onClose: () => void, web: boolean
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.mobileModalOuter}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.mobileCard} onStartShouldSetResponder={() => true}>
           {content}
         </View>

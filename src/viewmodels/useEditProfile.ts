@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { imageUploadService } from "../models/services/image-upload.services";
+import { moderateStoredImage, MODERATION_UNAVAILABLE_MESSAGE } from "../models/services/image-moderation.service";
+import { normalizeImageForUpload } from "../utils/image-normalize";
 import { useAuthContext } from "../providers/AuthProvider";
 import { US_STATES } from "../utils/constants";
 import { buildFullName } from "../utils/name.utils";
@@ -160,14 +162,30 @@ export const useEditProfile = (): UseEditProfileReturn => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error("No authenticated user found");
 
+      // Normalize FIRST — HEIC/HEIF → JPEG so Vision can decode it (never send raw HEIC).
+      const normalized = await normalizeImageForUpload(uri);
       const result = await imageUploadService.uploadImage(
-        uri,
+        normalized.uri,
         "profile-images",
         `avatars/${session.user.id}`,
       );
 
-      if (!result.success || !result.url) {
+      if (!result.success || !result.url || !result.path) {
         throw new Error(result.error || "Upload failed");
+      }
+
+      // Moderate the uploaded avatar (same shared SafeSearch service as tournament
+      // images). FAIL CLOSED: if not approved, remove the temp upload and keep the
+      // previous avatar — never publish an unscanned image.
+      const scan = await moderateStoredImage("profile-images", result.path, session.user.id);
+      if (scan.status !== "approved") {
+        await imageUploadService.deleteImage(result.url, "profile-images");
+        if (scan.status === "rejected") {
+          Alert.alert("Image Not Allowed", "This image was rejected by content moderation.");
+        } else {
+          Alert.alert("Image review unavailable", MODERATION_UNAVAILABLE_MESSAGE);
+        }
+        return;
       }
 
       setAvatarUrl(result.url);

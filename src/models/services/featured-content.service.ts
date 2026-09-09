@@ -1,6 +1,7 @@
 ﻿import { supabase } from "@/src/lib/supabase";
-import { decode } from "base64-arraybuffer";
-import * as FileSystem from "expo-file-system/legacy";
+import { imageUploadService } from "./image-upload.services";
+import { moderateStoredImage } from "./image-moderation.service";
+import { normalizeImageForUpload } from "../../utils/image-normalize";
 
 const BUCKET_NAME = "featured-content-images";
 
@@ -376,30 +377,31 @@ class FeaturedImageService {
     entityId: number | string,
   ): Promise<string | null> {
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: "base64",
-      });
-
-      const extension = uri.split(".").pop()?.toLowerCase() || "jpg";
-      const contentType =
-        extension === "png"
-          ? "image/png"
-          : extension === "webp"
-            ? "image/webp"
-            : "image/jpeg";
-
+      // Normalize FIRST — HEIC/HEIF → JPEG so Vision can decode it (never send raw HEIC).
+      const normalized = await normalizeImageForUpload(uri);
       const timestamp = Date.now();
-      const filePath = `${type}/${type.slice(0, -1)}_${entityId}_${timestamp}.${extension}`;
+      const filePath = `${type}/${type.slice(0, -1)}_${entityId}_${timestamp}.${normalized.ext}`;
 
-      const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(filePath, decode(base64), {
-          contentType,
-          upsert: true,
-        });
+      // Native-safe binary upload via the shared uploader (no browser FormData /
+      // hand-rolled base64).
+      const uploaded = await imageUploadService.uploadBinary(normalized.uri, BUCKET_NAME, filePath, {
+        upsert: true,
+      });
+      const error = uploaded.success ? null : { message: uploaded.error ?? "Upload failed" };
+      const data = { path: uploaded.path ?? filePath };
 
       if (error) {
         console.error("âŒ Upload error:", error.message);
+        return null;
+      }
+
+      // Moderate before publishing (shared SafeSearch service). FAIL CLOSED: any
+      // non-approved result removes the temp object and returns null so nothing
+      // unscanned is ever linked. Admin callers surface their own error on null.
+      const scan = await moderateStoredImage(BUCKET_NAME, data.path);
+      if (scan.status !== "approved") {
+        await supabase.storage.from(BUCKET_NAME).remove([data.path]).catch(() => {});
+        console.warn(`Featured image not published (${scan.status}): ${scan.reason ?? ""}`);
         return null;
       }
 

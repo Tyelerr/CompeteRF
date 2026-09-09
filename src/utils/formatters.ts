@@ -54,3 +54,18 @@ export function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
+/**
+ * Format an elapsed duration (in ms) as strict zero-padded HH:MM:SS.
+ * The single source of truth for every live/history Chip match timer
+ * (Admin, spectator, and profile all render this so they stay identical).
+ * @example 5000 -> "00:00:05", 222000 -> "00:03:42", 4509000 -> "01:15:09", 48958000 -> "13:35:58"
+ */
+export function formatElapsedClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+

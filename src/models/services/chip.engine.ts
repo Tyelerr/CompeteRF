@@ -120,12 +120,100 @@ const roundSeat = (s: ChipState, id: string): void => {
   if (s.roundRemaining) s.roundRemaining = s.roundRemaining.filter((x) => x !== id);
 };
 
-// Pull the front-most queued entry that is NOT the table's just-beaten player
-// (table-specific anti-repeat) and, in a round, is still on roundRemaining.
-const takeChallenger = (s: ChipState, table: ChipTable): string | null => {
-  const blocked = table.lastLoserId ?? null;
-  const idx = s.queue.findIndex((id) => id !== blocked && roundSeatable(s, id));
-  if (idx === -1) return null; // no eligible challenger → the holder waits
+// ── Anti-repeat: prevent an IMMEDIATE rematch (most-recent-opponent) ────────────
+// The anti-repeat is keyed to each player's OWN most-recent completed opponent, NOT
+// to the holder's whole streak. A queued team is blocked from a table only if the
+// opponent of its single most-recent finished match IS that table's current holder.
+// The moment that team plays anyone else (any table), its most-recent opponent
+// changes and it becomes eligible against the old holder again.
+//
+// mostRecentOpponent: the other side of this entry's most-recent finished match,
+// across ALL tables (so a match elsewhere correctly updates eligibility). Derived
+// from match history — no stored field, correct across reloads/restores. Returns
+// null if the entry has no completed match yet (fresh entrant → never blocked).
+export const mostRecentOpponent = (s: ChipState, entryId: string): string | null => {
+  let best: ChipMatch | null = null;
+  for (const m of s.matches) {
+    if (m.status === "in_progress" || !m.endedAt) continue;
+    if (m.aId !== entryId && m.bId !== entryId) continue;
+    if (!best || new Date(m.endedAt).getTime() > new Date(best.endedAt as string).getTime())
+      best = m;
+  }
+  return best ? (best.aId === entryId ? best.bId : best.aId) : null;
+};
+
+// The queue "Rematch skipped" chip reflects an ACTUAL skip that is STILL in effect —
+// never a prediction and never a stale record. A queued team is marked only when some
+// table satisfies ALL of:
+//   • it has a LIVE pending challenger selection (pendingChallengerId set, no live
+//     match) — the decision that produced the skip still exists. The moment that
+//     matchup starts, is cancelled, cleared, or re-selected, pendingChallengerId is
+//     gone, so the chip clears regardless of which code path ended it.
+//   • the team is in that table's rematchSkipped — it was ACTUALLY bypassed for THIS
+//     selection (not merely a queued team whose opponent happens to conflict, and not
+//     a team sitting deeper that was never evaluated).
+//   • the team is STILL blocked — its most-recent opponent is still that holder. If
+//     the team has since played elsewhere it's eligible again, so the chip clears.
+// This makes the display self-correcting even if an old rematchSkipped array lingers
+// on a table whose pending was released without clearing it.
+export const rematchSkippedLabel = (s: ChipState, entryId: string): string | null => {
+  if (s.shuffleRound) return null; // anti-repeat is off during a shuffle round — never label
+  for (const t of s.tables) {
+    if (t.matchId || !t.pendingChallengerId) continue; // no live pending selection
+    if (!(t.rematchSkipped ?? []).includes(entryId)) continue; // not actually skipped here
+    if (mostRecentOpponent(s, entryId) !== (t.holderId ?? null)) continue; // no longer blocked
+    return t.label;
+  }
+  return null;
+};
+
+// Pull a challenger for the winner-stays holder. Anti-repeat (immediate rematch):
+// FIFO — inspect the front-most eligible team; if its most-recent opponent is this
+// holder, skip forward to the first queued team whose most-recent opponent is NOT the
+// holder. If NO such team exists (everyone waiting last played this holder), fall back
+// to the front-most eligible (allow the rematch) rather than deadlocking the table.
+// Round gating is preserved. Records ONLY the teams actually passed over on
+// table.rematchSkipped (transient) for the Next Match modal + queue chip.
+const takeChallenger = (s: ChipState, table: ChipTable, by?: number | null): string | null => {
+  const holder = table.holderId ?? null;
+  const isBlocked = (id: string): boolean =>
+    holder != null && mostRecentOpponent(s, id) === holder;
+  const firstIdx = s.queue.findIndex((id) => roundSeatable(s, id));
+  if (firstIdx === -1) {
+    table.rematchSkipped = [];
+    return null; // no eligible challenger at all → the holder waits
+  }
+  // Shuffle round: anti-repeat is DISABLED — the round's priority is that every
+  // eligible entry gets its one required turn, so never reorder/skip to dodge a
+  // rematch (and never emit a "Rematch skipped" note). Take the front-most eligible.
+  if (s.shuffleRound) {
+    table.rematchSkipped = [];
+    return s.queue.splice(firstIdx, 1)[0];
+  }
+  const freshIdx = s.queue.findIndex((id) => roundSeatable(s, id) && !isBlocked(id));
+  let idx = firstIdx;
+  const skipped: string[] = [];
+  if (freshIdx !== -1 && freshIdx !== firstIdx) {
+    idx = freshIdx;
+    // Only the eligible teams we passed over BECAUSE they'd immediately rematch.
+    for (let i = firstIdx; i < freshIdx; i++) {
+      const id = s.queue[i];
+      if (roundSeatable(s, id) && isBlocked(id)) skipped.push(id);
+    }
+    if (skipped.length) {
+      const holderEntry = holder ? entryById(s, holder) : null;
+      const names = skipped
+        .map((id) => { const e = entryById(s, id); return e ? teamName(e) : "a team"; })
+        .join(", ");
+      pushEvent(
+        s,
+        "manual",
+        `Rematch skipped — ${names} just played ${holderEntry ? teamName(holderEntry) : "the holder"} (${table.label})`,
+        by,
+      );
+    }
+  }
+  table.rematchSkipped = skipped; // transient: who was skipped for THIS assignment
   const [id] = s.queue.splice(idx, 1);
   return id;
 };
@@ -165,6 +253,7 @@ const startMatch = (
   table.matchId = m.id;
   table.status = "in_use";
   table.holderId = null;
+  table.rematchSkipped = []; // the pending "Rematch skipped" note is consumed on start
   for (const id of [aId, bId]) {
     const e = entryById(s, id);
     if (e) {
@@ -182,6 +271,14 @@ const startMatch = (
 const seatAllTables = (s: ChipState): void => {
   // A pending reshuffle freezes seating — matches finish, nobody new is seated.
   if (s.reshufflePending) return;
+  // Opening phase ("Start All"): the tournament has STARTED but no match has begun
+  // yet. Opening matchups are ANNOUNCED — seated as holder + pending challenger with
+  // NO timer — and wait for the TD to tap Start All, which starts them all at once.
+  // This reuses the exact "assigned, awaiting Start Match" state that winner-stays
+  // (pendingChallengerId) and assignFinals already use. The instant any match starts,
+  // matches is non-empty and preStart is false forever after, so mid-event fresh
+  // pairs (an emptied table reopening) still start immediately as before.
+  const preStart = !!s.startedAt && s.matches.length === 0;
   let progressed = true;
   // Loop until no table can be seated (a freed challenger may enable another).
   while (progressed) {
@@ -213,7 +310,19 @@ const seatAllTables = (s: ChipState): void => {
         if (pair) {
           const [a, b] = pair;
           table.lastLoserId = null; // fresh seat, no anti-repeat carry-over
-          startMatch(s, table, a, b);
+          if (preStart) {
+            // Announce the opening matchup (no timer) — starts on Start All.
+            table.holderId = a;
+            table.pendingChallengerId = b;
+            table.status = "open";
+            for (const id of [a, b]) {
+              const e = entryById(s, id);
+              if (e) { e.status = "playing"; e.tableId = table.id; }
+              roundSeat(s, id);
+            }
+          } else {
+            startMatch(s, table, a, b);
+          }
           progressed = true;
         }
       }
@@ -232,6 +341,7 @@ const releasePending = (s: ChipState, t: ChipTable): void => {
     if (!s.queue.includes(e.id)) s.queue.unshift(e.id);
   }
   t.pendingChallengerId = null;
+  t.rematchSkipped = []; // the selection that produced this pending is gone
 };
 
 // Begin draining the board: send any waiting winner (and assigned-but-not-started
@@ -245,7 +355,11 @@ const startDrain = (
 ): void => {
   s.reshufflePending = true;
   s.shuffleReady = false;
-  s.shuffleRound = false;
+  // Keep shuffleRound TRUE through a round-completion drain so the ready state reads as
+  // "Round N Complete" (+ Start Shuffle). Clear it for the INITIAL modal-confirm drain
+  // (shuffle started while matches were live) so the ready state reads "Ready to Shuffle"
+  // (+ Start Shuffle). Either way the TD taps Start Shuffle to redraw — no auto-advance.
+  s.shuffleRound = reason === "round";
   s.roundRemaining = [];
   for (const t of s.tables) {
     if (t.inactive || t.matchId) continue;
@@ -364,11 +478,13 @@ export const reconcileMatches = (input: ChipState): ChipState => {
       t.matchId = null;
       t.holderId = null;
       t.pendingChallengerId = null;
+      t.rematchSkipped = [];
       t.status = "open";
     } else if (t.matchId && !liveNow.has(t.matchId)) {
       // Dangling reference: clear it, but keep a genuine staying winner as holder.
       t.matchId = null;
       t.pendingChallengerId = null;
+      t.rematchSkipped = [];
       const h = t.holderId ? entryById(s, t.holderId) : null;
       if (!h || h.status === "eliminated") t.holderId = null;
       t.status = "open";
@@ -408,6 +524,41 @@ export const reconcileQueue = (input: ChipState): ChipState => {
     if (e.status === "eliminated") continue;
     if (onTable.has(e.id)) continue;
     if (e.status !== "queued") { e.status = "queued"; e.tableId = null; }
+  }
+  return s;
+};
+
+// Safety reconcile: a team with 0 chips is OUT — always. The match-loss path
+// (recordWinner) and chip adjustments already eliminate on reaching 0, but an entry
+// can arrive at 0 by other routes (seeded from a 0/blank Fargo tier, an import, a
+// restore). This guard catches ANY non-eliminated entry sitting at ≤0 chips and
+// eliminates it: pulls it from the queue and frees any table slot it holds, so a
+// 0-chip team can never linger in active rotation. Skips entries currently IN a live
+// match (that resolves through recordWinner) and only runs while the tournament is
+// live. Idempotent — returns input unchanged when nothing is at 0.
+export const reconcileEliminations = (input: ChipState): ChipState => {
+  if (!input.startedAt || input.finishedAt) return input;
+  const inLive = new Set<string>();
+  for (const m of input.matches) {
+    if (m.status === "in_progress") { inLive.add(m.aId); inLive.add(m.bId); }
+  }
+  const hasVictim = input.entries.some(
+    (e) => e.status !== "eliminated" && (e.chips ?? 0) <= 0 && !inLive.has(e.id),
+  );
+  if (!hasVictim) return input;
+  const s = clone(input);
+  const nowIso = new Date().toISOString();
+  for (const e of s.entries) {
+    if (e.status === "eliminated" || (e.chips ?? 0) > 0 || inLive.has(e.id)) continue;
+    e.status = "eliminated";
+    e.eliminatedAt = e.eliminatedAt ?? nowIso;
+    e.tableId = null;
+    s.queue = s.queue.filter((id) => id !== e.id);
+    for (const t of s.tables) {
+      if (t.holderId === e.id) { t.holderId = null; t.lastLoserId = null; t.status = "open"; }
+      if (t.pendingChallengerId === e.id) t.pendingChallengerId = null;
+    }
+    pushEvent(s, "elimination", `${teamName(e)} eliminated (out of chips)`, null, { entryId: e.id });
   }
   return s;
 };
@@ -654,7 +805,88 @@ export const startPendingMatch = (
   const challengerId = t.pendingChallengerId;
   t.pendingChallengerId = null;
   startMatch(s, t, holderId, challengerId);
-  pushEvent(s, "manual", `${t.label} match started`, by);
+  pushEvent(s, "manual", `${t.label} match started`, by, { act: "match_started" });
+  return s;
+};
+
+// A table showing an OPENING matchup still awaiting Start: a fresh holder + pending
+// pair with no live match, where the holder has NOT yet won on this table THIS round
+// (streak === 0). Keying on streak (reset to 0 at the tournament start AND at every
+// reshuffle) — not lifetime wins/losses — means the SAME opening flow applies to each
+// Shuffle round's opening matchups, not just the very first tournament kickoff. This
+// distinguishes the opening kickoff from a normal winner-stays pending challenger
+// (whose holder just won → streak > 0). Opening tables are the only ones the "Start
+// All / Start Remaining" control acts on.
+const isOpeningWaitTable = (s: ChipState, t: ChipTable): boolean => {
+  if (t.inactive || t.matchId || !t.holderId || !t.pendingChallengerId) return false;
+  const h = entryById(s, t.holderId);
+  return !!h && (h.streak ?? 0) === 0;
+};
+
+// How many opening matchups are still waiting to start.
+export const openingWaitCount = (s: ChipState): number =>
+  s.tables.filter((t) => isOpeningWaitTable(s, t)).length;
+
+// A table showing a genuine WINNER-STAYS next challenger: a pending challenger that
+// exists because a COMPLETED match freed the table, so the holder has already played
+// (wins > 0). This — NOT the mere existence of a pending challenger — is what the
+// "Next Match / Incoming Team" callout targets. It excludes an opening matchup that
+// is merely Waiting to Start (isOpeningWaitTable: holder has never played), so
+// assigning/starting the opening never triggers a callout; only recording a winner
+// (which stays the holder and pulls the next challenger) does — independently per
+// table, the moment that table's own match completes.
+export const isPostMatchPending = (s: ChipState, t: ChipTable): boolean => {
+  if (t.inactive || t.matchId || !t.holderId || !t.pendingChallengerId) return false;
+  const h = entryById(s, t.holderId);
+  // streak > 0 ⇒ the holder just won a game on THIS table this round (a winner staying).
+  // Reset to 0 at each reshuffle, so a new round's opening holders never look post-match
+  // — the callout only fires once a table records its first result of the round.
+  return !!h && (h.streak ?? 0) > 0;
+};
+
+// The state of the global opening-kickoff control, driving its label + visibility:
+//   • "all"       — nothing has started yet (Start All)
+//   • "remaining" — some opening tables are live, others still waiting (Start Remaining)
+//   • null        — no opening table is waiting (control reverts to Shuffle Mode)
+export const startAllState = (s: ChipState): "all" | "remaining" | null => {
+  if (!s.startedAt || s.finishedAt) return null;
+  if (openingWaitCount(s) === 0) return null;
+  // "all" while NO active table has a live match yet (fresh opening — tournament OR a
+  // reshuffle round); "remaining" once at least one is live. (Can't key on the global
+  // matches.length here — it's non-zero after the first round — so read live tables.)
+  const anyLive = s.tables.some(
+    (t) =>
+      !t.inactive &&
+      !!t.matchId &&
+      s.matches.some((m) => m.id === t.matchId && m.status === "in_progress"),
+  );
+  return anyLive ? "remaining" : "all";
+};
+
+// "Start All" / "Start Remaining": start EVERY opening table still waiting to start,
+// all at the SAME instant so their timers stay in sync. Only touches opening tables
+// (fresh holder + pending, no live match) — it never starts a mid-game winner-stays
+// pending matchup, and never resets or restarts a table that is already Live. No-op
+// when nothing is waiting.
+export const startAllMatches = (
+  input: ChipState,
+  by?: number | null,
+): ChipState => {
+  const s = clone(input);
+  const waiting = s.tables.filter((t) => isOpeningWaitTable(s, t));
+  if (!waiting.length) return input;
+  const startedAt = new Date().toISOString();
+  for (const t of waiting) {
+    const holderId = t.holderId as string;
+    const challengerId = t.pendingChallengerId as string;
+    t.pendingChallengerId = null;
+    startMatch(s, t, holderId, challengerId);
+    // startMatch stamps startedAt individually; align them all to one instant.
+    const m = s.matches.find((mm) => mm.id === t.matchId);
+    if (m) m.startedAt = startedAt;
+  }
+  const n = waiting.length;
+  pushEvent(s, "manual", `Started ${n} match${n === 1 ? "" : "es"}`, by, { act: "matches_started" });
   return s;
 };
 
@@ -695,7 +927,7 @@ export const startChipTournament = (input: ChipState): ChipState => {
   s.finishedAt = null;
   s.winnerId = null;
   seatAllTables(s);
-  pushEvent(s, "manual", `Tournament started · ${playing.length} entries`);
+  pushEvent(s, "manual", `Tournament started · ${playing.length} entries`, null, { act: "tournament_started" });
   return s;
 };
 
@@ -794,7 +1026,7 @@ export const recordWinner = (
       t.status = "open";
     }
     alive[0].status = "queued";
-    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by);
+    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by, { act: "champion", entryId: alive[0].id });
     return s;
   }
 
@@ -904,7 +1136,7 @@ export const forfeitEntry = (
       t.status = "open";
     }
     alive[0].status = "queued";
-    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by);
+    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by, { act: "champion", entryId: alive[0].id });
   }
   return s;
 };
@@ -944,23 +1176,71 @@ export const reorderQueue = (
 };
 
 // ── manual chip adjustments ───────────────────────────────────────────────────
+// Metadata for a MANUAL director chip override (distinct from engine-controlled chip
+// changes like match results / losses / buy-backs). Required while live so every manual
+// change to the live field is attributable and auditable.
+export interface ChipAdjustMeta {
+  reason?: string | null;
+  notes?: string | null;
+  actorId?: number | null;
+  actorName?: string | null;
+}
+
+// Manual chip override (the TD's +/- controls). NOT used by engine gameplay — match
+// results adjust chips inside recordWinner, never here. Guards while live:
+//   • requires a reason (meta.reason) — a manual live override must be attributable;
+//   • an actively-PLAYING player can never be manually reduced to 0 (elimination must
+//     come from the match-result flow), so the change is refused if it would zero them.
+// A QUEUED player reduced to 0 is eliminated through the existing path (below), same as
+// before. Setup (pre-start) adjustments are unrestricted (no reason needed).
 export const adjustChips = (
   input: ChipState,
   entryId: string,
   delta: number,
-  by?: number | null,
+  meta?: ChipAdjustMeta | null,
 ): ChipState => {
   const s = clone(input);
   const e = entryById(s, entryId);
   if (!e) return input;
-  e.chips = Math.max(0, e.chips + delta);
-  pushEvent(s, "chip_adjust", `${teamName(e)} ${delta > 0 ? "+" : ""}${delta} chip → ${e.chips}`, by, { entryId, delta, resulting: e.chips });
+  const live = !!s.startedAt && !s.finishedAt;
+  // Defense-in-depth: a live manual override with no reason is refused at the engine, so
+  // no caller (stale UI, another component) can silently mutate the live field.
+  if (live && !meta?.reason) return input;
+  const liveMatch = s.matches.find(
+    (m) => m.status === "in_progress" && (m.aId === entryId || m.bId === entryId),
+  );
+  const playing = e.status === "playing" || !!liveMatch;
+  const oldChips = e.chips;
+  const resulting = Math.max(0, e.chips + delta);
+  // Never let a manual override eliminate an actively-playing player via a chip edit.
+  if (live && playing && resulting <= 0) return input;
+  e.chips = resulting;
+  const reasonSuffix = meta?.reason ? ` — ${meta.reason}` : "";
+  pushEvent(
+    s,
+    "chip_adjust",
+    `${teamName(e)} chips ${oldChips} → ${e.chips} (${delta > 0 ? "+" : ""}${delta})${reasonSuffix}`,
+    meta?.actorId ?? null,
+    {
+      entryId,
+      delta,
+      resulting: e.chips,
+      oldChips,
+      newChips: e.chips,
+      reason: meta?.reason ?? null,
+      notes: meta?.notes ?? null,
+      actorName: meta?.actorName ?? null,
+      playerState: e.status,
+      tableId: e.tableId ?? null,
+      matchId: liveMatch?.id ?? null,
+    },
+  );
   if (e.chips <= 0 && e.status === "queued") {
     e.status = "eliminated";
     e.eliminatedAt = new Date().toISOString();
     s.queue = s.queue.filter((id) => id !== entryId);
     roundSeat(s, entryId); // drop from roundRemaining so it can't block completion
-    pushEvent(s, "elimination", `${teamName(e)} eliminated`, by, { entryId });
+    pushEvent(s, "elimination", `${teamName(e)} eliminated`, meta?.actorId ?? null, { entryId });
   }
   return s;
 };
@@ -986,7 +1266,7 @@ export const buyBackEntry = (
   if (!s.queue.includes(entryId)) s.queue.push(entryId);
   s.finishedAt = null;
   s.winnerId = null;
-  pushEvent(s, "manual", `${teamName(e)} bought back in (${e.chips} chips)`, by);
+  pushEvent(s, "manual", `${teamName(e)} bought back in (${e.chips} chips)`, by, { act: "buyback", entryId });
   seatAllTables(s);
   return s;
 };
@@ -1029,7 +1309,11 @@ export const finalizeReshuffle = (
   tableCount: number | null,
   by?: number | null,
 ): ChipState => {
-  const s = clone(input);
+  // Eliminate any 0-chip team BEFORE the draw. Otherwise a team sitting at 0 chips but
+  // not yet flagged eliminated would be treated as "alive", get seated onto a table,
+  // and then be removed by the post-redraw elimination reconcile — leaving that table
+  // empty even though eligible teams remained (the "Table 2 stays Available" bug).
+  const s = clone(reconcileEliminations(input));
   const alive = aliveEntries(s);
   if (tableCount != null) {
     let activated = 0;
@@ -1054,6 +1338,12 @@ export const finalizeReshuffle = (
     t.lastLoserId = null;
     t.pendingChallengerId = null;
     t.closing = false;
+    // A reshuffle is a full redraw: every ACTIVE table returns to play, so a stale
+    // "lock" (a transient mid-round "don't send a match here") does NOT carry into the
+    // new round — otherwise a locked table is silently skipped forever. To sit a table
+    // out of a round, the TD reduces tables (inactive) in the Shuffle modal.
+    t.locked = false;
+    t.rematchSkipped = []; // stale anti-repeat notes never carry into the new round
   }
   // Drop any lingering in-progress matches (should be none if matches finished).
   s.matches = s.matches.filter((m) => m.status !== "in_progress");
@@ -1061,12 +1351,111 @@ export const finalizeReshuffle = (
   s.reshuffleCount = (s.reshuffleCount ?? 0) + 1;
   s.reshufflePending = false;
   s.reshuffleTableCount = null;
+  s.reshuffleRemovingIds = []; // removals are finalized (closing tables now inactive)
   s.shuffleReady = false;
   // A new round begins: every shuffled survivor is round-remaining until seated.
   s.shuffleRound = !!s.shuffleMode;
   s.roundRemaining = s.shuffleMode ? [...s.queue] : [];
-  pushEvent(s, "shuffle", `Reshuffle #${s.reshuffleCount} · ${alive.length} entries`, by);
-  seatAllTables(s);
+  pushEvent(s, "shuffle", `Reshuffle #${s.reshuffleCount} · ${alive.length} entries`, by, { act: "reshuffled" });
+  // ANNOUNCE the new round's opening matchups (holder + pending challenger, NO timer)
+  // — exactly like the tournament's opening. The TD starts them via Start All / Start
+  // Remaining / individual Start Match; nothing auto-starts. We seat the pairs here
+  // (rather than via seatAllTables, whose preStart branch only covers matches.length
+  // === 0) so every reshuffle opens as "Waiting to Start". Because every survivor's
+  // streak was reset to 0 above, these holders read as opening-wait (isOpeningWaitTable)
+  // and no "Next Match / Incoming Team" callout fires until a table records its first
+  // result this round (isPostMatchPending → holder streak > 0).
+  for (const table of s.tables) {
+    if (table.inactive || table.closing || table.locked) continue;
+    if (table.holderId || table.pendingChallengerId || table.matchId) continue;
+    const pair = takePair(s);
+    if (!pair) break;
+    const [a, b] = pair;
+    table.lastLoserId = null;
+    table.holderId = a;
+    table.pendingChallengerId = b;
+    table.status = "open";
+    for (const id of [a, b]) {
+      const e = entryById(s, id);
+      if (e) { e.status = "playing"; e.tableId = table.id; }
+      roundSeat(s, id);
+    }
+  }
+  return s;
+};
+
+// Auto-ASSIGN the FINALS (reserve, do NOT start). When the field settles to
+// exactly two alive players with no active match and no assignment yet, reserve
+// them onto a table as holder + pendingChallenger — the SAME "assigned, awaiting
+// Start Match" state normal winner-stays uses (table.holderId + pendingChallengerId
+// + no matchId, consumed by startPendingMatch). The TD still taps Start Match to go
+// live. This deliberately does NOT call finalizeReshuffle/startMatch (that would
+// start immediately). It runs from the VM settle path (and on load), never render:
+//   • Assigns once — if a table already holds both finalists (assigned) or a match
+//     is in progress, it returns the input unchanged (duplicate protection).
+//   • Repeats — after a final game whose loser still has chips, the board settles
+//     to "winner is holder, loser queued" (anti-repeat blocks the rematch); this
+//     reserves the loser as the pending challenger on the winner's table (clearing
+//     lastLoserId so the two CAN face off), again awaiting Start Match.
+//   • No table — if nothing is free it no-ops (UI: "waiting for an available
+//     table"); it auto-assigns on the next settle once a table frees up.
+// Chip-loss, elimination, winner selection and results are untouched: the reserved
+// match still starts via startPendingMatch and resolves via recordWinner.
+export const assignFinals = (input: ChipState): ChipState => {
+  if (!input.startedAt || input.finishedAt) return input;
+  const alive = aliveEntries(input);
+  if (alive.length !== 2) return input;
+  if (input.matches.some((m) => m.status === "in_progress")) return input; // playing
+  // Already assigned (a table holds a holder + pending challenger, no match)?
+  if (input.tables.some((t) => t.holderId && t.pendingChallengerId && !t.matchId))
+    return input; // duplicate protection
+  const seatable = (t: ChipTable) =>
+    !t.inactive && !t.closing && !t.locked && !t.matchId;
+  // Prefer the table where a finalist is already the holder (between-games); else
+  // any empty seatable table (fresh finals).
+  const table =
+    input.tables.find(
+      (t) => seatable(t) && !!t.holderId && alive.some((e) => e.id === t.holderId),
+    ) ??
+    input.tables.find(
+      (t) => seatable(t) && !t.holderId && !t.pendingChallengerId,
+    );
+  if (!table) return input; // no table free → UI shows "waiting for a table"
+
+  const s = clone(input);
+  const tbl = s.tables.find((t) => t.id === table.id)!;
+  const holderId =
+    tbl.holderId && alive.some((e) => e.id === tbl.holderId)
+      ? tbl.holderId
+      : alive[0].id;
+  const challengerId = holderId === alive[0].id ? alive[1].id : alive[0].id;
+  tbl.holderId = holderId;
+  tbl.pendingChallengerId = challengerId;
+  tbl.matchId = null;
+  tbl.lastLoserId = null; // finals: the two MUST face off — clear anti-repeat
+  tbl.status = "open";
+  // Reserve both on this table and pull them from the waiting queue.
+  s.queue = s.queue.filter((id) => id !== holderId && id !== challengerId);
+  for (const id of [holderId, challengerId]) {
+    const e = entryById(s, id);
+    if (e) {
+      e.status = "playing";
+      e.tableId = tbl.id;
+    }
+  }
+  // Finals is not a shuffle round — clear any lingering round/drain state.
+  s.shuffleRound = false;
+  s.roundRemaining = [];
+  s.reshufflePending = false;
+  s.shuffleReady = false;
+  s.reshuffleRemovingIds = []; // the pending cycle is superseded by finals
+  pushEvent(
+    s,
+    "manual",
+    `Finals assigned — ${teamName(entryById(s, holderId)!)} vs ${teamName(entryById(s, challengerId)!)} on ${tbl.label}`,
+    null,
+    { act: "finals" },
+  );
   return s;
 };
 
@@ -1092,6 +1481,7 @@ export const setShuffleMode = (
     s.shuffleRound = false;
     s.roundRemaining = [];
     s.reshuffleTableCount = null;
+    s.reshuffleRemovingIds = [];
     pushEvent(s, "manual", "Shuffle Mode disabled", by);
     if (wasActive && s.startedAt && !s.finishedAt) seatAllTables(s);
   }
@@ -1106,6 +1496,43 @@ export const beginShuffle = (input: ChipState, by?: number | null): ChipState =>
   const s = clone(input);
   if (s.reshufflePending || s.shuffleReady) return input;
   s.shuffleMode = true;
+  s.reshuffleRemovingIds = [];
+  startDrain(s, by, "initial");
+  return s;
+};
+
+// Begin a shuffle cycle WITH the TD's Reduce-tables selection applied first. Empty
+// selected tables go inactive immediately; live ones are marked "closing after match"
+// — and we record EXACTLY those (shuffle-owned closings) so a later Cancel Shuffle can
+// reopen only them, never a table the TD closed manually. Then drain, same as
+// beginShuffle. This is the ONE authoritative entry the Shuffle modal confirm uses.
+export const startShuffleCycle = (
+  input: ChipState,
+  removeTableIds: string[],
+  by?: number | null,
+): ChipState => {
+  // Record which selected tables THIS shuffle actually removes — computed from the
+  // PRE-shuffle state: a table that was genuinely active (not already inactive, not
+  // already closing) is shuffle-owned, whether it then goes inactive (empty) or
+  // closing (live). A table already closing from a manual "Close After Current Match"
+  // is deliberately EXCLUDED, so Cancel Shuffle leaves that manual decision intact.
+  const owned = removeTableIds.filter((id) => {
+    const t = input.tables.find((x) => x.id === id);
+    return !!t && !t.inactive && !t.closing;
+  });
+  const withRemovals = removeTableIds.length ? closeTables(input, removeTableIds, by) : input;
+  if (withRemovals.reshufflePending || withRemovals.shuffleReady) return withRemovals;
+  const s = clone(withRemovals);
+  s.shuffleMode = true;
+  // ZERO live matches at confirm → nothing to wait for: redraw straight into Round 1
+  // (the modal was the confirmation; NO separate Start Shuffle step). LIVE matches →
+  // freeze + drain ("Finishing the Round") and rest at "Ready to Shuffle" until the TD
+  // taps Start Shuffle (which runs finalizeReshuffle then). Later round completions also
+  // rest at ready (via startDrain "round"); every non-immediate redraw is TD-triggered.
+  if (!s.matches.some((m) => m.status === "in_progress")) {
+    return finalizeReshuffle(s, null, by);
+  }
+  s.reshuffleRemovingIds = owned; // tracked for the drain window (Cancel can restore)
   startDrain(s, by, "initial");
   return s;
 };
@@ -1133,6 +1560,20 @@ export const cancelReshuffle = (input: ChipState, by?: number | null): ChipState
   s.shuffleRound = false;
   s.roundRemaining = [];
   s.reshuffleTableCount = null;
+  // Cancelling resumes normal play — so undo THIS shuffle's table-removal intent for
+  // EVERY table it removed (tracked in reshuffleRemovingIds), whichever way it went:
+  //   • live table left "closing after match" → clear closing (stays active)
+  //   • empty table made inactive by the shuffle → reactivate it
+  // Tables the TD closed/deactivated for any OTHER reason (a manual "Close After
+  // Current Match", or a pre-existing inactive table) are NOT in the set and are left
+  // exactly as they are. seatAllTables (below) re-seats the restored tables.
+  const shuffleOwned = new Set(s.reshuffleRemovingIds ?? []);
+  for (const t of s.tables) {
+    if (!shuffleOwned.has(t.id)) continue;
+    if (t.closing) t.closing = false;
+    if (t.inactive) { t.inactive = false; t.status = "open"; }
+  }
+  s.reshuffleRemovingIds = [];
   pushEvent(s, "manual", "Shuffle cancelled", by);
   if (s.startedAt && !s.finishedAt) seatAllTables(s);
   return s;
@@ -1197,19 +1638,47 @@ export const removeTable = (
   }
   s.tables = s.tables.filter((t) => t.id !== tableId);
   pushEvent(s, "table_removed", `Removed ${table.label}`, by);
-  if (s.startedAt && !s.finishedAt) seatAllTables(s);
+  // Table removal never auto-seats/starts a match (table-management only). Requeued
+  // players (above) are seated by the normal flow, not here.
   return s;
 };
 
-// Recommended number of ACTIVE tables for the field size, to always keep a small
-// queue (winner-stays). ~1 table per 3 teams, with end-game overrides so a queue
-// survives as the field shrinks (e.g. 4 teams → 1 table: 2 play, 2 wait).
-export const recommendedActiveTables = (remaining: number): number => {
-  if (remaining <= 4) return 1; // 2–4 teams → one table keeps a line
-  if (remaining <= 6) return 2;
-  if (remaining <= 9) return 3;
-  return Math.max(1, Math.round(remaining / 3));
+// ── SINGLE SOURCE OF TRUTH for every Chip recommended-table count ──────────────
+// One entry = one singles PLAYER or one doubles TEAM (never individual partners); a
+// table seats 2 entries. We want ~half the field playing at once but ALWAYS round
+// DOWN so we only recommend COMPLETE matches — the odd extra entry waits instead of
+// spawning another table. So the count is floor(entries / 4), floored at 1 once a
+// match is possible, and 0 below 2 entries (no match can start).
+//   2–7 → 1 · 8–11 → 2 · 12–15 → 3 · 16–19 → 4 · 20 → 5 · 32–35 → 8 · 36 → 9
+export const getChipRecommendedTableCount = (entryCount: number): number =>
+  entryCount < 2 ? 0 : Math.max(1, Math.floor(entryCount / 4));
+
+// Recommended number of ACTIVE tables during LIVE play, for the alive-entry field
+// size. Delegates to the shared helper so setup and live never diverge.
+export const recommendedActiveTables = (remaining: number): number =>
+  getChipRecommendedTableCount(remaining);
+
+// ── Recommended SETUP tables (format-aware, single source of truth) ────────────
+// A chip ENTRY is "playable" for table planning when it can actually be seated:
+// singles always; scotch doubles only when BOTH partners are present (an incomplete
+// team still waiting for a teammate can't start a match, so it isn't counted). Uses
+// the SAME partner test as the setup→live start flow.
+export const playableEntryCount = (s: ChipState): number => {
+  const doubles = s.settings.format === "scotch_doubles";
+  return s.entries.filter((e) => {
+    if (e.status === "eliminated") return false;
+    if (!doubles) return true;
+    return e.p2MemberId != null || (!!e.p2Name && e.p2Name !== "") || e.p2ProfileId != null;
+  }).length;
 };
+
+// How many tables to SET UP so ~half the field plays at once and the rest queue
+// (winner-stays). Delegates to the shared helper (floor, never ceil) so setup and
+// live recommendations are always identical. Uses TEAM count for doubles:
+//   Singles  8→2, 10→2, 12→3, 16→4, 20→5   (entries = players)
+//   Doubles  4→1, 8→2, 12→3, 16→4 teams    (entries = teams; = players 8→1, 16→2 …)
+export const recommendedSetupTables = (playableEntries: number): number =>
+  getChipRecommendedTableCount(playableEntries);
 
 // Close one or more tables (TD picks which). A table with a match in progress is
 // marked `closing` and goes inactive only after that match ends — play is never
@@ -1249,7 +1718,10 @@ export const closeTables = (
       pushEvent(s, "table_removed", `${t.label} closed`, by);
     }
   }
-  if (s.startedAt && !s.finishedAt && !s.reshufflePending) seatAllTables(s);
+  // Closing/removing a table is a table-management action ONLY — it must never
+  // implicitly seat the queue or start a match. Any freed holder is returned to the
+  // queue above and will be seated by the normal flow (match completion / explicit
+  // assign), not here. (Was: seatAllTables(s), which auto-started a new match.)
   return s;
 };
 
@@ -1288,44 +1760,81 @@ export const resetTableTimer = (
   return input;
 };
 
-// Clear a table: void any in-progress match (both teams back to the queue, no
-// result) or send a waiting holder back to the queue. The table is emptied and
-// left OPEN — it is not auto-re-seated, so the TD keeps control of what goes next.
+// Clear a table (administrative reset — NOT a match result): void any in-progress
+// match (both teams back to the queue, no chip/W-L change) or send a waiting
+// holder + pending challenger back to the queue. The TD chooses the destination:
+//   • "next" → the affected entries go to the FRONT of the queue (up next), in a
+//     deterministic order (match: aId then bId; waiting: holder then pending).
+//   • "end"  → they go to the BACK, same deterministic order.
+// Entries already in the queue are MOVED (not duplicated). The table is emptied and
+// left OPEN (closing/holder/pending/timer all cleared) so Auto-Assign sees it
+// correctly; a locked table stays locked. Not auto-re-seated — the TD keeps control.
 export const clearTable = (
   input: ChipState,
   tableId: string,
+  destination: "next" | "end" = "end",
   by?: number | null,
 ): ChipState => {
   const s = clone(input);
   const t = s.tables.find((x) => x.id === tableId);
   if (!t) return input;
-  const requeue = (id: string) => {
-    const e = entryById(s, id);
-    if (e && e.status !== "eliminated") {
-      e.status = "queued";
-      e.tableId = null;
-      if (!s.queue.includes(id)) s.queue.push(id);
-    }
-  };
+  // A table already pending closure ("Close After Current Match") completes its
+  // closure on clear (goes inactive) instead of reopening — same terminal state
+  // recordWinner produces when a closing table's match finishes.
+  const wasClosing = !!t.closing;
+  // Affected entries, in deterministic order.
+  const affected: string[] = [];
+  let matchCancelled = false;
   const m = t.matchId ? s.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress") : null;
   if (m) {
-    // Void the match entirely — it never counted (no W/L change).
-    s.matches = s.matches.filter((mm) => mm.id !== m.id);
-    requeue(m.aId);
-    requeue(m.bId);
-    pushEvent(s, "manual", `${t.label} cleared — match voided`, by);
+    s.matches = s.matches.filter((mm) => mm.id !== m.id); // void — never counted
+    affected.push(m.aId, m.bId);
+    matchCancelled = true;
   } else if (t.holderId || t.pendingChallengerId) {
-    if (t.holderId) requeue(t.holderId);
-    if (t.pendingChallengerId) requeue(t.pendingChallengerId);
-    pushEvent(s, "manual", `${t.label} cleared`, by);
+    if (t.holderId) affected.push(t.holderId);
+    if (t.pendingChallengerId) affected.push(t.pendingChallengerId);
   } else {
     return input;
   }
+  // Alive affected entries → queued; drop any existing queue occurrence (move, don't
+  // duplicate) then place at the chosen end, preserving affected order.
+  const alive = affected.filter((id) => { const e = entryById(s, id); return !!e && e.status !== "eliminated"; });
+  for (const id of alive) {
+    const e = entryById(s, id);
+    if (e) { e.status = "queued"; e.tableId = null; }
+  }
+  s.queue = s.queue.filter((id) => !alive.includes(id));
+  s.queue = destination === "next" ? [...alive, ...s.queue] : [...s.queue, ...alive];
+
   t.matchId = null;
   t.holderId = null;
   t.lastLoserId = null;
   t.pendingChallengerId = null;
+  t.rematchSkipped = [];
+  t.closing = false;
   t.status = "open";
+  // Normal table → open/Auto-Assignable. Pending-closure table → complete the
+  // closure (inactive; skipped by seating). `locked` is untouched in both cases.
+  if (wasClosing) t.inactive = true;
+
+  const names = alive.map((id) => { const e = entryById(s, id); return e ? teamName(e) : "a team"; }).join(" and ");
+  const destLabel = destination === "next" ? "next in queue" : "end of queue";
+  const verb = wasClosing ? "cleared and closed" : "cleared";
+  pushEvent(
+    s,
+    "manual",
+    names ? `${t.label} ${verb} — ${names} moved to ${destLabel}` : `${t.label} ${verb}`,
+    by,
+    {
+      act: "table_cleared",
+      tableId: t.id,
+      tableLabel: t.label,
+      entryIds: alive,
+      destination: destination === "next" ? "next_in_queue" : "end_of_queue",
+      matchCancelled,
+      closedTable: wasClosing,
+    },
+  );
   return s;
 };
 
@@ -1342,7 +1851,9 @@ export const reactivateTable = (
   t.closing = false;
   t.status = "open";
   pushEvent(s, "table_added", `${t.label} reactivated`, by);
-  if (s.startedAt && !s.finishedAt && !s.reshufflePending) seatAllTables(s);
+  // Reactivate / Cancel-Removal is a PURE table-state change — it must never seat the
+  // queue or start a match (that caused "Cancel Removal starts a match on another
+  // table"). The reactivated table fills via the normal flow / explicit assign.
   return s;
 };
 
@@ -1359,7 +1870,32 @@ export const setTableLocked = (
   if (!t) return input;
   t.locked = locked;
   pushEvent(s, "manual", `${t.label} ${locked ? "locked" : "unlocked"}`, by);
-  if (!locked && s.startedAt && !s.finishedAt && !s.reshufflePending) seatAllTables(s);
+  // Lock/Unlock is a PURE availability toggle — it must never seat the queue or start a
+  // match. Unlocking just makes the table eligible again; it fills via the normal flow /
+  // explicit assign (Assign Next Team / Auto Assign), not as a side effect of unlocking.
+  return s;
+};
+
+// Lock or unlock EVERY active (non-inactive) table at once. Same pure-availability
+// semantics as the single-table toggle — never seats, never starts/cancels a match,
+// never reorders the queue. A locked table with a live match keeps playing and simply
+// won't receive a new challenger afterward ("locks after match"). Writes ONE summary
+// audit event with the affected count (not per-table, to avoid noise).
+export const setAllTablesLocked = (
+  input: ChipState,
+  locked: boolean,
+  by?: number | null,
+): ChipState => {
+  const s = clone(input);
+  let n = 0;
+  for (const t of s.tables) {
+    if (t.inactive) continue; // removed tables aren't part of the active set
+    if (!!t.locked === locked) continue;
+    t.locked = locked;
+    n += 1;
+  }
+  if (n === 0) return input;
+  pushEvent(s, "manual", `All tables ${locked ? "locked" : "unlocked"} (${n})`, by, { count: n });
   return s;
 };
 
@@ -1452,8 +1988,11 @@ export const assignSpecificTeam = (
   if (!s.queue.includes(entryId)) return input;
   s.queue = s.queue.filter((id) => id !== entryId);
   if (table.holderId) {
-    // Winner-stays → assign as pending (TD confirms with Start Match).
+    // Winner-stays → assign as pending (TD confirms with Start Match). A manual
+    // override is a deliberate pick, not an anti-repeat skip — clear any prior
+    // selection's skip record so it can't linger on this new pending.
     table.pendingChallengerId = entryId;
+    table.rematchSkipped = [];
     const ce = entryById(s, entryId);
     if (ce) { ce.status = "playing"; ce.tableId = table.id; }
   } else {
@@ -1557,6 +2096,7 @@ export const finishTournament = (input: ChipState, by?: number | null): ChipStat
   if (!s.finishedAt) s.finishedAt = new Date().toISOString();
   const placements = finalPlacements(s);
   pushEvent(s, "manual", TOURNAMENT_FINISHED_TEXT, by, {
+    act: "tournament_finished",
     placements: placements.map((p) => ({ entryId: p.entryId, place: p.place })),
   });
   return s;

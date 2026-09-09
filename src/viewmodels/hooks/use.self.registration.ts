@@ -15,6 +15,7 @@ export const useSelfRegistration = (
   const [registration, setRegistration] = useState<Registration | null>(null);
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [unregistering, setUnregistering] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!tournamentId || !playerId) {
@@ -76,5 +77,19 @@ export const useSelfRegistration = (
     [tournamentId, playerId, registration],
   );
 
-  return { registration, isRegistered, loading, register, registering, refresh };
+  // Self-service unregister: SOFT-cancel the player's OWN row via the supported
+  // cancellation path (status → cancelled), preserving the row so a later
+  // register() re-uses it (no duplicate registrations). Throws on failure.
+  const unregister = useCallback(async () => {
+    if (!registration || registration.status === "cancelled") return;
+    setUnregistering(true);
+    try {
+      const r = await registrationService.cancelOwnRegistration(registration.id);
+      setRegistration(r);
+    } finally {
+      setUnregistering(false);
+    }
+  }, [registration]);
+
+  return { registration, isRegistered, loading, register, registering, unregister, unregistering, refresh };
 };

@@ -11,9 +11,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { chipStatusColor } from "../../../utils/chip-colors";
+import { formatElapsedClock } from "../../../utils/formatters";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
-  ChipPerfLabel,
+  ChipHubTable,
   ChipPlayerHub,
   ChipStatus,
 } from "../../../viewmodels/hooks/use.player.chip.tournament";
@@ -38,27 +40,34 @@ const STATUS_META: Record<ChipStatus, { label: string; color: string }> = {
   eliminated: { label: "Eliminated", color: COLORS.error },
 };
 
-const PERF_META: Record<ChipPerfLabel, { label: string; color: string }> = {
-  exceptional: { label: "Exceptional", color: COLORS.success },
-  above: { label: "Above expectation", color: COLORS.success },
-  expected: { label: "As expected", color: COLORS.primaryLight },
-  below: { label: "Below expectation", color: COLORS.warning },
-  under: { label: "Underperforming", color: COLORS.error },
-};
-
-const fmtDur = (ms: number | null): string => {
-  if (ms == null || ms <= 0) return "—";
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}:${String(sec).padStart(2, "0")}`;
-};
+// Strict zero-padded HH:MM:SS from the shared formatter (matches Admin exactly);
+// keeps the em-dash for missing/zero durations. Was "Xh Ym" / "m:ss" before.
+const fmtDur = (ms: number | null): string =>
+  ms == null || ms <= 0 ? "—" : formatElapsedClock(ms);
 
 const Stat = ({ label, value, tint }: { label: string; value: string; tint?: string }) => (
   <View style={styles.stat}>
     <Text allowFontScaling={false} style={[styles.statVal, tint ? { color: tint } : null]}>{value}</Text>
-    <Text allowFontScaling={false} style={styles.statLabel}>{label}</Text>
+    <Text allowFontScaling={false} numberOfLines={2} style={styles.statLabel}>{label}</Text>
   </View>
+);
+
+// Win-loss record with wins green and losses red (dash stays neutral). `style` is
+// the base text style (size/weight); the spans only override color.
+const WinLoss = ({
+  wins,
+  losses,
+  style,
+}: {
+  wins: number;
+  losses: number;
+  style?: object;
+}) => (
+  <Text allowFontScaling={false} style={style}>
+    <Text style={{ color: COLORS.success }}>{wins}</Text>
+    <Text>{" - "}</Text>
+    <Text style={{ color: COLORS.error }}>{losses}</Text>
+  </Text>
 );
 
 const Section = ({
@@ -126,12 +135,68 @@ const Collapsible = ({
           <Text allowFontScaling={false} style={styles.collapseLabel}>{open ? "Hide" : "Show"}</Text>
           <View style={styles.chevronBox}>
             <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Ionicons name="chevron-down" size={wxMs(18)} color={COLORS.primaryLight} />
+              <Ionicons name="chevron-down" size={wxMs(18)} color={COLORS.primarySoft} />
             </Animated.View>
           </View>
         </View>
       </Pressable>
       {open && <View>{children}</View>}
+    </View>
+  );
+};
+
+// Chip Leaderboard preview/full-view sizing — mirrors the Queue preview + View
+// Full pattern. Inline shows the top 10; the full modal renders in incremental
+// batches so a large field never renders every row at once.
+const LB_PREVIEW = 10;
+const LB_PAGE = 30;
+const TABLES_PREVIEW = 2;
+
+// Read-only table row for the Profile hub — mirrors the spectator TableCard (holder
+// = a-side, aStreak = win streak) with NO admin controls (no ⋮, no Start Match).
+const HubTableRow = ({ t, now }: { t: ChipHubTable; now: number }) => {
+  const elapsed = t.live && t.startedAt ? now - new Date(t.startedAt).getTime() : 0;
+  const status = t.live
+    ? `Live ${fmtDur(elapsed)}`
+    : t.closing
+      ? "Closing after match"
+      : t.waitingText ?? "";
+  return (
+    <View style={styles.htCard}>
+      <View style={styles.htTop}>
+        <Text allowFontScaling={false} style={styles.htLabel} numberOfLines={1}>
+          {t.label}{t.isStream ? "  🔴" : ""}
+        </Text>
+        <Text allowFontScaling={false} style={[styles.htStatus, t.live && styles.htStatusLive]} numberOfLines={1}>
+          {status}
+        </Text>
+      </View>
+      {t.aName ? (
+        <View style={styles.htMatch}>
+          <View style={styles.htSide}>
+            <Text allowFontScaling={false} style={styles.htName} numberOfLines={1}>{t.aName}</Text>
+            <Text allowFontScaling={false} style={styles.htMeta} numberOfLines={1}>
+              {t.aChips != null ? <Text style={{ color: chipStatusColor(t.aChips, t.aStartChips) }}>{t.aChips} chips</Text> : ""}
+              {t.aStreak != null && t.aStreak > 0 ? `  ·  🔥 ${t.aStreak}` : ""}
+            </Text>
+          </View>
+          <Text allowFontScaling={false} style={styles.htVs}>VS</Text>
+          <View style={[styles.htSide, styles.htSideRight]}>
+            {t.bName ? (
+              <>
+                <Text allowFontScaling={false} style={styles.htName} numberOfLines={1}>{t.bName}</Text>
+                <Text allowFontScaling={false} style={styles.htMeta} numberOfLines={1}>
+                  {t.bChips != null ? <Text style={{ color: chipStatusColor(t.bChips, t.bStartChips) }}>{t.bChips} chips</Text> : ""}
+                </Text>
+              </>
+            ) : (
+              <Text allowFontScaling={false} style={styles.htMeta} numberOfLines={1}>Waiting for a challenger</Text>
+            )}
+          </View>
+        </View>
+      ) : (
+        <Text allowFontScaling={false} style={styles.htMeta}>Open — no team assigned</Text>
+      )}
     </View>
   );
 };
@@ -145,6 +210,15 @@ export const ChipTournamentHubView = ({
 }) => {
   const [now, setNow] = useState(Date.now());
   const [queueOpen, setQueueOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [lbCount, setLbCount] = useState(LB_PAGE);
+  const [tablesOpen, setTablesOpen] = useState(false);
+  // Reset the full-leaderboard window on close (next open starts at the top batch);
+  // avoids a setState-in-effect while keeping live polling updates intact.
+  const closeLeaderboard = () => {
+    setLbCount(LB_PAGE);
+    setLeaderboardOpen(false);
+  };
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -181,8 +255,8 @@ export const ChipTournamentHubView = ({
 
         <View style={styles.heroRow}>
           <View style={styles.chipsBox}>
-            <Text allowFontScaling={false} style={styles.chipsNum}>{hub.chips}</Text>
-            <Text allowFontScaling={false} style={styles.chipsLabel}>chips remaining</Text>
+            <Text allowFontScaling={false} style={[styles.chipsNum, { color: chipStatusColor(hub.chips, hub.startChips) }]}>{hub.chips}</Text>
+            <Text allowFontScaling={false} style={styles.chipsLabel}>Chips Remaining</Text>
           </View>
           <View style={styles.heroMeta}>
             {hub.status === "playing" ? (
@@ -199,7 +273,7 @@ export const ChipTournamentHubView = ({
             ) : hub.queuePosition != null ? (
               <>
                 <Text allowFontScaling={false} style={styles.metaBig}>#{hub.queuePosition}</Text>
-                <Text allowFontScaling={false} style={styles.metaSub}>in queue</Text>
+                <Text allowFontScaling={false} style={styles.metaSub}>In Queue</Text>
               </>
             ) : (
               <Text allowFontScaling={false} style={styles.metaSub}>
@@ -228,58 +302,14 @@ export const ChipTournamentHubView = ({
           tint={COLORS.primaryLight}
         />
         <View style={styles.summaryDivider} />
-        <Stat
-          label="record"
-          value={`${hub.wins}-${hub.losses}`}
-        />
+        <View style={styles.stat}>
+          <WinLoss wins={hub.wins} losses={hub.losses} style={styles.statVal} />
+          <Text allowFontScaling={false} numberOfLines={2} style={styles.statLabel}>record</Text>
+        </View>
       </View>
 
-      {/* ── Performance ──────────────────────────────────────────────────── */}
-      <Section
-        title="PERFORMANCE"
-        right={
-          hub.perf ? (
-            <View style={[styles.perfPill, { borderColor: PERF_META[hub.perf.label].color }]}>
-              <Text allowFontScaling={false} style={[styles.perfText, { color: PERF_META[hub.perf.label].color }]}>
-                {PERF_META[hub.perf.label].label}
-              </Text>
-            </View>
-          ) : undefined
-        }
-      >
-        {hub.perf && hub.perf.rating != null && (
-          <View style={styles.perfHeadline}>
-            <Text allowFontScaling={false} style={styles.perfRating}>{hub.perf.rating}</Text>
-            <Text allowFontScaling={false} style={styles.perfRatingLbl}>
-              Performance Rating
-              {hub.perf.delta != null ? (
-                <Text style={{ color: hub.perf.delta > 10 ? COLORS.success : hub.perf.delta < -10 ? COLORS.error : COLORS.textSecondary }}>
-                  {"   "}{hub.perf.delta > 0 ? "+" : ""}{hub.perf.delta} vs Fargo
-                </Text>
-              ) : null}
-              {hub.perf.avgOpponentFargo != null ? `   ·   Avg opp Fargo ${hub.perf.avgOpponentFargo}` : ""}
-            </Text>
-          </View>
-        )}
-        <View style={styles.perfGrid}>
-          <Stat label="Win %" value={hub.matchesPlayed ? `${Math.round(hub.winPct * 100)}%` : "—"} tint={COLORS.success} />
-          <Stat
-            label={hub.streakType === "loss" ? "Loss streak" : "Win streak"}
-            value={hub.streak ? String(hub.streak) : "—"}
-            tint={hub.streakType === "loss" ? COLORS.error : COLORS.success}
-          />
-          <Stat label="Matches" value={String(hub.matchesPlayed)} />
-          <Stat label="Avg time" value={fmtDur(hub.avgMatchMs)} />
-        </View>
-        {!hub.perf && (
-          <Text allowFontScaling={false} style={styles.perfHint}>
-            Play a few matches to see your Fargo performance.
-          </Text>
-        )}
-      </Section>
-
-      {/* ── Queue preview ────────────────────────────────────────────────── */}
-      <Section title="UP NEXT IN THE QUEUE">
+      {/* ── Queue preview (expandable) ───────────────────────────────────── */}
+      <Collapsible title="UP NEXT IN THE QUEUE" count={hub.fullQueue.length}>
         {hub.queuePreview.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyLine}>The queue is empty right now.</Text>
         ) : (
@@ -289,10 +319,17 @@ export const ChipTournamentHubView = ({
                 {i > 0 && <View style={styles.divider} />}
                 <View style={[styles.qRow, q.isMe && styles.qRowMe]}>
                   <Text allowFontScaling={false} style={[styles.qPos, q.isMe && styles.qMeText]}>{i + 1}</Text>
-                  <Text allowFontScaling={false} style={[styles.qName, q.isMe && styles.qMeText]} numberOfLines={1}>
-                    {q.name}{q.isMe ? "  (you)" : ""}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.qChips}>{q.chips} chips</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text allowFontScaling={false} style={[styles.qName, q.isMe && styles.qMeText]} numberOfLines={1}>
+                      {q.name}{q.isMe ? "  (you)" : ""}
+                    </Text>
+                    {q.roundStatus && (
+                      <Text allowFontScaling={false} style={[styles.qRoundStatus, { color: q.roundStatus === "waiting" ? COLORS.primary : COLORS.textMuted }]} numberOfLines={1}>
+                        {q.roundStatus === "waiting" ? "Waiting for turn" : "✓ Played this round"}
+                      </Text>
+                    )}
+                  </View>
+                  <Text allowFontScaling={false} style={[styles.qChips, { color: chipStatusColor(q.chips, q.startChips) }]}>{q.chips} chips</Text>
                 </View>
               </View>
             ))}
@@ -310,7 +347,7 @@ export const ChipTournamentHubView = ({
             )}
           </View>
         )}
-      </Section>
+      </Collapsible>
 
       {/* Full queue (read-only) */}
       <Modal visible={queueOpen} transparent animationType="fade" onRequestClose={() => setQueueOpen(false)}>
@@ -330,10 +367,17 @@ export const ChipTournamentHubView = ({
                 {hub.fullQueue.map((q, i) => (
                   <View key={q.id} style={[styles.fqRow, q.isMe && styles.qRowMe, i > 0 && styles.fqRowDiv]}>
                     <Text allowFontScaling={false} style={[styles.qPos, q.isMe && styles.qMeText]}>{i + 1}</Text>
-                    <Text allowFontScaling={false} style={[styles.qName, q.isMe && styles.qMeText]} numberOfLines={1}>
-                      {q.name}{q.isMe ? "  (you)" : ""}
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.qChips}>{q.chips} chips</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text allowFontScaling={false} style={[styles.qName, q.isMe && styles.qMeText]} numberOfLines={1}>
+                        {q.name}{q.isMe ? "  (you)" : ""}
+                      </Text>
+                      {q.roundStatus && (
+                        <Text allowFontScaling={false} style={[styles.qRoundStatus, { color: q.roundStatus === "waiting" ? COLORS.primary : COLORS.textMuted }]} numberOfLines={1}>
+                          {q.roundStatus === "waiting" ? "Waiting for turn" : "✓ Played this round"}
+                        </Text>
+                      )}
+                    </View>
+                    <Text allowFontScaling={false} style={[styles.qChips, { color: chipStatusColor(q.chips, q.startChips) }]}>{q.chips} chips</Text>
                   </View>
                 ))}
               </ScrollView>
@@ -342,7 +386,9 @@ export const ChipTournamentHubView = ({
         </View>
       </Modal>
 
-      {/* ── Live matches ─────────────────────────────────────────────────── */}
+      {/* ── Live matches (ALWAYS VISIBLE — critical live context: my match/opponent/
+          timer among all live matches; the collapsed Tables section is NOT a
+          replacement for this). Shown whenever any match is live. ─────────────── */}
       {hub.liveMatches.length > 0 && (
         <Section title="LIVE NOW">
           <View style={styles.card}>
@@ -369,8 +415,186 @@ export const ChipTournamentHubView = ({
         </Section>
       )}
 
+      {/* ── Performance (expandable) ─────────────────────────────────────── */}
+      {/* Value-communicates-status: no "Underperforming/Overperforming" badge —
+          the vs Fargo value itself is colored (green +, red −, gray 0). */}
+      <Collapsible title="PERFORMANCE">
+        <View style={styles.card}>
+          {hub.perf && hub.perf.rating != null ? (
+            <View style={styles.perfRow}>
+              <Stat label="Performance Rating" value={String(hub.perf.rating)} />
+              <View style={styles.summaryDivider} />
+              <Stat
+                label="vs Fargo"
+                value={
+                  hub.perf.delta != null
+                    ? `${hub.perf.delta > 0 ? "+" : ""}${hub.perf.delta}`
+                    : "—"
+                }
+                tint={
+                  hub.perf.delta == null
+                    ? COLORS.textSecondary
+                    : hub.perf.delta > 0
+                      ? COLORS.success
+                      : hub.perf.delta < 0
+                        ? COLORS.error
+                        : COLORS.textSecondary
+                }
+              />
+              <View style={styles.summaryDivider} />
+              <Stat
+                label="Avg Opp Fargo"
+                value={hub.perf.avgOpponentFargo != null ? String(hub.perf.avgOpponentFargo) : "—"}
+              />
+            </View>
+          ) : (
+            <Text allowFontScaling={false} style={styles.perfHint}>
+              Play a few matches to see your Fargo performance.
+            </Text>
+          )}
+
+          {hub.perf && hub.perf.rating != null && <View style={styles.divider} />}
+
+          <View style={styles.perfRow}>
+            <Stat label="Win %" value={hub.matchesPlayed ? `${Math.round(hub.winPct * 100)}%` : "—"} tint={COLORS.success} />
+            <View style={styles.summaryDivider} />
+            <Stat
+              label={hub.streakType === "loss" ? "Loss streak" : "Win streak"}
+              value={hub.streak ? String(hub.streak) : "—"}
+              tint={hub.streakType === "loss" ? COLORS.error : COLORS.success}
+            />
+            <View style={styles.summaryDivider} />
+            <Stat label="Matches" value={String(hub.matchesPlayed)} />
+            <View style={styles.summaryDivider} />
+            <Stat label="Avg time" value={fmtDur(hub.avgMatchMs)} />
+          </View>
+        </View>
+      </Collapsible>
+
+      {/* ── Tables (read-only, expandable) ───────────────────────────────── */}
+      <Collapsible title="TABLES" count={hub.tables.length}>
+        {hub.tables.length === 0 ? (
+          <Text allowFontScaling={false} style={styles.emptyLine}>No active tables right now.</Text>
+        ) : (
+          <View>
+            {hub.tables.slice(0, TABLES_PREVIEW).map((t) => (
+              <HubTableRow key={t.id} t={t} now={now} />
+            ))}
+            {hub.tables.length > TABLES_PREVIEW && (
+              <Pressable
+                style={({ pressed }) => [styles.qViewAll, pressed && { opacity: 0.5 }]}
+                onPress={() => setTablesOpen(true)}
+              >
+                <Text allowFontScaling={false} style={styles.qViewAllText}>View All Tables ({hub.tables.length})</Text>
+                <Text allowFontScaling={false} style={styles.qViewAllChevron}>›</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+      </Collapsible>
+
+      {/* Full tables (read-only, live-updating) */}
+      <Modal visible={tablesOpen} transparent animationType="fade" onRequestClose={() => setTablesOpen(false)}>
+        <View style={styles.fqRoot}>
+          <Pressable style={styles.fqDim} onPress={() => setTablesOpen(false)} />
+          <View style={styles.fqCard}>
+            <View style={styles.fqHeader}>
+              <Text allowFontScaling={false} style={styles.fqTitle}>Tables ({hub.tables.length})</Text>
+              <TouchableOpacity onPress={() => setTablesOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text allowFontScaling={false} style={styles.fqDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            {hub.tables.length === 0 ? (
+              <Text allowFontScaling={false} style={[styles.emptyLine, { padding: wxSc(SPACING.lg) }]}>No active tables right now.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ padding: wxSc(SPACING.sm) }} showsVerticalScrollIndicator>
+                {hub.tables.map((t) => (
+                  <HubTableRow key={t.id} t={t} now={now} />
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Chip leaderboard (expandable) ────────────────────────────────── */}
+      <Collapsible title="CHIP LEADERBOARD" count={hub.playersRemaining}>
+        {hub.leaderboard.length === 0 ? (
+          <Text allowFontScaling={false} style={styles.emptyLine}>No standings yet.</Text>
+        ) : (
+          <View style={styles.card}>
+            {hub.leaderboard.slice(0, LB_PREVIEW).map((l, i) => (
+              <View key={l.id}>
+                {i > 0 && <View style={styles.divider} />}
+                <View style={[styles.lbRow, l.isMe && styles.qRowMe]}>
+                  <Text allowFontScaling={false} style={[styles.lbRank, l.rank <= 3 && styles.lbRankTop]}>#{l.rank}</Text>
+                  <Text allowFontScaling={false} style={[styles.lbName, l.isMe && styles.qMeText]} numberOfLines={1}>
+                    {l.name}{l.isMe ? "  (you)" : ""}
+                  </Text>
+                  <WinLoss wins={l.wins} losses={l.losses} style={styles.lbRec} />
+                  <Text allowFontScaling={false} style={[styles.lbChips, { color: chipStatusColor(l.chips, l.startChips) }]}>{l.chips}</Text>
+                </View>
+              </View>
+            ))}
+            {hub.fullLeaderboard.length > LB_PREVIEW && (
+              <>
+                <View style={styles.divider} />
+                <Pressable
+                  style={({ pressed }) => [styles.qViewAll, pressed && { opacity: 0.5 }]}
+                  onPress={() => setLeaderboardOpen(true)}
+                >
+                  <Text allowFontScaling={false} style={styles.qViewAllText}>View Full Leaderboard ({hub.fullLeaderboard.length})</Text>
+                  <Text allowFontScaling={false} style={styles.qViewAllChevron}>›</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
+      </Collapsible>
+
+      {/* Full leaderboard (read-only) — reuses the Full Queue modal shell; renders
+          in incremental batches (LB_PAGE) so a large field never draws all at once. */}
+      <Modal visible={leaderboardOpen} transparent animationType="fade" onRequestClose={closeLeaderboard}>
+        <View style={styles.fqRoot}>
+          <Pressable style={styles.fqDim} onPress={closeLeaderboard} />
+          <View style={styles.fqCard}>
+            <View style={styles.fqHeader}>
+              <Text allowFontScaling={false} style={styles.fqTitle}>Leaderboard ({hub.fullLeaderboard.length})</Text>
+              <TouchableOpacity onPress={closeLeaderboard} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text allowFontScaling={false} style={styles.fqDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            {hub.fullLeaderboard.length === 0 ? (
+              <Text allowFontScaling={false} style={[styles.emptyLine, { padding: wxSc(SPACING.lg) }]}>No standings yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingBottom: wxSc(SPACING.sm) }} showsVerticalScrollIndicator>
+                {hub.fullLeaderboard.slice(0, lbCount).map((l, i) => (
+                  <View key={l.id} style={[styles.lbRow, l.isMe && styles.qRowMe, i > 0 && styles.fqRowDiv]}>
+                    <Text allowFontScaling={false} style={[styles.lbRank, l.rank <= 3 && styles.lbRankTop]}>#{l.rank}</Text>
+                    <Text allowFontScaling={false} style={[styles.lbName, l.isMe && styles.qMeText]} numberOfLines={1}>
+                      {l.name}{l.isMe ? "  (you)" : ""}
+                    </Text>
+                    <WinLoss wins={l.wins} losses={l.losses} style={styles.lbRec} />
+                    <Text allowFontScaling={false} style={[styles.lbChips, { color: chipStatusColor(l.chips, l.startChips) }]}>{l.chips}</Text>
+                  </View>
+                ))}
+                {hub.fullLeaderboard.length > lbCount && (
+                  <Pressable
+                    style={({ pressed }) => [styles.qViewAll, pressed && { opacity: 0.5 }]}
+                    onPress={() => setLbCount((c) => c + LB_PAGE)}
+                  >
+                    <Text allowFontScaling={false} style={styles.qViewAllText}>Load more</Text>
+                    <Text allowFontScaling={false} style={styles.qViewAllChevron}>▾</Text>
+                  </Pressable>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Recent history (expandable) ──────────────────────────────────── */}
-      <Collapsible title="RECENT MATCHES" count={hub.recentMatches.length} startOpen>
+      <Collapsible title="RECENT MATCHES" count={hub.recentMatches.length}>
         {hub.recentMatches.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyLine}>No completed matches yet.</Text>
         ) : (
@@ -398,25 +622,6 @@ export const ChipTournamentHubView = ({
             ))}
           </View>
         )}
-      </Collapsible>
-
-      {/* ── Chip leaderboard (expandable) ────────────────────────────────── */}
-      <Collapsible title="CHIP LEADERBOARD" count={hub.playersRemaining}>
-        <View style={styles.card}>
-          {hub.leaderboard.map((l, i) => (
-            <View key={l.id}>
-              {i > 0 && <View style={styles.divider} />}
-              <View style={[styles.lbRow, l.isMe && styles.qRowMe]}>
-                <Text allowFontScaling={false} style={[styles.lbRank, l.rank <= 3 && styles.lbRankTop]}>#{l.rank}</Text>
-                <Text allowFontScaling={false} style={[styles.lbName, l.isMe && styles.qMeText]} numberOfLines={1}>
-                  {l.name}{l.isMe ? "  (you)" : ""}
-                </Text>
-                <Text allowFontScaling={false} style={styles.lbRec}>{l.wins}-{l.losses}</Text>
-                <Text allowFontScaling={false} style={styles.lbChips}>{l.chips}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
       </Collapsible>
     </View>
   );
@@ -457,24 +662,35 @@ const styles = StyleSheet.create({
   summaryDivider: { width: 1, alignSelf: "stretch", backgroundColor: COLORS.border },
   stat: { flex: 1, alignItems: "center" },
   statVal: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "900" },
-  statLabel: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 2, textTransform: "lowercase" },
+  // Stretch to the full column width so long Title-Case labels WRAP (centered) to a
+  // 2nd line instead of overflowing and clipping; minHeight reserves two lines so the
+  // three/four columns stay balanced whether a label is one or two lines. No ellipsis.
+  statLabel: {
+    color: COLORS.textMuted,
+    fontSize: wxMs(FONT_SIZES.xs),
+    fontWeight: "600",
+    marginTop: 2,
+    textTransform: "capitalize",
+    textAlign: "center",
+    alignSelf: "stretch",
+    paddingHorizontal: wxSc(2),
+    lineHeight: wxMs(FONT_SIZES.xs) + 3,
+    minHeight: (wxMs(FONT_SIZES.xs) + 3) * 2,
+  },
 
   section: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.lg) },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: wxSc(SPACING.sm) },
-  sectionTitle: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
+  sectionTitle: { color: COLORS.sectionHeader, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
   collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: wxSc(SPACING.md), paddingRight: wxSc(SPACING.xs), paddingVertical: wxSc(SPACING.xs), borderRadius: wxSc(RADIUS.md), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, marginBottom: wxSc(SPACING.sm) },
   collapseHeadPressed: { backgroundColor: COLORS.primary + "1A", borderColor: COLORS.primary + "55" },
   collapseRight: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.xs) },
-  collapseLabel: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  collapseLabel: { color: COLORS.primarySoft, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   chevronBox: { width: wxSc(44), height: wxSc(44), alignItems: "center", justifyContent: "center" },
 
-  perfPill: { borderWidth: 1, borderRadius: wxSc(RADIUS.sm), paddingHorizontal: wxSc(SPACING.sm), paddingVertical: 2 },
-  perfText: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
-  perfHeadline: { flexDirection: "row", alignItems: "baseline", gap: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.sm) },
-  perfRating: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.xl), fontWeight: "900" },
-  perfRatingLbl: { flex: 1, color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
-  perfGrid: { flexDirection: "row", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: wxSc(RADIUS.lg), paddingVertical: wxSc(SPACING.md) },
-  perfHint: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(SPACING.xs), textAlign: "center" },
+  // Performance rows live inside the shared rounded dark card; vertical
+  // summaryDividers separate stats, a horizontal divider separates the two rows.
+  perfRow: { flexDirection: "row", alignItems: "center", paddingVertical: wxSc(SPACING.md) },
+  perfHint: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), paddingVertical: wxSc(SPACING.md), paddingHorizontal: wxSc(SPACING.md), textAlign: "center" },
 
   card: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: wxSc(RADIUS.lg), overflow: "hidden" },
   divider: { height: 1, backgroundColor: COLORS.border },
@@ -485,13 +701,14 @@ const styles = StyleSheet.create({
   qPos: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", width: wxSc(20) },
   qName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   qChips: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
+  qRoundStatus: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 1 },
   qMeText: { color: COLORS.primaryLight },
   // View Full Queue affordance + read-only modal.
   qViewAll: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm) },
   qViewAllText: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
   qViewAllChevron: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800" },
   fqRoot: { flex: 1, justifyContent: "center", alignItems: "center", padding: wxSc(SPACING.lg) },
-  fqDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
+  fqDim: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.6)" },
   fqCard: { width: "100%", maxWidth: wxSc(460), maxHeight: "80%", backgroundColor: COLORS.backgroundCard, borderRadius: wxSc(22), borderWidth: 1, borderColor: COLORS.border, overflow: "hidden" },
   fqHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   fqTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
@@ -521,4 +738,17 @@ const styles = StyleSheet.create({
   lbName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   lbRec: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", width: wxSc(48), textAlign: "right" },
   lbChips: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "900", width: wxSc(36), textAlign: "right" },
+
+  // Read-only Tables section rows (Profile hub).
+  htCard: { backgroundColor: COLORS.surface, borderRadius: wxSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.sm) },
+  htTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.xs) },
+  htLabel: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", flexShrink: 1 },
+  htStatus: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700" },
+  htStatusLive: { color: COLORS.success },
+  htMatch: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm) },
+  htSide: { flex: 1, minWidth: 0 },
+  htSideRight: { alignItems: "flex-end" },
+  htName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  htMeta: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 2 },
+  htVs: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
 });

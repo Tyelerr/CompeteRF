@@ -5,6 +5,7 @@
 // the live tournament view and to the TD in the manage hub.
 
 import { LiveMatch } from "./match.utils";
+import { computePerformance, PerfGame } from "./performance";
 
 export interface PlayerRecord {
   key: string;
@@ -151,10 +152,8 @@ interface PlayerAcc {
   gamesLost: number;
   totalGames: number;
   weightedFargoNum: number; // Σ opponentFargo × gamesInMatch
+  games: PerfGame[]; // per-opponent rows for the shared performance model
 }
-
-// −100 / ln(2): converts a game win-rate into a Fargo-point swing.
-const TPR_K = -100 / Math.log(2);
 
 export const computeAllPlayerStats = (
   matches: LiveMatch[],
@@ -182,6 +181,7 @@ export const computeAllPlayerStats = (
         gamesLost: 0,
         totalGames: 0,
         weightedFargoNum: 0,
+        games: [],
       };
       map.set(key, a);
     }
@@ -214,24 +214,21 @@ export const computeAllPlayerStats = (
       a1.gamesLost += p2;
       a1.totalGames += g;
       a1.weightedFargoNum += m.p2Fargo * g;
+      a1.games.push({ opponentFargo: m.p2Fargo, gamesWon: p1, gamesLost: p2 });
     }
     if (a2 && m.p1Fargo != null) {
       a2.gamesWon += p2;
       a2.gamesLost += p1;
       a2.totalGames += g;
       a2.weightedFargoNum += m.p1Fargo * g;
+      a2.games.push({ opponentFargo: m.p1Fargo, gamesWon: p2, gamesLost: p1 });
     }
   }
 
   const out: PlayerTournamentStats[] = [...map.values()].map((a) => {
-    const winPct = a.totalGames > 0 ? a.gamesWon / a.totalGames : null;
-    const avgRaw = a.totalGames > 0 ? a.weightedFargoNum / a.totalGames : null;
-    let performanceRating: number | null = null;
-    if (winPct != null && avgRaw != null) {
-      // Cap the win-rate off 0/1 so the log term stays finite.
-      const cap = Math.min(0.99, Math.max(0.01, winPct));
-      performanceRating = Math.round(avgRaw + TPR_K * Math.log((1 - cap) / cap));
-    }
+    // Rack-level, per-opponent rows (a 7-6 loss differs from a 7-0 loss). Rating is
+    // expected-vs-actual, Fargo-anchored, via the shared helper.
+    const perf = computePerformance(a.games, a.fargo);
     return {
       key: a.key,
       name: a.name,
@@ -241,13 +238,10 @@ export const computeAllPlayerStats = (
       gamesWon: a.gamesWon,
       gamesLost: a.gamesLost,
       totalGames: a.totalGames,
-      winPct,
-      avgOpponentFargo: avgRaw != null ? Math.round(avgRaw) : null,
-      performanceRating,
-      performanceDelta:
-        performanceRating != null && a.fargo != null
-          ? performanceRating - a.fargo
-          : null,
+      winPct: a.totalGames > 0 ? perf.winPct : null,
+      avgOpponentFargo: perf.avgOpponentFargo,
+      performanceRating: perf.rating,
+      performanceDelta: perf.delta,
     };
   });
 

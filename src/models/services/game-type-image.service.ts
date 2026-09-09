@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { moderateStoredImage } from "./image-moderation.service";
 
 const BUCKET_NAME = "game-type-images";
 
@@ -56,6 +57,19 @@ export const uploadGameTypeImage = async (
 
     if (error) {
       return { success: false, error: error.message };
+    }
+
+    // Moderate before publishing (shared SafeSearch service). FAIL CLOSED.
+    const scan = await moderateStoredImage(BUCKET_NAME, fileName);
+    if (scan.status !== "approved") {
+      await supabase.storage.from(BUCKET_NAME).remove([fileName]).catch(() => {});
+      return {
+        success: false,
+        error:
+          scan.status === "rejected"
+            ? "Image rejected by content moderation."
+            : "Image review is temporarily unavailable. Please try again.",
+      };
     }
 
     const { data: urlData } = supabase.storage

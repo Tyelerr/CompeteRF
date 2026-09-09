@@ -347,6 +347,8 @@ export const chipService = {
     type: string,
     text: string,
     payload?: Record<string, unknown> | null,
+    actorId?: number | null,
+    txId?: string | null,
   ): Promise<void> {
     const eid = `ev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const { error } = await supabase.from("chip_events").insert({
@@ -354,6 +356,13 @@ export const chipService = {
       tournament_id: tournamentId,
       type,
       text,
+      // actor_id (profiles.id_auto) is the authoritative "who did this" column; thread it
+      // explicitly for director actions (Fargo-cap override, Settings unlock, …) so the
+      // audit row is never anonymous. Callers may still mirror it into payload.
+      actor_id: actorId ?? null,
+      // tx_id groups linked events from one session (e.g. Settings unlocked → updated &
+      // locked / relocked) so the Activity Log can relate them.
+      tx_id: txId ?? null,
       payload: payload ?? null,
     });
     if (error) throw error;
@@ -486,6 +495,7 @@ export const chipService = {
       reshuffleCount: c?.reshuffle_count ?? 0,
       reshufflePending: !!c?.reshuffle_pending,
       reshuffleTableCount: c?.reshuffle_table_count ?? null,
+      reshuffleRemovingIds: (c?.reshuffle_removing_ids as string[] | null) ?? [],
       shuffleMode: !!c?.shuffle_mode,
       shuffleReady: !!c?.shuffle_ready,
       shuffleRound: !!c?.shuffle_round,
@@ -549,6 +559,19 @@ export const chipService = {
       });
       if (error) throw error;
     });
+    // Shuffle-owned closing table ids — its OWN block that swallows its error so a
+    // not-yet-applied migration for this newest column never surfaces as a save
+    // failure (before the column exists it simply no-ops; Cancel Shuffle then reopens
+    // nothing after a reload, which is the safe fallback — it never touches manual
+    // closings). Once the column exists, the distinction survives reloads.
+    try {
+      await supabase.from("chip_config").upsert({
+        tournament_id: id,
+        reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [],
+      });
+    } catch {
+      /* column pending migration — non-critical */
+    }
 
     // Registration-backed entries live in tournament_players and are re-projected
     // on every load — never write (or prune against) them here, otherwise they'd
@@ -657,6 +680,23 @@ export const chipService = {
 
   async start(id: number, chip: ChipState): Promise<void> {
     await chipService.save(id, chip);
-    await chipService.setLiveState(id, "in_progress");
+    // Going live makes the tournament PUBLIC-DISCOVERABLE: besides live_state, it
+    // must satisfy the Billiards discovery rule (status="active", is_draft=false).
+    // A chip created via the TD "New Tournament" draft flow starts is_draft=true;
+    // if it reached "running" without a settings-save clearing that flag, it stayed
+    // hidden from Billiards while still visible on Profile (participation-based).
+    // Setting these here is the authoritative "started ⇒ public/active" invariant.
+    const { error } = await supabase
+      .from("tournaments")
+      .update({
+        live_state: "in_progress",
+        status: "active",
+        is_draft: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("id")
+      .single();
+    if (error) throw error;
   },
 };

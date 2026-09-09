@@ -14,19 +14,24 @@ const testImageScanner = async () => {
     const result = await ImageContentScanner.scanImage(testImageUrl);
 
     console.log("✅ Scan Results:");
+    console.log("  - Status:", result.status);
     console.log("  - Is Appropriate:", result.isAppropriate);
-    console.log("  - Violations:", result.violations);
-    console.log("  - Confidence Levels:");
-    console.log("    * Adult:", result.confidence.adult);
-    console.log("    * Violence:", result.confidence.violence);
-    console.log("    * Racy:", result.confidence.racy);
-    console.log("    * Medical:", result.confidence.medical);
-    console.log("    * Spoof:", result.confidence.spoof);
+    console.log("  - Reason:", result.reason ?? "(none)");
+    console.log("  - SafeSearch:");
+    console.log("    * Adult:", result.safeSearch?.adult);
+    console.log("    * Violence:", result.safeSearch?.violence);
+    console.log("    * Racy:", result.safeSearch?.racy);
+    console.log("    * Medical:", result.safeSearch?.medical);
+    console.log("    * Spoof:", result.safeSearch?.spoof);
 
-    if (result.isAppropriate) {
+    if (result.status === "approved") {
       console.log("🎉 SUCCESS: Image scanner is working correctly!");
+    } else if (result.status === "rejected") {
+      console.log("⚠️  Test image was flagged as inappropriate.");
     } else {
-      console.log("⚠️  WARNING: Test image was flagged");
+      // Note: scan-image has verify_jwt=true, so a standalone run without a signed-in
+      // user session will return status:"error" (401). Run the real flow on-device.
+      console.log("❌ Scanner returned an error:", result.reason);
     }
   } catch (error) {
     console.error("❌ ERROR: Image scanner test failed");

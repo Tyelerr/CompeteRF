@@ -58,6 +58,9 @@ export interface PlayerTournament {
   id: number; // registration id
   status: RegistrationStatus;
   registered_at: string;
+  // Authoritative per-player elimination (elimination-format), set by the bracket engine via
+  // sync_tournament_eliminations. Drives the review opportunity + live "eliminated" label.
+  eliminated_at?: string | null;
   tournament: {
     id: number;
     name: string;
@@ -67,6 +70,10 @@ export interface PlayerTournament {
     start_time?: string | null;
     status: string; // tournament status (active/completed/archived/...)
     live_state?: string | null; // not_started/registration_open/in_progress/finished
+    // Tournament-View eligibility keys ONLY on live_state === "in_progress" (see
+    // src/utils/tournament-view.ts). gameplay_started_at (real go-live time, trigger-set) picks
+    // the primary tournament when several are live at once — latest wins.
+    gameplay_started_at?: string | null;
     thumbnail?: string | null;
     venues?: { venue: string; city: string; state: string } | null;
   } | null;

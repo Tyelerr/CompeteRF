@@ -646,7 +646,7 @@ export function SearchAlertsModal({ visible, onClose }: SearchAlertsModalProps) 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.mobileOverlay}>
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={s.mobileContainer}>{innerContent}</View>
       </View>
     </Modal>
@@ -659,7 +659,7 @@ const s = StyleSheet.create({
   dialog: { width: 700, maxWidth: "92%" as any, height: "92vh" as any, backgroundColor: COLORS.background, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden" as any, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 24, display: "flex" as any, flexDirection: "column" },
   mobileOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end", paddingBottom: TAB_BAR_HEIGHT },
   mobileContainer: { backgroundColor: COLORS.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, width: "100%", height: "88%" as any, overflow: "hidden" },
-  sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheetBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.45)" },
   sheetContainer: { position: "absolute", bottom: 0, left: 0, right: 0, height: "95%", backgroundColor: COLORS.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: "hidden" },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: wxSc(SPACING.lg), paddingTop: wxSc(SPACING.lg), paddingBottom: wxSc(SPACING.md) },
   headerTitle: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "700", letterSpacing: 1 },

@@ -2,9 +2,10 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Platform, TextInput } from "react-native";
-import { ImageContentScanner } from "../../image-scanner";
 import { supabase } from "../lib/supabase";
+import { tournamentImageService } from "../models/services/tournament-image.service";
 import { tournamentService } from "../models/services/tournament.service";
+import { defaultThumbnailIdForGameType } from "../utils/tournament-helpers";
 import {
   VenueTableRecord,
   venueTableService,
@@ -19,6 +20,7 @@ import {
   TournamentFormData,
   getRecurrencePreviewText,
   initialFormData,
+  suggestedSchedule,
 } from "../utils/tournament-form-data";
 
 // -- Web-safe alert helper ---------------------------------------------------
@@ -113,7 +115,12 @@ export const useSubmitTournament = () => {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
-  const [formData, setFormData] = useState<TournamentFormData>(initialFormData);
+  // Lazy init (computed at mount, not module load) so a NEW tournament suggests the
+  // current local date + next clean future time instead of a blank/fixed schedule.
+  const [formData, setFormData] = useState<TournamentFormData>(() => ({
+    ...initialFormData,
+    ...suggestedSchedule(),
+  }));
   const [sidePots, setSidePots] = useState<SidePot[]>([]);
 
   // -- Venue tables state -----------------------------------------------------
@@ -154,15 +161,9 @@ export const useSubmitTournament = () => {
 
   useEffect(() => {
     if (formData.gameType && !hasManualSelection) {
-      const normalizedGameType = formData.gameType?.replace("-scotch-doubles", "") ?? formData.gameType;
-      const matchingThumb = THUMBNAIL_OPTIONS.find(
-        (thumb) =>
-          thumb.gameType === formData.gameType ||
-          thumb.gameType === normalizedGameType ||
-          (thumb.gameType && normalizedGameType?.toLowerCase().includes(thumb.gameType)),
-      );
-      if (matchingThumb) {
-        setFormData((prev) => ({ ...prev, thumbnail: matchingThumb.id }));
+      const defaultId = defaultThumbnailIdForGameType(formData.gameType);
+      if (defaultId) {
+        setFormData((prev) => ({ ...prev, thumbnail: defaultId }));
       }
     }
   }, [formData.gameType, hasManualSelection]);
@@ -418,7 +419,7 @@ export const useSubmitTournament = () => {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"], // SDK 57: MediaTypeOptions is deprecated
         allowsEditing: false,
         aspect: [16, 9],
         quality: 0.8,
@@ -428,27 +429,29 @@ export const useSubmitTournament = () => {
       setUploadingImage(true);
       setScanningImage(true);
       const asset = result.assets[0];
-      const scanResult = await ImageContentScanner.scanImage(asset.uri, profile?.id_auto?.toString());
+      // Shared scan + upload (same path used by the live TD setup screen).
+      const outcome = await tournamentImageService.scanAndUpload(
+        asset.uri,
+        profile?.id_auto?.toString(),
+        asset.mimeType,
+      );
       setScanningImage(false);
-      if (!scanResult.isAppropriate) {
-        Alert.alert("Image Not Allowed", `This image contains inappropriate content:\n\n${scanResult.violations.join("\n")}`, [
-          { text: "Try Different Image", onPress: () => handleImageUpload() },
-          { text: "Cancel", style: "cancel" },
-        ]);
+      if (!outcome.ok) {
+        if (outcome.reason === "error") {
+          // FAIL CLOSED: scanner/config unavailable — don't publish the image.
+          Alert.alert("Image review unavailable", outcome.message);
+        } else {
+          Alert.alert("Image Not Allowed", `This image was rejected by content moderation:\n\n${outcome.violations.join("\n")}`, [
+            { text: "Try Different Image", onPress: () => handleImageUpload() },
+            { text: "Cancel", style: "cancel" },
+          ]);
+        }
         setUploadingImage(false);
         return;
       }
-      const timestamp = new Date().getTime();
-      const fileExt = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
-      const fileName = `uploads/tournament-${timestamp}-custom.${fileExt}`;
-      const formDataUpload = new FormData();
-      formDataUpload.append("file", { uri: asset.uri, type: `image/${fileExt}`, name: fileName } as any);
-      const { error } = await supabase.storage.from("tournament-images").upload(fileName, formDataUpload, { contentType: `image/${fileExt}`, upsert: false });
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from("tournament-images").getPublicUrl(fileName);
       setCustomImageUri(asset.uri);
       setHasManualSelection(true);
-      updateFormData("thumbnail", `custom:${publicUrl}`);
+      updateFormData("thumbnail", `custom:${outcome.publicUrl}`);
       Alert.alert("Success", "Image scanned and uploaded successfully!");
     } catch (error: any) {
       Alert.alert("Upload Error", error.message || "Failed to upload image.");
@@ -686,7 +689,8 @@ export const useSubmitTournament = () => {
   };
 
   const resetForm = () => {
-    setFormData(initialFormData);
+    // Reset to a fresh form, re-suggesting today + the next clean future time.
+    setFormData({ ...initialFormData, ...suggestedSchedule() });
     setSidePots([]);
     setSelectedVenue(null);
     setCustomImageUri(null);

@@ -1,4 +1,4 @@
-﻿import { useFocusEffect, useNavigation } from "@react-navigation/native";
+﻿import { useFocusEffect, useNavigation } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Platform } from "react-native";
 import { featuredContentService } from "../models/services/featured-content.service";

@@ -182,7 +182,7 @@ export function EditProfileModal({ visible, onClose }: EditProfileModalProps) {
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={handleClose}>
       <View style={s.mobileOverlay}>
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={handleClose} />
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleClose} />
         <View style={s.mobileContainer}>{innerContent}</View>
       </View>
       <DeleteAccountModal visible={modalVisible} confirmText={confirmText} onChangeConfirmText={setConfirmText} isConfirmed={isConfirmed} deleting={deleting} onCancel={closeModal} onDelete={handleDelete} />

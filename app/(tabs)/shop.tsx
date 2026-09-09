@@ -112,7 +112,7 @@ const awS = StyleSheet.create({
     elevation: 8,
   },
   ring: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: wxSc(16),
     borderWidth: 1.5,
     borderColor: T.blueBorder,
