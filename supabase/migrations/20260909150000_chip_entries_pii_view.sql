@@ -73,5 +73,7 @@ from public.chip_entries;
 -- Definer view: returns the public row set regardless of the base manager-only RLS.
 alter view public.chip_entries_public set (security_invoker = false);
 
--- 3) Public read of the safe projection only.
+-- 3) Public read of the safe projection ONLY — explicitly read-only for public roles:
+--    strip any inherited privileges first, then grant SELECT (no INSERT/UPDATE/DELETE).
+revoke all on public.chip_entries_public from public, anon, authenticated;
 grant select on public.chip_entries_public to anon, authenticated;
