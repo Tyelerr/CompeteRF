@@ -13,6 +13,7 @@ import {
   TournamentTeam,
 } from "../types/team.types";
 import { PlayerTournament } from "../types/registration.types";
+import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-pots";
 
 // Team + its member slots, each with the linked profile (when an account).
 const TEAM_SELECT =
@@ -239,6 +240,33 @@ export const teamService = {
       p_pots: pots,
     });
     if (error) throw error;
+  },
+
+  // Reconcile EVERY team's side-pot membership after a Settings rename/remove (B4).
+  // Reads the tournament's teams, applies the shared reconciler (keep valid, migrate
+  // renames, drop removals) and rewrites only the changed teams via the authoritative
+  // set_team_side_pots RPC (so RLS/authorization is enforced). Throws on the first error.
+  async reconcileSidePots(
+    tournamentId: number,
+    renameMap: Record<string, string>,
+    validNames: string[],
+  ): Promise<void> {
+    const { data, error } = await supabase
+      .from("tournament_teams")
+      .select("id, paid_side_pots")
+      .eq("tournament_id", tournamentId);
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: number; paid_side_pots: unknown }[]) {
+      const cur = safePaidSidePots(row.paid_side_pots);
+      const next = reconcileSidePotMembership(cur, renameMap, validNames);
+      if (next.length !== cur.length || next.some((n, i) => n !== cur[i])) {
+        const { error: e2 } = await supabase.rpc("set_team_side_pots", {
+          p_team_id: row.id,
+          p_pots: next,
+        });
+        if (e2) throw e2;
+      }
+    }
   },
 
   // TD checks a team in / out. Persisted on the team so it survives roster

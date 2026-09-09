@@ -4,14 +4,17 @@
 // show "Register" vs "✓ Registered", and self-registers as `preregistered`
 // (NOT checked in — only the TD checks players in on tournament day).
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { registrationService } from "../../models/services/registration.service";
 import { Registration } from "../../models/types/registration.types";
+import { invalidateRegistrationQueries } from "./registration-invalidation";
 
 export const useSelfRegistration = (
   tournamentId?: number,
   playerId?: number,
 ) => {
+  const queryClient = useQueryClient();
   const [registration, setRegistration] = useState<Registration | null>(null);
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -70,11 +73,14 @@ export const useSelfRegistration = (
           });
         }
         setRegistration(r);
+        // Targeted refresh: this player's profile buckets + the tournament roster now
+        // reflect the new registration without a manual pull-to-refresh.
+        invalidateRegistrationQueries(queryClient, { tournamentId, playerId });
       } finally {
         setRegistering(false);
       }
     },
-    [tournamentId, playerId, registration],
+    [tournamentId, playerId, registration, queryClient],
   );
 
   // Self-service unregister: SOFT-cancel the player's OWN row via the supported
@@ -86,10 +92,12 @@ export const useSelfRegistration = (
     try {
       const r = await registrationService.cancelOwnRegistration(registration.id);
       setRegistration(r);
+      // Same targeted refresh on unregister so the roster/profile buckets drop them.
+      invalidateRegistrationQueries(queryClient, { tournamentId, playerId });
     } finally {
       setUnregistering(false);
     }
-  }, [registration]);
+  }, [registration, queryClient, tournamentId, playerId]);
 
   return { registration, isRegistered, loading, register, registering, unregister, unregistering, refresh };
 };

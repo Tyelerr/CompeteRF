@@ -159,6 +159,10 @@ export const useChipTournament = (id: number) => {
   const [starting, setStarting] = useState(false);
   const loadedRef = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The latest chip state awaiting persistence (set when the debounce is scheduled).
+  // flushSave() writes it immediately; load({ silent }) flushes it BEFORE reconciling so a
+  // background refetch never discards a not-yet-saved local edit (B3 stale-refetch guard).
+  const pendingSaveRef = useRef<ChipState | null>(null);
   // Tournament restore history. Every live action appends a PERSISTED restore
   // point (its pre-action snapshot) onto the chip state — see engine
   // withRestorePoint. The Audit Log restores to any of them and the quick "Undo
@@ -192,13 +196,34 @@ export const useChipTournament = (id: number) => {
     [],
   );
 
+  // Persist the latest pending chip NOW, coalescing with the debounce (clears its timer so
+  // it won't also fire). No-op when nothing is pending. Used to flush before a background
+  // reconcile so an in-flight local edit is never lost to a refetch.
+  const flushSave = useCallback(async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    const toSave = pendingSaveRef.current;
+    if (!toSave) return;
+    pendingSaveRef.current = null;
+    await chipService.save(id, toSave).catch(() => {});
+  }, [id]);
+
   // `silent` reconciles server state WITHOUT the full-screen takeover — used after a
   // row-level mutation that already updated `chip` optimistically. Only the very first
   // load (never-loaded) uses the blocking `loading` flag.
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent ?? false;
-    if (silent) setRefreshing(true);
-    else setLoading(true);
+    if (silent) {
+      // Persist any pending debounced change FIRST, then reconcile — otherwise a
+      // background refetch (adjacent mutation, or the admin roster Realtime signal) would
+      // overwrite `chip` with server state and drop a not-yet-saved local edit.
+      await flushSave();
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const b = await chipService.load(id);
@@ -240,24 +265,27 @@ export const useChipTournament = (id: number) => {
       if (silent) setRefreshing(false);
       else setLoading(false);
     }
-  }, [id]);
+  }, [id, flushSave]);
 
   useEffect(() => {
     loadedRef.current = false;
     load();
   }, [load]);
 
-  // Debounced auto-save whenever the chip blob changes (after the initial load).
+  // Debounced auto-save whenever the chip blob changes (after the initial load). The
+  // latest state is stashed in pendingSaveRef so flushSave() (before a silent reload) can
+  // persist it synchronously instead of losing it to the incoming refetch.
   useEffect(() => {
     if (!loadedRef.current || !chip) return;
+    pendingSaveRef.current = chip;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      chipService.save(id, chip).catch(() => {});
+      flushSave();
     }, 800);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [chip, id]);
+  }, [chip, id, flushSave]);
 
   // Registration-backed entries are PROJECTED from tournament_players / the team
   // roster on every load and are never written to chip_entries — so once a
@@ -778,6 +806,30 @@ export const useChipTournament = (id: number) => {
     [update, load, rosterLocked],
   );
 
+  // TD sets which side pots a SINGLES entry has entered (full replacement list). Mirrors
+  // setTeamSidePots: optimistic local update, then a TARGETED immediate write to that one
+  // chip_entries row so the membership persists reliably — not only via the debounced
+  // whole-blob save (which a background refetch could otherwise pre-empt). A brand-new,
+  // not-yet-saved entry matches 0 rows in the targeted write and is inserted by the
+  // whole-blob save instead; on failure we reconcile from the server.
+  const setEntrySidePots = useCallback(
+    async (entryId: string, pots: string[]) => {
+      if (rosterLocked()) return;
+      update((c) => ({
+        ...c,
+        entries: c.entries.map((e) =>
+          e.id === entryId ? { ...e, paidSidePots: pots } : e,
+        ),
+      }));
+      try {
+        await chipService.setEntrySidePots(id, entryId, pots);
+      } catch {
+        await load({ silent: true });
+      }
+    },
+    [update, load, id, rosterLocked],
+  );
+
   // TD checks a team in / out. Persisted server-side (optimistic locally) so it
   // survives roster reloads — previously local-only, so adding another team (a
   // reload) reset every team's check-in.
@@ -1113,6 +1165,7 @@ export const useChipTournament = (id: number) => {
     approveTeam,
     setTeamChips,
     setTeamSidePots,
+    setEntrySidePots,
     setTeamCheckedIn,
     checkInRegistration,
     setTeamPaid,

@@ -5,6 +5,7 @@
 // Unverified partner). Rules are enforced by the SECURITY DEFINER RPCs behind
 // teamService; this hook just orchestrates create → invite and reloads.
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { teamService } from "../../models/services/team.service";
 import {
@@ -12,6 +13,7 @@ import {
   TeamMember,
   TournamentTeam,
 } from "../../models/types/team.types";
+import { invalidateRegistrationQueries } from "./registration-invalidation";
 
 // Human-readable status for the modal.
 export type TeamRegState =
@@ -29,9 +31,17 @@ const memberLabel = (m?: TeamMember | null): string => {
 };
 
 export const useTeamRegistration = (tournamentId?: number, playerId?: number) => {
+  const queryClient = useQueryClient();
   const [team, setTeam] = useState<TournamentTeam | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Targeted refresh after any team registration change — same key set as self-reg,
+  // keyed to this captain. No browse reload, no polling.
+  const invalidate = useCallback(
+    () => invalidateRegistrationQueries(queryClient, { tournamentId, playerId }),
+    [queryClient, tournamentId, playerId],
+  );
 
   const refresh = useCallback(async () => {
     if (!tournamentId || !playerId) {
@@ -83,12 +93,13 @@ export const useTeamRegistration = (tournamentId?: number, playerId?: number) =>
           targetIdAuto = await teamService.invitePartner(teamId, partnerInvite);
         }
         await refresh();
+        invalidate();
         return { teamId, targetIdAuto };
       } finally {
         setBusy(false);
       }
     },
-    [tournamentId, team, refresh],
+    [tournamentId, team, refresh, invalidate],
   );
 
   const invitePartner = useCallback(
@@ -98,12 +109,13 @@ export const useTeamRegistration = (tournamentId?: number, playerId?: number) =>
       try {
         const targetIdAuto = await teamService.invitePartner(team.id, input);
         await refresh();
+        invalidate();
         return targetIdAuto;
       } finally {
         setBusy(false);
       }
     },
-    [team, refresh],
+    [team, refresh, invalidate],
   );
 
   const cancelPartner = useCallback(async () => {
@@ -112,10 +124,11 @@ export const useTeamRegistration = (tournamentId?: number, playerId?: number) =>
     try {
       await teamService.cancelPartner(team.id);
       await refresh();
+      invalidate();
     } finally {
       setBusy(false);
     }
-  }, [team, refresh]);
+  }, [team, refresh, invalidate]);
 
   const cancelTeam = useCallback(async () => {
     if (!team) return;
@@ -123,10 +136,11 @@ export const useTeamRegistration = (tournamentId?: number, playerId?: number) =>
     try {
       await teamService.cancelTeam(team.id);
       setTeam(null);
+      invalidate();
     } finally {
       setBusy(false);
     }
-  }, [team]);
+  }, [team, invalidate]);
 
   return {
     team,

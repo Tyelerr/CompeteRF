@@ -10,9 +10,10 @@
 // Players reuses the registration data layer (add / approve / check-in / remove
 // / no-show / search). Glyphs are Unicode escapes (raw emoji corrupt here).
 
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRegistrationRealtime } from "../../../../src/viewmodels/hooks/use.registration.realtime";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -86,6 +87,11 @@ import {
   reconcileSidePots,
   sidePotTotal,
 } from "../../../../src/utils/prize-pool";
+import {
+  detectSidePotRenames,
+  parseAmount,
+  reconcileSidePotMembership,
+} from "../../../../src/utils/side-pots";
 import {
   DrawPlayer,
   RaceConfig,
@@ -1820,6 +1826,22 @@ export default function ManageTournamentScreen() {
 
   const hub = useManageTournament(tournamentId);
 
+  // Cross-client roster freshness (B1 follow-up): while THIS director is actively on
+  // this tournament's manage screen, subscribe (tournament-scoped) to registration
+  // changes and refresh the roster. Active = screen focused; blur/unmount tears it down
+  // so only directors currently managing a tournament hold a channel. `chipRosterTick`
+  // is bumped so the embedded chip roster (VM-driven, not React Query) reloads too.
+  const [screenActive, setScreenActive] = useState(true);
+  const [chipRosterTick, setChipRosterTick] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenActive(true);
+      return () => setScreenActive(false);
+    }, []),
+  );
+  const bumpChipRoster = useCallback(() => setChipRosterTick((t) => t + 1), []);
+  useRegistrationRealtime(tournamentId, screenActive, bumpChipRoster);
+
   const isChipTournament =
     hub.tournament?.tournament_format === "chip-tournament";
   // Chip Prize Pool counts come from the SAME unified roster the chip Players tab and
@@ -1916,42 +1938,33 @@ export default function ManageTournamentScreen() {
   //  - any other removed name is dropped from players' records.
   const propagateSidePotChanges = async (prevForm: SettingsForm | null) => {
     if (!prevForm || !form) return;
-    const prevNames = prevForm.sidePots
-      .map((p) => p.name.trim())
-      .filter(Boolean);
+    // Detect renames (amount-aware; side pots have no stable id, membership is name-keyed)
+    // and genuine removals between the last-saved and current pot lists.
+    const toDef = (rows: SidePotForm[]) =>
+      rows.map((p) => ({ name: p.name.trim(), amount: parseAmount(p.amount) }));
+    const { renameMap, removed } = detectSidePotRenames(
+      toDef(prevForm.sidePots),
+      toDef(form.sidePots),
+    );
+    // A pure addition changes no existing membership — nothing to reconcile.
+    if (Object.keys(renameMap).length === 0 && removed.length === 0) return;
     const curNames = form.sidePots.map((p) => p.name.trim()).filter(Boolean);
-    const removed = prevNames.filter((n) => !curNames.includes(n));
-    const added = curNames.filter((n) => !prevNames.includes(n));
-    if (removed.length === 0) return; // nothing stale to clean up
-    const renameMap: Record<string, string> =
-      removed.length === 1 && added.length === 1
-        ? { [removed[0]]: added[0] }
-        : {};
-    const reconcile = (pots: string[]): string[] => {
-      const out: string[] = [];
-      for (const n of pots) {
-        if (curNames.includes(n)) out.push(n);
-        else if (n in renameMap) out.push(renameMap[n]);
-        // otherwise: pot was removed — drop it
+    const tasks: Promise<unknown>[] = [];
+    // 1) tournament_players (elim / self-reg singles) — reconcile changed rows in memory.
+    for (const reg of hub.registrations) {
+      const current = safePaidSidePots(reg.paid_side_pots);
+      const next = reconcileSidePotMembership(current, renameMap, curNames);
+      if (next.length !== current.length || next.some((n, i) => n !== current[i])) {
+        tasks.push(
+          hub.updateRegistration({ id: reg.id, updates: { paid_side_pots: next } }),
+        );
       }
-      return out;
-    };
-    const tasks = hub.registrations
-      .map((reg) => {
-        const current = safePaidSidePots(reg.paid_side_pots);
-        const next = reconcile(current);
-        const changed =
-          next.length !== current.length ||
-          next.some((n, i) => n !== current[i]);
-        return changed
-          ? hub.updateRegistration({
-              id: reg.id,
-              updates: { paid_side_pots: next },
-            })
-          : null;
-      })
-      .filter(Boolean) as Promise<unknown>[];
-    if (tasks.length > 0) await Promise.all(tasks);
+    }
+    // 2) chip_entries (owned singles) and 3) tournament_teams — reconciled server-side so
+    // a rename/remove propagates across ALL three membership stores, not just registrations.
+    tasks.push(chipService.reconcileSidePots(tournamentId, renameMap, curNames));
+    tasks.push(teamService.reconcileSidePots(tournamentId, renameMap, curNames));
+    await Promise.all(tasks);
   };
 
   // Snapshot of the last-saved form, used to detect side-pot renames on save.
@@ -5735,6 +5748,7 @@ export default function ManageTournamentScreen() {
             onReadinessChange={setEmbeddedChipReadiness}
             onStarted={() => hub.setLiveStateLocal("in_progress")}
             onTableCountChange={setEmbeddedChipTables}
+            reloadSignal={chipRosterTick}
           />
         );
       }

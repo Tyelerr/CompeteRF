@@ -53,6 +53,70 @@ export const selectedEntryTotal = (
   return parseAmount(entryFee) + pots;
 };
 
+// Reconcile a stored membership list (a player/team's `paid_side_pots` names) against an
+// edited pot list: keep names that still exist, migrate renamed names via `renameMap`
+// (oldName -> newName), drop names that were removed, and de-dupe. Used by every store
+// (tournament_players, chip_entries, tournament_teams) so membership stays consistent
+// after a Settings side-pot rename/remove.
+export const reconcileSidePotMembership = (
+  pots: string[],
+  renameMap: Record<string, string>,
+  validNames: string[],
+): string[] => {
+  const valid = new Set(validNames);
+  const out: string[] = [];
+  for (const raw of pots) {
+    const n = String(raw ?? "").trim();
+    if (!n) continue;
+    const target = valid.has(n) ? n : renameMap[n];
+    if (target && !out.includes(target)) out.push(target);
+  }
+  return out;
+};
+
+// Detect side-pot RENAMES between the previous and current pot lists. Side pots have no
+// stable id — membership is keyed by name — so a rename is inferred from a set diff. A
+// rename normally keeps the pot's amount, so removed names are paired to added names by
+// equal amount (1:1); a single unpaired removed↔added left over is also treated as a
+// rename (covers a rename that ALSO changed the amount). Any remaining unpaired removed
+// name is a genuine removal. This biases toward detecting a rename so membership is
+// MIGRATED rather than dropped — the safe default for the reported "members go stale on
+// rename" bug. Returns the rename map (old -> new) and the list of truly-removed names.
+export const detectSidePotRenames = (
+  prev: SidePotDef[],
+  cur: SidePotDef[],
+): { renameMap: Record<string, string>; removed: string[] } => {
+  const clean = (arr: SidePotDef[]) =>
+    arr
+      .map((p) => ({ name: String(p.name ?? "").trim(), amount: parseAmount(p.amount) }))
+      .filter((p) => p.name.length > 0);
+  const P = clean(prev);
+  const C = clean(cur);
+  const curNames = new Set(C.map((p) => p.name));
+  const prevNames = new Set(P.map((p) => p.name));
+  const removedDefs = P.filter((p) => !curNames.has(p.name));
+  const availableAdded = C.filter((p) => !prevNames.has(p.name));
+
+  const renameMap: Record<string, string> = {};
+  const unpaired: { name: string; amount: number }[] = [];
+  // 1) pair by equal amount (a plain rename keeps its amount)
+  for (const r of removedDefs) {
+    const i = availableAdded.findIndex((a) => a.amount === r.amount);
+    if (i >= 0) {
+      renameMap[r.name] = availableAdded[i].name;
+      availableAdded.splice(i, 1);
+    } else {
+      unpaired.push(r);
+    }
+  }
+  // 2) a single leftover removed <-> added is a rename that also changed the amount
+  if (unpaired.length === 1 && availableAdded.length === 1) {
+    renameMap[unpaired[0].name] = availableAdded[0].name;
+    unpaired.length = 0;
+  }
+  return { renameMap, removed: unpaired.map((r) => r.name) };
+};
+
 // Format a currency amount compactly ("$25", "$5"). No cents unless present. Accepts the
 // same messy string/number inputs as parseAmount so callers can pass raw config values.
 export const formatMoney = (amount: number | string | null | undefined): string => {

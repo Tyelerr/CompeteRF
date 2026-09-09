@@ -217,6 +217,31 @@ export type LivePlayerSort =
   | "record"
   | "fargoDesc"
   | "fargoAsc";
+
+// B5: session-scoped, per-tournament cache of the Players roster UI controls (Setup +
+// Live search text, status filter, sort). The embedded ChipManageScreen remounts when the
+// TD crosses setup⇄live or swaps Players↔Settings/Prize-Pool; without persisting these,
+// that remount resets the search/filter/sort the TD had set. Keyed by tournament id,
+// cleared on app restart. Correctness-neutral (affects only what the TD sees on return,
+// never tournament data) and NOT global app state — a bounded, screen-local Map, same
+// spirit as nav-cache. (Scroll-offset restoration is PARTIAL/deferred: in embedded mode
+// the Setup roster scrolls inside the host's ScrollView, so it would need host
+// coordination — tracked as a follow-up, not done here.)
+type RosterUiState = {
+  rosterQuery: string;
+  rosterFilter: "all" | "prereg" | "registered" | "ready" | "no_show";
+  rosterSort:
+    | "default"
+    | "name"
+    | "fargoDesc"
+    | "fargoAsc"
+    | "chipsDesc"
+    | "recent"
+    | "status";
+  liveQuery: string;
+  liveSort: LivePlayerSort;
+};
+const rosterUiCache = new Map<number, RosterUiState>();
 export const LIVE_SORT_OPTS: { label: string; value: LivePlayerSort }[] = [
   { label: "Current / Status", value: "status" },
   { label: "Name A–Z", value: "name" },
@@ -399,6 +424,11 @@ interface ChipManageProps {
   // Fired ONCE after a confirmed Start Tournament so the host can flip its cached
   // tournament/header to Running immediately (this VM persists the start itself).
   onStarted?: () => void;
+  // Bumped by the host's tournament-scoped registration Realtime subscription. This
+  // roster is VM-driven (not a React Query key), so a change on this number triggers a
+  // SILENT reload to surface cross-client registration changes (e.g. a player who just
+  // self-registered from another device) without a spinner or scroll reset.
+  reloadSignal?: number;
 }
 
 // Compact Prize Pool summary shown on Review & Start (computed by the host).
@@ -505,8 +535,22 @@ const ShuffleBallsAnimation = ({ onDone }: { onDone: () => void }) => {
   );
 };
 
-export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted }: ChipManageProps) => {
+export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
   const vm = useChipTournament(id);
+  // Host bumps `reloadSignal` when its tournament-scoped registration Realtime channel
+  // sees a change. Silently reload so a cross-client registration surfaces here without
+  // a spinner/scroll reset. Refs keep reload stable and skip the initial mount value
+  // (which the host's own load already covers) — the effect fires only on real changes.
+  const reloadRef = useRef(vm.reload);
+  useEffect(() => {
+    reloadRef.current = vm.reload;
+  }, [vm.reload]);
+  const lastReloadSignal = useRef(reloadSignal);
+  useEffect(() => {
+    if (reloadSignal === lastReloadSignal.current) return;
+    lastReloadSignal.current = reloadSignal;
+    reloadRef.current({ silent: true });
+  }, [reloadSignal]);
   // Shared completed-tournament lock. Every manager page reads this: when true the
   // pages are historical/read-only — all mutating controls are hidden. The engine
   // guards (see the viewmodel) enforce the same lock so stale UI can't change it.
@@ -842,17 +886,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // Players page (registration manager) UI state: search, status filter, per-card
   // edit mode, and the three-dot menu target.
-  const [rosterQuery, setRosterQuery] = useState("");
-  const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show">("all");
+  // Seed from the per-tournament UI cache so search/filter/sort survive a remount (B5).
+  const [rosterQuery, setRosterQuery] = useState(() => rosterUiCache.get(id)?.rosterQuery ?? "");
+  const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show">(
+    () => rosterUiCache.get(id)?.rosterFilter ?? "all",
+  );
   const [rosterSort, setRosterSort] = useState<
     "default" | "name" | "fargoDesc" | "fargoAsc" | "chipsDesc" | "recent" | "status"
-  >("default");
+  >(() => rosterUiCache.get(id)?.rosterSort ?? "default");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   // Live · Players tab — presentation-only search + sort (separate from the Setup
   // roster controls above; never touches queue/table/winner-stays state).
-  const [liveQuery, setLiveQuery] = useState("");
-  const [liveSort, setLiveSort] = useState<LivePlayerSort>("status");
+  const [liveQuery, setLiveQuery] = useState(() => rosterUiCache.get(id)?.liveQuery ?? "");
+  const [liveSort, setLiveSort] = useState<LivePlayerSort>(() => rosterUiCache.get(id)?.liveSort ?? "status");
   const [liveSortMenuOpen, setLiveSortMenuOpen] = useState(false);
   const [editEntryId, setEditEntryId] = useState<string | null>(null);
   // Fargo-cap override modals: confirm (Allow over cap?) → reason (chips + notes); plus a
@@ -864,6 +911,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [capReasonNotes, setCapReasonNotes] = useState<string>("");
   const [capReasonMenuOpen, setCapReasonMenuOpen] = useState(false);
   const [menuEntryId, setMenuEntryId] = useState<string | null>(null);
+  // Persist the roster UI controls so they survive this screen's remount (B5).
+  useEffect(() => {
+    rosterUiCache.set(id, { rosterQuery, rosterFilter, rosterSort, liveQuery, liveSort });
+  }, [id, rosterQuery, rosterFilter, rosterSort, liveQuery, liveSort]);
   // Window rect of the Actions button that opened the menu (for above/below math) +
   // the screen-root's window origin (so we can position the in-tree overlay, which
   // lives inside the scroll content, in the root's coordinate space).
@@ -1181,16 +1232,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Single source of truth for this tournament's configured side pots (name + numeric
   // amount, robustly coerced) — used by the cards, the Add flow, and Review & Start.
   const tournamentSidePots = parseSidePots(tournament?.side_pots);
-  // Toggle a side-pot ENTRY (membership). Doubles/team persist via tournament_teams
-  // (setTeamSidePots); Singles have no teamId, so persist on the chip_entries row itself
-  // (updateEntry → chip_entries.paid_side_pots). Both are auto-saved by the viewmodel.
+  // Toggle a side-pot ENTRY (membership). Both paths persist the membership IMMEDIATELY
+  // with a targeted per-row write (teams → tournament_teams via setTeamSidePots; singles →
+  // chip_entries via setEntrySidePots), not via the debounced whole-blob save — so a
+  // background refetch can't drop it and singles behave the same as teams.
   const toggleSidePot = (e: ChipEntry, name: string) => {
     const cur = e.paidSidePots ?? [];
     const next = cur.includes(name)
       ? cur.filter((n) => n !== name)
       : [...cur, name];
     if (e.teamId != null) vm.setTeamSidePots(e.teamId, next);
-    else vm.updateEntry(e.id, { paidSidePots: next });
+    else vm.setEntrySidePots(e.id, next);
   };
 
   // ── Setup · Players (registration) ───────────────────────────────────────────

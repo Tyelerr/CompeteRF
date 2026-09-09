@@ -19,6 +19,7 @@ import {
   GeneratedBracket,
   MatchLiveState,
   PrizePoolConfig,
+  TournamentLiveSettings,
 } from "../../models/types/tournament-settings.types";
 import {
   TournamentLiveState,
@@ -97,33 +98,67 @@ export const useManageTournament = (tournamentId?: number) => {
       queryKey: ["tournament-tables", tournamentId],
     });
 
+  // ---- live_settings write safety (B2: stale-overwrite protection) -------
+  // Every live_settings write is a read-modify-write of ONE jsonb column that Supabase
+  // overwrites wholesale — there is no server-side merge. Reading the merge base from the
+  // render-closure query data let two writes fired within the same refetch window
+  // (Settings ↔ Prize Pool, which the screen chains in beginRegistration / saveCurrentPage
+  // / confirmLeaveSettings) each merge onto the SAME stale snapshot and silently drop the
+  // other's keys — e.g. a Settings save reverting the just-saved side-pot payout split.
+  //
+  // writeLiveSettings closes that window per client: it cancels in-flight refetches,
+  // computes the next blob from the FRESHEST cache (so chained saves merge onto each
+  // other), optimistically writes the merged result into the cache (so the next chained
+  // save reads it, not a stale value), persists, and rolls the cache back on failure.
+  // `build` runs exactly once, so appends (e.g. drawLog) never double-apply. It returns
+  // the FULL patch to send: top-level columns pass through; a `live_settings` delta is
+  // shallow-merged onto the current live_settings.
+  //
+  // NOTE (Phase G): this protects a single client's chained saves. Concurrent writes from
+  // DIFFERENT directors to different live_settings keys still last-write-wins — that needs
+  // a server-side jsonb merge (RPC), tracked as the multi-director concurrency item.
+  const currentTournament = () =>
+    queryClient.getQueryData<Tournament>(["tournament", tournamentId]);
+  const writeLiveSettings = async (
+    build: (prevLS: TournamentLiveSettings) => Partial<Tournament>,
+  ): Promise<Tournament> => {
+    await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
+    const prev = currentTournament();
+    const prevLS: TournamentLiveSettings = prev?.live_settings ?? {};
+    const patch = build(prevLS);
+    const nextPatch: Partial<Tournament> = patch.live_settings
+      ? { ...patch, live_settings: { ...prevLS, ...patch.live_settings } }
+      : patch;
+    if (prev) {
+      queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+        ...prev,
+        ...nextPatch,
+      });
+    }
+    try {
+      return await tournamentService.updateTournament(tournamentId!, nextPatch);
+    } catch (e) {
+      if (prev) queryClient.setQueryData(["tournament", tournamentId], prev);
+      throw e;
+    }
+  };
+
   // ---- Mutations ---------------------------------------------------------
 
   // Settings save MERGES live_settings into the existing blob so it never
   // clobbers sibling keys (bracket, drawLog, matchState, prizePool) that the
   // Settings form's toPatch() doesn't know about.
   const saveSettingsMutation = useMutation({
-    mutationFn: (patch: Partial<Tournament>) => {
-      let next = patch;
-      if (patch.live_settings) {
-        const ls = tournamentQuery.data?.live_settings ?? {};
-        next = { ...patch, live_settings: { ...ls, ...patch.live_settings } };
-      }
-      return tournamentService.updateTournament(tournamentId!, next);
-    },
-    onSuccess: invalidateTournament,
+    mutationFn: (patch: Partial<Tournament>) => writeLiveSettings(() => patch),
+    onSettled: invalidateTournament,
   });
 
   // Persist the prize-pool payout config (Setup phase). Merges into live_settings
   // so it survives a Settings save and rides along when the bracket is drawn.
   const savePrizePoolMutation = useMutation({
-    mutationFn: (config: PrizePoolConfig) => {
-      const ls = tournamentQuery.data?.live_settings ?? {};
-      return tournamentService.updateTournament(tournamentId!, {
-        live_settings: { ...ls, prizePool: config },
-      });
-    },
-    onSuccess: invalidateTournament,
+    mutationFn: (config: PrizePoolConfig) =>
+      writeLiveSettings(() => ({ live_settings: { prizePool: config } })),
+    onSettled: invalidateTournament,
   });
 
   const liveStateMutation = useMutation({
@@ -167,22 +202,19 @@ export const useManageTournament = (tournamentId?: number) => {
     mutationFn: (vars: {
       bracket: GeneratedBracket;
       logEntry: DrawLogEntry;
-    }) => {
-      const ls = tournamentQuery.data?.live_settings ?? {};
-      return tournamentService.updateTournament(tournamentId!, {
+    }) =>
+      writeLiveSettings((prevLS) => ({
         live_state: "registration_closed",
         live_settings: {
-          ...ls,
           bracket: vars.bracket,
-          drawLog: [...(ls.drawLog ?? []), vars.logEntry],
+          drawLog: [...(prevLS.drawLog ?? []), vars.logEntry],
           // A (re)draw replaces the field/seeding, so any prior live match state
           // (winners/scores/timers, keyed by match id) must be cleared — otherwise
           // old results stick to the new bracket.
           matchState: {},
         },
-      });
-    },
-    onSuccess: invalidateTournament,
+      })),
+    onSettled: invalidateTournament,
   });
 
   // DEV/test: replace the whole matchState at once (used by the bracket
@@ -191,46 +223,38 @@ export const useManageTournament = (tournamentId?: number) => {
     mutationFn: (vars: {
       matchState: Record<string, MatchLiveState>;
       start?: boolean;
-    }) => {
-      const ls = tournamentQuery.data?.live_settings ?? {};
-      return tournamentService.updateTournament(tournamentId!, {
+    }) =>
+      writeLiveSettings(() => ({
         ...(vars.start ? { live_state: "in_progress" as TournamentLiveState } : {}),
-        live_settings: { ...ls, matchState: vars.matchState },
-      });
-    },
-    onSuccess: invalidateTournament,
+        live_settings: { matchState: vars.matchState },
+      })),
+    onSettled: invalidateTournament,
   });
 
   // Persist Queue Manager settings (auto-assign mode + manual queue order),
   // merged into live_settings.
   const saveQueueSettingsMutation = useMutation({
-    mutationFn: (vars: { autoAssignMode?: AutoAssignMode; queueOrder?: string[] }) => {
-      const ls = tournamentQuery.data?.live_settings ?? {};
-      return tournamentService.updateTournament(tournamentId!, {
-        live_settings: { ...ls, ...vars },
-      });
-    },
-    onSuccess: invalidateTournament,
+    mutationFn: (vars: { autoAssignMode?: AutoAssignMode; queueOrder?: string[] }) =>
+      writeLiveSettings(() => ({ live_settings: { ...vars } })),
+    onSettled: invalidateTournament,
   });
 
   // Merge a patch into one match's live state (Matches tab). Stored in
   // live_settings.matchState keyed by match number.
   const setMatchStateMutation = useMutation({
-    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) => {
-      const ls = tournamentQuery.data?.live_settings ?? {};
-      const prev = ls.matchState ?? {};
-      const key = vars.matchId;
-      const existing = prev[key];
-      const merged: MatchLiveState = {
-        ...existing,
-        ...vars.patch,
-        status: vars.patch.status ?? existing?.status ?? "scheduled",
-      };
-      return tournamentService.updateTournament(tournamentId!, {
-        live_settings: { ...ls, matchState: { ...prev, [key]: merged } },
-      });
-    },
-    onSuccess: invalidateTournament,
+    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) =>
+      writeLiveSettings((prevLS) => {
+        const prevMS = prevLS.matchState ?? {};
+        const key = vars.matchId;
+        const existing = prevMS[key];
+        const merged: MatchLiveState = {
+          ...existing,
+          ...vars.patch,
+          status: vars.patch.status ?? existing?.status ?? "scheduled",
+        };
+        return { live_settings: { matchState: { ...prevMS, [key]: merged } } };
+      }),
+    onSettled: invalidateTournament,
   });
 
   // Table mutations (used by the Tables tab)

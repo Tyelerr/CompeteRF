@@ -16,7 +16,7 @@ import {
 } from "../types/chip.types";
 import { Tournament } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
-import { safePaidSidePots } from "../../utils/side-pots";
+import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-pots";
 
 export interface ChipTournamentBundle {
   tournament: Tournament;
@@ -604,6 +604,50 @@ export const chipService = {
     });
 
     if (errors.length) throw errors[0];
+  },
+
+  // Targeted write of ONE singles entry's side-pot membership to chip_entries — the
+  // singles counterpart to teamService.setTeamSidePots. Lets a side-pot toggle persist
+  // IMMEDIATELY (independent of the debounced whole-blob save), so a background refetch
+  // can't drop it. Matches an OWNED entry by (tournament_id, id); a brand-new not-yet-saved
+  // entry matches 0 rows (no error) and is inserted by the whole-blob save instead — hence
+  // no .single() here. Throws on a real error.
+  async setEntrySidePots(id: number, entryId: string, pots: string[]): Promise<void> {
+    const { error } = await supabase
+      .from("chip_entries")
+      .update({ paid_side_pots: pots })
+      .eq("tournament_id", id)
+      .eq("id", entryId);
+    if (error) throw error;
+  },
+
+  // Reconcile EVERY owned singles entry's side-pot membership after a Settings rename/
+  // remove (B4). Fetches the current chip_entries for the tournament, applies the shared
+  // reconciler (keep valid, migrate renames, drop removals) and writes back only the rows
+  // that actually changed. Registration-backed singles live in tournament_players and are
+  // reconciled separately by the caller. Throws on the first write error.
+  async reconcileSidePots(
+    id: number,
+    renameMap: Record<string, string>,
+    validNames: string[],
+  ): Promise<void> {
+    const { data, error } = await supabase
+      .from("chip_entries")
+      .select("id, paid_side_pots")
+      .eq("tournament_id", id);
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: string; paid_side_pots: unknown }[]) {
+      const cur = safePaidSidePots(row.paid_side_pots);
+      const next = reconcileSidePotMembership(cur, renameMap, validNames);
+      if (next.length !== cur.length || next.some((n, i) => n !== cur[i])) {
+        const { error: e2 } = await supabase
+          .from("chip_entries")
+          .update({ paid_side_pots: next })
+          .eq("tournament_id", id)
+          .eq("id", row.id);
+        if (e2) throw e2;
+      }
+    }
   },
 
   async setName(id: number, name: string): Promise<void> {
