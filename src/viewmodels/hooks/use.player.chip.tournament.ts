@@ -9,7 +9,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService } from "../../models/services/chip.service";
-import { teamName as teamNameOf } from "../../models/services/chip.engine";
+import { enteredField, teamName as teamNameOf } from "../../models/services/chip.engine";
 import {
   ChipEntry,
   ChipFormat,
@@ -164,7 +164,9 @@ const buildChipHub = (
     return t ? t.label : null;
   };
 
-  const alive = s.entries.filter(isAlive);
+  // Field participants only (checkedIn) — non-field roster entries never appear in the
+  // profile's leaderboard / players-left count, matching the engine + spectator.
+  const alive = s.entries.filter((e) => isAlive(e) && enteredField(e));
   const byChips = [...alive].sort(
     (a, b) => b.chips - a.chips || b.wins - a.wins,
   );

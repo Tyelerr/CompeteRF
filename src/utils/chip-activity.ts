@@ -31,6 +31,12 @@ export interface PublicActivity {
   text: string;
   at: string;
   kind: PublicActivityKind;
+  // Public audit context, surfaced when the originating event carries it (director
+  // actions: forfeit, elimination, chip adjust, etc.). Automatic gameplay events
+  // leave these null, so ordinary play-by-play lines render unchanged.
+  actor?: string | null; // display name of who performed the action
+  reason?: string | null; // PUBLIC reason (spectator-visible audit note)
+  notes?: string | null; // PUBLIC free-text note (spectator-visible)
 }
 
 // Light, spectator-friendly wording tweaks over the engine's audit text (which is
@@ -42,6 +48,9 @@ const humanize = (text: string): string =>
     // "… → 5 left" → "… → 5 remaining"
     .replace(/→\s*(\d+)\s*left\b/i, "→ $1 remaining");
 
+// Escape a string for safe inclusion in a RegExp (reason text is user-authored).
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const readAct = (ev: ChipEvent): string | null =>
   (ev.payload?.act as string | undefined) ?? null;
 
@@ -49,7 +58,25 @@ const readAct = (ev: ChipEvent): string | null =>
 export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
   // A restored-past (superseded) event is no longer part of the live story.
   if (ev.superseded || !ev.text) return null;
-  const base = { id: ev.id, at: ev.at, text: humanize(ev.text) };
+  const readStr = (k: string): string | null => {
+    const v = ev.payload?.[k];
+    return typeof v === "string" && v.trim() ? v : null;
+  };
+  const reason = readStr("reason");
+  // Some engine lines bake "— {reason}" into the text; drop it so the reason isn't
+  // shown twice once we surface it as its own field below.
+  let text = humanize(ev.text);
+  if (reason) {
+    text = text.replace(new RegExp(`\\s*[—-]\\s*${escapeRe(reason)}\\s*$`), "").trim();
+  }
+  const base = {
+    id: ev.id,
+    at: ev.at,
+    text,
+    actor: readStr("actorName"),
+    reason,
+    notes: readStr("notes"),
+  };
 
   switch (ev.type) {
     // ── Always public: core play-by-play ──────────────────────────────────────

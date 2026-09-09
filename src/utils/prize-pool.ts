@@ -372,6 +372,58 @@ export const isPrizePoolComplete = (
   return true;
 };
 
+// ── Payout allocation summary (Start gate + Review display) ────────────────────
+// Per-bucket "is every dollar allocated?" view. An ENABLED bucket = the entry pool plus
+// every side pot that has money collected (pool > 0). `remaining` is the authoritative,
+// cent-rounded pool − payouts from computeBreakdown (>0 under-allocated, <0 over): the
+// view/gate reuse this rather than recomputing payout math. `balanced` uses a half-cent
+// tolerance so it never depends on fragile floating-point equality.
+export interface PayoutBucketAllocation {
+  key: string;
+  label: string;
+  pool: number;
+  allocated: number;
+  remaining: number;
+  balanced: boolean;
+}
+export const payoutAllocations = (
+  config: PrizePoolConfig | null | undefined,
+  entryPool: number,
+  sidePotPools: Record<string, number>,
+): PayoutBucketAllocation[] => {
+  if (!config) return [];
+  const bucket = (
+    key: string,
+    label: string,
+    pool: number,
+    places: PrizePlace[],
+  ): PayoutBucketAllocation => {
+    const b = computeBreakdown(pool, places);
+    return {
+      key,
+      label,
+      pool: b.pool,
+      allocated: b.payoutTotal,
+      remaining: b.remaining,
+      balanced: Math.abs(b.remaining) < 0.005,
+    };
+  };
+  const buckets: PayoutBucketAllocation[] = [
+    bucket("entry", "Entry Payouts", entryPool, config.entryPlaces),
+  ];
+  for (const sp of config.sidePots) {
+    const pool = sidePotPools[sp.name] ?? 0;
+    if (round2(pool) <= 0) continue; // an enabled side pot has money collected
+    buckets.push(bucket(`sidepot:${sp.name}`, `Side Pot · ${sp.name}`, pool, sp.places));
+  }
+  return buckets;
+};
+
+// Start gate: EVERY enabled payout bucket must allocate its pool exactly ($0 remaining).
+export const payoutsFullyAllocated = (
+  buckets: PayoutBucketAllocation[],
+): boolean => buckets.every((b) => b.balanced);
+
 // ── Read-only side-pot payout model (shared by every payout/results display) ────
 // ONE normalized model so the TD setup, TD results, and player/spectator payout
 // screens never drift. Given the SAVED payout config (config.sidePots — the

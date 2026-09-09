@@ -92,8 +92,17 @@ const pushEvent = (
   s.events.unshift(ev); // newest first
 };
 
+// Authoritative live-field membership. An entry is a live participant ONLY if it entered
+// the field — `checkedIn` is set true for exactly the field entrants at Start (and stays
+// true for the life of the tournament, including after elimination), and false for roster
+// entries that never entered (paid-but-not-Ready, unresolved registrations). Using it here
+// keeps non-field entries out of the alive count, eliminations, standings, and placements
+// WITHOUT deleting their row (non-destructive). Pre-start (no startedAt) it is unused —
+// setup counts use the lifecycle helpers instead.
+export const enteredField = (e: ChipEntry): boolean => !!e.checkedIn;
+
 const aliveEntries = (s: ChipState): ChipEntry[] =>
-  s.entries.filter((e) => e.status !== "eliminated");
+  s.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
 
 // ── factory ──────────────────────────────────────────────────────────────────
 export const emptyChipState = (format: ChipFormat): ChipState => ({
@@ -542,14 +551,17 @@ export const reconcileEliminations = (input: ChipState): ChipState => {
   for (const m of input.matches) {
     if (m.status === "in_progress") { inLive.add(m.aId); inLive.add(m.bId); }
   }
+  // Only FIELD participants can be eliminated for being out of chips — a roster entry
+  // that never entered the field (checkedIn=false: paid-but-not-Ready, unresolved reg)
+  // sits at chips=0 but is NOT a live player, so it must not be fake-eliminated.
   const hasVictim = input.entries.some(
-    (e) => e.status !== "eliminated" && (e.chips ?? 0) <= 0 && !inLive.has(e.id),
+    (e) => e.status !== "eliminated" && enteredField(e) && (e.chips ?? 0) <= 0 && !inLive.has(e.id),
   );
   if (!hasVictim) return input;
   const s = clone(input);
   const nowIso = new Date().toISOString();
   for (const e of s.entries) {
-    if (e.status === "eliminated" || (e.chips ?? 0) > 0 || inLive.has(e.id)) continue;
+    if (e.status === "eliminated" || !enteredField(e) || (e.chips ?? 0) > 0 || inLive.has(e.id)) continue;
     e.status = "eliminated";
     e.eliminatedAt = e.eliminatedAt ?? nowIso;
     e.tableId = null;
@@ -800,7 +812,9 @@ export const startPendingMatch = (
 ): ChipState => {
   const s = clone(input);
   const t = s.tables.find((x) => x.id === tableId);
-  if (!t || t.matchId || !t.holderId || !t.pendingChallengerId) return input;
+  // A locked table never starts a new match — even an already-assigned opening matchup
+  // (assigned before the lock). The TD must unlock it first.
+  if (!t || t.matchId || !t.holderId || !t.pendingChallengerId || t.locked) return input;
   const holderId = t.holderId;
   const challengerId = t.pendingChallengerId;
   t.pendingChallengerId = null;
@@ -818,7 +832,9 @@ export const startPendingMatch = (
 // (whose holder just won → streak > 0). Opening tables are the only ones the "Start
 // All / Start Remaining" control acts on.
 const isOpeningWaitTable = (s: ChipState, t: ChipTable): boolean => {
-  if (t.inactive || t.matchId || !t.holderId || !t.pendingChallengerId) return false;
+  // A locked table is never "waiting to start" — it must not be started by Start All /
+  // Start Remaining, and must not be counted toward the opening-kickoff control.
+  if (t.inactive || t.locked || t.matchId || !t.holderId || !t.pendingChallengerId) return false;
   const h = entryById(s, t.holderId);
   return !!h && (h.streak ?? 0) === 0;
 };
@@ -931,6 +947,36 @@ export const startChipTournament = (input: ChipState): ChipState => {
   return s;
 };
 
+// Finalize the tournament when exactly ONE field entrant remains alive. Returns true
+// (and mutates `s` to the finished state) if a champion was crowned, false otherwise.
+// This is the single crowning path shared by recordWinner and forfeitEntry. It takes
+// precedence over any pending shuffle/reshuffle drain: a tournament that has reached a
+// sole survivor is OVER, so it clears all drain/round state and every table assignment
+// rather than parking in "ready to shuffle". aliveEntries already counts only field
+// entrants (A1), so a lone survivor is the true champion.
+const crownIfChampion = (s: ChipState, by?: number | null): boolean => {
+  const alive = aliveEntries(s);
+  if (alive.length !== 1) return false;
+  const champ = alive[0];
+  s.winnerId = champ.id;
+  s.finishedAt = new Date().toISOString();
+  // The event is finished — no drain/round is pending any longer.
+  s.reshufflePending = false;
+  s.shuffleReady = false;
+  s.shuffleRound = false;
+  s.roundRemaining = [];
+  for (const t of s.tables) {
+    t.matchId = null;
+    t.holderId = null;
+    t.pendingChallengerId = null;
+    t.status = "open";
+  }
+  champ.status = "queued";
+  champ.tableId = null;
+  pushEvent(s, "manual", `${teamName(champ)} wins the tournament! 🏆`, by, { act: "champion", entryId: champ.id });
+  return true;
+};
+
 // ── record a winner ──────────────────────────────────────────────────────────
 export const recordWinner = (
   input: ChipState,
@@ -1001,6 +1047,12 @@ export const recordWinner = (
     s.queue.push(loserId); // back of the queue
   }
 
+  // Win condition FIRST — one field entrant left standing. This takes precedence over
+  // a pending reshuffle drain: if the result that just landed left a sole survivor, the
+  // tournament is over and the champion is crowned now, never deferred to a shuffle that
+  // will never come.
+  if (crownIfChampion(s, by)) return s;
+
   // A pending shuffle cycle: don't re-seat. When the LAST active match finishes,
   // the board is fully drained — enter the "ready to shuffle" state and wait for
   // the TD to press Start Shuffle (they may adjust tables first). The redraw does
@@ -1014,21 +1066,6 @@ export const recordWinner = (
   }
 
   seatAllTables(s);
-
-  // Win condition: one entry left standing.
-  const alive = aliveEntries(s);
-  if (alive.length === 1) {
-    s.winnerId = alive[0].id;
-    s.finishedAt = new Date().toISOString();
-    for (const t of s.tables) {
-      t.matchId = null;
-      t.holderId = null;
-      t.status = "open";
-    }
-    alive[0].status = "queued";
-    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by, { act: "champion", entryId: alive[0].id });
-    return s;
-  }
 
   // Shuffle round complete: once every alive team has been seated for the round
   // (nothing left in roundRemaining) AND no table is still holding a pending
@@ -1044,37 +1081,32 @@ export const recordWinner = (
   return s;
 };
 
-// ── forfeit (counts as a loss for the forfeiting entry) ───────────────────────
-export const forfeitMatch = (
-  input: ChipState,
-  matchId: string,
-  forfeitingEntryId: string,
-  by?: number | null,
-): ChipState => {
-  const match = input.matches.find((m) => m.id === matchId);
-  if (!match) return input;
-  const winnerId = match.aId === forfeitingEntryId ? match.bId : match.aId;
-  const s = recordWinner(input, matchId, winnerId, by);
-  // tag the most recent match_result as a forfeit for the timeline
-  const fEntry = s.entries.find((e) => e.id === forfeitingEntryId);
-  if (fEntry) pushEventInPlace(s, "forfeit", `${teamName(fEntry)} forfeited`, by);
-  return s;
-};
-
 // TD forfeits an entry out of the WHOLE tournament — eliminated regardless of
 // chip count or current standing. If they are mid-match, the opponent wins by
 // forfeit and stays on the table; a waiting holder's table is freed. The board
 // re-seats and the win condition is re-checked (a forfeit can end the event).
+// Metadata for a director forfeit action (Forfeit Match / Forfeit Tournament). The
+// reason/notes are PUBLIC audit notes (spectator-visible), not private internal notes.
+export interface ForfeitMeta {
+  reason?: string | null;
+  notes?: string | null;
+  actorId?: number | null;
+  actorName?: string | null;
+}
+
 export const forfeitEntry = (
   input: ChipState,
   entryId: string,
-  by?: number | null,
+  meta?: ForfeitMeta | null,
 ): ChipState => {
   const s = clone(input);
   const e = entryById(s, entryId);
   if (!e || e.status === "eliminated") return input;
+  const by = meta?.actorId ?? null;
 
-  // Mid-match: the opponent wins by forfeit and stays as the table holder.
+  // Mid-match: the opponent wins by forfeit and stays as the table holder — UNLESS the
+  // table is closing (Remove After Match) or a reshuffle drain is pending, in which case
+  // the winner returns to the queue and the table is NOT held open for a new challenger.
   const liveMatch = s.matches.find(
     (m) => m.status === "in_progress" && (m.aId === entryId || m.bId === entryId),
   );
@@ -1097,11 +1129,28 @@ export const forfeitEntry = (
       table.status = "open";
       table.lastLoserId = null;
       if (opp) {
-        table.holderId = oppId;
-        opp.tableId = table.id;
+        if (table.closing) {
+          // Closing table: don't park the winner — requeue them and complete the closure.
+          opp.tableId = null;
+          opp.status = "queued";
+          if (!s.queue.includes(oppId)) s.queue.unshift(oppId);
+          table.holderId = null;
+          table.closing = false;
+          table.inactive = true;
+          pushEvent(s, "table_removed", `${table.label} closed`, by);
+        } else if (s.reshufflePending) {
+          // Draining for a reshuffle: return the winner to the queue; don't hold the table.
+          opp.tableId = null;
+          opp.status = "queued";
+          if (!s.queue.includes(oppId)) s.queue.unshift(oppId);
+          table.holderId = null;
+        } else {
+          table.holderId = oppId;
+          opp.tableId = table.id;
+        }
       }
     }
-    pushEvent(s, "forfeit", `${teamName(e)} forfeited vs ${opp ? teamName(opp) : "opponent"}`, by, { entryId, oppId });
+    pushEvent(s, "forfeit", `${teamName(e)} forfeited vs ${opp ? teamName(opp) : "opponent"}`, by, { entryId, oppId, reason: meta?.reason ?? null, notes: meta?.notes ?? null, actorName: meta?.actorName ?? null });
   }
 
   // Force elimination regardless of remaining chips.
@@ -1121,34 +1170,57 @@ export const forfeitEntry = (
     if (t.pendingChallengerId === entryId) t.pendingChallengerId = null; // challenger eliminated
     if (t.lastLoserId === entryId) t.lastLoserId = null;
   }
-  pushEvent(s, "elimination", `${teamName(e)} forfeited the tournament`, by, { entryId });
+  pushEvent(s, "elimination", `${teamName(e)} forfeited the tournament${meta?.reason ? ` — ${meta.reason}` : ""}`, by, { entryId, act: "forfeit_tournament", reason: meta?.reason ?? null, notes: meta?.notes ?? null, actorName: meta?.actorName ?? null });
+
+  // Win condition FIRST — a forfeit can leave a sole survivor. Crowning takes precedence
+  // over re-seating and over a pending drain (crownIfChampion clears drain state).
+  if (crownIfChampion(s, by)) return s;
 
   if (s.startedAt && !s.finishedAt && !s.reshufflePending) seatAllTables(s);
-
-  // Win condition: one entry left standing.
-  const alive = aliveEntries(s);
-  if (alive.length === 1) {
-    s.winnerId = alive[0].id;
-    s.finishedAt = new Date().toISOString();
-    for (const t of s.tables) {
-      t.matchId = null;
-      t.holderId = null;
-      t.status = "open";
-    }
-    alive[0].status = "queued";
-    pushEvent(s, "manual", `${teamName(alive[0])} wins the tournament! 🏆`, by, { act: "champion", entryId: alive[0].id });
-  }
   return s;
 };
 
-// recordWinner already cloned; this appends without another clone.
-const pushEventInPlace = (
-  s: ChipState,
-  type: ChipEventType,
-  text: string,
-  by?: number | null,
+// Forfeit the CURRENT match (NON-destructive unless it busts the forfeiter): the opponent
+// receives the win and stays (winner-stays), the forfeiter loses EXACTLY one chip and
+// returns to the back of the queue — or is eliminated through the normal path if that drops
+// them to 0. The state transition is delegated to recordWinner (the single source of truth
+// for a match result), so it already honors a closing table, a pending reshuffle drain, and
+// counts the forfeiter as having played this shuffle round; a public forfeit audit event is
+// appended. No live match ⇒ nothing to forfeit (no-op); the UI only offers this with an
+// opponent. This never removes the entry from the tournament unless chips reach 0.
+export const forfeitMatch = (
+  input: ChipState,
+  entryId: string,
+  meta?: ForfeitMeta | null,
 ): ChipState => {
-  pushEvent(s, type, text, by);
+  const e0 = entryById(input, entryId);
+  if (!e0 || e0.status === "eliminated") return input;
+  const liveMatch = input.matches.find(
+    (m) => m.status === "in_progress" && (m.aId === entryId || m.bId === entryId),
+  );
+  if (!liveMatch) return input; // no current match to forfeit
+  const oppId = liveMatch.aId === entryId ? liveMatch.bId : liveMatch.aId;
+  const by = meta?.actorId ?? null;
+  const s = recordWinner(input, liveMatch.id, oppId, by);
+  const e = entryById(s, entryId);
+  const opp = entryById(s, oppId);
+  pushEvent(
+    s,
+    "forfeit",
+    `${e ? teamName(e) : "A player"} forfeited the match${opp ? ` vs ${teamName(opp)}` : ""}${meta?.reason ? ` — ${meta.reason}` : ""}`,
+    by,
+    {
+      act: "forfeit_match",
+      entryId,
+      oppId,
+      chipDelta: -1,
+      resulting: e?.chips ?? null,
+      eliminated: e?.status === "eliminated",
+      reason: meta?.reason ?? null,
+      notes: meta?.notes ?? null,
+      actorName: meta?.actorName ?? null,
+    },
+  );
   return s;
 };
 
@@ -2030,17 +2102,26 @@ export const finalPlacements = (s: ChipState): ChipPlacement[] => {
     const eid = (ev.payload?.entryId as string | undefined) ?? undefined;
     if (!eid || eid === s.winnerId || seen.has(eid)) continue;
     const e = entryById(s, eid);
-    if (e) { seen.add(eid); orderedElim.push(e); }
+    // Only FIELD participants place — a fabricated elimination for a non-field entry
+    // (should no longer occur post-fix) never enters the standings.
+    if (e && enteredField(e)) { seen.add(eid); orderedElim.push(e); }
   }
-  // Safety net: any eliminated entry without a surviving event (edge case) is
+  // Safety net: any eliminated FIELD entry without a surviving event (edge case) is
   // appended by eliminatedAt desc, then a stable id order.
   const leftover = s.entries
-    .filter((e) => e.id !== s.winnerId && e.eliminatedAt && !seen.has(e.id))
+    .filter((e) => enteredField(e) && e.id !== s.winnerId && e.eliminatedAt && !seen.has(e.id))
     .sort((a, b) => {
       const d = new Date(b.eliminatedAt as string).getTime() - new Date(a.eliminatedAt as string).getTime();
       return d !== 0 ? d : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
-  const ordered = [...(champ ? [champ] : []), ...orderedElim, ...leftover];
+  for (const e of leftover) seen.add(e.id);
+  // Defensive final pass: every remaining FIELD participant (not winner, no elim event,
+  // no eliminatedAt — e.g. an alive non-winner in a malformed state) still gets a place
+  // exactly once, ranked by current chips desc. Guarantees "every field entrant once".
+  const stillUnplaced = s.entries
+    .filter((e) => enteredField(e) && e.id !== s.winnerId && !seen.has(e.id))
+    .sort((a, b) => (b.chips ?? 0) - (a.chips ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const ordered = [...(champ ? [champ] : []), ...orderedElim, ...leftover, ...stillUnplaced];
   return ordered.map((e, i) => ({ entryId: e.id, place: i + 1 }));
 };
 

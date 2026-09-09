@@ -50,6 +50,7 @@ import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite
 import {
   chipsForFargo,
   dashboard,
+  enteredField,
   finalPlacements,
   LONG_MATCH_MS,
   matchElapsedMs,
@@ -62,7 +63,7 @@ import {
   teamName,
 } from "../../../../models/services/chip.engine";
 import { scheduleStaleError } from "../../../../utils/schedule";
-import { computeBreakdown, entryPoolTotal, feesPerPlayer, sidePotTotal, sidePotPayoutViews } from "../../../../utils/prize-pool";
+import { computeBreakdown, entryPoolTotal, feesPerPlayer, sidePotTotal, sidePotPayoutViews, type PayoutBucketAllocation } from "../../../../utils/prize-pool";
 import { computePerformance, PerfGame } from "../../../../utils/performance";
 import { buildReadinessSummary, ReadinessRow, PlayerReadinessSummary } from "../../../../utils/player-readiness";
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
@@ -405,6 +406,9 @@ export interface ChipReviewPrize {
   total: number; // entry pool + side-pot pools (dollars)
   paidPlaces: number; // number of paid places in the main entry split
   complete: boolean; // isPrizePoolComplete — payouts valid & within the pool
+  // Per-bucket allocation (entry + each enabled side pot) for the Start gate + display.
+  buckets: PayoutBucketAllocation[];
+  balanced: boolean; // EVERY enabled bucket allocates its pool exactly ($0 remaining)
 }
 
 // Next available number for tables sharing a base label (e.g. "Table", "Diamond"),
@@ -741,6 +745,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [chipAdjustNew, setChipAdjustNew] = useState(0);
   const [chipAdjustReason, setChipAdjustReason] = useState<string | null>(null);
   const [chipAdjustNotes, setChipAdjustNotes] = useState("");
+  // Forfeit decision (reason-gated). Opened from the table ⋮, the queue row, and the
+  // player ⋮. Offers Forfeit Match (−1 chip, back of queue, opponent wins) only when the
+  // entry has a live match; always offers Forfeit Tournament (authoritative elimination).
+  const [forfeit, setForfeit] = useState<{ entryId: string; name: string; matchId: string | null; oppName: string | null } | null>(null);
+  const [forfeitReason, setForfeitReason] = useState<string | null>(null);
+  const [forfeitNotes, setForfeitNotes] = useState("");
   // Tables master/detail: open detail for a table, and the move-destination picker.
   const [tableDetailId, setTableDetailId] = useState<string | null>(null);
   const [moveFromId, setMoveFromId] = useState<string | null>(null);
@@ -1536,6 +1546,29 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     setChipAdjust(null);
   };
 
+  // Open the forfeit decision modal for an entry. Resolves the entry's live match (if any)
+  // so the modal can offer Forfeit Match; a forfeit with no active match context is
+  // Forfeit Tournament only.
+  const openForfeit = (entryId: string) => {
+    const e = entryById(entryId);
+    if (!e || e.status === "eliminated") return;
+    const m = chip.matches.find(
+      (mm) => mm.status === "in_progress" && (mm.aId === entryId || mm.bId === entryId),
+    );
+    const oppId = m ? (m.aId === entryId ? m.bId : m.aId) : null;
+    const opp = oppId ? entryById(oppId) : null;
+    setForfeit({ entryId, name: teamName(e), matchId: m?.id ?? null, oppName: opp ? teamName(opp) : null });
+    setForfeitReason(null);
+    setForfeitNotes("");
+  };
+  const commitForfeit = (mode: "match" | "tournament") => {
+    if (!forfeit || !forfeitReason) return;
+    const meta = { reason: forfeitReason, notes: forfeitNotes.trim() || null, actorId, actorName };
+    if (mode === "match") vm.forfeitMatch(forfeit.entryId, meta);
+    else vm.forfeitEntry(forfeit.entryId, meta);
+    setForfeit(null);
+  };
+
   // Lock/Unlock a table (pure availability — never seats). Locking a table that has a
   // live match uses a controlled "Lock After Match" confirm (the match finishes, then no
   // new match is assigned there). Locking an idle table and unlocking are immediate.
@@ -1612,23 +1645,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const confirmForfeitTeam = (t: ChipTable) => {
     const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
     if (m) {
+      // Live match: pick which side is forfeiting, then open the reason-gated decision
+      // modal (Forfeit Match vs Forfeit Tournament) for that entry.
       const a = entryById(m.aId);
       const b = entryById(m.bId);
-      Alert.alert("Forfeit Team", "Which team is forfeiting the tournament?", [
+      Alert.alert("Forfeit Team", "Which team is forfeiting?", [
         { text: "Cancel", style: "cancel" },
-        { text: a ? teamName(a) : "Team A", style: "destructive", onPress: () => vm.forfeitEntry(m.aId) },
-        { text: b ? teamName(b) : "Team B", style: "destructive", onPress: () => vm.forfeitEntry(m.bId) },
+        { text: a ? teamName(a) : "Team A", onPress: () => openForfeit(m.aId) },
+        { text: b ? teamName(b) : "Team B", onPress: () => openForfeit(m.bId) },
       ]);
     } else if (t.holderId) {
-      const h = entryById(t.holderId);
-      Alert.alert(
-        "Forfeit Team",
-        `Are you sure you want to remove ${h ? teamName(h) : "this team"} from this tournament?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Forfeit", style: "destructive", onPress: () => t.holderId && vm.forfeitEntry(t.holderId) },
-        ],
-      );
+      openForfeit(t.holderId);
     }
   };
   const confirmClearTable = (t: ChipTable) => {
@@ -1652,14 +1679,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     setAssignPopupTableId(null);
   };
   const confirmRemoveFromQueue = (e: ChipEntry) => {
-    Alert.alert(
-      "Remove From Queue",
-      `Remove ${shortTeam(e)} from the queue? They will be eliminated from the tournament.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: () => vm.forfeitEntry(e.id) },
-      ],
-    );
+    // Queued entry has no live match → the modal offers Forfeit Tournament only.
+    openForfeit(e.id);
   };
   const saveRename = () => {
     if (!renameTbl) return;
@@ -2890,8 +2911,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Ready entries that are over the Fargo cap without a valid override — a stale/
     // inconsistent Ready state. Do NOT silently exclude these; BLOCK Start until resolved.
     const overCapReady = chip.entries.filter((e) => entryState(e) === "ready" && overCapBlocking(e));
+    // Payout-allocation gate: every enabled bucket (entry + each side pot) must allocate
+    // its whole pool ($0 remaining) — reviewPrize.balanced from the authoritative
+    // payoutAllocations. When reviewPrize isn't provided (non-embedded), don't gate.
+    const payoutsAllocated = !reviewPrize || (reviewPrize.complete && reviewPrize.balanced);
     const canStart =
-      readyCount >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1 && overCapReady.length === 0;
+      readyCount >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1 && overCapReady.length === 0 && payoutsAllocated;
 
     // Start: if any paid players aren't Ready, force an explicit Proceed Anyway so the TD
     // can't accidentally exclude someone they already collected money from.
@@ -3145,14 +3170,38 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               reviewPrize ? `${money(reviewPrize.total)} · ${reviewPrize.paidPlaces} paid ${reviewPrize.paidPlaces === 1 ? "place" : "places"}` : "—",
               !!reviewOpen.prize,
               { label: "Edit", onPress: () => goSetup("prizepool") },
-              reviewPrize && !reviewPrize.complete ? { kind: "warn" as const, text: "Incomplete" } : null,
+              reviewPrize && !(reviewPrize.complete && reviewPrize.balanced) ? { kind: "warn" as const, text: "Incomplete" } : null,
               <>
                 {kv("Total prize pool", reviewPrize ? money(reviewPrize.total) : "—")}
                 {kv("Entry fee", entryFee ? money(entryFee) : "—")}
                 {kv("Added money", addedMoney ? money(addedMoney) : "—")}
                 {kv("Side pots", tournamentSidePots.length ? String(tournamentSidePots.length) : "None")}
                 {kv("Paid places", reviewPrize ? String(reviewPrize.paidPlaces) : "—")}
-                {kv("Payout status", reviewPrize ? (reviewPrize.complete ? "Complete" : "Incomplete") : "—")}
+                {/* Per-bucket allocation (entry + each enabled side pot): Allocated / Pool,
+                    with any unallocated (or over-allocated) amount flagged. Start is blocked
+                    until every bucket is exactly $0 remaining. */}
+                {(reviewPrize?.buckets ?? []).map((b) => {
+                  const off = Math.abs(b.remaining) >= 0.005;
+                  return (
+                    <View key={b.key}>
+                      {kv(b.label, `${money(b.allocated)} / ${money(b.pool)}`)}
+                      {off ? (
+                        <Text allowFontScaling={false} style={styles.payoutMismatch}>
+                          {b.remaining > 0
+                            ? `${money(b.remaining)} unallocated`
+                            : `over-allocated by ${money(-b.remaining)}`}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
+                {reviewPrize && !(reviewPrize.complete && reviewPrize.balanced) ? (
+                  <Text allowFontScaling={false} style={styles.payoutWarn}>
+                    Payouts incomplete — assign every dollar of each pool (entry and each side pot) before starting.
+                  </Text>
+                ) : (
+                  kv("Payout status", reviewPrize ? "Complete" : "—")
+                )}
               </>,
             )}
 
@@ -3180,7 +3229,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </Text>
 
             <TouchableOpacity style={[styles.startBtn, !canStart && styles.startBtnDisabled]} disabled={!canStart || vm.starting} onPress={doStart}>
-              {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{canStart ? "Start Tournament" : overCapReady.length > 0 ? "Resolve over-cap players to start" : "Need 2+ Ready, a table, and a chip tier"}</Text>}
+              {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{canStart ? "Start Tournament" : overCapReady.length > 0 ? "Resolve over-cap players to start" : !payoutsAllocated ? "Allocate all payouts to start" : "Need 2+ Ready, a table, and a chip tier"}</Text>}
             </TouchableOpacity>
           </>
         )}
@@ -3261,7 +3310,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // removing every table (authoritative — not just the disabled button).
   const confirmShuffle = () => {
     const activeNow = chip.tables.filter((t) => !t.inactive);
-    const hasActivePlayers = chip.entries.some((e) => e.status !== "eliminated");
+    const hasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && enteredField(e));
     if (hasActivePlayers && activeNow.length - shuffleRemoveIds.size < 1) return;
     // ONE atomic engine step (startShuffleCycle): applies the removal selection AND
     // either redraws immediately (no live matches) or drains ("Finishing the Round",
@@ -3307,7 +3356,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const readyInitial = ready && !chip.shuffleRound; // initial cycle drained → Ready to Shuffle
     const round = !!chip.shuffleRound && !draining && !ready;
     const roundNum = chip.reshuffleCount ?? 0;
-    const aliveTeams = chip.entries.filter((e) => e.status !== "eliminated");
+    const aliveTeams = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const totalCount = aliveTeams.length;
     // Format-aware unit label — "Teams" for scotch doubles, "Players" for singles (one
     // chip ENTRY = one team or one player, never individual partners).
@@ -3575,7 +3624,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // ── Live · Dashboard (live control center) ───────────────────────────────────
   const renderLiveDashboard = () => {
     const d = dashboard(chip);
-    const alive = chip.entries.filter((e) => e.status !== "eliminated");
+    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const activeCount = activeTables.length;
     const rec = recommendedActiveTables(d.playersRemaining);
@@ -4272,7 +4321,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // ── Live · Players (records + buy-back) ──────────────────────────────────────
 
   const renderLivePlayers = () => {
-    const aliveAll = chip.entries.filter((e) => e.status !== "eliminated");
+    const aliveAll = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const outAll = chip.entries.filter((e) => e.status === "eliminated");
 
     // ── Presentation-only search + sort ────────────────────────────────────────
@@ -4435,7 +4484,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // ── Results · Standings ──────────────────────────────────────────────────────
   const renderStandings = () => {
-    const alive = [...chip.entries].filter((e) => e.status !== "eliminated").sort((a, b) => b.chips - a.chips || b.wins - a.wins);
+    const alive = [...chip.entries].filter((e) => e.status !== "eliminated" && enteredField(e)).sort((a, b) => b.chips - a.chips || b.wins - a.wins);
     const out = [...chip.entries].filter((e) => e.status === "eliminated").sort((a, b) => b.wins - a.wins);
     const row = (e: ChipEntry, rank: number) => {
       const isOut = e.status === "eliminated";
@@ -4506,7 +4555,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const e = p ? entryById(p.entryId) : null;
       return e ? teamName(e) : "—";
     };
-    const paidPlayers = chip.entries.filter((e) => e.paid).length;
+    // Payout pool basis = actual FIELD entrants (enteredField) — the same set the setup /
+    // Review pool uses — not a raw paid count (which would count paid-but-not-Ready entries
+    // that never entered the field and inflate the pool vs Review).
+    const paidPlayers = chip.entries.filter(enteredField).length;
     const entryFee = Number(tournament.entry_fee) || 0;
     const addedMoney = Number(tournament.added_money) || 0;
     const ls: any = tournament.live_settings ?? {};
@@ -4535,7 +4587,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           rows={[
             ["Entry Fee", entryFee ? money(entryFee) : "—"],
             ["Added Money", addedMoney ? money(addedMoney) : "—"],
-            ["Paid Entries", String(paidPlayers)],
+            ["Entries", String(paidPlayers)],
             ["Prize Pool", pool ? money(pool) : "—"],
           ]}
         />
@@ -4578,14 +4630,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   const renderSummary = () => {
-    const alive = chip.entries.filter((e) => e.status !== "eliminated");
+    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const out = chip.entries.filter((e) => e.status === "eliminated");
     const winner = chip.winnerId ? entryById(chip.winnerId) : alive.length === 1 ? alive[0] : null;
     const d = dashboard(chip);
     const durs = chip.matches.filter((m) => m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
     const fastest = durs.length ? Math.min(...durs) : null;
     const checkedIn = chip.entries.filter((e) => e.checkedIn).length;
-    const paidCount = chip.entries.filter((e) => e.paid).length;
+    // Field-entrant basis for the recap's entry-fee math (see renderPayouts) — matches the
+    // Review/setup pool; excludes paid-but-not-Ready entries that never entered the field.
+    const paidCount = chip.entries.filter(enteredField).length;
     const totalChipChanges = chip.entries.reduce((s, e) => s + e.losses, 0);
     const tablesAdded = chip.events.filter((e) => e.type === "table_added").length;
     const tablesRemoved = chip.events.filter((e) => e.type === "table_removed").length;
@@ -4788,7 +4842,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const shuffleRecommended = recommendedActiveTables(dashboard(chip).playersRemaining);
   const shuffleTablesAfter = shuffleModalActiveTables.length - shuffleRemoveCount;
   // Hard safety guard: never remove the last table while players are still active.
-  const shuffleHasActivePlayers = chip.entries.some((e) => e.status !== "eliminated");
+  const shuffleHasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && enteredField(e));
   const shuffleWouldStrand = shuffleHasActivePlayers && shuffleTablesAfter < 1;
   // ONE Modal for the whole flow — its content swaps from the setup sheet to the
   // animation (never two Modals racing to present/dismiss on iOS). Visible while
@@ -6245,6 +6299,57 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Pressable>
       </Modal>
 
+      {/* Forfeit decision — reason-gated. Forfeit Match (only with a live match) vs
+          Forfeit Tournament. Both write a public spectator-visible audit event. */}
+      <Modal visible={forfeit != null} transparent animationType="fade" onRequestClose={() => setForfeit(null)}>
+        <Pressable style={styles.centerBackdrop} onPress={() => setForfeit(null)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            {forfeit && (() => {
+              const canConfirm = !!forfeitReason;
+              const hasMatch = !!forfeit.matchId;
+              return (
+                <>
+                  <Text style={styles.renameTitle}>Forfeit</Text>
+                  <Text style={{ color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", marginTop: webSc(SPACING.xs), textAlign: "center" }}>{forfeit.name}</Text>
+                  {hasMatch ? (
+                    <Text style={styles.reduceHint}>
+                      Forfeit Match: {forfeit.oppName ? `${forfeit.oppName} wins` : "the opponent wins"}, this team loses 1 chip and goes to the back of the queue (eliminated if it reaches 0). Forfeit Tournament removes them entirely.
+                    </Text>
+                  ) : (
+                    <Text style={styles.reduceHint}>Forfeit Tournament removes this team from the tournament. This is recorded.</Text>
+                  )}
+                  <Text style={{ color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginTop: webSc(SPACING.md), marginBottom: webSc(SPACING.xs) }}>Reason *</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) }}>
+                    {["No-show", "Player left", "Rule violation", "Injury / emergency", "Other"].map((r) => {
+                      const active = forfeitReason === r;
+                      return (
+                        <TouchableOpacity key={r} onPress={() => setForfeitReason(r)} activeOpacity={0.8}
+                          style={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, borderWidth: 1, borderColor: active ? COLORS.primary : COLORS.border, backgroundColor: active ? COLORS.primary + "22" : "transparent" }}>
+                          <Text style={{ color: active ? COLORS.primary : COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: active ? "700" : "500" }}>{r}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <TextInput allowFontScaling={false} value={forfeitNotes} onChangeText={setForfeitNotes} placeholder="Notes (optional, shown to spectators)" placeholderTextColor={COLORS.textMuted}
+                    style={{ marginTop: webSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), color: COLORS.text, backgroundColor: COLORS.surface }} multiline />
+                  {hasMatch && (
+                    <TouchableOpacity style={[{ alignItems: "center", paddingVertical: webSc(SPACING.md), borderRadius: RADIUS.md, backgroundColor: COLORS.warning, marginTop: webSc(SPACING.md) }, !canConfirm && { opacity: 0.5 }]} onPress={() => commitForfeit("match")} disabled={!canConfirm}>
+                      <Text style={{ color: COLORS.white, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) }}>Forfeit Match</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={[{ alignItems: "center", paddingVertical: webSc(SPACING.md), borderRadius: RADIUS.md, backgroundColor: COLORS.error, marginTop: webSc(SPACING.sm) }, !canConfirm && { opacity: 0.5 }]} onPress={() => commitForfeit("tournament")} disabled={!canConfirm}>
+                    <Text style={{ color: COLORS.white, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) }}>Forfeit Tournament</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.renameCancel, { alignSelf: "stretch", alignItems: "center", marginTop: webSc(SPACING.sm) }]} onPress={() => setForfeit(null)}>
+                    <Text style={styles.renameCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Table Details — information first; actions layered in-modal (no nesting) */}
       <Modal visible={tableDetailId != null} transparent animationType="fade" onRequestClose={() => { setDetailActions(false); setTableDetailId(null); }}>
         <View style={styles.centerRoot}>
@@ -6641,14 +6746,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             );
             const confirmForfeit = () => {
               close();
-              Alert.alert(
-                "Forfeit",
-                `Are you sure you want to remove ${teamName(e)} from this tournament?`,
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Forfeit", style: "destructive", onPress: () => vm.forfeitEntry(e.id) },
-                ],
-              );
+              openForfeit(e.id);
             };
             const confirmRestore = () => {
               close();
@@ -7057,6 +7155,9 @@ const styles = StyleSheet.create({
 
   reviewRow: { flexDirection: "row", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
   reviewLead: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginBottom: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.sm + 5) },
+  // Per-bucket unallocated/over-allocated flag + the payout-incomplete warning on Review.
+  payoutMismatch: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: -2, marginBottom: webSc(SPACING.xs), textAlign: "right" },
+  payoutWarn: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", marginTop: webSc(SPACING.xs), lineHeight: webMs(FONT_SIZES.xs + 4) },
   // Blocking over-cap panel (red) — must be resolved before Start.
   reviewBlock: { backgroundColor: COLORS.error + "18", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.error, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
   reviewBlockHead: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", marginBottom: webSc(SPACING.sm), lineHeight: webMs(FONT_SIZES.sm + 5) },

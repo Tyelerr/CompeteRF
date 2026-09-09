@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService } from "../../models/services/chip.service";
-import { dashboard, teamName } from "../../models/services/chip.engine";
+import { dashboard, enteredField, teamName } from "../../models/services/chip.engine";
 import {
   ChipEntry,
   ChipFormat,
@@ -26,7 +26,7 @@ import {
 } from "../../utils/prize-pool";
 import { parseSidePots } from "../../utils/side-pots";
 import {
-  PublicActivityKind,
+  PublicActivity,
   toPublicActivityFeed,
 } from "../../utils/chip-activity";
 import { computePerformance, PerfGame } from "../../utils/performance";
@@ -104,12 +104,9 @@ export interface SpecStandingRow {
   eliminated: boolean; // show "Eliminated" instead of a chip count
   isMe: boolean;
 }
-export interface SpecActivity {
-  id: string;
-  text: string;
-  at: string;
-  kind: PublicActivityKind;
-}
+// One source of truth for a public activity row (id/text/at/kind + public
+// actor/reason/notes). Aliased so the spectator feed always matches the mapper.
+export type SpecActivity = PublicActivity;
 export interface SpecPlayerRow {
   id: string;
   name: string;
@@ -344,7 +341,9 @@ const buildSpectatorView = (
     : started
       ? "live"
       : "upcoming";
-  const alive = s.entries.filter(isAlive);
+  // Field participants only (checkedIn) — a roster entry that never entered the field is
+  // excluded from every standings/leaderboard/players surface, consistent with the engine.
+  const alive = s.entries.filter((e) => isAlive(e) && enteredField(e));
   const byChips = [...alive].sort(
     (a, b) => b.chips - a.chips || b.wins - a.wins,
   );
@@ -508,7 +507,7 @@ const buildSpectatorView = (
   // Standings = alive ranked by chips, then eliminated below (most-recently-out first,
   // i.e. higher placement). Eliminated rows render "Eliminated" instead of a chip count.
   const eliminatedRanked = s.entries
-    .filter((e) => !isAlive(e))
+    .filter((e) => !isAlive(e) && enteredField(e))
     .sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime());
   const fullStandings: SpecStandingRow[] = [...byChips, ...eliminatedRanked].map((e, i) => ({
     id: e.id,
@@ -534,6 +533,7 @@ const buildSpectatorView = (
   // eliminated teams always pinned to the bottom regardless of chips. Status is
   // shown as a badge but never drives the order.
   const players: SpecPlayerRow[] = [...s.entries]
+    .filter(enteredField)
     .map((e) => ({
       id: e.id,
       name: teamName(e),
@@ -552,8 +552,10 @@ const buildSpectatorView = (
       return b.chips - a.chips || a.name.localeCompare(b.name);
     });
 
-  // Payouts — reuse the same money math as the TD Prize Pool setup.
-  const paidPlayers = s.entries.filter((e) => e.paid).length;
+  // Payouts — reuse the same money math as the TD Prize Pool setup. Basis = actual FIELD
+  // entrants (enteredField), the same set the setup/Review pool uses — NOT a raw paid
+  // count, which would inflate the pool with paid-but-not-Ready entries that never entered.
+  const paidPlayers = s.entries.filter(enteredField).length;
   const entryFee = tournament.entry_fee ?? 0;
   const addedMoney = tournament.added_money ?? 0;
   const ls = tournament.live_settings;

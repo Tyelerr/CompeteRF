@@ -81,6 +81,8 @@ import {
   feesPerPlayer,
   feesValid,
   isPrizePoolComplete,
+  payoutAllocations,
+  payoutsFullyAllocated,
   reconcileSidePots,
   sidePotTotal,
 } from "../../../../src/utils/prize-pool";
@@ -2232,6 +2234,12 @@ export default function ManageTournamentScreen() {
 
   // Compact Prize Pool summary handed to the chip Review & Start screen (the split +
   // fee math lives here, so the embedded review reads it rather than recomputing).
+  // Per-bucket payout allocation (entry + each enabled side pot) — the authoritative
+  // source the Review & Start gate reads to block Start on any under/over-allocated pool.
+  const chipPayoutBuckets = useMemo(
+    () => payoutAllocations(prizeForm, prizeEntryPool, prizeSidePotPools),
+    [prizeForm, prizeEntryPool, prizeSidePotPools],
+  );
   const chipReviewPrize = useMemo(
     () => ({
       total:
@@ -2239,8 +2247,10 @@ export default function ManageTournamentScreen() {
         Object.values(prizeSidePotPools).reduce((a, b) => a + b, 0),
       paidPlaces: prizeForm?.entryPlaces.length ?? 0,
       complete: prizeComplete,
+      buckets: chipPayoutBuckets,
+      balanced: payoutsFullyAllocated(chipPayoutBuckets),
     }),
-    [prizeEntryPool, prizeSidePotPools, prizeForm, prizeComplete],
+    [prizeEntryPool, prizeSidePotPools, prizeForm, prizeComplete, chipPayoutBuckets],
   );
 
   // ── Guided setup sequence ───────────────────────────────────────────────────

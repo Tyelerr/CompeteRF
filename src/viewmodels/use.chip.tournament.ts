@@ -15,6 +15,8 @@ import {
   type ChipAdjustMeta,
   reorderQueue as engineReorderQueue,
   forfeitEntry as engineForfeitEntry,
+  forfeitMatch as engineForfeitMatch,
+  type ForfeitMeta,
   buyBackEntry as engineBuyBack,
   restoreEntry as engineRestoreEntry,
   assignNextTeam as engineAssignNextTeam,
@@ -566,10 +568,17 @@ export const useChipTournament = (id: number) => {
       update((c) => engineAdjustChips(c, entryId, delta, meta)),
     [update],
   );
-  // TD forfeits an entry out of the whole tournament (eliminated regardless of
-  // chips; opponent wins by forfeit if mid-match).
+  // Forfeit Match: the opponent wins the current match, the forfeiter loses 1 chip and
+  // goes to the back of the queue (eliminated only if that reaches 0). `meta` carries the
+  // public reason/notes + acting director for the audit event.
+  const forfeitMatch = useCallback(
+    (entryId: string, meta?: ForfeitMeta | null) => update((c) => engineForfeitMatch(c, entryId, meta)),
+    [update],
+  );
+  // Forfeit Tournament: the TD removes an entry from the whole tournament (eliminated
+  // regardless of chips; opponent wins by forfeit if mid-match). `meta` = public audit.
   const forfeitEntry = useCallback(
-    (entryId: string) => update((c) => engineForfeitEntry(c, entryId)),
+    (entryId: string, meta?: ForfeitMeta | null) => update((c) => engineForfeitEntry(c, entryId, meta)),
     [update],
   );
   const reorderQueue = useCallback(
@@ -990,15 +999,23 @@ export const useChipTournament = (id: number) => {
           : e.p1Fargo == null;
         return readyGate({ paid: !!e.paid, entryFeeRequired: feeRequired, hardBlocker });
       };
+      // Materialize ONLY the field entrants (readyForField). Non-field entries keep their
+      // existing form — a projected registration stays projected (fromRegistration:true →
+      // not written to chip_entries, remains a tournament_players row), an owned row keeps
+      // its row — and both carry checkedIn:false so the engine's `enteredField` guard keeps
+      // them out of the live field, standings, eliminations, and placements. Non-destructive.
       const owned: ChipState = {
         ...chip,
-        entries: chip.entries.map((e) => ({
-          ...e,
-          ...(e.fromRegistration
-            ? { fromRegistration: false, regId: null, regStatus: null, fargoStatus: null }
-            : {}),
-          checkedIn: readyForField(e),
-        })),
+        entries: chip.entries.map((e) => {
+          const inField = readyForField(e);
+          return {
+            ...e,
+            ...(inField && e.fromRegistration
+              ? { fromRegistration: false, regId: null, regStatus: null, fargoStatus: null }
+              : {}),
+            checkedIn: inField,
+          };
+        }),
       };
       const started = startChipTournament(owned);
       setChip(started);
@@ -1079,6 +1096,7 @@ export const useChipTournament = (id: number) => {
     moveTable,
     adjustChips,
     forfeitEntry,
+    forfeitMatch,
     reorderQueue,
     buyBack,
     restoreEntry,

@@ -31,6 +31,7 @@ import { chipStatusColor } from "../../../utils/chip-colors";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipSpectatorView,
+  SpecActivity,
   SpecPlayerProfile,
   SpecPlayerStatus,
   SpecTable,
@@ -716,10 +717,7 @@ const OverviewTab = ({
         ) : (
           <>
             {view.activityPreview.map((a) => (
-              <View key={a.id} style={styles.actRow}>
-                <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
-                <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
-              </View>
+              <ActivityRow key={a.id} a={a} />
             ))}
             {/* Only when there is MORE than the 5-row preview (≤5 events shows all inline). */}
             {view.activity.length > view.activityPreview.length && (
@@ -744,6 +742,35 @@ const activityColor = (kind: string): string =>
       : kind === "shuffle" || kind === "match_start" || kind === "tournament" || kind === "table"
         ? COLORS.primary
         : COLORS.textSecondary; // chip_loss
+
+// Short wall-clock time for an activity row (e.g. "3:42 PM"). Blank on a bad date.
+const fmtActTime = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+};
+
+// One public activity row. Always shows the action text + timestamp; when the
+// originating event carried public audit context (director actions), it also shows
+// the actor, the reason, and any notes. Module-level (not created during render) so
+// both the Overview preview and the full log reuse it.
+const ActivityRow = ({ a }: { a: SpecActivity }) => (
+  <View style={styles.actRow}>
+    <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
+    <View style={styles.actBody}>
+      <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
+      <Text allowFontScaling={false} style={styles.actMeta} numberOfLines={1}>
+        {fmtActTime(a.at)}{a.actor ? ` · ${a.actor}` : ""}
+      </Text>
+      {a.reason ? (
+        <Text allowFontScaling={false} style={styles.actReason} numberOfLines={2}>Reason: {a.reason}</Text>
+      ) : null}
+      {a.notes ? (
+        <Text allowFontScaling={false} style={styles.actNotes} numberOfLines={4}>&ldquo;{a.notes}&rdquo;</Text>
+      ) : null}
+    </View>
+  </View>
+);
 
 // ── Tables tab ────────────────────────────────────────────────────────────────
 
@@ -1232,10 +1259,7 @@ const ActivityModal = ({
       ) : (
         <>
           {shown.map((a) => (
-            <View key={a.id} style={styles.actRow}>
-              <View style={[styles.actDot, { backgroundColor: activityColor(a.kind) }]} />
-              <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
-            </View>
+            <ActivityRow key={a.id} a={a} />
           ))}
           {hasMore && (
             <TouchableOpacity style={styles.viewAll} activeOpacity={0.7} onPress={() => setCount((c) => c + LOG_PAGE)}>
@@ -1363,9 +1387,13 @@ const styles = StyleSheet.create({
   clChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
 
   // Activity
-  actRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  actDot: { width: 8, height: 8, borderRadius: 4 },
-  actText: { flex: 1, color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
+  actRow: { flexDirection: "row", alignItems: "flex-start", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  actDot: { width: 8, height: 8, borderRadius: 4, marginTop: wxSc(6) },
+  actBody: { flex: 1 },
+  actText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
+  actMeta: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2) },
+  actReason: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2), fontStyle: "italic" },
+  actNotes: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2) },
 
   // Players
   searchWrap: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.xs), backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.sm), height: wxSc(42), marginVertical: wxSc(SPACING.xs) },
