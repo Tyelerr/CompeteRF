@@ -1725,10 +1725,30 @@ export const removeTable = (
 export const getChipRecommendedTableCount = (entryCount: number): number =>
   entryCount < 2 ? 0 : Math.max(1, Math.floor(entryCount / 4));
 
-// Recommended number of ACTIVE tables during LIVE play, for the alive-entry field
-// size. Delegates to the shared helper so setup and live never diverge.
+// Recommended number of ACTIVE tables during LIVE play, for the alive-entry field size.
+// INTENTIONALLY DISTINCT from the pre-start setup recommendation (audit item 13): live
+// biases slightly toward MORE tables so roughly half the remaining field is playing and
+// half waiting — max(1, floor((remaining + 1) / 4)). 20→5, 15→4, 11→3, 10→2, 7→2, 5→1.
+// (Setup still uses getChipRecommendedTableCount = floor(entries/4).)
 export const recommendedActiveTables = (remaining: number): number =>
-  getChipRecommendedTableCount(remaining);
+  remaining < 2 ? 0 : Math.max(1, Math.floor((remaining + 1) / 4));
+
+// Total field entrants ever (checkedIn is set at Start and never cleared), so this is a
+// stable baseline for the shuffle milestone even as players are eliminated.
+export const fieldEntrantCount = (s: ChipState): number =>
+  s.entries.filter((e) => enteredField(e)).length;
+
+// The alive-field size at which a (re)shuffle is recommended: ~50% of the CURRENT shuffle
+// cycle's baseline, halving each cycle → floor(fieldSize / 2^(reshuffleCount+1)).
+// e.g. 20 entrants → recommend Shuffle ~10 → after it, recommend Reshuffle ~5. Returns 0
+// (no recommendation) for a field too small to bother with. Recommend when the alive count
+// is at/under this threshold. The label is "Recommended Shuffle" before the first shuffle
+// (reshuffleCount 0) and "Recommended Reshuffle" after — decided by the caller.
+export const recommendedShuffleThreshold = (s: ChipState): number => {
+  const base = fieldEntrantCount(s);
+  if (base < 4) return 0;
+  return Math.floor(base / Math.pow(2, (s.reshuffleCount ?? 0) + 1));
+};
 
 // ── Recommended SETUP tables (format-aware, single source of truth) ────────────
 // A chip ENTRY is "playable" for table planning when it can actually be seated:

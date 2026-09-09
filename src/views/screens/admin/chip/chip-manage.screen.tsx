@@ -55,6 +55,7 @@ import {
   LONG_MATCH_MS,
   matchElapsedMs,
   recommendedActiveTables,
+  recommendedShuffleThreshold,
   recommendedSetupTables,
   playableEntryCount,
   isPostMatchPending,
@@ -242,6 +243,13 @@ type RosterUiState = {
   liveSort: LivePlayerSort;
 };
 const rosterUiCache = new Map<number, RosterUiState>();
+
+// B5/item-15: session-scoped, per-tournament set of dismissed live-alert ids. Keyed by a
+// STABLE per-condition id (e.g. "shuffle:0", "reduce:5", "long:Table 3"), so a dismissal
+// sticks across this screen's remounts and refreshes and only reappears when the condition
+// materially changes (the id changes). Session-only (cleared on app restart) — advisory
+// alerts don't warrant durable DB persistence.
+const dismissedAlertsCache = new Map<number, Set<string>>();
 export const LIVE_SORT_OPTS: { label: string; value: LivePlayerSort }[] = [
   { label: "Current / Status", value: "status" },
   { label: "Name A–Z", value: "name" },
@@ -915,6 +923,21 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   useEffect(() => {
     rosterUiCache.set(id, { rosterQuery, rosterFilter, rosterSort, liveQuery, liveSort });
   }, [id, rosterQuery, rosterFilter, rosterSort, liveQuery, liveSort]);
+  // Live-alert dismissals (item 15) — persisted per tournament across remounts.
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(
+    () => dismissedAlertsCache.get(id) ?? new Set(),
+  );
+  const dismissAlert = useCallback(
+    (alertId: string) =>
+      setDismissedAlerts((prev) => {
+        const next = new Set(prev);
+        next.add(alertId);
+        dismissedAlertsCache.set(id, next);
+        return next;
+      }),
+    [id],
+  );
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
   // Window rect of the Actions button that opened the menu (for above/below math) +
   // the screen-root's window origin (so we can position the in-tree overlay, which
   // lives inside the scroll content, in the root's coordinate space).
@@ -1067,6 +1090,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (liveScrollRef.current) liveScrollRef.current.scrollTo({ y: 0, animated: true });
     else onRequestScrollTop?.();
   }, [onRequestScrollTop]);
+  // Y offset of the on-page "Chip Leaders" section within the live scroll content, so the
+  // Chip Leader card's "View Standings" CTA can scroll to it instead of no-op (item 24).
+  const leadersYRef = useRef(0);
+  const scrollToLeaders = useCallback(() => {
+    setShowFullStandings(true);
+    liveScrollRef.current?.scrollTo({ y: Math.max(0, leadersYRef.current), animated: true });
+  }, []);
 
   // Route to the Live Dashboard — the authoritative Shuffle-transition hub. Embedded:
   // ask the host to switch tabs + scroll top. Standalone: drive our own phase/page.
@@ -3679,6 +3709,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const activeCount = activeTables.length;
+    // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
+    // locked/available/other (2), so the director never misses a table awaiting Start Match.
+    const tableRank = (t: ChipTable): number => {
+      const live = chip.matches.some((m) => m.id === t.matchId && m.status === "in_progress");
+      if (!live && t.pendingChallengerId) return 0;
+      if (live) return 1;
+      return 2;
+    };
+    const sortedActiveTables = [...activeTables].sort((a, b) => tableRank(a) - tableRank(b));
+    const waitingCount = activeTables.filter((t) => tableRank(t) === 0).length;
     const rec = recommendedActiveTables(d.playersRemaining);
     const overStaffed = d.playersRemaining > 0 && activeCount > rec && !chip.reshufflePending;
     const leaders = [...alive].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
@@ -3699,10 +3739,41 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Alerts are for conditions that need the TD's attention only. A normal
     // waiting queue is expected during a chip tournament and is already shown in
     // the Queue summary card + the Queue section, so it is NOT an alert.
-    const alerts: { text: string; sub?: string; onPress?: () => void; cta?: string; urgent?: boolean }[] = [];
-    if (overStaffed) alerts.push({ text: `Recommended tables: ${rec}`, sub: `Currently active: ${activeCount}`, onPress: openReduce, cta: "Reduce" });
-    if (streamAvail) alerts.push({ text: "Stream table available" });
-    for (const lm of longNow) alerts.push({ text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
+    // Each alert carries a STABLE id keyed to its condition so a Dismiss persists for that
+    // specific instance and only reappears when the condition materially changes (id
+    // changes). Recommendations are passive cards (never a re-popup on refresh).
+    const alerts: { id: string; text: string; sub?: string; onPress?: () => void; cta?: string; urgent?: boolean }[] = [];
+    // (Re)shuffle milestone — recommend once the alive field reaches ~50% of the current
+    // cycle's baseline (item 13). Suppressed while a reshuffle is already pending/ready or
+    // continuous Shuffle Mode is running (don't nag toward endgame).
+    const shuffleThreshold = recommendedShuffleThreshold(chip);
+    const recommendReshuffle =
+      shuffleThreshold >= 2 &&
+      d.playersRemaining >= 2 &&
+      d.playersRemaining <= shuffleThreshold &&
+      !chip.reshufflePending &&
+      !chip.shuffleReady &&
+      !chip.shuffleMode;
+    const shuffleLabel = (chip.reshuffleCount ?? 0) === 0 ? "Recommended Shuffle" : "Recommended Reshuffle";
+    if (recommendReshuffle)
+      alerts.push({
+        id: `shuffle:${chip.reshuffleCount ?? 0}`,
+        text: shuffleLabel,
+        sub: `${d.playersRemaining} players remain — ${(chip.reshuffleCount ?? 0) === 0 ? "shuffle" : "reshuffle"} to rebalance the field.`,
+        onPress: openShuffleModal,
+        cta: "Take Action",
+      });
+    if (overStaffed)
+      alerts.push({
+        id: `reduce:${rec}`,
+        text: "Adjustment Recommended",
+        sub: `${d.playersRemaining} players remain · ${activeCount} active tables — reduce to ~${rec} to keep the queue balanced.`,
+        onPress: openReduce,
+        cta: "Take Action",
+      });
+    if (streamAvail) alerts.push({ id: "stream", text: "Stream table available" });
+    for (const lm of longNow) alerts.push({ id: `long:${lm.label}`, text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
+    const visibleAlerts = alerts.filter((a) => !dismissedAlerts.has(a.id));
 
     const queueIds = chip.queue.slice(0, 5);
     const leaderList = showFullStandings ? leaders : leaders.slice(0, 5);
@@ -3736,7 +3807,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       <View style={styles.leaderCardN}>
         <View style={styles.leaderHeadN}>
           <Text style={styles.leaderKickerN}>Chip Leader</Text>
-          <TouchableOpacity onPress={() => setShowFullStandings(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={scrollToLeaders} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.leaderLinkN}>View Standings</Text>
           </TouchableOpacity>
         </View>
@@ -3772,20 +3843,51 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </View>
     ) : null;
 
-    const alertsEl = alerts.length > 0 ? (
-      <DashSection icon="warning-outline" iconColor={COLORS.warning} title="Alerts">
-        {alerts.map((a, i) => (
-          <View key={i} style={[styles.alertRow2, i === alerts.length - 1 && styles.noBorder]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.alertText2, a.urgent && styles.alertUrgent]}>{a.text}</Text>
-              {a.sub ? <Text style={styles.alertSub2}>{a.sub}</Text> : null}
-            </View>
-            {a.onPress && (
-              <TouchableOpacity style={styles.secBtnSm} onPress={a.onPress}><Text style={styles.secBtnSmText}>{a.cta}</Text></TouchableOpacity>
-            )}
-          </View>
-        ))}
-      </DashSection>
+    // One alert row (shared by the 3-item preview and the View All modal). A lowercase
+    // helper returning JSX (not a component) so it's not re-created on each render.
+    const alertRowEl = (a: (typeof visibleAlerts)[number], last: boolean) => (
+      <View key={a.id} style={[styles.alertRow2, last && styles.noBorder]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.alertText2, a.urgent && styles.alertUrgent]}>{a.text}</Text>
+          {a.sub ? <Text style={styles.alertSub2}>{a.sub}</Text> : null}
+        </View>
+        {a.onPress && (
+          <TouchableOpacity style={styles.secBtnSm} onPress={a.onPress}><Text style={styles.secBtnSmText}>{a.cta}</Text></TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={() => dismissAlert(a.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: webSc(SPACING.sm), padding: 2 }}>
+          <Ionicons name="close" size={webMs(16)} color={COLORS.textMuted} />
+        </TouchableOpacity>
+      </View>
+    );
+    // Preview shows at most 3; the rest open in a "View All Alerts" modal (item 15).
+    const alertsPreview = visibleAlerts.slice(0, 3);
+    const alertsEl = visibleAlerts.length > 0 ? (
+      <>
+        <DashSection icon="warning-outline" iconColor={COLORS.warning} title="Alerts">
+          {alertsPreview.map((a, i) => alertRowEl(a, visibleAlerts.length <= 3 && i === alertsPreview.length - 1))}
+          {visibleAlerts.length > 3 && (
+            <TouchableOpacity style={styles.atViewAll} onPress={() => setAlertsModalOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.atViewAllText}>View All Alerts ({visibleAlerts.length})</Text>
+              <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+        </DashSection>
+        <Modal visible={alertsModalOpen} transparent animationType="fade" onRequestClose={() => setAlertsModalOpen(false)}>
+          <Pressable style={styles.menuBackdrop} onPress={() => setAlertsModalOpen(false)}>
+            <Pressable style={styles.dashTablesCard} onPress={() => {}}>
+              <View style={styles.dashTablesHeader}>
+                <Text style={styles.dashTablesTitle}>Alerts ({visibleAlerts.length})</Text>
+                <TouchableOpacity onPress={() => setAlertsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.dashTablesDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) }} showsVerticalScrollIndicator>
+                {visibleAlerts.map((a, i) => alertRowEl(a, i === visibleAlerts.length - 1))}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </>
     ) : null;
 
     const queueEl = (
@@ -3836,15 +3938,25 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       <>
         <DashSection icon="grid-outline" title="Active Tables" action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
           {activeTables.length === 0 && <Text style={styles.hint}>No active tables.</Text>}
-          <View style={dashTwoCol ? styles.atGrid : undefined}>
-            {activeTables.slice(0, 2).map((t) => renderTableCard(t))}
-          </View>
-          {activeTables.length > 2 && (
-            <TouchableOpacity style={styles.atViewAll} onPress={() => setDashTablesOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.atViewAllText}>View All Tables ({activeTables.length})</Text>
-              <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
+          {(() => {
+            // Always show EVERY waiting-to-start table (even beyond the normal 2-card cap)
+            // plus fill to at least 2; the rest live under "View All Tables".
+            const previewCount = Math.max(2, waitingCount);
+            const preview = sortedActiveTables.slice(0, previewCount);
+            return (
+              <>
+                <View style={dashTwoCol ? styles.atGrid : undefined}>
+                  {preview.map((t) => renderTableCard(t))}
+                </View>
+                {activeTables.length > preview.length && (
+                  <TouchableOpacity style={styles.atViewAll} onPress={() => setDashTablesOpen(true)} activeOpacity={0.7}>
+                    <Text style={styles.atViewAllText}>View All Tables ({activeTables.length})</Text>
+                    <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
+                  </TouchableOpacity>
+                )}
+              </>
+            );
+          })()}
         </DashSection>
         <Modal visible={dashTablesOpen} transparent animationType="fade" onRequestClose={() => setDashTablesOpen(false)}>
           <Pressable style={styles.menuBackdrop} onPress={() => setDashTablesOpen(false)}>
@@ -3856,7 +3968,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 </TouchableOpacity>
               </View>
               <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-                {activeTables.map((t) => renderTableCard(t, true))}
+                {sortedActiveTables.map((t) => renderTableCard(t, true))}
               </ScrollView>
             </Pressable>
           </Pressable>
@@ -3873,6 +3985,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
 
     const chipLeadersEl = (
+      <View onLayout={(e) => { leadersYRef.current = e.nativeEvent.layout.y; }}>
         <DashSection icon="trophy-outline" title="Chip Leaders" action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
@@ -3882,6 +3995,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </TouchableOpacity>
           ))}
         </DashSection>
+      </View>
     );
 
     const activityEl = (
@@ -6277,6 +6391,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
       {/* Manual chip override — reason-gated (director action, live) */}
       <Modal visible={chipAdjust != null} transparent animationType="fade" onRequestClose={() => setChipAdjust(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable style={styles.centerBackdrop} onPress={() => setChipAdjust(null)}>
           <Pressable style={styles.pickerCard} onPress={() => {}}>
             {chipAdjust && (() => {
@@ -6294,7 +6409,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 backgroundColor: COLORS.surface,
               };
               return (
-                <>
+                // Body scrolls inside the height-capped card so the reason chips + Notes +
+                // Cancel/Save stay reachable on small screens and when the keyboard is up.
+                <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: webSc(SPACING.xs) }}>
                   <Text style={styles.renameTitle}>Adjust Player Chips</Text>
                   <Text style={styles.reduceHint}>Manual chip changes affect the live tournament and will be recorded.</Text>
                   <Text style={{ color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", marginTop: webSc(SPACING.sm), textAlign: "center" }}>{chipAdjust.name}</Text>
@@ -6344,11 +6461,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <Text style={{ color: COLORS.white, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) }}>Save Change</Text>
                     </TouchableOpacity>
                   </View>
-                </>
+                </ScrollView>
               );
             })()}
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Forfeit decision — reason-gated. Forfeit Match (only with a live match) vs
@@ -6814,17 +6932,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               );
             };
             return (
-              <Pressable style={[styles.ddCard, { left: playerMenu.left, top: playerMenu.top, bottom: playerMenu.bottom }]} onPress={() => {}}>
+              // Cap to the computed usable space (playerMenu.maxH) and scroll internally so
+              // the bottom-most card's menu never overflows below the tab bar (mirrors
+              // renderTableMenu). placeMenu already decides open-up vs open-down.
+              <Pressable style={[styles.ddCard, { left: playerMenu.left, top: playerMenu.top, bottom: playerMenu.bottom, maxHeight: playerMenu.maxH }]} onPress={() => {}}>
                 <Text style={styles.ddName} numberOfLines={1}>{teamName(e)}</Text>
-                {eliminated ? (
-                  <Row icon="refresh-outline" label="Restore Team" onPress={confirmRestore} last />
-                ) : (
-                  <>
-                    <Row icon="add-circle-outline" label="Add Chip" onPress={() => { close(); openChipAdjust(e, 1); }} />
-                    <Row icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); openChipAdjust(e, -1); }} />
-                    <Row icon="exit-outline" label="Forfeit" onPress={confirmForfeit} danger last />
-                  </>
-                )}
+                <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  {eliminated ? (
+                    <Row icon="refresh-outline" label="Restore Team" onPress={confirmRestore} last />
+                  ) : (
+                    <>
+                      <Row icon="add-circle-outline" label="Add Chip" onPress={() => { close(); openChipAdjust(e, 1); }} />
+                      <Row icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); openChipAdjust(e, -1); }} />
+                      <Row icon="exit-outline" label="Forfeit" onPress={confirmForfeit} danger last />
+                    </>
+                  )}
+                </ScrollView>
               </Pressable>
             );
           })()}
