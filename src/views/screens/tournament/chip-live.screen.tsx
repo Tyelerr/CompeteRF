@@ -1027,15 +1027,22 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
             <Text allowFontScaling={false} style={styles.payValTotal}>{sp.pool > 0 ? money(sp.pool) : "—"}</Text>
           </View>
           {sp.places && sp.places.length > 0 ? (
-            sp.places.map((row, i) => (
-              <View key={row.place} style={[styles.payoutRow, i === (sp.places!.length - 1) && styles.noBorder]}>
+            <>
+            {sp.places.map((row, i) => (
+              <View key={row.place} style={[styles.payoutRow, i === (sp.places!.length - 1) && sp.finishers.length === 0 && styles.noBorder]}>
                 <View style={[styles.payoutPlace, row.place <= 3 && styles.payoutPlaceTop]}>
                   <Text allowFontScaling={false} style={[styles.payoutPlaceText, row.place <= 3 && styles.payoutPlaceTextTop]}>{ordinal(row.place)}</Text>
                 </View>
-                <Text allowFontScaling={false} style={styles.payoutPct}>{row.percent}%</Text>
+                {/* Once finished, show the eligible finisher NAME (buyers-only ranking,
+                    item 30); otherwise show the split %. */}
+                <Text allowFontScaling={false} style={styles.payoutPct} numberOfLines={1}>{sp.finishers[i] ?? `${row.percent}%`}</Text>
                 <Text allowFontScaling={false} style={styles.payoutAmt}>{money(row.amount)}</Text>
               </View>
-            ))
+            ))}
+            {sp.finishers.length > 0 && (
+              <Text allowFontScaling={false} style={styles.payFallbackText}>Side pot payouts are based only on players who entered the Side Pot.</Text>
+            )}
+            </>
           ) : (
             <View style={styles.payFallback}>
               <Ionicons name="megaphone-outline" size={wxMs(20)} color={COLORS.textMuted} />
@@ -1131,9 +1138,9 @@ const ProfileModal = ({
           <PStat val={`${profile.startChips}`} lbl="Started With" />
           <PStat val={profile.fargo != null ? `${profile.fargo}` : "—"} lbl="Fargo" />
           <PStat
-            val={`${profile.streak}`}
-            lbl="Win Streak"
-            color={profile.streak > 0 ? COLORS.success : undefined}
+            val={`${profile.bestStreak}`}
+            lbl="Best Streak"
+            color={profile.bestStreak > 0 ? COLORS.success : undefined}
           />
         </View>
 
@@ -1141,7 +1148,9 @@ const ProfileModal = ({
         {profile.perf && (() => {
           const d = profile.perf.delta ?? 0;
           const dColor = d > 0 ? COLORS.success : d < 0 ? COLORS.error : COLORS.textSecondary;
-          const dArrow = d > 0 ? "▲" : d < 0 ? "▼" : "▬";
+          // Item 25: signed "±N vs Fargo" (not an arrow) so the hierarchy reads
+          // Fargo → Performance Rating → vs Fargo.
+          const dSigned = `${d > 0 ? "+" : ""}${d}`;
           return (
             <View style={styles.perfCard}>
               <Text allowFontScaling={false} style={styles.perfKicker}>PERFORMANCE</Text>
@@ -1154,7 +1163,7 @@ const ProfileModal = ({
                   {profile.perf.rating != null ? profile.perf.rating : "—"}
                 </Text>
                 {profile.perf.delta != null && (
-                  <Text allowFontScaling={false} style={[styles.perfDeltaInline, { color: dColor }]}>{`${dArrow} ${Math.abs(d)}`}</Text>
+                  <Text allowFontScaling={false} style={[styles.perfDeltaInline, { color: dColor }]}>{`${dSigned} vs Fargo`}</Text>
                 )}
               </View>
               {/* Supporting two-column stats */}
@@ -1164,9 +1173,15 @@ const ProfileModal = ({
                 <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.fargo != null ? profile.fargo : "—"}</Text>
               </View>
               <View style={styles.perfStatRow}>
-                <Text allowFontScaling={false} style={styles.perfStatLbl}>Performance</Text>
+                <Text allowFontScaling={false} style={styles.perfStatLbl}>Performance Rating</Text>
                 <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.perf.rating != null ? profile.perf.rating : "—"}</Text>
               </View>
+              {profile.perf.delta != null && (
+                <View style={styles.perfStatRow}>
+                  <Text allowFontScaling={false} style={styles.perfStatLbl}>vs Fargo</Text>
+                  <Text allowFontScaling={false} style={[styles.perfStatVal, { color: dColor }]}>{dSigned}</Text>
+                </View>
+              )}
               {profile.perf.avgOpponentFargo != null && (
                 <View style={styles.perfStatRow}>
                   <Text allowFontScaling={false} style={styles.perfStatLbl}>Opponent Avg</Text>

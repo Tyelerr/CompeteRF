@@ -148,6 +148,7 @@ export interface SpecPlayerProfile {
   winPct: number;
   status: SpecPlayerStatus;
   streak: number; // consecutive wins (win streak only)
+  bestStreak: number; // highest consecutive wins this tournament (displayed summary)
   perf: SpecPerf | null;
   history: SpecHistoryRow[];
 }
@@ -162,6 +163,10 @@ export interface SpecSidePot {
   pool: number; // $ collected so far (entrants × buy-in)
   entrants: number; // how many teams/players entered — aggregate, never individuals
   places: SpecPayoutRow[] | null; // split rows when a split is configured AND pool > 0
+  // Eligible finisher NAMES in side-pot placement order (index 0 = 1st side pot) — buyers
+  // of THIS pot ranked by overall finish. Only populated when the tournament is finished
+  // (item 30). Empty while live.
+  finishers: string[];
 }
 export interface SpecPayouts {
   entryFee: number;
@@ -315,6 +320,7 @@ const buildProfile = (
     winPct,
     status: statusFor(s, e, finished),
     streak,
+    bestStreak: e.bestStreak ?? 0,
     perf,
     history,
   };
@@ -583,6 +589,20 @@ const buildSpectatorView = (
   // config), not only pots that already have a split + non-empty pool. Spectators
   // should see a pot exists and its buy-in even before anyone has entered. Only
   // aggregate entrant COUNT and pool are exposed — never individual payment status.
+  // Full overall finish order (best-first) once finished: champion, then eliminated by
+  // most-recent-out. Used for final placements AND side-pot finisher ranking (item 30).
+  const orderedEntries = finished
+    ? ([
+        entryById(s.winnerId),
+        ...s.entries
+          .filter((e) => e.id !== s.winnerId && e.eliminatedAt)
+          .sort(
+            (a, b) =>
+              new Date(b.eliminatedAt as string).getTime() -
+              new Date(a.eliminatedAt as string).getTime(),
+          ),
+      ].filter(Boolean) as typeof s.entries)
+    : [];
   const parsedPots = parseSidePots(tournament.side_pots);
   const sidePotEntrantsByName: Record<string, number> = {};
   const sidePotPoolByName: Record<string, number> = {};
@@ -606,6 +626,12 @@ const buildSpectatorView = (
       places: view
         ? view.places.map((p) => ({ place: p.place, amount: p.amount, percent: p.percent }))
         : null,
+      // Buyers of THIS pot, ranked by overall finish (item 30). Names only; only when done.
+      finishers: finished
+        ? orderedEntries
+            .filter((e) => (e.paidSidePots ?? []).includes(sp.name))
+            .map((e) => teamName(e))
+        : [],
     };
   });
   const payouts: SpecPayouts = {
@@ -622,19 +648,7 @@ const buildSpectatorView = (
   // by elimination order (latest eliminated placed higher).
   let finalPlacements: SpecPlacement[] | null = null;
   if (finished) {
-    const champion = entryById(s.winnerId);
-    const elimOrder = s.entries
-      .filter((e) => e.id !== s.winnerId && e.eliminatedAt)
-      .sort(
-        (a, b) =>
-          new Date(b.eliminatedAt as string).getTime() -
-          new Date(a.eliminatedAt as string).getTime(),
-      );
-    const ordered = [
-      ...(champion ? [champion] : []),
-      ...elimOrder,
-    ];
-    finalPlacements = ordered.slice(0, 8).map((e, i) => ({
+    finalPlacements = orderedEntries.slice(0, 8).map((e, i) => ({
       place: i + 1,
       id: e.id,
       name: teamName(e),

@@ -2457,6 +2457,27 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           return registrationOrder();
       }
     });
+  // Unresolved preregistrations (self-signups the TD hasn't processed) + teams still
+  // waiting for a partner — the entries that "need review" (item 8). Drives a highlight
+  // banner (tap → filter the roster to them) so a new pre-registration isn't missed.
+  const preregCount = chip.entries.filter((e) => {
+    const st = entryState(e);
+    return st === "prereg" || st === "waiting";
+  }).length;
+  const preregBanner =
+    preregCount > 0 && !setupLocked ? (
+      <TouchableOpacity
+        style={styles.preregBanner}
+        activeOpacity={0.8}
+        onPress={() => setRosterFilter(rosterFilter === "prereg" ? "all" : "prereg")}
+      >
+        <Ionicons name="alert-circle-outline" size={webMs(16)} color={COLORS.warning} />
+        <Text style={styles.preregBannerText}>
+          {preregCount} {preregCount === 1 ? "player needs" : "players need"} review — new pre-registration
+        </Text>
+        <Text style={styles.preregBannerCta}>{rosterFilter === "prereg" ? "Show all" : "Review"}</Text>
+      </TouchableOpacity>
+    ) : null;
   const STATUS_LABELS: Record<typeof rosterFilter, string> = {
     all: "All",
     prereg: "Pre-Registered",
@@ -2600,6 +2621,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           )}
         </View>
 
+        {preregBanner}
         {rosterFiltered.length === 0 ? (
           <Text style={styles.hint}>
             {chip.entries.length === 0
@@ -2862,6 +2884,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Text>
       )}
 
+      {preregBanner}
       {/* Phase 5: mobile roster now renders the SHARED TeamCard (display mode) — the
           same component the Add Team modal uses in draft mode, so they can't drift.
           Business logic stays here and is passed via toTeamCardProps(). */}
@@ -7749,6 +7772,9 @@ const styles = StyleSheet.create({
   payPlace: { width: webSc(40), color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   payName: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   payAmt: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "900", flexShrink: 0, textAlign: "right" },
+  preregBanner: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning, backgroundColor: COLORS.warning + "18", marginBottom: webSc(SPACING.sm) },
+  preregBannerText: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  preregBannerCta: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   paidToggle: { marginLeft: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), paddingVertical: 2, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
   paidToggleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "22" },
   paidToggleText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
