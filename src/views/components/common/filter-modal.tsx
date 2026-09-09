@@ -152,6 +152,14 @@ export const FilterModal = ({ visible, onClose, filters, onApply }: FilterModalP
 
   const renderDropdowns = () => (
     <>
+      {/* Status → Completed browse (item 35): shows completed tournaments ~last 90 days. */}
+      <Dropdown
+        label="Status"
+        placeholder="Upcoming & Live"
+        options={[{ label: "Upcoming & Live", value: "" }, { label: "Completed", value: "completed" }]}
+        value={localFilters.status}
+        onSelect={(v) => setLocalFilters({ ...localFilters, status: (v === "completed" ? "completed" : "") })}
+      />
       <Dropdown label="Game Type" placeholder="All Game Types" options={GAME_TYPES} value={localFilters.gameType} onSelect={handleGameTypeChange} />
       <Dropdown label="Tournament Format" placeholder="Select The Format" options={TOURNAMENT_FORMATS} value={localFilters.tournamentFormat} onSelect={(v) => setLocalFilters({ ...localFilters, tournamentFormat: v })} />
       <Dropdown label="Table Size" placeholder="All Table Sizes" options={TABLE_SIZES} value={localFilters.tableSize} onSelect={(v) => setLocalFilters({ ...localFilters, tableSize: v })} />

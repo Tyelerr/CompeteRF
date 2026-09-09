@@ -19,6 +19,9 @@ export interface Filters {
   reportsToFargo: boolean;
   calcutta: boolean;
   openTournament: boolean;
+  // Status → Completed browse (item 35). "" = default (upcoming/live + 8-day completed);
+  // "completed" = completed tournaments from ~the last 90 days.
+  status: "" | "completed";
 }
 
 const SCOTCH_DOUBLES_TYPES = [
@@ -51,6 +54,7 @@ export const defaultFilters: Filters = {
   reportsToFargo: false,
   calcutta: false,
   openTournament: false,
+  status: "",
 };
 
 export const getActiveFilterCount = (filters: Filters): number => {
@@ -70,5 +74,6 @@ export const getActiveFilterCount = (filters: Filters): number => {
   if (filters.reportsToFargo) count++;
   if (filters.calcutta) count++;
   if (filters.openTournament) count++;
+  if (filters.status) count++;
   return count;
 };

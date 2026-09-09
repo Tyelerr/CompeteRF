@@ -611,14 +611,13 @@ const OverviewTab = ({
   const summaryCards = view.finished
     ? [
         { val: view.championName ?? "—", lbl: "Champion", wide: true },
-        { val: `${s.activeTables}`, lbl: "Active Tables" },
-        { val: `${s.completedMatches}`, lbl: "Completed" },
+        { val: `${s.completedMatches}`, lbl: "Matches Played" },
       ]
     : [
         { val: `${s.playersRemaining}`, lbl: "Remaining" },
         { val: `${s.activeTables}`, lbl: "Active Tables" },
         { val: `${s.waiting}`, lbl: "Waiting" },
-        { val: `${s.completedMatches}`, lbl: "Completed" },
+        { val: `${s.completedMatches}`, lbl: "Matches Played" },
       ];
 
   return (
@@ -650,7 +649,8 @@ const OverviewTab = ({
         </TouchableOpacity>
       )}
 
-      {/* 3 — Currently Playing */}
+      {/* 3 — Currently Playing (live only; removed after completion — item 32) */}
+      {!view.finished && (
       <View style={styles.section}>
         <SectionHeader icon="flame-outline" title="Currently Playing" />
         {view.tables.length === 0 ? (
@@ -663,8 +663,10 @@ const OverviewTab = ({
           </View>
         )}
       </View>
+      )}
 
-      {/* 4 — Up Next */}
+      {/* 4 — Up Next (live only; removed after completion — item 32) */}
+      {!view.finished && (
       <View style={styles.section}>
         <SectionHeader icon="list-outline" title="Up Next" />
         {view.queuePreview.length === 0 ? (
@@ -697,10 +699,11 @@ const OverviewTab = ({
           </>
         )}
       </View>
+      )}
 
-      {/* 5 — Chip Leaders */}
+      {/* 5 — Chip Leaders (live) / Final Standings (completed) — item 27 */}
       <View style={styles.section}>
-        <SectionHeader icon="podium-outline" title="Chip Leaders" />
+        <SectionHeader icon="podium-outline" title={view.finished ? "Final Standings" : "Chip Leaders"} />
         {view.standingsPreview.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyLine}>No standings yet.</Text>
         ) : (

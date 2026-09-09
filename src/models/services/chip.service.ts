@@ -650,6 +650,34 @@ export const chipService = {
     }
   },
 
+  // Admin payout paid/unpaid tracking (item 29). Stored in tournament.live_settings under
+  // `payoutsPaid` keyed by a stable payout key ("entry:<place>" or "sidepot:<name>:<place>")
+  // so it uniformly covers the entry pool AND every side pot with no schema change. Read-
+  // modify-write of the current live_settings (fresh read to avoid clobbering siblings).
+  // Post-completion, low-frequency director action. NOTE: spectators must never read this —
+  // PayoutsTab intentionally does not. (A durable chip_results-based store is the Phase G
+  // direction, item 37.)
+  async setPayoutPaid(id: number, key: string, paid: boolean): Promise<Record<string, boolean>> {
+    const { data: cur, error: readErr } = await supabase
+      .from("tournaments")
+      .select("live_settings")
+      .eq("id", id)
+      .single();
+    if (readErr) throw readErr;
+    const ls: any = (cur?.live_settings as any) ?? {};
+    const next: Record<string, boolean> = { ...(ls.payoutsPaid ?? {}) };
+    if (paid) next[key] = true;
+    else delete next[key];
+    const { error } = await supabase
+      .from("tournaments")
+      .update({ live_settings: { ...ls, payoutsPaid: next }, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("id")
+      .single();
+    if (error) throw error;
+    return next;
+  },
+
   async setName(id: number, name: string): Promise<void> {
     const { error } = await supabase
       .from("tournaments")

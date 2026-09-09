@@ -23,18 +23,32 @@ function normalizeTournament<T extends { game_type?: any }>(t: T): T {
 type DiscoveryFilterable = {
   eq: (column: string, value: unknown) => DiscoveryFilterable;
   or: (filters: string) => DiscoveryFilterable;
+  gte: (column: string, value: unknown) => DiscoveryFilterable;
 };
-const applyPublicDiscovery = <Q>(query: Q): Q => {
+const ymd = (dt: Date): string =>
+  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+// Default discovery = upcoming OR live active tournaments, PLUS recently-completed ones so
+// results linger briefly in the feed (item 34: 8 days). The "completed" mode (item 35: the
+// Status → Completed filter) instead returns only completed tournaments from ~the last 90
+// days. Never exposes private/hidden/draft rows. Format-agnostic (chip included).
+const applyPublicDiscovery = <Q>(query: Q, mode: "default" | "completed" = "default"): Q => {
   const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const q = query as DiscoveryFilterable;
   // PostgREST filter builders mutate and return the same instance, so applying the
   // predicate through a loose local view still mutates `query`. The caller keeps its
   // concrete builder type Q (so it can chain .order/.range/.eq afterwards).
-  (query as DiscoveryFilterable)
-    .eq("status", "active")
-    .eq("is_hidden", false)
-    .eq("is_draft", false)
-    .or(`tournament_date.gte.${today},live_state.eq.in_progress`);
+  q.eq("is_hidden", false).eq("is_draft", false);
+  if (mode === "completed") {
+    const since = new Date(d);
+    since.setDate(since.getDate() - 90);
+    q.eq("status", "completed").gte("completed_at", ymd(since));
+  } else {
+    const since = new Date(d);
+    since.setDate(since.getDate() - 8);
+    q.or(
+      `and(status.eq.active,or(tournament_date.gte.${ymd(d)},live_state.eq.in_progress)),and(status.eq.completed,completed_at.gte.${ymd(since)})`,
+    );
+  }
   return query;
 };
 
@@ -46,12 +60,16 @@ export const tournamentService = {
     page: number = 1,
     limit: number = 20,
   ): Promise<{ data: Tournament[]; count: number }> {
+    const completedMode = filters.status === "completed";
     let query = applyPublicDiscovery(
       supabase
         .from("tournaments")
         .select("*, venues(*), profiles!director_id(*)", { count: "exact" }),
+      completedMode ? "completed" : "default",
     )
-      .order("tournament_date", { ascending: true })
+      // Completed browse shows most-recently-finished first; default browse shows the
+      // soonest upcoming first.
+      .order(completedMode ? "completed_at" : "tournament_date", { ascending: !completedMode })
       .range((page - 1) * limit, page * limit - 1);
 
     if (filters.state) query = query.eq("venues.state", filters.state);

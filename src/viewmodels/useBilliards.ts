@@ -73,7 +73,9 @@ export function useBilliards(): UseBilliardsReturn {
   // Resolved venue IDs for the active brand filter. null = no brand filter active.
   const [brandVenueIds, setBrandVenueIds] = useState<number[] | null>(null);
 
-  useEffect(() => { loadTournaments(); }, []);
+  // Refetch when the Completed status filter toggles (it changes the server-side window),
+  // as well as on mount. Other filters apply client-side and don't need a refetch.
+  useEffect(() => { loadTournaments(); }, [filters.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resolve venue IDs whenever the brand filter changes
   useEffect(() => {
@@ -125,7 +127,13 @@ export function useBilliards(): UseBilliardsReturn {
 
   const loadTournaments = async () => {
     try {
-      const { data } = await tournamentService.getTournaments({}, 1, 10000);
+      // Pass the Completed status so the service widens to the 90-day completed window
+      // (item 35); default ("") returns upcoming/live + the 8-day completed feed (item 34).
+      const { data } = await tournamentService.getTournaments(
+        { status: filters.status === "completed" ? "completed" : "" },
+        1,
+        10000,
+      );
       // Best-effort: attach active registration counts for the status badges.
       let withCounts = data;
       try {

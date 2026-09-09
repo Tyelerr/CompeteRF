@@ -46,6 +46,7 @@ import {
   PhaseNavPhase,
 } from "../../../components/tournament/live/PhaseNav";
 import { useChipTournament } from "../../../../viewmodels/use.chip.tournament";
+import { chipService } from "../../../../models/services/chip.service";
 import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite";
 import {
   chipsForFargo,
@@ -940,6 +941,24 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     [id],
   );
   const [alertsModalOpen, setAlertsModalOpen] = useState(false);
+  // Admin payout paid/unpaid (item 29). Recent optimistic toggles live in paidOverrides
+  // and are merged over the persisted live_settings.payoutsPaid at render (no effect →
+  // no set-state-in-effect). Persisted via chipService.setPayoutPaid. Spectators never see it.
+  const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>({});
+  const togglePayoutPaid = useCallback(
+    async (key: string) => {
+      const serverPaid = !!(((vm.tournament?.live_settings as any)?.payoutsPaid ?? {})[key]);
+      const nextVal = !(paidOverrides[key] ?? serverPaid);
+      setPaidOverrides((p) => ({ ...p, [key]: nextVal }));
+      try {
+        await chipService.setPayoutPaid(id, key, nextVal);
+      } catch {
+        setPaidOverrides((p) => ({ ...p, [key]: !nextVal }));
+        Alert.alert("Couldn't save", "Payment status could not be saved. Please try again.");
+      }
+    },
+    [id, paidOverrides, vm.tournament],
+  );
   // Window rect of the Actions button that opened the menu (for above/below math) +
   // the screen-root's window origin (so we can position the in-tree overlay, which
   // lives inside the scroll content, in the root's coordinate space).
@@ -3775,6 +3794,40 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       });
     if (streamAvail) alerts.push({ id: "stream", text: "Stream table available" });
     for (const lm of longNow) alerts.push({ id: `long:${lm.label}`, text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
+    // Payout-ready (item 28): when a PAYABLE placement locks in via elimination (or the
+    // champion at finish), surface a passive alert — never auto-navigate to Payouts. The
+    // "View Payouts" CTA opens the Results area. Amounts use the same centralized pool +
+    // breakdown math as renderPayouts.
+    const lsPay: any = tournament.live_settings ?? {};
+    const cfgPay = lsPay.prizePool ?? null;
+    if (cfgPay?.entryPlaces?.length) {
+      const fieldCt = chip.entries.filter(enteredField).length;
+      const poolPay = entryPoolTotal(
+        fieldCt,
+        Number(tournament.entry_fee) || 0,
+        feesPerPlayer((lsPay.fees ?? []).filter((f: any) => f.enabled)),
+        !!lsPay.feesAddedOnTop,
+        cfgPay?.includeAddedMoney ?? true,
+        Number(tournament.added_money) || 0,
+      );
+      const placesPay = poolPay > 0 ? computeBreakdown(poolPay, cfgPay.entryPlaces).places : [];
+      const placementsPay = finalPlacements(chip);
+      const ord = (n: number): string => { const s = ["th", "st", "nd", "rd"], v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
+      for (const row of placesPay) {
+        const who = placementsPay.find((p) => p.place === row.place);
+        const e = who ? entryById(who.entryId) : null;
+        // Locked = that entry is eliminated, or (place 1) the tournament finished.
+        if (e && (e.status === "eliminated" || chip.finishedAt)) {
+          alerts.push({
+            id: `payout:${row.place}:${e.id}`,
+            text: "Payout Ready",
+            sub: `${teamName(e)} finished ${ord(row.place)} and is owed $${Math.round(row.amount).toLocaleString()}.`,
+            onPress: onOpenResults,
+            cta: "View Payouts",
+          });
+        }
+      }
+    }
     const visibleAlerts = alerts.filter((a) => !dismissedAlerts.has(a.id));
 
     const queueIds = chip.queue.slice(0, 5);
@@ -4713,6 +4766,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // bracket flow; no paid/unpaid tracking or splitting yet.
   const renderPayouts = () => {
     const money = (n: number): string => `$${Math.round(n).toLocaleString()}`;
+    // Persisted paid state merged with recent optimistic toggles (item 29).
+    const payoutsPaid: Record<string, boolean> = {
+      ...(((tournament.live_settings as any)?.payoutsPaid) ?? {}),
+      ...paidOverrides,
+    };
     const ordinal = (n: number): string => {
       const s = ["th", "st", "nd", "rd"], v = n % 100;
       return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
@@ -4779,13 +4837,23 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         {payoutPlaces && payoutPlaces.length && pool > 0 ? (
           <View style={styles.sumGroup}>
             <Text style={styles.sumGroupTitle}>PAYOUT BREAKDOWN</Text>
-            {payoutPlaces.map((row, i) => (
-              <View key={row.place} style={[styles.sumRow, i > 0 && styles.sumRowDiv]}>
-                <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
-                <Text style={styles.payName} numberOfLines={1}>{teamAtPlace(row.place)}</Text>
-                <Text style={styles.payAmt}>{money(row.amount)}</Text>
-              </View>
-            ))}
+            {payoutPlaces.map((row, i) => {
+              const payee = teamAtPlace(row.place);
+              const paidKey = `entry:${row.place}`;
+              const isPaid = !!payoutsPaid[paidKey];
+              return (
+                <View key={row.place} style={[styles.sumRow, i > 0 && styles.sumRowDiv]}>
+                  <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
+                  <Text style={styles.payName} numberOfLines={1}>{payee}</Text>
+                  <Text style={styles.payAmt}>{money(row.amount)}</Text>
+                  {payee !== "—" && (
+                    <TouchableOpacity onPress={() => togglePayoutPaid(paidKey)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
+                      <Text style={[styles.paidToggleText, isPaid && styles.paidToggleTextOn]}>{isPaid ? "Paid ✓" : "Mark Paid"}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
           </View>
         ) : (
           <View style={styles.section}>
@@ -4803,15 +4871,25 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 <Text style={styles.payName}>Pool</Text>
                 <Text style={styles.payAmt}>{money(sp.pool)}</Text>
               </View>
-              {sp.places.map((row, i) => (
-                <View key={row.place} style={[styles.sumRow, styles.sumRowDiv]}>
-                  <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
-                  {/* i-th configured side-pot place → i-th eligible finisher (buyers ranked
-                      by overall finish). Falls back to the % when no eligible finisher yet. */}
-                  <Text style={styles.payName} numberOfLines={1}>{finishers[i] ?? (row.custom ? "" : `${row.percent}%`)}</Text>
-                  <Text style={styles.payAmt}>{money(row.amount)}</Text>
-                </View>
-              ))}
+              {sp.places.map((row, i) => {
+                const payee = finishers[i];
+                const paidKey = `sidepot:${sp.name}:${row.place}`;
+                const isPaid = !!payoutsPaid[paidKey];
+                return (
+                  <View key={row.place} style={[styles.sumRow, styles.sumRowDiv]}>
+                    <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
+                    {/* i-th configured side-pot place → i-th eligible finisher (buyers ranked
+                        by overall finish). Falls back to the % when no eligible finisher yet. */}
+                    <Text style={styles.payName} numberOfLines={1}>{payee ?? (row.custom ? "" : `${row.percent}%`)}</Text>
+                    <Text style={styles.payAmt}>{money(row.amount)}</Text>
+                    {payee && (
+                      <TouchableOpacity onPress={() => togglePayoutPaid(paidKey)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
+                        <Text style={[styles.paidToggleText, isPaid && styles.paidToggleTextOn]}>{isPaid ? "Paid ✓" : "Mark Paid"}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
               <Text style={styles.hint}>Side pot payouts are based only on players who entered the Side Pot.</Text>
             </View>
           );
@@ -7671,6 +7749,10 @@ const styles = StyleSheet.create({
   payPlace: { width: webSc(40), color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   payName: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   payAmt: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "900", flexShrink: 0, textAlign: "right" },
+  paidToggle: { marginLeft: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), paddingVertical: 2, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
+  paidToggleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "22" },
+  paidToggleText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  paidToggleTextOn: { color: COLORS.success },
   sumStandToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
   sumStandToggleText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   exportBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center", marginTop: webSc(SPACING.xs), marginBottom: webSc(SPACING.lg) },

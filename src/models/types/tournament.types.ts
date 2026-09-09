@@ -181,4 +181,7 @@ export interface TournamentFilters {
   reportsToFargo?: boolean;
   calcutta?: boolean;
   openTournament?: boolean;
+  // Status → Completed browse (item 35): "completed" returns completed tournaments from
+  // ~the last 90 days instead of the default upcoming/live + 8-day-completed feed.
+  status?: "" | "completed";
 }
