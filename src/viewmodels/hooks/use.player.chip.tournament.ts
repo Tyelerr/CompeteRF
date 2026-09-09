@@ -97,6 +97,7 @@ export interface ChipPlayerHub {
   tournamentId: number;
   tournamentName: string;
   format: ChipFormat;
+  completed: boolean; // tournament finished → "Final Standings" vs live "Chip Leaders"
   isTeam: boolean;
   meId: string;
   myName: string;
@@ -114,6 +115,7 @@ export interface ChipPlayerHub {
   winPct: number;
   streak: number;
   streakType: ChipStreakType;
+  bestStreak: number; // highest consecutive wins this tournament (displayed summary)
   matchesPlayed: number;
   avgMatchMs: number | null;
   perf: ChipPerf | null; // Fargo/expectation label (enough data only)
@@ -374,6 +376,9 @@ const buildChipHub = (
     tournamentId,
     tournamentName,
     format,
+    // Tournament-level completion (item 27): drives live "Chip Leaders" vs completed
+    // "Final Standings" terminology.
+    completed: !!s.finishedAt || !!s.winnerId,
     isTeam: format === "scotch_doubles",
     meId: me.id,
     myName: teamNameOf(me),
@@ -389,6 +394,7 @@ const buildChipHub = (
     winPct,
     streak,
     streakType,
+    bestStreak: me.bestStreak ?? 0,
     matchesPlayed,
     avgMatchMs,
     perf,

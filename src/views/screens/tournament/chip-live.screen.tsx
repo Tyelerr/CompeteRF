@@ -533,6 +533,7 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
                 onStFilter={setStandingsFilter}
                 stSort={standingsSort}
                 onStSort={setStandingsSort}
+                finished={view.finished}
                 onTap={openProfile}
               />
             )}
@@ -562,10 +563,10 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
         onTap={openProfileFromList}
       />
 
-      {/* Full standings */}
+      {/* Full standings (Chip Leaders live / Final Standings completed — item 27) */}
       <ListModal
         visible={standingsOpen}
-        title="Full Standings"
+        title={view?.finished ? "Final Standings" : "Chip Leaders"}
         onClose={() => setStandingsOpen(false)}
         rows={(view?.fullStandings ?? []).map((r) => ({
           id: r.id,
@@ -828,6 +829,7 @@ const PlayersTab = ({
   onStFilter,
   stSort,
   onStSort,
+  finished,
   onTap,
 }: {
   isTeam: boolean;
@@ -846,9 +848,12 @@ const PlayersTab = ({
   onStFilter: (f: StandingsFilter) => void;
   stSort: StandingsSort;
   onStSort: (s: StandingsSort) => void;
+  finished: boolean;
   onTap: (id: string | null) => void;
 }) => {
   const listLabel = isTeam ? "Team List" : "Player List";
+  // Item 27: live → "Chip Leaders"; completed → "Final Standings".
+  const standingsLabel = finished ? "Final Standings" : "Chip Leaders";
   const noun = isTeam ? "teams" : "players";
   return (
     <View style={styles.section}>
@@ -858,7 +863,7 @@ const PlayersTab = ({
           <Text allowFontScaling={false} style={[styles.pvSegText, subView === "list" && styles.pvSegTextOn]}>{listLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.pvSegBtn, subView === "standings" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("standings")}>
-          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>Standings</Text>
+          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>{standingsLabel}</Text>
         </TouchableOpacity>
       </View>
 

@@ -40,7 +40,7 @@ import { TournamentHubView } from "../../src/views/components/profile/Tournament
 import { ChipTournamentHubView } from "../../src/views/components/profile/ChipTournamentHubView";
 import { Dropdown } from "../../src/views/components/common/dropdown";
 import { ReviewPromptModal } from "../../src/views/components/reviews/ReviewPromptModal";
-import { ReviewConfetti } from "../../src/views/components/reviews/ReviewConfetti";
+import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/common/ConfettiBurst";
 import { useReviewPrompt } from "../../src/viewmodels/hooks/use.review.prompt";
 import { usePlayerChipTournament } from "../../src/viewmodels/hooks/use.player.chip.tournament";
 import { TournamentDetailModal } from "../../src/views/components/tournament/TournamentDetailModal";
@@ -248,7 +248,9 @@ export default function ProfileScreen() {
     endedLiveTournamentIds,
   });
   // Screen-level confetti that keeps falling briefly AFTER the review modal closes on submit.
-  const [showReviewConfetti, setShowReviewConfetti] = useState(false);
+  // Item 33: reuse the shared radial ConfettiBurst (not the old top-concentrated
+  // ReviewConfetti) for the post-review celebration.
+  const reviewConfettiRef = useRef<ConfettiBurstRef>(null);
   const [profileTab, setProfileTab] = useState<ProfileTab>("tournament");
 
   const [loading, setLoading] = useState(true);
@@ -660,13 +662,13 @@ export default function ProfileScreen() {
           onSubmit={async (rating, reasons, comment) => {
             // Persist + close the modal (optimistic), then start the brief screen-level confetti.
             await reviewPrompt.submit(rating, reasons, comment);
-            setShowReviewConfetti(true);
+            reviewConfettiRef.current?.fire();
           }}
           onDismiss={reviewPrompt.dismiss}
         />
       )}
 
-      {showReviewConfetti && <ReviewConfetti onDone={() => setShowReviewConfetti(false)} />}
+      <ConfettiBurst ref={reviewConfettiRef} />
     </View>
   );
 }

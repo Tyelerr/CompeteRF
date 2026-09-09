@@ -4658,7 +4658,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const isOut = e.status === "eliminated";
       return (
         <TouchableOpacity key={e.id} style={styles.standRow} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-          <Text style={styles.standRank}>{rank}</Text>
+          <Text style={styles.standRank} numberOfLines={1}>{rank}</Text>
           <Text style={[styles.standName, isOut && styles.playerOut]} numberOfLines={1}>{shortTeam(e)}</Text>
           <Text style={styles.standMeta}><Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>{e.chips}</Text> · {e.wins}-{e.losses} · {e.eliminations}K</Text>
         </TouchableOpacity>
@@ -4746,6 +4746,23 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       );
     }
     const sidePots = sidePotPayoutViews(cfg, sidePotPoolByName);
+    // Side-pot RESULTS ranking (item 30): eligibility = ONLY entrants who bought that pot.
+    // Rank those buyers by their OVERALL finish order and assign side-pot placement among
+    // them (5th overall who entered becomes 1st Side Pot). Singles AND teams both carry
+    // paidSidePots, so one filter serves both. Returns the eligible finisher NAMES in
+    // side-pot placement order (index 0 = 1st Side Pot).
+    const sidePotFinishers = (name: string): string[] => {
+      const buyers = new Set(
+        chip.entries.filter((e) => (e.paidSidePots ?? []).includes(name)).map((e) => e.id),
+      );
+      return placements
+        .filter((p) => buyers.has(p.entryId))
+        .sort((a, b) => a.place - b.place)
+        .map((p) => {
+          const e = entryById(p.entryId);
+          return e ? teamName(e) : "—";
+        });
+    };
     return (
       <View>
         <Text style={styles.sumHeader}>Payouts</Text>
@@ -4777,22 +4794,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </Text>
           </View>
         )}
-        {sidePots.map((sp) => (
-          <View key={sp.name} style={styles.sumGroup}>
-            <Text style={styles.sumGroupTitle}>{sp.name.toUpperCase()}</Text>
-            <View style={[styles.sumRow, { justifyContent: "space-between" }]}>
-              <Text style={styles.payName}>Pool</Text>
-              <Text style={styles.payAmt}>{money(sp.pool)}</Text>
-            </View>
-            {sp.places.map((row, i) => (
-              <View key={row.place} style={[styles.sumRow, styles.sumRowDiv]}>
-                <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
-                <Text style={styles.payName} numberOfLines={1}>{row.custom ? "" : `${row.percent}%`}</Text>
-                <Text style={styles.payAmt}>{money(row.amount)}</Text>
+        {sidePots.map((sp) => {
+          const finishers = sidePotFinishers(sp.name);
+          return (
+            <View key={sp.name} style={styles.sumGroup}>
+              <Text style={styles.sumGroupTitle}>{sp.name.toUpperCase()} — SIDE POT RESULTS</Text>
+              <View style={[styles.sumRow, { justifyContent: "space-between" }]}>
+                <Text style={styles.payName}>Pool</Text>
+                <Text style={styles.payAmt}>{money(sp.pool)}</Text>
               </View>
-            ))}
-          </View>
-        ))}
+              {sp.places.map((row, i) => (
+                <View key={row.place} style={[styles.sumRow, styles.sumRowDiv]}>
+                  <Text style={styles.payPlace}>{ordinal(row.place)}</Text>
+                  {/* i-th configured side-pot place → i-th eligible finisher (buyers ranked
+                      by overall finish). Falls back to the % when no eligible finisher yet. */}
+                  <Text style={styles.payName} numberOfLines={1}>{finishers[i] ?? (row.custom ? "" : `${row.percent}%`)}</Text>
+                  <Text style={styles.payAmt}>{money(row.amount)}</Text>
+                </View>
+              ))}
+              <Text style={styles.hint}>Side pot payouts are based only on players who entered the Side Pot.</Text>
+            </View>
+          );
+        })}
       </View>
     );
   };
@@ -8047,7 +8070,7 @@ const styles = StyleSheet.create({
   reshufStatLbl: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
   standRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  standRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: 22 },
+  standRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", minWidth: webSc(30), flexShrink: 0 },
   standName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flex: 1 },
   standMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs) },
 

@@ -421,7 +421,12 @@ export const ChipTournamentHubView = ({
       <Collapsible title="PERFORMANCE">
         <View style={styles.card}>
           {hub.perf && hub.perf.rating != null ? (
+            // Item 25 hierarchy: Fargo → Performance Rating → vs Fargo (signed, red when
+            // negative) makes "rating = fargo + differential" obvious. Avg Opp Fargo kept
+            // as a trailing supporting stat.
             <View style={styles.perfRow}>
+              <Stat label="Fargo" value={hub.myFargo != null ? String(hub.myFargo) : "—"} />
+              <View style={styles.summaryDivider} />
               <Stat label="Performance Rating" value={String(hub.perf.rating)} />
               <View style={styles.summaryDivider} />
               <Stat
@@ -459,9 +464,9 @@ export const ChipTournamentHubView = ({
             <Stat label="Win %" value={hub.matchesPlayed ? `${Math.round(hub.winPct * 100)}%` : "—"} tint={COLORS.success} />
             <View style={styles.summaryDivider} />
             <Stat
-              label={hub.streakType === "loss" ? "Loss streak" : "Win streak"}
-              value={hub.streak ? String(hub.streak) : "—"}
-              tint={hub.streakType === "loss" ? COLORS.error : COLORS.success}
+              label="Best Streak"
+              value={hub.bestStreak ? String(hub.bestStreak) : "—"}
+              tint={COLORS.success}
             />
             <View style={styles.summaryDivider} />
             <Stat label="Matches" value={String(hub.matchesPlayed)} />
@@ -517,8 +522,8 @@ export const ChipTournamentHubView = ({
         </View>
       </Modal>
 
-      {/* ── Chip leaderboard (expandable) ────────────────────────────────── */}
-      <Collapsible title="CHIP LEADERBOARD" count={hub.playersRemaining}>
+      {/* ── Chip Leaders (live) / Final Standings (completed) — expandable ──── */}
+      <Collapsible title={hub.completed ? "FINAL STANDINGS" : "CHIP LEADERS"} count={hub.playersRemaining}>
         {hub.leaderboard.length === 0 ? (
           <Text allowFontScaling={false} style={styles.emptyLine}>No standings yet.</Text>
         ) : (
@@ -543,7 +548,7 @@ export const ChipTournamentHubView = ({
                   style={({ pressed }) => [styles.qViewAll, pressed && { opacity: 0.5 }]}
                   onPress={() => setLeaderboardOpen(true)}
                 >
-                  <Text allowFontScaling={false} style={styles.qViewAllText}>View Full Leaderboard ({hub.fullLeaderboard.length})</Text>
+                  <Text allowFontScaling={false} style={styles.qViewAllText}>{hub.completed ? "View Final Standings" : "View Chip Leaders"} ({hub.fullLeaderboard.length})</Text>
                   <Text allowFontScaling={false} style={styles.qViewAllChevron}>›</Text>
                 </Pressable>
               </>
@@ -559,7 +564,7 @@ export const ChipTournamentHubView = ({
           <Pressable style={styles.fqDim} onPress={closeLeaderboard} />
           <View style={styles.fqCard}>
             <View style={styles.fqHeader}>
-              <Text allowFontScaling={false} style={styles.fqTitle}>Leaderboard ({hub.fullLeaderboard.length})</Text>
+              <Text allowFontScaling={false} style={styles.fqTitle}>{hub.completed ? "Final Standings" : "Chip Leaders"} ({hub.fullLeaderboard.length})</Text>
               <TouchableOpacity onPress={closeLeaderboard} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text allowFontScaling={false} style={styles.fqDone}>Done</Text>
               </TouchableOpacity>

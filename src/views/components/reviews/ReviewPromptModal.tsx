@@ -4,7 +4,7 @@
 // (multi-select) reason chips + "Tell us more" comment + Submit reveal underneath — so the first
 // interaction feels like a quick rating, not a survey. Dismiss (button OR the X) is a true
 // dismissal (parent persists it; never re-prompts). On a successful submit the parent closes
-// this modal immediately and plays a brief screen-level confetti (ReviewConfetti) — this modal
+// this modal immediately and plays a brief screen-level confetti (shared ConfettiBurst) — this modal
 // shows no internal success/thank-you state. Only the star rating is required.
 
 import { useEffect, useRef, useState } from "react";
