@@ -54,9 +54,9 @@ the authored SQL applied. PARTIAL / DEFERRED / NOT REPRODUCED as labelled.
 | 33 | Confetti reuse | E1 | c3231be | DONE |
 | 34 | Completed 8-day default discovery | E2 | 665e56b | DONE (service window); card **winner-name** PARTIAL (not on discovery row — overlaps G-37) |
 | 35 | Completed 90-day Status filter | E2 | 665e56b | DONE |
-| 36 | TD-added singles vanish from history | G4, Fix 1 | 5a8dff5, d32aa8d, 68f9115 | DONE — G4 backfill (historical, **pending apply**) + Fix 1 forward sync at completion prevents recurrence (**RPC pending apply**; pending device verify) |
+| 36 | TD-added singles vanish from history | G4, Fix 1 | 5a8dff5, d32aa8d, 68f9115 | DONE — G4 backfill (historical, **applied**) + Fix 1 forward sync at completion prevents recurrence (**RPC applied**; pending device verify) |
 | 37 | chip_results durable completed source | G5b, Fix 2 | 072188a, 3d576d0 | **CORRECTED:** was only PARTIAL (see note) — G5b wired the durable plumbing but all three surfaces still rendered live-recomputed standings. Fix 2 switches Spectator + Admin to read chip_results and Profile inherits it via the spectator screen. DONE pending device verification across all three |
-| 38 | Chip elimination sync to participants | G4, Fix 1 | 5a8dff5, 68f9115 | DONE — eliminated_at in G4 backfill (**pending apply**) + copied forward by Fix 1 completion sync (pending device verify) |
+| 38 | Chip elimination sync to participants | G4, Fix 1 | 5a8dff5, 68f9115 | DONE — eliminated_at in G4 backfill (**applied**) + copied forward by Fix 1 completion sync (**applied**; pending device verify) |
 | 39 | chip_entries PII SELECT | F | 8d15766, c3ef1bd | DONE (**applied** + ledger-repaired by user) |
 | 40 | Manager authorization role mismatch | F | c52a1b2 | DONE (**applied** + ledger-repaired by user) |
 | 41 | Multi-director last-write-wins | G3 | 2e3b032 | DONE (version CAS RPC authored, flag OFF; **pending apply + enable + verify**) |
@@ -86,7 +86,7 @@ the authored SQL applied. PARTIAL / DEFERRED / NOT REPRODUCED as labelled.
 > Separately, validation found that TD-added chip singles never created a `tournament_players`
 > row going forward (the G4 backfill only repaired historical tournaments) — the forward
 > participant-model gap — now closed by **Fix 1 (`68f9115`)** with a completion-time sync RPC
-> (migration `20260910160000`, **pending apply**).
+> (migration `20260910160000`, **APPLIED**).
 
 ---
 
@@ -104,30 +104,26 @@ All rollbacks live in `supabase/rollback/<same-name>_rollback.sql`.
 | 20260910130000_chip_apply_rpc | transactional CAS apply RPC | **APPLIED** (by user) | ✅ |
 | 20260910140000_chip_participant_backfill | historical participant backfill | **APPLIED** (by user; backfilled=27, still_eligible=0) | ✅ (log-based, precise) |
 | 20260910150000_chip_payouts_paid | manager-only paid store + data move | **APPLIED** (by user) | ✅ |
-| 20260910160000_chip_sync_completed_participants | Fix 1 — forward participant sync RPC | **PENDING** | ✅ (drops fn only; keeps data) |
+| 20260910160000_chip_sync_completed_participants | Fix 1 — forward participant sync RPC | **APPLIED** (by user; repaired, Local = Remote) | ✅ (drops fn only; keeps data) |
 
 (Pre-audit `20260907140000_chip_config_reshuffle_removing_ids` was applied + repaired earlier; not part of this audit.)
 
 ---
 
-## 5. Pending SQL to apply manually + verification + ledger
+## 5. SQL status + verification + ledger
 
-**The four G migrations (20260910120000 / 130000 / 140000 / 150000) are now APPLIED in
-production by the user** (backfill verified: backfilled=27, still_eligible=0). The **only
-remaining pending migration** is the Fix 1 RPC:
+**All chip migrations are now APPLIED in production by the user** — the four G migrations
+(20260910120000 / 130000 / 140000 / 150000; backfill verified: backfilled=27,
+still_eligible=0) and the Fix 1 RPC (20260910160000, applied + `migration repair` run,
+confirmed Local = Remote via `supabase migration list`). **No pending chip SQL remains.**
 
-1. **20260910160000_chip_sync_completed_participants** (Fix 1) — creates the manager-gated,
-   idempotent `public.chip_sync_completed_participants(bigint)` RPC that upserts
-   `tournament_players` for a completed chip singles tournament (forward recurrence guard).
-   Until applied, the client call is a **soft no-op** (completion never breaks).
-   Verify: `select proname, pg_get_function_identity_arguments(oid) from pg_proc where proname='chip_sync_completed_participants';`
-   Dry-run row count for a given completed tournament is in the migration header comment.
+- **20260910160000_chip_sync_completed_participants** (Fix 1) — APPLIED. The manager-gated,
+  idempotent `public.chip_sync_completed_participants(bigint)` RPC upserts `tournament_players`
+  for a completed chip singles tournament (forward recurrence guard). Now that it's live, the
+  client's completion-time sync writes real rows (it was a soft no-op only while unapplied).
+  Verify: `select proname, pg_get_function_identity_arguments(oid) from pg_proc where proname='chip_sync_completed_participants';`
 
-**Ledger repair (after applying it):**
-```bash
-supabase migration repair --status applied 20260910160000
-```
-Then `supabase db push --dry-run` should report the remote is up to date.
+`supabase db push --dry-run` should report the remote is up to date.
 
 **Enabling strict CAS (item 41):** only after #1/#2 are applied and `chip_apply` is verified,
 set `CHIP_APPLY_ENABLED = true` in `src/models/services/chip.service.ts` and device-test live
@@ -148,7 +144,7 @@ play + a two-director conflict (expect reload + notice, no double-apply).
 - **G4 backfill touches historical data.** It's additive/idempotent/skip-ambiguous with a precise log-based rollback, but run the dry-run report queries first and review counts.
 - **Cross-director concurrency is only fully protected once G3 is applied + the flag enabled.** Until then, soft-CAS logs conflicts but the legacy whole-blob save still last-write-wins.
 - **Completed-results source (item 37)** — RESOLVED IN CODE by Fix 2 (`3d576d0`): Spectator + Admin now read `chip_results`, Profile inherits via the spectator screen. Pending device verification that all three agree. Legacy completed tournaments without `chip_results` rows intentionally fall back to the live recompute.
-- **Forward participant sync (Fix 1, `68f9115`)** — the `chip_sync_completed_participants` RPC (migration `20260910160000`) is **pending apply**; until applied, newly completed tournaments' TD-added singles are not written to `tournament_players` (the client call soft-no-ops). A failed sync after apply is surfaced (not swallowed) with an idempotent retry; completion itself always stands.
+- **Forward participant sync (Fix 1, `68f9115`)** — the `chip_sync_completed_participants` RPC (migration `20260910160000`) is **APPLIED**; newly completed tournaments' TD-added singles are now written to `tournament_players` at completion. A failed sync is surfaced (not swallowed) with an idempotent retry; completion itself always stands. Pending device verification.
 - **Section X** is not device-verified; apply the candidate fix and reproduce before considering it resolved.
 - **Discovery window change (items 34/35)** affects all tournament formats' public browse; verify on staging (PostgREST `or(and(...))` filter).
 - Items 11 (scroll offset), 32 (champion-stat block), 34 (card winner-name) remain PARTIAL as noted.
