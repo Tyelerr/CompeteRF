@@ -47,6 +47,7 @@ import {
 } from "../../../components/tournament/live/PhaseNav";
 import { useChipTournament } from "../../../../viewmodels/use.chip.tournament";
 import { chipService } from "../../../../models/services/chip.service";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite";
 import {
   chipsForFargo,
@@ -945,19 +946,27 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // and are merged over the persisted live_settings.payoutsPaid at render (no effect →
   // no set-state-in-effect). Persisted via chipService.setPayoutPaid. Spectators never see it.
   const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>({});
+  // Manager-only paid map (G5). Falls back to legacy public live_settings.payoutsPaid when
+  // the manager-only table isn't present (getPayoutsPaid returns null → data undefined).
+  const queryClient = useQueryClient();
+  const payoutsPaidQuery = useQuery({
+    queryKey: ["chip-payouts-paid", id],
+    queryFn: () => chipService.getPayoutsPaid(id),
+  });
   const togglePayoutPaid = useCallback(
     async (key: string) => {
-      const serverPaid = !!(((vm.tournament?.live_settings as any)?.payoutsPaid ?? {})[key]);
-      const nextVal = !(paidOverrides[key] ?? serverPaid);
+      const base = payoutsPaidQuery.data ?? ((vm.tournament?.live_settings as any)?.payoutsPaid ?? {});
+      const nextVal = !(paidOverrides[key] ?? !!base[key]);
       setPaidOverrides((p) => ({ ...p, [key]: nextVal }));
       try {
         await chipService.setPayoutPaid(id, key, nextVal);
+        queryClient.invalidateQueries({ queryKey: ["chip-payouts-paid", id] });
       } catch {
         setPaidOverrides((p) => ({ ...p, [key]: !nextVal }));
         Alert.alert("Couldn't save", "Payment status could not be saved. Please try again.");
       }
     },
-    [id, paidOverrides, vm.tournament],
+    [id, paidOverrides, vm.tournament, payoutsPaidQuery.data, queryClient],
   );
   // Window rect of the Actions button that opened the menu (for above/below math) +
   // the screen-root's window origin (so we can position the in-tree overlay, which
@@ -4789,9 +4798,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // bracket flow; no paid/unpaid tracking or splitting yet.
   const renderPayouts = () => {
     const money = (n: number): string => `$${Math.round(n).toLocaleString()}`;
-    // Persisted paid state merged with recent optimistic toggles (item 29).
+    // Paid state: manager-only store (G5) with legacy live_settings fallback, plus recent
+    // optimistic toggles (item 29).
     const payoutsPaid: Record<string, boolean> = {
-      ...(((tournament.live_settings as any)?.payoutsPaid) ?? {}),
+      ...(payoutsPaidQuery.data ?? (((tournament.live_settings as any)?.payoutsPaid) ?? {})),
       ...paidOverrides,
     };
     const ordinal = (n: number): string => {

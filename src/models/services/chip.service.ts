@@ -707,19 +707,33 @@ export const chipService = {
     }
   },
 
-  // Admin payout paid/unpaid tracking (item 29). Stored in tournament.live_settings under
-  // `payoutsPaid` keyed by a stable payout key ("entry:<place>" or "sidepot:<name>:<place>")
-  // so it uniformly covers the entry pool AND every side pot with no schema change. Read-
-  // modify-write of the current live_settings (fresh read to avoid clobbering siblings).
-  // Post-completion, low-frequency director action. NOTE: spectators must never read this —
-  // PayoutsTab intentionally does not. (A durable chip_results-based store is the Phase G
-  // direction, item 37.)
-  async setPayoutPaid(id: number, key: string, paid: boolean): Promise<Record<string, boolean>> {
+  // Admin payout paid/unpaid tracking (item 29 + G5). Persisted in the MANAGER-ONLY
+  // chip_payouts_paid table (keyed by "entry:<place>" / "sidepot:<name>:<place>") so
+  // spectators can never read payment status. Resilient: if that table isn't present yet
+  // (migration pending) it falls back to the legacy public live_settings.payoutsPaid.
+  async setPayoutPaid(id: number, key: string, paid: boolean): Promise<void> {
+    try {
+      if (paid) {
+        const { error } = await supabase
+          .from("chip_payouts_paid")
+          .upsert({ tournament_id: id, payout_key: key, paid: true });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("chip_payouts_paid")
+          .delete()
+          .eq("tournament_id", id)
+          .eq("payout_key", key);
+        if (error) throw error;
+      }
+      return;
+    } catch (e: any) {
+      // 42P01 = undefined_table (migration pending) → legacy fallback; rethrow real errors.
+      if (e?.code && e.code !== "42P01") throw e;
+    }
+    // Legacy fallback: public live_settings.payoutsPaid.
     const { data: cur, error: readErr } = await supabase
-      .from("tournaments")
-      .select("live_settings")
-      .eq("id", id)
-      .single();
+      .from("tournaments").select("live_settings").eq("id", id).single();
     if (readErr) throw readErr;
     const ls: any = (cur?.live_settings as any) ?? {};
     const next: Record<string, boolean> = { ...(ls.payoutsPaid ?? {}) };
@@ -732,7 +746,26 @@ export const chipService = {
       .select("id")
       .single();
     if (error) throw error;
-    return next;
+  },
+
+  // Read the manager-only payout paid map (G5). Returns { key: true } for paid payouts, or
+  // null when the manager-only table isn't available (migration pending / no access) so the
+  // caller can fall back to the legacy live_settings.payoutsPaid.
+  async getPayoutsPaid(id: number): Promise<Record<string, boolean> | null> {
+    try {
+      const { data, error } = await supabase
+        .from("chip_payouts_paid")
+        .select("payout_key, paid")
+        .eq("tournament_id", id);
+      if (error) throw error;
+      const map: Record<string, boolean> = {};
+      for (const r of (data ?? []) as { payout_key: string; paid: boolean }[]) {
+        if (r.paid) map[r.payout_key] = true;
+      }
+      return map;
+    } catch {
+      return null;
+    }
   },
 
   // Phase G3 strict-CAS write path (used only when CHIP_APPLY_ENABLED). Applies the whole
