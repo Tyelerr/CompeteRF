@@ -505,7 +505,6 @@ export const PrizePoolView = ({
     config.includeAddedMoney,
     addedMoney,
   );
-  const netEntryBeforeAdded = Math.max(0, entryPool - includedAdded);
   const entryBreakdown = computeBreakdown(entryPool, config.entryPlaces);
 
   const sidePotRows = sidePots.map((sp) => {
@@ -547,43 +546,10 @@ export const PrizePoolView = ({
         </View>
       )}
 
-      {/* Money collected + fees → net pool */}
-      <Card title="Prize Pool Summary">
-        <Row label="Players entered" value={String(players)} />
-        <Row label="Entry fee" value={money(entryFee)} />
-        <Row
-          label="Gross entry"
-          value={`${players} × ${money(entryFee)} = ${money(grossEntry)}`}
-        />
-        {fees.map((f, i) => (
-          <Row
-            key={i}
-            label={`${feesAddedOnTop ? "+" : "−"} ${f.name || "Fee"}`}
-            value={`${players} × ${money(f.perPlayer)} = ${money(
-              Math.max(0, players) * Math.max(0, f.perPlayer),
-            )}`}
-          />
-        ))}
-        {fees.length > 0 && (
-          <Row
-            label={feesAddedOnTop ? "Entry to pool" : "Net entry"}
-            value={money(netEntryBeforeAdded)}
-          />
-        )}
-        {addedMoney > 0 && (
-          <ToggleSwitch
-            label={`Added money (${money(addedMoney)})`}
-            value={config.includeAddedMoney}
-            onValueChange={(v) =>
-              !locked && onChange({ ...config, includeAddedMoney: v })
-            }
-            disabled={locked}
-          />
-        )}
-        <Row label="Total prize pool" value={money(totalPrizePool)} strong />
-      </Card>
-
-      {/* Entry payouts (over the NET pool) */}
+      {/* Entry payouts (over the NET pool). Item 2: the redundant top "Prize Pool Summary"
+          card was removed — the bottom "Summary" is the single consolidated reconciliation
+          (collected → fees → net pool → assigned → unassigned); the added-money include
+          toggle moved there. */}
       <PayoutCard
         title="Entry Payouts"
         pool={entryPool}
@@ -622,16 +588,17 @@ export const PrizePoolView = ({
             value={money(r.pool)}
           />
         ))}
-        <Row
-          label="Added money"
-          value={
-            addedMoney > 0
-              ? config.includeAddedMoney
-                ? `${money(addedMoney)} (in pool)`
-                : `${money(addedMoney)} (excluded)`
-              : money(0)
-          }
-        />
+        {addedMoney > 0 ? (
+          // Item 2: the added-money include toggle now lives here (was in the removed top card).
+          <ToggleSwitch
+            label={`Added money (${money(addedMoney)})`}
+            value={config.includeAddedMoney}
+            onValueChange={(v) => !locked && onChange({ ...config, includeAddedMoney: v })}
+            disabled={locked}
+          />
+        ) : (
+          <Row label="Added money" value={money(0)} />
+        )}
         <Row label="Total collected" value={money(totalCollected)} strong />
         <Row label="Total fees / deductions" value={money(totalFees)} />
         <Row label="Net payout pool" value={money(totalPrizePool)} strong />
