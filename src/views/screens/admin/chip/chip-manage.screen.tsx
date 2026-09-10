@@ -3805,6 +3805,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     <Text style={styles.atStartBtnText}>Start Match</Text>
                   </TouchableOpacity>
                 )}
+                {/* Item 12: recording the winner is the most common table action — surface a
+                    visible Winner button on a live-match card that opens the SAME choose-winner
+                    confirmation modal the ⋮ "Set Winner" row uses (no immediate record, no new
+                    mutation). The ⋮ menu keeps the secondary actions. */}
+                {m && a && b && (
+                  <TouchableOpacity style={styles.atWinnerBtn} onPress={() => setCompleteMatch({ matchId: m.id, aId: m.aId, bId: m.bId })} activeOpacity={0.85}>
+                    <Ionicons name="trophy-outline" size={webMs(15)} color={COLORS.white} />
+                    <Text style={styles.atWinnerBtnText}>Winner</Text>
+                  </TouchableOpacity>
+                )}
               </Pressable>
       );
     };
@@ -7823,6 +7833,8 @@ const styles = StyleSheet.create({
   atPendingNote: { marginTop: webSc(SPACING.sm), alignSelf: "center", color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   atStartBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   atStartBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  atWinnerBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  atWinnerBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   // Dashboard "View All Tables" row + the full-list modal shell.
   atViewAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
   atViewAllText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
