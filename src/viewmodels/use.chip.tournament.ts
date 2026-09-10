@@ -154,6 +154,11 @@ export const useChipTournament = (
 ) => {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [chip, setChip] = useState<ChipState | null>(null);
+  // Fix 2 (item 37) — durable chip_results (bundle.results). Once the tournament is
+  // COMPLETED this is the AUTHORITATIVE placement order for the admin standings/recap/
+  // payout surfaces; empty for a live tournament or a legacy completed one with no durable
+  // rows (→ the screen falls back to the live finalPlacements recompute).
+  const [results, setResults] = useState<ChipResultRow[]>([]);
   // The acting director (D/item 21). Threaded onto gameplay events that don't already
   // carry an actor (match results, chip loss, eliminations, table events, auto-seeds) so
   // audit attribution is reliable — reason-gated actions still set their own actor/reason.
@@ -287,6 +292,7 @@ export const useChipTournament = (
       const b = await chipService.load(id);
       versionRef.current = b.version; // Phase G CAS baseline for the next save.
       setTournament(b.tournament);
+      setResults(b.results ?? []); // Fix 2: durable placements for the completed view.
       const finished = b.tournament.live_state === "finished" || b.tournament.status === "completed";
       if (finished) {
         // Completed: normalize to a fully torn-down board and DO NOT run the active
@@ -1227,6 +1233,9 @@ export const useChipTournament = (
     startAllMode,
     tournament,
     chip,
+    // Fix 2 — durable chip_results (authoritative placement order once completed; empty
+    // otherwise). The completed admin standings/recap/payout read from this.
+    results,
     phase,
     reload: load,
     restorePoints,

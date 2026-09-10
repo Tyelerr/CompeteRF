@@ -362,6 +362,22 @@ const buildSpectatorView = (
     return e ? teamName(e) : "—";
   };
 
+  // Fix 2 (item 37) — once the tournament is COMPLETED, chip_results is the AUTHORITATIVE
+  // placement order. Map the durable rows (by place) to live entries purely for display
+  // enrichment (name / chips / Fargo / wins) — the ORDER comes from chip_results and live
+  // chip state never re-orders it. null when not finished, or when a LEGACY completed
+  // tournament has no durable rows → every consumer falls back to the live-recompute path,
+  // so historical tournaments keep working. This single source is shared by fullStandings,
+  // orderedEntries (side-pot finishers) and finalPlacements so all surfaces agree.
+  const durableOrdered: ChipEntry[] | null =
+    finished && durableResults && durableResults.length
+      ? (durableResults
+          .slice()
+          .sort((a, b) => a.place - b.place)
+          .map((r) => entryById(r.entryId))
+          .filter(Boolean) as ChipEntry[])
+      : null;
+
   // Chip leader (top by chips, then wins) — only when someone has chips.
   const leaderEntry = byChips[0] && byChips[0].chips > 0 ? byChips[0] : null;
   const chipLeader: SpecLeader | null = leaderEntry
@@ -516,7 +532,10 @@ const buildSpectatorView = (
   const eliminatedRanked = s.entries
     .filter((e) => !isAlive(e) && enteredField(e))
     .sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime());
-  const fullStandings: SpecStandingRow[] = [...byChips, ...eliminatedRanked].map((e, i) => ({
+  // Completed → durable chip_results order; live/legacy → recompute (alive by chips, then
+  // eliminated by most-recent-out). Enrichment only; the durable order is never re-sorted.
+  const standingsSource = durableOrdered ?? [...byChips, ...eliminatedRanked];
+  const fullStandings: SpecStandingRow[] = standingsSource.map((e, i) => ({
     id: e.id,
     rank: i + 1,
     name: teamName(e),
@@ -597,10 +616,8 @@ const buildSpectatorView = (
   // derive from live chip state.
   const orderedEntries = !finished
     ? ([] as typeof s.entries)
-    : durableResults && durableResults.length
-      ? (durableResults
-          .map((r) => entryById(r.entryId))
-          .filter(Boolean) as typeof s.entries)
+    : durableOrdered
+      ? (durableOrdered as typeof s.entries)
       : ([
           entryById(s.winnerId),
           ...s.entries

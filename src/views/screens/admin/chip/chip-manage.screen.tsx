@@ -1282,6 +1282,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
   const entryById = (eid: string | null | undefined) =>
     chip.entries.find((e) => e.id === eid) ?? null;
+  // Fix 2 (item 37) — authoritative COMPLETED placements. Once finished, the durable
+  // chip_results rows (vm.results) ARE the placement order; projected to the same
+  // { entryId, place } shape as finalPlacements() so every recap / payout / standings
+  // consumer reads ONE source and they all agree. A legacy completed tournament with no
+  // durable rows (or a live board) falls back to the live finalPlacements recompute, so
+  // historical tournaments keep working unchanged.
+  const authoritativePlacements = (): { entryId: string; place: number }[] =>
+    vm.isFinished && vm.results.length
+      ? vm.results
+          .slice()
+          .sort((a, b) => a.place - b.place)
+          .map((r) => ({ entryId: r.entryId, place: r.place }))
+      : finalPlacements(chip);
+  // Completed standings as ordered ENTRIES (durable order; names/chips/records enriched from
+  // the live entries). null while live or for a legacy completed tournament lacking durable
+  // rows → the caller keeps its existing live-recompute standings.
+  const finalOrderedEntries = (): ChipEntry[] | null =>
+    vm.isFinished && vm.results.length
+      ? (authoritativePlacements()
+          .map((p) => entryById(p.entryId))
+          .filter(Boolean) as ChipEntry[])
+      : null;
   const autoChips = (e: ChipEntry) =>
     chipsForFargo(chip.settings.tiers, teamFargoOf(e, chip.settings.format));
   const chipPreview = (e: ChipEntry) =>
@@ -3845,7 +3867,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         Number(tournament.added_money) || 0,
       );
       const placesPay = poolPay > 0 ? computeBreakdown(poolPay, cfgPay.entryPlaces).places : [];
-      const placementsPay = finalPlacements(chip);
+      const placementsPay = authoritativePlacements();
       const ord = (n: number): string => { const s = ["th", "st", "nd", "rd"], v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
       for (const row of placesPay) {
         const who = placementsPay.find((p) => p.place === row.place);
@@ -4647,7 +4669,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
     // Completed: read-only. Replace the active status ("queued"/"playing") with a
     // final placement label and hide the per-team action menu.
-    const placeById = new Map(readOnly ? finalPlacements(chip).map((p) => [p.entryId, p.place]) : []);
+    const placeById = new Map(readOnly ? authoritativePlacements().map((p) => [p.entryId, p.place]) : []);
     const finalLabel = (e: ChipEntry): string => {
       const p = placeById.get(e.id);
       if (p === 1) return "Winner";
@@ -4775,14 +4797,26 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </TouchableOpacity>
       );
     };
+    // Fix 2 — once completed, render the durable chip_results order as a single Final
+    // Standings list; live/legacy falls back to the alive-by-chips + eliminated split.
+    const finalOrdered = finalOrderedEntries();
     return (
       <>
         {chip.winnerId && <Section title="Champion"><Text style={styles.champ}>🏆 {teamName(entryById(chip.winnerId)!)}</Text></Section>}
-        <Section title="Standings">
-          <Text style={styles.hint}>Chips · W-L · Eliminations</Text>
-          {alive.map((e, i) => row(e, i + 1))}
-        </Section>
-        {out.length > 0 && <Section title="Eliminated">{out.map((e, i) => row(e, alive.length + i + 1))}</Section>}
+        {finalOrdered ? (
+          <Section title="Final Standings">
+            <Text style={styles.hint}>Chips · W-L · Eliminations</Text>
+            {finalOrdered.map((e, i) => row(e, i + 1))}
+          </Section>
+        ) : (
+          <>
+            <Section title="Standings">
+              <Text style={styles.hint}>Chips · W-L · Eliminations</Text>
+              {alive.map((e, i) => row(e, i + 1))}
+            </Section>
+            {out.length > 0 && <Section title="Eliminated">{out.map((e, i) => row(e, alive.length + i + 1))}</Section>}
+          </>
+        )}
         {vm.phase === "results" && (
           <Section title="Manage">
             <Text style={styles.hint}>Ended by mistake? Put it back to Live to keep playing.</Text>
@@ -4834,7 +4868,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const s = ["th", "st", "nd", "rd"], v = n % 100;
       return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
     };
-    const placements = finalPlacements(chip);
+    const placements = authoritativePlacements();
     const teamAtPlace = (place: number): string => {
       const p = placements.find((x) => x.place === place);
       const e = p ? entryById(p.entryId) : null;
@@ -4983,8 +5017,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const bestFargo = [...chip.entries]
       .filter((e) => e.wins + e.losses >= 3)
       .sort((a, b) => (b.wins / Math.max(1, b.wins + b.losses)) - (a.wins / Math.max(1, a.wins + a.losses)))[0];
-    // Standings: living by chips, then eliminated by most-recent elimination.
-    const standings = [
+    // Standings: Fix 2 — durable chip_results order once completed; else live recompute
+    // (living by chips, then eliminated by most-recent elimination) for live/legacy.
+    const standings = finalOrderedEntries() ?? [
       ...alive.sort((a, b) => b.chips - a.chips || b.wins - a.wins),
       ...out.sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime()),
     ];
