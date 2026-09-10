@@ -58,7 +58,6 @@ import {
   LONG_MATCH_MS,
   matchElapsedMs,
   recommendedActiveTables,
-  recommendedShuffleThreshold,
   recommendedSetupTables,
   playableEntryCount,
   isPostMatchPending,
@@ -3827,7 +3826,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const ms = matchElapsedMs(m, now);
       return ms > LONG_MATCH_MS ? { label: t.label, clock: fmtClock(ms) } : null;
     }).filter(Boolean) as { label: string; clock: string }[];
-    const streamAvail = chip.tables.some((t) => t.isStream && !t.matchId && !t.inactive);
+    // Item 9: a stream table is only ACTIONABLE when it is genuinely open (no live/pending
+    // match, not inactive/locked/closing) AND there are enough queued players to seat it (a
+    // holder table needs 1 challenger; an empty table needs 2). Winner-stays auto-seating
+    // normally fills tables, so this fires only when the TD can actually act — not merely
+    // because a stream-flagged table exists or is momentarily idle between matches.
+    const openStreamTable = chip.tables.find(
+      (t) => t.isStream && !t.matchId && !t.pendingChallengerId && !t.inactive && !t.locked && !t.closing,
+    );
+    const streamCanSeat =
+      !!openStreamTable &&
+      (openStreamTable.holderId ? chip.queue.length >= 1 : chip.queue.length >= 2) &&
+      !chip.shuffleReady && !chip.reshufflePending && !chip.shuffleMode;
 
     // Alerts are for conditions that need the TD's attention only. A normal
     // waiting queue is expected during a chip tournament and is already shown in
@@ -3836,14 +3846,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // specific instance and only reappears when the condition materially changes (id
     // changes). Recommendations are passive cards (never a re-popup on refresh).
     const alerts: { id: string; text: string; sub?: string; onPress?: () => void; cta?: string; urgent?: boolean }[] = [];
-    // (Re)shuffle milestone — recommend once the alive field reaches ~50% of the current
-    // cycle's baseline (item 13). Suppressed while a reshuffle is already pending/ready or
-    // continuous Shuffle Mode is running (don't nag toward endgame).
-    const shuffleThreshold = recommendedShuffleThreshold(chip);
+    // (Re)shuffle recommendation (item 8) — chip is winner-stays, so what matters is the
+    // WAITING QUEUE relative to the remaining field: aim for ~50% of the remaining players
+    // waiting. Recommend a (re)shuffle when the queue falls materially below that target
+    // (hysteresis band of 2 so it doesn't flap at the boundary). Suppressed while a reshuffle
+    // is already pending/ready or continuous Shuffle Mode is on, and near the endgame
+    // (remaining < 5) where rebalancing is pointless. The stable id keyed to reshuffleCount
+    // acts as the cooldown: once dismissed it won't reappear until the next shuffle cycle.
+    const remaining = d.playersRemaining;
+    const queueLen = chip.queue.length;
+    const queueTarget = Math.round(remaining / 2); // ~50% of the field waiting
     const recommendReshuffle =
-      shuffleThreshold >= 2 &&
-      d.playersRemaining >= 2 &&
-      d.playersRemaining <= shuffleThreshold &&
+      remaining >= 5 &&
+      queueLen <= queueTarget - 2 &&
       !chip.reshufflePending &&
       !chip.shuffleReady &&
       !chip.shuffleMode;
@@ -3852,7 +3867,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       alerts.push({
         id: `shuffle:${chip.reshuffleCount ?? 0}`,
         text: shuffleLabel,
-        sub: `${d.playersRemaining} players remain — ${(chip.reshuffleCount ?? 0) === 0 ? "shuffle" : "reshuffle"} to rebalance the field.`,
+        sub: `Only ${queueLen} waiting of ${remaining} remaining — ${(chip.reshuffleCount ?? 0) === 0 ? "shuffle" : "reshuffle"} to rebalance the queue.`,
         onPress: openShuffleModal,
         cta: "Take Action",
       });
@@ -3864,7 +3879,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         onPress: openReduce,
         cta: "Take Action",
       });
-    if (streamAvail) alerts.push({ id: "stream", text: "Stream table available" });
+    if (streamCanSeat && openStreamTable)
+      alerts.push({
+        id: `stream:${openStreamTable.id}`,
+        text: "Stream table open",
+        sub: `${openStreamTable.label} is open with players waiting — seat the next match on stream.`,
+        onPress: () => vm.assignNextTeam(openStreamTable.id),
+        cta: "Seat on Stream",
+      });
     for (const lm of longNow) alerts.push({ id: `long:${lm.label}`, text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
     // Payout-ready (item 28): when a PAYABLE placement locks in via elimination (or the
     // champion at finish), surface a passive alert — never auto-navigate to Payouts. The
@@ -3986,7 +4008,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           {a.sub ? <Text style={styles.alertSub2}>{a.sub}</Text> : null}
         </View>
         {a.onPress && (
-          <TouchableOpacity style={styles.secBtnSm} onPress={a.onPress}><Text style={styles.secBtnSmText}>{a.cta}</Text></TouchableOpacity>
+          // Item 7: close the (possible) expanded Alerts modal BEFORE running the action, so a
+          // secondary modal (shuffle setup, reduce, payouts nav) never stacks on top of the
+          // still-open Alerts modal and leaves an invisible backdrop that freezes the
+          // dashboard. Harmless no-op when the row is shown inline (modal already closed).
+          <TouchableOpacity style={styles.secBtnSm} onPress={() => { setAlertsModalOpen(false); a.onPress?.(); }}><Text style={styles.secBtnSmText}>{a.cta}</Text></TouchableOpacity>
         )}
         <TouchableOpacity onPress={() => dismissAlert(a.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: webSc(SPACING.sm), padding: 2 }}>
           <Ionicons name="close" size={webMs(16)} color={COLORS.textMuted} />
