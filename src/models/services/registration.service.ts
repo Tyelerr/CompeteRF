@@ -80,7 +80,7 @@ export const registrationService = {
     const { data, error } = await supabase
       .from("tournament_players")
       .select(
-        "id, status, registered_at, eliminated_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, gameplay_started_at, thumbnail, venues:venue_id (venue, city, state))",
+        "id, status, registered_at, eliminated_at, tournament:tournament_id (id, name, game_type, tournament_format, tournament_date, start_time, status, live_state, gameplay_started_at, archived_at, completed_at, thumbnail, venues:venue_id (venue, city, state))",
       )
       .eq("player_id", playerId)
       .order("registered_at", { ascending: false });

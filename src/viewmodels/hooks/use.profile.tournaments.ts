@@ -8,8 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import { registrationService } from "../../models/services/registration.service";
 import { teamService } from "../../models/services/team.service";
 import { PlayerTournament } from "../../models/types/registration.types";
-import { isTournamentCompleted } from "../../utils/tournament.archive";
-import { isTournamentViewEligible, isTournamentDeleted } from "../../utils/tournament-view";
+import { isTournamentCompleted, isTournamentArchived } from "../../utils/tournament.archive";
+import { isTournamentViewEligible, isTournamentDeleted, isTournamentCurrent } from "../../utils/tournament-view";
 
 // Team-format (Scotch Doubles) events register as a TEAM, not an individual
 // tournament_players row. A leftover players row (e.g. after a partner swap
@@ -137,9 +137,10 @@ export const useProfileTournaments = (
   // live" note) — and re-sorted most-recently-started first for a deterministic primary.
   const live = useMemo(() => {
     const clientLive = all.filter(isLive);
-    // Guard the RPC path too: until the get_my_live_tournament migration (which adds
-    // 'cancelled' to its exclusion) is applied, the RPC can still return a deleted event.
-    const rpcLive = (!liveQuery.isError ? liveQuery.data ?? [] : []).filter((t) => !isTournamentDeleted(t));
+    // Guard the RPC path too: until the get_my_live_tournament migration (terminal-state
+    // exclusion) is applied, the RPC can still return a removed event. Keep only genuinely
+    // current tournaments (the shared predicate).
+    const rpcLive = (!liveQuery.isError ? liveQuery.data ?? [] : []).filter((t) => isTournamentCurrent(t));
     const byId = new Map<number, PlayerTournament>();
     for (const t of clientLive) {
       if (t.tournament?.id != null) byId.set(t.tournament.id, t);
@@ -158,8 +159,10 @@ export const useProfileTournaments = (
   // "Registered" = signed up but gameplay has NOT begun (and not completed). Once a
   // tournament enters gameplay it moves to the live/Tournament-View bucket, and when it
   // finishes it moves to Completed — so a tournament lives in exactly one bucket.
+  // Exclude ARCHIVED (and, via `all`, DELETED) so a removed event that is no longer "current"
+  // can't fall through into Registered/Upcoming. Archived-completed stays under Completed.
   const registered = useMemo(
-    () => all.filter((t) => !isCompleted(t) && !isLive(t)),
+    () => all.filter((t) => !isCompleted(t) && !isLive(t) && !isTournamentArchived(t.tournament ?? {})),
     [all],
   );
 
