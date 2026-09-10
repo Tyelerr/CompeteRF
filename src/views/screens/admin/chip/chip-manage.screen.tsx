@@ -809,6 +809,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // entry has a live match; always offers Forfeit Tournament (authoritative elimination).
   const [forfeit, setForfeit] = useState<{ entryId: string; name: string; matchId: string | null; oppName: string | null } | null>(null);
   const [forfeitReason, setForfeitReason] = useState<string | null>(null);
+  // Required free-text detail shown ONLY when the "Other" reason chip is selected (item 10),
+  // kept separate from the optional spectator-visible notes.
+  const [forfeitOther, setForfeitOther] = useState("");
   const [forfeitNotes, setForfeitNotes] = useState("");
   // Tables master/detail: open detail for a table, and the move-destination picker.
   const [tableDetailId, setTableDetailId] = useState<string | null>(null);
@@ -1710,11 +1713,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const opp = oppId ? entryById(oppId) : null;
     setForfeit({ entryId, name: teamName(e), matchId: m?.id ?? null, oppName: opp ? teamName(opp) : null });
     setForfeitReason(null);
+    setForfeitOther("");
     setForfeitNotes("");
   };
   const commitForfeit = (mode: "match" | "tournament") => {
     if (!forfeit || !forfeitReason) return;
-    const meta = { reason: forfeitReason, notes: forfeitNotes.trim() || null, actorId, actorName };
+    // "Other" requires a free-text detail; use it as the recorded reason. Notes stay separate.
+    const other = forfeitOther.trim();
+    if (forfeitReason === "Other" && !other) return;
+    const reason = forfeitReason === "Other" ? other : forfeitReason;
+    const meta = { reason, notes: forfeitNotes.trim() || null, actorId, actorName };
     if (mode === "match") vm.forfeitMatch(forfeit.entryId, meta);
     else vm.forfeitEntry(forfeit.entryId, meta);
     setForfeit(null);
@@ -6718,13 +6726,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       {/* Forfeit decision — reason-gated. Forfeit Match (only with a live match) vs
           Forfeit Tournament. Both write a public spectator-visible audit event. */}
       <Modal visible={forfeit != null} transparent animationType="fade" onRequestClose={() => setForfeit(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable style={styles.centerBackdrop} onPress={() => setForfeit(null)}>
           <Pressable style={styles.pickerCard} onPress={() => {}}>
             {forfeit && (() => {
-              const canConfirm = !!forfeitReason;
+              // "Other" requires the free-text detail; otherwise a reason chip is enough.
+              const canConfirm = !!forfeitReason && (forfeitReason !== "Other" || forfeitOther.trim().length > 0);
               const hasMatch = !!forfeit.matchId;
               return (
-                <>
+                // Item 10: mirror the chip-adjust modal — KeyboardAvoidingView + inner ScrollView
+                // so the reason detail / notes fields and the Forfeit/Cancel buttons stay
+                // reachable when the keyboard is up and can't overflow the height-capped card.
+                <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: webSc(SPACING.xs) }}>
                   <Text style={styles.renameTitle}>Forfeit</Text>
                   <Text style={{ color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", marginTop: webSc(SPACING.xs), textAlign: "center" }}>{forfeit.name}</Text>
                   {hasMatch ? (
@@ -6746,6 +6759,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       );
                     })}
                   </View>
+                  {forfeitReason === "Other" && (
+                    <TextInput allowFontScaling={false} value={forfeitOther} onChangeText={setForfeitOther} placeholder="Describe the reason *" placeholderTextColor={COLORS.textMuted}
+                      style={{ marginTop: webSc(SPACING.sm), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), color: COLORS.text, backgroundColor: COLORS.surface }} />
+                  )}
                   <TextInput allowFontScaling={false} value={forfeitNotes} onChangeText={setForfeitNotes} placeholder="Notes (optional, shown to spectators)" placeholderTextColor={COLORS.textMuted}
                     style={{ marginTop: webSc(SPACING.md), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), color: COLORS.text, backgroundColor: COLORS.surface }} multiline />
                   {hasMatch && (
@@ -6759,11 +6776,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   <TouchableOpacity style={[styles.renameCancel, { alignSelf: "stretch", alignItems: "center", marginTop: webSc(SPACING.sm) }]} onPress={() => setForfeit(null)}>
                     <Text style={styles.renameCancelText}>Cancel</Text>
                   </TouchableOpacity>
-                </>
+                </ScrollView>
               );
             })()}
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Table Details — information first; actions layered in-modal (no nesting) */}
