@@ -1047,6 +1047,12 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
               <View style={[styles.payoutPlace, row.place <= 3 && styles.payoutPlaceTop]}>
                 <Text allowFontScaling={false} style={[styles.payoutPlaceText, row.place <= 3 && styles.payoutPlaceTextTop]}>{ordinal(row.place)}</Text>
               </View>
+              {/* Item 16: recipient name once finished (never a paid/unpaid indicator). */}
+              {row.name ? (
+                <Text allowFontScaling={false} style={styles.payoutName} numberOfLines={1}>{row.name}</Text>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
               <Text allowFontScaling={false} style={styles.payoutPct}>{row.percent}%</Text>
               <Text allowFontScaling={false} style={styles.payoutAmt}>{money(row.amount)}</Text>
             </View>
@@ -1534,7 +1540,8 @@ const styles = StyleSheet.create({
   payoutPlaceTop: { backgroundColor: COLORS.primary + "1F" },
   payoutPlaceText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
   payoutPlaceTextTop: { color: COLORS.primary },
-  payoutPct: { flex: 1, color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs) },
+  payoutName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  payoutPct: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs) },
   payoutAmt: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
   payFallback: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md) },
   payFallbackText: { flex: 1, color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), lineHeight: wxMs(FONT_SIZES.sm) * 1.4 },

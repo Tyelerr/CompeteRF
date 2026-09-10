@@ -156,6 +156,7 @@ export interface SpecPayoutRow {
   place: number;
   amount: number;
   percent: number;
+  name?: string | null; // recipient name once finished (item 16); null while unknown/live
 }
 export interface SpecSidePot {
   name: string;
@@ -645,6 +646,14 @@ const buildSpectatorView = (
                 new Date(a.eliminatedAt as string).getTime(),
             ),
         ].filter(Boolean) as typeof s.entries);
+  // Item 16: attach recipient names to the entry payout rows from the durable finish order
+  // once completed, so spectators see "1st — Name — $amt". Null (name omitted) while live.
+  const namedPayoutRows: SpecPayoutRow[] | null = payoutRows
+    ? payoutRows.map((r) => ({
+        ...r,
+        name: finished && orderedEntries[r.place - 1] ? teamName(orderedEntries[r.place - 1]) : null,
+      }))
+    : null;
   const parsedPots = parseSidePots(tournament.side_pots);
   const sidePotEntrantsByName: Record<string, number> = {};
   const sidePotPoolByName: Record<string, number> = {};
@@ -682,7 +691,7 @@ const buildSpectatorView = (
     pool,
     paidPlayers,
     finalized: hasSplit && pool > 0,
-    places: hasSplit && pool > 0 ? payoutRows : null,
+    places: hasSplit && pool > 0 ? namedPayoutRows : null,
     sidePots,
   };
 

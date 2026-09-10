@@ -975,6 +975,24 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     },
     [id, paidOverrides, vm.tournament, payoutsPaidQuery.data, queryClient],
   );
+  // Item 17: confirm before flipping a payout's paid status (in both directions) so a
+  // mis-tap never silently records a payout as paid/unpaid. Name + amount come from the row.
+  const confirmTogglePayoutPaid = useCallback(
+    (key: string, name: string, amount: number, currentlyPaid: boolean) => {
+      const dollars = `$${Math.round(amount).toLocaleString()}`;
+      Alert.alert(
+        currentlyPaid ? "Mark as unpaid?" : "Mark as paid?",
+        currentlyPaid
+          ? `Mark ${name}'s ${dollars} payout as NOT paid?`
+          : `Mark ${name}'s ${dollars} payout as paid?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: currentlyPaid ? "Mark Unpaid" : "Mark Paid", onPress: () => void togglePayoutPaid(key) },
+        ],
+      );
+    },
+    [togglePayoutPaid],
+  );
   // Window rect of the Actions button that opened the menu (for above/below math) +
   // the screen-root's window origin (so we can position the in-tree overlay, which
   // lives inside the scroll content, in the root's coordinate space).
@@ -5013,7 +5031,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   <Text style={styles.payName} numberOfLines={1}>{payee}</Text>
                   <Text style={styles.payAmt}>{money(row.amount)}</Text>
                   {payee !== "—" && (
-                    <TouchableOpacity onPress={() => togglePayoutPaid(paidKey)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
+                    <TouchableOpacity onPress={() => confirmTogglePayoutPaid(paidKey, payee, row.amount, isPaid)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
                       <Text style={[styles.paidToggleText, isPaid && styles.paidToggleTextOn]}>{isPaid ? "Paid ✓" : "Mark Paid"}</Text>
                     </TouchableOpacity>
                   )}
@@ -5049,7 +5067,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     <Text style={styles.payName} numberOfLines={1}>{payee ?? (row.custom ? "" : `${row.percent}%`)}</Text>
                     <Text style={styles.payAmt}>{money(row.amount)}</Text>
                     {payee && (
-                      <TouchableOpacity onPress={() => togglePayoutPaid(paidKey)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
+                      <TouchableOpacity onPress={() => confirmTogglePayoutPaid(paidKey, payee, row.amount, isPaid)} style={[styles.paidToggle, isPaid && styles.paidToggleOn]}>
                         <Text style={[styles.paidToggleText, isPaid && styles.paidToggleTextOn]}>{isPaid ? "Paid ✓" : "Mark Paid"}</Text>
                       </TouchableOpacity>
                     )}
