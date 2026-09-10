@@ -59,7 +59,6 @@ import {
   matchElapsedMs,
   recommendedActiveTables,
   recommendedSetupTables,
-  playableEntryCount,
   isPostMatchPending,
   rematchSkippedLabel,
   teamFargoOf,
@@ -2984,12 +2983,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // ── Setup · Tables (incl. stream marking) ────────────────────────────────────
   const renderTablesSetup = () => {
-    // Format-aware recommendation (single source of truth: chip.engine). Counts only
-    // playable entries — singles = players, doubles = COMPLETE teams — and targets
-    // ~half the field active with the rest queued (winner-stays): floor(entries / 4).
+    // Item 3: recommend tables from the READY entrants (who will actually take the field),
+    // not total registered — ceil(ready / 4), min 1, capped at floor(ready / 2). Singles =
+    // ready players, doubles = ready teams.
     const entrantWord = doubles ? "teams" : "players";
     const entrantWordSingular = doubles ? "team" : "player";
-    const entrantCount = playableEntryCount(chip);
+    const entrantCount = readyCount;
     const recommendedTables = recommendedSetupTables(entrantCount);
     // Singular-aware display label (visual only — counts are unchanged).
     const entrantLabel = entrantCount === 1 ? entrantWordSingular : entrantWord;
@@ -3016,7 +3015,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <View style={styles.recBox}>
           <Text allowFontScaling={false} style={styles.recTitle}>Recommended setup</Text>
           <Text allowFontScaling={false} style={styles.recLine}>
-            {entrantCount} {entrantLabel}
+            {entrantCount} ready {entrantLabel}
             {"  •  "}
             <Text style={styles.recNum}>{recommendedTables} table{recommendedTables === 1 ? "" : "s"}</Text>
           </Text>

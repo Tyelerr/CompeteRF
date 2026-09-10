@@ -1768,7 +1768,7 @@ export const recommendedShuffleThreshold = (s: ChipState): number => {
   return Math.floor(base / Math.pow(2, (s.reshuffleCount ?? 0) + 1));
 };
 
-// ── Recommended SETUP tables (format-aware, single source of truth) ────────────
+// ── Recommended SETUP tables (format-aware) ────────────────────────────────────
 // A chip ENTRY is "playable" for table planning when it can actually be seated:
 // singles always; scotch doubles only when BOTH partners are present (an incomplete
 // team still waiting for a teammate can't start a match, so it isn't counted). Uses
@@ -1782,13 +1782,19 @@ export const playableEntryCount = (s: ChipState): number => {
   }).length;
 };
 
-// How many tables to SET UP so ~half the field plays at once and the rest queue
-// (winner-stays). Delegates to the shared helper (floor, never ceil) so setup and
-// live recommendations are always identical. Uses TEAM count for doubles:
-//   Singles  8→2, 10→2, 12→3, 16→4, 20→5   (entries = players)
-//   Doubles  4→1, 8→2, 12→3, 16→4 teams    (entries = teams; = players 8→1, 16→2 …)
-export const recommendedSetupTables = (playableEntries: number): number =>
-  getChipRecommendedTableCount(playableEntries);
+// How many tables to SET UP (item 3). Based on the READY entrants (the players/teams that
+// will actually take the field), NOT total registered. Uses ceil(ready / 4) so ~half play
+// and the rest queue while favoring one more table over leaving many waiting, min 1 once a
+// match is possible, capped at floor(ready / 2) (never more tables than possible pairs) and
+// at the physical table limit when one is supplied. Recommendation only.
+//   6→2  8→2  9→3  10→3  11→3  12→3  13→4  16→4  20→5
+export const recommendedSetupTables = (readyCount: number, maxTables?: number | null): number => {
+  if (readyCount < 2) return 0;
+  let n = Math.max(1, Math.ceil(readyCount / 4));
+  n = Math.min(n, Math.floor(readyCount / 2)); // never more tables than pairs of players
+  if (maxTables != null && maxTables > 0) n = Math.min(n, maxTables);
+  return n;
+};
 
 // Close one or more tables (TD picks which). A table with a match in progress is
 // marked `closing` and goes inactive only after that match ends — play is never
