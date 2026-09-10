@@ -54,6 +54,7 @@ import {
   dashboard,
   enteredField,
   finalPlacements,
+  determinedFinishers,
   LONG_MATCH_MS,
   matchElapsedMs,
   recommendedActiveTables,
@@ -415,6 +416,9 @@ interface ChipManageProps {
   onOpenSettings?: () => void;
   // Open the Results → Standings page (host owns tab nav in embedded mode).
   onOpenResults?: () => void;
+  // Open the Results → Payouts page directly (host owns tab nav in embedded mode). Used by
+  // the payout-ready alert CTA so "View Payouts" lands on Payouts, not Standings (item 6).
+  onOpenPayouts?: () => void;
   // Jump to a Setup page (host owns tab nav in embedded mode) — used by the
   // Review & Start quick actions to hop to Settings / Players / Tables / Prize Pool.
   onOpenSetupPage?: (tab: "settings" | "players" | "tables" | "prizepool") => void;
@@ -545,7 +549,7 @@ const ShuffleBallsAnimation = ({ onDone }: { onDone: () => void }) => {
   );
 };
 
-export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
+export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
   // Acting director identity (from auth) — passed into the VM so it can stamp gameplay
   // audit events, and reused by reason-gated actions. Computed BEFORE the VM call.
   const { profile } = useAuthContext();
@@ -3879,21 +3883,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         Number(tournament.added_money) || 0,
       );
       const placesPay = poolPay > 0 ? computeBreakdown(poolPay, cfgPay.entryPlaces).places : [];
-      const placementsPay = authoritativePlacements();
+      const paidCount = placesPay.length; // number of paid places (e.g. top 3)
+      const amtByPlace = new Map(placesPay.map((r) => [r.place, r.amount]));
+      // Item 5 fix: iterate the entries whose TRUE finishing place is already locked
+      // (eliminated players numbered bottom-up: first out = last place; champion = 1st) and
+      // surface a payout alert ONLY when that real place is within the paid places. The old
+      // code matched paid places against authoritativePlacements()/finalPlacements, which is
+      // champion-first and therefore labels the most-recent elimination as "1st" while live —
+      // announcing a just-eliminated last-place finisher as owed 1st-place money.
       const ord = (n: number): string => { const s = ["th", "st", "nd", "rd"], v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
-      for (const row of placesPay) {
-        const who = placementsPay.find((p) => p.place === row.place);
-        const e = who ? entryById(who.entryId) : null;
-        // Locked = that entry is eliminated, or (place 1) the tournament finished.
-        if (e && (e.status === "eliminated" || chip.finishedAt)) {
-          alerts.push({
-            id: `payout:${row.place}:${e.id}`,
-            text: "Payout Ready",
-            sub: `${teamName(e)} finished ${ord(row.place)} and is owed $${Math.round(row.amount).toLocaleString()}.`,
-            onPress: onOpenResults,
-            cta: "View Payouts",
-          });
-        }
+      for (const f of determinedFinishers(chip)) {
+        if (f.place > paidCount) continue; // not in the money — no payout alert
+        const amt = amtByPlace.get(f.place);
+        if (amt == null) continue;
+        const e = entryById(f.entryId);
+        if (!e) continue;
+        alerts.push({
+          id: `payout:${f.place}:${e.id}`,
+          text: "Payout Ready",
+          sub: `${teamName(e)} finished ${ord(f.place)} and is owed $${Math.round(amt).toLocaleString()}.`,
+          onPress: onOpenPayouts ?? onOpenResults, // item 6: land on Payouts, not Standings
+          cta: "View Payouts",
+        });
       }
     }
     const visibleAlerts = alerts.filter((a) => !dismissedAlerts.has(a.id));

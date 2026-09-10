@@ -2163,6 +2163,33 @@ export const finalPlacements = (s: ChipState): ChipPlacement[] => {
   return ordered.map((e, i) => ({ entryId: e.id, place: i + 1 }));
 };
 
+// Finishing places that are ALREADY LOCKED — for payout-ready detection during live play
+// AND after finish. An eliminated FIELD entrant's place is fixed the moment they go out: the
+// first player eliminated finishes LAST (place = field size), the next one place-1 higher, …,
+// and the champion (once crowned) finishes 1st. Alive, not-yet-eliminated players have NO
+// determined place and are omitted (unlike finalPlacements, which numbers champion-first and
+// therefore mislabels the most-recent elimination as "1st" while the tournament is still
+// live). Uses the same committed, non-superseded elimination event order finalPlacements uses,
+// so once finished the two agree exactly (champion=1, most-recent elimination=2, …).
+export const determinedFinishers = (s: ChipState): ChipPlacement[] => {
+  const N = fieldEntrantCount(s);
+  const elimNewestFirst: string[] = [];
+  const seen = new Set<string>();
+  for (const ev of s.events) {
+    if (ev.type !== "elimination" || ev.superseded) continue;
+    const eid = (ev.payload?.entryId as string | undefined) ?? undefined;
+    if (!eid || eid === s.winnerId || seen.has(eid)) continue;
+    const e = entryById(s, eid);
+    if (e && enteredField(e)) { seen.add(eid); elimNewestFirst.push(eid); }
+  }
+  const E = elimNewestFirst.length;
+  const out: ChipPlacement[] = [];
+  if (s.winnerId) out.push({ entryId: s.winnerId, place: 1 });
+  // newest-first index i → true place = N − E + 1 + i (so the FIRST eliminated is place N).
+  elimNewestFirst.forEach((eid, i) => out.push({ entryId: eid, place: N - E + 1 + i }));
+  return out;
+};
+
 // Fully tear down the live board for a completed tournament: Shuffle Mode + round
 // state OFF, queue emptied, tables/timers/pending cleared, any lingering match
 // closed, champion off the board. Pure + IDEMPOTENT — returns input unchanged

@@ -5749,6 +5749,7 @@ export default function ManageTournamentScreen() {
             }}
             onOpenSettings={() => handleSelectPage("setup", "settings")}
             onOpenResults={() => handleSelectPage("results", "standings")}
+            onOpenPayouts={() => handleSelectPage("results", "payouts")}
             onOpenSetupPage={(tab) => handleSelectPage("setup", tab)}
             reviewPrize={chipReviewPrize}
             onReadyCountChange={setEmbeddedChipReady}
