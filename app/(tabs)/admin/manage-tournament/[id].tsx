@@ -2179,6 +2179,13 @@ export default function ManageTournamentScreen() {
   // The page ScrollView — chip pages ask to jump to the top (e.g. when a shuffle
   // round completes) so the Shuffle Mode banner / Start Shuffle is in reach.
   const pageScrollRef = useRef<ScrollView>(null);
+  // Item 1(B): the setup pages share ONE persistent page ScrollView, so switching subtabs
+  // (e.g. tapping "Review & Start" from the longer Players/Tables page) would inherit the
+  // previous page's scroll offset and open mid-page. Reset to top on every setup subtab
+  // change. Scoped to the setup phase — live/results own their scroll via onRequestScrollTop.
+  useEffect(() => {
+    if (selectedPhase === "setup") pageScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [activeTab, selectedPhase]);
   useEffect(() => {
     if (prizeSeededRef.current || !hub.tournament) return;
     const base = hub.prizePool ?? defaultPrizePoolConfig(sidePotNames);
@@ -6486,6 +6493,14 @@ export default function ManageTournamentScreen() {
           automaticallyAdjustKeyboardInsets={
             Platform.OS === "ios" && selectedPhase === "setup"
           }
+          // Item 1(A): a fast overscroll that coincides with a content-size change (a field
+          // expanding, the keyboard inset re-applying) re-triggers iOS's
+          // automaticallyAdjustKeyboardInsets blanking on Fabric — the setup page goes black
+          // until remount. Disabling the rubber-band overscroll on setup/iOS removes that
+          // trigger without disabling scrolling; content still scrolls normally. Android is
+          // unaffected (overScrollMode kept "never" for parity).
+          bounces={!(Platform.OS === "ios" && selectedPhase === "setup")}
+          overScrollMode={selectedPhase === "setup" ? "never" : "auto"}
           refreshControl={
             isWeb ? undefined : (
               <RefreshControl
