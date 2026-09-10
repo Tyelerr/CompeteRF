@@ -899,6 +899,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Players page (registration manager) UI state: search, status filter, per-card
   // edit mode, and the three-dot menu target.
   // Seed from the per-tournament UI cache so search/filter/sort survive a remount (B5).
+  // Fix 1 — busy flag for the completed-view "participant sync failed → Retry" affordance.
+  const [retryingSync, setRetryingSync] = useState(false);
   const [rosterQuery, setRosterQuery] = useState(() => rosterUiCache.get(id)?.rosterQuery ?? "");
   const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show">(
     () => rosterUiCache.get(id)?.rosterFilter ?? "all",
@@ -4119,6 +4121,30 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       ];
       return (
         <View>
+          {/* Fix 1 — forward participant sync failed at finish (completion still stood).
+              tournament_players may be incomplete; the sync is idempotent so Retry is safe. */}
+          {vm.participantSyncError != null && (
+            <TouchableOpacity
+              style={styles.syncErrorBanner}
+              activeOpacity={0.8}
+              disabled={retryingSync}
+              onPress={async () => {
+                setRetryingSync(true);
+                try {
+                  await vm.retryParticipantSync();
+                } finally {
+                  setRetryingSync(false);
+                }
+              }}
+            >
+              <Ionicons name="warning-outline" size={webMs(16)} color={COLORS.warning} />
+              <Text style={styles.syncErrorText}>
+                Participant records didn’t fully sync. Final standings are saved, but some
+                players may be missing from tournament history until you retry.
+              </Text>
+              <Text style={styles.syncErrorCta}>{retryingSync ? "Retrying…" : "Retry"}</Text>
+            </TouchableOpacity>
+          )}
           {championEl}
           <View style={styles.sumCardsRow}>
             {completedCards.map((c) => (
@@ -7785,6 +7811,9 @@ const styles = StyleSheet.create({
   preregBanner: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning, backgroundColor: COLORS.warning + "18", marginBottom: webSc(SPACING.sm) },
   preregBannerText: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   preregBannerCta: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  syncErrorBanner: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning, backgroundColor: COLORS.warning + "18", marginBottom: webSc(SPACING.sm) },
+  syncErrorText: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  syncErrorCta: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   paidToggle: { marginLeft: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), paddingVertical: 2, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, flexShrink: 0 },
   paidToggleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "22" },
   paidToggleText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },

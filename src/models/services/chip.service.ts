@@ -875,6 +875,31 @@ export const chipService = {
     if (error) throw error;
   },
 
+  // Fix 1 — FORWARD participant sync. The TD "Add Player" singles path writes only
+  // chip_entries; this upserts the durable tournament_players participation rows for a
+  // COMPLETED chip singles tournament so completed history / results / reviews never lose
+  // TD-added players again (the recurrence the G4 backfill only fixed historically).
+  // Delegates to the manager-gated, idempotent `chip_sync_completed_participants` RPC
+  // (same reconstruction rules as the backfill: reliable identity only, status=checked_in,
+  // paid/side-pots/fargo/fargo_at_registration from the chip snapshot, eliminated_at copied,
+  // both unique indexes honored, existing rows never overwritten). Teams are untouched.
+  // Returns the number of participation rows created (0 when already in sync). Before the
+  // migration is applied the RPC is absent — treated as a soft no-op so completion never
+  // breaks; the real error on an applied RPC is surfaced to the caller.
+  async syncCompletedParticipants(id: number): Promise<number> {
+    const { data, error } = await supabase.rpc("chip_sync_completed_participants", {
+      p_tournament_id: id,
+    });
+    if (error) {
+      // Function not yet created (migration pending) → soft no-op. Any other error is real.
+      const code = (error as { code?: string }).code;
+      const msg = String((error as { message?: string }).message ?? "");
+      if (code === "PGRST202" || /function .* does not exist/i.test(msg)) return 0;
+      throw error;
+    }
+    return typeof data === "number" ? data : 0;
+  },
+
   async loadResults(id: number): Promise<ChipResultRow[]> {
     const { data, error } = await supabase
       .from("chip_results")

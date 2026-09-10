@@ -205,6 +205,12 @@ export const useChipTournament = (
   }, [tournament]);
   const finishingRef = useRef(false);
   const [finishing, setFinishing] = useState(false);
+  // Fix 1 — forward participant-sync outcome. null = ok / not yet run; a string = the last
+  // sync FAILED for a real reason (NOT the "RPC not deployed yet" compat no-op, which the
+  // service reports as success/0). Completion still stood; the sync is idempotent and
+  // re-runnable via retryParticipantSync(), so this surfaces a retry without ever
+  // re-running or corrupting tournament completion.
+  const [participantSyncError, setParticipantSyncError] = useState<string | null>(null);
   // Setup-roster lock. Once the tournament is LIVE (in_progress) — or finished — the
   // SETUP roster is read-only: Add/Remove/Fargo/starting-chips/Ready/Paid/side-pots/
   // check-in must go through the controlled "Add Late Player" live flow, never the
@@ -735,12 +741,55 @@ export const useChipTournament = (
       // live_state="finished" + completed_at are set atomically — identical to
       // bracket completion (they can't drift). Idempotent: preserves completed_at.
       await tournamentService.completeTournament(id);
+      // Fix 1 — forward participant sync. Now that the tournament is COMPLETED, upsert the
+      // durable tournament_players rows for any TD-added singles that only ever lived in
+      // chip_entries, so they don't vanish from completed history/results/reviews (the
+      // recurrence the G4 backfill only repaired historically). Idempotent + manager-gated.
+      //
+      // Completion has ALREADY persisted durably above, and the sync is safely re-runnable,
+      // so a sync failure must NOT roll back or re-run completion — but it must NOT be
+      // silently swallowed either. The service already returns success for the "RPC not yet
+      // deployed" rollout case (a no-op that never hides a real error); any thrown error here
+      // is a REAL failure. Record it (so the UI can offer a retry) and log it loudly; do not
+      // rethrow, so a completed-but-unsynced tournament still finishes and can be repaired
+      // via retryParticipantSync(). Teams are untouched by the RPC.
+      try {
+        await chipService.syncCompletedParticipants(id);
+        setParticipantSyncError(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(
+          `[chip] participant sync FAILED for tournament ${id} — completion stands; ` +
+            `tournament_players may be incomplete. Retry via retryParticipantSync().`,
+          e,
+        );
+        setParticipantSyncError(msg);
+      }
       await load({ silent: true });
     } finally {
       finishingRef.current = false;
       setFinishing(false);
     }
   }, [chip, id, load]);
+
+  // Fix 1 — retry the forward participant sync for an already-COMPLETED tournament whose
+  // sync failed at finish (participantSyncError set). Does NOT touch completion/results —
+  // it only re-runs the idempotent, manager-gated RPC, so repeated taps are safe and never
+  // duplicate rows or re-complete the tournament. Clears the error on success and reloads so
+  // the roster reflects the now-synced participants. Returns true on success.
+  const retryParticipantSync = useCallback(async (): Promise<boolean> => {
+    try {
+      await chipService.syncCompletedParticipants(id);
+      setParticipantSyncError(null);
+      await load({ silent: true });
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[chip] participant sync retry FAILED for tournament ${id}:`, e);
+      setParticipantSyncError(msg);
+      return false;
+    }
+  }, [id, load]);
 
   // Re-open a finished tournament back to Live (undo completion, e.g. it was
   // ended by mistake). Clears the decided-winner flags so play can continue,
@@ -1225,6 +1274,10 @@ export const useChipTournament = (
     buyBack,
     restoreEntry,
     endTournament,
+    // Fix 1 — forward participant-sync status + manual retry (see endTournament). Non-null
+    // error means the completed tournament's tournament_players rows may be incomplete.
+    participantSyncError,
+    retryParticipantSync,
     reopen,
     approveRegistration,
     setRegistrationReady,
