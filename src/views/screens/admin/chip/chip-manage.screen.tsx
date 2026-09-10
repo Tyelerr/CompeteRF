@@ -1688,6 +1688,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const openForfeit = (entryId: string) => {
     const e = entryById(entryId);
     if (!e || e.status === "eliminated") return;
+    // Never STACK the forfeit modal on top of another modal/menu. The eliminate action is
+    // reached from the player-detail modal's ⋯ menu (and the queue/player row menus); those
+    // only closed their own anchored menu, leaving the detail Modal mounted underneath. Two
+    // simultaneously-visible RN Modals can leave a transparent presentation view intercepting
+    // touches after both dismiss → the dashboard looks "stuck". Close every player overlay
+    // here so the forfeit modal is the ONLY overlay and dismissing it always returns to an
+    // interactive dashboard, regardless of which entry point opened it.
+    setProfMenuOpen(false);
+    setProfileId(null);
+    setQueueMenuId(null);
+    setPlayerMenu(null);
+    setDetailActions(false);
     const m = chip.matches.find(
       (mm) => mm.status === "in_progress" && (mm.aId === entryId || mm.bId === entryId),
     );
