@@ -9,7 +9,7 @@ import { registrationService } from "../../models/services/registration.service"
 import { teamService } from "../../models/services/team.service";
 import { PlayerTournament } from "../../models/types/registration.types";
 import { isTournamentCompleted } from "../../utils/tournament.archive";
-import { isTournamentViewEligible } from "../../utils/tournament-view";
+import { isTournamentViewEligible, isTournamentDeleted } from "../../utils/tournament-view";
 
 // Team-format (Scotch Doubles) events register as a TEAM, not an individual
 // tournament_players row. A leftover players row (e.g. after a partner swap
@@ -76,9 +76,13 @@ export const useProfileTournaments = (
   // flickers. Computed BEFORE the live query so its cadence can react to whether
   // the user actually has an upcoming/live event.
   const all = useMemo<PlayerTournament[]>(() => {
-    const players = (data ?? []).filter((t) => t.tournament != null);
+    // Exclude DELETED tournaments (status='cancelled') from every active Profile bucket
+    // (live / registered / completed selector) — a deleted event must never masquerade as
+    // live/registered. It stays reachable via direct navigation (Tournament Details shows the
+    // "deleted" banner). This is the source filter; the RPC live list is filtered too below.
+    const players = (data ?? []).filter((t) => t.tournament != null && !isTournamentDeleted(t));
     if (!teamsQuery.isSuccess) return players;
-    const teamEntries = (teamsQuery.data ?? []).filter((t) => t.tournament != null);
+    const teamEntries = (teamsQuery.data ?? []).filter((t) => t.tournament != null && !isTournamentDeleted(t));
     const byTournament = new Map<number, PlayerTournament>();
     for (const t of players) {
       if (isTeamFormat(t)) continue; // team events come from memberships below
@@ -133,7 +137,9 @@ export const useProfileTournaments = (
   // live" note) — and re-sorted most-recently-started first for a deterministic primary.
   const live = useMemo(() => {
     const clientLive = all.filter(isLive);
-    const rpcLive = !liveQuery.isError ? liveQuery.data ?? [] : [];
+    // Guard the RPC path too: until the get_my_live_tournament migration (which adds
+    // 'cancelled' to its exclusion) is applied, the RPC can still return a deleted event.
+    const rpcLive = (!liveQuery.isError ? liveQuery.data ?? [] : []).filter((t) => !isTournamentDeleted(t));
     const byId = new Map<number, PlayerTournament>();
     for (const t of clientLive) {
       if (t.tournament?.id != null) byId.set(t.tournament.id, t);

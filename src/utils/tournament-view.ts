@@ -37,12 +37,19 @@ const EXCLUDED_PARTICIPATION = new Set([
   "withdrawn",
 ]);
 
+// A DELETED tournament: deletion sets tournaments.status='cancelled' (see
+// useTournamentDetail.isDeleted) but does NOT reset live_state, so a deleted event can still
+// read as live_state='in_progress'. It must never count as live/eligible anywhere.
+export const isTournamentDeleted = (t: TournamentViewFields): boolean =>
+  String(t.tournament?.status ?? "").toLowerCase() === "cancelled";
+
 // Is this tournament officially LIVE / in progress? (Not merely registration-closed or
-// bracket-prepared, and not completed.) The single authoritative gameplay signal.
+// bracket-prepared, not completed, and not deleted.) The single authoritative gameplay signal.
 export const tournamentGameplayStarted = (t: TournamentViewFields): boolean => {
   const tt = t.tournament;
   if (!tt) return false;
   if (isTournamentCompleted(tt)) return false;
+  if (isTournamentDeleted(t)) return false; // deleted (cancelled) is never live
   return tt.live_state === "in_progress";
 };
 
