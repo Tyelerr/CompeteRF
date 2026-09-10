@@ -26,10 +26,8 @@
 -- chip_participant_backfill_log so the rollback can remove EXACTLY these rows and nothing
 -- legitimate.
 --
--- NOTE on fargo_at_registration (rule 5): it is not confirmed present in the live schema,
--- so it is intentionally OMITTED to keep this migration from failing on a missing column.
--- If your tournament_players has a `fargo_at_registration` column and you want it set, add
--- `fargo_at_registration` to the INSERT column list and `e.p1_fargo` to the SELECT.
+-- fargo_at_registration (rule 5): confirmed present in the live schema (integer, nullable),
+-- so it is set from the chip Fargo snapshot (e.p1_fargo) alongside fargo_rating.
 --
 -- Run the DRY-RUN / report queries at the bottom of this file BEFORE applying to preview
 -- exactly what will be backfilled vs skipped.
@@ -45,7 +43,7 @@ create table if not exists public.chip_participant_backfill_log (
 with ins as (
   insert into public.tournament_players (
     tournament_id, player_uuid, player_id, status,
-    paid_entry, paid_side_pots, fargo_rating, eliminated_at
+    paid_entry, paid_side_pots, fargo_rating, fargo_at_registration, eliminated_at
   )
   select
     e.tournament_id,
@@ -54,6 +52,7 @@ with ins as (
     'checked_in',
     coalesce(e.paid, false),
     to_jsonb(coalesce(e.paid_side_pots, '{}'::text[])),
+    e.p1_fargo,
     e.p1_fargo,
     e.eliminated_at
   from public.chip_entries e
