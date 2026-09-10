@@ -18,6 +18,11 @@ import { Tournament } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
 import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-pots";
 
+// Phase G3 feature flag. OFF = legacy whole-blob save (default). ON = strict-CAS
+// transactional chip_apply RPC (reject stale → reload + notify, no replay). Flip to true
+// ONLY after the 20260910130000_chip_apply_rpc migration is applied and verified on device.
+export const CHIP_APPLY_ENABLED = false;
+
 export interface ChipTournamentBundle {
   tournament: Tournament;
   chip: ChipState;
@@ -728,6 +733,50 @@ export const chipService = {
       .single();
     if (error) throw error;
     return next;
+  },
+
+  // Phase G3 strict-CAS write path (used only when CHIP_APPLY_ENABLED). Applies the whole
+  // chip state atomically via the chip_apply RPC with an optimistic version check. Returns
+  // { ok, conflict, version }: conflict=true means the write was REJECTED (another director
+  // wrote first) and NOTHING was persisted — the caller must reload + notify, not replay.
+  async applyState(
+    id: number,
+    chip: ChipState,
+    expectedVersion: number | null,
+  ): Promise<{ ok: boolean; conflict: boolean; version: number }> {
+    const ownedEntries = chip.entries.filter((e) => !e.fromRegistration);
+    const config = {
+      format: chip.settings.format,
+      queue: chip.queue,
+      started_at: chip.startedAt ?? null,
+      finished_at: chip.finishedAt ?? null,
+      winner_entry_id: chip.winnerId ?? null,
+      reshuffle_count: chip.reshuffleCount ?? 0,
+      reshuffle_pending: !!chip.reshufflePending,
+      reshuffle_table_count: chip.reshuffleTableCount ?? null,
+      shuffle_mode: !!chip.shuffleMode,
+      shuffle_ready: !!chip.shuffleReady,
+      shuffle_round: !!chip.shuffleRound,
+      round_remaining: chip.roundRemaining ?? [],
+      restore_points: chip.restorePoints ?? [],
+      reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [],
+    };
+    const { data, error } = await supabase.rpc("chip_apply", {
+      p_tid: id,
+      p_expected_version: expectedVersion,
+      p_config: config,
+      p_entries: ownedEntries.map((e) => entryToRow(id, e)),
+      p_matches: chip.matches.map((m) => matchToRow(id, m)),
+      p_tables: chip.tables.map((t, i) => tableToRow(id, t, i)),
+      p_events: chip.events.map((ev) => eventToRow(id, ev)),
+    });
+    if (error) throw error;
+    const res = (data ?? {}) as { ok?: boolean; conflict?: boolean; version?: number };
+    return {
+      ok: !!res.ok,
+      conflict: !!res.conflict,
+      version: Number(res.version ?? expectedVersion ?? 0),
+    };
   },
 
   async setName(id: number, name: string): Promise<void> {

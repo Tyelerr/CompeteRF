@@ -4,7 +4,7 @@
 // Setup actions. Rules live in chip.engine.ts; persistence in chip.service.ts.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chipService, ChipResultRow } from "../models/services/chip.service";
+import { chipService, ChipResultRow, CHIP_APPLY_ENABLED } from "../models/services/chip.service";
 import { tournamentService } from "../models/services/tournament.service";
 import { registrationService } from "../models/services/registration.service";
 import { teamService } from "../models/services/team.service";
@@ -181,6 +181,13 @@ export const useChipTournament = (
   // chipService.save so a cross-director conflict can be DETECTED (soft stage: logged for
   // observability, save still applies; a later strict stage will reject + reload + notify).
   const versionRef = useRef(0);
+  // Strict-CAS conflict notice (Phase G3, only when CHIP_APPLY_ENABLED): set true when a
+  // write was REJECTED because another director changed the tournament first. The screen
+  // surfaces it; the action was NOT applied and authoritative state has been reloaded.
+  const [casConflict, setCasConflict] = useState(false);
+  // Stable handle to load() so flushSave can trigger a post-conflict reload without a
+  // circular useCallback dependency (load depends on flushSave). Synced via an effect.
+  const loadRef = useRef<((opts?: { silent?: boolean; skipFlush?: boolean }) => Promise<void>) | null>(null);
   // Tournament restore history. Every live action appends a PERSISTED restore
   // point (its pre-action snapshot) onto the chip state — see engine
   // withRestorePoint. The Audit Log restores to any of them and the quick "Undo
@@ -226,15 +233,28 @@ export const useChipTournament = (
     if (!toSave) return;
     pendingSaveRef.current = null;
     try {
-      const res = await chipService.save(id, toSave, { expectedVersion: versionRef.current });
-      if (res.conflict) {
-        // SOFT stage: another director wrote since we loaded. Log for observability; the
-        // write still applied (strict rejection + reload/notify is a later Phase G stage).
-        console.warn(
-          `[chip CAS] version conflict on tournament ${id} (expected ${versionRef.current}); save applied under soft CAS`,
-        );
+      if (CHIP_APPLY_ENABLED) {
+        // STRICT CAS path (transactional RPC). A conflict means the write was REJECTED and
+        // nothing persisted — discard this edit, reload authoritative state (skipping the
+        // flush so we don't re-persist the discarded edit), and notify. No auto-replay.
+        const res = await chipService.applyState(id, toSave, versionRef.current);
+        if (res.conflict) {
+          setCasConflict(true);
+          await loadRef.current?.({ silent: true, skipFlush: true });
+          return;
+        }
+        versionRef.current = res.version;
+      } else {
+        // SOFT stage: detect + log a cross-director conflict; the whole-blob save still
+        // applies (observability before strict rejection).
+        const res = await chipService.save(id, toSave, { expectedVersion: versionRef.current });
+        if (res.conflict) {
+          console.warn(
+            `[chip CAS] version conflict on tournament ${id} (expected ${versionRef.current}); save applied under soft CAS`,
+          );
+        }
+        versionRef.current = res.version;
       }
-      versionRef.current = res.version;
     } catch {
       /* save error already surfaced elsewhere; keep prior version */
     }
@@ -243,13 +263,15 @@ export const useChipTournament = (
   // `silent` reconciles server state WITHOUT the full-screen takeover — used after a
   // row-level mutation that already updated `chip` optimistically. Only the very first
   // load (never-loaded) uses the blocking `loading` flag.
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
+  const load = useCallback(async (opts?: { silent?: boolean; skipFlush?: boolean }) => {
     const silent = opts?.silent ?? false;
     if (silent) {
       // Persist any pending debounced change FIRST, then reconcile — otherwise a
       // background refetch (adjacent mutation, or the admin roster Realtime signal) would
       // overwrite `chip` with server state and drop a not-yet-saved local edit.
-      await flushSave();
+      // skipFlush: used by the strict-CAS conflict path, which intentionally DISCARDS the
+      // rejected local edit rather than persisting it.
+      if (!opts?.skipFlush) await flushSave();
       setRefreshing(true);
     } else {
       setLoading(true);
@@ -301,6 +323,11 @@ export const useChipTournament = (
   useEffect(() => {
     loadedRef.current = false;
     load();
+  }, [load]);
+  // Keep loadRef pointing at the latest load() so flushSave's strict-CAS conflict path can
+  // reload without a circular dependency.
+  useEffect(() => {
+    loadRef.current = load;
   }, [load]);
 
   // Debounced auto-save whenever the chip blob changes (after the initial load). The
@@ -1140,6 +1167,10 @@ export const useChipTournament = (
     loading,
     refreshing,
     error,
+    // Strict-CAS conflict notice (Phase G3): true when another director's change rejected
+    // this action; authoritative state was reloaded and the action was NOT applied.
+    casConflict,
+    acknowledgeCasConflict: () => setCasConflict(false),
     starting,
     finishing,
     isLive,
