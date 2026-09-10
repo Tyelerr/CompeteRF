@@ -6538,10 +6538,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     {p.performanceRating != null && (
                       <View style={styles.pPerfCard}>
                         <Text style={styles.pPerfLabel}>Performance Rating</Text>
-                        <Text style={styles.pPerfRating}>{p.performanceRating}</Text>
+                        {/* Item 15: rating green, delta shown as just "+184" (no "vs Fargo"). */}
+                        <Text style={[styles.pPerfRating, { color: COLORS.success }]}>{p.performanceRating}</Text>
                         {p.performanceDelta != null && (
                           <Text style={[styles.pPerfDelta, { color: p.performanceDelta > 0 ? COLORS.success : p.performanceDelta < 0 ? COLORS.error : COLORS.textSecondary }]}>
-                            {p.performanceDelta > 0 ? "+" : ""}{p.performanceDelta} vs Fargo
+                            {p.performanceDelta > 0 ? "+" : ""}{p.performanceDelta}
                           </Text>
                         )}
                         {p.avgOpp != null && (

@@ -183,6 +183,22 @@ export interface SpecPlacement {
   name: string;
 }
 
+// Completed-tournament recap stats (items 13/14). Each leader is a name + a display value,
+// derived from real ordered match history — never fabricated (null when undeterminable).
+export interface SpecStatLeader {
+  name: string;
+  value: string;
+}
+export interface SpecStats {
+  durationLabel: string | null; // wall-clock start→finish, e.g. "1h 23m"
+  matchesPlayed: number;
+  mostWins: SpecStatLeader | null;
+  bestWinRate: SpecStatLeader | null;
+  longestStreak: SpecStatLeader | null;
+  mostActive: SpecStatLeader | null;
+  topPerformance: SpecStatLeader | null;
+}
+
 export interface ChipSpectatorView {
   tournamentId: number;
   tournamentName: string;
@@ -205,6 +221,7 @@ export interface ChipSpectatorView {
   players: SpecPlayerRow[];
   payouts: SpecPayouts;
   finalPlacements: SpecPlacement[] | null;
+  stats: SpecStats | null; // completed-recap stats (items 13/14); null until finished
   profileFor: (entryId: string) => SpecPlayerProfile | null;
 }
 
@@ -680,6 +697,39 @@ const buildSpectatorView = (
     }));
   }
 
+  // Completed-recap stats (items 13/14) — derived from actual results; null while live.
+  let stats: SpecStats | null = null;
+  if (finished) {
+    const fieldProfiles = s.entries.filter(enteredField).map((e) => buildProfile(s, e, finished));
+    const lead = (
+      arr: typeof fieldProfiles,
+      cmp: (a: (typeof fieldProfiles)[number], b: (typeof fieldProfiles)[number]) => number,
+      ok: (p: (typeof fieldProfiles)[number]) => boolean,
+      val: (p: (typeof fieldProfiles)[number]) => string,
+    ): SpecStatLeader | null => {
+      const top = [...arr].filter(ok).sort(cmp)[0];
+      return top ? { name: top.name, value: val(top) } : null;
+    };
+    const durMs = s.startedAt && s.finishedAt ? new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime() : null;
+    const durationLabel = durMs != null && durMs > 0
+      ? (() => { const mins = Math.round(durMs / 60000); const h = Math.floor(mins / 60); const m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; })()
+      : null;
+    stats = {
+      durationLabel,
+      matchesPlayed: d.matchesPlayed,
+      mostWins: lead(fieldProfiles, (a, b) => b.wins - a.wins, (p) => p.wins > 0, (p) => `${p.wins}`),
+      bestWinRate: lead(fieldProfiles, (a, b) => b.winPct - a.winPct, (p) => p.matchesPlayed >= 3, (p) => `${Math.round(p.winPct * 100)}%`),
+      longestStreak: lead(fieldProfiles, (a, b) => (b.bestStreak ?? 0) - (a.bestStreak ?? 0), (p) => (p.bestStreak ?? 0) > 0, (p) => `${p.bestStreak}`),
+      mostActive: lead(fieldProfiles, (a, b) => b.matchesPlayed - a.matchesPlayed, (p) => p.matchesPlayed > 0, (p) => `${p.matchesPlayed}`),
+      topPerformance: lead(
+        fieldProfiles,
+        (a, b) => (b.perf?.rating ?? -1) - (a.perf?.rating ?? -1),
+        (p) => p.perf?.rating != null,
+        (p) => { const dl = p.perf?.delta ?? 0; return `${p.perf?.rating} (${dl >= 0 ? "+" : ""}${dl})`; },
+      ),
+    };
+  }
+
   return {
     tournamentId: tournament.id,
     tournamentName: tournament.name,
@@ -707,6 +757,7 @@ const buildSpectatorView = (
     players,
     payouts,
     finalPlacements,
+    stats,
     profileFor: (entryId: string) => {
       const e = entryById(entryId);
       return e ? buildProfile(s, e, finished) : null;

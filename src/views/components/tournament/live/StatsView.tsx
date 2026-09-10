@@ -231,9 +231,10 @@ const PlayerStatsBody = ({
             </Text>
             <View style={styles.perfHead}>
               <View>
+                {/* Item 15: rating green + delta shown as just "+184" (no "vs Fargo"). */}
                 <Text
                   allowFontScaling={false}
-                  style={[styles.perfRating, { color: dColor }]}
+                  style={[styles.perfRating, { color: COLORS.success }]}
                 >
                   {p.performanceRating != null ? p.performanceRating : "N/A"}
                 </Text>
@@ -242,11 +243,8 @@ const PlayerStatsBody = ({
                 </Text>
               </View>
               <View style={styles.deltaBadge}>
-                <Text allowFontScaling={false} style={styles.deltaText}>
+                <Text allowFontScaling={false} style={[styles.deltaText, { color: dColor }]}>
                   {deltaLabel(p.performanceDelta)}
-                </Text>
-                <Text allowFontScaling={false} style={styles.deltaSub}>
-                  vs Fargo
                 </Text>
               </View>
             </View>
@@ -254,11 +252,6 @@ const PlayerStatsBody = ({
             <Row
               label="Current Fargo"
               value={p.fargo != null ? String(p.fargo) : "—"}
-            />
-            <Row
-              label="Performance"
-              value={deltaLabel(p.performanceDelta)}
-              valueColor={dColor}
             />
             <Row label="Win %" value={winFractionLabel(p.winPct)} />
             <Row

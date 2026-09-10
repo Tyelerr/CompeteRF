@@ -46,10 +46,11 @@ const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
 
-type Tab = "overview" | "tables" | "players" | "payouts";
-const TABS: { key: Tab; label: string }[] = [
+type Tab = "overview" | "tables" | "stats" | "players" | "payouts";
+// Item 14: once completed, the live Tables tab is dead weight — swap it for a Stats recap tab.
+const tabsFor = (finished: boolean): { key: Tab; label: string }[] => [
   { key: "overview", label: "Overview" },
-  { key: "tables", label: "Tables" },
+  finished ? { key: "stats", label: "Stats" } : { key: "tables", label: "Tables" },
   { key: "players", label: "Players" },
   { key: "payouts", label: "Payouts" },
 ];
@@ -482,7 +483,7 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
 
         {/* Tabs */}
         <View style={styles.tabs}>
-          {TABS.map((tb) => (
+          {tabsFor(!!view?.finished).map((tb) => (
             <TouchableOpacity
               key={tb.key}
               activeOpacity={0.8}
@@ -514,7 +515,8 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
                 onViewLog={() => setLogOpen(true)}
               />
             )}
-            {tab === "tables" && <TablesTab view={view} now={now} onTapTeam={openProfile} />}
+            {tab === "tables" && !view.finished && <TablesTab view={view} now={now} onTapTeam={openProfile} />}
+            {(tab === "stats" || (tab === "tables" && view.finished)) && <StatsTab view={view} />}
             {tab === "players" && (
               <PlayersTab
                 isTeam={view.isTeam}
@@ -632,8 +634,26 @@ const OverviewTab = ({
         ))}
       </View>
 
-      {/* 2 — Chip Leader */}
-      {view.chipLeader && (
+      {/* 2 — Compact recap stats (completed only, item 13) — a teaser above Final Standings;
+             the full breakdown lives on the Stats tab. */}
+      {view.finished && view.stats && (
+        <View style={styles.recapCard}>
+          {([
+            ["Duration", view.stats.durationLabel ?? "—"],
+            ["Matches Played", `${view.stats.matchesPlayed}`],
+            view.stats.mostWins ? ["Most Wins", `${view.stats.mostWins.name} (${view.stats.mostWins.value})`] : null,
+            view.stats.topPerformance ? ["Top Performance", `${view.stats.topPerformance.name} (${view.stats.topPerformance.value})`] : null,
+          ].filter(Boolean) as [string, string][]).map(([l, v]) => (
+            <View key={l} style={styles.recapRow}>
+              <Text allowFontScaling={false} style={styles.recapLbl}>{l}</Text>
+              <Text allowFontScaling={false} style={styles.recapVal} numberOfLines={1}>{v}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Chip Leader — LIVE only (item 13: redundant with Final Standings once completed). */}
+      {!view.finished && view.chipLeader && (
         <TouchableOpacity style={styles.leaderCard} activeOpacity={0.85} onPress={() => onTapTeam(view.chipLeader!.id)}>
           <View style={styles.leaderKickerRow}>
             <Ionicons name="trophy" size={wxMs(14)} color={COLORS.primary} />
@@ -812,6 +832,36 @@ const TablesTab = ({
     )}
   </View>
 );
+
+// ── Stats tab (completed recap, items 13/14) ──────────────────────────────────
+// Clean line-by-line summary (like the Prize Pool summary), derived from real results.
+
+const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
+  const st = view.stats;
+  if (!st) return <View style={styles.section}><Text allowFontScaling={false} style={styles.emptyLine}>Stats will appear once the tournament is complete.</Text></View>;
+  const rows: [string, string][] = [
+    ["Tournament Duration", st.durationLabel ?? "—"],
+    ["Matches Played", `${st.matchesPlayed}`],
+    ["Most Wins", st.mostWins ? `${st.mostWins.name} · ${st.mostWins.value}` : "—"],
+    ["Best Win Rate", st.bestWinRate ? `${st.bestWinRate.name} · ${st.bestWinRate.value}` : "—"],
+    ["Longest Win Streak", st.longestStreak ? `${st.longestStreak.name} · ${st.longestStreak.value}` : "—"],
+    ["Most Active Player", st.mostActive ? `${st.mostActive.name} · ${st.mostActive.value}` : "—"],
+    ["Top Performance", st.topPerformance ? `${st.topPerformance.name} · ${st.topPerformance.value}` : "—"],
+  ];
+  return (
+    <View style={styles.section}>
+      <SectionHeader icon="stats-chart-outline" title="Tournament Stats" />
+      <View style={styles.recapCard}>
+        {rows.map(([l, v]) => (
+          <View key={l} style={styles.recapRow}>
+            <Text allowFontScaling={false} style={styles.recapLbl}>{l}</Text>
+            <Text allowFontScaling={false} style={styles.recapVal} numberOfLines={1}>{v}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
 
 // ── Players tab ───────────────────────────────────────────────────────────────
 
@@ -1148,22 +1198,21 @@ const ProfileModal = ({
         {profile.perf && (() => {
           const d = profile.perf.delta ?? 0;
           const dColor = d > 0 ? COLORS.success : d < 0 ? COLORS.error : COLORS.textSecondary;
-          // Item 25: signed "±N vs Fargo" (not an arrow) so the hierarchy reads
-          // Fargo → Performance Rating → vs Fargo.
+          // Item 15: headline reads "355 → 539 +184" — Fargo neutral, arrow dim, Performance
+          // Rating green, delta green (no "vs Fargo" wording). The redundant vs-Fargo detail
+          // row is removed; Team Fargo / Performance Rating / Opponent Avg stay below.
           const dSigned = `${d > 0 ? "+" : ""}${d}`;
           return (
             <View style={styles.perfCard}>
               <Text allowFontScaling={false} style={styles.perfKicker}>PERFORMANCE</Text>
-              {/* Focal centered stat; the arrow + change sits to the right and is
-                  vertically CENTERED against the big number (not baseline-aligned) */}
               <View style={styles.perfHeadline}>
                 <Text allowFontScaling={false} style={styles.perfBig}>
                   {profile.fargo != null ? profile.fargo : "—"}
                   <Text style={styles.perfArrowSep}>{"  →  "}</Text>
-                  {profile.perf.rating != null ? profile.perf.rating : "—"}
+                  <Text style={{ color: COLORS.success }}>{profile.perf.rating != null ? profile.perf.rating : "—"}</Text>
                 </Text>
                 {profile.perf.delta != null && (
-                  <Text allowFontScaling={false} style={[styles.perfDeltaInline, { color: dColor }]}>{`${dSigned} vs Fargo`}</Text>
+                  <Text allowFontScaling={false} style={[styles.perfDeltaInline, { color: dColor }]}>{dSigned}</Text>
                 )}
               </View>
               {/* Supporting two-column stats */}
@@ -1176,12 +1225,6 @@ const ProfileModal = ({
                 <Text allowFontScaling={false} style={styles.perfStatLbl}>Performance Rating</Text>
                 <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.perf.rating != null ? profile.perf.rating : "—"}</Text>
               </View>
-              {profile.perf.delta != null && (
-                <View style={styles.perfStatRow}>
-                  <Text allowFontScaling={false} style={styles.perfStatLbl}>vs Fargo</Text>
-                  <Text allowFontScaling={false} style={[styles.perfStatVal, { color: dColor }]}>{dSigned}</Text>
-                </View>
-              )}
               {profile.perf.avgOpponentFargo != null && (
                 <View style={styles.perfStatRow}>
                   <Text allowFontScaling={false} style={styles.perfStatLbl}>Opponent Avg</Text>
@@ -1370,6 +1413,11 @@ const styles = StyleSheet.create({
 
   // Chip leader
   leaderCard: { backgroundColor: COLORS.primary + "12", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.primary + "55", padding: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md) },
+  // Completed recap stats (items 13/14) — line-by-line summary card.
+  recapCard: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.md) },
+  recapRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: wxSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border + "55", gap: wxSc(SPACING.md) },
+  recapLbl: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
+  recapVal: { flex: 1, textAlign: "right", color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   leaderKickerRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
   leaderKicker: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
   leaderName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800" },

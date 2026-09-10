@@ -427,10 +427,11 @@ export const ChipTournamentHubView = ({
             <View style={styles.perfRow}>
               <Stat label="Fargo" value={hub.myFargo != null ? String(hub.myFargo) : "—"} />
               <View style={styles.summaryDivider} />
-              <Stat label="Performance Rating" value={String(hub.perf.rating)} />
+              {/* Item 15: Performance Rating tinted green for consistency across surfaces. */}
+              <Stat label="Performance Rating" value={String(hub.perf.rating)} tint={COLORS.success} />
               <View style={styles.summaryDivider} />
               <Stat
-                label="vs Fargo"
+                label="Differential"
                 value={
                   hub.perf.delta != null
                     ? `${hub.perf.delta > 0 ? "+" : ""}${hub.perf.delta}`
