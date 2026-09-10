@@ -502,11 +502,16 @@ export const reconcileMatches = (input: ChipState): ChipState => {
   return s;
 };
 
-// Recovery guard (run on load): every ALIVE team must be somewhere — in a live
-// match, holding/pending a table, or in the queue. Re-attach any alive team that
-// fell out (e.g. a stale/failed queue save), and drop queue ids that are
-// eliminated, unknown, or already seated on a table. Returns input unchanged when
-// the queue is already consistent.
+// Recovery guard (run on load): every ALIVE FIELD entrant must be somewhere — in a live
+// match, holding/pending a table, or in the queue. Re-attach any alive field entrant that
+// fell out (e.g. a stale/failed queue save), and drop queue ids that are eliminated,
+// unknown, already seated on a table, OR NOT a field entrant. "Alive" here means the same
+// thing it does for aliveEntries / reconcileEliminations: a non-eliminated entry that
+// actually entered the field (enteredField / checkedIn). A roster entry that never entered
+// the field (Registered-but-not-Ready, unresolved registration) has status "queued" +
+// chips 0 from the blank template but is NOT a live player, so it must never be injected
+// into the live queue (doing so put a 0-chip "Fargo —" ghost into a running tournament).
+// Returns input unchanged when the queue is already consistent.
 export const reconcileQueue = (input: ChipState): ChipState => {
   const onTable = new Set<string>();
   for (const t of input.tables) {
@@ -516,7 +521,9 @@ export const reconcileQueue = (input: ChipState): ChipState => {
   for (const m of input.matches) if (m.status === "in_progress") { onTable.add(m.aId); onTable.add(m.bId); }
   const isQueueable = (id: string) => {
     const e = input.entries.find((x) => x.id === id);
-    return !!e && e.status !== "eliminated" && !onTable.has(id);
+    // enteredField: only actual field entrants (checkedIn) belong in the live queue —
+    // matches aliveEntries / reconcileEliminations so a non-Ready roster entry can't leak in.
+    return !!e && e.status !== "eliminated" && enteredField(e) && !onTable.has(id);
   };
   // Defensive de-dupe (Section U): drop non-queueable ids AND any duplicate ids (a stale
   // or partially-failed save could leave the same entry in the queue twice), preserving
@@ -530,15 +537,18 @@ export const reconcileQueue = (input: ChipState): ChipState => {
   const inQueue = new Set(pruned);
   const orphans: string[] = [];
   for (const e of input.entries) {
-    if (e.status === "eliminated" || onTable.has(e.id) || inQueue.has(e.id)) continue;
+    // Only re-attach alive FIELD entrants — a non-field roster entry (checkedIn=false) is
+    // not a live player and must not be added to the queue.
+    if (e.status === "eliminated" || !enteredField(e) || onTable.has(e.id) || inQueue.has(e.id)) continue;
     orphans.push(e.id);
   }
   if (orphans.length === 0 && pruned.length === input.queue.length) return input; // already consistent
   const s = clone(input);
   s.queue = [...pruned, ...orphans];
-  // Keep entry statuses coherent with where they actually are.
+  // Keep entry statuses coherent with where they actually are — field entrants only; never
+  // touch a non-field roster entry (it keeps its setup lifecycle).
   for (const e of s.entries) {
-    if (e.status === "eliminated") continue;
+    if (e.status === "eliminated" || !enteredField(e)) continue;
     if (onTable.has(e.id)) continue;
     if (e.status !== "queued") { e.status = "queued"; e.tableId = null; }
   }
