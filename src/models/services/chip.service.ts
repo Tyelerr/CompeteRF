@@ -29,6 +29,10 @@ export interface ChipTournamentBundle {
   // Optimistic-concurrency version read from chip_config.version (Phase G). 0 when the
   // column isn't present yet (migration pending) — the client treats that as "no CAS".
   version: number;
+  // Durable finalized placements from chip_results (Phase G5b) — authoritative for a
+  // COMPLETED tournament's placement ORDER. null while live / not yet finalized; consumers
+  // prefer it when the tournament is finished, else derive from live chip state.
+  results: ChipResultRow[] | null;
 }
 
 // One persisted final-placement row (chip_results). Deliberately just the durable
@@ -401,12 +405,13 @@ export const chipService = {
       }
       return supabase.from("chip_entries").select("*").eq("tournament_id", id);
     })();
-    const [cfg, entries, tables, matches, events, regs] = await Promise.all([
+    const [cfg, entries, tables, matches, events, resultsRes, regs] = await Promise.all([
       supabase.from("chip_config").select("*").eq("tournament_id", id).maybeSingle(),
       entriesQuery,
       supabase.from("chip_tables").select("*").eq("tournament_id", id).order("sort", { ascending: true }),
       supabase.from("chip_matches").select("*").eq("tournament_id", id),
       supabase.from("chip_events").select("*").eq("tournament_id", id).order("created_at", { ascending: false }),
+      supabase.from("chip_results").select("*").eq("tournament_id", id).order("place", { ascending: true }),
       supabase
         .from("tournament_players")
         .select(
@@ -528,7 +533,18 @@ export const chipService = {
     // chip_config.version (Phase G CAS anchor); resilient to the column being absent
     // (migration pending) → 0.
     const version = Number((c as any)?.version ?? 0);
-    return { tournament: t as Tournament, chip, version };
+    // Durable finalized placements (G5b). null when none are persisted yet.
+    const resultRows = (resultsRes.data ?? []) as any[];
+    const results: ChipResultRow[] | null = resultRows.length
+      ? resultRows.map((r) => ({
+          entryId: r.entry_id,
+          place: r.place,
+          teamName: r.team_name ?? null,
+          p1ProfileId: r.p1_profile_id ?? null,
+          p2ProfileId: r.p2_profile_id ?? null,
+        }))
+      : null;
+    return { tournament: t as Tournament, chip, version, results };
   },
 
   // Write the whole chip state back to the tables (upsert + prune removed rows).

@@ -9,7 +9,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { chipService } from "../../models/services/chip.service";
+import { chipService, ChipResultRow } from "../../models/services/chip.service";
 import { dashboard, enteredField, teamName } from "../../models/services/chip.engine";
 import {
   ChipEntry,
@@ -330,6 +330,7 @@ const buildSpectatorView = (
   tournament: Tournament,
   s: ChipState,
   viewerProfileId?: number | null,
+  durableResults?: ChipResultRow[] | null,
 ): ChipSpectatorView => {
   const d = dashboard(s);
   // "(You)" — the viewing user's OWN entry (team-level for doubles: either partner's
@@ -591,18 +592,25 @@ const buildSpectatorView = (
   // aggregate entrant COUNT and pool are exposed — never individual payment status.
   // Full overall finish order (best-first) once finished: champion, then eliminated by
   // most-recent-out. Used for final placements AND side-pot finisher ranking (item 30).
-  const orderedEntries = finished
-    ? ([
-        entryById(s.winnerId),
-        ...s.entries
-          .filter((e) => e.id !== s.winnerId && e.eliminatedAt)
-          .sort(
-            (a, b) =>
-              new Date(b.eliminatedAt as string).getTime() -
-              new Date(a.eliminatedAt as string).getTime(),
-          ),
-      ].filter(Boolean) as typeof s.entries)
-    : [];
+  // G5b: when the tournament is finished and durable chip_results exist, use THAT order as
+  // authoritative (placements survive even if live chip state later changes); otherwise
+  // derive from live chip state.
+  const orderedEntries = !finished
+    ? ([] as typeof s.entries)
+    : durableResults && durableResults.length
+      ? (durableResults
+          .map((r) => entryById(r.entryId))
+          .filter(Boolean) as typeof s.entries)
+      : ([
+          entryById(s.winnerId),
+          ...s.entries
+            .filter((e) => e.id !== s.winnerId && e.eliminatedAt)
+            .sort(
+              (a, b) =>
+                new Date(b.eliminatedAt as string).getTime() -
+                new Date(a.eliminatedAt as string).getTime(),
+            ),
+        ].filter(Boolean) as typeof s.entries);
   const parsedPots = parseSidePots(tournament.side_pots);
   const sidePotEntrantsByName: Record<string, number> = {};
   const sidePotPoolByName: Record<string, number> = {};
@@ -713,7 +721,7 @@ export const useChipSpectator = (tournamentId?: number, viewerProfileId?: number
   const view = useMemo<ChipSpectatorView | null>(
     () =>
       query.data
-        ? buildSpectatorView(query.data.tournament, query.data.chip, viewerProfileId)
+        ? buildSpectatorView(query.data.tournament, query.data.chip, viewerProfileId, query.data.results)
         : null,
     [query.data, viewerProfileId],
   );
