@@ -177,6 +177,10 @@ export const useChipTournament = (
   // flushSave() writes it immediately; load({ silent }) flushes it BEFORE reconciling so a
   // background refetch never discards a not-yet-saved local edit (B3 stale-refetch guard).
   const pendingSaveRef = useRef<ChipState | null>(null);
+  // Phase G soft CAS: the chip_config.version this client last loaded/saved. Passed to
+  // chipService.save so a cross-director conflict can be DETECTED (soft stage: logged for
+  // observability, save still applies; a later strict stage will reject + reload + notify).
+  const versionRef = useRef(0);
   // Tournament restore history. Every live action appends a PERSISTED restore
   // point (its pre-action snapshot) onto the chip state — see engine
   // withRestorePoint. The Audit Log restores to any of them and the quick "Undo
@@ -221,7 +225,19 @@ export const useChipTournament = (
     const toSave = pendingSaveRef.current;
     if (!toSave) return;
     pendingSaveRef.current = null;
-    await chipService.save(id, toSave).catch(() => {});
+    try {
+      const res = await chipService.save(id, toSave, { expectedVersion: versionRef.current });
+      if (res.conflict) {
+        // SOFT stage: another director wrote since we loaded. Log for observability; the
+        // write still applied (strict rejection + reload/notify is a later Phase G stage).
+        console.warn(
+          `[chip CAS] version conflict on tournament ${id} (expected ${versionRef.current}); save applied under soft CAS`,
+        );
+      }
+      versionRef.current = res.version;
+    } catch {
+      /* save error already surfaced elsewhere; keep prior version */
+    }
   }, [id]);
 
   // `silent` reconciles server state WITHOUT the full-screen takeover — used after a
@@ -241,6 +257,7 @@ export const useChipTournament = (
     setError(null);
     try {
       const b = await chipService.load(id);
+      versionRef.current = b.version; // Phase G CAS baseline for the next save.
       setTournament(b.tournament);
       const finished = b.tournament.live_state === "finished" || b.tournament.status === "completed";
       if (finished) {

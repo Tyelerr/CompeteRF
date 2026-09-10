@@ -21,6 +21,9 @@ import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-p
 export interface ChipTournamentBundle {
   tournament: Tournament;
   chip: ChipState;
+  // Optimistic-concurrency version read from chip_config.version (Phase G). 0 when the
+  // column isn't present yet (migration pending) — the client treats that as "no CAS".
+  version: number;
 }
 
 // One persisted final-placement row (chip_results). Deliberately just the durable
@@ -517,7 +520,10 @@ export const chipService = {
       roundRemaining: (c?.round_remaining as string[] | null) ?? [],
       restorePoints: (c?.restore_points as ChipRestorePoint[] | null) ?? [],
     };
-    return { tournament: t as Tournament, chip };
+    // chip_config.version (Phase G CAS anchor); resilient to the column being absent
+    // (migration pending) → 0.
+    const version = Number((c as any)?.version ?? 0);
+    return { tournament: t as Tournament, chip, version };
   },
 
   // Write the whole chip state back to the tables (upsert + prune removed rows).
@@ -525,7 +531,16 @@ export const chipService = {
   // unapplied migration) must not block the others — so match results/timers still
   // save even if a newer table/config column isn't there yet. The first error is
   // rethrown at the end so explicit callers still see a problem.
-  async save(id: number, chip: ChipState): Promise<void> {
+  // Returns the post-save chip_config.version and whether a cross-director CONFLICT was
+  // detected (the live version differed from `expectedVersion` at save time). Phase G soft
+  // CAS: the save STILL applies (observability stage) and the caller logs/telemeters the
+  // conflict; a later strict stage will reject instead. All version handling is resilient
+  // to the column being absent (migration pending) → returns { version: 0, conflict: false }.
+  async save(
+    id: number,
+    chip: ChipState,
+    opts?: { expectedVersion?: number | null },
+  ): Promise<{ version: number; conflict: boolean }> {
     const errors: any[] = [];
     const run = async (fn: () => Promise<void>) => {
       try {
@@ -618,7 +633,29 @@ export const chipService = {
       if (error) throw error;
     });
 
+    // Phase G soft CAS: read the live version, flag a conflict if it moved away from what
+    // this client started from, then bump it. Isolated + swallowed so a missing `version`
+    // column (migration pending) or a transient error never blocks the save.
+    let version = 0;
+    let conflict = false;
+    try {
+      const { data: cur } = await supabase
+        .from("chip_config")
+        .select("version")
+        .eq("tournament_id", id)
+        .maybeSingle();
+      const live = cur ? Number((cur as any).version ?? 0) : null;
+      if (live != null) {
+        if (opts?.expectedVersion != null && live !== opts.expectedVersion) conflict = true;
+        version = live + 1;
+        await supabase.from("chip_config").update({ version }).eq("tournament_id", id);
+      }
+    } catch {
+      /* version column not present yet — soft no-op */
+    }
+
     if (errors.length) throw errors[0];
+    return { version, conflict };
   },
 
   // Targeted write of ONE singles entry's side-pot membership to chip_entries — the
