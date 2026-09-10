@@ -518,7 +518,15 @@ export const reconcileQueue = (input: ChipState): ChipState => {
     const e = input.entries.find((x) => x.id === id);
     return !!e && e.status !== "eliminated" && !onTable.has(id);
   };
-  const pruned = input.queue.filter(isQueueable);
+  // Defensive de-dupe (Section U): drop non-queueable ids AND any duplicate ids (a stale
+  // or partially-failed save could leave the same entry in the queue twice), preserving
+  // first-seen order.
+  const seenQ = new Set<string>();
+  const pruned = input.queue.filter((id) => {
+    if (!isQueueable(id) || seenQ.has(id)) return false;
+    seenQ.add(id);
+    return true;
+  });
   const inQueue = new Set(pruned);
   const orphans: string[] = [];
   for (const e of input.entries) {
