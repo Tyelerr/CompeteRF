@@ -26,6 +26,7 @@ export interface PlayerReadinessSummary {
   ready: number;
   notReady: number;
   unpaid: number; // entry fees unpaid (informational)
+  paidNotReady: number; // paid the entry fee but NOT marked Ready — BLOCKS leaving Players (item 4)
   noShows: number; // informational
   waitingForPartner: number; // team formats (informational)
   sidePotNotEntered: number | null; // informational; null when the format has no side pots
@@ -46,6 +47,11 @@ export const buildReadinessSummary = (
   const unpaid = playable.filter(
     (r) => r.status !== "ready" && r.entryFeeRequired && !r.paid,
   ).length;
+  // Paid the entry fee but not yet Ready — the TD collected money then left the player out.
+  // This BLOCKS advancing past Players (must be resolved), unlike the informational counts.
+  // Matches the Review & Start "Paid but Not Ready" definition: a processed (registered)
+  // entry that has paid but isn't marked Ready.
+  const paidNotReady = playable.filter((r) => r.status === "registered" && r.paid).length;
   const sidePotNotEntered = hasSidePots
     ? playable.filter((r) => r.inAnySidePot === false).length
     : null;
@@ -57,12 +63,19 @@ export const buildReadinessSummary = (
     ready,
     notReady,
     unpaid,
+    paidNotReady,
     noShows,
     waitingForPartner,
     sidePotNotEntered,
   };
 };
 
-// The ONLY blocking-ish condition (it doesn't hard-block; it just warns).
+// Soft warning shown when advancing (informational): any not-ready entrants.
 export const needsReadinessWarning = (s: PlayerReadinessSummary): boolean =>
   s.notReady > 0;
+
+// HARD block on leaving the Players step (item 4): a player who paid the entry fee but was
+// left not-Ready must be marked Ready or otherwise resolved first. The Review & Start warning
+// remains as a final safety net.
+export const blocksLeavingPlayers = (s: PlayerReadinessSummary): boolean =>
+  s.paidNotReady > 0;

@@ -231,7 +231,7 @@ export type LivePlayerSort =
 // coordination — tracked as a follow-up, not done here.)
 type RosterUiState = {
   rosterQuery: string;
-  rosterFilter: "all" | "prereg" | "registered" | "ready" | "no_show";
+  rosterFilter: "all" | "prereg" | "registered" | "ready" | "no_show" | "paidNotReady";
   rosterSort:
     | "default"
     | "name"
@@ -907,7 +907,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Fix 1 — busy flag for the completed-view "participant sync failed → Retry" affordance.
   const [retryingSync, setRetryingSync] = useState(false);
   const [rosterQuery, setRosterQuery] = useState(() => rosterUiCache.get(id)?.rosterQuery ?? "");
-  const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show">(
+  const [rosterFilter, setRosterFilter] = useState<"all" | "prereg" | "registered" | "ready" | "no_show" | "paidNotReady">(
     () => rosterUiCache.get(id)?.rosterFilter ?? "all",
   );
   const [rosterSort, setRosterSort] = useState<
@@ -2481,6 +2481,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (rosterFilter === "registered" && st !== "registered") return false;
       if (rosterFilter === "ready" && st !== "ready") return false;
       if (rosterFilter === "no_show" && st !== "no_show") return false;
+      if (rosterFilter === "paidNotReady" && !(st === "registered" && !!e.paid)) return false;
       const q = rosterQuery.trim().toLowerCase();
       if (q) {
         const hay = `${e.p1Name} ${e.p2Name ?? ""} ${e.p1ProfileId ?? ""} ${e.p2ProfileId ?? ""}`.toLowerCase();
@@ -2539,6 +2540,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     registered: "Registered",
     ready: "Ready",
     no_show: "No Show",
+    paidNotReady: "Paid · Not Ready",
   };
   const SORT_LABELS: Record<typeof rosterSort, string> = {
     default: "Registration Order",
@@ -2563,12 +2565,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     { prereg: 0, registered: 0, ready: 0, no_show: 0 },
   );
   const readyCount = statusCounts.ready;
+  // Item 4: paid the entry fee but still Registered (not Ready) — the actionable count that
+  // BLOCKS advancing past Players. Same definition as the Review "Paid but Not Ready" badge.
+  const paidNotReadyCount = chip.entries.filter((e) => entryState(e) === "registered" && !!e.paid).length;
   // Tappable counter chip: taps set the matching status filter (Pre-Reg toggles).
   const STATUS_COUNTERS: { key: typeof rosterFilter; label: string; n: number }[] = [
     { key: "prereg", label: "Pre-Reg", n: statusCounts.prereg },
     { key: "registered", label: "Registered", n: statusCounts.registered },
     { key: "ready", label: "Ready", n: statusCounts.ready },
     { key: "no_show", label: "No Show", n: statusCounts.no_show },
+    // Only surface the blocking chip when there is something to resolve.
+    ...(paidNotReadyCount > 0 ? [{ key: "paidNotReady" as typeof rosterFilter, label: "Paid · Not Ready", n: paidNotReadyCount }] : []),
   ];
 
   // Expanded detail body for the desktop players table — reuses the existing

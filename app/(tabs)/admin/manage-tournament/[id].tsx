@@ -130,7 +130,7 @@ import { smsNotificationService } from "../../../../src/models/services/sms-noti
 import { teamService } from "../../../../src/models/services/team.service";
 import { chipService } from "../../../../src/models/services/chip.service";
 import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-lifecycle";
-import { buildReadinessSummary, needsReadinessWarning, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
+import { buildReadinessSummary, needsReadinessWarning, blocksLeavingPlayers, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
 import { missingSettingsFields, settingsComplete, SettingsCompleteInput } from "../../../../src/utils/settings-complete";
 import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
 import { LifecyclePhase, deriveLifecycle, paymentSatisfied } from "../../../../src/utils/registration-lifecycle";
@@ -2659,7 +2659,25 @@ export default function ManageTournamentScreen() {
 
   // Players page forward CTA: if any playable player/team is Not Ready, show the
   // informational summary first (never hard-blocks); otherwise advance in one tap.
+  // Item 4: hard block leaving Players while any paid-but-not-Ready entrant exists — the TD
+  // collected an entry fee then left the player out of the field. Marking Ready (or removing
+  // them) must happen first. Shown as an actionable message, not just a disabled control; the
+  // Review & Start warning remains as the final safety net.
+  const chipPlayersBlocked =
+    isChipTournament && !!readinessSummary && blocksLeavingPlayers(readinessSummary);
+  const alertPaidNotReady = () => {
+    const n = readinessSummary?.paidNotReady ?? 0;
+    const noun = n === 1 ? readinessSummary?.entitySingular ?? "player" : readinessSummary?.entityLabel ?? "players";
+    Alert.alert(
+      "Resolve paid players first",
+      `${n} ${(noun as string).toLowerCase()} paid the entry fee but ${n === 1 ? "is" : "are"} not marked Ready. Mark ${n === 1 ? "them" : "each"} Ready — or remove ${n === 1 ? "them" : "them"} — before continuing to Tables. (Tap the "Paid · Not Ready" filter on the Players step to find ${n === 1 ? "them" : "them"}.)`,
+    );
+  };
   const advanceFromPlayers = (target: TabKey) => {
+    if (activeTab === "players" && chipPlayersBlocked) {
+      alertPaidNotReady();
+      return;
+    }
     if (
       activeTab === "players" &&
       readinessSummary &&
