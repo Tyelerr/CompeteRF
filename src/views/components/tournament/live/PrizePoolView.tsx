@@ -35,6 +35,8 @@ import {
   canIncrease,
   computeBreakdown,
   entryPoolTotal,
+  feesPerPlayer,
+  feesTotal,
   placesFromPercents,
   presetSplit,
   setPercent,
@@ -102,15 +104,17 @@ const Row = ({
   label,
   value,
   strong,
+  indent,
 }: {
   label: string;
   value: string;
   strong?: boolean;
+  indent?: boolean;
 }) => (
   <View style={styles.row}>
     <Text
       allowFontScaling={false}
-      style={[styles.rowLabel, strong && styles.rowLabelStrong]}
+      style={[styles.rowLabel, indent && styles.rowLabelIndent, strong && styles.rowLabelStrong]}
     >
       {label}
     </Text>
@@ -508,8 +512,11 @@ export const PrizePoolView = ({
   feesAddedOnTop,
 }: PrizePoolViewProps) => {
   const grossEntry = Math.max(0, players) * Math.max(0, entryFee);
-  const feePerPlayer = fees.reduce((s, f) => s + Math.max(0, f.perPlayer), 0);
-  const totalFees = Math.max(0, players) * feePerPlayer;
+  // Fee aggregates come from the ONE shared source (utils/prize-pool), the same functions
+  // the net-pool math and the Settings validation use — never a second inline sum.
+  const feeAmounts = fees.map((f) => ({ amount: f.perPlayer }));
+  const feePerPlayer = feesPerPlayer(feeAmounts);
+  const totalFees = feesTotal(feeAmounts, players);
   const includedAdded = config.includeAddedMoney ? Math.max(0, addedMoney) : 0;
   // Net entry payout pool. Included mode: entry minus fees. On-top mode: full
   // entry to the pool (fees collected separately). Plus added money.
@@ -531,10 +538,14 @@ export const PrizePoolView = ({
   });
 
   const sidePotsTotal = sidePotRows.reduce((s, r) => s + r.pool, 0);
-  // On-top fees are extra money collected from players; included fees are part
-  // of the entry already counted in grossEntry.
-  const totalCollected =
-    grossEntry + sidePotsTotal + includedAdded + (feesAddedOnTop ? totalFees : 0);
+  // Entry's contribution to the PRIZE pool, before side pots / added money. Included mode:
+  // fees come out of the entry (Entry − Fees). On-top mode: fees are collected separately,
+  // so the full entry contributes (fees are NOT deducted). Display-only breakdown — the
+  // authoritative net pool below still comes from entryPoolTotal (shared util); by
+  // construction netEntryContribution + sidePots + includedAdded === totalPrizePool.
+  const netEntryContribution = feesAddedOnTop
+    ? grossEntry
+    : Math.max(0, grossEntry - totalFees);
   const totalPrizePool = entryPool + sidePotsTotal; // net of fees
   const totalPayout =
     entryBreakdown.payoutTotal +
@@ -594,14 +605,54 @@ export const PrizePoolView = ({
         />
       ))}
 
-      {/* Item 5B — clearer summary: show the arithmetic ("$20 × 6 = $120"), and group
-          collected → deductions/net → assigned with subtle dividers so totals stand out. */}
+      {/* Item 5B / fee audit — the Summary presents the SAME numbers the Settings fee
+          breakdown and the payout math use (entryPoolTotal + feesPerPlayer from
+          utils/prize-pool), never a second calculator. It carries over the per-fee
+          breakdown so the TD can audit how the prize pool was derived, and it respects
+          the fee mode:
+            • included in entry → fees are DEDUCTED (Entry − Fees = Net Entry);
+            • added on top      → fees are collected SEPARATELY and are NOT deducted, so
+                                  the full entry is the Entry Prize Contribution.
+          netEntryContribution + side pots + included added money === Net prize pool
+          (== totalPrizePool from the shared util) in BOTH modes. */}
       <Card title="Summary">
-        {/* Collected */}
+        {/* Entry */}
         <Row
           label="Entry"
           value={entryFee > 0 ? `${money(entryFee)} × ${players} entered = ${money(grossEntry)}` : money(grossEntry)}
         />
+
+        {/* Fees — itemized, respecting the fee mode. Only enabled fees reach here (filtered
+            by the host from live_settings.fees), so a $0 fee still lists as "$0" for parity
+            with Settings without affecting any total. */}
+        {fees.length > 0 && (
+          <>
+            <View style={styles.summaryGroupDivider} />
+            <Text allowFontScaling={false} style={styles.summarySectionLabel}>
+              {feesAddedOnTop ? "Added-on Fees" : "Fees"}
+            </Text>
+            {fees.map((f) => (
+              <Row
+                key={f.name}
+                indent
+                label={f.name}
+                value={
+                  f.perPlayer > 0
+                    ? `${money(f.perPlayer)} × ${players} = ${money(f.perPlayer * players)}`
+                    : money(0)
+                }
+              />
+            ))}
+            <View style={styles.summaryGroupDivider} />
+            <Row
+              label={feesAddedOnTop ? "Entry Prize Contribution" : "Net Entry"}
+              value={money(netEntryContribution)}
+              strong
+            />
+          </>
+        )}
+
+        {/* Side pots */}
         {sidePotRows.map((r) => (
           <Row
             key={r.sp.name}
@@ -609,8 +660,9 @@ export const PrizePoolView = ({
             value={r.sp.amount > 0 ? `${money(r.sp.amount)} × ${r.sp.players} entered = ${money(r.pool)}` : money(r.pool)}
           />
         ))}
+
+        {/* Added money (include toggle lives here) */}
         {addedMoney > 0 ? (
-          // Item 2: the added-money include toggle lives here (was in the removed top card).
           <ToggleSwitch
             label={`Added money (${money(addedMoney)})`}
             value={config.includeAddedMoney}
@@ -620,11 +672,11 @@ export const PrizePoolView = ({
         ) : (
           <Row label="Added money" value={money(0)} />
         )}
-        <Row label="Total collected" value={money(totalCollected)} strong />
+
         <View style={styles.summaryGroupDivider} />
-        {/* Deductions → net */}
-        <Row label="Total fees / deductions" value={totalFees > 0 ? `− ${money(totalFees)}` : money(0)} />
-        <Row label="Net payout pool" value={money(totalPrizePool)} strong />
+        {/* Net prize pool — authoritative pool from entryPoolTotal + side pots (net of any
+            included fees). Payouts are split over exactly this. */}
+        <Row label="Net prize pool" value={money(totalPrizePool)} strong />
         <View style={styles.summaryGroupDivider} />
         {/* Assigned */}
         <Row label="Total payouts assigned" value={money(totalPayout)} strong />
@@ -689,7 +741,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: webSc(SPACING.sm),
   },
+  rowLabelIndent: { paddingLeft: webSc(SPACING.sm) },
   rowLabelStrong: { color: COLORS.text, fontWeight: "700" },
+  summarySectionLabel: {
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+    marginTop: webSc(SPACING.xs),
+    marginBottom: webSc(2),
+  },
   rowValue: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
