@@ -194,11 +194,11 @@ export interface SpecStatLeader {
 export interface SpecStats {
   durationLabel: string | null; // wall-clock start→finish, e.g. "1h 23m"
   matchesPlayed: number;
+  reshuffles: number;
   mostWins: SpecStatLeader | null;
   bestWinRate: SpecStatLeader | null;
   longestStreak: SpecStatLeader | null;
-  mostActive: SpecStatLeader | null;
-  topPerformance: SpecStatLeader | null;
+  topPerformance: SpecStatLeader | null; // highest POSITIVE Fargo differential only (else null)
 }
 
 export interface ChipSpectatorView {
@@ -743,15 +743,18 @@ const buildSpectatorView = (
     stats = {
       durationLabel,
       matchesPlayed: d.matchesPlayed,
+      reshuffles: s.reshuffleCount ?? 0,
       mostWins: lead(fieldProfiles, (a, b) => b.wins - a.wins, (p) => p.wins > 0, (p) => `${p.wins}`),
       bestWinRate: lead(fieldProfiles, (a, b) => b.winPct - a.winPct, (p) => p.matchesPlayed >= 3, (p) => `${Math.round(p.winPct * 100)}%`),
       longestStreak: lead(fieldProfiles, (a, b) => (b.bestStreak ?? 0) - (a.bestStreak ?? 0), (p) => (p.bestStreak ?? 0) > 0, (p) => `${p.bestStreak}`),
-      mostActive: lead(fieldProfiles, (a, b) => b.matchesPlayed - a.matchesPlayed, (p) => p.matchesPlayed > 0, (p) => `${p.matchesPlayed}`),
+      // Top Performance = highest POSITIVE Fargo differential (overperformance). Sorted by
+      // delta desc and gated on delta > 0, so it never surfaces a negative result; null when
+      // nobody overperformed → the row shows "—". Value: "708 (+158)" (one paren set).
       topPerformance: lead(
         fieldProfiles,
-        (a, b) => (b.perf?.rating ?? -1) - (a.perf?.rating ?? -1),
-        (p) => p.perf?.rating != null,
-        (p) => { const dl = p.perf?.delta ?? 0; return `${p.perf?.rating} (${dl >= 0 ? "+" : ""}${dl})`; },
+        (a, b) => (b.perf?.delta ?? -Infinity) - (a.perf?.delta ?? -Infinity),
+        (p) => p.perf != null && (p.perf.delta ?? 0) > 0,
+        (p) => `${p.perf?.rating} (+${p.perf?.delta})`,
       ),
     };
   }

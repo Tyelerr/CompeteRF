@@ -596,8 +596,8 @@ const OverviewTab = ({
           {([
             ["Duration", view.stats.durationLabel ?? "—"],
             ["Matches Played", `${view.stats.matchesPlayed}`],
-            view.stats.mostWins ? ["Most Wins", `${view.stats.mostWins.name} (${view.stats.mostWins.value})`] : null,
-            view.stats.topPerformance ? ["Top Performance", `${view.stats.topPerformance.name} (${view.stats.topPerformance.value})`] : null,
+            view.stats.mostWins ? ["Most Wins", `${view.stats.mostWins.name} · ${view.stats.mostWins.value}`] : null,
+            view.stats.topPerformance ? ["Top Performance", `${view.stats.topPerformance.name} · ${view.stats.topPerformance.value}`] : null,
           ].filter(Boolean) as [string, string][]).map(([l, v]) => (
             <View key={l} style={styles.recapRow}>
               <Text allowFontScaling={false} style={styles.recapLbl}>{l}</Text>
@@ -794,23 +794,30 @@ const TablesTab = ({
 const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
   const st = view.stats;
   if (!st) return <View style={styles.section}><Text allowFontScaling={false} style={styles.emptyLine}>Stats will appear once the tournament is complete.</Text></View>;
-  const rows: [string, string][] = [
-    ["Tournament Duration", st.durationLabel ?? "—"],
-    ["Matches Played", `${st.matchesPlayed}`],
-    ["Most Wins", st.mostWins ? `${st.mostWins.name} · ${st.mostWins.value}` : "—"],
-    ["Best Win Rate", st.bestWinRate ? `${st.bestWinRate.name} · ${st.bestWinRate.value}` : "—"],
-    ["Longest Win Streak", st.longestStreak ? `${st.longestStreak.name} · ${st.longestStreak.value}` : "—"],
-    ["Most Active Player", st.mostActive ? `${st.mostActive.name} · ${st.mostActive.value}` : "—"],
-    ["Top Performance", st.topPerformance ? `${st.topPerformance.name} · ${st.topPerformance.value}` : "—"],
+  // Item 8: taller, easier-to-scan rows. Each stat is a label + a value; leader stats split
+  // into "Name" (primary) and a compact metric so the eye lands on the value. Top Performance
+  // shows the winner's overperformance as "708 (+158)" — one paren set — or "—" if nobody
+  // overperformed. "Most Active Player" removed (it was just most-matches = a rename).
+  const rows: { label: string; name?: string; value: string }[] = [
+    { label: "Tournament Duration", value: st.durationLabel ?? "—" },
+    { label: "Matches Played", value: `${st.matchesPlayed}` },
+    { label: "Reshuffles", value: `${st.reshuffles}` },
+    { label: "Most Wins", name: st.mostWins?.name, value: st.mostWins ? st.mostWins.value : "—" },
+    { label: "Best Win Rate", name: st.bestWinRate?.name, value: st.bestWinRate ? st.bestWinRate.value : "—" },
+    { label: "Longest Win Streak", name: st.longestStreak?.name, value: st.longestStreak ? st.longestStreak.value : "—" },
+    { label: "Top Performance", name: st.topPerformance?.name, value: st.topPerformance ? st.topPerformance.value : "—" },
   ];
   return (
     <View style={styles.section}>
       <SectionHeader icon="stats-chart-outline" title="Tournament Stats" />
-      <View style={styles.recapCard}>
-        {rows.map(([l, v]) => (
-          <View key={l} style={styles.recapRow}>
-            <Text allowFontScaling={false} style={styles.recapLbl}>{l}</Text>
-            <Text allowFontScaling={false} style={styles.recapVal} numberOfLines={1}>{v}</Text>
+      <View style={styles.statsCard}>
+        {rows.map((r, i) => (
+          <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
+            <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
+            <View style={styles.statValWrap}>
+              {r.name ? <Text allowFontScaling={false} style={styles.statName} numberOfLines={1}>{r.name}</Text> : null}
+              <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
+            </View>
           </View>
         ))}
       </View>
@@ -1332,6 +1339,15 @@ const styles = StyleSheet.create({
   recapRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: wxSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border + "55", gap: wxSc(SPACING.md) },
   recapLbl: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
   recapVal: { flex: 1, textAlign: "right", color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Item 8: bigger, cleaner Tournament Stats card — taller rows, larger value, name + metric.
+  statsCard: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md) },
+  statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.md) },
+  statRowDiv: { borderTopWidth: 1, borderTopColor: COLORS.border + "66" },
+  statLbl: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md) },
+  statValWrap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: wxSc(SPACING.sm), minWidth: 0 },
+  statName: { flexShrink: 1, textAlign: "right", color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
+  statVal: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  statValSolo: { color: COLORS.text },
   leaderKickerRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
   leaderKicker: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
   leaderName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800" },
