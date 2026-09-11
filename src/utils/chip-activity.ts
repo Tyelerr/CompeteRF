@@ -140,8 +140,26 @@ export const toPublicActivityFeed = (
   events: ChipEvent[],
   limit = 40,
 ): PublicActivity[] => {
+  // Item 7A: collapse the redundant "lost a chip → 0 remaining" line when that loss caused an
+  // elimination. recordWinner emits a chip_loss (payload.resulting === 0) immediately followed
+  // by an elimination for the SAME player, so the feed would tell the story twice. Drop the
+  // chip-loss-to-0 for any player who has a (non-superseded) elimination; a genuine chip loss
+  // that did NOT eliminate (resulting > 0) is always kept.
+  const eliminatedIds = new Set<string>();
+  for (const ev of events) {
+    if (ev.type === "elimination" && !ev.superseded) {
+      const id = ev.payload?.entryId as string | undefined;
+      if (id) eliminatedIds.add(id);
+    }
+  }
   const out: PublicActivity[] = [];
   for (const ev of events) {
+    if (
+      ev.type === "chip_loss" &&
+      Number(ev.payload?.resulting ?? 1) <= 0 &&
+      eliminatedIds.has(ev.payload?.entryId as string)
+    )
+      continue; // redundant with the player's elimination line
     const a = toPublicActivity(ev);
     if (a) out.push(a);
     if (out.length >= limit) break;
