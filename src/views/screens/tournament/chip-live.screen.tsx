@@ -55,26 +55,13 @@ const tabsFor = (finished: boolean): { key: Tab; label: string }[] => [
   { key: "payouts", label: "Payouts" },
 ];
 
-type PlayerFilter = "all" | "playing" | "next" | "waiting" | "eliminated";
-const PLAYER_FILTERS: { key: PlayerFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "playing", label: "Playing" },
-  { key: "next", label: "Up Next" },
-  { key: "waiting", label: "Waiting" },
-  { key: "eliminated", label: "Eliminated" },
-];
-type PlayerSort = "chips" | "name" | "record" | "fargo" | "status";
-const PLAYER_SORTS: { key: PlayerSort; label: string }[] = [
-  { key: "chips", label: "Chips" },
-  { key: "name", label: "Name" },
-  { key: "record", label: "Record" },
-  { key: "fargo", label: "Fargo" },
-  { key: "status", label: "Status" },
-];
-type StandingsFilter = "all" | "active" | "eliminated";
+// ONE unified spectator players list across all phases (no List/Standings toggle). Status-based
+// filter works live (Playing/Waiting) and completed (Eliminated); sort defaults to Rank.
+type StandingsFilter = "all" | "playing" | "waiting" | "eliminated";
 const STANDINGS_FILTERS: { key: StandingsFilter; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "active", label: "Active" },
+  { key: "playing", label: "Playing" },
+  { key: "waiting", label: "Waiting" },
   { key: "eliminated", label: "Eliminated" },
 ];
 type StandingsSort = "standings" | "chips" | "record" | "winpct" | "fargo" | "name";
@@ -86,7 +73,6 @@ const STANDINGS_SORTS: { key: StandingsSort; label: string }[] = [
   { key: "fargo", label: "Fargo" },
   { key: "name", label: "Name" },
 ];
-const STATUS_RANK: Record<string, number> = { playing: 0, next: 1, waiting: 2, completed: 3, eliminated: 4 };
 const recordScore = (w: number, l: number) => w - l;
 const winPct = (w: number, l: number) => (w + l > 0 ? w / (w + l) : 0);
 
@@ -331,12 +317,9 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [standingsOpen, setStandingsOpen] = useState(false);
-  // Players tab sub-view: full-page Player/Team List vs full-page Standings.
-  const [playersView, setPlayersView] = useState<"list" | "standings">("list");
   const [logOpen, setLogOpen] = useState(false);
   const [playerQuery, setPlayerQuery] = useState("");
-  const [playerFilter, setPlayerFilter] = useState<PlayerFilter>("all");
-  const [playerSort, setPlayerSort] = useState<PlayerSort>("chips");
+  // ONE unified players list (all phases): status-based filter + sort defaulting to Rank.
   const [standingsFilter, setStandingsFilter] = useState<StandingsFilter>("all");
   const [standingsSort, setStandingsSort] = useState<StandingsSort>("standings");
   const bodyRef = useRef<ScrollView>(null);
@@ -395,43 +378,19 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
     [view, profileId],
   );
 
-  // Player/Team List: search + status filter, then a PRESENTATION-ONLY sort over a COPY
-  // (never mutates view.players). Defaults to Chips (high→low).
-  const filteredPlayers = useMemo(() => {
-    if (!view) return [];
-    const q = playerQuery.trim().toLowerCase();
-    const rows = view.players.filter((p) => {
-      if (q && !p.name.toLowerCase().includes(q)) return false;
-      if (playerFilter === "all") return true;
-      if (playerFilter === "playing") return p.status === "playing";
-      if (playerFilter === "next") return p.status === "next";
-      if (playerFilter === "waiting") return p.status === "waiting";
-      return p.status === "eliminated";
-    });
-    const sorted = [...rows];
-    sorted.sort((a, b) => {
-      switch (playerSort) {
-        case "name": return a.name.localeCompare(b.name);
-        case "record": return recordScore(b.wins, b.losses) - recordScore(a.wins, a.losses) || b.wins - a.wins;
-        case "fargo": return (b.fargo ?? -1) - (a.fargo ?? -1) || a.name.localeCompare(b.name);
-        case "status": return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || b.chips - a.chips;
-        case "chips":
-        default: return b.chips - a.chips || a.name.localeCompare(b.name);
-      }
-    });
-    return sorted;
-  }, [view, playerQuery, playerFilter, playerSort]);
-
-  // Standings: shared search + Active/Eliminated filter, then a presentation-only sort
-  // over a COPY. "standings" preserves the authoritative rank order.
+  // The ONE unified players list (all phases): search + status filter, then a
+  // presentation-only sort over a COPY. "standings" (default) preserves the authoritative
+  // rank order — LIVE = compareLiveChipRank (chips → differential → wins), COMPLETED = durable
+  // chip_results — so opening the tab always shows the tournament ranking.
   const filteredStandings = useMemo(() => {
     if (!view) return [];
     const q = playerQuery.trim().toLowerCase();
     const rows = view.fullStandings.filter((r) => {
       if (q && !r.name.toLowerCase().includes(q)) return false;
-      if (standingsFilter === "active") return !r.eliminated;
+      if (standingsFilter === "playing") return r.status === "playing";
+      if (standingsFilter === "waiting") return r.status === "waiting" || r.status === "next";
       if (standingsFilter === "eliminated") return r.eliminated;
-      return true;
+      return true; // all
     });
     if (standingsSort === "standings") return rows;
     const sorted = [...rows];
@@ -520,24 +479,18 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
             {tab === "players" && (
               <PlayersTab
                 isTeam={view.isTeam}
-                // Completed → ONE unified standings list (final rank order); no List/Standings
-                // toggle. Live keeps the player's chosen subview.
-                subView={view.finished ? "standings" : playersView}
-                onSubView={setPlayersView}
-                players={filteredPlayers}
                 standings={filteredStandings}
                 total={view.players.length}
                 query={playerQuery}
                 onQuery={setPlayerQuery}
-                filter={playerFilter}
-                onFilter={setPlayerFilter}
-                sort={playerSort}
-                onSort={setPlayerSort}
                 stFilter={standingsFilter}
                 onStFilter={setStandingsFilter}
                 stSort={standingsSort}
                 onStSort={setStandingsSort}
                 finished={view.finished}
+                // Rank numbers are real only once gameplay has started; pre-start shows a
+                // neutral list (no fabricated placement).
+                showRank={view.status !== "upcoming"}
                 onTap={openProfile}
               />
             )}
@@ -869,63 +822,42 @@ const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
 
 const PlayersTab = ({
   isTeam,
-  subView,
-  onSubView,
-  players,
   standings,
   total,
   query,
   onQuery,
-  filter,
-  onFilter,
-  sort,
-  onSort,
   stFilter,
   onStFilter,
   stSort,
   onStSort,
   finished,
+  showRank,
   onTap,
 }: {
   isTeam: boolean;
-  subView: "list" | "standings";
-  onSubView: (v: "list" | "standings") => void;
-  players: ChipSpectatorView["players"];
   standings: ChipSpectatorView["fullStandings"];
   total: number;
   query: string;
   onQuery: (v: string) => void;
-  filter: PlayerFilter;
-  onFilter: (f: PlayerFilter) => void;
-  sort: PlayerSort;
-  onSort: (s: PlayerSort) => void;
   stFilter: StandingsFilter;
   onStFilter: (f: StandingsFilter) => void;
   stSort: StandingsSort;
   onStSort: (s: StandingsSort) => void;
   finished: boolean;
+  showRank: boolean;
   onTap: (id: string | null) => void;
 }) => {
-  const listLabel = isTeam ? "Team List" : "Player List";
-  // Item 27: live → "Chip Leaders"; completed → "Final Standings".
-  const standingsLabel = finished ? "Final Standings" : "Chip Leaders";
   const noun = isTeam ? "teams" : "players";
+  // Subtle LIVE status beside the name — only while running (completed rows carry their own
+  // Eliminated/chips status), and never for eliminated/finished entries.
+  const liveTag = (s: SpecPlayerStatus): string | null =>
+    finished || s === "eliminated" || s === "completed"
+      ? null
+      : s === "playing" ? "Playing" : s === "next" ? "Up Next" : "Waiting";
   return (
     <View style={styles.section}>
-      {/* Full-page toggle: List | Standings (live only). Completed shows ONE unified final
-          standings list, so the toggle is hidden (subView is forced to "standings"). */}
-      {!finished && (
-        <View style={styles.pvSeg}>
-          <TouchableOpacity style={[styles.pvSegBtn, subView === "list" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("list")}>
-            <Text allowFontScaling={false} style={[styles.pvSegText, subView === "list" && styles.pvSegTextOn]}>{listLabel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pvSegBtn, subView === "standings" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("standings")}>
-            <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>{standingsLabel}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Shared search (matches tournament entry/team names, both views) */}
+      {/* ONE unified players list across all phases — no List/Standings toggle. */}
+      {/* Shared search (matches tournament entry/team names) */}
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={wxMs(16)} color={COLORS.textMuted} />
         <TextInput
@@ -944,77 +876,45 @@ const PlayersTab = ({
         )}
       </View>
 
-      {/* Compact Filter + Sort — anchored popovers over the page (no inline expand). */}
+      {/* Filter + Sort — anchored popovers (Sort defaults to Rank). */}
       <View style={styles.ctrlRow}>
-        {subView === "list" ? (
-          <>
-            <AnchoredMenu prefix="Filter" value={filter} options={PLAYER_FILTERS} onSelect={(v) => onFilter(v as PlayerFilter)} />
-            <AnchoredMenu prefix="Sort" value={sort} options={PLAYER_SORTS} onSelect={(v) => onSort(v as PlayerSort)} />
-          </>
-        ) : (
-          <>
-            <AnchoredMenu prefix="Filter" value={stFilter} options={STANDINGS_FILTERS} onSelect={(v) => onStFilter(v as StandingsFilter)} />
-            <AnchoredMenu prefix="Sort" value={stSort} options={STANDINGS_SORTS} onSelect={(v) => onStSort(v as StandingsSort)} />
-          </>
-        )}
+        <AnchoredMenu prefix="Filter" value={stFilter} options={STANDINGS_FILTERS} onSelect={(v) => onStFilter(v as StandingsFilter)} />
+        <AnchoredMenu prefix="Sort" value={stSort} options={STANDINGS_SORTS} onSelect={(v) => onStSort(v as StandingsSort)} />
       </View>
 
-      {subView === "list" ? (
-        <>
-          <View style={styles.plHeadRow}>
-            <Text allowFontScaling={false} style={styles.plHeadLabel}>{isTeam ? "TEAM" : "PLAYER"}</Text>
-          </View>
-
-          {players.length === 0 ? (
-            <Text allowFontScaling={false} style={styles.emptyLine}>No {noun} match.</Text>
-          ) : (
-            players.map((p) => (
-              <TouchableOpacity key={p.id} style={styles.plRow} activeOpacity={0.7} onPress={() => onTap(p.id)}>
-                <View style={styles.plNameRow}>
-                  <Text allowFontScaling={false} style={styles.plName} numberOfLines={2}>
-                    {p.name}{p.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
-                  </Text>
-                  <StatusBadge status={p.status} />
-                </View>
-                <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
-                  <FargoInline fargo={p.fargo} /><MetaDot /><RecordInline wins={p.wins} losses={p.losses} /><MetaDot />
-                  {p.status === "eliminated"
-                    ? <Text style={styles.plMetaElim}>Eliminated</Text>
-                    : <Text style={[styles.plMetaChips, { color: chipStatusColor(p.chips, p.startChips) }]}>{p.chips} Chips</Text>}
-                </Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </>
+      <View style={styles.plHeadRow}>
+        <Text allowFontScaling={false} style={styles.plHeadLabel}>{finished ? "FINAL STANDINGS" : "STANDINGS"}</Text>
+      </View>
+      {standings.length === 0 ? (
+        <Text allowFontScaling={false} style={styles.emptyLine}>No {noun} match.</Text>
       ) : (
-        <>
-          <View style={styles.plHeadRow}>
-            <Text allowFontScaling={false} style={styles.plHeadLabel}>STANDINGS</Text>
-          </View>
-          {standings.length === 0 ? (
-            <Text allowFontScaling={false} style={styles.emptyLine}>No {noun} match.</Text>
-          ) : (
-            standings.map((r) => (
-              <TouchableOpacity key={r.id} style={styles.stRow} activeOpacity={0.7} onPress={() => onTap(r.id)}>
-                {/* Champion (rank 1) gets a stronger accent. */}
+        standings.map((r) => {
+          const tag = liveTag(r.status);
+          return (
+            <TouchableOpacity key={r.id} style={styles.stRow} activeOpacity={0.7} onPress={() => onTap(r.id)}>
+              {/* Rank number only once gameplay has started; champion (rank 1) accented. */}
+              {showRank ? (
                 <Text allowFontScaling={false} style={[styles.stRank, r.rank === 1 && styles.stRankTop]}>{r.rank}</Text>
-                <View style={styles.stMain}>
-                  <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
-                    {r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
-                  </Text>
-                  {/* Fargo ### · W-L */}
-                  <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
-                    <FargoInline fargo={r.fargo} /><MetaDot /><RecordInline wins={r.wins} losses={r.losses} />
-                  </Text>
-                </View>
-                {/* ONE final-status presentation: champion's remaining chips, else Eliminated. */}
-                {r.eliminated
-                  ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
-                  : <Text allowFontScaling={false} style={[styles.stChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} {r.chips === 1 ? "chip" : "chips"}</Text>}
-              </TouchableOpacity>
-            ))
-          )}
-        </>
+              ) : (
+                <View style={{ width: wxSc(26) }} />
+              )}
+              <View style={styles.stMain}>
+                <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
+                  {r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
+                  {tag ? <Text allowFontScaling={false} style={styles.stLiveTag}>{"  "}{tag}</Text> : null}
+                </Text>
+                {/* Fargo ### · W-L */}
+                <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
+                  <FargoInline fargo={r.fargo} /><MetaDot /><RecordInline wins={r.wins} losses={r.losses} />
+                </Text>
+              </View>
+              {/* ONE status on the right: champion/active chips, else Eliminated. */}
+              {r.eliminated
+                ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
+                : <Text allowFontScaling={false} style={[styles.stChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} {r.chips === 1 ? "chip" : "chips"}</Text>}
+            </TouchableOpacity>
+          );
+        })
       )}
     </View>
   );
@@ -1531,6 +1431,7 @@ const styles = StyleSheet.create({
   stRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border },
   stRank: { width: wxSc(26), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
   stRankTop: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.lg) },
+  stLiveTag: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
   stMain: { flex: 1, minWidth: 0 },
   stName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
   stChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },

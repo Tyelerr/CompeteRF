@@ -102,6 +102,7 @@ export interface SpecStandingRow {
   wins: number;
   losses: number;
   eliminated: boolean; // show "Eliminated" instead of a chip count
+  status: SpecPlayerStatus; // subtle live status (playing / next / waiting / completed / eliminated)
   isMe: boolean;
 }
 // One source of truth for a public activity row (id/text/at/kind + public
@@ -234,6 +235,23 @@ const perfLabelFor = (delta: number): ChipPerfLabel =>
       : delta >= -15 ? "expected"
         : delta >= -50 ? "below"
           : "under";
+
+// Shared LIVE chip-ranking order for the spectator standings — the single owner of the
+// tiebreak so the list (and the chip leader) read the same rule. Chips are the primary
+// tournament state; equal chips break by the differential PRESERVED from the starting stack
+// (a player who kept all their chips outranks one who climbed back to the same count), then
+// record, then a stable id. This is the LIVE PRESENTATION rank ONLY — after completion the
+// durable order is chip_results (never this formula), and the engine's finalPlacements stays
+// the official placement source.
+//   1) current chips              desc
+//   2) differential (chips-start) desc
+//   3) wins                       desc
+//   4) id                         asc (stable)
+const compareLiveChipRank = (a: ChipEntry, b: ChipEntry): number =>
+  b.chips - a.chips ||
+  (b.chips - b.startChips) - (a.chips - a.startChips) ||
+  b.wins - a.wins ||
+  (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 // Per-entry status for the players list / profile.
 const statusFor = (
@@ -369,9 +387,7 @@ const buildSpectatorView = (
   // Field participants only (checkedIn) — a roster entry that never entered the field is
   // excluded from every standings/leaderboard/players surface, consistent with the engine.
   const alive = s.entries.filter((e) => isAlive(e) && enteredField(e));
-  const byChips = [...alive].sort(
-    (a, b) => b.chips - a.chips || b.wins - a.wins,
-  );
+  const byChips = [...alive].sort(compareLiveChipRank);
 
   const entryById = (id: string | null | undefined) =>
     id ? s.entries.find((e) => e.id === id) ?? null : null;
@@ -563,6 +579,7 @@ const buildSpectatorView = (
     wins: e.wins,
     losses: e.losses,
     eliminated: !isAlive(e),
+    status: statusFor(s, e, finished),
     isMe: isMine(e),
   }));
   const standingsPreview = fullStandings.slice(0, 5);
