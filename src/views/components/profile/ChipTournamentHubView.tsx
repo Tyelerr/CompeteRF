@@ -11,8 +11,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { useRouter } from "expo-router";
 import { chipStatusColor } from "../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../utils/formatters";
+import { estimateChipWaitMs, formatWaitLabel } from "../../../utils/chip-wait";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipHubTable,
@@ -68,24 +70,6 @@ const WinLoss = ({
     <Text>{" - "}</Text>
     <Text style={{ color: COLORS.error }}>{losses}</Text>
   </Text>
-);
-
-const Section = ({
-  title,
-  right,
-  children,
-}: {
-  title: string;
-  right?: ReactNode;
-  children: ReactNode;
-}) => (
-  <View style={styles.section}>
-    <View style={styles.sectionHead}>
-      <Text allowFontScaling={false} style={styles.sectionTitle}>{title}</Text>
-      {right}
-    </View>
-    {children}
-  </View>
 );
 
 const Collapsible = ({
@@ -226,6 +210,18 @@ export const ChipTournamentHubView = ({
 
   const st = STATUS_META[hub.status];
   const entrantWord = hub.isTeam ? "teams" : "players";
+  const router = useRouter();
+  // Item 1C: estimated wait for a WAITING player — shared heuristic (presentation only).
+  const waitLabel =
+    hub.status === "waiting"
+      ? formatWaitLabel(
+          estimateChipWaitMs({
+            queuePosition: hub.queuePosition,
+            activeTables: hub.tables.filter((t) => t.live).length,
+            avgMatchMs: hub.avgMatchMs,
+          }),
+        )
+      : null;
 
   return (
     <View style={styles.root}>
@@ -274,6 +270,9 @@ export const ChipTournamentHubView = ({
               <>
                 <Text allowFontScaling={false} style={styles.metaBig}>#{hub.queuePosition}</Text>
                 <Text allowFontScaling={false} style={styles.metaSub}>In Queue</Text>
+                {waitLabel ? (
+                  <Text allowFontScaling={false} style={styles.metaWait}>{waitLabel} wait</Text>
+                ) : null}
               </>
             ) : (
               <Text allowFontScaling={false} style={styles.metaSub}>
@@ -349,6 +348,16 @@ export const ChipTournamentHubView = ({
         )}
       </Collapsible>
 
+      {/* Item 1B: a clear blue CTA to open the full live/spectator tournament view. */}
+      <TouchableOpacity
+        style={styles.viewTournamentBtn}
+        activeOpacity={0.7}
+        onPress={() => router.push(`/chip-live/${hub.tournamentId}` as never)}
+      >
+        <Ionicons name="eye-outline" size={wxMs(16)} color={COLORS.primaryLight} />
+        <Text allowFontScaling={false} style={styles.viewTournamentText}>View Tournament</Text>
+      </TouchableOpacity>
+
       {/* Full queue (read-only) */}
       <Modal visible={queueOpen} transparent animationType="fade" onRequestClose={() => setQueueOpen(false)}>
         <View style={styles.fqRoot}>
@@ -386,11 +395,10 @@ export const ChipTournamentHubView = ({
         </View>
       </Modal>
 
-      {/* ── Live matches (ALWAYS VISIBLE — critical live context: my match/opponent/
-          timer among all live matches; the collapsed Tables section is NOT a
-          replacement for this). Shown whenever any match is live. ─────────────── */}
+      {/* ── Live matches. Item 1A: now a collapsible like Up Next / Performance (Show/Hide +
+          chevron), open by default so the live context stays visible unless the user hides it. */}
       {hub.liveMatches.length > 0 && (
-        <Section title="LIVE NOW">
+        <Collapsible title="LIVE NOW" count={hub.liveMatches.length} startOpen>
           <View style={styles.card}>
             {hub.liveMatches.map((m, i) => {
               const elapsed = now - new Date(m.startedAt).getTime();
@@ -412,7 +420,7 @@ export const ChipTournamentHubView = ({
               );
             })}
           </View>
-        </Section>
+        </Collapsible>
       )}
 
       {/* ── Performance (expandable) ─────────────────────────────────────── */}
@@ -659,6 +667,9 @@ const styles = StyleSheet.create({
   heroMeta: { alignItems: "flex-end", minWidth: wxSc(90) },
   metaBig: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.xl), fontWeight: "900" },
   metaSub: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 1 },
+  metaWait: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
+  viewTournamentBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.md) },
+  viewTournamentText: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
   streamBadge: { marginTop: wxSc(SPACING.xs), backgroundColor: COLORS.error + "22", borderRadius: wxSc(RADIUS.sm), paddingHorizontal: wxSc(SPACING.sm), paddingVertical: 2 },
   streamText: { color: COLORS.error, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
   nextBanner: { marginTop: wxSc(SPACING.md), backgroundColor: COLORS.warning + "1A", borderRadius: wxSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.warning + "55", paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm) },
