@@ -520,7 +520,9 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
             {tab === "players" && (
               <PlayersTab
                 isTeam={view.isTeam}
-                subView={playersView}
+                // Completed → ONE unified standings list (final rank order); no List/Standings
+                // toggle. Live keeps the player's chosen subview.
+                subView={view.finished ? "standings" : playersView}
                 onSubView={setPlayersView}
                 players={filteredPlayers}
                 standings={filteredStandings}
@@ -910,15 +912,18 @@ const PlayersTab = ({
   const noun = isTeam ? "teams" : "players";
   return (
     <View style={styles.section}>
-      {/* Full-page toggle: List | Standings (each uses the whole content area) */}
-      <View style={styles.pvSeg}>
-        <TouchableOpacity style={[styles.pvSegBtn, subView === "list" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("list")}>
-          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "list" && styles.pvSegTextOn]}>{listLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.pvSegBtn, subView === "standings" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("standings")}>
-          <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>{standingsLabel}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Full-page toggle: List | Standings (live only). Completed shows ONE unified final
+          standings list, so the toggle is hidden (subView is forced to "standings"). */}
+      {!finished && (
+        <View style={styles.pvSeg}>
+          <TouchableOpacity style={[styles.pvSegBtn, subView === "list" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("list")}>
+            <Text allowFontScaling={false} style={[styles.pvSegText, subView === "list" && styles.pvSegTextOn]}>{listLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.pvSegBtn, subView === "standings" && styles.pvSegBtnOn]} activeOpacity={0.8} onPress={() => onSubView("standings")}>
+            <Text allowFontScaling={false} style={[styles.pvSegText, subView === "standings" && styles.pvSegTextOn]}>{standingsLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Shared search (matches tournament entry/team names, both views) */}
       <View style={styles.searchWrap}>
@@ -991,15 +996,18 @@ const PlayersTab = ({
           ) : (
             standings.map((r) => (
               <TouchableOpacity key={r.id} style={styles.stRow} activeOpacity={0.7} onPress={() => onTap(r.id)}>
-                <Text allowFontScaling={false} style={styles.stRank}>{r.rank}</Text>
+                {/* Champion (rank 1) gets a stronger accent. */}
+                <Text allowFontScaling={false} style={[styles.stRank, r.rank === 1 && styles.stRankTop]}>{r.rank}</Text>
                 <View style={styles.stMain}>
                   <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
                     {r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
                   </Text>
+                  {/* Fargo ### · W-L */}
                   <Text allowFontScaling={false} style={styles.plMeta} numberOfLines={1}>
-                    <RecordInline wins={r.wins} losses={r.losses} />
+                    <FargoInline fargo={r.fargo} /><MetaDot /><RecordInline wins={r.wins} losses={r.losses} />
                   </Text>
                 </View>
+                {/* ONE final-status presentation: champion's remaining chips, else Eliminated. */}
                 {r.eliminated
                   ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
                   : <Text allowFontScaling={false} style={[styles.stChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} {r.chips === 1 ? "chip" : "chips"}</Text>}
@@ -1522,6 +1530,7 @@ const styles = StyleSheet.create({
   // Standings row.
   stRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border },
   stRank: { width: wxSc(26), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
+  stRankTop: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.lg) },
   stMain: { flex: 1, minWidth: 0 },
   stName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
   stChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
