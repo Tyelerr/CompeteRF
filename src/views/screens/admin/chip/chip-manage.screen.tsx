@@ -94,6 +94,7 @@ import { TeamCard, TeamCardPlayerVM, TeamCardProps, ActionsAnchor } from "../../
 import { useAuthContext } from "../../../../providers/AuthProvider";
 import { Profile } from "../../../../models/types/profile.types";
 import { ConfettiBurst, ConfettiBurstRef } from "../../../components/common/ConfettiBurst";
+import { Dropdown } from "../../../components/common/dropdown";
 
 const profileName = (p: Profile): string =>
   [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.name || p.user_name;
@@ -477,6 +478,10 @@ const nextTableNumber = (
 // at module scope (never during render) and driven by ONE Animated value with the
 // native driver, so it's cheap. `onDone` is guaranteed to fire once (timer fallback
 // in case the animation is paused/interrupted, e.g. the app backgrounds).
+// Item 10C: forfeit reason options for the shared Dropdown (label = value).
+const FORFEIT_REASONS = ["No-show", "Player left", "Rule violation", "Injury / emergency", "Other"].map(
+  (r) => ({ label: r, value: r }),
+);
 const SHUFFLE_ANIM_MS = 3000;
 // Item 6C: after the shuffle overlay appears, wait this long before applying the engine
 // redraw BEHIND the overlay — so the underlying board never visibly jumps before the
@@ -6788,18 +6793,15 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   ) : (
                     <Text style={styles.reduceHint}>Forfeit Tournament removes this team from the tournament. This is recorded.</Text>
                   )}
-                  <Text style={{ color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginTop: webSc(SPACING.md), marginBottom: webSc(SPACING.xs) }}>Reason *</Text>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) }}>
-                    {["No-show", "Player left", "Rule violation", "Injury / emergency", "Other"].map((r) => {
-                      const active = forfeitReason === r;
-                      return (
-                        <TouchableOpacity key={r} onPress={() => setForfeitReason(r)} activeOpacity={0.8}
-                          style={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderRadius: RADIUS.md, borderWidth: 1, borderColor: active ? COLORS.primary : COLORS.border, backgroundColor: active ? COLORS.primary + "22" : "transparent" }}>
-                          <Text style={{ color: active ? COLORS.primary : COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: active ? "700" : "500" }}>{r}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                  {/* Item 10C: reason is a dropdown/select (was chips). "Other" reveals the
+                      required free-text detail below; optional notes stay separate. */}
+                  <Dropdown
+                    label="Reason *"
+                    placeholder="Select a reason"
+                    value={forfeitReason ?? undefined}
+                    options={FORFEIT_REASONS}
+                    onSelect={setForfeitReason}
+                  />
                   {forfeitReason === "Other" && (
                     <TextInput allowFontScaling={false} value={forfeitOther} onChangeText={setForfeitOther} placeholder="Describe the reason *" placeholderTextColor={COLORS.textMuted}
                       style={{ marginTop: webSc(SPACING.sm), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), color: COLORS.text, backgroundColor: COLORS.surface }} />
