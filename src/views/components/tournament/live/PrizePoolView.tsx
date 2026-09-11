@@ -594,18 +594,23 @@ export const PrizePoolView = ({
         />
       ))}
 
-      {/* Final summary: collected → fees → net pool → payouts */}
+      {/* Item 5B — clearer summary: show the arithmetic ("$20 × 6 = $120"), and group
+          collected → deductions/net → assigned with subtle dividers so totals stand out. */}
       <Card title="Summary">
-        <Row label="Gross entry collected" value={money(grossEntry)} />
+        {/* Collected */}
+        <Row
+          label="Entry"
+          value={entryFee > 0 ? `${money(entryFee)} × ${players} entered = ${money(grossEntry)}` : money(grossEntry)}
+        />
         {sidePotRows.map((r) => (
           <Row
             key={r.sp.name}
             label={`Side pot · ${r.sp.name || "Unnamed"}`}
-            value={money(r.pool)}
+            value={r.sp.amount > 0 ? `${money(r.sp.amount)} × ${r.sp.players} entered = ${money(r.pool)}` : money(r.pool)}
           />
         ))}
         {addedMoney > 0 ? (
-          // Item 2: the added-money include toggle now lives here (was in the removed top card).
+          // Item 2: the added-money include toggle lives here (was in the removed top card).
           <ToggleSwitch
             label={`Added money (${money(addedMoney)})`}
             value={config.includeAddedMoney}
@@ -616,8 +621,12 @@ export const PrizePoolView = ({
           <Row label="Added money" value={money(0)} />
         )}
         <Row label="Total collected" value={money(totalCollected)} strong />
-        <Row label="Total fees / deductions" value={money(totalFees)} />
+        <View style={styles.summaryGroupDivider} />
+        {/* Deductions → net */}
+        <Row label="Total fees / deductions" value={totalFees > 0 ? `− ${money(totalFees)}` : money(0)} />
         <Row label="Net payout pool" value={money(totalPrizePool)} strong />
+        <View style={styles.summaryGroupDivider} />
+        {/* Assigned */}
         <Row label="Total payouts assigned" value={money(totalPayout)} strong />
         <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
       </Card>
@@ -668,6 +677,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: webSc(SPACING.xs),
+  },
+  summaryGroupDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: webSc(SPACING.sm),
   },
   rowLabel: {
     fontSize: webMs(FONT_SIZES.sm),
