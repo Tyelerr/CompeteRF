@@ -178,6 +178,16 @@ const PercentCell = ({
     setDraft(String(value));
   }, [value]);
 
+  // Item 5A: commit on blur + submit (onEndEditing doesn't fire on blur on web); empty → 0.
+  const commit = () => {
+    const v = draft === "" ? 0 : parseInt(draft, 10);
+    if (isNaN(v)) {
+      setDraft(String(value));
+      return;
+    }
+    onCommit(v);
+  };
+
   if (disabled) {
     return (
       <Text allowFontScaling={false} style={styles.payPct}>
@@ -192,11 +202,8 @@ const PercentCell = ({
         style={styles.pctInput}
         value={draft}
         onChangeText={(t) => setDraft(t.replace(/[^0-9]/g, ""))}
-        onEndEditing={() => {
-          const v = parseInt(draft, 10);
-          if (isNaN(v)) setDraft(String(value));
-          else onCommit(v);
-        }}
+        onBlur={commit}
+        onSubmitEditing={commit}
         keyboardType="number-pad"
         maxLength={3}
         selectTextOnFocus
@@ -224,6 +231,18 @@ const AmountCell = ({
     setDraft(String(value));
   }, [value]);
 
+  // Item 5A: commit on BLUR and on submit (not only onEndEditing, which never fires on blur on
+  // react-native-web — the cause of "tapping outside drops the value" / "Done doesn't save").
+  // An empty field commits 0 (an explicit "no amount") rather than silently reverting.
+  const commit = () => {
+    const v = draft === "" ? 0 : parseInt(draft, 10);
+    if (isNaN(v)) {
+      setDraft(String(value)); // non-numeric garbage → restore last good value
+      return;
+    }
+    onCommit(v);
+  };
+
   if (disabled) {
     return (
       <Text allowFontScaling={false} style={styles.payAmt}>
@@ -241,11 +260,8 @@ const AmountCell = ({
         style={styles.amtInput}
         value={draft}
         onChangeText={(t) => setDraft(t.replace(/[^0-9]/g, ""))}
-        onEndEditing={() => {
-          const v = parseInt(draft, 10);
-          if (isNaN(v)) setDraft(String(value));
-          else onCommit(v);
-        }}
+        onBlur={commit}
+        onSubmitEditing={commit}
         keyboardType="number-pad"
         maxLength={7}
         selectTextOnFocus
