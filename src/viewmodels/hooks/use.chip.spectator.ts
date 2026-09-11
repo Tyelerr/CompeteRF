@@ -170,6 +170,18 @@ export interface SpecSidePot {
   // (item 30). Empty while live.
   finishers: string[];
 }
+// Item 9C — a player's winnings grouped across the entry prize + each side pot they placed
+// in. Spectator-safe: amounts only, never whether the TD has actually paid.
+export interface SpecPlayerWinningLine {
+  source: string; // "Entry Prize" or the side-pot name
+  place: number;
+  amount: number;
+}
+export interface SpecPlayerWinnings {
+  name: string;
+  lines: SpecPlayerWinningLine[];
+  total: number;
+}
 export interface SpecPayouts {
   entryFee: number;
   addedMoney: number;
@@ -178,6 +190,7 @@ export interface SpecPayouts {
   finalized: boolean;
   places: SpecPayoutRow[] | null; // null → not finalized (show TD-announce fallback)
   sidePots: SpecSidePot[]; // configured side pots with a real pool + split (may be empty)
+  byPlayer: SpecPlayerWinnings[]; // winnings grouped by player (finished only; else empty)
 }
 export interface SpecPlacement {
   place: number;
@@ -702,6 +715,23 @@ const buildSpectatorView = (
         : [],
     };
   });
+  // Item 9C — group winnings by player: entry prize + each side pot they placed in. Only once
+  // finished (winners known). Spectator-safe (amounts only, no paid/unpaid).
+  const winningsByName = new Map<string, SpecPlayerWinnings>();
+  const addWin = (name: string | null | undefined, source: string, place: number, amount: number) => {
+    if (!name || amount <= 0) return;
+    const cur = winningsByName.get(name) ?? { name, lines: [], total: 0 };
+    cur.lines.push({ source, place, amount });
+    cur.total += amount;
+    winningsByName.set(name, cur);
+  };
+  if (finished) {
+    (namedPayoutRows ?? []).forEach((r) => addWin(r.name, "Entry Prize", r.place, r.amount));
+    for (const sp of sidePots) {
+      (sp.places ?? []).forEach((pl, i) => addWin(sp.finishers[i], sp.name, pl.place, pl.amount));
+    }
+  }
+  const byPlayer = [...winningsByName.values()].sort((a, b) => b.total - a.total);
   const payouts: SpecPayouts = {
     entryFee,
     addedMoney,
@@ -710,6 +740,7 @@ const buildSpectatorView = (
     finalized: hasSplit && pool > 0,
     places: hasSplit && pool > 0 ? namedPayoutRows : null,
     sidePots,
+    byPlayer,
   };
 
   // Final placements when the tournament is over: 1st = champion, then the rest

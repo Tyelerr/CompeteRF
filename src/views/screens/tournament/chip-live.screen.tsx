@@ -962,13 +962,13 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
               <View style={[styles.payoutPlace, row.place <= 3 && styles.payoutPlaceTop]}>
                 <Text allowFontScaling={false} style={[styles.payoutPlaceText, row.place <= 3 && styles.payoutPlaceTextTop]}>{ordinal(row.place)}</Text>
               </View>
-              {/* Item 16: recipient name once finished (never a paid/unpaid indicator). */}
+              {/* Item 16: recipient name once finished (never a paid/unpaid indicator).
+                  Item 9A: no percentages in spectator view. */}
               {row.name ? (
                 <Text allowFontScaling={false} style={styles.payoutName} numberOfLines={1}>{row.name}</Text>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
-              <Text allowFontScaling={false} style={styles.payoutPct}>{row.percent}%</Text>
               <Text allowFontScaling={false} style={styles.payoutAmt}>{money(row.amount)}</Text>
             </View>
           ))
@@ -1004,9 +1004,13 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
                 <View style={[styles.payoutPlace, row.place <= 3 && styles.payoutPlaceTop]}>
                   <Text allowFontScaling={false} style={[styles.payoutPlaceText, row.place <= 3 && styles.payoutPlaceTextTop]}>{ordinal(row.place)}</Text>
                 </View>
-                {/* Once finished, show the eligible finisher NAME (buyers-only ranking,
-                    item 30); otherwise show the split %. */}
-                <Text allowFontScaling={false} style={styles.payoutPct} numberOfLines={1}>{sp.finishers[i] ?? `${row.percent}%`}</Text>
+                {/* Item 9A/9B: eligible finisher NAME (buyers-only ranking, item 30) in the
+                    SAME style as the main breakdown; no percentages. */}
+                {sp.finishers[i] ? (
+                  <Text allowFontScaling={false} style={styles.payoutName} numberOfLines={1}>{sp.finishers[i]}</Text>
+                ) : (
+                  <View style={{ flex: 1 }} />
+                )}
                 <Text allowFontScaling={false} style={styles.payoutAmt}>{money(row.amount)}</Text>
               </View>
             ))}
@@ -1024,6 +1028,29 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
           )}
         </View>
       ))}
+
+      {/* Item 9C: winnings grouped by player (entry prize + each side pot), below the pool /
+          side-pot breakdowns. Spectator-safe — amounts only, never paid/unpaid status. */}
+      {p.byPlayer.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader icon="person-outline" title="Winnings by Player" />
+          {p.byPlayer.map((pl) => (
+            <View key={pl.name} style={styles.winCard}>
+              <View style={styles.winHead}>
+                <Text allowFontScaling={false} style={styles.winName} numberOfLines={1}>{pl.name}</Text>
+                <Text allowFontScaling={false} style={styles.winTotal}>{money(pl.total)}</Text>
+              </View>
+              {pl.lines.map((ln) => (
+                <View key={`${ln.source}:${ln.place}`} style={styles.winLineRow}>
+                  <Text allowFontScaling={false} style={styles.winLineSource} numberOfLines={1}>{ln.source}</Text>
+                  <Text allowFontScaling={false} style={styles.winLinePlace}>{ordinal(ln.place)}</Text>
+                  <Text allowFontScaling={false} style={styles.winLineAmt}>{money(ln.amount)}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 };
@@ -1464,6 +1491,15 @@ const styles = StyleSheet.create({
   payoutName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   payoutPct: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs) },
   payoutAmt: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  // Item 9C — winnings grouped by player.
+  winCard: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.sm) },
+  winHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.sm), paddingBottom: wxSc(SPACING.xs), marginBottom: wxSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border + "66" },
+  winName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  winTotal: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
+  winLineRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: 3 },
+  winLineSource: { flex: 1, color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
+  winLinePlace: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600" },
+  winLineAmt: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", minWidth: wxSc(56), textAlign: "right" },
   payFallback: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md) },
   payFallbackText: { flex: 1, color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), lineHeight: wxMs(FONT_SIZES.sm) * 1.4 },
 
