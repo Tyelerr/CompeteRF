@@ -27,6 +27,7 @@ export interface PlayerReadinessSummary {
   notReady: number;
   unpaid: number; // entry fees unpaid (informational)
   paidNotReady: number; // paid the entry fee but NOT marked Ready — BLOCKS leaving Players (item 4)
+  sidePotConflicts: number; // entry fee required + unpaid + ≥1 side pot selected — BLOCKS progression
   noShows: number; // informational
   waitingForPartner: number; // team formats (informational)
   sidePotNotEntered: number | null; // informational; null when the format has no side pots
@@ -52,6 +53,11 @@ export const buildReadinessSummary = (
   // Matches the Review & Start "Paid but Not Ready" definition: a processed (registered)
   // entry that has paid but isn't marked Ready.
   const paidNotReady = playable.filter((r) => r.status === "registered" && r.paid).length;
+  // Incomplete state: entry fee required + unpaid + at least one side pot selected. Allowed
+  // while editing, BLOCKS progression (shared with the card warning via hasSidePotPaymentConflict).
+  const sidePotConflicts = playable.filter(
+    (r) => r.entryFeeRequired && !r.paid && r.inAnySidePot === true,
+  ).length;
   const sidePotNotEntered = hasSidePots
     ? playable.filter((r) => r.inAnySidePot === false).length
     : null;
@@ -64,6 +70,7 @@ export const buildReadinessSummary = (
     notReady,
     unpaid,
     paidNotReady,
+    sidePotConflicts,
     noShows,
     waitingForPartner,
     sidePotNotEntered,
@@ -74,8 +81,9 @@ export const buildReadinessSummary = (
 export const needsReadinessWarning = (s: PlayerReadinessSummary): boolean =>
   s.notReady > 0;
 
-// HARD block on leaving the Players step (item 4): a player who paid the entry fee but was
-// left not-Ready must be marked Ready or otherwise resolved first. The Review & Start warning
-// remains as a final safety net.
+// HARD block on leaving the Players step: a player who paid the entry fee but was left
+// not-Ready must be marked Ready or otherwise resolved first (item 4), OR an incomplete
+// side-pot state (entry required + unpaid + ≥1 side pot selected) must be resolved. The
+// Review & Start warning remains as a final safety net.
 export const blocksLeavingPlayers = (s: PlayerReadinessSummary): boolean =>
-  s.paidNotReady > 0;
+  s.paidNotReady > 0 || s.sidePotConflicts > 0;

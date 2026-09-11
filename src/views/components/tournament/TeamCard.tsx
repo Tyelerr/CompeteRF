@@ -93,6 +93,10 @@ export interface TeamCardProps {
   sidePots?: SidePotDef[];
   enteredPots?: string[];
   onToggleSidePot?: (name: string, entered: boolean) => void;
+  // Subtle warning shown under the entry section when this entry is in an incomplete state
+  // (e.g. entry fee unpaid but a side pot is selected). Configurable freely; resolved at the
+  // progression gates. Undefined = no warning.
+  sidePotConflictWarning?: string;
 
   // display edit chip override
   showChipOverride?: boolean;
@@ -286,7 +290,7 @@ export const TeamCard = (props: TeamCardProps) => {
     mode, doubles, title, onClose, label, statusLabel, statusColor, cardBorderColor, teamName, onChangeTeamName,
     player1, player2, showAddPartner, onAddPlayer2, onInvitePartner,
     showTeamFargo, teamFargo, assignedChipsText, paid, onTogglePaid,
-    entryFee, sidePots, enteredPots, onToggleSidePot,
+    entryFee, sidePots, enteredPots, onToggleSidePot, sidePotConflictWarning,
     showChipOverride, chipOverrideDefault, chipAutoPlaceholder, onChipOverrideEnd,
     readOnly, actionsLabel, onActions, primary, warning,
     onCancel, onSaveWaiting, onCreateTeam, saving,
@@ -454,6 +458,9 @@ export const TeamCard = (props: TeamCardProps) => {
             readOnly={readOnly}
           />
         )}
+        {sidePotConflictWarning ? (
+          <Text allowFontScaling={false} style={styles.sidePotConflictWarn}>{sidePotConflictWarning}</Text>
+        ) : null}
 
         <View style={styles.tsumRow}>
           <Text allowFontScaling={false} style={styles.tsumLabel}>Assigned Chips</Text>
@@ -611,6 +618,7 @@ const styles = StyleSheet.create({
   footerSlot: { flexGrow: 1, flexBasis: 0, flexShrink: 1 },
   footerButton: { width: "100%", minHeight: webSc(46), borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
   footerWarning: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", textAlign: "center", marginTop: webSc(SPACING.sm) },
+  sidePotConflictWarn: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", marginTop: webSc(SPACING.xs) },
   // Balanced with the primary label: larger size, weight just a touch lighter than the
   // primary's 800. Hierarchy still comes from color (gray secondary vs green primary),
   // not text size. (Text style only — footer sizing/layout untouched.)

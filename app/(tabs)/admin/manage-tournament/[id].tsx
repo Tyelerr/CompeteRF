@@ -2663,9 +2663,25 @@ export default function ManageTournamentScreen() {
   // collected an entry fee then left the player out of the field. Marking Ready (or removing
   // them) must happen first. Shown as an actionable message, not just a disabled control; the
   // Review & Start warning remains as the final safety net.
+  // Side-pot conflict: entry fee required + unpaid + ≥1 side pot selected is an incomplete
+  // state the TD may configure freely while editing, but must resolve before progressing —
+  // same shared predicate (blocksLeavingPlayers → hasSidePotPaymentConflict) as the card warning.
   const chipPlayersBlocked =
     isChipTournament && !!readinessSummary && blocksLeavingPlayers(readinessSummary);
-  const alertPaidNotReady = () => {
+  const alertLeavingPlayersBlocked = () => {
+    // Side-pot conflict takes priority in the message (it's the newer, less obvious rule).
+    const conflicts = readinessSummary?.sidePotConflicts ?? 0;
+    if (conflicts > 0) {
+      const noun =
+        conflicts === 1
+          ? readinessSummary?.entitySingular ?? "player"
+          : readinessSummary?.entityLabel ?? "players";
+      Alert.alert(
+        "Resolve side pot entries first",
+        `${conflicts} ${(noun as string).toLowerCase()} ${conflicts === 1 ? "has" : "have"} a side pot selected but ${conflicts === 1 ? "their" : "their"} tournament entry is unpaid. Mark entry paid/waived — or remove the side pot — before continuing to Tables.`,
+      );
+      return;
+    }
     const n = readinessSummary?.paidNotReady ?? 0;
     const noun = n === 1 ? readinessSummary?.entitySingular ?? "player" : readinessSummary?.entityLabel ?? "players";
     Alert.alert(
@@ -2675,7 +2691,7 @@ export default function ManageTournamentScreen() {
   };
   const advanceFromPlayers = (target: TabKey) => {
     if (activeTab === "players" && chipPlayersBlocked) {
-      alertPaidNotReady();
+      alertLeavingPlayersBlocked();
       return;
     }
     if (

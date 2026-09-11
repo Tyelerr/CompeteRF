@@ -65,15 +65,17 @@ export const readyGate = (a: {
   hardBlocker?: boolean;
 }): boolean => paymentSatisfied(a.paid, a.entryFeeRequired) && !a.hardBlocker;
 
-// A player may enter a SIDE POT only once their tournament ENTRY requirement is satisfied
-// (entry fee paid, or no fee required / waived). This is exactly the entry-fee half of
-// readyGate — a format hard blocker (e.g. missing Fargo) does NOT prevent owing a side pot,
-// only competing. One source of truth for the side-pot UI (disable + hint) AND the toggle
-// handler, so the invalid "entry unpaid + side pot entered" state can't be created by any path.
-export const canEnterSidePot = (a: {
+// Side pots may be CONFIGURED freely during setup even before the entry fee is collected —
+// the TD often sets everything up first and collects money after. But "entry fee required AND
+// unpaid AND ≥1 side pot selected" is an INCOMPLETE state that must be resolved before the
+// tournament progresses. One source of truth for the player-card warning AND every
+// progression gate (Continue to Tables / Review & Start / Start). No conflict when the entry
+// fee is waived / not required (entryFeeRequired false) or when no side pots are selected.
+export const hasSidePotPaymentConflict = (a: {
   paid: boolean;
   entryFeeRequired: boolean;
-}): boolean => paymentSatisfied(a.paid, a.entryFeeRequired);
+  sidePotCount: number;
+}): boolean => a.entryFeeRequired && !a.paid && a.sidePotCount > 0;
 
 // ── Maximum-Fargo cap (shared) ───────────────────────────────────────────────
 // How many points a rating is OVER the tournament max (0 when at/under, or when either

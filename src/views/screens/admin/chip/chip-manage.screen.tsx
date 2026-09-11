@@ -78,7 +78,7 @@ import {
   LIFECYCLE_RANK,
   paymentSatisfied,
   readyGate,
-  canEnterSidePot,
+  hasSidePotPaymentConflict,
   fargoOverBy,
   isFargoOverCap,
 } from "../../../../utils/registration-lifecycle";
@@ -1354,17 +1354,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // chip_entries via setEntrySidePots), not via the debounced whole-blob save — so a
   // background refetch can't drop it and singles behave the same as teams.
   const toggleSidePot = (e: ChipEntry, name: string) => {
+    // Side pots can be configured freely during setup regardless of entry-payment state (the
+    // TD may collect money later). The "unpaid + side pot selected" conflict is flagged on the
+    // card and BLOCKED at the progression gates (Continue/Review/Start), not here.
     const cur = e.paidSidePots ?? [];
-    const entering = !cur.includes(name);
-    // Rule: a side pot can only be ENTERED once the tournament entry requirement is satisfied
-    // (entry fee paid, or no fee / waived). Removal is always allowed so an invalid state can
-    // always be undone. Enforced HERE (the single toggle chokepoint for singles AND teams) so
-    // no path — card tap, menu, stale UI — can create "entry unpaid + side pot entered".
-    if (entering && !canEnterSidePot({ paid: !!e.paid, entryFeeRequired: (Number(tournament?.entry_fee) || 0) > 0 })) {
-      Alert.alert("Pay entry fee first", "This player must pay the tournament entry fee before entering a side pot.");
-      return;
-    }
-    const next = entering ? [...cur, name] : cur.filter((n) => n !== name);
+    const next = cur.includes(name)
+      ? cur.filter((n) => n !== name)
+      : [...cur, name];
     if (e.teamId != null) vm.setTeamSidePots(e.teamId, next);
     else vm.setEntrySidePots(e.id, next);
   };
@@ -1454,29 +1450,29 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const eligibleForReady = (e: ChipEntry): boolean =>
     paymentSatisfied(!!e.paid, entryFeeRequired) && !hardBlockerOf(e) && (!doubles || hasPartner(e));
 
+  // Incomplete setup state: entry fee required + unpaid + at least one side pot selected. Not
+  // blocked while editing — flagged on the card and blocked at the progression gates. One
+  // shared rule (hasSidePotPaymentConflict) drives the card warning AND the readiness summary.
+  const sidePotConflict = (e: ChipEntry): boolean =>
+    hasSidePotPaymentConflict({ paid: !!e.paid, entryFeeRequired, sidePotCount: e.paidSidePots?.length ?? 0 });
+
   // PAYMENT control (Entry Fee row). Payment is now SEPARATE from readiness: paying does
   // NOT auto-mark Ready (that's an explicit action); UNpaying clears Ready because Ready
   // requires payment. Side-pot changes use toggleSidePot and never call this.
   const setPaid = async (e: ChipEntry, nextPaid: boolean) => {
     if (readOnly) return;
     const nextCheckedIn = nextPaid ? !!e.checkedIn : false; // pay: unchanged · unpay: clear Ready
-    // Rule enforcement (existing-state case): un-paying makes side-pot entry impossible, so also
-    // clear any entered side pots — never leave "entry unpaid + side pot entered". Only when a
-    // fee is actually required and they had pots (confirmTogglePaid warns first). Clearing a
-    // side-pot SELECTION isn't a payment, so it's safe. Uses the same per-format writes as the
-    // toggle so both singles and teams are handled.
-    const clearSidePots = !nextPaid && (Number(tournament?.entry_fee) || 0) > 0 && (e.paidSidePots?.length ?? 0) > 0;
+    // Side-pot selections are PRESERVED across a paid→unpaid change (never silently removed) —
+    // the resulting "unpaid + side pot" conflict is flagged on the card and blocked at the
+    // progression gates, so the TD keeps their configuration and just resolves it later.
     try {
       if (e.teamId != null) {
         await vm.setTeamPaid(e.teamId, nextPaid);
         if (!nextCheckedIn && e.checkedIn) await vm.setTeamCheckedIn(e.teamId, false);
-        if (clearSidePots) vm.setTeamSidePots(e.teamId, []);
       } else if (e.regId != null && e.fromRegistration) {
         await vm.setRegistrationReady(e.regId, { paid: nextPaid, ready: nextCheckedIn });
-        if (clearSidePots) vm.setEntrySidePots(e.id, []);
       } else {
         vm.updateEntry(e.id, { paid: nextPaid, checkedIn: nextCheckedIn });
-        if (clearSidePots) vm.setEntrySidePots(e.id, []);
       }
     } catch {
       Alert.alert("Update failed", "Couldn't update this player. Please try again.");
@@ -1602,17 +1598,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const confirmTogglePaid = (e: ChipEntry) => {
     if (!e.paid) { void setPaid(e, true); return; } // checking → instant
     const wasReady = entryState(e) === "ready";
-    const potCount = e.paidSidePots?.length ?? 0; // will be cleared by setPaid (rule)
-    const readyLine = wasReady
-      ? "This player will move from Ready to Registered and will not be included in the live field."
-      : "This player's entry fee will be marked unpaid.";
-    const potLine =
-      potCount > 0
-        ? ` They'll also be removed from ${potCount} side pot${potCount === 1 ? "" : "s"} (a side pot needs a paid entry).`
-        : "";
     Alert.alert(
       "Mark entry fee unpaid?",
-      readyLine + potLine,
+      wasReady
+        ? "This player will move from Ready to Registered and will not be included in the live field."
+        : "This player's entry fee will be marked unpaid.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Mark Unpaid", style: "destructive", onPress: () => void setPaid(e, false) },
@@ -2668,30 +2658,23 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           />
         </View>
       )}
-      {tournamentSidePots.length > 0 && e.teamId != null && (() => {
-        // Item: a side pot can only be ENTERED once the entry fee is satisfied. Disable
-        // entering when ineligible (removal of an already-entered pot stays allowed); show a
-        // subtle "Pay entry fee first" hint.
-        const canPot = canEnterSidePot({ paid: !!e.paid, entryFeeRequired });
-        return (
+      {tournamentSidePots.length > 0 && e.teamId != null && (
         <View style={styles.tpotsBlock}>
           <Text style={styles.tpotsHead}>Side Pots</Text>
           {tournamentSidePots.map((p) => {
             const name = p.name.trim();
             const inPot = (e.paidSidePots ?? []).includes(name);
             const amt = Number(p.amount) ? ` ($${Number(p.amount)})` : "";
-            const locked = setupLocked || (!canPot && !inPot);
             return (
-              <TouchableOpacity key={name} disabled={locked} style={[styles.potRow, locked && { opacity: 0.5 }]} onPress={() => confirmToggleSidePot(e, name)} activeOpacity={0.7}>
+              <TouchableOpacity key={name} disabled={setupLocked} style={styles.potRow} onPress={() => confirmToggleSidePot(e, name)} activeOpacity={0.7}>
                 <View style={[styles.potCheckbox, inPot && styles.potCheckboxOn]}>{inPot && <Text style={styles.potCheckMark}>✓</Text>}</View>
                 <Text style={[styles.potLabel, inPot && styles.potLabelOn]}>{name}{amt}{inPot ? " · Entered" : ""}</Text>
               </TouchableOpacity>
             );
           })}
-          {!canPot && <Text style={styles.tpotsHint}>Pay entry fee first</Text>}
+          {sidePotConflict(e) && <Text style={styles.tpotsWarn}>⚠ Entry unpaid — side pot selected</Text>}
         </View>
-        );
-      })()}
+      )}
       {/* Mark Ready (setup only). The Ready gate = entry fee satisfied + no hard blocker;
           the row's Status column also offers this — kept here for the expanded view. */}
       {lifecyclePhase === "setup" && !readOnly && st !== "ready" && st !== "waiting" && (
@@ -2913,13 +2896,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       entryFee: Number(tournament?.entry_fee) || 0,
       sidePots: tournamentSidePots,
       enteredPots: e.paidSidePots ?? [],
-      // Disable side-pot entry until the entry fee is satisfied (rule); if pots are already
-      // entered (legacy/stale) keep it tappable so they can be removed. toggleSidePot also
-      // hard-rejects entering when ineligible, so no path can create the invalid state.
-      onToggleSidePot:
-        setupLocked || (!canEnterSidePot({ paid: !!e.paid, entryFeeRequired }) && (e.paidSidePots?.length ?? 0) === 0)
-          ? undefined
-          : (name: string) => confirmToggleSidePot(e, name),
+      // Side pots are freely configurable regardless of payment; the unpaid+selected conflict
+      // is flagged (sidePotConflictWarning) and blocked at the progression gates.
+      onToggleSidePot: setupLocked ? undefined : (name: string) => confirmToggleSidePot(e, name),
+      sidePotConflictWarning: sidePotConflict(e) ? "⚠ Entry unpaid — side pot selected" : undefined,
       showChipOverride: editing && !setupLocked && e.teamId != null,
       chipOverrideDefault: e.chipOverride != null ? String(e.chipOverride) : "",
       chipAutoPlaceholder: `Auto (${autoChips(e)})`,
@@ -3164,12 +3144,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Ready entries that are over the Fargo cap without a valid override — a stale/
     // inconsistent Ready state. Do NOT silently exclude these; BLOCK Start until resolved.
     const overCapReady = chip.entries.filter((e) => entryState(e) === "ready" && overCapBlocking(e));
+    // Side-pot payment conflict: entry fee required + unpaid + ≥1 side pot selected. The TD
+    // may configure this freely while editing, but it's an incomplete state that BLOCKS Start
+    // until resolved (same shared predicate — sidePotConflict → hasSidePotPaymentConflict — as
+    // the player-card warning and the Continue-to-Tables gate).
+    const sidePotConflicts = chip.entries.filter((e) => sidePotConflict(e));
     // Payout-allocation gate: every enabled bucket (entry + each side pot) must allocate
     // its whole pool ($0 remaining) — reviewPrize.balanced from the authoritative
     // payoutAllocations. When reviewPrize isn't provided (non-embedded), don't gate.
     const payoutsAllocated = !reviewPrize || (reviewPrize.complete && reviewPrize.balanced);
     const canStart =
-      readyCount >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1 && overCapReady.length === 0 && payoutsAllocated;
+      readyCount >= 2 && chip.tables.length >= 1 && chip.settings.tiers.length >= 1 && overCapReady.length === 0 && sidePotConflicts.length === 0 && payoutsAllocated;
 
     // Start: if any paid players aren't Ready, force an explicit Proceed Anyway so the TD
     // can't accidentally exclude someone they already collected money from.
@@ -3201,6 +3186,24 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       }
       // Over-cap Ready entries hard-block Start (canStart already false); guard anyway.
       if (overCapReady.length > 0) return;
+      // Side-pot payment conflicts hard-block Start — name the affected entrant(s) and the
+      // exact fix (mark entry paid/waived, or remove the side pot). canStart already false;
+      // guard anyway so no start path can slip past the conflict.
+      if (sidePotConflicts.length > 0) {
+        const entryFee = Number(tournament?.entry_fee) || 0;
+        const fee = entryFee > 0 ? `$${entryFee.toFixed(2).replace(/\.00$/, "")}` : "";
+        const line = (e: ChipEntry) => {
+          const pots = (e.paidSidePots ?? []).join(", ") || "a side pot";
+          return `${nameOf(e)} has ${pots} selected but their ${fee ? `${fee} ` : ""}tournament entry is unpaid.`;
+        };
+        const shown = sidePotConflicts.slice(0, 8).map(line).join("\n");
+        const more = sidePotConflicts.length > 8 ? `\n…and ${sidePotConflicts.length - 8} more` : "";
+        Alert.alert(
+          "Resolve side pot entries first",
+          `${shown}${more}\n\nMark entry paid/waived — or remove the side pot — before starting.`,
+        );
+        return;
+      }
       if (paidNotReady.length > 0) {
         const names = paidNotReady.slice(0, 8).map(nameOf).join("\n");
         const more = paidNotReady.length > 8 ? `\n…and ${paidNotReady.length - 8} more` : "";
@@ -3482,7 +3485,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </Text>
 
             <TouchableOpacity style={[styles.startBtn, !canStart && styles.startBtnDisabled]} disabled={!canStart || vm.starting} onPress={doStart}>
-              {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{canStart ? "Start Tournament" : overCapReady.length > 0 ? "Resolve over-cap players to start" : !payoutsAllocated ? "Allocate all payouts to start" : "Need 2+ Ready, a table, and a chip tier"}</Text>}
+              {vm.starting ? <ActivityIndicator color="#fff" /> : <Text style={styles.startBtnText}>{canStart ? "Start Tournament" : overCapReady.length > 0 ? "Resolve over-cap players to start" : sidePotConflicts.length > 0 ? "Resolve side pot entries to start" : !payoutsAllocated ? "Allocate all payouts to start" : "Need 2+ Ready, a table, and a chip tier"}</Text>}
             </TouchableOpacity>
           </>
         )}
@@ -8741,7 +8744,7 @@ const styles = StyleSheet.create({
   // elim Players tab.
   tpotsBlock: { marginTop: 4, paddingTop: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
   tpotsHead: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginBottom: 2 },
-  tpotsHint: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontStyle: "italic", marginTop: 2 },
+  tpotsWarn: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 4 },
   potRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
   potCheckbox: { width: webSc(22), height: webSc(22), borderRadius: RADIUS.sm, borderWidth: 1.5, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
   potCheckboxOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
