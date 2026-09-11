@@ -71,7 +71,17 @@ export const MoneyInput = ({
           setDraft(value);
           setFocused(true);
         }}
-        onChangeText={(t) => setDraft(sanitizeCurrencyInput(t))}
+        onChangeText={(t) => {
+          const s = sanitizeCurrencyInput(t);
+          setDraft(s);
+          // Propagate the raw value on EVERY keystroke, not only on blur. A parent that
+          // unmounts the field on a "Done" button (e.g. the side-pot editor's Done) tears the
+          // input down before onBlur can fire, which previously discarded the typed amount.
+          // Committing here keeps the value even if blur never runs; onBlur still normalizes to
+          // two decimals for display, and while focused the display reads the raw draft so
+          // there's no per-keystroke reformatting.
+          onChange(s);
+        }}
         onBlur={() => {
           setFocused(false);
           onChange(formatCurrency(draft ?? value));
