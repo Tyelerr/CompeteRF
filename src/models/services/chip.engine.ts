@@ -1733,23 +1733,25 @@ export const removeTable = (
   return s;
 };
 
-// ── SINGLE SOURCE OF TRUTH for every Chip recommended-table count ──────────────
-// One entry = one singles PLAYER or one doubles TEAM (never individual partners); a
-// table seats 2 entries. We want ~half the field playing at once but ALWAYS round
-// DOWN so we only recommend COMPLETE matches — the odd extra entry waits instead of
-// spawning another table. So the count is floor(entries / 4), floored at 1 once a
-// match is possible, and 0 below 2 entries (no match can start).
-//   2–7 → 1 · 8–11 → 2 · 12–15 → 3 · 16–19 → 4 · 20 → 5 · 32–35 → 8 · 36 → 9
-export const getChipRecommendedTableCount = (entryCount: number): number =>
-  entryCount < 2 ? 0 : Math.max(1, Math.floor(entryCount / 4));
+// ── SINGLE SOURCE OF TRUTH for every Chip recommended-table count (item 4) ──────────────
+// One entry = one singles PLAYER or one doubles TEAM (a table seats 2 entries). The product
+// rule: ~50% of the seatable field WAITING in the queue so the winner-stays flow stays
+// healthy (≈half playing). That means tables ≈ n/4, biased so an odd extra entry WAITS rather
+// than spawning a near-empty table → floor((n + 1) / 4), min 1 once a match is possible, 0
+// below 2, optionally capped at the physical table count. Used by BOTH the setup
+// recommendation (ready count) and the live adjustment (remaining count) so they never
+// disagree (previously setup used ceil(n/4) → too few waiting, e.g. 6→2 = 33% waiting).
+//   n: 2–6→1 · 7–10→2 · 11–14→3 · 15–18→4 · 19–22→5   (each ≥ ~50% of n waiting)
+export const recommendChipTables = (n: number, maxTables?: number | null): number => {
+  if (n < 2) return 0;
+  let tables = Math.max(1, Math.floor((n + 1) / 4));
+  if (maxTables != null && maxTables > 0) tables = Math.min(tables, maxTables);
+  return tables;
+};
 
-// Recommended number of ACTIVE tables during LIVE play, for the alive-entry field size.
-// INTENTIONALLY DISTINCT from the pre-start setup recommendation (audit item 13): live
-// biases slightly toward MORE tables so roughly half the remaining field is playing and
-// half waiting — max(1, floor((remaining + 1) / 4)). 20→5, 15→4, 11→3, 10→2, 7→2, 5→1.
-// (Setup still uses getChipRecommendedTableCount = floor(entries/4).)
-export const recommendedActiveTables = (remaining: number): number =>
-  remaining < 2 ? 0 : Math.max(1, Math.floor((remaining + 1) / 4));
+// Recommended ACTIVE tables during LIVE play (alive/remaining field). Thin wrapper over the
+// shared helper so live and setup agree.
+export const recommendedActiveTables = (remaining: number): number => recommendChipTables(remaining);
 
 // Total field entrants ever (checkedIn is set at Start and never cleared), so this is a
 // stable baseline for the shuffle milestone even as players are eliminated.
@@ -1782,19 +1784,11 @@ export const playableEntryCount = (s: ChipState): number => {
   }).length;
 };
 
-// How many tables to SET UP (item 3). Based on the READY entrants (the players/teams that
-// will actually take the field), NOT total registered. Uses ceil(ready / 4) so ~half play
-// and the rest queue while favoring one more table over leaving many waiting, min 1 once a
-// match is possible, capped at floor(ready / 2) (never more tables than possible pairs) and
-// at the physical table limit when one is supplied. Recommendation only.
-//   6→2  8→2  9→3  10→3  11→3  12→3  13→4  16→4  20→5
-export const recommendedSetupTables = (readyCount: number, maxTables?: number | null): number => {
-  if (readyCount < 2) return 0;
-  let n = Math.max(1, Math.ceil(readyCount / 4));
-  n = Math.min(n, Math.floor(readyCount / 2)); // never more tables than pairs of players
-  if (maxTables != null && maxTables > 0) n = Math.min(n, maxTables);
-  return n;
-};
+// How many tables to SET UP (item 4). The SAME shared rule as live, over the READY entrants
+// (the players/teams that will actually take the field), NOT total registered — so setup,
+// Review & Start, and the live adjustment all agree. Recommendation only.
+export const recommendedSetupTables = (readyCount: number, maxTables?: number | null): number =>
+  recommendChipTables(readyCount, maxTables);
 
 // Close one or more tables (TD picks which). A table with a match in progress is
 // marked `closing` and goes inactive only after that match ends — play is never
