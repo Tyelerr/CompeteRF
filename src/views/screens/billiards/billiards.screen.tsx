@@ -456,7 +456,7 @@ export const BilliardsScreen = () => {
 
         {isWeb && webDetailId && <WebTournamentDetailOverlay id={webDetailId} onClose={() => setWebDetailId(null)} />}
 
-        <TournamentDetailModal id={mobileDetailId} visible={mobileDetailId !== null && isFocused} onClose={() => setMobileDetailId(null)} onReport={openReportModal} />
+        <TournamentDetailModal id={mobileDetailId} visible={mobileDetailId !== null && isFocused} onClose={() => setMobileDetailId(null)} onReport={openReportModal} onRegistrationChanged={() => { void vm.onRefresh(); }} />
 
         <ReportModal visible={isReportVisible} onClose={closeReportModal} contentType={reportContentType} reason={reportReason} onReasonChange={setReportReason} details={reportDetails} onDetailsChange={setReportDetails} onSubmit={handleReportSubmit} isSubmitting={isReportSubmitting} />
 

@@ -31,9 +31,12 @@ interface TournamentDetailModalProps {
   // Route to return to when the chip spectator view's Back is pressed (the tab
   // that owns this modal — "billiards" by default, "profile" from the profile).
   origin?: string;
+  // Item 2A: fired after the viewer registers/unregisters here, so the owning list (e.g. the
+  // Billiards discovery cards, which aren't React-Query backed) can refresh its counts.
+  onRegistrationChanged?: () => void;
 }
 
-export function TournamentDetailModal({ id, visible, onClose, origin = "billiards" }: TournamentDetailModalProps) {
+export function TournamentDetailModal({ id, visible, onClose, origin = "billiards", onRegistrationChanged }: TournamentDetailModalProps) {
   const router = useRouter();
   const vm = useTournamentDetail(id ?? "");
   const { session, isAdmin } = useAuth();
@@ -118,6 +121,7 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
     const fargo = fargoMode === "none" || digits === "" ? null : parseInt(digits, 10);
     try {
       await reg.register(fargo);
+      onRegistrationChanged?.();
       setShowRegisterConfirm(false);
       setRegFargo("");
       Alert.alert(
@@ -133,6 +137,7 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
     try {
       await reg.unregister();       // soft-cancel via cancelOwnRegistration
       await reg.refresh();          // re-sync registration state from the server
+      onRegistrationChanged?.();
       setShowUnregisterConfirm(false);
       Alert.alert("Unregistered", "You've been removed from the tournament registration list.");
     } catch {
