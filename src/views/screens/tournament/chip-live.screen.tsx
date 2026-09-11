@@ -45,6 +45,13 @@ import { useAuthStore } from "../../../viewmodels/stores/auth.store";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
+// Ordinal formatter — 1st / 2nd / 3rd / 4th … with the 11th-13th teens exception (and 21st,
+// 22nd, 23rd, etc.). Display-only.
+const toOrdinal = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+};
 
 type Tab = "overview" | "tables" | "stats" | "players" | "payouts";
 // Item 14: once completed, the live Tables tab is dead weight — swap it for a Stats recap tab.
@@ -901,9 +908,9 @@ const PlayersTab = ({
             <TouchableOpacity key={r.id} style={styles.stRow} activeOpacity={0.7} onPress={() => onTap(r.id)}>
               {/* Rank number only once gameplay has started; champion (rank 1) accented. */}
               {showRank ? (
-                <Text allowFontScaling={false} style={[styles.stRank, r.rank === 1 && styles.stRankTop]}>{r.rank}</Text>
+                <Text allowFontScaling={false} style={[styles.stRank, r.rank === 1 && styles.stRankTop]}>{toOrdinal(r.rank)}</Text>
               ) : (
-                <View style={{ width: wxSc(26) }} />
+                <View style={{ width: wxSc(40) }} />
               )}
               <View style={styles.stMain}>
                 <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
@@ -1467,7 +1474,7 @@ const styles = StyleSheet.create({
   // Players tab List | Standings segmented control.
   // Standings row.
   stRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border },
-  stRank: { width: wxSc(26), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
+  stRank: { minWidth: wxSc(40), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
   stRankTop: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.lg) },
   stLiveTag: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600" },
   stMain: { flex: 1, minWidth: 0 },
