@@ -478,6 +478,10 @@ const nextTableNumber = (
 // native driver, so it's cheap. `onDone` is guaranteed to fire once (timer fallback
 // in case the animation is paused/interrupted, e.g. the app backgrounds).
 const SHUFFLE_ANIM_MS = 3000;
+// Item 6C: after the shuffle overlay appears, wait this long before applying the engine
+// redraw BEHIND the overlay — so the underlying board never visibly jumps before the
+// animation starts. Must be < SHUFFLE_ANIM_MS so the updated board is ready when it ends.
+const SHUFFLE_STATE_DELAY_MS = 1000;
 // A 9-ball rack (diamond), matching a standard rack layout: 1 at the top, then 2/5,
 // then 8/9/4, then 7/6, then 3 at the bottom. (dx, dy) = offset from cluster center.
 const SHUFFLE_BALLS: { num: number; color: string; dx: number; dy: number }[] = [
@@ -3525,23 +3529,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // live matches to finish. In the live-match case the animation plays later, at the
     // Ready-state Start Shuffle tap (startShuffleRedraw).
     const hasLiveMatches = chip.matches.some((m) => m.status === "in_progress");
-    vm.startShuffleCycle([...shuffleRemoveIds]);
+    const removeIds = [...shuffleRemoveIds];
     setShuffleModalOpen(false);
     setShuffleRemoveIds(new Set());
     if (!hasLiveMatches) {
-      // Case 2 — immediate redraw: play the animation, which routes to the dashboard.
+      // Case 2 — immediate redraw. Item 6C: show the overlay FIRST, then apply the redraw
+      // behind it ~1s later so the board never visibly jumps before the animation starts;
+      // onShuffleAnimDone (at SHUFFLE_ANIM_MS) reveals the updated board.
       setShuffleAnimating(true);
+      setTimeout(() => vm.startShuffleCycle(removeIds), SHUFFLE_STATE_DELAY_MS);
     } else {
-      // Case 1 — matches live: no animation yet; go to the dashboard to watch
+      // Case 1 — matches live: no animation yet; apply now and go to the dashboard to watch
       // "Finishing the Round" drain, then Ready to Shuffle → Start Shuffle.
+      vm.startShuffleCycle(removeIds);
       goToDashboard();
     }
   };
   // Start Shuffle from the Ready state (initial after a drain, OR a completed round):
-  // the ONE deliberate tap that plays the animation and performs the redraw.
+  // the ONE deliberate tap that plays the animation and performs the redraw. Item 6C: overlay
+  // first, redraw behind it ~1s later.
   const startShuffleRedraw = () => {
-    vm.startShuffle(); // finalizeReshuffle → next round, opening matchups announced (Waiting to Start)
     setShuffleAnimating(true);
+    setTimeout(() => vm.startShuffle(), SHUFFLE_STATE_DELAY_MS); // finalizeReshuffle → next round
   };
 
   // ── Shuffle Mode banner ──────────────────────────────────────────────────────
@@ -3829,8 +3838,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     mutation). The ⋮ menu keeps the secondary actions. */}
                 {m && a && b && (
                   <TouchableOpacity style={styles.atWinnerBtn} onPress={() => setCompleteMatch({ matchId: m.id, aId: m.aId, bId: m.bId })} activeOpacity={0.85}>
-                    <Ionicons name="trophy-outline" size={webMs(15)} color={COLORS.white} />
-                    <Text style={styles.atWinnerBtnText}>Winner</Text>
+                    <Text style={styles.atWinnerBtnText}>🏆 Select Winner 🏆</Text>
                   </TouchableOpacity>
                 )}
               </Pressable>
@@ -3949,25 +3957,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const placesPay = poolPay > 0 ? computeBreakdown(poolPay, cfgPay.entryPlaces).places : [];
       const paidCount = placesPay.length; // number of paid places (e.g. top 3)
       const amtByPlace = new Map(placesPay.map((r) => [r.place, r.amount]));
-      // Item 5 fix: iterate the entries whose TRUE finishing place is already locked
-      // (eliminated players numbered bottom-up: first out = last place; champion = 1st) and
-      // surface a payout alert ONLY when that real place is within the paid places. The old
-      // code matched paid places against authoritativePlacements()/finalPlacements, which is
-      // champion-first and therefore labels the most-recent elimination as "1st" while live —
-      // announcing a just-eliminated last-place finisher as owed 1st-place money.
-      const ord = (n: number): string => { const s = ["th", "st", "nd", "rd"], v = n % 100; return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`; };
-      for (const f of determinedFinishers(chip)) {
-        if (f.place > paidCount) continue; // not in the money — no payout alert
-        const amt = amtByPlace.get(f.place);
-        if (amt == null) continue;
-        const e = entryById(f.entryId);
-        if (!e) continue;
+      // Item 6D: ONE generic actionable alert instead of one-per-finisher noise. A finisher's
+      // TRUE place is locked the moment they're out (determinedFinishers: first out = last
+      // place, champion = 1st). As soon as ANY payable place is locked in, surface a single
+      // "Payouts ready → Go to Payouts"; the per-player amounts live on the Payouts page.
+      const anyPayoutReady = determinedFinishers(chip).some(
+        (f) => f.place <= paidCount && amtByPlace.get(f.place) != null,
+      );
+      if (anyPayoutReady) {
         alerts.push({
-          id: `payout:${f.place}:${e.id}`,
-          text: "Payout Ready",
-          sub: `${teamName(e)} finished ${ord(f.place)} and is owed $${Math.round(amt).toLocaleString()}.`,
+          id: "payouts-ready",
+          text: "Payouts ready",
+          sub: chip.finishedAt
+            ? "Pay the players — open Payouts for the full breakdown."
+            : "Payable places are locked in — open Payouts for the breakdown.",
           onPress: onOpenPayouts ?? onOpenResults, // item 6: land on Payouts, not Standings
-          cta: "View Payouts",
+          cta: "Go to Payouts",
         });
       }
     }
@@ -7852,8 +7857,10 @@ const styles = StyleSheet.create({
   atPendingNote: { marginTop: webSc(SPACING.sm), alignSelf: "center", color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   atStartBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   atStartBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
-  atWinnerBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  atWinnerBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Item 6A: subtler than solid green — neutral surface bg + a subtle green border/accent,
+  // still a large easy-to-tap target (just slightly shorter).
+  atWinnerBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.success + "88", borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.xs), flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  atWinnerBtnText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   // Dashboard "View All Tables" row + the full-list modal shell.
   atViewAll: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
   atViewAllText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
