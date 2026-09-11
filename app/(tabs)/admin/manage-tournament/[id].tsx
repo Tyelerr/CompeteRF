@@ -6520,6 +6520,14 @@ export default function ManageTournamentScreen() {
           // unaffected (overScrollMode kept "never" for parity).
           bounces={!(Platform.OS === "ios" && selectedPhase === "setup")}
           overScrollMode={selectedPhase === "setup" ? "never" : "auto"}
+          // Item 3A: the Players "Mark Ready" tap re-renders the roster (optimistic flip +
+          // silent reload) which changes content height; if that lands mid-fling while the
+          // keyboard-inset flag is active, Fabric can blank the shared scroll view. Anchor the
+          // visible content across content-size changes so the offset can't jump/blank — this
+          // fixes it without disabling scrolling or the keyboard behavior. Setup/iOS only.
+          maintainVisibleContentPosition={
+            Platform.OS === "ios" && selectedPhase === "setup" ? { minIndexForVisible: 0 } : undefined
+          }
           refreshControl={
             isWeb ? undefined : (
               <RefreshControl

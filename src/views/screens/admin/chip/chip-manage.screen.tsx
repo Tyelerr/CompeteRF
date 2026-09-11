@@ -2550,10 +2550,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         onPress={() => setRosterFilter(rosterFilter === "prereg" ? "all" : "prereg")}
       >
         <Ionicons name="alert-circle-outline" size={webMs(16)} color={COLORS.warning} />
+        {/* Item 3B: simplified copy — the director already knows it needs review, so drop the
+            separate "Review" CTA. The banner still taps to filter the roster to prereg. */}
         <Text style={styles.preregBannerText}>
-          {preregCount} {preregCount === 1 ? "player needs" : "players need"} review — new pre-registration
+          {preregCount} new {preregCount === 1 ? "preregister" : "preregisters"}
         </Text>
-        <Text style={styles.preregBannerCta}>{rosterFilter === "prereg" ? "Show all" : "Review"}</Text>
       </TouchableOpacity>
     ) : null;
   const STATUS_LABELS: Record<typeof rosterFilter, string> = {

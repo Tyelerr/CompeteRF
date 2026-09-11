@@ -183,7 +183,9 @@ export const UnifiedRegisterModal = ({
   // Results list cap: fills the room below the fixed header+search and above the
   // keyboard+footer. RESERVE ≈ header + search + footer + paddings (a layout reserve,
   // not a keyboard push offset). Sizes to content when short, scrolls when long.
-  const resultsMax = Math.max(webSc(140), Math.round(winH - topOffset - kb - webSc(240)));
+  // Item 3C: a slightly smaller footer reserve lets one more row peek at the bottom, cueing
+  // that the list scrolls (paired with a visible scroll indicator below).
+  const resultsMax = Math.max(webSc(140), Math.round(winH - topOffset - kb - webSc(206)));
 
   const search = useUnifiedPlayerSearch(tournamentId);
   const lastRef = useRef<TextInput>(null);
@@ -649,7 +651,7 @@ export const UnifiedRegisterModal = ({
           contentContainerStyle={styles.resultsContent}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={true}
         >
           {showRecents ? (
             search.isLoadingRecents ? (
