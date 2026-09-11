@@ -1422,11 +1422,6 @@ const styles = StyleSheet.create({
   plMetaElim: { color: COLORS.error, fontWeight: "800" },
   plYou: { color: COLORS.primary, fontWeight: "800" },
   // Players tab List | Standings segmented control.
-  pvSeg: { flexDirection: "row", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: 3, marginBottom: wxSc(SPACING.sm) },
-  pvSegBtn: { flex: 1, height: wxSc(34), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
-  pvSegBtnOn: { backgroundColor: COLORS.primary + "22" },
-  pvSegText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
-  pvSegTextOn: { color: COLORS.primary },
   // Standings row.
   stRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border },
   stRank: { width: wxSc(26), color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
