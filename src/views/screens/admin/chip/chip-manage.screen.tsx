@@ -6801,9 +6801,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       intentionally omitted here: Fargo is in the stat tiles below and queue
                       status is visible on the Queue screen (both redundant in this modal). */}
                   <View style={styles.pHeaderRow}>
-                    <Text style={[styles.pName, { flex: 1 }]} numberOfLines={2}>{teamName(entry)}</Text>
+                    <Text style={styles.pName} numberOfLines={2}>{teamName(entry)}</Text>
                     <TouchableOpacity
-                      style={styles.pMenuBtn}
+                      style={[styles.pMenuBtn, styles.pMenuBtnAbs]}
                       onPress={() => setProfMenuOpen((v) => !v)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -8837,13 +8837,19 @@ const styles = StyleSheet.create({
   // Team/player Tournament Profile modal — premium redesign.
   profCard: { width: "100%", maxWidth: webSc(460), maxHeight: "86%", backgroundColor: COLORS.backgroundCard, borderRadius: 24, paddingHorizontal: webSc(SPACING.lg), paddingTop: webSc(SPACING.lg), paddingBottom: webSc(SPACING.lg), shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 24, elevation: 12 },
   // Header — name (Large), Fargo + status pill (Tiny), ⋯ action button
-  pHeaderRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.sm) },
+  // Centered title: the name is centered in the card and can wrap to 2 lines; the ⋮ button
+  // is anchored top-right (absolute) so it never crowds the name. Symmetric horizontal
+  // padding reserves room for the ⋮ on the right AND mirrors it on the left so the name's
+  // visual center is the card's center — balanced for short ("Bobby Thomas") and long/team
+  // names alike, and safe on narrow iPhones (wraps instead of colliding).
+  pHeaderRow: { position: "relative", minHeight: webSc(36), justifyContent: "center", alignItems: "center", paddingHorizontal: webSc(40), marginBottom: webSc(SPACING.md) },
   pMenuBtn: { width: webSc(32), height: webSc(32), borderRadius: webSc(16), alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
+  pMenuBtnAbs: { position: "absolute", right: 0, top: 0 },
   // Floating contextual menu, anchored under the ⋯ button (in-place, no modal)
   pMenu: { position: "absolute", top: webSc(60), right: webSc(SPACING.lg), minWidth: webSc(210), backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: webSc(SPACING.xs), shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 14 },
   pMenuItem: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
   pMenuItemText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
-  pName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "700", lineHeight: webMs(FONT_SIZES.xxl) * 1.18 },
+  pName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "700", lineHeight: webMs(FONT_SIZES.xxl) * 1.18, textAlign: "center", width: "100%" },
   pHeaderMeta: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
   pFargo: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
   pStatusPill: { borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.sm), paddingVertical: 3 },
