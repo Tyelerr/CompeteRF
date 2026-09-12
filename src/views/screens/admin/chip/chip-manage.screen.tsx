@@ -1944,7 +1944,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         { text: a ? teamName(a) : "Team A", onPress: () => openForfeit(m.aId) },
         { text: b ? teamName(b) : "Team B", onPress: () => openForfeit(m.bId) },
       ]);
+    } else if (t.holderId && t.pendingChallengerId) {
+      // Seeded but NOT started (winner-stays / Shuffle "Waiting to Start"): the table has TWO
+      // teams (holder + pending challenger). Ask which one is forfeiting — never auto-pick the
+      // holder. (This was the Shuffle-Mode "auto-selects a player" bug.)
+      const a = entryById(t.holderId);
+      const b = entryById(t.pendingChallengerId);
+      Alert.alert("Forfeit Team", "Which team is forfeiting?", [
+        { text: "Cancel", style: "cancel" },
+        { text: a ? teamName(a) : "Team A", onPress: () => openForfeit(t.holderId as string) },
+        { text: b ? teamName(b) : "Team B", onPress: () => openForfeit(t.pendingChallengerId as string) },
+      ]);
     } else if (t.holderId) {
+      // Only one team on the table (a lone holder, no challenger yet) → unambiguous.
       openForfeit(t.holderId);
     }
   };
