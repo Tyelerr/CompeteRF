@@ -142,7 +142,7 @@ import {
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
 import { CHECK_INSET, FieldCheck } from "../../../../src/views/components/common/field-check";
-import { MoneyInput, formatCurrency } from "../../../../src/views/components/common/money-input";
+import { MoneyInput, formatCurrency, sanitizeCurrencyInput } from "../../../../src/views/components/common/money-input";
 import {
   ManagePhase,
   useManageTournament,
@@ -601,7 +601,9 @@ const toForm = (t: Tournament): SettingsForm => {
       maxFargo: numStr(g.maxFargo),
       raceTo: numStr(g.raceTo),
     })),
-    fees: feesToForm(ls.fees ?? []),
+    // Pass the RAW value so feesToForm can tell "property absent" (never
+    // configured → seed defaults) apart from "[]" (intentionally empty).
+    fees: feesToForm(ls.fees),
     feesOnTop: !!ls.feesAddedOnTop,
     chipTiers:
       t.tournament_format !== "chip-tournament"
@@ -621,29 +623,34 @@ const toForm = (t: Tournament): SettingsForm => {
   };
 };
 
-// Build the unified fee list. Once a tournament has a saved fee config, that list
-// is authoritative and loaded as-is — built-in and custom fees behave identically,
-// so deletions (including of Green/TD/Admin) persist. Only a tournament that has
-// never had fees configured is seeded with the 3 built-in types (disabled) for
-// convenience. A saved fee with no `enabled` flag predates this field and was
-// therefore applied → treat it as enabled.
-const feesToForm = (saved: TournamentFee[]): FeeForm[] => {
-  if (saved.length > 0) {
-    return saved.map((f) => ({
-      id: f.id,
-      category: f.category,
-      name: f.name ?? (f.category === "custom" ? "" : feePresetLabel(f.category)),
-      amount: formatCurrency(numStr(f.amount)),
-      enabled: f.enabled ?? true,
+// Build the unified fee list. The distinction that matters is NEVER-CONFIGURED vs
+// INTENTIONALLY-EMPTY, and it is carried by the presence of the `fees` property in
+// live_settings — NOT by array length:
+//   • `undefined` (property absent)  → never configured → seed the 3 convenience
+//     defaults (disabled) so a brand-new tournament has something to enable.
+//   • `[]` (present, empty)          → the TD saved with zero fees on purpose →
+//     honor it and show no fees.
+//   • non-empty array                → load exactly what was saved.
+// Once present, built-in and custom fees are treated identically (one model), so
+// deletions of Green/TD/Admin persist. A saved fee with no `enabled` flag predates
+// that field and was therefore applied → treat it as enabled.
+const feesToForm = (saved: TournamentFee[] | undefined | null): FeeForm[] => {
+  if (saved == null) {
+    // Never configured: seed the built-in presets, disabled until the TD enables them.
+    return FEE_PRESETS.map((p) => ({
+      id: `fee-${p.category}`,
+      category: p.category,
+      name: p.label,
+      amount: formatCurrency(numStr(undefined)),
+      enabled: false,
     }));
   }
-  // Fresh tournament: seed the built-in presets, disabled until the TD enables them.
-  return FEE_PRESETS.map((p) => ({
-    id: `fee-${p.category}`,
-    category: p.category,
-    name: p.label,
-    amount: formatCurrency(numStr(undefined)),
-    enabled: false,
+  return saved.map((f) => ({
+    id: f.id,
+    category: f.category,
+    name: f.name ?? (f.category === "custom" ? "" : feePresetLabel(f.category)),
+    amount: formatCurrency(numStr(f.amount)),
+    enabled: f.enabled ?? true,
   }));
 };
 
@@ -3605,13 +3612,14 @@ export default function ManageTournamentScreen() {
     });
   const removeFee = (id: string) =>
     patchForm({ fees: (form?.fees ?? []).filter((f) => f.id !== id) });
-  // Add a custom fee from the modal: appended unchecked with the optional amount.
+  // Add a custom fee from the modal: appended already ENABLED so it immediately
+  // applies to the fee/prize-pool calculation — no second step to check it.
   const addCustomFee = (name: string, amount: string) => {
     const id = `fee-custom-${tournamentId}-${Date.now()}`;
     patchForm({
       fees: [
         ...(form?.fees ?? []),
-        { id, category: "custom", name: name.trim(), amount, enabled: false },
+        { id, category: "custom", name: name.trim(), amount, enabled: true },
       ],
     });
   };
@@ -4630,17 +4638,7 @@ export default function ManageTournamentScreen() {
 
           {/* Fees — built-in + custom, one uniform list */}
           <View style={styles.feeBlock}>
-            <View style={styles.feeHeaderRow}>
-              <FieldLabel label="Fees (per player)" />
-              <TouchableOpacity
-                style={styles.feeEditToggle}
-                onPress={() => setFeesEditMode((v) => !v)}
-              >
-                <Text allowFontScaling={false} style={styles.feeEditToggleText}>
-                  {feesEditMode ? "Done" : "Edit Fees"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <FieldLabel label="Fees (per player)" />
 
             {/* How fees relate to the entry fee */}
             <View style={styles.feeModeRow}>
@@ -4745,20 +4743,49 @@ export default function ManageTournamentScreen() {
               ),
             )}
 
-            {feesEditMode && (
+            {(form.fees ?? []).length === 0 && (
+              <Text allowFontScaling={false} style={styles.feeEmptyText}>
+                No fees configured.
+              </Text>
+            )}
+
+            {/* Action row: Add Fee is always available; Edit Fees appears only
+                when there is at least one fee to edit (or while editing). */}
+            <View style={styles.feeActionRow}>
               <TouchableOpacity
-                style={styles.feeAddRow}
+                style={[styles.feeBtn, styles.feeBtnFull]}
                 onPress={() => {
                   setFeeModalName("");
                   setFeeModalAmount("");
                   setFeeModalVisible(true);
                 }}
               >
-                <Text allowFontScaling={false} style={styles.feeAddText}>
+                <Text allowFontScaling={false} style={styles.feeBtnText}>
                   + Add Fee
                 </Text>
               </TouchableOpacity>
-            )}
+
+              {((form.fees ?? []).length > 0 || feesEditMode) && (
+                <TouchableOpacity
+                  style={[
+                    styles.feeBtn,
+                    styles.feeBtnFull,
+                    feesEditMode && styles.feeBtnActive,
+                  ]}
+                  onPress={() => setFeesEditMode((v) => !v)}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.feeBtnText,
+                      feesEditMode && styles.feeBtnTextActive,
+                    ]}
+                  >
+                    {feesEditMode ? "Done" : "Edit Fees"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Breakdown: entry ± each enabled fee = per-player to pool */}
             {feeEntryNum > 0 && (
@@ -6013,7 +6040,9 @@ export default function ManageTournamentScreen() {
                       allowFontScaling={false}
                       style={styles.input}
                       value={feeModalAmount}
-                      onChangeText={setFeeModalAmount}
+                      onChangeText={(t) =>
+                        setFeeModalAmount(sanitizeCurrencyInput(t))
+                      }
                       placeholder="$0.00"
                       placeholderTextColor={COLORS.textMuted}
                       keyboardType="decimal-pad"
@@ -6040,7 +6069,12 @@ export default function ManageTournamentScreen() {
                         ]}
                         disabled={!feeModalName.trim()}
                         onPress={() => {
-                          addCustomFee(feeModalName, feeModalAmount);
+                          // Normalize on Add (2 -> 2.00, .5 -> 0.50) to match the
+                          // shared MoneyInput format used by every other fee.
+                          addCustomFee(
+                            feeModalName,
+                            formatCurrency(feeModalAmount),
+                          );
                           setFeeModalVisible(false);
                         }}
                       >
@@ -7421,20 +7455,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  feeHeaderRow: {
+  feeEmptyText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textMuted,
+    fontStyle: "italic",
+    marginTop: webSc(SPACING.sm),
+  },
+  // Secondary/outlined action buttons (Add Fee / Edit Fees), side by side.
+  feeActionRow: {
     flexDirection: "row",
+    gap: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.sm),
+  },
+  feeBtn: {
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
-  feeEditToggle: {
-    paddingVertical: webSc(SPACING.xs),
-    paddingHorizontal: webSc(SPACING.sm),
-  },
-  feeEditToggleText: {
+  feeBtnFull: { flex: 1 },
+  feeBtnActive: { backgroundColor: COLORS.primary },
+  feeBtnText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.primary,
     fontWeight: "700",
   },
+  feeBtnTextActive: { color: COLORS.white },
   feeAmountStatic: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
@@ -7484,15 +7533,6 @@ const styles = StyleSheet.create({
   },
   feeTrash: { padding: webSc(SPACING.xs) },
   feeTrashText: { fontSize: webMs(FONT_SIZES.md) },
-  feeAddRow: {
-    marginTop: webSc(SPACING.sm),
-    paddingVertical: webSc(SPACING.xs),
-  },
-  feeAddText: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.primary,
-    fontWeight: "700",
-  },
   // Fee mode segmented control
   feeModeRow: {
     flexDirection: "row",
