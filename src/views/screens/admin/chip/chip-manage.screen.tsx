@@ -4730,28 +4730,29 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const isFirst = idx <= 0;
     const isLast = idx === chip.queue.length - 1;
     const close = () => setQueueMenuId(null);
-    const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
-      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
+    // Compact centered action card (not a bottom sheet). `last` drops the row divider.
+    const Row = ({ label, icon, onPress, danger, disabled, last }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean; last?: boolean }) => (
+      <TouchableOpacity style={[styles.qActRow, last && styles.qActRowLast, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
         <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
-        <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
+        <Text style={[styles.qActRowText, danger && styles.qActRowDanger]}>{label}</Text>
       </TouchableOpacity>
     );
     return (
-      <Pressable style={styles.tdSheetOverlay} onPress={close}>
-        <Pressable style={styles.actSheet} onPress={() => {}}>
-          <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
-          <View style={styles.actSheetGroup}>
+      <Pressable style={styles.qActOverlay} onPress={close}>
+        <Pressable style={styles.qActCard} onPress={() => {}}>
+          <Text style={styles.qActTitle} numberOfLines={1}>{shortTeam(e)}</Text>
+          <View style={styles.qActGroup}>
             <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
             <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
             <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
             <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
-            <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
+            <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} last onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
           </View>
-          <View style={styles.actSheetGroup}>
-            <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
+          <View style={styles.qActGroup}>
+            <Row icon="trash-outline" danger last label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
           </View>
-          <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
-            <Text style={styles.actSheetCancelText}>Cancel</Text>
+          <TouchableOpacity style={styles.qActCancel} onPress={close} activeOpacity={0.6}>
+            <Text style={styles.qActCancelText}>Cancel</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -8438,6 +8439,34 @@ const styles = StyleSheet.create({
   actRow2Danger: { color: COLORS.error },
   actSheetCancel: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, paddingVertical: webSc(SPACING.md), alignItems: "center" },
   actSheetCancelText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  // Compact CENTERED action card for the queue ⋮ menu (replaces the bottom sheet). Same dim
+  // backdrop as other compact modals; narrow, only as tall as its rows; dark card, rounded,
+  // subtle border + shadow. Used by BOTH queue surfaces via renderQueueActionSheet.
+  qActOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", padding: webSc(SPACING.lg) },
+  qActCard: {
+    width: "100%",
+    maxWidth: webSc(320),
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.md),
+    paddingBottom: webSc(SPACING.md),
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  qActTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center", marginBottom: webSc(SPACING.sm) },
+  qActGroup: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, overflow: "hidden", marginBottom: webSc(SPACING.sm) },
+  qActRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
+  qActRowLast: { borderBottomWidth: 0 },
+  qActRowText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  qActRowDanger: { color: COLORS.error },
+  qActCancel: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  qActCancelText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   toolBtn: { flex: 1, borderWidth: 1.5, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   toolBtnText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   // Slim recommendation banner.
