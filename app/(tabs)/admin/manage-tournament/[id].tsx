@@ -621,31 +621,30 @@ const toForm = (t: Tournament): SettingsForm => {
   };
 };
 
-// Build the unified fee list: the 3 built-in types are ALWAYS present (seeded
-// from saved state if it exists), followed by any custom fee types. A saved fee
-// with no `enabled` flag predates this field and was therefore applied → treat
-// it as enabled.
+// Build the unified fee list. Once a tournament has a saved fee config, that list
+// is authoritative and loaded as-is — built-in and custom fees behave identically,
+// so deletions (including of Green/TD/Admin) persist. Only a tournament that has
+// never had fees configured is seeded with the 3 built-in types (disabled) for
+// convenience. A saved fee with no `enabled` flag predates this field and was
+// therefore applied → treat it as enabled.
 const feesToForm = (saved: TournamentFee[]): FeeForm[] => {
-  const builtIns: FeeForm[] = FEE_PRESETS.map((p) => {
-    const s = saved.find((f) => f.category === p.category);
-    return {
-      id: s?.id ?? `fee-${p.category}`,
-      category: p.category,
-      name: p.label,
-      amount: formatCurrency(numStr(s?.amount)),
-      enabled: s ? (s.enabled ?? true) : false,
-    };
-  });
-  const customs: FeeForm[] = saved
-    .filter((f) => f.category === "custom")
-    .map((f) => ({
+  if (saved.length > 0) {
+    return saved.map((f) => ({
       id: f.id,
-      category: "custom" as FeeCategory,
-      name: f.name ?? "",
+      category: f.category,
+      name: f.name ?? (f.category === "custom" ? "" : feePresetLabel(f.category)),
       amount: formatCurrency(numStr(f.amount)),
       enabled: f.enabled ?? true,
     }));
-  return [...builtIns, ...customs];
+  }
+  // Fresh tournament: seed the built-in presets, disabled until the TD enables them.
+  return FEE_PRESETS.map((p) => ({
+    id: `fee-${p.category}`,
+    category: p.category,
+    name: p.label,
+    amount: formatCurrency(numStr(undefined)),
+    enabled: false,
+  }));
 };
 
 // Map the live Settings form to the SHARED completion-check shape (utils/settings-
@@ -744,17 +743,16 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     fargoDiffPerGame: f.diffPerGame,
     fargoDiffMaxRace: f.diffMaxEnabled ? f.diffMaxRace : null,
     fargoDiffRounding: "down",
-    // Persist every custom fee type (so it survives even when unchecked) and any
-    // enabled built-in. Unchecked, empty built-ins are dropped and re-seeded.
-    fees: f.fees
-      .filter((fee) => fee.category === "custom" || fee.enabled)
-      .map((fee) => ({
-        id: fee.id,
-        category: fee.category,
-        name: fee.name.trim() || feePresetLabel(fee.category),
-        amount: numOrNull(fee.amount) ?? 0,
-        enabled: fee.enabled,
-      })),
+    // Persist the full uniform fee list exactly as edited. Every fee that exists
+    // is saved (enabled or not); a fee the TD deleted is simply absent, so the
+    // deletion persists — built-in and custom are treated identically.
+    fees: f.fees.map((fee) => ({
+      id: fee.id,
+      category: fee.category,
+      name: fee.name.trim() || feePresetLabel(fee.category),
+      amount: numOrNull(fee.amount) ?? 0,
+      enabled: fee.enabled,
+    })),
     feesAddedOnTop: f.feesOnTop,
     chipBuyBacks: f.chipBuyBacks,
   } as any,
@@ -1977,6 +1975,8 @@ export default function ManageTournamentScreen() {
   const [feeModalVisible, setFeeModalVisible] = useState(false);
   const [feeModalName, setFeeModalName] = useState("");
   const [feeModalAmount, setFeeModalAmount] = useState("");
+  // Edit Fees mode: toggle rows between quick-config (normal) and fully-editable (rename/amount/delete any fee).
+  const [feesEditMode, setFeesEditMode] = useState(false);
 
   // Players tab state
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -4630,7 +4630,17 @@ export default function ManageTournamentScreen() {
 
           {/* Fees — built-in + custom, one uniform list */}
           <View style={styles.feeBlock}>
-            <FieldLabel label="Fees (per player)" />
+            <View style={styles.feeHeaderRow}>
+              <FieldLabel label="Fees (per player)" />
+              <TouchableOpacity
+                style={styles.feeEditToggle}
+                onPress={() => setFeesEditMode((v) => !v)}
+              >
+                <Text allowFontScaling={false} style={styles.feeEditToggleText}>
+                  {feesEditMode ? "Done" : "Edit Fees"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             {/* How fees relate to the entry fee */}
             <View style={styles.feeModeRow}>
@@ -4670,14 +4680,43 @@ export default function ManageTournamentScreen() {
               </TouchableOpacity>
             </View>
 
-            {(form.fees ?? []).map((fee) => {
-              const isCustom = fee.category === "custom";
-              return (
+            {(form.fees ?? []).map((fee) =>
+              feesEditMode ? (
+                /* EDIT mode: every fee — built-in or custom — is fully editable
+                   (rename, change amount, delete). No separate model per category. */
                 <View key={fee.id} style={styles.feeRow}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={[styles.input, styles.feeNameInput]}
+                    value={fee.name}
+                    onChangeText={(v) => updateFee(fee.id, "name", v)}
+                    placeholder="Fee name"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                  <MoneyInput
+                    value={fee.amount}
+                    onChange={(v) => updateFee(fee.id, "amount", v)}
+                    compact
+                  />
                   <TouchableOpacity
-                    style={styles.feeBox2}
-                    onPress={() => toggleFeeEnabled(fee.id)}
+                    style={styles.feeTrash}
+                    onPress={() => removeFee(fee.id)}
                   >
+                    <Text allowFontScaling={false} style={styles.feeTrashText}>
+                      {"🗑"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* NORMAL mode: quick config — enable/disable + see the amount.
+                   No rename, no delete. */
+                <TouchableOpacity
+                  key={fee.id}
+                  style={styles.feeRow}
+                  activeOpacity={0.7}
+                  onPress={() => toggleFeeEnabled(fee.id)}
+                >
+                  <View style={styles.feeBox2}>
                     <View style={[styles.feeBox, fee.enabled && styles.feeBoxOn]}>
                       {fee.enabled && (
                         <Text allowFontScaling={false} style={styles.feeBoxCheck}>
@@ -4685,62 +4724,41 @@ export default function ManageTournamentScreen() {
                         </Text>
                       )}
                     </View>
-                  </TouchableOpacity>
+                  </View>
 
-                  {isCustom ? (
-                    <TextInput
-                      allowFontScaling={false}
-                      style={[styles.input, styles.feeNameInput]}
-                      value={fee.name}
-                      onChangeText={(v) => updateFee(fee.id, "name", v)}
-                      placeholder="Fee name"
-                      placeholderTextColor={COLORS.textMuted}
-                    />
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.feeNameStaticWrap}
-                      onPress={() => toggleFeeEnabled(fee.id)}
-                    >
-                      <Text allowFontScaling={false} style={styles.feeLabel}>
-                        {fee.name}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.feeNameStaticWrap}>
+                    <Text allowFontScaling={false} style={styles.feeLabel}>
+                      {fee.name}
+                    </Text>
+                  </View>
 
-                  {fee.enabled && (
-                    <MoneyInput
-                      value={fee.amount}
-                      onChange={(v) => updateFee(fee.id, "amount", v)}
-                      compact
-                    />
-                  )}
+                  <Text
+                    allowFontScaling={false}
+                    style={[
+                      styles.feeAmountStatic,
+                      !fee.enabled && styles.feeAmountStaticOff,
+                    ]}
+                  >
+                    {fmtMoney(parseFloat(fee.amount) || 0)}
+                  </Text>
+                </TouchableOpacity>
+              ),
+            )}
 
-                  {isCustom && (
-                    <TouchableOpacity
-                      style={styles.feeTrash}
-                      onPress={() => removeFee(fee.id)}
-                    >
-                      <Text allowFontScaling={false} style={styles.feeTrashText}>
-                        {"🗑"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-
-            <TouchableOpacity
-              style={styles.feeAddRow}
-              onPress={() => {
-                setFeeModalName("");
-                setFeeModalAmount("");
-                setFeeModalVisible(true);
-              }}
-            >
-              <Text allowFontScaling={false} style={styles.feeAddText}>
-                + Add Fee
-              </Text>
-            </TouchableOpacity>
+            {feesEditMode && (
+              <TouchableOpacity
+                style={styles.feeAddRow}
+                onPress={() => {
+                  setFeeModalName("");
+                  setFeeModalAmount("");
+                  setFeeModalVisible(true);
+                }}
+              >
+                <Text allowFontScaling={false} style={styles.feeAddText}>
+                  + Add Fee
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Breakdown: entry ± each enabled fee = per-player to pool */}
             {feeEntryNum > 0 && (
@@ -7403,6 +7421,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  feeHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  feeEditToggle: {
+    paddingVertical: webSc(SPACING.xs),
+    paddingHorizontal: webSc(SPACING.sm),
+  },
+  feeEditToggleText: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.primary,
+    fontWeight: "700",
+  },
+  feeAmountStatic: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    fontWeight: "600",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  feeAmountStaticOff: { color: COLORS.textMuted },
   feeRow: {
     flexDirection: "row",
     alignItems: "center",
