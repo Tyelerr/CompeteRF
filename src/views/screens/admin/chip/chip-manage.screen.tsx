@@ -71,7 +71,6 @@ import { buildReadinessSummary, ReadinessRow, PlayerReadinessSummary } from "../
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
-import * as Haptics from "expo-haptics";
 import {
   LifecyclePhase,
   LifecycleStatus,
@@ -338,8 +337,6 @@ const auditMeta = (ev: ChipEvent): AuditMeta => {
       return /queue/.test(t)
         ? { icon: "swap-vertical", color: AUDIT_CYAN, title: "Queue Reordered", category: "Tables" }
         : { icon: "swap-horizontal", color: AUDIT_CYAN, title: "Table Moved", category: "Tables" };
-    case "queue_reorder":
-      return { icon: "swap-vertical", color: AUDIT_CYAN, title: "Queue Reordered", category: "Tables" };
     case "restore":
       return { icon: "arrow-undo-circle", color: AUDIT_ORANGE, title: "Tournament Restored", category: "Undo" };
     // Director settings-override trail. Explicit cases so the text ("…unlocked"/"…locked")
@@ -851,11 +848,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Full-screen queue manager + the per-team action sheet inside it.
   const [queueModalOpen, setQueueModalOpen] = useState(false);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
-  // Dedicated queue-REORDER control (opened by the grip handle): which entry's move menu is
-  // open, and whether the "Move to Position…" numeric picker is showing. Explicit, tap-driven
-  // controls (no drag) — the reliable reorder affordance.
-  const [queueReorderId, setQueueReorderId] = useState<string | null>(null);
-  const [queuePosPickerOpen, setQueuePosPickerOpen] = useState(false);
   // Admin dashboard "Active Tables" preview → full-list modal (dashboard only; the
   // Live → Tables management tab is unchanged). This Modal is rendered at the screen
   // ROOT (in `modals`, a sibling of the ScrollView) — NOT nested inside the scrollable
@@ -4691,24 +4683,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   // ── Live · Queue ─────────────────────────────────────────────────────────────
-  // Full Live → Queue page. Uses the SAME row + reorder controls + audit path as the pop-out
-  // Manage Queue modal (no second implementation). The ☰ grip opens the move menu; the ⋮
-  // keeps player actions. Both sheets for this (non-modal) surface render as a dedicated
-  // Modal in `modals` (gated by !queueModalOpen) so they overlay the screen correctly.
-  const renderLiveQueue = () => {
-    if (chip.queue.length === 0) {
-      return (
-        <Section title="Queue (0)">
-          <Text style={styles.hint}>Queue is empty.</Text>
-        </Section>
-      );
-    }
-    return (
-      <Section title={`Queue (${chip.queue.length})`}>
-        {chip.queue.map((qid, i) => renderQueueRow(qid, i, { reorderable: queueReorderAllowed }))}
-      </Section>
-    );
-  };
+  const renderLiveQueue = () => (
+    <Section title={`Queue (${chip.queue.length})`}>
+      {chip.queue.map((qid, i) => {
+        const e = entryById(qid);
+        if (!e) return null;
+        return (
+          <View key={qid} style={styles.queueRow}>
+            <Text style={styles.queuePos}>{i + 1}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.queueName} numberOfLines={1}>{shortTeam(e)}</Text>
+              {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
+              {rematchSkippedLabel(chip, qid) ? (
+                <Text style={styles.qRematchSkip} numberOfLines={1}>⚠ Rematch skipped</Text>
+              ) : null}
+            </View>
+            <Text style={styles.queueMeta}><Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>{e.chips} chip{e.chips === 1 ? "" : "s"}</Text> · {e.wins}-{e.losses}</Text>
+          </View>
+        );
+      })}
+      {chip.queue.length === 0 && <Text style={styles.hint}>Queue is empty.</Text>}
+    </Section>
+  );
 
   // Measure an anchor node in the window and place a dropdown just below it,
   // right-edge aligned (opens left), clamped to stay on-screen.
@@ -5477,155 +5473,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     </Modal>
   );
 
-  // ONE row renderer shared by BOTH queue surfaces (pop-out modal + full Live → Queue page).
-  // The ☰ grip is a dedicated, explicit REORDER control (tap → move menu). The row itself is
-  // otherwise normal (no hidden long-press). The ⋮ button keeps the other player actions.
-  const renderQueueRow = (
-    qid: string,
-    i: number,
-    opts?: { reorderable?: boolean },
-  ) => {
-    const e = entryById(qid);
-    if (!e) return null;
-    const rs = queueRoundStatus(qid);
-    return (
-      <View key={qid} style={styles.qmRow}>
-        {opts?.reorderable ? (
-          <TouchableOpacity
-            style={styles.qmGripBtn}
-            onPress={() => { setQueuePosPickerOpen(false); setQueueReorderId(e.id); }}
-            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-            accessibilityLabel={`Reorder ${shortTeam(e)} in the queue`}
-          >
-            <Ionicons name="reorder-three" size={webMs(24)} color={COLORS.primary} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.qmGripSpacer} />
-        )}
-        <Text style={styles.qmPos}>{i + 1}</Text>
-        <View style={styles.qmMain}>
-          <View style={styles.qmLine1}>
-            <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
-            <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
-          </View>
-          <Text style={styles.qmMeta} numberOfLines={1}>
-            <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
-            <Text style={styles.qmMetaDot}>  •  </Text>
-            <Text style={styles.qmWin}>W{e.wins}</Text>
-            <Text style={styles.qmMetaDot}>  •  </Text>
-            <Text style={styles.qmLoss}>L{e.losses}</Text>
-          </Text>
-          {rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null}
-        </View>
-        <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-  // Whether a queue entry may be reordered right now: more than one entry, editable, and not
-  // mid-shuffle (finalizeReshuffle re-randomizes the queue, so a manual move would be lost).
-  const queueReorderAllowed =
-    chip.queue.length > 1 &&
-    !readOnly &&
-    !chip.reshufflePending &&
-    !chip.shuffleReady &&
-    !chip.shuffleRound;
-
-  // Per-team queue ⋮ action sheet — player actions ONLY (view details, remove). Queue
-  // ORDER moved to its own grip control (renderQueueReorderSheet). Shared by both queue
-  // surfaces. Returns null when no row's ⋮ menu is open.
-  const renderQueueActionSheet = () => {
-    if (!queueMenuId) return null;
-    const e = entryById(queueMenuId);
-    if (!e) return null;
-    const close = () => setQueueMenuId(null);
-    const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
-      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
-        <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
-        <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
-      </TouchableOpacity>
-    );
-    return (
-      <Pressable style={styles.tdSheetOverlay} onPress={close}>
-        <Pressable style={styles.actSheet} onPress={() => {}}>
-          <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
-          <View style={styles.actSheetGroup}>
-            <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
-            {queueReorderAllowed && (
-              <Row icon="swap-vertical-outline" label="Reorder in Queue" onPress={() => { close(); setQueuePosPickerOpen(false); setQueueReorderId(e.id); }} />
-            )}
-          </View>
-          <View style={styles.actSheetGroup}>
-            <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
-          </View>
-          <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
-            <Text style={styles.actSheetCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    );
-  };
-
-  // Dedicated queue-REORDER sheet — opened by the ☰ grip. Explicit tap controls that all
-  // funnel through the SAME authoritative engine reorder path as before:
-  //   Move to Top/Up/Down/Bottom → vm.reorderQueue (engine reorderQueue → moveQueueEntry)
-  //   Move to Position…          → vm.moveQueueTo (engine moveQueueEntry, exact index)
-  // Both emit ONE "queue_reorder" audit event (actor auto-stamped) and no-op with no event
-  // when the target equals the current slot. Shared by both queue surfaces.
-  const renderQueueReorderSheet = () => {
-    if (!queueReorderId) return null;
-    const e = entryById(queueReorderId);
-    if (!e) return null;
-    const idx = chip.queue.indexOf(e.id);
-    if (idx < 0) return null;
-    const n = chip.queue.length;
-    const isFirst = idx <= 0;
-    const isLast = idx === n - 1;
-    const close = () => { setQueueReorderId(null); setQueuePosPickerOpen(false); };
-    const move = (fn: () => void) => { close(); Haptics.selectionAsync().catch(() => {}); fn(); };
-    const Row = ({ label, icon, onPress, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; disabled?: boolean }) => (
-      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
-        <Ionicons name={icon} size={webMs(17)} color={COLORS.textSecondary} />
-        <Text style={styles.actRow2Text}>{label}</Text>
-      </TouchableOpacity>
-    );
-    return (
-      <Pressable style={styles.tdSheetOverlay} onPress={close}>
-        <Pressable style={styles.actSheet} onPress={() => {}}>
-          <Text style={styles.actSheetTitle}>Move {shortTeam(e)}</Text>
-          <Text style={styles.actSheetSub}>Currently #{idx + 1} of {n}</Text>
-          {queuePosPickerOpen ? (
-            // Move to Position… — tap the exact slot. Same slot = no-op (engine emits nothing).
-            <View style={styles.qPosGrid}>
-              {chip.queue.map((_id, k) => (
-                <TouchableOpacity
-                  key={k}
-                  style={[styles.qPosCell, k === idx && styles.qPosCellCurrent]}
-                  disabled={k === idx}
-                  onPress={() => move(() => vm.moveQueueTo(e.id, k))}
-                >
-                  <Text style={[styles.qPosCellText, k === idx && styles.qPosCellTextCurrent]}>{k + 1}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.actSheetGroup}>
-              <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => move(() => vm.reorderQueue(e.id, "top"))} />
-              <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => move(() => vm.reorderQueue(e.id, "up"))} />
-              <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => move(() => vm.reorderQueue(e.id, "down"))} />
-              <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => move(() => vm.reorderQueue(e.id, "bottom"))} />
-              <Row icon="keypad-outline" label="Move to Position…" disabled={n <= 2} onPress={() => setQueuePosPickerOpen(true)} />
-            </View>
-          )}
-          <TouchableOpacity style={styles.actSheetCancel} onPress={queuePosPickerOpen ? () => setQueuePosPickerOpen(false) : close}>
-            <Text style={styles.actSheetCancelText}>{queuePosPickerOpen ? "Back" : "Cancel"}</Text>
-          </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    );
-  };
-
   // Dashboard "View All Tables" — rendered HERE at the screen root (sibling of the live
   // ScrollView), never inside the scrollable dashboard content, so its native host view
   // is torn down cleanly on iOS/Fabric and can't leave a touch-blocking layer behind.
@@ -5706,19 +5553,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       {shuffleFlowEl}
       {dashTablesModal}
       {dashAlertsModal}
-      {/* Queue ⋮ + reorder sheets for the full Live → Queue page (a non-modal surface). When
-          a sheet is opened from the pop-out Queue modal instead, that modal renders them
-          inline so two RN modals never stack; here !queueModalOpen keeps exactly one path
-          mounted. */}
-      <Modal
-        visible={(queueMenuId != null || queueReorderId != null) && !queueModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setQueueMenuId(null); setQueueReorderId(null); setQueuePosPickerOpen(false); }}
-      >
-        {renderQueueActionSheet()}
-        {renderQueueReorderSheet()}
-      </Modal>
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
           Add Player directly into chip_entries via onAddSingles (players.id identity),
@@ -7458,10 +7292,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={styles.qSectionHeadText}>Queue ({chip.queue.length})</Text>
             </View>
           )}
-          {/* Scrollable list. Reorder is an explicit, tap-driven control: the ☰ grip on each
-              row opens a move menu (Top/Up/Down/Bottom/Position). The grip shows only when a
-              reorder is valid (>1 entry, editable, not mid-shuffle — finalizeReshuffle would
-              re-randomize the queue). The ⋮ keeps the other player actions. */}
+          {/* Scrollable list */}
           {chip.queue.length === 0 ? (
             <View style={styles.qEmptyFull}>
               <Ionicons name="list-outline" size={webMs(34)} color={COLORS.textMuted} />
@@ -7470,14 +7301,70 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </View>
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-              {chip.queue.map((qid, i) => renderQueueRow(qid, i, { reorderable: queueReorderAllowed }))}
+              {chip.queue.map((qid, i) => {
+                const e = entryById(qid);
+                if (!e) return null;
+                return (
+                  <View key={qid} style={styles.qmRow}>
+                    <Text style={styles.qmPos}>{i + 1}</Text>
+                    <View style={styles.qmMain}>
+                      <View style={styles.qmLine1}>
+                        <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
+                        <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+                      </View>
+                      <Text style={styles.qmMeta} numberOfLines={1}>
+                        <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
+                        <Text style={styles.qmMetaDot}>  •  </Text>
+                        <Text style={styles.qmWin}>W{e.wins}</Text>
+                        <Text style={styles.qmMetaDot}>  •  </Text>
+                        <Text style={styles.qmLoss}>L{e.losses}</Text>
+                      </Text>
+                      {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
+                    </View>
+                    <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
             </ScrollView>
           )}
 
-          {/* Per-team sheets (layered inside this modal — no nesting). Shared helpers so the
-              full Live → Queue page uses the identical menus. */}
-          {renderQueueActionSheet()}
-          {renderQueueReorderSheet()}
+          {/* Per-team action sheet (layered inside this modal — no nesting) */}
+          {queueMenuId && (() => {
+            const e = entryById(queueMenuId);
+            if (!e) return null;
+            const idx = chip.queue.indexOf(e.id);
+            const isFirst = idx <= 0;
+            const isLast = idx === chip.queue.length - 1;
+            const close = () => setQueueMenuId(null);
+            const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
+              <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
+                <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
+                <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
+              </TouchableOpacity>
+            );
+            return (
+              <Pressable style={styles.tdSheetOverlay} onPress={close}>
+                <Pressable style={styles.actSheet} onPress={() => {}}>
+                  <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
+                  <View style={styles.actSheetGroup}>
+                    <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
+                    <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
+                    <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
+                    <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
+                    <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
+                  </View>
+                  <View style={styles.actSheetGroup}>
+                    <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
+                  </View>
+                  <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
+                    <Text style={styles.actSheetCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </Pressable>
+              </Pressable>
+            );
+          })()}
           </View>
         </View>
       </Modal>
@@ -8069,12 +7956,6 @@ const styles = StyleSheet.create({
   qEmptyFull: { alignItems: "center", justifyContent: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.xl), paddingVertical: webSc(SPACING.xl) },
   // Compact native-style queue row (two lines).
   qmRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
-  // Draggable variant: fill the fixed slot height and paint an opaque background so a lifted
-  // row cleanly covers the rows it passes over.
-  // ☰ grip: the dedicated, explicit reorder control (tap → move menu). Primary-tinted so
-  // it reads as an affordance; a spacer keeps alignment on rows that can't be reordered.
-  qmGripBtn: { width: webSc(28), alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
-  qmGripSpacer: { width: webSc(28) },
   qmPos: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", width: webSc(24), textAlign: "center" },
   qmMain: { flex: 1 },
   qmLine1: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
@@ -8541,13 +8422,6 @@ const styles = StyleSheet.create({
   actSheetRoot: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   actSheet: { backgroundColor: COLORS.backgroundCard, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: COLORS.borderLight, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.lg) },
   actSheetTitle: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", marginBottom: webSc(SPACING.sm) },
-  actSheetSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textAlign: "center", marginTop: webSc(-4), marginBottom: webSc(SPACING.sm) },
-  // Move to Position… picker: a wrap of tappable slot numbers.
-  qPosGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm), justifyContent: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.sm) },
-  qPosCell: { minWidth: webSc(46), paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.md, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, alignItems: "center" },
-  qPosCellCurrent: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "22" },
-  qPosCellText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
-  qPosCellTextCurrent: { color: COLORS.primary },
   actSheetGroup: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: "hidden", marginBottom: webSc(SPACING.sm) },
   actRow2: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   actRow2Text: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },

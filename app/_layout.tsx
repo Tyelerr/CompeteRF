@@ -4,7 +4,6 @@ import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { analyticsService } from "../src/models/services/analytics.service";
@@ -80,11 +79,6 @@ export default function RootLayout() {
   }, []);
 
   return (
-    // GestureHandlerRootView MUST wrap the whole app or react-native-gesture-handler
-    // gestures (GestureDetector / Gesture.Pan, used by the Manage Queue drag reorder) are
-    // completely inert — no activation, no callbacks. It was previously missing, so every
-    // gesture-handler gesture silently did nothing. It has to be the OUTERMOST view.
-    <GestureHandlerRootView style={styles.root}>
     <SafeAreaProvider style={styles.root}>
       {/* App-wide native status bar. Rendered once at the root so every screen and
           modal inherits it — the phone's time, battery, signal and Wi-Fi stay visible
@@ -117,7 +111,6 @@ export default function RootLayout() {
       )}
       <WebAlertHost />
     </SafeAreaProvider>
-    </GestureHandlerRootView>
   );
 }
 

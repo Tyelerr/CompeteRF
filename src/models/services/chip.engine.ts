@@ -1244,69 +1244,25 @@ export const forfeitMatch = (
 
 // ── queue reordering ──────────────────────────────────────────────────────────
 // TD moves a queued team up/down one spot, or to the top/bottom of the line.
-// Move a waiting entry to an EXACT queue index (0-based). ONE authoritative reorder path,
-// shared by the ⋮ menu (reorderQueue) AND press-and-hold drag — so both persist the same
-// way and log the SAME "queue_reorder" audit event. Only entries actually IN the queue can
-// move (playing / holder / pending / eliminated are never in s.queue — reconcileQueue keeps
-// it to eligible waiting entries), so this can never reorder an ineligible participant.
-// A no-op move (same index) returns the input UNCHANGED so update() records nothing — a drop
-// back into the original slot creates no audit event. The audit payload keeps enough to fully
-// reconstruct the change: the mover, from/to (1-based for humans + 0-based), and the whole
-// before/after id order.
-export const moveQueueEntry = (
-  input: ChipState,
-  entryId: string,
-  toIndex: number,
-  by?: number | null,
-): ChipState => {
-  const s = clone(input);
-  const i = s.queue.indexOf(entryId);
-  if (i < 0) return input; // not a waiting entry — ineligible, ignore
-  const j = Math.max(0, Math.min(toIndex, s.queue.length - 1));
-  if (j === i) return input; // no change → no event, no save
-  const before = [...s.queue];
-  s.queue.splice(i, 1);
-  s.queue.splice(j, 0, entryId);
-  const after = [...s.queue];
-  const e = entryById(s, entryId);
-  pushEvent(
-    s,
-    "queue_reorder",
-    `${e ? teamName(e) : "Team"} moved from #${i + 1} to #${j + 1} in the queue`,
-    by,
-    {
-      entryId,
-      teamName: e ? teamName(e) : null,
-      fromIndex: i,
-      toIndex: j,
-      from: i + 1, // 1-based positions for human-readable audit
-      to: j + 1,
-      direction: j < i ? "up" : "down",
-      before, // stable entry-id order before the move
-      after, // …and after — enough to reconstruct any queue manipulation
-      source: "manual_reorder",
-    },
-  );
-  return s;
-};
-
-// Directional convenience (⋮ menu): compute the target index and delegate to the ONE
-// shared reorder path above, so the menu and drag produce identical persistence + audit.
 export const reorderQueue = (
   input: ChipState,
   entryId: string,
   to: "up" | "down" | "top" | "bottom",
   by?: number | null,
 ): ChipState => {
-  const i = input.queue.indexOf(entryId);
+  const s = clone(input);
+  const i = s.queue.indexOf(entryId);
   if (i < 0) return input;
-  const last = input.queue.length - 1;
-  const target =
-    to === "up" ? i - 1
-    : to === "down" ? i + 1
+  s.queue.splice(i, 1);
+  const j =
+    to === "up" ? Math.max(0, i - 1)
+    : to === "down" ? Math.min(s.queue.length, i + 1)
     : to === "top" ? 0
-    : last;
-  return moveQueueEntry(input, entryId, target, by);
+    : s.queue.length;
+  s.queue.splice(j, 0, entryId);
+  const e = entryById(s, entryId);
+  pushEvent(s, "manual", `${e ? teamName(e) : "Team"} moved ${to} in the queue`, by);
+  return s;
 };
 
 // ── manual chip adjustments ───────────────────────────────────────────────────

@@ -160,7 +160,6 @@ export type ChipEventType =
   | "table_removed"
   | "chip_adjust"
   | "move"
-  | "queue_reorder" // TD manually reordered the waiting queue (drag or ⋮ move)
   | "undo"
   | "redo"
   | "restore"

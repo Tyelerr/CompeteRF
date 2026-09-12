@@ -129,12 +129,6 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
           return null;
       }
 
-    // Manual queue reorder is TD micromanagement — the audit record (with actor +
-    // before/after order) is kept in chip_events for troubleshooting, but it is NOT
-    // surfaced in the public/spectator feed.
-    case "queue_reorder":
-      return null;
-
     // ── TD-only types: table_added, chip_adjust, player_added, undo/redo/restore.
     default:
       return null;
