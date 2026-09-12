@@ -72,7 +72,6 @@ import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.t
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
 import * as Haptics from "expo-haptics";
-import { DraggableQueueList } from "../../../components/tournament/live/DraggableQueueList";
 import {
   LifecyclePhase,
   LifecycleStatus,
@@ -852,6 +851,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Full-screen queue manager + the per-team action sheet inside it.
   const [queueModalOpen, setQueueModalOpen] = useState(false);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
+  // Dedicated queue-REORDER control (opened by the grip handle): which entry's move menu is
+  // open, and whether the "Move to Position…" numeric picker is showing. Explicit, tap-driven
+  // controls (no drag) — the reliable reorder affordance.
+  const [queueReorderId, setQueueReorderId] = useState<string | null>(null);
+  const [queuePosPickerOpen, setQueuePosPickerOpen] = useState(false);
   // Admin dashboard "Active Tables" preview → full-list modal (dashboard only; the
   // Live → Tables management tab is unchanged). This Modal is rendered at the screen
   // ROOT (in `modals`, a sibling of the ScrollView) — NOT nested inside the scrollable
@@ -4687,11 +4691,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   // ── Live · Queue ─────────────────────────────────────────────────────────────
-  // Full Live → Queue page. Uses the SAME draggable list + row + reorder + audit path as
-  // the pop-out Manage Queue modal (no second DnD system). Drag is gated to a stable
-  // waiting queue (see the modal for the rationale); otherwise the static list is shown.
-  // The ⋮ action sheet for this (non-modal) surface is rendered as a dedicated Modal in
-  // `modals` (queueMenuId + !queueModalOpen), so it overlays the screen correctly.
+  // Full Live → Queue page. Uses the SAME row + reorder controls + audit path as the pop-out
+  // Manage Queue modal (no second implementation). The ☰ grip opens the move menu; the ⋮
+  // keeps player actions. Both sheets for this (non-modal) surface render as a dedicated
+  // Modal in `modals` (gated by !queueModalOpen) so they overlay the screen correctly.
   const renderLiveQueue = () => {
     if (chip.queue.length === 0) {
       return (
@@ -4700,31 +4703,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Section>
       );
     }
-    const canDragQueue =
-      chip.queue.length > 1 &&
-      !readOnly &&
-      !chip.reshufflePending &&
-      !chip.shuffleReady &&
-      !chip.shuffleRound;
-    const listH = Math.max(webSc(240), Dimensions.get("window").height * 0.6);
     return (
       <Section title={`Queue (${chip.queue.length})`}>
-        {canDragQueue ? (
-          <>
-            <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
-            <View style={{ height: listH }}>
-              <DraggableQueueList
-                ids={chip.queue}
-                rowHeight={QUEUE_ROW_H}
-                renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
-                onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (page)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
-                onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (page)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
-              />
-            </View>
-          </>
-        ) : (
-          chip.queue.map((qid, i) => renderQueueRow(qid, i, { roundStatus: true }))
-        )}
+        {chip.queue.map((qid, i) => renderQueueRow(qid, i, { reorderable: queueReorderAllowed }))}
       </Section>
     );
   };
@@ -5496,25 +5477,30 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     </Modal>
   );
 
-  // Fixed row height for the Manage Queue list — required for exact drag-reorder math (the
-  // draggable list positions rows by index × height). Drag is only enabled when rows are
-  // uniform height (no shuffle-round status line), so this stays accurate.
-  const QUEUE_ROW_H = webSc(66);
-  // ONE row renderer shared by the draggable list AND the static (drag-disabled) list, so the
-  // presentation never drifts. `grip` adds the drag handle; `roundStatus` adds the shuffle-
-  // round "waiting/played" line (only shown in the static list, where rows may be taller).
+  // ONE row renderer shared by BOTH queue surfaces (pop-out modal + full Live → Queue page).
+  // The ☰ grip is a dedicated, explicit REORDER control (tap → move menu). The row itself is
+  // otherwise normal (no hidden long-press). The ⋮ button keeps the other player actions.
   const renderQueueRow = (
     qid: string,
     i: number,
-    opts?: { grip?: boolean; roundStatus?: boolean },
+    opts?: { reorderable?: boolean },
   ) => {
     const e = entryById(qid);
     if (!e) return null;
-    const rs = opts?.roundStatus ? queueRoundStatus(qid) : null;
+    const rs = queueRoundStatus(qid);
     return (
-      <View key={qid} style={[styles.qmRow, opts?.grip && styles.qmRowDrag]}>
-        {opts?.grip && (
-          <Ionicons name="reorder-three-outline" size={webMs(22)} color={COLORS.textSecondary} style={styles.qmGrip} />
+      <View key={qid} style={styles.qmRow}>
+        {opts?.reorderable ? (
+          <TouchableOpacity
+            style={styles.qmGripBtn}
+            onPress={() => { setQueuePosPickerOpen(false); setQueueReorderId(e.id); }}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+            accessibilityLabel={`Reorder ${shortTeam(e)} in the queue`}
+          >
+            <Ionicons name="reorder-three" size={webMs(24)} color={COLORS.primary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.qmGripSpacer} />
         )}
         <Text style={styles.qmPos}>{i + 1}</Text>
         <View style={styles.qmMain}>
@@ -5537,18 +5523,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </View>
     );
   };
+  // Whether a queue entry may be reordered right now: more than one entry, editable, and not
+  // mid-shuffle (finalizeReshuffle re-randomizes the queue, so a manual move would be lost).
+  const queueReorderAllowed =
+    chip.queue.length > 1 &&
+    !readOnly &&
+    !chip.reshufflePending &&
+    !chip.shuffleReady &&
+    !chip.shuffleRound;
 
-  // Per-team queue ⋮ action sheet — the non-drag fallback (Move Up/Down/Top/Bottom +
-  // Remove). Shared by BOTH queue surfaces (the pop-out modal AND the full Live → Queue
-  // page) so they use the same menu → same vm.reorderQueue → same audit path as drag.
-  // Returns null when no row's menu is open.
+  // Per-team queue ⋮ action sheet — player actions ONLY (view details, remove). Queue
+  // ORDER moved to its own grip control (renderQueueReorderSheet). Shared by both queue
+  // surfaces. Returns null when no row's ⋮ menu is open.
   const renderQueueActionSheet = () => {
     if (!queueMenuId) return null;
     const e = entryById(queueMenuId);
     if (!e) return null;
-    const idx = chip.queue.indexOf(e.id);
-    const isFirst = idx <= 0;
-    const isLast = idx === chip.queue.length - 1;
     const close = () => setQueueMenuId(null);
     const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
       <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
@@ -5562,16 +5552,74 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
           <View style={styles.actSheetGroup}>
             <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
-            <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
-            <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
-            <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
-            <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
+            {queueReorderAllowed && (
+              <Row icon="swap-vertical-outline" label="Reorder in Queue" onPress={() => { close(); setQueuePosPickerOpen(false); setQueueReorderId(e.id); }} />
+            )}
           </View>
           <View style={styles.actSheetGroup}>
             <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
           </View>
           <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
             <Text style={styles.actSheetCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    );
+  };
+
+  // Dedicated queue-REORDER sheet — opened by the ☰ grip. Explicit tap controls that all
+  // funnel through the SAME authoritative engine reorder path as before:
+  //   Move to Top/Up/Down/Bottom → vm.reorderQueue (engine reorderQueue → moveQueueEntry)
+  //   Move to Position…          → vm.moveQueueTo (engine moveQueueEntry, exact index)
+  // Both emit ONE "queue_reorder" audit event (actor auto-stamped) and no-op with no event
+  // when the target equals the current slot. Shared by both queue surfaces.
+  const renderQueueReorderSheet = () => {
+    if (!queueReorderId) return null;
+    const e = entryById(queueReorderId);
+    if (!e) return null;
+    const idx = chip.queue.indexOf(e.id);
+    if (idx < 0) return null;
+    const n = chip.queue.length;
+    const isFirst = idx <= 0;
+    const isLast = idx === n - 1;
+    const close = () => { setQueueReorderId(null); setQueuePosPickerOpen(false); };
+    const move = (fn: () => void) => { close(); Haptics.selectionAsync().catch(() => {}); fn(); };
+    const Row = ({ label, icon, onPress, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; disabled?: boolean }) => (
+      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
+        <Ionicons name={icon} size={webMs(17)} color={COLORS.textSecondary} />
+        <Text style={styles.actRow2Text}>{label}</Text>
+      </TouchableOpacity>
+    );
+    return (
+      <Pressable style={styles.tdSheetOverlay} onPress={close}>
+        <Pressable style={styles.actSheet} onPress={() => {}}>
+          <Text style={styles.actSheetTitle}>Move {shortTeam(e)}</Text>
+          <Text style={styles.actSheetSub}>Currently #{idx + 1} of {n}</Text>
+          {queuePosPickerOpen ? (
+            // Move to Position… — tap the exact slot. Same slot = no-op (engine emits nothing).
+            <View style={styles.qPosGrid}>
+              {chip.queue.map((_id, k) => (
+                <TouchableOpacity
+                  key={k}
+                  style={[styles.qPosCell, k === idx && styles.qPosCellCurrent]}
+                  disabled={k === idx}
+                  onPress={() => move(() => vm.moveQueueTo(e.id, k))}
+                >
+                  <Text style={[styles.qPosCellText, k === idx && styles.qPosCellTextCurrent]}>{k + 1}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.actSheetGroup}>
+              <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => move(() => vm.reorderQueue(e.id, "top"))} />
+              <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => move(() => vm.reorderQueue(e.id, "up"))} />
+              <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => move(() => vm.reorderQueue(e.id, "down"))} />
+              <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => move(() => vm.reorderQueue(e.id, "bottom"))} />
+              <Row icon="keypad-outline" label="Move to Position…" disabled={n <= 2} onPress={() => setQueuePosPickerOpen(true)} />
+            </View>
+          )}
+          <TouchableOpacity style={styles.actSheetCancel} onPress={queuePosPickerOpen ? () => setQueuePosPickerOpen(false) : close}>
+            <Text style={styles.actSheetCancelText}>{queuePosPickerOpen ? "Back" : "Cancel"}</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -5658,12 +5706,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       {shuffleFlowEl}
       {dashTablesModal}
       {dashAlertsModal}
-      {/* Queue ⋮ action sheet for the full Live → Queue page (a non-modal surface). When the
-          menu is opened from the pop-out Queue modal instead, that modal renders the sheet
-          inline (renderQueueActionSheet) so two RN modals never stack; here !queueModalOpen
-          keeps exactly one of them mounted. */}
-      <Modal visible={queueMenuId != null && !queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueMenuId(null)}>
+      {/* Queue ⋮ + reorder sheets for the full Live → Queue page (a non-modal surface). When
+          a sheet is opened from the pop-out Queue modal instead, that modal renders them
+          inline so two RN modals never stack; here !queueModalOpen keeps exactly one path
+          mounted. */}
+      <Modal
+        visible={(queueMenuId != null || queueReorderId != null) && !queueModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setQueueMenuId(null); setQueueReorderId(null); setQueuePosPickerOpen(false); }}
+      >
         {renderQueueActionSheet()}
+        {renderQueueReorderSheet()}
       </Modal>
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
@@ -7404,50 +7458,26 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={styles.qSectionHeadText}>Queue ({chip.queue.length})</Text>
             </View>
           )}
-          {/* Scrollable list — press-and-hold a row to drag-reorder (see DraggableQueueList).
-              Drag is enabled only when the queue is a STABLE waiting list: >1 entry, not
-              read-only, and NOT mid-shuffle (reshufflePending / shuffleReady / shuffleRound),
-              because finalizeReshuffle re-randomizes the queue and rows gain a status line
-              (variable height) — a manual order there would be discarded and the drag math
-              would be off. In those states we fall back to the static list; the ⋮ menu
-              (Move Up/Down/Top/Bottom) stays available in BOTH as a non-drag alternative. */}
+          {/* Scrollable list. Reorder is an explicit, tap-driven control: the ☰ grip on each
+              row opens a move menu (Top/Up/Down/Bottom/Position). The grip shows only when a
+              reorder is valid (>1 entry, editable, not mid-shuffle — finalizeReshuffle would
+              re-randomize the queue). The ⋮ keeps the other player actions. */}
           {chip.queue.length === 0 ? (
             <View style={styles.qEmptyFull}>
               <Ionicons name="list-outline" size={webMs(34)} color={COLORS.textMuted} />
               <Text style={styles.qEmptyTitle}>Queue is empty</Text>
               <Text style={styles.qEmptySub}>Teams will appear here when they are waiting for a table.</Text>
             </View>
-          ) : (() => {
-            const canDragQueue =
-              chip.queue.length > 1 &&
-              !readOnly &&
-              !chip.reshufflePending &&
-              !chip.shuffleReady &&
-              !chip.shuffleRound;
-            if (canDragQueue) {
-              return (
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
-                  <DraggableQueueList
-                    ids={chip.queue}
-                    rowHeight={QUEUE_ROW_H}
-                    renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
-                    onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (modal)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
-                    onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (modal)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
-                  />
-                </View>
-              );
-            }
-            return (
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-                {chip.queue.map((qid, i) => renderQueueRow(qid, i, { roundStatus: true }))}
-              </ScrollView>
-            );
-          })()}
+          ) : (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
+              {chip.queue.map((qid, i) => renderQueueRow(qid, i, { reorderable: queueReorderAllowed }))}
+            </ScrollView>
+          )}
 
-          {/* Per-team action sheet (layered inside this modal — no nesting). Shared helper so
-              the full Live → Queue page uses the identical menu. */}
+          {/* Per-team sheets (layered inside this modal — no nesting). Shared helpers so the
+              full Live → Queue page uses the identical menus. */}
           {renderQueueActionSheet()}
+          {renderQueueReorderSheet()}
           </View>
         </View>
       </Modal>
@@ -8041,9 +8071,10 @@ const styles = StyleSheet.create({
   qmRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
   // Draggable variant: fill the fixed slot height and paint an opaque background so a lifted
   // row cleanly covers the rows it passes over.
-  qmRowDrag: { height: "100%", backgroundColor: COLORS.backgroundCard, gap: webSc(SPACING.xs) },
-  qmGrip: { marginRight: webSc(2) },
-  qDragHint: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textAlign: "center", paddingVertical: webSc(SPACING.xs), paddingHorizontal: webSc(SPACING.md) },
+  // ☰ grip: the dedicated, explicit reorder control (tap → move menu). Primary-tinted so
+  // it reads as an affordance; a spacer keeps alignment on rows that can't be reordered.
+  qmGripBtn: { width: webSc(28), alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
+  qmGripSpacer: { width: webSc(28) },
   qmPos: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", width: webSc(24), textAlign: "center" },
   qmMain: { flex: 1 },
   qmLine1: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
@@ -8510,6 +8541,13 @@ const styles = StyleSheet.create({
   actSheetRoot: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
   actSheet: { backgroundColor: COLORS.backgroundCard, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderWidth: 1, borderColor: COLORS.borderLight, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.lg) },
   actSheetTitle: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", marginBottom: webSc(SPACING.sm) },
+  actSheetSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textAlign: "center", marginTop: webSc(-4), marginBottom: webSc(SPACING.sm) },
+  // Move to Position… picker: a wrap of tappable slot numbers.
+  qPosGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm), justifyContent: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.sm) },
+  qPosCell: { minWidth: webSc(46), paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.md, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, alignItems: "center" },
+  qPosCellCurrent: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "22" },
+  qPosCellText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  qPosCellTextCurrent: { color: COLORS.primary },
   actSheetGroup: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, overflow: "hidden", marginBottom: webSc(SPACING.sm) },
   actRow2: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   actRow2Text: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "600" },
