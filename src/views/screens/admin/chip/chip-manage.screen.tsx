@@ -484,10 +484,6 @@ const FORFEIT_REASONS = ["No-show", "Player left", "Rule violation", "Injury / e
   (r) => ({ label: r, value: r }),
 );
 const SHUFFLE_ANIM_MS = 3000;
-// Item 6C: after the shuffle overlay appears, wait this long before applying the engine
-// redraw BEHIND the overlay — so the underlying board never visibly jumps before the
-// animation starts. Must be < SHUFFLE_ANIM_MS so the updated board is ready when it ends.
-const SHUFFLE_STATE_DELAY_MS = 1000;
 // A 9-ball rack (diamond), matching a standard rack layout: 1 at the top, then 2/5,
 // then 8/9/4, then 7/6, then 3 at the bottom. (dx, dy) = offset from cluster center.
 const SHUFFLE_BALLS: { num: number; color: string; dx: number; dy: number }[] = [
@@ -897,6 +893,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [shuffleModalOpen, setShuffleModalOpen] = useState(false);
   const [shuffleRemoveIds, setShuffleRemoveIds] = useState<Set<string>>(new Set());
   const [shuffleAnimating, setShuffleAnimating] = useState(false);
+  // The heavy shuffle redraw (engine mutation + setChip → full chip-screen re-render +
+  // Fabric commit) is DEFERRED here and run only when the cosmetic animation finishes, so no
+  // expensive synchronous JS/commit work overlaps the visible animation (which was the hitch —
+  // a native-driven animation shares the UI thread with the mount phase of a large commit).
+  // Set when the overlay is shown; consumed once by onShuffleAnimDone behind the overlay.
+  const pendingShuffleCommitRef = useRef<(() => void) | null>(null);
   // "Next match" assignment popup: shown once per winner-stays assignment. The
   // ref tracks which pending assignments were already surfaced (so a re-render or
   // a re-received assignment doesn't reopen it).
@@ -1165,11 +1167,15 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }
   };
 
+  // Live match-timer tick. PAUSED while the shuffle overlay is animating: the 1Hz setNow
+  // otherwise re-renders the entire chip screen (and re-commits it on Fabric) every second
+  // mid-animation, which is what produced the ~1s hitch. Nothing behind the opaque overlay
+  // needs a ticking clock; the interval resumes (and now = Date.now()) as soon as it dismisses.
   useEffect(() => {
-    if (vm.phase !== "live") return;
+    if (vm.phase !== "live" || shuffleAnimating) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [vm.phase]);
+  }, [vm.phase, shuffleAnimating]);
 
   // Surface the "Next Match" popup once per new winner-stays assignment (a table
   // that has a holder + a pending challenger, awaiting Start Match).
@@ -1235,7 +1241,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Cosmetic shuffle animation finished → tear it down and land on the dashboard.
   // Stable identity so the animation child's effect never restarts mid-play.
   const onShuffleAnimDone = useCallback(() => {
-    if (__DEV__) console.log("[shuffle] animation done → dismiss", Date.now());
+    if (__DEV__) console.log("[shuffle] animation done", Date.now());
+    // Apply the deferred redraw NOW (animation is over — nothing left to hitch), then dismiss
+    // the overlay + route in the SAME React batch, so the new board is already rendered when
+    // the overlay disappears (no flash of the old board, no mid-animation stutter).
+    const commit = pendingShuffleCommitRef.current;
+    pendingShuffleCommitRef.current = null;
+    if (commit) {
+      const t0 = __DEV__ ? Date.now() : 0;
+      commit();
+      if (__DEV__) console.log(`[shuffle] state committed after anim (engine sync ${Date.now() - t0}ms)`);
+    }
     setShuffleAnimating(false);
     goToDashboard();
   }, [goToDashboard]);
@@ -3638,16 +3654,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     setShuffleModalOpen(false);
     setShuffleRemoveIds(new Set());
     if (!hasLiveMatches) {
-      // Case 2 — immediate redraw. Item 6C: show the overlay FIRST, then apply the redraw
-      // behind it ~1s later so the board never visibly jumps before the animation starts;
-      // onShuffleAnimDone (at SHUFFLE_ANIM_MS) reveals the updated board.
+      // Case 2 — immediate redraw. Show the overlay FIRST and DEFER the redraw until the
+      // animation finishes (onShuffleAnimDone), so the heavy engine mutation + full re-render
+      // never overlaps the visible animation. The board updates behind the overlay right as it
+      // dismisses, so there's no pre-animation jump and no mid-animation stutter.
+      pendingShuffleCommitRef.current = () => vm.startShuffleCycle(removeIds);
       setShuffleAnimating(true);
       if (__DEV__) console.log("[shuffle] overlay visible", Date.now());
-      setTimeout(() => {
-        const t0 = __DEV__ ? Date.now() : 0;
-        vm.startShuffleCycle(removeIds); // engine mutation + setChip, applied BEHIND the overlay
-        if (__DEV__) console.log(`[shuffle] state committed (engine sync ${Date.now() - t0}ms)`);
-      }, SHUFFLE_STATE_DELAY_MS);
     } else {
       // Case 1 — matches live: no animation yet; apply now and go to the dashboard to watch
       // "Finishing the Round" drain, then Ready to Shuffle → Start Shuffle.
@@ -3659,13 +3672,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // the ONE deliberate tap that plays the animation and performs the redraw. Item 6C: overlay
   // first, redraw behind it ~1s later.
   const startShuffleRedraw = () => {
+    // Deferred like Case 2: the finalizeReshuffle redraw runs in onShuffleAnimDone, behind the
+    // overlay, after the animation completes — never during it.
+    pendingShuffleCommitRef.current = () => vm.startShuffle();
     setShuffleAnimating(true);
     if (__DEV__) console.log("[shuffle] overlay visible", Date.now());
-    setTimeout(() => {
-      const t0 = __DEV__ ? Date.now() : 0;
-      vm.startShuffle(); // finalizeReshuffle → next round (applied BEHIND the overlay)
-      if (__DEV__) console.log(`[shuffle] state committed (engine sync ${Date.now() - t0}ms)`);
-    }, SHUFFLE_STATE_DELAY_MS);
   };
 
   // ── Shuffle Mode banner ──────────────────────────────────────────────────────
