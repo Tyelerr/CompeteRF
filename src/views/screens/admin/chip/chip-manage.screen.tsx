@@ -4683,26 +4683,90 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   // ── Live · Queue ─────────────────────────────────────────────────────────────
+  // ONE shared queue-row renderer, used by BOTH the pop-out Queue modal AND the full Live →
+  // Queue page, so the two surfaces can never drift. Presentation matches the modal: rank on
+  // the left; name + chips on the top line; "Fargo · W · L" beneath; the round status
+  // ("Waiting for turn") in blue; the ⋮ menu on the right. (The rematch-skipped note renders
+  // only in the rare transient case where it applies.)
+  const renderQueueRow = (qid: string, i: number) => {
+    const e = entryById(qid);
+    if (!e) return null;
+    const rs = queueRoundStatus(qid);
+    return (
+      <View key={qid} style={styles.qmRow}>
+        <Text style={styles.qmPos}>{i + 1}</Text>
+        <View style={styles.qmMain}>
+          <View style={styles.qmLine1}>
+            <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
+            <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+          </View>
+          <Text style={styles.qmMeta} numberOfLines={1}>
+            <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
+            <Text style={styles.qmMetaDot}>  •  </Text>
+            <Text style={styles.qmWin}>W{e.wins}</Text>
+            <Text style={styles.qmMetaDot}>  •  </Text>
+            <Text style={styles.qmLoss}>L{e.losses}</Text>
+          </Text>
+          {rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null}
+          {rematchSkippedLabel(chip, qid) ? (
+            <Text style={styles.qRematchSkip} numberOfLines={1}>⚠ Rematch skipped</Text>
+          ) : null}
+        </View>
+        <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // The per-team queue ⋮ action sheet — shared so both surfaces get the identical menu.
+  // Renders inline inside the pop-out modal (no nested RN modal) and, for the full page, as
+  // a dedicated Modal in `modals` (gated by !queueModalOpen so only one is ever mounted).
+  const renderQueueActionSheet = () => {
+    if (!queueMenuId) return null;
+    const e = entryById(queueMenuId);
+    if (!e) return null;
+    const idx = chip.queue.indexOf(e.id);
+    const isFirst = idx <= 0;
+    const isLast = idx === chip.queue.length - 1;
+    const close = () => setQueueMenuId(null);
+    const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
+      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
+        <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
+        <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
+      </TouchableOpacity>
+    );
+    return (
+      <Pressable style={styles.tdSheetOverlay} onPress={close}>
+        <Pressable style={styles.actSheet} onPress={() => {}}>
+          <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
+          <View style={styles.actSheetGroup}>
+            <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
+            <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
+            <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
+            <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
+            <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
+          </View>
+          <View style={styles.actSheetGroup}>
+            <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
+          </View>
+          <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
+            <Text style={styles.actSheetCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    );
+  };
+
+  // Full Live → Queue page — same card + rows as the pop-out modal (minus the modal's
+  // Cancel/Done + "Up Next" chrome). The ⋮ sheet for this surface renders in `modals`.
   const renderLiveQueue = () => (
     <Section title={`Queue (${chip.queue.length})`}>
-      {chip.queue.map((qid, i) => {
-        const e = entryById(qid);
-        if (!e) return null;
-        return (
-          <View key={qid} style={styles.queueRow}>
-            <Text style={styles.queuePos}>{i + 1}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.queueName} numberOfLines={1}>{shortTeam(e)}</Text>
-              {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
-              {rematchSkippedLabel(chip, qid) ? (
-                <Text style={styles.qRematchSkip} numberOfLines={1}>⚠ Rematch skipped</Text>
-              ) : null}
-            </View>
-            <Text style={styles.queueMeta}><Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>{e.chips} chip{e.chips === 1 ? "" : "s"}</Text> · {e.wins}-{e.losses}</Text>
-          </View>
-        );
-      })}
-      {chip.queue.length === 0 && <Text style={styles.hint}>Queue is empty.</Text>}
+      {chip.queue.length === 0 ? (
+        <Text style={styles.hint}>Queue is empty.</Text>
+      ) : (
+        chip.queue.map((qid, i) => renderQueueRow(qid, i))
+      )}
     </Section>
   );
 
@@ -5552,6 +5616,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     <>
       {shuffleFlowEl}
       {dashTablesModal}
+      {/* Queue ⋮ action sheet for the full Live → Queue page (a non-modal surface). When the
+          menu is opened from the pop-out Queue modal instead, that modal renders the sheet
+          inline (renderQueueActionSheet); !queueModalOpen keeps exactly one path mounted so
+          two RN modals never stack. */}
+      <Modal visible={queueMenuId != null && !queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueMenuId(null)}>
+        {renderQueueActionSheet()}
+      </Modal>
       {dashAlertsModal}
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
@@ -7301,70 +7372,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             </View>
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-              {chip.queue.map((qid, i) => {
-                const e = entryById(qid);
-                if (!e) return null;
-                return (
-                  <View key={qid} style={styles.qmRow}>
-                    <Text style={styles.qmPos}>{i + 1}</Text>
-                    <View style={styles.qmMain}>
-                      <View style={styles.qmLine1}>
-                        <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
-                        <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
-                      </View>
-                      <Text style={styles.qmMeta} numberOfLines={1}>
-                        <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
-                        <Text style={styles.qmMetaDot}>  •  </Text>
-                        <Text style={styles.qmWin}>W{e.wins}</Text>
-                        <Text style={styles.qmMetaDot}>  •  </Text>
-                        <Text style={styles.qmLoss}>L{e.losses}</Text>
-                      </Text>
-                      {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
-                    </View>
-                    <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+              {chip.queue.map((qid, i) => renderQueueRow(qid, i))}
             </ScrollView>
           )}
 
-          {/* Per-team action sheet (layered inside this modal — no nesting) */}
-          {queueMenuId && (() => {
-            const e = entryById(queueMenuId);
-            if (!e) return null;
-            const idx = chip.queue.indexOf(e.id);
-            const isFirst = idx <= 0;
-            const isLast = idx === chip.queue.length - 1;
-            const close = () => setQueueMenuId(null);
-            const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
-              <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
-                <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
-                <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
-              </TouchableOpacity>
-            );
-            return (
-              <Pressable style={styles.tdSheetOverlay} onPress={close}>
-                <Pressable style={styles.actSheet} onPress={() => {}}>
-                  <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
-                  <View style={styles.actSheetGroup}>
-                    <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
-                    <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
-                    <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
-                    <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
-                    <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
-                  </View>
-                  <View style={styles.actSheetGroup}>
-                    <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
-                  </View>
-                  <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
-                    <Text style={styles.actSheetCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </Pressable>
-              </Pressable>
-            );
-          })()}
+          {/* Per-team action sheet (layered inside this modal — no nesting). Shared helper so
+              the full Live → Queue page uses the identical menu. */}
+          {renderQueueActionSheet()}
           </View>
         </View>
       </Modal>
@@ -8151,10 +8165,6 @@ const styles = StyleSheet.create({
   winnerMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
   winnerTap: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), marginTop: 2 },
 
-  queueRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  queuePos: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: 22 },
-  queueName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flex: 1 },
-  queueMeta: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs) },
 
   // Live Players row: two-line stack (name / scannable stats) with generous
   // vertical rhythm; the ⋮ stays centered and never collides with a long name.
