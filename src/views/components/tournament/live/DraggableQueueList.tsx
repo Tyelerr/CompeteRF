@@ -181,6 +181,7 @@ export interface DraggableQueueListProps {
   onReorder: (id: string, toIndex: number) => void;
   onPickup?: () => void; // fired when a row is lifted (haptic lives here)
   disabled?: boolean;
+  longPressMs?: number; // hold duration before drag activates (default 400ms)
 }
 
 export const DraggableQueueList = ({
@@ -191,6 +192,7 @@ export const DraggableQueueList = ({
   onReorder,
   onPickup,
   disabled = false,
+  longPressMs = 400,
 }: DraggableQueueListProps) => {
   const positions = useSharedValue<Record<string, number>>(positionsFromIds(ids));
   const activeId = useSharedValue<string | null>(null);
@@ -224,7 +226,7 @@ export const DraggableQueueList = ({
           disabled={disabled}
           positions={positions}
           activeId={activeId}
-          longPressMs={220}
+          longPressMs={longPressMs}
           onPickup={pickup}
           onDrop={onReorder}
           setScrollEnabled={setScrollEnabled}

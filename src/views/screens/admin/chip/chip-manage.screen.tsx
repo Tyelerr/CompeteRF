@@ -4688,28 +4688,47 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   // ── Live · Queue ─────────────────────────────────────────────────────────────
-  const renderLiveQueue = () => (
-    <Section title={`Queue (${chip.queue.length})`}>
-      {chip.queue.map((qid, i) => {
-        const e = entryById(qid);
-        if (!e) return null;
-        return (
-          <View key={qid} style={styles.queueRow}>
-            <Text style={styles.queuePos}>{i + 1}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.queueName} numberOfLines={1}>{shortTeam(e)}</Text>
-              {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
-              {rematchSkippedLabel(chip, qid) ? (
-                <Text style={styles.qRematchSkip} numberOfLines={1}>⚠ Rematch skipped</Text>
-              ) : null}
-            </View>
-            <Text style={styles.queueMeta}><Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>{e.chips} chip{e.chips === 1 ? "" : "s"}</Text> · {e.wins}-{e.losses}</Text>
-          </View>
-        );
-      })}
-      {chip.queue.length === 0 && <Text style={styles.hint}>Queue is empty.</Text>}
-    </Section>
-  );
+  // Full Live → Queue page. Uses the SAME draggable list + row + reorder + audit path as
+  // the pop-out Manage Queue modal (no second DnD system). Drag is gated to a stable
+  // waiting queue (see the modal for the rationale); otherwise the static list is shown.
+  // The ⋮ action sheet for this (non-modal) surface is rendered as a dedicated Modal in
+  // `modals` (queueMenuId + !queueModalOpen), so it overlays the screen correctly.
+  const renderLiveQueue = () => {
+    if (chip.queue.length === 0) {
+      return (
+        <Section title="Queue (0)">
+          <Text style={styles.hint}>Queue is empty.</Text>
+        </Section>
+      );
+    }
+    const canDragQueue =
+      chip.queue.length > 1 &&
+      !readOnly &&
+      !chip.reshufflePending &&
+      !chip.shuffleReady &&
+      !chip.shuffleRound;
+    const listH = Math.max(webSc(240), Dimensions.get("window").height * 0.6);
+    return (
+      <Section title={`Queue (${chip.queue.length})`}>
+        {canDragQueue ? (
+          <>
+            <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
+            <GestureHandlerRootView style={{ height: listH }}>
+              <DraggableQueueList
+                ids={chip.queue}
+                rowHeight={QUEUE_ROW_H}
+                renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
+                onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (page)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+                onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (page)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
+              />
+            </GestureHandlerRootView>
+          </>
+        ) : (
+          chip.queue.map((qid, i) => renderQueueRow(qid, i, { roundStatus: true }))
+        )}
+      </Section>
+    );
+  };
 
   // Measure an anchor node in the window and place a dropdown just below it,
   // right-edge aligned (opens left), clamped to stay on-screen.
@@ -5520,6 +5539,46 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
   };
 
+  // Per-team queue ⋮ action sheet — the non-drag fallback (Move Up/Down/Top/Bottom +
+  // Remove). Shared by BOTH queue surfaces (the pop-out modal AND the full Live → Queue
+  // page) so they use the same menu → same vm.reorderQueue → same audit path as drag.
+  // Returns null when no row's menu is open.
+  const renderQueueActionSheet = () => {
+    if (!queueMenuId) return null;
+    const e = entryById(queueMenuId);
+    if (!e) return null;
+    const idx = chip.queue.indexOf(e.id);
+    const isFirst = idx <= 0;
+    const isLast = idx === chip.queue.length - 1;
+    const close = () => setQueueMenuId(null);
+    const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
+      <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
+        <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
+        <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
+      </TouchableOpacity>
+    );
+    return (
+      <Pressable style={styles.tdSheetOverlay} onPress={close}>
+        <Pressable style={styles.actSheet} onPress={() => {}}>
+          <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
+          <View style={styles.actSheetGroup}>
+            <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
+            <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
+            <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
+            <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
+            <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
+          </View>
+          <View style={styles.actSheetGroup}>
+            <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
+          </View>
+          <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
+            <Text style={styles.actSheetCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    );
+  };
+
   // Dashboard "View All Tables" — rendered HERE at the screen root (sibling of the live
   // ScrollView), never inside the scrollable dashboard content, so its native host view
   // is torn down cleanly on iOS/Fabric and can't leave a touch-blocking layer behind.
@@ -5600,6 +5659,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       {shuffleFlowEl}
       {dashTablesModal}
       {dashAlertsModal}
+      {/* Queue ⋮ action sheet for the full Live → Queue page (a non-modal surface). When the
+          menu is opened from the pop-out Queue modal instead, that modal renders the sheet
+          inline (renderQueueActionSheet) so two RN modals never stack; here !queueModalOpen
+          keeps exactly one of them mounted. */}
+      <Modal visible={queueMenuId != null && !queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueMenuId(null)}>
+        {renderQueueActionSheet()}
+      </Modal>
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
           Add Player directly into chip_entries via onAddSingles (players.id identity),
@@ -7368,8 +7434,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       ids={chip.queue}
                       rowHeight={QUEUE_ROW_H}
                       renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
-                      onPickup={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
-                      onReorder={(entId, toIndex) => { Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
+                      onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (modal)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+                      onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (modal)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
                     />
                   </GestureHandlerRootView>
                 </View>
@@ -7382,41 +7448,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             );
           })()}
 
-          {/* Per-team action sheet (layered inside this modal — no nesting) */}
-          {queueMenuId && (() => {
-            const e = entryById(queueMenuId);
-            if (!e) return null;
-            const idx = chip.queue.indexOf(e.id);
-            const isFirst = idx <= 0;
-            const isLast = idx === chip.queue.length - 1;
-            const close = () => setQueueMenuId(null);
-            const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
-              <TouchableOpacity style={[styles.actRow2, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
-                <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
-                <Text style={[styles.actRow2Text, danger && styles.actRow2Danger]}>{label}</Text>
-              </TouchableOpacity>
-            );
-            return (
-              <Pressable style={styles.tdSheetOverlay} onPress={close}>
-                <Pressable style={styles.actSheet} onPress={() => {}}>
-                  <Text style={styles.actSheetTitle}>{shortTeam(e)}</Text>
-                  <View style={styles.actSheetGroup}>
-                    <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
-                    <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
-                    <Row icon="arrow-down-outline" label="Move Down" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "down"); }} />
-                    <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
-                    <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
-                  </View>
-                  <View style={styles.actSheetGroup}>
-                    <Row icon="trash-outline" danger label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
-                  </View>
-                  <TouchableOpacity style={styles.actSheetCancel} onPress={close}>
-                    <Text style={styles.actSheetCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </Pressable>
-              </Pressable>
-            );
-          })()}
+          {/* Per-team action sheet (layered inside this modal — no nesting). Shared helper so
+              the full Live → Queue page uses the identical menu. */}
+          {renderQueueActionSheet()}
           </View>
         </View>
       </Modal>
