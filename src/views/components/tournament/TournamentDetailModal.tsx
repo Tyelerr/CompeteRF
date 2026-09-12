@@ -360,8 +360,10 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
             <Text allowFontScaling={false} style={s.disclaimerText}>
               This tournament is organized by {tournament.venues?.venue || "an independent venue"}. Compete is not the organizer and is not responsible for tournament operations.
             </Text>
-          </ScrollView>
 
+            {/* Primary CTA lives at the END of the scrollable content — a floating button on
+                the modal's own background, NOT a separate dark footer strip. Only the Share /
+                Report / Close row below stays pinned. */}
           {isExternal && tournament.external_bracket_url ? (
             <View style={s.registerContainer}>
               <TouchableOpacity style={s.viewTournamentButton} onPress={handleViewBracket}>
@@ -416,6 +418,7 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
               )}
             </View>
           )}
+          </ScrollView>
 
           <View style={s.bottomBar}>
             <TouchableOpacity style={s.shareButton} onPress={handleShare}>
@@ -648,10 +651,10 @@ const s = StyleSheet.create({
   chipLine: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, paddingVertical: 2, textAlign: "center" },
   chipLineCount: { fontWeight: "800", color: COLORS.primary },
   disclaimerText: { fontSize: moderateScale(11), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.md), lineHeight: moderateScale(16), opacity: 0.6 },
-  // The primary CTA floats between the scroll content and the Share/Report/Close row: no
-  // background block, horizontal margins matching the content cards, and breathing room
-  // above AND below so it doesn't feel attached to the footer divider.
-  registerContainer: { paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.lg) },
+  // The primary CTA is the LAST item in the scroll content (transparent, content-height) —
+  // a floating button on the modal background, not a dark footer block. Horizontal inset and
+  // the gap below come from scrollContent's own padding; only a modest top gap is added here.
+  registerContainer: { paddingTop: scale(SPACING.sm) },
   viewTournamentButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
   viewTournamentText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   registerButton: { backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center" },
