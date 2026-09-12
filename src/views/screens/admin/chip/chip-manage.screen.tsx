@@ -4280,7 +4280,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               if (!e) return null;
               return (
                 <TouchableOpacity key={qid} style={[styles.qRow2, i === 0 && styles.noBorderTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-                  <Text style={styles.qPos2}>{i + 1}</Text>
+                  <Text style={styles.qPos2} numberOfLines={1}>{i + 1}</Text>
                   <View style={styles.qNameCol}>
                     <Text style={styles.qName2} numberOfLines={1}>{shortTeam(e)}</Text>
                     {e.teamFargo != null ? <Text style={styles.qFargo2}>{fargoLabel}: {e.teamFargo}</Text> : null}
@@ -4346,7 +4346,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <DashSection icon="trophy-outline" title="Chip Leaders" action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-              <Text style={styles.clRank}>{i + 1}.</Text>
+              <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
               <Text style={styles.clName} numberOfLines={1}>{shortTeam(e)}</Text>
               <Text style={[styles.clChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} chips</Text>
             </TouchableOpacity>
@@ -4754,7 +4754,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const rs = queueRoundStatus(qid);
     return (
       <View key={qid} style={styles.qmRow}>
-        <Text style={styles.qmPos}>{i + 1}</Text>
+        <Text style={styles.qmPos} numberOfLines={1}>{i + 1}</Text>
         <View style={styles.qmMain}>
           <View style={styles.qmLine1}>
             <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
@@ -7952,7 +7952,7 @@ const styles = StyleSheet.create({
   alertUrgent: { color: COLORS.error, fontWeight: "600" },
   // Queue rows.
   qRow2: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  qPos2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", width: webSc(22) },
+  qPos2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", minWidth: webSc(28), flexShrink: 0 },
   qNameCol: { flex: 1 },
   qName2: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
   qFargo2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
@@ -7983,7 +7983,7 @@ const styles = StyleSheet.create({
   qEmptyFull: { alignItems: "center", justifyContent: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.xl), paddingVertical: webSc(SPACING.xl) },
   // Compact native-style queue row (two lines).
   qmRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
-  qmPos: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", width: webSc(24), textAlign: "center" },
+  qmPos: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", minWidth: webSc(30), flexShrink: 0, textAlign: "center" },
   qmMain: { flex: 1 },
   qmLine1: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   qmName: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
@@ -8091,7 +8091,9 @@ const styles = StyleSheet.create({
   // Chip leaders rows.
   clRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border, paddingHorizontal: webSc(SPACING.xs) },
   clRowTop: { borderTopWidth: 0, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm },
-  clRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: webSc(22) },
+  // minWidth (not fixed width) + flexShrink:0 so multi-digit ranks (10., 32., 100.) never
+  // wrap or get squeezed; paired with numberOfLines={1} on the render.
+  clRank: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", minWidth: webSc(30), flexShrink: 0 },
   clName: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
   clChips: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   // Queue team rows (full names).

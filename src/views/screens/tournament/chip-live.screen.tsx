@@ -658,7 +658,7 @@ const OverviewTab = ({
           <>
             {view.queuePreview.map((q) => (
               <TouchableOpacity key={q.id} style={styles.qRow} activeOpacity={0.7} onPress={() => onTapTeam(q.id)}>
-                <Text allowFontScaling={false} style={styles.qPos}>{q.position}</Text>
+                <Text allowFontScaling={false} style={styles.qPos} numberOfLines={1}>{q.position}</Text>
                 <View style={styles.qMid}>
                   <Text allowFontScaling={false} style={styles.qName} numberOfLines={1}>{q.name}</Text>
                   <View style={styles.qMetaRow}>
@@ -693,7 +693,7 @@ const OverviewTab = ({
           <>
             {view.standingsPreview.map((r) => (
               <TouchableOpacity key={r.id} style={[styles.clRow, r.rank === 1 && styles.clRowTop]} activeOpacity={0.7} onPress={() => onTapTeam(r.id)}>
-                <Text allowFontScaling={false} style={[styles.clRank, r.rank === 1 && styles.clRankTop]}>{r.rank}</Text>
+                <Text allowFontScaling={false} style={[styles.clRank, r.rank === 1 && styles.clRankTop]} numberOfLines={1}>{r.rank}</Text>
                 <Text allowFontScaling={false} style={styles.clName} numberOfLines={1}>{r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}</Text>
                 {r.eliminated
                   ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
@@ -1179,7 +1179,7 @@ const ListModal = ({
     ) : (
       rows.map((r, i) => (
         <TouchableOpacity key={r.id} style={[styles.qRow, i === 0 && styles.noBorderTop]} activeOpacity={0.7} onPress={() => onTap(r.id)}>
-          <Text allowFontScaling={false} style={styles.qPos}>{r.left}</Text>
+          <Text allowFontScaling={false} style={styles.qPos} numberOfLines={1}>{r.left}</Text>
           <View style={styles.qMid}>
             <Text allowFontScaling={false} style={styles.qName} numberOfLines={1}>{r.title}</Text>
             <Text allowFontScaling={false} style={styles.qSub} numberOfLines={1}>{r.sub}</Text>
@@ -1343,7 +1343,7 @@ const styles = StyleSheet.create({
 
   // Queue rows
   qRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
-  qPos: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", width: wxSc(22), textAlign: "center" },
+  qPos: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", minWidth: wxSc(30), flexShrink: 0, textAlign: "center" },
   qMid: { flex: 1, minWidth: 0 },
   qName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   qMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.sm), marginTop: 2 },
@@ -1357,7 +1357,7 @@ const styles = StyleSheet.create({
   // Chip leaders
   clRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), paddingVertical: wxSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   clRowTop: { borderTopWidth: 0 },
-  clRank: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", width: wxSc(22), textAlign: "center" },
+  clRank: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800", minWidth: wxSc(30), flexShrink: 0, textAlign: "center" },
   clRankTop: { color: COLORS.primary },
   clName: { flex: 1, color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   clChips: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
