@@ -7147,20 +7147,26 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
                     {/* Scrollable information */}
                     <ScrollView style={{ maxHeight: webSc(340) }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                      {/* Stat cards — full labels, never truncated */}
-                      <View style={styles.tdStatRow}>
-                        {([
-                          holder && holder.teamFargo != null ? { lbl: fargoLabel, val: String(holder.teamFargo) } : null,
-                          holder ? { lbl: "Current Chips", val: String(holder.chips), color: chipStatusColor(holder.chips, holder.startChips) } : null,
+                      {/* Table-level timing only. Per-participant Fargo + Current Chips were
+                          removed here — they're already on the two matchup cards above, and a
+                          single holder-only stat is misleading when two teams are shown. */}
+                      {(() => {
+                        const cards = ([
                           waitMs != null ? { lbl: "Waiting Time", val: fmtDur(waitMs) } : null,
                           matchMs != null ? { lbl: "Match Time", val: fmtDur(matchMs) } : null,
-                        ].filter(Boolean) as { lbl: string; val: string; color?: string }[]).map((s) => (
-                          <View key={s.lbl} style={styles.tdStatCard}>
-                            <Text style={styles.tdStatLbl}>{s.lbl}</Text>
-                            <Text style={[styles.tdStatVal, s.color ? { color: s.color } : null]} numberOfLines={1}>{s.val}</Text>
+                        ].filter(Boolean) as { lbl: string; val: string }[]);
+                        if (cards.length === 0) return null;
+                        return (
+                          <View style={styles.tdStatRow}>
+                            {cards.map((s) => (
+                              <View key={s.lbl} style={styles.tdStatCard}>
+                                <Text style={styles.tdStatLbl}>{s.lbl}</Text>
+                                <Text style={styles.tdStatVal} numberOfLines={1}>{s.val}</Text>
+                              </View>
+                            ))}
                           </View>
-                        ))}
-                      </View>
+                        );
+                      })()}
 
                       <Text style={styles.tdSubhead}>{t.label} Match History</Text>
                       {hist.length === 0 && <Text style={styles.tdEmpty}>No matches on this table yet.</Text>}
