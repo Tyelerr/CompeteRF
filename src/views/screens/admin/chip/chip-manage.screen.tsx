@@ -71,6 +71,9 @@ import { buildReadinessSummary, ReadinessRow, PlayerReadinessSummary } from "../
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
+import { DraggableQueueList } from "../../../components/tournament/live/DraggableQueueList";
 import {
   LifecyclePhase,
   LifecycleStatus,
@@ -337,6 +340,8 @@ const auditMeta = (ev: ChipEvent): AuditMeta => {
       return /queue/.test(t)
         ? { icon: "swap-vertical", color: AUDIT_CYAN, title: "Queue Reordered", category: "Tables" }
         : { icon: "swap-horizontal", color: AUDIT_CYAN, title: "Table Moved", category: "Tables" };
+    case "queue_reorder":
+      return { icon: "swap-vertical", color: AUDIT_CYAN, title: "Queue Reordered", category: "Tables" };
     case "restore":
       return { icon: "arrow-undo-circle", color: AUDIT_ORANGE, title: "Tournament Restored", category: "Undo" };
     // Director settings-override trail. Explicit cases so the text ("…unlocked"/"…locked")
@@ -5473,6 +5478,48 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     </Modal>
   );
 
+  // Fixed row height for the Manage Queue list — required for exact drag-reorder math (the
+  // draggable list positions rows by index × height). Drag is only enabled when rows are
+  // uniform height (no shuffle-round status line), so this stays accurate.
+  const QUEUE_ROW_H = webSc(66);
+  // ONE row renderer shared by the draggable list AND the static (drag-disabled) list, so the
+  // presentation never drifts. `grip` adds the drag handle; `roundStatus` adds the shuffle-
+  // round "waiting/played" line (only shown in the static list, where rows may be taller).
+  const renderQueueRow = (
+    qid: string,
+    i: number,
+    opts?: { grip?: boolean; roundStatus?: boolean },
+  ) => {
+    const e = entryById(qid);
+    if (!e) return null;
+    const rs = opts?.roundStatus ? queueRoundStatus(qid) : null;
+    return (
+      <View key={qid} style={[styles.qmRow, opts?.grip && styles.qmRowDrag]}>
+        {opts?.grip && (
+          <Ionicons name="reorder-three-outline" size={webMs(20)} color={COLORS.textMuted} style={styles.qmGrip} />
+        )}
+        <Text style={styles.qmPos}>{i + 1}</Text>
+        <View style={styles.qmMain}>
+          <View style={styles.qmLine1}>
+            <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
+            <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+          </View>
+          <Text style={styles.qmMeta} numberOfLines={1}>
+            <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
+            <Text style={styles.qmMetaDot}>  •  </Text>
+            <Text style={styles.qmWin}>W{e.wins}</Text>
+            <Text style={styles.qmMetaDot}>  •  </Text>
+            <Text style={styles.qmLoss}>L{e.losses}</Text>
+          </Text>
+          {rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null}
+        </View>
+        <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   // Dashboard "View All Tables" — rendered HERE at the screen root (sibling of the live
   // ScrollView), never inside the scrollable dashboard content, so its native host view
   // is torn down cleanly on iOS/Fabric and can't leave a touch-blocking layer behind.
@@ -7292,43 +7339,48 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={styles.qSectionHeadText}>Queue ({chip.queue.length})</Text>
             </View>
           )}
-          {/* Scrollable list */}
+          {/* Scrollable list — press-and-hold a row to drag-reorder (see DraggableQueueList).
+              Drag is enabled only when the queue is a STABLE waiting list: >1 entry, not
+              read-only, and NOT mid-shuffle (reshufflePending / shuffleReady / shuffleRound),
+              because finalizeReshuffle re-randomizes the queue and rows gain a status line
+              (variable height) — a manual order there would be discarded and the drag math
+              would be off. In those states we fall back to the static list; the ⋮ menu
+              (Move Up/Down/Top/Bottom) stays available in BOTH as a non-drag alternative. */}
           {chip.queue.length === 0 ? (
             <View style={styles.qEmptyFull}>
               <Ionicons name="list-outline" size={webMs(34)} color={COLORS.textMuted} />
               <Text style={styles.qEmptyTitle}>Queue is empty</Text>
               <Text style={styles.qEmptySub}>Teams will appear here when they are waiting for a table.</Text>
             </View>
-          ) : (
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-              {chip.queue.map((qid, i) => {
-                const e = entryById(qid);
-                if (!e) return null;
-                return (
-                  <View key={qid} style={styles.qmRow}>
-                    <Text style={styles.qmPos}>{i + 1}</Text>
-                    <View style={styles.qmMain}>
-                      <View style={styles.qmLine1}>
-                        <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
-                        <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
-                      </View>
-                      <Text style={styles.qmMeta} numberOfLines={1}>
-                        <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
-                        <Text style={styles.qmMetaDot}>  •  </Text>
-                        <Text style={styles.qmWin}>W{e.wins}</Text>
-                        <Text style={styles.qmMetaDot}>  •  </Text>
-                        <Text style={styles.qmLoss}>L{e.losses}</Text>
-                      </Text>
-                      {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
-                    </View>
-                    <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          )}
+          ) : (() => {
+            const canDragQueue =
+              chip.queue.length > 1 &&
+              !readOnly &&
+              !chip.reshufflePending &&
+              !chip.shuffleReady &&
+              !chip.shuffleRound;
+            if (canDragQueue) {
+              return (
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
+                  <GestureHandlerRootView style={{ flex: 1 }}>
+                    <DraggableQueueList
+                      ids={chip.queue}
+                      rowHeight={QUEUE_ROW_H}
+                      renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
+                      onPickup={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+                      onReorder={(entId, toIndex) => { Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
+                    />
+                  </GestureHandlerRootView>
+                </View>
+              );
+            }
+            return (
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
+                {chip.queue.map((qid, i) => renderQueueRow(qid, i, { roundStatus: true }))}
+              </ScrollView>
+            );
+          })()}
 
           {/* Per-team action sheet (layered inside this modal — no nesting) */}
           {queueMenuId && (() => {
@@ -7956,6 +8008,11 @@ const styles = StyleSheet.create({
   qEmptyFull: { alignItems: "center", justifyContent: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.xl), paddingVertical: webSc(SPACING.xl) },
   // Compact native-style queue row (two lines).
   qmRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border },
+  // Draggable variant: fill the fixed slot height and paint an opaque background so a lifted
+  // row cleanly covers the rows it passes over.
+  qmRowDrag: { height: "100%", backgroundColor: COLORS.backgroundCard, gap: webSc(SPACING.xs) },
+  qmGrip: { marginRight: webSc(2) },
+  qDragHint: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textAlign: "center", paddingVertical: webSc(SPACING.xs), paddingHorizontal: webSc(SPACING.md) },
   qmPos: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", width: webSc(24), textAlign: "center" },
   qmMain: { flex: 1 },
   qmLine1: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },

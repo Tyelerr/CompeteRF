@@ -14,6 +14,7 @@ import {
   adjustChips as engineAdjustChips,
   type ChipAdjustMeta,
   reorderQueue as engineReorderQueue,
+  moveQueueEntry as engineMoveQueueEntry,
   forfeitEntry as engineForfeitEntry,
   forfeitMatch as engineForfeitMatch,
   type ForfeitMeta,
@@ -694,6 +695,15 @@ export const useChipTournament = (
       update((c) => engineReorderQueue(c, entryId, to)),
     [update],
   );
+  // Press-and-hold drag reorder: move an entry to an EXACT queue index. Shares the engine's
+  // one reorder path (moveQueueEntry) with the ⋮ menu, so it gets the same optimistic update,
+  // debounced CAS-guarded save, actor stamping, restore point, and "queue_reorder" audit event.
+  // A no-op move returns unchanged state → update() records nothing (drop-in-place = no audit).
+  const moveQueueTo = useCallback(
+    (entryId: string, toIndex: number) =>
+      update((c) => engineMoveQueueEntry(c, entryId, toIndex)),
+    [update],
+  );
   const buyBack = useCallback(
     (entryId: string) => update((c) => engineBuyBack(c, entryId)),
     [update],
@@ -1280,6 +1290,7 @@ export const useChipTournament = (
     forfeitEntry,
     forfeitMatch,
     reorderQueue,
+    moveQueueTo,
     buyBack,
     restoreEntry,
     endTournament,
