@@ -261,14 +261,16 @@ const rosterUiCache = new Map<number, RosterUiState>();
 // materially changes (the id changes). Session-only (cleared on app restart) — advisory
 // alerts don't warrant durable DB persistence.
 const dismissedAlertsCache = new Map<number, Set<string>>();
+// Concise labels that fit the sort control without truncation. Values (sort behavior)
+// are unchanged; only the visible text was shortened. Asc/desc kept distinct via arrows.
 export const LIVE_SORT_OPTS: { label: string; value: LivePlayerSort }[] = [
-  { label: "Current / Status", value: "status" },
-  { label: "Name A–Z", value: "name" },
-  { label: "Chips — High to Low", value: "chipsDesc" },
-  { label: "Chips — Low to High", value: "chipsAsc" },
-  { label: "Record — Best First", value: "record" },
-  { label: "Fargo — High to Low", value: "fargoDesc" },
-  { label: "Fargo — Low to High", value: "fargoAsc" },
+  { label: "Status", value: "status" },
+  { label: "Name", value: "name" },
+  { label: "Chips ↓", value: "chipsDesc" },
+  { label: "Chips ↑", value: "chipsAsc" },
+  { label: "Record", value: "record" },
+  { label: "Fargo ↓", value: "fargoDesc" },
+  { label: "Fargo ↑", value: "fargoAsc" },
 ];
 
 // Live · Tables tab — presentation-only sort. "default" = the authoritative board
@@ -6849,10 +6851,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     const liveMatch = chip.matches.find(
                       (m) => m.status === "in_progress" && (m.aId === entry.id || m.bId === entry.id),
                     );
+                    // Same visual language as the players-list / table ⋮ menus (shared dd* styles).
                     const Item = ({ icon, label, onPress, danger }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void; danger?: boolean }) => (
-                      <TouchableOpacity style={styles.pMenuItem} onPress={onPress} activeOpacity={0.6}>
-                        <Ionicons name={icon} size={webMs(16)} color={danger ? COLORS.error : COLORS.textSecondary} />
-                        <Text style={[styles.pMenuItemText, danger && { color: COLORS.error }]} numberOfLines={1}>{label}</Text>
+                      <TouchableOpacity style={styles.ddRow} onPress={onPress} activeOpacity={0.6}>
+                        <Ionicons name={icon} size={webMs(17)} color={danger ? COLORS.error : COLORS.textSecondary} />
+                        <Text style={[styles.ddRowText, danger && { color: COLORS.error }]} numberOfLines={1}>{label}</Text>
                       </TouchableOpacity>
                     );
                     const viewHistory = () => { close(); profScrollRef.current?.scrollToEnd({ animated: true }); };
@@ -6860,6 +6863,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <>
                         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
                         <View style={styles.pMenu}>
+                          <Text style={styles.ddName} numberOfLines={1}>{teamName(entry)}</Text>
                           {p.status === "playing" && (
                             <>
                               {liveMatch && (
@@ -6877,7 +6881,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                               <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
                               <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
                               <Item icon="arrow-down-circle-outline" label="Send to Back of Queue" onPress={() => { close(); vm.reorderQueue(entry.id, "bottom"); }} />
-                              <Item icon="exit-outline" danger label="Eliminate Team" onPress={() => { close(); runAfterProfileClose(() => confirmRemoveFromQueue(entry)); }} />
+                              <Item icon="exit-outline" danger label="Forfeit" onPress={() => { close(); runAfterProfileClose(() => confirmRemoveFromQueue(entry)); }} />
                             </>
                           )}
                           {p.status === "eliminated" && (
@@ -8658,8 +8662,10 @@ const styles = StyleSheet.create({
   ptToolbar: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, marginBottom: SPACING.md },
   ptSearch: { flex: 1, flexDirection: "row", alignItems: "center", gap: SPACING.sm, height: 40, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   ptSearchInput: { flex: 1, color: COLORS.text, fontSize: FONT_SIZES.sm, ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
-  ptFilterBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: SPACING.xs, width: 168, height: 40, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  ptFilterText: { flex: 1, color: COLORS.text, fontSize: FONT_SIZES.sm, fontWeight: "700" },
+  // Content-sized with a floor (no fixed width) so the concise sort label never truncates and
+  // the search field keeps the remaining space — responsive across iPhone widths.
+  ptFilterBtn: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: SPACING.xs, minWidth: 118, maxWidth: 200, height: 40, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  ptFilterText: { color: COLORS.text, fontSize: FONT_SIZES.sm, fontWeight: "700" },
   ptAddBtn: { flexDirection: "row", alignItems: "center", gap: 6, height: 40, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.primary, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
   ptAddText: { color: "#FFFFFF", fontSize: FONT_SIZES.sm, fontWeight: "800" },
   ptTable: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, overflow: "hidden" },
@@ -8864,9 +8870,9 @@ const styles = StyleSheet.create({
   pMenuBtn: { width: webSc(32), height: webSc(32), borderRadius: webSc(16), alignItems: "center", justifyContent: "center", backgroundColor: COLORS.surface },
   pMenuBtnAbs: { position: "absolute", right: 0, top: 0 },
   // Floating contextual menu, anchored under the ⋯ button (in-place, no modal)
-  pMenu: { position: "absolute", top: webSc(60), right: webSc(SPACING.lg), minWidth: webSc(210), backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: webSc(SPACING.xs), shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 14 },
-  pMenuItem: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
-  pMenuItemText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  // Detail-modal ⋮ menu card — matches the shared ddCard visual (radius/border/bg); only the
+  // position differs (anchored top-right under the ⋯). Rows use the shared ddRow/ddRowText.
+  pMenu: { position: "absolute", top: webSc(60), right: webSc(SPACING.lg), minWidth: webSc(230), backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderLight, paddingVertical: webSc(SPACING.xs), shadowColor: "#000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 14 },
   pName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xxl), fontWeight: "700", lineHeight: webMs(FONT_SIZES.xxl) * 1.18, textAlign: "center", width: "100%" },
   pHeaderMeta: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.xs) },
   pFargo: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
