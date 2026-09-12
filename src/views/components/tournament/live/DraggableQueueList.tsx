@@ -1,174 +1,146 @@
 // src/views/components/tournament/live/DraggableQueueList.tsx
-// Press-and-hold drag-to-reorder list for the chip "Manage Queue" modal. Long-press a row
-// to lift it (haptic), drag vertically, and the surrounding rows animate out of the way;
-// release commits the new index via onReorder. Normal vertical scrolling works when NOT
-// dragging (scroll is disabled only while a row is actively held). Built on the already-
-// installed react-native-gesture-handler + react-native-reanimated (+ worklets) — no new
-// dependency and no drag library.
+// Press-and-hold drag-to-reorder for the chip "Manage Queue" (pop-out modal AND the full
+// Live → Queue page). Built on React Native CORE only — PanResponder + Animated — so it needs
+// NO gesture-handler, NO reanimated, NO worklets, and NO root provider. This is deliberate:
+// the earlier gesture-handler/reanimated version never activated on device (New Arch), so this
+// uses the responder system that always works, including inside ScrollViews and Modals.
 //
-// This component is presentation-only: it reports the drop index through onReorder and lets
-// the caller persist authoritative order (chip.queue) through the engine. Rows are a FIXED
-// height (the caller passes rowHeight) so the reorder math is exact; the caller must only
-// enable dragging when every row is uniform height (the chip screen disables it during a
-// shuffle round, where an extra status line makes rows variable-height).
+// Interaction: touch a row and hold ~longPressMs WITHOUT moving → the row arms (haptic + lift),
+// then dragging moves it and the other rows slide out of the way; release commits the index via
+// onReorder. A quick vertical swipe never arms (movement cancels the hold) so the parent
+// ScrollView scrolls normally; once armed the row refuses to yield the touch back to the parent.
+// Rows are a FIXED height (rowHeight) so the reorder math is exact.
 
-/* eslint-disable react-hooks/immutability -- reanimated shared values (SharedValue.value) are
-   designed to be written inside worklets and gesture callbacks; the React Compiler
-   immutability rule does not model reanimated and false-positives on every .value write in
-   this file. All such writes here are legitimate reanimated usage. */
-import React, { useEffect } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedReaction,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
-import type { SharedValue } from "react-native-reanimated";
+/* eslint-disable react-hooks/refs -- this component is intentionally imperative: it uses
+   PanResponder + Animated with refs for the drag lifecycle (a stable PanResponder, lazily
+   created per-row Animated.Values, and "latest value" refs read inside gesture callbacks that
+   run long after render). The React Compiler refs rule does not model this pattern and
+   false-positives on every such access; all ref use here is the standard, safe RN idiom. */
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  PanResponder,
+  type PanResponderInstance,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
+import { COLORS } from "../../../../theme/colors";
+import { RADIUS } from "../../../../theme/spacing";
 
-const SPRING = { damping: 22, stiffness: 240, mass: 0.6 } as const;
+// Movement (px) during the hold that reclassifies the touch as a scroll and cancels arming.
+const SCROLL_CANCEL_PX = 12;
 
-// id -> index map from the current id order.
-const positionsFromIds = (ids: string[]): Record<string, number> => {
-  const map: Record<string, number> = {};
-  ids.forEach((id, i) => {
-    map[id] = i;
-  });
-  return map;
-};
+interface RowHandlers {
+  onLongActivate: (id: string) => void;
+  onMove: (id: string, dy: number) => void;
+  onRelease: (id: string) => void;
+}
 
-// Worklet: move `activeId` to `newIndex`, shifting the entries in between by one. Handles
-// arbitrary jumps (fast drags), not just adjacent swaps, so the live gaps never desync.
-const reindex = (
-  positions: Record<string, number>,
-  activeId: string,
-  newIndex: number,
-): Record<string, number> => {
-  "worklet";
-  const oldIndex = positions[activeId];
-  if (oldIndex == null || newIndex === oldIndex) return positions;
-  const next: Record<string, number> = {};
-  for (const key in positions) {
-    const p = positions[key];
-    if (key === activeId) {
-      next[key] = newIndex;
-    } else if (oldIndex < newIndex) {
-      next[key] = p > oldIndex && p <= newIndex ? p - 1 : p;
-    } else {
-      next[key] = p >= newIndex && p < oldIndex ? p + 1 : p;
-    }
-  }
-  return next;
-};
-
-interface RowProps {
+interface DragRowProps {
   id: string;
   index: number;
-  count: number;
   rowHeight: number;
   disabled: boolean;
-  positions: SharedValue<Record<string, number>>;
-  activeId: SharedValue<string | null>;
   longPressMs: number;
-  onPickup: () => void;
-  onDrop: (id: string, toIndex: number) => void;
-  setScrollEnabled: (v: boolean) => void;
+  isActive: boolean;
+  offset: Animated.Value; // vertical displacement from the row's base slot
+  handlers: RowHandlers;
   children: React.ReactNode;
 }
 
-const QueueDragRow = ({
+const DragRow = ({
   id,
   index,
-  count,
   rowHeight,
   disabled,
-  positions,
-  activeId,
   longPressMs,
-  onPickup,
-  onDrop,
-  setScrollEnabled,
+  isActive,
+  offset,
+  handlers,
   children,
-}: RowProps) => {
-  const top = useSharedValue(index * rowHeight);
-  const startTop = useSharedValue(index * rowHeight);
-  const isActive = useSharedValue(false);
+}: DragRowProps) => {
+  // The PanResponder is created ONCE; these refs let its long-lived closures read the latest
+  // props/callbacks without recreating it (which would drop an in-flight gesture).
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const longPressRef = useRef(longPressMs);
+  longPressRef.current = longPressMs;
 
-  // Follow position changes (both live reorders from OTHER rows being dragged and external
-  // queue updates) when this row is not the one being held.
-  useAnimatedReaction(
-    () => positions.value[id],
-    (cur, prev) => {
-      if (cur == null) return;
-      if (!isActive.value && cur !== prev) {
-        top.value = withSpring(cur * rowHeight, SPRING);
-      }
-    },
-  );
+  const armed = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTimer = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
 
-  const pan = Gesture.Pan()
-    .enabled(!disabled)
-    .activateAfterLongPress(longPressMs)
-    .onStart(() => {
-      isActive.value = true;
-      activeId.value = id;
-      startTop.value = (positions.value[id] ?? index) * rowHeight;
-      top.value = startTop.value;
-      runOnJS(setScrollEnabled)(false);
-      runOnJS(onPickup)();
-    })
-    .onUpdate((e) => {
-      top.value = startTop.value + e.translationY;
-      const newIndex = Math.max(
-        0,
-        Math.min(count - 1, Math.round(top.value / rowHeight)),
-      );
-      if (newIndex !== positions.value[id]) {
-        positions.value = reindex(positions.value, id, newIndex);
-      }
-    })
-    .onEnd(() => {
-      const finalIndex = positions.value[id] ?? index;
-      top.value = withSpring(finalIndex * rowHeight, SPRING);
-      isActive.value = false;
-      activeId.value = null;
-      runOnJS(setScrollEnabled)(true);
-      runOnJS(onDrop)(id, finalIndex);
-    })
-    .onFinalize(() => {
-      // Safety net for a cancelled gesture (no onEnd): snap back, re-enable scroll, and do
-      // NOT commit a reorder.
-      if (isActive.value) {
-        isActive.value = false;
-        activeId.value = null;
-        top.value = withSpring((positions.value[id] ?? index) * rowHeight, SPRING);
-        runOnJS(setScrollEnabled)(true);
-      }
+  const responder = useRef<PanResponderInstance | null>(null);
+  if (responder.current == null) {
+    responder.current = PanResponder.create({
+      // Do NOT claim the touch on start (so a swipe can still scroll the parent) — but start
+      // the long-press arming timer as a side effect.
+      onStartShouldSetPanResponder: () => {
+        if (disabledRef.current) return false;
+        armed.current = false;
+        clearTimer();
+        timer.current = setTimeout(() => {
+          armed.current = true;
+          handlersRef.current.onLongActivate(id);
+        }, longPressRef.current);
+        return false;
+      },
+      // Claim the touch ONLY once armed. Before arming, any real movement means the user is
+      // scrolling → cancel the hold and let the parent ScrollView have it.
+      onMoveShouldSetPanResponder: (_e, g) => {
+        if (disabledRef.current) return false;
+        if (!armed.current) {
+          if (Math.abs(g.dy) > SCROLL_CANCEL_PX || Math.abs(g.dx) > SCROLL_CANCEL_PX) clearTimer();
+          return false;
+        }
+        return true;
+      },
+      onPanResponderMove: (_e, g) => {
+        if (armed.current) handlersRef.current.onMove(id, g.dy);
+      },
+      onPanResponderRelease: () => {
+        clearTimer();
+        if (armed.current) {
+          armed.current = false;
+          handlersRef.current.onRelease(id);
+        }
+      },
+      onPanResponderTerminate: () => {
+        clearTimer();
+        if (armed.current) {
+          armed.current = false;
+          handlersRef.current.onRelease(id);
+        }
+      },
+      // Once armed/dragging, don't let the parent ScrollView steal the gesture back.
+      onPanResponderTerminationRequest: () => !armed.current,
     });
+  }
 
-  const style = useAnimatedStyle(() => ({
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: rowHeight,
-    top: top.value,
-    zIndex: isActive.value ? 20 : 1,
-    elevation: isActive.value ? 8 : 0,
-    shadowColor: "#000",
-    shadowOpacity: isActive.value ? 0.3 : 0,
-    shadowRadius: isActive.value ? 8 : 0,
-    shadowOffset: { width: 0, height: isActive.value ? 4 : 0 },
-    transform: [{ scale: withTiming(isActive.value ? 1.03 : 1, { duration: 120 }) }],
-  }));
+  useEffect(() => clearTimer, []);
 
   return (
-    <Animated.View style={style}>
-      <GestureDetector gesture={pan}>
-        <View style={styles.rowInner}>{children}</View>
-      </GestureDetector>
+    <Animated.View
+      {...responder.current.panHandlers}
+      style={[
+        styles.row,
+        {
+          top: index * rowHeight,
+          height: rowHeight,
+          transform: [{ translateY: offset }, { scale: isActive ? 1.03 : 1 }],
+          zIndex: isActive ? 20 : 1,
+        },
+        isActive && styles.rowActive,
+      ]}
+    >
+      {children}
     </Animated.View>
   );
 };
@@ -176,12 +148,12 @@ const QueueDragRow = ({
 export interface DraggableQueueListProps {
   ids: string[];
   rowHeight: number;
-  maxHeight?: number; // optional cap; by default the list flexes to fill its parent
+  maxHeight?: number;
   renderRow: (id: string, index: number) => React.ReactNode;
   onReorder: (id: string, toIndex: number) => void;
-  onPickup?: () => void; // fired when a row is lifted (haptic lives here)
+  onPickup?: () => void; // fired when a row arms (haptic lives here)
   disabled?: boolean;
-  longPressMs?: number; // hold duration before drag activates (default 400ms)
+  longPressMs?: number;
 }
 
 export const DraggableQueueList = ({
@@ -194,50 +166,121 @@ export const DraggableQueueList = ({
   disabled = false,
   longPressMs = 400,
 }: DraggableQueueListProps) => {
-  const positions = useSharedValue<Record<string, number>>(positionsFromIds(ids));
-  const activeId = useSharedValue<string | null>(null);
-  const [scrollEnabled, setScrollEnabled] = React.useState(true);
+  const [order, setOrder] = useState<string[]>(ids);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
-  // Re-sync when the authoritative id order changes externally (a committed reorder, a
-  // poll/reload, a seat/removal) — but never mid-drag, so a live hold is not clobbered.
-  useEffect(() => {
-    if (activeId.value == null) {
-      positions.value = positionsFromIds(ids);
+  const orderRef = useRef<string[]>(ids);
+  orderRef.current = order;
+  const draggingRef = useRef<{ id: string; startIndex: number; hoverIndex: number } | null>(null);
+
+  // Per-id vertical displacement from its base slot (Animated so moves don't re-render React).
+  const offsets = useRef<Record<string, Animated.Value>>({});
+  const getOffset = (id: string) => {
+    if (!offsets.current[id]) offsets.current[id] = new Animated.Value(0);
+    return offsets.current[id];
+  };
+  const resetOffsets = () => {
+    for (const key in offsets.current) {
+      offsets.current[key].stopAnimation();
+      offsets.current[key].setValue(0);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  };
+
+  // Latest callbacks/props read by the stable handlers object (which is created once).
+  const onReorderRef = useRef(onReorder);
+  onReorderRef.current = onReorder;
+  const onPickupRef = useRef(onPickup);
+  onPickupRef.current = onPickup;
+  const rowHeightRef = useRef(rowHeight);
+  rowHeightRef.current = rowHeight;
+
+  // Re-sync when the authoritative id order changes externally (a committed reorder, a poll /
+  // reload, a seat / removal) — but never mid-drag, so a live hold is not clobbered.
+  useEffect(() => {
+    if (!draggingRef.current) {
+      setOrder(ids);
+      resetOffsets();
+    }
   }, [ids]);
 
-  const pickup = () => onPickup?.();
+  const handlers = useRef<RowHandlers>({
+    onLongActivate: (id) => {
+      const startIndex = orderRef.current.indexOf(id);
+      if (startIndex < 0) return;
+      draggingRef.current = { id, startIndex, hoverIndex: startIndex };
+      setActiveId(id);
+      setScrollEnabled(false);
+      onPickupRef.current?.();
+    },
+    onMove: (id, dy) => {
+      const d = draggingRef.current;
+      if (!d || d.id !== id) return;
+      const rh = rowHeightRef.current;
+      getOffset(id).setValue(dy); // active row follows the finger
+      const n = orderRef.current.length;
+      const newHover = Math.max(0, Math.min(n - 1, Math.round(d.startIndex + dy / rh)));
+      if (newHover === d.hoverIndex) return;
+      d.hoverIndex = newHover;
+      // Slide every other row to the slot it would occupy if the active row dropped at newHover.
+      orderRef.current.forEach((oid, i) => {
+        if (oid === id) return;
+        let shift = 0;
+        if (d.startIndex < newHover && i > d.startIndex && i <= newHover) shift = -rh;
+        else if (d.startIndex > newHover && i >= newHover && i < d.startIndex) shift = rh;
+        Animated.timing(getOffset(oid), { toValue: shift, duration: 140, useNativeDriver: true }).start();
+      });
+    },
+    onRelease: (id) => {
+      const d = draggingRef.current;
+      draggingRef.current = null;
+      setActiveId(null);
+      setScrollEnabled(true);
+      resetOffsets();
+      if (!d || d.id !== id) return;
+      if (d.hoverIndex !== d.startIndex) onReorderRef.current(id, d.hoverIndex);
+    },
+  }).current;
 
   return (
     <ScrollView
       style={maxHeight != null ? { flex: 1, maxHeight } : { flex: 1 }}
       scrollEnabled={scrollEnabled}
       showsVerticalScrollIndicator
-      contentContainerStyle={{ height: ids.length * rowHeight }}
+      contentContainerStyle={{ height: order.length * rowHeight }}
     >
-      {ids.map((id, i) => (
-        <QueueDragRow
+      {order.map((id, i) => (
+        <DragRow
           key={id}
           id={id}
           index={i}
-          count={ids.length}
           rowHeight={rowHeight}
           disabled={disabled}
-          positions={positions}
-          activeId={activeId}
           longPressMs={longPressMs}
-          onPickup={pickup}
-          onDrop={onReorder}
-          setScrollEnabled={setScrollEnabled}
+          isActive={activeId === id}
+          offset={getOffset(id)}
+          handlers={handlers}
         >
           {renderRow(id, i)}
-        </QueueDragRow>
+        </DragRow>
       ))}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  rowInner: { flex: 1 },
+  row: { position: "absolute", left: 0, right: 0 },
+  // Obvious lifted state (the user asked for a very visible pickup): tinted background, a
+  // primary border, and an Android shadow.
+  rowActive: {
+    backgroundColor: COLORS.backgroundCard,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.sm,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+  },
 });

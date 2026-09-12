@@ -71,7 +71,6 @@ import { buildReadinessSummary, ReadinessRow, PlayerReadinessSummary } from "../
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Haptics from "expo-haptics";
 import { DraggableQueueList } from "../../../components/tournament/live/DraggableQueueList";
 import {
@@ -4713,7 +4712,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         {canDragQueue ? (
           <>
             <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
-            <GestureHandlerRootView style={{ height: listH }}>
+            <View style={{ height: listH }}>
               <DraggableQueueList
                 ids={chip.queue}
                 rowHeight={QUEUE_ROW_H}
@@ -4721,7 +4720,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (page)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
                 onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (page)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
               />
-            </GestureHandlerRootView>
+            </View>
           </>
         ) : (
           chip.queue.map((qid, i) => renderQueueRow(qid, i, { roundStatus: true }))
@@ -5515,7 +5514,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     return (
       <View key={qid} style={[styles.qmRow, opts?.grip && styles.qmRowDrag]}>
         {opts?.grip && (
-          <Ionicons name="reorder-three-outline" size={webMs(20)} color={COLORS.textMuted} style={styles.qmGrip} />
+          <Ionicons name="reorder-three-outline" size={webMs(22)} color={COLORS.textSecondary} style={styles.qmGrip} />
         )}
         <Text style={styles.qmPos}>{i + 1}</Text>
         <View style={styles.qmMain}>
@@ -7429,15 +7428,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               return (
                 <View style={{ flex: 1 }}>
                   <Text style={styles.qDragHint}>Press &amp; hold a row to drag it to a new position</Text>
-                  <GestureHandlerRootView style={{ flex: 1 }}>
-                    <DraggableQueueList
-                      ids={chip.queue}
-                      rowHeight={QUEUE_ROW_H}
-                      renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
-                      onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (modal)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
-                      onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (modal)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
-                    />
-                  </GestureHandlerRootView>
+                  <DraggableQueueList
+                    ids={chip.queue}
+                    rowHeight={QUEUE_ROW_H}
+                    renderRow={(qid, i) => renderQueueRow(qid, i, { grip: true })}
+                    onPickup={() => { if (__DEV__) console.log("[queue-drag] pickup (modal)"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+                    onReorder={(entId, toIndex) => { if (__DEV__) console.log("[queue-drag] drop (modal)", entId, "->", toIndex); Haptics.selectionAsync().catch(() => {}); vm.moveQueueTo(entId, toIndex); }}
+                  />
                 </View>
               );
             }
