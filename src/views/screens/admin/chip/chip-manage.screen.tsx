@@ -849,8 +849,36 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [queueModalOpen, setQueueModalOpen] = useState(false);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
   // Admin dashboard "Active Tables" preview → full-list modal (dashboard only; the
-  // Live → Tables management tab is unchanged).
+  // Live → Tables management tab is unchanged). This Modal is rendered at the screen
+  // ROOT (in `modals`, a sibling of the ScrollView) — NOT nested inside the scrollable
+  // dashboard content. On the New Architecture (Fabric/iOS) an RN <Modal> declared
+  // inside a <ScrollView> can leave a transparent host view behind after dismissal that
+  // keeps intercepting touches (the "dashboard dead after closing View All Tables" bug);
+  // every other modal here already lives at the root for that reason.
   const [dashTablesOpen, setDashTablesOpen] = useState(false);
+  // Proper dismissal sequencing for actions launched FROM inside View All Tables (Select
+  // Winner, and the ⋮ actions that open their own modal). Two RN Modals must never be
+  // presented at once on iOS, so we close View All Tables first, then run the queued
+  // action only AFTER it has fully dismissed — via the Modal's onDismiss (iOS) or the
+  // next frame (Android/web, which have no onDismiss and no stacked-presentation issue).
+  // Held in state (not a ref) so it can be referenced from render-time JSX cleanly.
+  const [pendingAfterTables, setPendingAfterTables] = useState<(() => void) | null>(null);
+  const flushAfterTablesClose = () => {
+    if (pendingAfterTables) {
+      const fn = pendingAfterTables;
+      setPendingAfterTables(null);
+      fn();
+    }
+  };
+  const runAfterTablesClose = (fn: () => void) => {
+    setPendingAfterTables(() => fn); // updater form stores the fn (never invokes it)
+    setDashTablesOpen(false);
+    if (Platform.OS !== "ios")
+      requestAnimationFrame(() => {
+        setPendingAfterTables(null);
+        fn();
+      });
+  };
   // Live → Tables tab: view mode (resets to "card" on leaving the page) + sort.
   const [tablesView, setTablesView] = useState<"card" | "list">("card");
   const [tablesSort, setTablesSort] = useState<LiveTableSort>("default");
@@ -3785,6 +3813,15 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // routes the ⋮ to a distinct ref map so the dashboard preview + modal never collide
   // (the Tables tab and dashboard are never mounted at the same time, so they share
   // the default ref map safely).
+  // Preview/modal table ordering (item 12): Waiting-to-Start (0) first, then Live (1),
+  // then locked/available/other (2). Component-scope so the dashboard body AND the
+  // root-level View All Tables modal sort identically from one source.
+  const dashTableRank = (t: ChipTable): number => {
+    const live = chip.matches.some((m) => m.id === t.matchId && m.status === "in_progress");
+    if (!live && t.pendingChallengerId) return 0;
+    if (live) return 1;
+    return 2;
+  };
   const renderTableCard = (t: ChipTable, inModal = false) => {
             const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
             const a = m ? entryById(m.aId) : null;
@@ -3883,7 +3920,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     confirmation modal the ⋮ "Set Winner" row uses (no immediate record, no new
                     mutation). The ⋮ menu keeps the secondary actions. */}
                 {m && a && b && (
-                  <TouchableOpacity style={styles.atWinnerBtn} onPress={() => setCompleteMatch({ matchId: m.id, aId: m.aId, bId: m.bId })} activeOpacity={0.85}>
+                  <TouchableOpacity
+                    style={styles.atWinnerBtn}
+                    onPress={() => {
+                      const sel = { matchId: m.id, aId: m.aId, bId: m.bId };
+                      // From inside View All Tables: close that modal FIRST, then open the
+                      // winner picker after it has dismissed (never two modals at once).
+                      if (inModal) runAfterTablesClose(() => setCompleteMatch(sel));
+                      else setCompleteMatch(sel);
+                    }}
+                    activeOpacity={0.85}
+                  >
                     <Text style={styles.atWinnerBtnText}>🏆 Select Winner 🏆</Text>
                   </TouchableOpacity>
                 )}
@@ -3898,15 +3945,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const activeCount = activeTables.length;
     // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
-    // locked/available/other (2), so the director never misses a table awaiting Start Match.
-    const tableRank = (t: ChipTable): number => {
-      const live = chip.matches.some((m) => m.id === t.matchId && m.status === "in_progress");
-      if (!live && t.pendingChallengerId) return 0;
-      if (live) return 1;
-      return 2;
-    };
-    const sortedActiveTables = [...activeTables].sort((a, b) => tableRank(a) - tableRank(b));
-    const waitingCount = activeTables.filter((t) => tableRank(t) === 0).length;
+    // locked/available/other (2), so the director never misses a table awaiting Start
+    // Match. Shared with the root-level View All Tables modal via dashTableRank.
+    const sortedActiveTables = [...activeTables].sort((a, b) => dashTableRank(a) - dashTableRank(b));
+    const waitingCount = activeTables.filter((t) => dashTableRank(t) === 0).length;
     const rec = recommendedActiveTables(d.playersRemaining);
     const overStaffed = d.playersRemaining > 0 && activeCount > rec && !chip.reshufflePending;
     const leaders = [...alive].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
@@ -4211,29 +4253,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             );
           })()}
         </DashSection>
-        <Modal visible={dashTablesOpen} transparent animationType="fade" onRequestClose={() => setDashTablesOpen(false)}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setDashTablesOpen(false)}>
-            <Pressable style={styles.dashTablesCard} onPress={() => {}}>
-              <View style={styles.dashTablesHeader}>
-                <Text style={styles.dashTablesTitle}>Active Tables ({activeTables.length})</Text>
-                <TouchableOpacity onPress={() => setDashTablesOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Text style={styles.dashTablesDone}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-                {sortedActiveTables.map((t) => renderTableCard(t, true))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-          {/* Table ⋮ menu rendered IN THIS layer (not a second RN Modal). Backdrop
-              dismisses only the menu → Active Tables stays open. Modal-launching
-              actions close Active Tables first (renderTableMenu's onModalAction). */}
-          {tableMenu != null && (
-            <View style={styles.dashMenuOverlay}>
-              {renderTableMenu(() => setTableMenu(null), () => setDashTablesOpen(false))}
-            </View>
-          )}
-        </Modal>
+        {/* The "View All Tables" modal itself is rendered at the screen ROOT (see
+            `dashTablesModal` in `modals`), NOT here inside the scrollable dashboard —
+            an RN <Modal> nested in a ScrollView can leave a touch-blocking host view
+            behind on iOS/Fabric after it closes. */}
       </>
     );
 
@@ -4709,20 +4732,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // standalone Modal (dashboard preview ⋮) AND inline inside the Active Tables modal
   // layer (its ⋮): a second RN Modal cannot present over an already-open Modal on iOS,
   // so the modal path renders this in the same layer. `onModalAction` (set only for the
-  // in-modal path) closes the Active Tables modal FIRST for actions that open their own
-  // RN Modal (Set Winner / Manually Assign / Move / Rename / Stream Link) — otherwise
-  // that follow-up modal would hit the same nested-present wall. Direct calls and native
-  // Alerts (Lock / Reset / Assign / Forfeit / Clear / Remove) keep the modal open.
-  const renderTableMenu = (close: () => void, onModalAction?: () => void) => {
+  // in-modal path) receives the follow-up action and is responsible for closing the
+  // Active Tables modal FIRST and running the action only AFTER it has fully dismissed
+  // (runAfterTablesClose) — otherwise the follow-up RN Modal (Set Winner / Manually
+  // Assign / Move / Rename / Stream Link) would stack on the still-presenting Active
+  // Tables modal on iOS and leave a touch-blocking layer. Direct calls and native Alerts
+  // (Lock / Reset / Assign / Forfeit / Clear / Remove) keep the modal open.
+  const renderTableMenu = (close: () => void, onModalAction?: (fn: () => void) => void) => {
     const t = tableMenu ? chip.tables.find((x) => x.id === tableMenu.id) : null;
     if (!t || !tableMenu) return null;
     const match = chip.matches.find((m) => m.id === t.matchId && m.status === "in_progress");
     const holder = entryById(t.holderId);
     const occupied = !!match || !!holder;
     const canMove = chip.tables.some((x) => x.id !== t.id && !x.inactive && !x.locked && !x.matchId && !x.holderId);
-    // Action that opens its OWN RN modal → dismiss the menu, close Active Tables (if in
-    // that layer), then launch — never two stacked modals.
-    const viaModal = (fn: () => void) => () => { close(); onModalAction?.(); fn(); };
+    // Action that opens its OWN RN modal → dismiss the menu, then (in the Active Tables
+    // layer) close that modal and launch AFTER it dismisses; otherwise launch directly.
+    const viaModal = (fn: () => void) => () => { close(); if (onModalAction) onModalAction(fn); else fn(); };
     const direct = (fn: () => void) => () => { close(); fn(); };
     const Row = ({ label, icon, onPress, danger, disabled }: { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; onPress: () => void; danger?: boolean; disabled?: boolean }) => (
       <TouchableOpacity style={[styles.ddRow, disabled && styles.btnDisabledLite]} disabled={disabled} onPress={onPress} activeOpacity={0.6}>
@@ -5427,9 +5452,51 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     </Modal>
   );
 
+  // Dashboard "View All Tables" — rendered HERE at the screen root (sibling of the live
+  // ScrollView), never inside the scrollable dashboard content, so its native host view
+  // is torn down cleanly on iOS/Fabric and can't leave a touch-blocking layer behind.
+  // Data is recomputed from `chip` with the shared dashTableRank so it matches the
+  // dashboard preview exactly.
+  const dashTablesModal = (() => {
+    const list = chip.tables.filter((t) => !t.inactive);
+    const sorted = [...list].sort((a, b) => dashTableRank(a) - dashTableRank(b));
+    return (
+      <Modal
+        visible={dashTablesOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDashTablesOpen(false)}
+        onDismiss={flushAfterTablesClose}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setDashTablesOpen(false)}>
+          <Pressable style={styles.dashTablesCard} onPress={() => {}}>
+            <View style={styles.dashTablesHeader}>
+              <Text style={styles.dashTablesTitle}>Active Tables ({list.length})</Text>
+              <TouchableOpacity onPress={() => setDashTablesOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={styles.dashTablesDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md) }} showsVerticalScrollIndicator>
+              {sorted.map((t) => renderTableCard(t, true))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+        {/* Table ⋮ menu rendered IN THIS layer (not a second RN Modal). Backdrop dismisses
+            only the menu → Active Tables stays open. Modal-launching actions close Active
+            Tables first and run AFTER dismissal (runAfterTablesClose via onModalAction). */}
+        {tableMenu != null && (
+          <View style={styles.dashMenuOverlay}>
+            {renderTableMenu(() => setTableMenu(null), runAfterTablesClose)}
+          </View>
+        )}
+      </Modal>
+    );
+  })();
+
   const modals = (
     <>
       {shuffleFlowEl}
+      {dashTablesModal}
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
           Add Player directly into chip_entries via onAddSingles (players.id identity),
@@ -7055,9 +7122,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </Modal>
 
       {/* Table actions (⋮) — anchored dropdown. Standalone Modal for the DASHBOARD
-          PREVIEW ⋮ only (dashTablesOpen === false); when the Active Tables modal is
-          open, the menu is rendered inside THAT layer instead (see activeTablesEl),
-          because a second RN Modal can't present over it on iOS. */}
+          PREVIEW ⋮ and the Live → Tables tab ⋮ only (dashTablesOpen === false); when the
+          Active Tables modal is open, the menu is rendered inside THAT layer instead (see
+          dashTablesModal), because a second RN Modal can't present over it on iOS. */}
       <Modal visible={tableMenu != null && !dashTablesOpen} transparent animationType="none" onRequestClose={() => setTableMenu(null)}>
         {renderTableMenu(() => setTableMenu(null))}
       </Modal>
