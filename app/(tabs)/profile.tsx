@@ -561,8 +561,8 @@ export default function ProfileScreen() {
               instead of a crowded chip row. 1 tournament → nothing (shown normally). */}
           {inLiveTournament && profileTab === "tournament" && live.length > 1 && (
             <View style={styles.liveSwitcherWrap}>
+              {/* No "Tournament" label — the selector already shows the tournament name. */}
               <Dropdown
-                label="Tournament"
                 options={live
                   .map((t) => ({ label: t.tournament?.name ?? "Tournament", value: String(t.tournament?.id ?? "") }))
                   .filter((o) => o.value !== "")}
