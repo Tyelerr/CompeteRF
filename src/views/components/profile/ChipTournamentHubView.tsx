@@ -289,6 +289,18 @@ export const ChipTournamentHubView = ({
             </Text>
           </View>
         )}
+
+        {/* View Tournament — the action for THIS status card, attached at the bottom. A
+            nested touchable (blue text + eye, not a filled button): tapping it opens the
+            live/spectator view; tapping elsewhere on the card still opens via onOpenTournament. */}
+        <TouchableOpacity
+          style={styles.viewTournamentBtn}
+          activeOpacity={0.7}
+          onPress={() => router.push(`/chip-live/${hub.tournamentId}` as never)}
+        >
+          <Ionicons name="eye-outline" size={wxMs(16)} color={COLORS.primaryLight} />
+          <Text allowFontScaling={false} style={styles.viewTournamentText}>View Tournament</Text>
+        </TouchableOpacity>
       </TouchableOpacity>
 
       {/* ── Standing summary ─────────────────────────────────────────────── */}
@@ -306,17 +318,6 @@ export const ChipTournamentHubView = ({
           <Text allowFontScaling={false} numberOfLines={2} style={styles.statLabel}>record</Text>
         </View>
       </View>
-
-      {/* Item 1B: a clear blue CTA to open the full live/spectator tournament view — the
-          primary navigation action, placed BEFORE the expandable detail sections. */}
-      <TouchableOpacity
-        style={styles.viewTournamentBtn}
-        activeOpacity={0.7}
-        onPress={() => router.push(`/chip-live/${hub.tournamentId}` as never)}
-      >
-        <Ionicons name="eye-outline" size={wxMs(16)} color={COLORS.primaryLight} />
-        <Text allowFontScaling={false} style={styles.viewTournamentText}>View Tournament</Text>
-      </TouchableOpacity>
 
       {/* ── Queue preview (expandable) ───────────────────────────────────── */}
       <Collapsible title="UP NEXT IN THE QUEUE" count={hub.fullQueue.length}>
@@ -669,7 +670,10 @@ const styles = StyleSheet.create({
   metaBig: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.xl), fontWeight: "900" },
   metaSub: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 1 },
   metaWait: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
-  viewTournamentBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.md) },
+  // Inside the status card, attached at the bottom: a small top gap after the chips/queue
+  // info, comfortable tap padding, and a little bottom padding on top of the card's own so it
+  // isn't cramped. Not a filled button — centered blue text + eye.
+  viewTournamentBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: wxSc(SPACING.md), paddingBottom: wxSc(SPACING.xs), marginTop: wxSc(SPACING.xs) },
   viewTournamentText: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "800" },
   streamBadge: { marginTop: wxSc(SPACING.xs), backgroundColor: COLORS.error + "22", borderRadius: wxSc(RADIUS.sm), paddingHorizontal: wxSc(SPACING.sm), paddingVertical: 2 },
   streamText: { color: COLORS.error, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
