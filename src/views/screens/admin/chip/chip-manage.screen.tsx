@@ -71,6 +71,7 @@ import { buildReadinessSummary, ReadinessRow, PlayerReadinessSummary } from "../
 import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.types";
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
+import { ChipPerformancePanel } from "../../../components/tournament/ChipPerformancePanel";
 import {
   LifecyclePhase,
   LifecycleStatus,
@@ -807,6 +808,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [resultsStandingsExpanded, setResultsStandingsExpanded] = useState(false);
   const profScrollRef = useRef<ScrollView>(null);
   const closeProfile = () => { setProfMenuOpen(false); setProfileId(null); };
+  // A ⋮ action that opens ANOTHER modal (Add/Remove Chip → chipAdjust, Eliminate → forfeit,
+  // End Match → completeMatch) must NOT present it while the profile Modal is still up — two
+  // stacked RN Modals on iOS/Fabric swallow the first tap (the 2-3-tap bug). So: close the
+  // profile Modal first, then run the queued action only AFTER it has fully dismissed — via
+  // the Modal's onDismiss (iOS) or the next frame (Android/web). One tap, every time.
+  const pendingProfileActionRef = useRef<(() => void) | null>(null);
+  const flushProfileAction = () => {
+    const fn = pendingProfileActionRef.current;
+    pendingProfileActionRef.current = null;
+    fn?.();
+  };
+  const runAfterProfileClose = (fn: () => void) => {
+    pendingProfileActionRef.current = fn;
+    closeProfile();
+    if (Platform.OS !== "ios") requestAnimationFrame(flushProfileAction);
+  };
   // Dashboard expand toggles.
   const [showFullStandings, setShowFullStandings] = useState(false);
   // Restore-chip (eliminated team) reason prompt.
@@ -2391,6 +2408,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       return {
         id: m.id,
         opp: opp ? teamName(opp) : "—",
+        oppFargo: opp?.teamFargo ?? null,
         won: m.winnerId === e.id,
         table: chip.tables.find((t) => t.id === m.tableId)?.label ?? null,
         dur: dur && dur > 0 ? dur : null,
@@ -6769,7 +6787,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </Modal>
 
       {/* Team / player Tournament Profile */}
-      <Modal visible={profileId != null} transparent animationType="fade" onRequestClose={closeProfile}>
+      <Modal visible={profileId != null} transparent animationType="fade" onRequestClose={closeProfile} onDismiss={flushProfileAction}>
         <View style={styles.centerRoot}>
           <Pressable style={styles.centerDim} onPress={() => (profMenuOpen ? setProfMenuOpen(false) : closeProfile())} />
           <View style={styles.profCard}>
@@ -6804,65 +6822,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     </View>
                   </View>
 
-                  {/* The three numbers that answer everything at a glance */}
-                  <View style={styles.pStats}>
-                    <View style={styles.pStat}>
-                      <Text style={[styles.pStatVal, { color: chipStatusColor(entry.chips, entry.startChips) }]}>{entry.chips}</Text>
-                      <Text style={styles.pStatLbl}>CHIPS</Text>
-                    </View>
-                    <View style={styles.pStat}>
-                      <Text style={styles.pStatVal}>{entry.wins}-{entry.losses}</Text>
-                      <Text style={styles.pStatLbl}>RECORD</Text>
-                    </View>
-                    <View style={styles.pStat}>
-                      <Text style={styles.pStatVal}>{p.matchesPlayed ? `${Math.round(p.winPct * 100)}%` : "--"}</Text>
-                      <Text style={styles.pStatLbl}>WIN %</Text>
-                    </View>
-                  </View>
-
-                  <ScrollView ref={profScrollRef} style={{ maxHeight: Dimensions.get("window").height * 0.42 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.sm) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                    {/* One compact tournament card — labels explain themselves */}
-                    <View style={styles.pInfoCard}>
-                      <Text style={styles.pInfoTitle}>Tournament</Text>
-                      <View style={styles.pRow}><Text style={styles.pRowLabel}>Starting Chips</Text><Text style={styles.pRowValue}>{entry.startChips}</Text></View>
-                      <View style={styles.pRow}><Text style={styles.pRowLabel}>Remaining</Text><Text style={[styles.pRowValue, { color: chipStatusColor(entry.chips, entry.startChips) }]}>{entry.chips}</Text></View>
-                    </View>
-
-                    {/* Small performance highlight card */}
-                    {p.performanceRating != null && (
-                      <View style={styles.pPerfCard}>
-                        <Text style={styles.pPerfLabel}>Performance Rating</Text>
-                        {/* Item 15: rating green, delta shown as just "+184" (no "vs Fargo"). */}
-                        <Text style={[styles.pPerfRating, { color: COLORS.success }]}>{p.performanceRating}</Text>
-                        {p.performanceDelta != null && (
-                          <Text style={[styles.pPerfDelta, { color: p.performanceDelta > 0 ? COLORS.success : p.performanceDelta < 0 ? COLORS.error : COLORS.textSecondary }]}>
-                            {p.performanceDelta > 0 ? "+" : ""}{p.performanceDelta}
-                          </Text>
-                        )}
-                        {p.avgOpp != null && (
-                          <>
-                            <Text style={styles.pPerfAvgLabel}>Average Opponent</Text>
-                            <Text style={styles.pPerfAvgVal}>{p.avgOpp}</Text>
-                          </>
-                        )}
-                      </View>
-                    )}
-
-                    {/* Recent matches — the section people actually read */}
-                    {p.history.length === 0 ? (
-                      <Text style={styles.pEmpty}>No completed matches yet.</Text>
-                    ) : (
-                      p.history.map((h) => (
-                        <View key={h.id} style={styles.pMatchCard}>
-                          <View style={styles.pMatchResult}>
-                            <View style={[styles.pMatchDot, { backgroundColor: h.won ? COLORS.success : COLORS.error }]} />
-                            <Text style={[styles.pMatchResultText, { color: h.won ? COLORS.success : COLORS.error }]}>{h.won ? "Win" : "Loss"}</Text>
-                          </View>
-                          <Text style={styles.pMatchOpp} numberOfLines={1}>vs {h.opp}</Text>
-                          <Text style={styles.pMatchMeta}>{h.table ?? ""}{h.dur ? ` • ${fmtClock(h.dur)}` : ""}</Text>
-                        </View>
-                      ))
-                    )}
+                  {/* Body: shared ChipPerformancePanel (same tiles / performance card / match
+                      history the spectator Performance modal uses — one source, so admin and
+                      spectator can't drift). Taller scroll area than before for breathing room. */}
+                  <ScrollView ref={profScrollRef} style={{ maxHeight: Dimensions.get("window").height * 0.6 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.sm) }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                    <ChipPerformancePanel
+                      chips={entry.chips}
+                      startChips={entry.startChips}
+                      wins={entry.wins}
+                      losses={entry.losses}
+                      winPct={p.winPct}
+                      fargo={entry.teamFargo}
+                      bestStreak={entry.bestStreak ?? 0}
+                      isTeam={doubles}
+                      perf={p.performanceRating != null ? { rating: p.performanceRating, delta: p.performanceDelta, avgOpponentFargo: p.avgOpp } : null}
+                      history={p.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opp, opponentFargo: h.oppFargo, tableLabel: h.table, durationMs: h.dur }))}
+                    />
                   </ScrollView>
 
                   <TouchableOpacity style={styles.pClose} onPress={closeProfile} activeOpacity={0.85}>
@@ -6889,10 +6864,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                           {p.status === "playing" && (
                             <>
                               {liveMatch && (
-                                <Item icon="flag-outline" label="End Match" onPress={() => { close(); closeProfile(); setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId }); }} />
+                                <Item icon="flag-outline" label="End Match" onPress={() => { close(); runAfterProfileClose(() => setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId })); }} />
                               )}
-                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); openChipAdjust(entry, 1); }} />
-                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); openChipAdjust(entry, -1); }} />
+                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
+                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
                               {entry.tableId && (
                                 <Item icon="time-outline" label="Reset Match Timer" onPress={() => { close(); vm.resetTableTimer(entry.tableId as string); }} />
                               )}
@@ -6900,10 +6875,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                           )}
                           {(p.status === "waiting" || p.status === "next") && (
                             <>
-                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); openChipAdjust(entry, 1); }} />
-                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); openChipAdjust(entry, -1); }} />
+                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
+                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
                               <Item icon="arrow-down-circle-outline" label="Send to Back of Queue" onPress={() => { close(); vm.reorderQueue(entry.id, "bottom"); }} />
-                              <Item icon="exit-outline" danger label="Eliminate Team" onPress={() => { close(); confirmRemoveFromQueue(entry); }} />
+                              <Item icon="exit-outline" danger label="Eliminate Team" onPress={() => { close(); runAfterProfileClose(() => confirmRemoveFromQueue(entry)); }} />
                             </>
                           )}
                           {p.status === "eliminated" && (

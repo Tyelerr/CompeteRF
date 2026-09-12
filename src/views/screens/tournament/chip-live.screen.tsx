@@ -40,6 +40,7 @@ import {
   useChipSpectator,
 } from "../../../viewmodels/hooks/use.chip.spectator";
 import { Loading } from "../../components/common/loading";
+import { ChipPerformancePanel } from "../../components/tournament/ChipPerformancePanel";
 import { useAuthStore } from "../../../viewmodels/stores/auth.store";
 
 const isWeb = Platform.OS === "web";
@@ -1135,95 +1136,23 @@ const ProfileModal = ({
           <StatusBadge status={profile.status} />
         </View>
 
-        {/* Stat grid */}
-        <View style={styles.pStatGrid}>
-          <PStat val={`${profile.chips}`} lbl="Chips" color={chipStatusColor(profile.chips, profile.startChips)} />
-          <PStat val={<RecordInline wins={profile.wins} losses={profile.losses} />} lbl="Record" />
-          <PStat val={`${Math.round(profile.winPct * 100)}%`} lbl="Win Rate" />
-          <PStat val={`${profile.startChips}`} lbl="Started With" />
-          <PStat val={profile.fargo != null ? `${profile.fargo}` : "—"} lbl="Fargo" />
-          <PStat
-            val={`${profile.bestStreak}`}
-            lbl="Best Streak"
-            color={profile.bestStreak > 0 ? COLORS.success : undefined}
-          />
-        </View>
-
-        {/* Performance — "played like a NNN" as a sports stat, not a report card */}
-        {profile.perf && (() => {
-          const d = profile.perf.delta ?? 0;
-          const dColor = d > 0 ? COLORS.success : d < 0 ? COLORS.error : COLORS.textSecondary;
-          // Item 15: headline reads "355 → 539 +184" — Fargo neutral, arrow dim, Performance
-          // Rating green, delta green (no "vs Fargo" wording). The redundant vs-Fargo detail
-          // row is removed; Team Fargo / Performance Rating / Opponent Avg stay below.
-          const dSigned = `${d > 0 ? "+" : ""}${d}`;
-          return (
-            <View style={styles.perfCard}>
-              <Text allowFontScaling={false} style={styles.perfKicker}>PERFORMANCE</Text>
-              <View style={styles.perfHeadline}>
-                <Text allowFontScaling={false} style={styles.perfBig}>
-                  {profile.fargo != null ? profile.fargo : "—"}
-                  <Text style={styles.perfArrowSep}>{"  →  "}</Text>
-                  <Text style={{ color: COLORS.success }}>{profile.perf.rating != null ? profile.perf.rating : "—"}</Text>
-                </Text>
-                {profile.perf.delta != null && (
-                  <Text allowFontScaling={false} style={[styles.perfDeltaInline, { color: dColor }]}>{dSigned}</Text>
-                )}
-              </View>
-              {/* Supporting two-column stats */}
-              <View style={styles.perfDivider} />
-              <View style={styles.perfStatRow}>
-                <Text allowFontScaling={false} style={styles.perfStatLbl}>Team Fargo</Text>
-                <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.fargo != null ? profile.fargo : "—"}</Text>
-              </View>
-              <View style={styles.perfStatRow}>
-                <Text allowFontScaling={false} style={styles.perfStatLbl}>Performance Rating</Text>
-                <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.perf.rating != null ? profile.perf.rating : "—"}</Text>
-              </View>
-              {profile.perf.avgOpponentFargo != null && (
-                <View style={styles.perfStatRow}>
-                  <Text allowFontScaling={false} style={styles.perfStatLbl}>Opponent Avg</Text>
-                  <Text allowFontScaling={false} style={styles.perfStatVal}>{profile.perf.avgOpponentFargo}</Text>
-                </View>
-              )}
-            </View>
-          );
-        })()}
-
-        {/* Match history */}
-        <Text allowFontScaling={false} style={styles.profileSecTitle}>Match History</Text>
-        {profile.history.length === 0 ? (
-          <Text allowFontScaling={false} style={styles.emptyLine}>No matches played yet.</Text>
-        ) : (
-          profile.history.map((h, i) => (
-            <View key={h.id} style={[styles.histRow, i === profile.history.length - 1 && styles.noBorder]}>
-              <View style={[styles.histResult, { backgroundColor: (h.won ? COLORS.success : COLORS.error) + "22" }]}>
-                <Text allowFontScaling={false} style={[styles.histResultText, { color: h.won ? COLORS.success : COLORS.error }]}>{h.won ? "W" : "L"}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text allowFontScaling={false} style={styles.histOpp} numberOfLines={1}>vs {h.opponentName}</Text>
-                <Text allowFontScaling={false} style={styles.histMeta} numberOfLines={1}>
-                  {[
-                    h.opponentFargo != null ? `Fargo ${h.opponentFargo}` : null,
-                    h.tableLabel,
-                    h.durationMs != null ? fmtClock(h.durationMs) : null,
-                  ].filter(Boolean).join(" · ") || "—"}
-                </Text>
-              </View>
-            </View>
-          ))
-        )}
-
+        {/* Stat grid + Performance + Match history — shared ChipPerformancePanel (the same
+            component the admin player-detail modal renders, so the two can't drift). */}
+        <ChipPerformancePanel
+          chips={profile.chips}
+          startChips={profile.startChips}
+          wins={profile.wins}
+          losses={profile.losses}
+          winPct={profile.winPct}
+          fargo={profile.fargo}
+          bestStreak={profile.bestStreak}
+          isTeam={profile.isTeam}
+          perf={profile.perf ? { rating: profile.perf.rating, delta: profile.perf.delta, avgOpponentFargo: profile.perf.avgOpponentFargo } : null}
+          history={profile.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opponentName, opponentFargo: h.opponentFargo, tableLabel: h.tableLabel, durationMs: h.durationMs }))}
+        />
       </>
     )}
   </SpectatorModal>
-);
-
-const PStat = ({ val, lbl, color }: { val: React.ReactNode; lbl: string; color?: string }) => (
-  <View style={styles.pStat}>
-    <Text allowFontScaling={false} style={[styles.pStatVal, color ? { color } : null]} numberOfLines={1}>{val}</Text>
-    <Text allowFontScaling={false} style={styles.pStatLbl} numberOfLines={1}>{lbl}</Text>
-  </View>
 );
 
 // ── Generic list modal (Full Queue / Full Standings) ─────────────────────────
