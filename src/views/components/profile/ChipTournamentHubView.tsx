@@ -307,6 +307,17 @@ export const ChipTournamentHubView = ({
         </View>
       </View>
 
+      {/* Item 1B: a clear blue CTA to open the full live/spectator tournament view — the
+          primary navigation action, placed BEFORE the expandable detail sections. */}
+      <TouchableOpacity
+        style={styles.viewTournamentBtn}
+        activeOpacity={0.7}
+        onPress={() => router.push(`/chip-live/${hub.tournamentId}` as never)}
+      >
+        <Ionicons name="eye-outline" size={wxMs(16)} color={COLORS.primaryLight} />
+        <Text allowFontScaling={false} style={styles.viewTournamentText}>View Tournament</Text>
+      </TouchableOpacity>
+
       {/* ── Queue preview (expandable) ───────────────────────────────────── */}
       <Collapsible title="UP NEXT IN THE QUEUE" count={hub.fullQueue.length}>
         {hub.queuePreview.length === 0 ? (
@@ -348,16 +359,6 @@ export const ChipTournamentHubView = ({
         )}
       </Collapsible>
 
-      {/* Item 1B: a clear blue CTA to open the full live/spectator tournament view. */}
-      <TouchableOpacity
-        style={styles.viewTournamentBtn}
-        activeOpacity={0.7}
-        onPress={() => router.push(`/chip-live/${hub.tournamentId}` as never)}
-      >
-        <Ionicons name="eye-outline" size={wxMs(16)} color={COLORS.primaryLight} />
-        <Text allowFontScaling={false} style={styles.viewTournamentText}>View Tournament</Text>
-      </TouchableOpacity>
-
       {/* Full queue (read-only) */}
       <Modal visible={queueOpen} transparent animationType="fade" onRequestClose={() => setQueueOpen(false)}>
         <View style={styles.fqRoot}>
@@ -395,10 +396,10 @@ export const ChipTournamentHubView = ({
         </View>
       </Modal>
 
-      {/* ── Live matches. Item 1A: now a collapsible like Up Next / Performance (Show/Hide +
-          chevron), open by default so the live context stays visible unless the user hides it. */}
+      {/* ── Live matches. A collapsible like Up Next / Performance (Show/Hide + chevron).
+          Defaults COLLAPSED to match the other sections; the user taps Show to expand. */}
       {hub.liveMatches.length > 0 && (
-        <Collapsible title="LIVE NOW" count={hub.liveMatches.length} startOpen>
+        <Collapsible title="LIVE NOW" count={hub.liveMatches.length}>
           <View style={styles.card}>
             {hub.liveMatches.map((m, i) => {
               const elapsed = now - new Date(m.startedAt).getTime();
