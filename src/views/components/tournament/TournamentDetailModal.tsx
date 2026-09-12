@@ -648,7 +648,10 @@ const s = StyleSheet.create({
   chipLine: { fontSize: moderateScale(FONT_SIZES.sm), fontWeight: "600", color: COLORS.text, paddingVertical: 2, textAlign: "center" },
   chipLineCount: { fontWeight: "800", color: COLORS.primary },
   disclaimerText: { fontSize: moderateScale(11), color: COLORS.textSecondary, textAlign: "center", marginTop: scale(SPACING.md), lineHeight: moderateScale(16), opacity: 0.6 },
-  registerContainer: { paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.md) },
+  // The primary CTA floats between the scroll content and the Share/Report/Close row: no
+  // background block, horizontal margins matching the content cards, and breathing room
+  // above AND below so it doesn't feel attached to the footer divider.
+  registerContainer: { paddingHorizontal: scale(SPACING.md), paddingTop: scale(SPACING.lg), paddingBottom: scale(SPACING.lg) },
   viewTournamentButton: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: scale(SPACING.xs), backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md) },
   viewTournamentText: { color: COLORS.white, fontSize: moderateScale(FONT_SIZES.md), fontWeight: "700" },
   registerButton: { backgroundColor: COLORS.primary, borderRadius: scale(12), paddingVertical: scale(SPACING.md), alignItems: "center" },
