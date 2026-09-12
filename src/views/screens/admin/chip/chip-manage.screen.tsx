@@ -987,6 +987,28 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     [id],
   );
   const [alertsModalOpen, setAlertsModalOpen] = useState(false);
+  // Deferred sequencing for an alert's action launched from INSIDE View All Alerts (its CTA
+  // may open the Shuffle/Reduce modal or navigate). Same rule as View All Tables: close the
+  // Alerts modal first, then run the action only AFTER it has fully dismissed — via the
+  // modal's onDismiss (iOS) or the next frame (Android/web) — so two RN modals are never
+  // presented at once. Held in state so it can be referenced from render-time JSX cleanly.
+  const [pendingAfterAlerts, setPendingAfterAlerts] = useState<(() => void) | null>(null);
+  const flushAfterAlertsClose = () => {
+    if (pendingAfterAlerts) {
+      const fn = pendingAfterAlerts;
+      setPendingAfterAlerts(null);
+      fn();
+    }
+  };
+  const runAfterAlertsClose = (fn: () => void) => {
+    setPendingAfterAlerts(() => fn); // updater form stores the fn (never invokes it)
+    setAlertsModalOpen(false);
+    if (Platform.OS !== "ios")
+      requestAnimationFrame(() => {
+        setPendingAfterAlerts(null);
+        fn();
+      });
+  };
   // Admin payout paid/unpaid (item 29). Recent optimistic toggles live in paidOverrides
   // and are merged over the persisted live_settings.payoutsPaid at render (no effect →
   // no set-state-in-effect). Persisted via chipService.setPayoutPaid. Spectators never see it.
@@ -3938,37 +3960,33 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       );
     };
 
-  // ── Live · Dashboard (live control center) ───────────────────────────────────
-  const renderLiveDashboard = () => {
+  // Dashboard alerts (derivation + filtering) — computed at component scope so the SAME
+  // list feeds the dashboard preview (renderLiveDashboard) AND the root-level View All
+  // Alerts modal (dashAlertsModal). Behaviour is unchanged from the previous inline
+  // version; it was only lifted so the modal can render outside the live ScrollView.
+  // Self-contained (recomputes its own cheap inputs from `chip`) so callers don't have to
+  // thread state in.
+  const computeVisibleAlerts = (): {
+    id: string;
+    text: string;
+    sub?: string;
+    onPress?: () => void;
+    cta?: string;
+    urgent?: boolean;
+  }[] => {
     const d = dashboard(chip);
-    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const activeCount = activeTables.length;
-    // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
-    // locked/available/other (2), so the director never misses a table awaiting Start
-    // Match. Shared with the root-level View All Tables modal via dashTableRank.
-    const sortedActiveTables = [...activeTables].sort((a, b) => dashTableRank(a) - dashTableRank(b));
-    const waitingCount = activeTables.filter((t) => dashTableRank(t) === 0).length;
     const rec = recommendedActiveTables(d.playersRemaining);
     const overStaffed = d.playersRemaining > 0 && activeCount > rec && !chip.reshufflePending;
-    const leaders = [...alive].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
-    const chipLeader = leaders[0] ?? null;
-    const tablesAdded = chip.events.filter((e) => e.type === "table_added").length;
-    const tablesRemoved = chip.events.filter((e) => e.type === "table_removed").length;
-    const durs = chip.matches.filter((m) => m.status !== "in_progress" && m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
-    const fastest = durs.length ? Math.min(...durs) : null;
-
-    const longNow = activeTables.map((t) => {
-      const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
-      if (!m) return null;
-      const ms = matchElapsedMs(m, now);
-      return ms > LONG_MATCH_MS ? { label: t.label, clock: fmtClock(ms) } : null;
-    }).filter(Boolean) as { label: string; clock: string }[];
-    // Item 9: a stream table is only ACTIONABLE when it is genuinely open (no live/pending
-    // match, not inactive/locked/closing) AND there are enough queued players to seat it (a
-    // holder table needs 1 challenger; an empty table needs 2). Winner-stays auto-seating
-    // normally fills tables, so this fires only when the TD can actually act — not merely
-    // because a stream-flagged table exists or is momentarily idle between matches.
+    const longNow = activeTables
+      .map((t) => {
+        const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
+        if (!m) return null;
+        const ms = matchElapsedMs(m, now);
+        return ms > LONG_MATCH_MS ? { label: t.label, clock: fmtClock(ms) } : null;
+      })
+      .filter(Boolean) as { label: string; clock: string }[];
     const openStreamTable = chip.tables.find(
       (t) => t.isStream && !t.matchId && !t.pendingChallengerId && !t.inactive && !t.locked && !t.closing,
     );
@@ -3977,20 +3995,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       (openStreamTable.holderId ? chip.queue.length >= 1 : chip.queue.length >= 2) &&
       !chip.shuffleReady && !chip.reshufflePending && !chip.shuffleMode;
 
-    // Alerts are for conditions that need the TD's attention only. A normal
-    // waiting queue is expected during a chip tournament and is already shown in
-    // the Queue summary card + the Queue section, so it is NOT an alert.
-    // Each alert carries a STABLE id keyed to its condition so a Dismiss persists for that
-    // specific instance and only reappears when the condition materially changes (id
-    // changes). Recommendations are passive cards (never a re-popup on refresh).
     const alerts: { id: string; text: string; sub?: string; onPress?: () => void; cta?: string; urgent?: boolean }[] = [];
-    // (Re)shuffle recommendation (item 8) — chip is winner-stays, so what matters is the
-    // WAITING QUEUE relative to the remaining field: aim for ~50% of the remaining players
-    // waiting. Recommend a (re)shuffle when the queue falls materially below that target
-    // (hysteresis band of 2 so it doesn't flap at the boundary). Suppressed while a reshuffle
-    // is already pending/ready or continuous Shuffle Mode is on, and near the endgame
-    // (remaining < 5) where rebalancing is pointless. The stable id keyed to reshuffleCount
-    // acts as the cooldown: once dismissed it won't reappear until the next shuffle cycle.
     const remaining = d.playersRemaining;
     const queueLen = chip.queue.length;
     const queueTarget = Math.round(remaining / 2); // ~50% of the field waiting
@@ -4026,10 +4031,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         cta: "Seat on Stream",
       });
     for (const lm of longNow) alerts.push({ id: `long:${lm.label}`, text: `Long match: ${lm.clock} on ${lm.label}`, urgent: true });
-    // Payout-ready (item 28): when a PAYABLE placement locks in via elimination (or the
-    // champion at finish), surface a passive alert — never auto-navigate to Payouts. The
-    // "View Payouts" CTA opens the Results area. Amounts use the same centralized pool +
-    // breakdown math as renderPayouts.
     const lsPay: any = tournament.live_settings ?? {};
     const cfgPay = lsPay.prizePool ?? null;
     if (cfgPay?.entryPlaces?.length) {
@@ -4043,12 +4044,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         Number(tournament.added_money) || 0,
       );
       const placesPay = poolPay > 0 ? computeBreakdown(poolPay, cfgPay.entryPlaces).places : [];
-      const paidCount = placesPay.length; // number of paid places (e.g. top 3)
+      const paidCount = placesPay.length;
       const amtByPlace = new Map(placesPay.map((r) => [r.place, r.amount]));
-      // Item 6D: ONE generic actionable alert instead of one-per-finisher noise. A finisher's
-      // TRUE place is locked the moment they're out (determinedFinishers: first out = last
-      // place, champion = 1st). As soon as ANY payable place is locked in, surface a single
-      // "Payouts ready → Go to Payouts"; the per-player amounts live on the Payouts page.
       const anyPayoutReady = determinedFinishers(chip).some(
         (f) => f.place <= paidCount && amtByPlace.get(f.place) != null,
       );
@@ -4059,12 +4056,69 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           sub: chip.finishedAt
             ? "Pay the players — open Payouts for the full breakdown."
             : "Payable places are locked in — open Payouts for the breakdown.",
-          onPress: onOpenPayouts ?? onOpenResults, // item 6: land on Payouts, not Standings
+          onPress: onOpenPayouts ?? onOpenResults,
           cta: "Go to Payouts",
         });
       }
     }
-    const visibleAlerts = alerts.filter((a) => !dismissedAlerts.has(a.id));
+    return alerts.filter((a) => !dismissedAlerts.has(a.id));
+  };
+
+  // One alert row (shared by the 3-item preview and the View All Alerts modal). A lowercase
+  // helper returning JSX (not a component) so it's not re-created on each render. `inModal`
+  // sequences a CTA that opens its own modal: close View All Alerts first, then run the
+  // action after it dismisses (runAfterAlertsClose). Inline preview rows run directly (no
+  // Alerts modal is open to conflict with).
+  const alertRowEl = (
+    a: ReturnType<typeof computeVisibleAlerts>[number],
+    last: boolean,
+    inModal = false,
+  ) => (
+    <View key={a.id} style={[styles.alertRow2, last && styles.noBorder]}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.alertText2, a.urgent && styles.alertUrgent]}>{a.text}</Text>
+        {a.sub ? <Text style={styles.alertSub2}>{a.sub}</Text> : null}
+      </View>
+      {a.onPress && (
+        <TouchableOpacity
+          style={styles.secBtnSm}
+          onPress={() => {
+            const act = a.onPress;
+            if (!act) return;
+            if (inModal) runAfterAlertsClose(act);
+            else act();
+          }}
+        >
+          <Text style={styles.secBtnSmText}>{a.cta}</Text>
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity onPress={() => dismissAlert(a.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: webSc(SPACING.sm), padding: 2 }}>
+        <Ionicons name="close" size={webMs(16)} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  );
+
+  // ── Live · Dashboard (live control center) ───────────────────────────────────
+  const renderLiveDashboard = () => {
+    const d = dashboard(chip);
+    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
+    const activeTables = chip.tables.filter((t) => !t.inactive);
+    const activeCount = activeTables.length;
+    // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
+    // locked/available/other (2), so the director never misses a table awaiting Start
+    // Match. Shared with the root-level View All Tables modal via dashTableRank.
+    const sortedActiveTables = [...activeTables].sort((a, b) => dashTableRank(a) - dashTableRank(b));
+    const waitingCount = activeTables.filter((t) => dashTableRank(t) === 0).length;
+    const leaders = [...alive].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
+    const chipLeader = leaders[0] ?? null;
+    const tablesAdded = chip.events.filter((e) => e.type === "table_added").length;
+    const tablesRemoved = chip.events.filter((e) => e.type === "table_removed").length;
+    const durs = chip.matches.filter((m) => m.status !== "in_progress" && m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
+    const fastest = durs.length ? Math.min(...durs) : null;
+
+    // Alerts derivation lives at component scope (computeVisibleAlerts) so the same list
+    // feeds this preview AND the root-level View All Alerts modal — behaviour unchanged.
+    const visibleAlerts = computeVisibleAlerts();
 
     const queueIds = chip.queue.slice(0, 5);
     const leaderList = showFullStandings ? leaders : leaders.slice(0, 5);
@@ -4134,55 +4188,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </View>
     ) : null;
 
-    // One alert row (shared by the 3-item preview and the View All modal). A lowercase
-    // helper returning JSX (not a component) so it's not re-created on each render.
-    const alertRowEl = (a: (typeof visibleAlerts)[number], last: boolean) => (
-      <View key={a.id} style={[styles.alertRow2, last && styles.noBorder]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.alertText2, a.urgent && styles.alertUrgent]}>{a.text}</Text>
-          {a.sub ? <Text style={styles.alertSub2}>{a.sub}</Text> : null}
-        </View>
-        {a.onPress && (
-          // Item 7: close the (possible) expanded Alerts modal BEFORE running the action, so a
-          // secondary modal (shuffle setup, reduce, payouts nav) never stacks on top of the
-          // still-open Alerts modal and leaves an invisible backdrop that freezes the
-          // dashboard. Harmless no-op when the row is shown inline (modal already closed).
-          <TouchableOpacity style={styles.secBtnSm} onPress={() => { setAlertsModalOpen(false); a.onPress?.(); }}><Text style={styles.secBtnSmText}>{a.cta}</Text></TouchableOpacity>
-        )}
-        <TouchableOpacity onPress={() => dismissAlert(a.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: webSc(SPACING.sm), padding: 2 }}>
-          <Ionicons name="close" size={webMs(16)} color={COLORS.textMuted} />
-        </TouchableOpacity>
-      </View>
-    );
-    // Preview shows at most 3; the rest open in a "View All Alerts" modal (item 15).
+    // Preview shows at most 3; the rest open in a "View All Alerts" modal (item 15). The
+    // modal itself is rendered at the screen ROOT (see dashAlertsModal in `modals`), NOT
+    // here inside the scrollable dashboard — an RN <Modal> nested in a ScrollView can leave
+    // a touch-blocking host view behind on iOS/Fabric after it closes. Preview rows use the
+    // shared component-scope alertRowEl (inline mode: CTA runs directly, no modal open).
     const alertsPreview = visibleAlerts.slice(0, 3);
     const alertsEl = visibleAlerts.length > 0 ? (
-      <>
-        <DashSection icon="warning-outline" iconColor={COLORS.warning} title="Alerts">
-          {alertsPreview.map((a, i) => alertRowEl(a, visibleAlerts.length <= 3 && i === alertsPreview.length - 1))}
-          {visibleAlerts.length > 3 && (
-            <TouchableOpacity style={styles.atViewAll} onPress={() => setAlertsModalOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.atViewAllText}>View All Alerts ({visibleAlerts.length})</Text>
-              <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
-            </TouchableOpacity>
-          )}
-        </DashSection>
-        <Modal visible={alertsModalOpen} transparent animationType="fade" onRequestClose={() => setAlertsModalOpen(false)}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setAlertsModalOpen(false)}>
-            <Pressable style={styles.dashTablesCard} onPress={() => {}}>
-              <View style={styles.dashTablesHeader}>
-                <Text style={styles.dashTablesTitle}>Alerts ({visibleAlerts.length})</Text>
-                <TouchableOpacity onPress={() => setAlertsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Text style={styles.dashTablesDone}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) }} showsVerticalScrollIndicator>
-                {visibleAlerts.map((a, i) => alertRowEl(a, i === visibleAlerts.length - 1))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      </>
+      <DashSection icon="warning-outline" iconColor={COLORS.warning} title="Alerts">
+        {alertsPreview.map((a, i) => alertRowEl(a, visibleAlerts.length <= 3 && i === alertsPreview.length - 1))}
+        {visibleAlerts.length > 3 && (
+          <TouchableOpacity style={styles.atViewAll} onPress={() => setAlertsModalOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.atViewAllText}>View All Alerts ({visibleAlerts.length})</Text>
+            <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
+          </TouchableOpacity>
+        )}
+      </DashSection>
     ) : null;
 
     const queueEl = (
@@ -5493,10 +5514,45 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
   })();
 
+  // Dashboard "View All Alerts" — same treatment as View All Tables: rendered at the screen
+  // root (sibling of the live ScrollView), never inside the scrollable dashboard content, so
+  // the native host view tears down cleanly on iOS/Fabric and can't leave a touch-blocking
+  // layer behind. Uses the shared computeVisibleAlerts + alertRowEl (inModal) so its CTAs
+  // sequence properly: close this modal first, then run the action after it dismisses.
+  const dashAlertsModal = (() => {
+    const visible = computeVisibleAlerts();
+    return (
+      <Modal
+        // Gate on the count too: previously the modal only existed while alerts remained
+        // (its section rendered null at 0), so dismissing the last alert closes it cleanly.
+        visible={alertsModalOpen && visible.length > 0}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAlertsModalOpen(false)}
+        onDismiss={flushAfterAlertsClose}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setAlertsModalOpen(false)}>
+          <Pressable style={styles.dashTablesCard} onPress={() => {}}>
+            <View style={styles.dashTablesHeader}>
+              <Text style={styles.dashTablesTitle}>Alerts ({visible.length})</Text>
+              <TouchableOpacity onPress={() => setAlertsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={styles.dashTablesDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: "100%" }} contentContainerStyle={{ paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) }} showsVerticalScrollIndicator>
+              {visible.map((a, i) => alertRowEl(a, i === visible.length - 1, true))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  })();
+
   const modals = (
     <>
       {shuffleFlowEl}
       {dashTablesModal}
+      {dashAlertsModal}
       {/* Phase 5: ONE unified search-first Add flow for BOTH formats (ACTIVE+PENDING,
           inline Create, inline Fargo). Doubles → Add Team (tournament_teams). Singles →
           Add Player directly into chip_entries via onAddSingles (players.id identity),
