@@ -6,7 +6,7 @@
 // timers), Queue, Players (chips/records + buy-back). Results = Standings.
 // Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -503,7 +503,14 @@ const SHUFFLE_BALLS: { num: number; color: string; dx: number; dy: number }[] = 
 ];
 const SHUFFLE_CLUSTER = 160; // cluster box; ball centers sit at (80 + dx, 80 + dy)
 const SHUFFLE_SCATTER_R = 72; // radius balls fan out to at the mid-point of the mix
-const ShuffleBallsAnimation = ({ onDone }: { onDone: () => void }) => {
+// memo'd so the mid-shuffle state commit (vm.startShuffleCycle → setChip, applied BEHIND the
+// overlay) can never re-render this component. Its only prop, onDone (onShuffleAnimDone), is a
+// stable useCallback that the commit doesn't change, so memo bails out of every parent
+// re-render. That's the fix for the ~0.1–0.2s hitch: without it, each parent re-render
+// recreated the interpolate()/style objects and re-committed the native-driven Animated.Views
+// mid-flight, momentarily reconfiguring the running UI-thread animation. The redraw still
+// happens behind the overlay; it just no longer touches the animation.
+const ShuffleBallsAnimation = memo(({ onDone }: { onDone: () => void }) => {
   // useState initializer (not useRef().current) so the animated value isn't a ref
   // read during render — keeps the react-compiler lint clean.
   const [progress] = useState(() => new Animated.Value(0));
@@ -555,7 +562,8 @@ const ShuffleBallsAnimation = ({ onDone }: { onDone: () => void }) => {
       <Text style={styles.shufAnimLabel}>Shuffling…</Text>
     </View>
   );
-};
+});
+ShuffleBallsAnimation.displayName = "ShuffleBallsAnimation";
 
 export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
   // Acting director identity (from auth) — passed into the VM so it can stamp gameplay
@@ -1227,6 +1235,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Cosmetic shuffle animation finished → tear it down and land on the dashboard.
   // Stable identity so the animation child's effect never restarts mid-play.
   const onShuffleAnimDone = useCallback(() => {
+    if (__DEV__) console.log("[shuffle] animation done → dismiss", Date.now());
     setShuffleAnimating(false);
     goToDashboard();
   }, [goToDashboard]);
@@ -3633,7 +3642,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       // behind it ~1s later so the board never visibly jumps before the animation starts;
       // onShuffleAnimDone (at SHUFFLE_ANIM_MS) reveals the updated board.
       setShuffleAnimating(true);
-      setTimeout(() => vm.startShuffleCycle(removeIds), SHUFFLE_STATE_DELAY_MS);
+      if (__DEV__) console.log("[shuffle] overlay visible", Date.now());
+      setTimeout(() => {
+        const t0 = __DEV__ ? Date.now() : 0;
+        vm.startShuffleCycle(removeIds); // engine mutation + setChip, applied BEHIND the overlay
+        if (__DEV__) console.log(`[shuffle] state committed (engine sync ${Date.now() - t0}ms)`);
+      }, SHUFFLE_STATE_DELAY_MS);
     } else {
       // Case 1 — matches live: no animation yet; apply now and go to the dashboard to watch
       // "Finishing the Round" drain, then Ready to Shuffle → Start Shuffle.
@@ -3646,7 +3660,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // first, redraw behind it ~1s later.
   const startShuffleRedraw = () => {
     setShuffleAnimating(true);
-    setTimeout(() => vm.startShuffle(), SHUFFLE_STATE_DELAY_MS); // finalizeReshuffle → next round
+    if (__DEV__) console.log("[shuffle] overlay visible", Date.now());
+    setTimeout(() => {
+      const t0 = __DEV__ ? Date.now() : 0;
+      vm.startShuffle(); // finalizeReshuffle → next round (applied BEHIND the overlay)
+      if (__DEV__) console.log(`[shuffle] state committed (engine sync ${Date.now() - t0}ms)`);
+    }, SHUFFLE_STATE_DELAY_MS);
   };
 
   // ── Shuffle Mode banner ──────────────────────────────────────────────────────
