@@ -46,10 +46,30 @@ const shuffle = <T>(arr: T[]): T[] => {
 };
 
 // ── small helpers ─────────────────────────────────────────────────────────────
+// FULL name — both members' full names for doubles. Kept as the value used in the audit
+// event LOG text (chip_events) so logs/history data retain the complete names.
 export const teamName = (e: ChipEntry): string =>
   e.p2Name && e.p2Name.trim()
     ? `${e.p1Name.trim()} / ${e.p2Name.trim()}`
     : e.p1Name.trim() || "—";
+
+// "First Last" → "First L." (single-token names pass through unchanged).
+const firstLastInitial = (name: string): string => {
+  const key = (name ?? "").trim();
+  if (!key) return "";
+  const parts = key.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return parts[0] ?? "";
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+};
+
+// The ONE display-name rule for chip UI (NOT the audit log): SINGLES show the player's FULL
+// name; DOUBLES show each member as "First L." joined by the team separator. Underlying
+// stored names are never modified — this only formats what the UI renders.
+export const chipDisplayName = (e: ChipEntry): string => {
+  const p2 = e.p2Name?.trim();
+  if (p2) return `${firstLastInitial(e.p1Name)} / ${firstLastInitial(p2)}`;
+  return e.p1Name?.trim() || "—";
+};
 
 export const teamFargoOf = (
   e: Pick<ChipEntry, "p1Fargo" | "p2Fargo">,

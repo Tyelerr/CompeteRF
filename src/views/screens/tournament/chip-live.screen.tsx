@@ -622,7 +622,7 @@ const OverviewTab = ({
             <Ionicons name="trophy" size={wxMs(14)} color={COLORS.primary} />
             <Text allowFontScaling={false} style={styles.leaderKicker}>CHIP LEADER</Text>
           </View>
-          <Text allowFontScaling={false} style={styles.leaderName} numberOfLines={1}>{view.chipLeader.name}</Text>
+          <Text allowFontScaling={false} style={styles.leaderName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{view.chipLeader.name}</Text>
           <View style={styles.leaderMetaRow}>
             <Text allowFontScaling={false} style={styles.leaderMeta}>
               <FargoInline fargo={view.chipLeader.fargo} /><MetaDot /><RecordInline wins={view.chipLeader.wins} losses={view.chipLeader.losses} />
@@ -660,7 +660,7 @@ const OverviewTab = ({
               <TouchableOpacity key={q.id} style={styles.qRow} activeOpacity={0.7} onPress={() => onTapTeam(q.id)}>
                 <Text allowFontScaling={false} style={styles.qPos} numberOfLines={1}>{q.position}</Text>
                 <View style={styles.qMid}>
-                  <Text allowFontScaling={false} style={styles.qName} numberOfLines={1}>{q.name}</Text>
+                  <Text allowFontScaling={false} style={styles.qName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{q.name}</Text>
                   <View style={styles.qMetaRow}>
                     <Text allowFontScaling={false} style={styles.qSub} numberOfLines={1}>
                       <FargoInline fargo={q.fargo} /><MetaDot /><RecordInline wins={q.wins} losses={q.losses} />
@@ -694,7 +694,7 @@ const OverviewTab = ({
             {view.standingsPreview.map((r) => (
               <TouchableOpacity key={r.id} style={[styles.clRow, r.rank === 1 && styles.clRowTop]} activeOpacity={0.7} onPress={() => onTapTeam(r.id)}>
                 <Text allowFontScaling={false} style={[styles.clRank, r.rank === 1 && styles.clRankTop]} numberOfLines={1}>{r.rank}</Text>
-                <Text allowFontScaling={false} style={styles.clName} numberOfLines={1}>{r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}</Text>
+                <Text allowFontScaling={false} style={styles.clName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}</Text>
                 {r.eliminated
                   ? <Text allowFontScaling={false} style={styles.plMetaElim}>Eliminated</Text>
                   : <Text allowFontScaling={false} style={[styles.clChips, { color: chipStatusColor(r.chips, r.startChips) }]}>{r.chips} chips</Text>}
@@ -823,7 +823,7 @@ const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
           <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
             <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
             <View style={styles.statValWrap}>
-              {r.name ? <Text allowFontScaling={false} style={styles.statName} numberOfLines={1}>{r.name}</Text> : null}
+              {r.name ? <Text allowFontScaling={false} style={styles.statName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.name}</Text> : null}
               <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
             </View>
           </View>
@@ -914,7 +914,7 @@ const PlayersTab = ({
                 <View style={{ width: wxSc(40) }} />
               )}
               <View style={styles.stMain}>
-                <Text allowFontScaling={false} style={styles.stName} numberOfLines={1}>
+                <Text allowFontScaling={false} style={styles.stName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                   {r.name}{r.isMe ? <Text style={styles.plYou}>  (You)</Text> : null}
                   {tag ? <Text allowFontScaling={false} style={styles.stLiveTag}>{"  "}{tag}</Text> : null}
                 </Text>
@@ -973,7 +973,7 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
               {/* Item 16: recipient name once finished (never a paid/unpaid indicator).
                   Item 9A: no percentages in spectator view. */}
               {row.name ? (
-                <Text allowFontScaling={false} style={styles.payoutName} numberOfLines={1}>{row.name}</Text>
+                <Text allowFontScaling={false} style={styles.payoutName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{row.name}</Text>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
@@ -1045,7 +1045,7 @@ const PayoutsTab = ({ view }: { view: ChipSpectatorView }) => {
           {p.byPlayer.map((pl) => (
             <View key={pl.name} style={styles.winCard}>
               <View style={styles.winHead}>
-                <Text allowFontScaling={false} style={styles.winName} numberOfLines={1}>{pl.name}</Text>
+                <Text allowFontScaling={false} style={styles.winName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{pl.name}</Text>
                 <Text allowFontScaling={false} style={styles.winTotal}>{money(pl.total)}</Text>
               </View>
               {pl.lines.map((ln) => (
@@ -1181,7 +1181,7 @@ const ListModal = ({
         <TouchableOpacity key={r.id} style={[styles.qRow, i === 0 && styles.noBorderTop]} activeOpacity={0.7} onPress={() => onTap(r.id)}>
           <Text allowFontScaling={false} style={styles.qPos} numberOfLines={1}>{r.left}</Text>
           <View style={styles.qMid}>
-            <Text allowFontScaling={false} style={styles.qName} numberOfLines={1}>{r.title}</Text>
+            <Text allowFontScaling={false} style={styles.qName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.title}</Text>
             <Text allowFontScaling={false} style={styles.qSub} numberOfLines={1}>{r.sub}</Text>
           </View>
           <Text allowFontScaling={false} style={[styles.qChips, r.rightColor ? { color: r.rightColor } : null]}>{r.right}</Text>

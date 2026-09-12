@@ -62,7 +62,8 @@ import {
   isPostMatchPending,
   rematchSkippedLabel,
   teamFargoOf,
-  teamName,
+  teamName as fullName,
+  chipDisplayName,
 } from "../../../../models/services/chip.engine";
 import { scheduleStaleError } from "../../../../utils/schedule";
 import { computeBreakdown, entryPoolTotal, feesPerPlayer, sidePotTotal, sidePotPayoutViews, type PayoutBucketAllocation } from "../../../../utils/prize-pool";
@@ -100,6 +101,12 @@ import { Dropdown } from "../../../components/common/dropdown";
 
 const profileName = (p: Profile): string =>
   [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.name || p.user_name;
+
+// Screen-wide DISPLAY name = the shared chip rule (singles full, doubles "First L. / First
+// L."). Every participant-name render in this screen resolves through this. `fullName` (the
+// engine's teamName) is reserved for the few DATA sites that must match the audit-log text
+// (timeline filter, search haystack, alphabetical sort key).
+const teamName = chipDisplayName;
 
 // "1st" / "2nd" / "3rd" / "4th" … ordinal suffix for placement labels.
 const ordSuffix = (n: number): string => {
@@ -1391,20 +1398,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Fargo label: only doubles/team formats show a COMBINED rating; singles is just
   // "Fargo". Display-only — the underlying teamFargo value is unchanged.
   const fargoLabel = doubles ? "Combined Fargo" : "Fargo";
-  const shortPerson = (name?: string | null) => {
-    if (!name) return "";
-    const key = name.trim();
-    const resolved = nameMap.get(key);
-    if (resolved) return resolved;
-    const parts = key.split(/\s+/).filter(Boolean);
-    if (parts.length < 2) return parts[0] ?? "";
-    return `${parts[0]} ${parts[parts.length - 1][0]}.`;
-  };
-  const shortTeam = (e: ChipEntry) => {
-    const p1 = shortPerson(e.p1Name);
-    const p2 = doubles && e.p2Name ? shortPerson(e.p2Name) : "";
-    return p2 ? `${p1} / ${p2}` : p1 || "—";
-  };
+  // Compact rows and every other participant render use the ONE shared rule (singles full,
+  // doubles "First L. / First L."). Kept as `shortTeam` so existing call sites are untouched.
+  const shortTeam = (e: ChipEntry) => chipDisplayName(e);
   const entryById = (eid: string | null | undefined) =>
     chip.entries.find((e) => e.id === eid) ?? null;
   // Fix 2 (item 37) — authoritative COMPLETED placements. Once finished, the durable
@@ -2451,8 +2447,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const avgOpp = pPerf.avgOpponentFargo;
     const performanceRating = pPerf.rating;
     const performanceDelta = pPerf.delta;
-    // Timeline: chip events that name this team.
-    const nm = teamName(e);
+    // Timeline: chip events that name this team. Must use the FULL name — event.text was
+    // logged with full names, so the abbreviated display name wouldn't match.
+    const nm = fullName(e);
     const timeline = chip.events.filter((ev) => ev.text.includes(nm)).slice(0, 40);
     return { e, history, opponents, qi, status, table, matchesPlayed, winPct, performanceRating, performanceDelta, avgOpp, timeline };
   };
@@ -2862,7 +2859,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   >
                     <Text allowFontScaling={false} style={[styles.ptNum, styles.ptcNum]}>{i + 1}</Text>
                     <View style={styles.ptcTeam}>
-                      <Text allowFontScaling={false} style={styles.ptName} numberOfLines={1}>{teamName(e)}</Text>
+                      <Text allowFontScaling={false} style={styles.ptName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{teamName(e)}</Text>
                       {e.teamName ? <Text allowFontScaling={false} style={styles.ptNameSub} numberOfLines={1}>{e.teamName}</Text> : null}
                     </View>
                     <Text allowFontScaling={false} style={[styles.ptCell, styles.ptcFargo]}>{combined != null ? combined : "—"}</Text>
@@ -3926,7 +3923,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             // value in parentheses right after the name. Richer per-player detail (Fargo +
             // chips) lives in the tapped table-detail view.
             const renderActivePlayer = (e: ChipEntry) => (
-              <Text style={styles.atMatchTeam} numberOfLines={1}>
+              <Text style={styles.atMatchTeam} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                 {shortTeam(e)}{" "}
                 <Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>({e.chips})</Text>
               </Text>
@@ -4282,7 +4279,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 <TouchableOpacity key={qid} style={[styles.qRow2, i === 0 && styles.noBorderTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
                   <Text style={styles.qPos2} numberOfLines={1}>{i + 1}</Text>
                   <View style={styles.qNameCol}>
-                    <Text style={styles.qName2} numberOfLines={1}>{shortTeam(e)}</Text>
+                    <Text style={styles.qName2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
                     {e.teamFargo != null ? <Text style={styles.qFargo2}>{fargoLabel}: {e.teamFargo}</Text> : null}
                     {(() => { const rs = queueRoundStatus(qid); return rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null; })()}
                     {rematchSkippedLabel(chip, qid) ? (
@@ -4347,7 +4344,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
               <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
-              <Text style={styles.clName} numberOfLines={1}>{shortTeam(e)}</Text>
+              <Text style={styles.clName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
               <Text style={[styles.clChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} chips</Text>
             </TouchableOpacity>
           ))}
@@ -4757,7 +4754,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <Text style={styles.qmPos} numberOfLines={1}>{i + 1}</Text>
         <View style={styles.qmMain}>
           <View style={styles.qmLine1}>
-            <Text style={styles.qmName} numberOfLines={1}>{shortTeam(e)}</Text>
+            <Text style={styles.qmName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
             <Text style={[styles.qmChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
           </View>
           <Text style={styles.qmMeta} numberOfLines={1}>
@@ -4800,7 +4797,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     return (
       <Pressable style={styles.qActOverlay} onPress={close}>
         <Pressable style={styles.qActCard} onPress={() => {}}>
-          <Text style={styles.qActTitle} numberOfLines={1}>{shortTeam(e)}</Text>
+          <Text style={styles.qActTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
           <View style={styles.qActGroup}>
             <Row icon="person-outline" label="View Team Details" onPress={() => { close(); setQueueModalOpen(false); setProfileId(e.id); }} />
             <Row icon="arrow-up-outline" label="Move Up" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "up"); }} />
@@ -4945,11 +4942,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const q = liveQuery.trim().toLowerCase();
     const matchesQuery = (e: ChipEntry): boolean => {
       if (!q) return true;
-      // Name (incl. both partners via teamName) + Fargo (team + each member).
-      const hay = `${teamName(e)} ${e.teamFargo ?? ""} ${e.p1Fargo ?? ""} ${e.p2Fargo ?? ""}`.toLowerCase();
+      // Search on FULL names (incl. both partners' full names) so a last name still matches
+      // even though the row displays the abbreviated form.
+      const hay = `${fullName(e)} ${e.teamFargo ?? ""} ${e.p1Fargo ?? ""} ${e.p2Fargo ?? ""}`.toLowerCase();
       return hay.includes(q);
     };
-    const nameKey = (e: ChipEntry) => teamName(e).toLowerCase();
+    const nameKey = (e: ChipEntry) => fullName(e).toLowerCase();
     // Fargo compare — unrated (null) always sorts last; name is the final tiebreak.
     const fargoCmp = (a: ChipEntry, b: ChipEntry, dir: "asc" | "desc"): number => {
       const fa = a.teamFargo;
@@ -5055,7 +5053,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             {out.map((e) => (
               <View key={e.id} style={styles.playerRow}>
                 <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-                  <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1}>{shortTeam(e)}</Text>
+                  <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
                   <Text style={[styles.playerMeta, styles.playerMetaOut]}>{readOnly ? `${finalLabel(e)} · ${e.wins}-${e.losses}` : `${e.wins}-${e.losses}`}</Text>
                 </TouchableOpacity>
                 {!readOnly && (
@@ -5105,7 +5103,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       return (
         <TouchableOpacity key={e.id} style={styles.standRow} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
           <Text style={styles.standRank} numberOfLines={1}>{rank}</Text>
-          <Text style={[styles.standName, isOut && styles.playerOut]} numberOfLines={1}>{shortTeam(e)}</Text>
+          <Text style={[styles.standName, isOut && styles.playerOut]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
           <Text style={styles.standMeta}><Text style={{ color: chipStatusColor(e.chips, e.startChips) }}>{e.chips}</Text> · {e.wins}-{e.losses} · {e.eliminations}K</Text>
         </TouchableOpacity>
       );
@@ -5405,7 +5403,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           {standings.slice(0, resultsStandingsExpanded ? standings.length : 5).map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.sumRow, i > 0 && styles.sumRowDiv]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
               <Text style={styles.sumMedal}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ordSuffix(i + 1)}</Text>
-              <Text style={styles.sumStandName} numberOfLines={1}>{shortTeam(e)}</Text>
+              <Text style={styles.sumStandName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
               <Text style={styles.sumRecord}>{e.wins}-{e.losses}</Text>
             </TouchableOpacity>
           ))}
@@ -7099,7 +7097,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   const fg = e.teamFargo != null ? e.teamFargo : e.p1Fargo;
                   return (
                     <View style={styles.tdpCard}>
-                      <Text style={styles.tdpName} numberOfLines={1}>{shortTeam(e)}</Text>
+                      <Text style={styles.tdpName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
                       <View style={styles.tdpMetaRow}>
                         <Text style={styles.tdpFargo}>{fargoLabel} {fg ?? "—"}</Text>
                         <Text style={[styles.tdpChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "Chip" : "Chips"}</Text>

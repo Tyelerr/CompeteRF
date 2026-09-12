@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService, ChipResultRow } from "../../models/services/chip.service";
-import { dashboard, enteredField, teamName } from "../../models/services/chip.engine";
+import { dashboard, enteredField, teamName as fullName, chipDisplayName } from "../../models/services/chip.engine";
 import {
   ChipEntry,
   ChipFormat,
@@ -30,6 +30,10 @@ import {
   toPublicActivityFeed,
 } from "../../utils/chip-activity";
 import { computePerformance, PerfGame } from "../../utils/performance";
+
+// Display names follow the shared chip rule (singles full, doubles "First L. / First L.").
+// `fullName` (engine teamName) is kept only for stable sort tie-breaks, never for display.
+const teamName = chipDisplayName;
 
 export type SpecPlayerStatus =
   | "playing"
@@ -608,6 +612,14 @@ const buildSpectatorView = (
   // shown as a badge but never drives the order.
   const players: SpecPlayerRow[] = [...s.entries]
     .filter(enteredField)
+    // Sort on the ENTRY (stable): eliminated last, then chips desc, then FULL-name tie-break —
+    // unchanged by the display rule so ordering never shifts. Display name is applied on map.
+    .sort((a, b) => {
+      const aOut = statusFor(s, a, finished) === "eliminated" ? 1 : 0;
+      const bOut = statusFor(s, b, finished) === "eliminated" ? 1 : 0;
+      if (aOut !== bOut) return aOut - bOut;
+      return b.chips - a.chips || fullName(a).localeCompare(fullName(b));
+    })
     .map((e) => ({
       id: e.id,
       name: teamName(e),
@@ -618,13 +630,7 @@ const buildSpectatorView = (
       losses: e.losses,
       status: statusFor(s, e, finished),
       isMe: isMine(e),
-    }))
-    .sort((a, b) => {
-      const aOut = a.status === "eliminated" ? 1 : 0;
-      const bOut = b.status === "eliminated" ? 1 : 0;
-      if (aOut !== bOut) return aOut - bOut;
-      return b.chips - a.chips || a.name.localeCompare(b.name);
-    });
+    }));
 
   // Payouts — reuse the same money math as the TD Prize Pool setup. Basis = actual FIELD
   // entrants (enteredField), the same set the setup/Review pool uses — NOT a raw paid
