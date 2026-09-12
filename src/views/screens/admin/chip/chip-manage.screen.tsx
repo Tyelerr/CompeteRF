@@ -6795,14 +6795,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               const entry = chip.entries.find((x) => x.id === profileId);
               if (!entry) return <Text style={styles.hint}>Not found.</Text>;
               const p = buildTeamProfile(entry);
-              const statusMeta =
-                p.status === "eliminated" ? { label: "Eliminated", color: COLORS.error }
-                  : p.status === "playing" ? { label: "Playing", color: COLORS.primary }
-                    : p.status === "next" ? { label: "Next Up", color: COLORS.primary }
-                      : { label: "Waiting", color: COLORS.warning };
               return (
                 <>
-                  {/* Header — name, Fargo, status + a contextual ⋯ action button */}
+                  {/* Header — name + a contextual ⋯ action button. Fargo and queue status are
+                      intentionally omitted here: Fargo is in the stat tiles below and queue
+                      status is visible on the Queue screen (both redundant in this modal). */}
                   <View style={styles.pHeaderRow}>
                     <Text style={[styles.pName, { flex: 1 }]} numberOfLines={2}>{teamName(entry)}</Text>
                     <TouchableOpacity
@@ -6812,14 +6809,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     >
                       <Ionicons name="ellipsis-horizontal" size={webMs(20)} color={COLORS.textSecondary} />
                     </TouchableOpacity>
-                  </View>
-                  <View style={styles.pHeaderMeta}>
-                    {entry.teamFargo != null && (
-                      <Text style={styles.pFargo}>{doubles ? "Team " : ""}Fargo {entry.teamFargo}</Text>
-                    )}
-                    <View style={[styles.pStatusPill, { backgroundColor: statusMeta.color + "22" }]}>
-                      <Text style={[styles.pStatusPillText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
-                    </View>
                   </View>
 
                   {/* Body: shared ChipPerformancePanel (same tiles / performance card / match
