@@ -838,6 +838,21 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Restore-chip (eliminated team) reason prompt.
   // Complete-match winner picker (Tables page).
   const [completeMatch, setCompleteMatch] = useState<{ matchId: string; aId: string; bId: string } | null>(null);
+  // Recording a winner can, in the SAME commit, seat the next winner-stays matchup (or the
+  // finals) — which the "Next Match" popup (and, at the last game, the champion modal) would
+  // open as a second RN <Modal> while this picker is still dismissing. Two RN Modals
+  // mid-transition on iOS/Fabric leave a transparent host that swallows every touch (the
+  // screen looks frozen — Start Match, taps, everything dead). So those popups MUST wait
+  // until this picker has FULLY dismissed: onDismiss (iOS) / next frame (Android/web, no
+  // stacked-presentation bug). Mirrors runAfterProfileClose / runAfterTablesClose. A STATE
+  // flag (not a ref) gates the popup effects AND re-runs them when it clears.
+  const [winnerPickerClosing, setWinnerPickerClosing] = useState(false);
+  const flushAfterWinnerPicker = () => setWinnerPickerClosing(false);
+  const closeWinnerPicker = () => {
+    setWinnerPickerClosing(true);
+    setCompleteMatch(null);
+    if (Platform.OS !== "ios") requestAnimationFrame(flushAfterWinnerPicker);
+  };
   // Manual chip-override session (reason-gated). Opened from the +/- chip controls.
   const [chipAdjust, setChipAdjust] = useState<{ entryId: string; name: string; current: number; playing: boolean } | null>(null);
   const [chipAdjustNew, setChipAdjustNew] = useState(0);
@@ -1221,6 +1236,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }
 
     if (assignPopupTableId) return;
+    // NEVER present the Next-Match popup while the winner picker is still open or
+    // mid-dismiss — two RN Modals overlapping on iOS/Fabric wedge the touch layer
+    // (the finals "frozen screen" bug). Reopen is nudged from flushAfterWinnerPicker
+    // once the picker has fully dismissed.
+    if (completeMatch != null || winnerPickerClosing) return;
     // The "Next Match / Incoming Team" callout fires ONLY for a genuine winner-stays
     // next challenger — a pending created because a completed match freed the table
     // (isPostMatchPending: the holder has already played). An OPENING matchup merely
@@ -1231,8 +1251,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const pend = c?.tables?.find(
       (t) => isPostMatchPending(c, t) && !ackedPendingRef.current.has(`${t.id}:${t.pendingChallengerId}`),
     );
-    if (pend) setAssignPopupTableId(pend.id);
-  }, [vm.chip, assignPopupTableId]);
+    if (pend) {
+      if (__DEV__) console.log("[finals/next-match] opening popup for table", pend.id, Date.now());
+      setAssignPopupTableId(pend.id);
+    }
+  }, [vm.chip, assignPopupTableId, completeMatch, winnerPickerClosing]);
 
   // Scroll-to-top bridge. Chip LIVE pages own their ScrollView (see the embedded
   // return), so the host's onRequestScrollTop (which scrolls the shared page
@@ -1339,10 +1362,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       championShownRef.current = null;
       return;
     }
-    if (championShownRef.current === winnerId) return;
-    championShownRef.current = winnerId;
-    setChampionModalOpen(true);
-  }, [vm.chip?.winnerId, vm.phase]);
+    // Same guard as the Next-Match popup: the champion is crowned by the very tap that
+    // records the final winner, so this must not present over the still-dismissing winner
+    // picker (two-modal touch-wedge). Wait for the picker to fully dismiss; the effect
+    // re-runs when winnerPickerClosing clears. `championShownRef` is only stamped once we
+    // actually open, so deferring never drops the modal.
+    const canShow =
+      championShownRef.current !== winnerId &&
+      completeMatch == null &&
+      !winnerPickerClosing;
+    if (canShow) {
+      championShownRef.current = winnerId;
+      setChampionModalOpen(true);
+    }
+  }, [vm.chip?.winnerId, vm.phase, completeMatch, winnerPickerClosing]);
 
   // The one Finish action (shared by the champion modal, the champion card, and
   // the Actions sheet). Idempotent: fires confetti once per winner, then hands off
@@ -4108,15 +4141,26 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const anyPayoutReady = determinedFinishers(chip).some(
         (f) => f.place <= paidCount && amtByPlace.get(f.place) != null,
       );
-      if (anyPayoutReady) {
+      // TWO DISTINCT states — never conflated (the engine's completion condition is
+      // crownIfChampion = exactly one field entrant alive; NOTHING here finalizes,
+      // locks, or navigates on payout placement):
+      //   • finishedAt set  → the tournament is COMPLETE → real "Payouts ready" CTA.
+      //   • finals still live but paid places mathematically locked → INFORMATIONAL
+      //     only. No "Go to Payouts" CTA competing with the live final, and wording
+      //     that never implies the tournament is over.
+      if (chip.finishedAt && anyPayoutReady) {
         alerts.push({
           id: "payouts-ready",
           text: "Payouts ready",
-          sub: chip.finishedAt
-            ? "Pay the players — open Payouts for the full breakdown."
-            : "Payable places are locked in — open Payouts for the breakdown.",
+          sub: "Pay the players — open Payouts for the full breakdown.",
           onPress: onOpenPayouts ?? onOpenResults,
           cta: "Go to Payouts",
+        });
+      } else if (anyPayoutReady) {
+        alerts.push({
+          id: "payout-places-locked",
+          text: "Payout places locked",
+          sub: `Top ${paidCount} payout ${paidCount === 1 ? "position is" : "positions are"} now guaranteed. Final results and payouts post when the tournament ends.`,
         });
       }
     }
@@ -6903,9 +6947,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </Modal>
 
 
-      {/* Complete Match — pick the winner */}
-      <Modal visible={completeMatch != null} transparent animationType="fade" onRequestClose={() => setCompleteMatch(null)}>
-        <Pressable style={styles.centerBackdrop} onPress={() => setCompleteMatch(null)}>
+      {/* Complete Match — pick the winner. onDismiss releases the Next-Match popup so it
+          only presents AFTER this picker is fully gone (no two-modal touch-wedge on iOS). */}
+      <Modal visible={completeMatch != null} transparent animationType="fade" onRequestClose={closeWinnerPicker} onDismiss={flushAfterWinnerPicker}>
+        <Pressable style={styles.centerBackdrop} onPress={closeWinnerPicker}>
           <Pressable style={styles.pickerCard} onPress={() => {}}>
             <Text style={styles.renameTitle}>Who won?</Text>
             <Text style={styles.reduceHint}>The winner stays on the table; the loser drops a chip.</Text>
@@ -6916,7 +6961,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 <TouchableOpacity
                   key={id}
                   style={styles.winPickBtn}
-                  onPress={() => { vm.recordWinner(completeMatch.matchId, id); setCompleteMatch(null); }}
+                  onPress={() => { vm.recordWinner(completeMatch.matchId, id); closeWinnerPicker(); }}
                 >
                   <Text style={styles.winPickName} numberOfLines={2}>{teamName(e)}</Text>
                   {/* Chip count here uses the button's fixed muted-white (winPickMeta) — NOT
@@ -6925,7 +6970,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 </TouchableOpacity>
               );
             })}
-            <TouchableOpacity style={[styles.renameCancel, { alignSelf: "stretch", alignItems: "center", marginTop: webSc(SPACING.sm) }]} onPress={() => setCompleteMatch(null)}>
+            <TouchableOpacity style={[styles.renameCancel, { alignSelf: "stretch", alignItems: "center", marginTop: webSc(SPACING.sm) }]} onPress={closeWinnerPicker}>
               <Text style={styles.renameCancelText}>Cancel</Text>
             </TouchableOpacity>
           </Pressable>
