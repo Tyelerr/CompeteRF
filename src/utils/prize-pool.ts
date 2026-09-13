@@ -270,54 +270,64 @@ export const entryPoolTotal = (
 export const sidePotTotal = (players: number, amountPerPlayer: number): number =>
   round2(Math.max(0, players) * Math.max(0, amountPerPlayer));
 
+// The cash increment lower payout places snap to — TDs pay round notes. $5 normally;
+// but if any lower place's exact share is under $5, the whole split drops to $1 so a
+// small place never rounds away to $0 (see computeBreakdown).
+export const PAYOUT_STEP = 5;
+
 // ── Breakdown ─────────────────────────────────────────────────────────────────
-// Percentage places are paid the EXACT percent-of-pool, rounded to the cent, with
-// the largest-remainder method distributing any residual cents so the percentage
-// places sum EXACTLY to their collective target (pool × their-percent-total). For a
-// preset — percents total 100 and no dollar overrides — that target is the whole
-// pool, so a percentage split NEVER leaves a rounding remainder (sum(payouts) ===
-// pool). A custom split that intentionally totals < 100% still shows the shortfall
-// as unassigned; custom dollar overrides are kept exact (whole dollars).
+// Cash-style allocator. Percentage places (2nd downward) snap DOWN to a clean $5
+// increment; 1st place ABSORBS the remainder so the percentage places sum EXACTLY to
+// their collective target (pool × their-percent-total). For a preset — percents total
+// 100 and no dollar overrides — that target is the whole pool, so a percentage split
+// is ALWAYS fully paid out in clean amounts (e.g. $165 → $90 / $50 / $25). A custom
+// split that intentionally totals < 100% still shows the shortfall as unassigned;
+// custom dollar overrides are kept exact (whole dollars).
+//
+// Fallbacks (reported): if any lower place's exact share is < $5, the step drops to
+// $1 for that split so no lower place rounds to $0. When the pool is not a whole $5
+// multiple (odd dollars, or a cents pool from fees), the lower places stay clean and
+// 1st carries the odd remainder — the only way to keep sum(payouts) === pool exactly.
 export const computeBreakdown = (
   pool: number,
   places: PrizePlace[],
 ): PoolBreakdown => {
   const poolR = round2(pool);
-  const poolCents = Math.round(poolR * 100);
 
-  // Custom dollar overrides are exact (whole dollars → cents); percentage places
-  // share the pool by their percents.
+  // Custom dollar overrides are exact (whole dollars); percentage places share the pool.
   const isCustom = places.map((pl) => pl.amountOverride != null);
-  const centsByPlace = new Array(places.length).fill(0);
+  const amounts = new Array<number>(places.length).fill(0);
   places.forEach((pl, i) => {
-    if (isCustom[i]) centsByPlace[i] = Math.max(0, Math.round(pl.amountOverride as number)) * 100;
+    if (isCustom[i]) amounts[i] = Math.max(0, Math.round(pl.amountOverride as number));
   });
 
   const pctIdx = places.map((_, i) => i).filter((i) => !isCustom[i]);
-  // Exact cents each percentage place claims, and the integer target they must sum to.
-  const exactCents = pctIdx.map((i) => (clampPct(places[i].percent) / 100) * poolCents);
-  const targetCents = Math.round(exactCents.reduce((s, v) => s + v, 0));
-  const floorCents = exactCents.map((v) => Math.floor(v + 1e-9));
-  const addCents = floorCents.slice();
-  let residual = targetCents - floorCents.reduce((s, v) => s + v, 0);
-  // Largest-remainder: hand each leftover cent to the place with the biggest fraction.
-  const order = exactCents
-    .map((v, k) => ({ k, f: v - Math.floor(v + 1e-9) }))
-    .sort((a, b) => b.f - a.f);
-  let w = 0;
-  while (residual > 0 && order.length > 0) {
-    addCents[order[w % order.length].k] += 1;
-    residual -= 1;
-    w += 1;
+  if (pctIdx.length > 0) {
+    const exact = pctIdx.map((i) => (clampPct(places[i].percent) / 100) * poolR);
+    // Collective target the percentage places must sum to: the whole pool for a preset
+    // (percents total 100), less for a custom split that totals under 100%.
+    const target = round2(exact.reduce((s, v) => s + v, 0));
+    // $5 unless a lower place would round to $0 at $5 — then $1 keeps it payable.
+    const lowerExact = exact.slice(1);
+    const step =
+      lowerExact.length > 0 && lowerExact.every((v) => v >= PAYOUT_STEP - 1e-9)
+        ? PAYOUT_STEP
+        : 1;
+    const floorToStep = (v: number) => Math.floor(v / step + 1e-9) * step;
+    // Lower places (2nd downward) snap DOWN to the step; 1st absorbs the remainder.
+    let lowerSum = 0;
+    for (let k = 1; k < pctIdx.length; k++) {
+      const a = floorToStep(exact[k]);
+      amounts[pctIdx[k]] = a;
+      lowerSum += a;
+    }
+    amounts[pctIdx[0]] = round2(target - lowerSum); // 1st absorbs remainder → exact total
   }
-  pctIdx.forEach((i, k) => {
-    centsByPlace[i] = addCents[k];
-  });
 
   const rows: PlaceBreakdown[] = places.map((pl, i) => ({
     place: i + 1,
     percent: clampPct(pl.percent),
-    amount: centsByPlace[i] / 100,
+    amount: amounts[i],
     custom: isCustom[i],
   }));
   const percentTotal = round2(rows.reduce((s, r) => s + r.percent, 0));
