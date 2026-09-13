@@ -709,15 +709,20 @@ export const useChipTournament = (
   // Idempotent — only valid once a champion has been decided (winnerId), the
   // finish event dedups, saveResults upserts, and setLiveState is a no-op if
   // already finished — so repeated taps never double-complete or duplicate rows.
-  const endTournament = useCallback(async () => {
-    if (finishingRef.current) return; // already in flight — no double completion
+  // Returns true when the tournament is completed (or was already completed) so the
+  // caller can immediately sync host UI (header badge / phase). False = nothing was
+  // finalized this call (in-flight, no champion, or completion threw).
+  const endTournament = useCallback(async (): Promise<boolean> => {
+    if (finishingRef.current) return false; // already in flight — no double completion
     const c = chipRef.current ?? chip;
-    if (!c?.winnerId) return; // guard: no champion yet
-    // Idempotent: if already completed, do nothing (the saved finalization stands).
+    if (!c?.winnerId) return false; // guard: no champion yet
+    // Idempotent: if already completed, the saved finalization stands — report success
+    // so the host can (re)sync its cached status without re-finalizing.
     const t = tournamentRef.current;
-    if (t?.live_state === "finished" || t?.status === "completed") return;
+    if (t?.live_state === "finished" || t?.status === "completed") return true;
     finishingRef.current = true;
     setFinishing(true);
+    let completed = false;
     try {
       const next = engineFinishTournament(c, null);
       await chipService.save(id, next);
@@ -747,6 +752,7 @@ export const useChipTournament = (
       // live_state="finished" + completed_at are set atomically — identical to
       // bracket completion (they can't drift). Idempotent: preserves completed_at.
       await tournamentService.completeTournament(id);
+      completed = true; // authoritative: status/live_state/completed_at are persisted now
       // Fix 1 — forward participant sync. Now that the tournament is COMPLETED, upsert the
       // durable tournament_players rows for any TD-added singles that only ever lived in
       // chip_entries, so they don't vanish from completed history/results/reviews (the
@@ -776,6 +782,7 @@ export const useChipTournament = (
       finishingRef.current = false;
       setFinishing(false);
     }
+    return completed;
   }, [chip, id, load]);
 
   // Fix 1 — retry the forward participant sync for an already-COMPLETED tournament whose
@@ -801,7 +808,9 @@ export const useChipTournament = (
   // ended by mistake). Clears the decided-winner flags so play can continue,
   // deletes the persisted placements, and flips live_state back to in_progress.
   // Tables/queue are preserved — reshuffle to re-seat if it had crowned a winner.
-  const reopen = useCallback(async () => {
+  // Returns true when the tournament was reopened to Live so the caller can immediately
+  // sync host UI (header badge / phase) back to Running. False = reopen threw.
+  const reopen = useCallback(async (): Promise<boolean> => {
     if (chip) {
       const next = { ...chip, winnerId: null, finishedAt: null };
       await chipService.save(id, next);
@@ -811,10 +820,17 @@ export const useChipTournament = (
     } catch (e) {
       console.warn("chip_results clear skipped:", e);
     }
-    // Canonical reopen: clears status/live_state/completed_at together so it leaves
-    // the Completed list cleanly (mirror of tournamentService.completeTournament).
-    await tournamentService.reopenTournament(id);
+    try {
+      // Canonical reopen: clears status/live_state/completed_at together so it leaves
+      // the Completed list cleanly (mirror of tournamentService.completeTournament).
+      await tournamentService.reopenTournament(id);
+    } catch (e) {
+      console.error(`[chip] reopen FAILED for tournament ${id}:`, e);
+      await load({ silent: true }); // resync to server truth (stays Completed)
+      return false;
+    }
     await load({ silent: true });
+    return true;
   }, [chip, id, load]);
 
   // ── Approve a self-service registration (TD confirms Fargo) ────────────────────

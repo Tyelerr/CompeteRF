@@ -5834,6 +5834,8 @@ export default function ManageTournamentScreen() {
             onReadyCountChange={setEmbeddedChipReady}
             onReadinessChange={setEmbeddedChipReadiness}
             onStarted={() => hub.setLiveStateLocal("in_progress")}
+            onFinished={() => hub.setLiveStateLocal("finished")}
+            onReopened={() => hub.setLiveStateLocal("in_progress")}
             onTableCountChange={setEmbeddedChipTables}
             reloadSignal={chipRosterTick}
           />

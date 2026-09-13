@@ -448,6 +448,12 @@ interface ChipManageProps {
   // Fired ONCE after a confirmed Start Tournament so the host can flip its cached
   // tournament/header to Running immediately (this VM persists the start itself).
   onStarted?: () => void;
+  // Fired after a confirmed Finish (completion) / Reopen so the host can flip its cached
+  // tournament/header to Completed / Running immediately — the chip VM owns these
+  // persists, so the host's tournament query would otherwise stay stale until a manual
+  // refresh. Same local-sync pattern as onStarted; reflects the persisted lifecycle state.
+  onFinished?: () => void;
+  onReopened?: () => void;
   // Bumped by the host's tournament-scoped registration Realtime subscription. This
   // roster is VM-driven (not a React Query key), so a change on this number triggers a
   // SILENT reload to surface cross-client registration changes (e.g. a player who just
@@ -571,7 +577,7 @@ const ShuffleBallsAnimation = memo(({ onDone }: { onDone: () => void }) => {
 });
 ShuffleBallsAnimation.displayName = "ShuffleBallsAnimation";
 
-export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, reloadSignal }: ChipManageProps) => {
+export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, onFinished, onReopened, reloadSignal }: ChipManageProps) => {
   // Acting director identity (from auth) — passed into the VM so it can stamp gameplay
   // audit events, and reused by reason-gated actions. Computed BEFORE the VM call.
   const { profile } = useAuthContext();
@@ -1380,7 +1386,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // The one Finish action (shared by the champion modal, the champion card, and
   // the Actions sheet). Idempotent: fires confetti once per winner, then hands off
   // to the vm's idempotent endTournament (no double-complete / duplicate rows).
-  const doFinishTournament = () => {
+  const doFinishTournament = async () => {
     // Idempotent at the UI layer: ignore repeat taps while finishing or once done.
     if (vm.finishing || vm.isFinished) { setChampionModalOpen(false); return; }
     const winnerId = vm.chip?.winnerId;
@@ -1389,7 +1395,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       confettiFiredRef.current = winnerId;
       confettiRef.current?.fire();
     }
-    vm.endTournament();
+    // On a CONFIRMED completion, tell the host so its cached tournament / header badge
+    // flips to Completed immediately (this VM persisted the finalization, not the host).
+    const ok = await vm.endTournament();
+    if (ok) onFinished?.();
   };
 
   // Full-body loader ONLY on the initial, never-loaded state (no chip yet). Once the
@@ -2083,7 +2092,15 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       "Move this tournament back to Live so you can keep playing? Any recorded champion is cleared — reshuffle to re-seat tables if it had finished.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Reopen", onPress: () => vm.reopen() },
+        {
+          text: "Reopen",
+          onPress: async () => {
+            // On a CONFIRMED reopen, tell the host so its cached tournament / header
+            // badge flips back to Running immediately (mirror of onFinished).
+            const ok = await vm.reopen();
+            if (ok) onReopened?.();
+          },
+        },
       ],
     );
   };
