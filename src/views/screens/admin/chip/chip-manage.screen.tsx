@@ -1254,11 +1254,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // assigning/starting the opening never pops the callout; each table only starts
     // calling its next match once its OWN match completes and a winner is recorded.
     const c = vm.chip;
+    // FINALS suppression: with exactly two entrants alive, every pending matchup is the
+    // SAME two finalists rematching on the SAME table (the engine correctly re-seats them
+    // as holder + pending after each result). Nobody new is rotating in, so the "Next
+    // Match / Incoming Team" popup would be misleading — the table simply reads "Waiting to
+    // Start" and the TD taps Start Match again. Normal winner-stays (3+ alive) is untouched.
+    const aliveCount = (c?.entries ?? []).filter(
+      (e) => e.status !== "eliminated" && enteredField(e),
+    ).length;
     const pend = c?.tables?.find(
       (t) => isPostMatchPending(c, t) && !ackedPendingRef.current.has(`${t.id}:${t.pendingChallengerId}`),
     );
-    if (pend) {
-      if (__DEV__) console.log("[finals/next-match] opening popup for table", pend.id, Date.now());
+    if (pend && aliveCount > 2) {
+      if (__DEV__) console.log("[next-match] opening popup for table", pend.id, Date.now());
       setAssignPopupTableId(pend.id);
     }
   }, [vm.chip, assignPopupTableId, completeMatch, winnerPickerClosing]);
