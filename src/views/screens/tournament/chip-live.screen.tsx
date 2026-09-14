@@ -806,33 +806,42 @@ const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
   // into "Name" (primary) and a compact metric so the eye lands on the value. Top Performance
   // shows the winner's overperformance as "708 (+158)" — one paren set — or "—" if nobody
   // overperformed. "Most Active Player" removed (it was just most-matches = a rename).
-  const rows: { label: string; name?: string; value: string }[] = [
+  type StatRow = { label: string; name?: string; value: string };
+  // Tournament-level facts (no player names → always single-line).
+  const tournamentRows: StatRow[] = [
+    { label: "Players", value: `${st.players}` },
+    { label: "Tables Used", value: `${st.tablesUsed}` },
     { label: "Tournament Duration", value: st.durationLabel ?? "—" },
     { label: "Matches Played", value: `${st.matchesPlayed}` },
+    { label: "Average Match Time", value: st.avgMatchLabel ?? "—" },
     { label: "Reshuffles", value: `${st.reshuffles}` },
+  ];
+  // Player-leader stats (name + value → responsive wrap).
+  const playerRows: StatRow[] = [
     { label: "Most Wins", name: st.mostWins?.name, value: st.mostWins ? st.mostWins.value : "—" },
     { label: "Best Win Rate", name: st.bestWinRate?.name, value: st.bestWinRate ? st.bestWinRate.value : "—" },
     { label: "Longest Win Streak", name: st.longestStreak?.name, value: st.longestStreak ? st.longestStreak.value : "—" },
     { label: "Top Performance", name: st.topPerformance?.name, value: st.topPerformance ? st.topPerformance.value : "—" },
   ];
+  // One reusable row for every stat. The value block wraps (flexWrap): a name + value that
+  // fit stay on one line; when they don't, the value drops to a second line BELOW the name —
+  // the name is never font-shrunk. Rows without a name never wrap. The row grows to fit.
+  const renderRow = (r: StatRow, i: number) => (
+    <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
+      <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
+      <View style={styles.statValWrap}>
+        {r.name ? <Text allowFontScaling={false} style={styles.statName}>{r.name}</Text> : null}
+        <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
+      </View>
+    </View>
+  );
   return (
     <View style={styles.section}>
       <SectionHeader icon="stats-chart-outline" title="Tournament Stats" />
-      <View style={styles.statsCard}>
-        {rows.map((r, i) => (
-          // One reusable row for every stat. The value block wraps (flexWrap): a name +
-          // value that fit stay on one line; when they don't, the value drops to a second
-          // line BELOW the name — the name is never font-shrunk. Rows without a name
-          // (Duration, Matches, Reshuffles) simply never wrap. The row grows to fit.
-          <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
-            <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
-            <View style={styles.statValWrap}>
-              {r.name ? <Text allowFontScaling={false} style={styles.statName}>{r.name}</Text> : null}
-              <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
+      <Text allowFontScaling={false} style={styles.statGroupLbl}>TOURNAMENT STATS</Text>
+      <View style={styles.statsCard}>{tournamentRows.map(renderRow)}</View>
+      <Text allowFontScaling={false} style={[styles.statGroupLbl, styles.statGroupLblGap]}>PLAYER STATS</Text>
+      <View style={styles.statsCard}>{playerRows.map(renderRow)}</View>
     </View>
   );
 };
@@ -1308,6 +1317,9 @@ const styles = StyleSheet.create({
   recapVal: { flex: 1, textAlign: "right", color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
   // Item 8: bigger, cleaner Tournament Stats card — taller rows, larger value, name + metric.
   statsCard: { backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: wxSc(SPACING.md), marginBottom: wxSc(SPACING.md) },
+  // Subtle group label above each stats card (Tournament Stats / Player Stats).
+  statGroupLbl: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", letterSpacing: 0.6, marginBottom: wxSc(SPACING.xs), marginLeft: wxSc(SPACING.xs) },
+  statGroupLblGap: { marginTop: wxSc(SPACING.sm) },
   statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.md) },
   statRowDiv: { borderTopWidth: 1, borderTopColor: COLORS.border + "66" },
   statLbl: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md) },

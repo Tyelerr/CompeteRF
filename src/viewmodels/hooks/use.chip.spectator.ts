@@ -209,9 +209,14 @@ export interface SpecStatLeader {
   value: string;
 }
 export interface SpecStats {
+  // Tournament-level
+  players: number; // total field entrants (whole field, not currently-alive)
+  tablesUsed: number; // distinct tables that hosted at least one completed match
   durationLabel: string | null; // wall-clock start→finish, e.g. "1h 23m"
   matchesPlayed: number;
+  avgMatchLabel: string | null; // mean of actual completed-match durations; null if none timed
   reshuffles: number;
+  // Player-level
   mostWins: SpecStatLeader | null;
   bestWinRate: SpecStatLeader | null;
   longestStreak: SpecStatLeader | null;
@@ -777,9 +782,39 @@ const buildSpectatorView = (
     const durationLabel = durMs != null && durMs > 0
       ? (() => { const mins = Math.round(durMs / 60000); const h = Math.floor(mins / 60); const m = mins % 60; return h > 0 ? `${h}h ${m}m` : `${m}m`; })()
       : null;
+    // Tables Used: distinct tables that actually hosted a completed match (historical
+    // usage, not the configured table count). tableId is stamped at match start and
+    // retained on the finished match.
+    const tablesUsed = new Set(
+      s.matches.filter((m) => m.status === "finished" && m.tableId).map((m) => m.tableId),
+    ).size;
+    // Average Match Time: mean of ACTUAL completed-match durations (endedAt − startedAt),
+    // NOT tournament-duration ÷ matches (tables run in parallel). Only matches with valid
+    // timing count; "—" when none are timed.
+    const matchDurations = s.matches
+      .filter((m) => m.status === "finished" && m.startedAt && m.endedAt)
+      .map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime())
+      .filter((ms) => Number.isFinite(ms) && ms > 0);
+    const avgMatchLabel =
+      matchDurations.length > 0
+        ? (() => {
+            const avgSec = Math.round(
+              matchDurations.reduce((a, b) => a + b, 0) / matchDurations.length / 1000,
+            );
+            const h = Math.floor(avgSec / 3600);
+            const m = Math.floor((avgSec % 3600) / 60);
+            const sec = avgSec % 60;
+            return h > 0
+              ? `${h}h ${String(m).padStart(2, "0")}m` // e.g. "1h 04m"
+              : `${m}m ${String(sec).padStart(2, "0")}s`; // e.g. "8m 24s"
+          })()
+        : null;
     stats = {
+      players: fieldProfiles.length,
+      tablesUsed,
       durationLabel,
       matchesPlayed: d.matchesPlayed,
+      avgMatchLabel,
       reshuffles: s.reshuffleCount ?? 0,
       mostWins: lead(fieldProfiles, (a, b) => b.wins - a.wins, (p) => p.wins > 0, (p) => `${p.wins}`),
       bestWinRate: lead(fieldProfiles, (a, b) => b.winPct - a.winPct, (p) => p.matchesPlayed >= 3, (p) => `${Math.round(p.winPct * 100)}%`),
