@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { geoService, ZipCoords } from "../models/services/geo.service";
 import { registrationService } from "../models/services/registration.service";
@@ -304,11 +304,25 @@ export function useBilliards(): UseBilliardsReturn {
     setHasSetHomeState(false);
   }, []);
 
+  // Pull-to-refresh: refetch the CURRENT dataset (loadTournaments reads the live
+  // filter state — status drives the server window; every other filter is applied
+  // client-side over the result — so no filter/search/city/zip/page state is touched).
+  // Depending on filters.status keeps this closure's loadTournaments fresh so a manual
+  // refresh always fetches the correct completed vs upcoming/live window. The in-flight
+  // ref ignores a second pull (or a concurrent registration-triggered refresh) so rapid
+  // double-pulls never fire duplicate concurrent requests.
+  const refreshingRef = useRef(false);
   const onRefresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
-    await loadTournaments();
-    setRefreshing(false);
-  }, []);
+    try {
+      await loadTournaments();
+    } finally {
+      setRefreshing(false);
+      refreshingRef.current = false;
+    }
+  }, [filters.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     tournaments,

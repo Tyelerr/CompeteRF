@@ -432,7 +432,22 @@ export const BilliardsScreen = () => {
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}
             scrollEventThrottle={16}
-            bounces={false}
+            // iOS pull-to-refresh needs the top overscroll, so allow bounce (was
+            // disabled). The refresh gesture is a downward pull at offset 0 (dy < 0),
+            // which only ever hits handleScroll's re-expand branch — never the collapse
+            // branch — so it can't hide the filters. RefreshControl itself only fires at
+            // the top, and vm.onRefresh refetches the CURRENT filter state (see the VM).
+            bounces={!isWeb}
+            refreshControl={
+              isWeb ? undefined : (
+                <RefreshControl
+                  refreshing={vm.refreshing}
+                  onRefresh={vm.onRefresh}
+                  tintColor={COLORS.primary}
+                  colors={[COLORS.primary]}
+                />
+              )
+            }
             onLayout={(e) => { listHeightRef.current = e.nativeEvent.layout.height; }}
             onContentSizeChange={(_w, h) => {
               contentHeightRef.current = h;
