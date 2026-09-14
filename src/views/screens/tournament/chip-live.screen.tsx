@@ -806,43 +806,32 @@ const StatsTab = ({ view }: { view: ChipSpectatorView }) => {
   // into "Name" (primary) and a compact metric so the eye lands on the value. Top Performance
   // shows the winner's overperformance as "708 (+158)" — one paren set — or "—" if nobody
   // overperformed. "Most Active Player" removed (it was just most-matches = a rename).
-  // `stacked` rows put the name on its own line ABOVE the value so a long name is
-  // never font-shrunk to share the line. Only Top Performance uses it (its value —
-  // "502 (+252)" — is the widest, which is what forced the name to shrink).
-  const rows: { label: string; name?: string; value: string; stacked?: boolean }[] = [
+  const rows: { label: string; name?: string; value: string }[] = [
     { label: "Tournament Duration", value: st.durationLabel ?? "—" },
     { label: "Matches Played", value: `${st.matchesPlayed}` },
     { label: "Reshuffles", value: `${st.reshuffles}` },
     { label: "Most Wins", name: st.mostWins?.name, value: st.mostWins ? st.mostWins.value : "—" },
     { label: "Best Win Rate", name: st.bestWinRate?.name, value: st.bestWinRate ? st.bestWinRate.value : "—" },
     { label: "Longest Win Streak", name: st.longestStreak?.name, value: st.longestStreak ? st.longestStreak.value : "—" },
-    { label: "Top Performance", name: st.topPerformance?.name, value: st.topPerformance ? st.topPerformance.value : "—", stacked: true },
+    { label: "Top Performance", name: st.topPerformance?.name, value: st.topPerformance ? st.topPerformance.value : "—" },
   ];
   return (
     <View style={styles.section}>
       <SectionHeader icon="stats-chart-outline" title="Tournament Stats" />
       <View style={styles.statsCard}>
-        {rows.map((r, i) =>
-          r.stacked && r.name ? (
-            // Two-line right block: full-size name (wraps if needed) centered above the
-            // larger blue performance value. Row grows to fit both lines.
-            <View key={r.label} style={[styles.statRow, styles.statRowStacked, i > 0 && styles.statRowDiv]}>
-              <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
-              <View style={styles.statValStack}>
-                <Text allowFontScaling={false} style={styles.statNameStacked}>{r.name}</Text>
-                <Text allowFontScaling={false} style={styles.statValLarge} numberOfLines={1}>{r.value}</Text>
-              </View>
+        {rows.map((r, i) => (
+          // One reusable row for every stat. The value block wraps (flexWrap): a name +
+          // value that fit stay on one line; when they don't, the value drops to a second
+          // line BELOW the name — the name is never font-shrunk. Rows without a name
+          // (Duration, Matches, Reshuffles) simply never wrap. The row grows to fit.
+          <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
+            <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
+            <View style={styles.statValWrap}>
+              {r.name ? <Text allowFontScaling={false} style={styles.statName}>{r.name}</Text> : null}
+              <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
             </View>
-          ) : (
-            <View key={r.label} style={[styles.statRow, i > 0 && styles.statRowDiv]}>
-              <Text allowFontScaling={false} style={styles.statLbl}>{r.label}</Text>
-              <View style={styles.statValWrap}>
-                {r.name ? <Text allowFontScaling={false} style={styles.statName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{r.name}</Text> : null}
-                <Text allowFontScaling={false} style={[styles.statVal, !r.name && styles.statValSolo]} numberOfLines={1}>{r.value}</Text>
-              </View>
-            </View>
-          ),
-        )}
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -1322,15 +1311,13 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.md), paddingVertical: wxSc(SPACING.md) },
   statRowDiv: { borderTopWidth: 1, borderTopColor: COLORS.border + "66" },
   statLbl: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md) },
-  statValWrap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: wxSc(SPACING.sm), minWidth: 0 },
+  // flexWrap lets the value drop to a second line (right-aligned, below the name) only
+  // when the name + value don't fit — the name keeps its font size and wraps if truly
+  // long. The gap doubles as the vertical spacing between the two wrapped lines.
+  statValWrap: { flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: wxSc(SPACING.sm), minWidth: 0 },
   statName: { flexShrink: 1, textAlign: "right", color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
   statVal: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.md), fontWeight: "800" },
   statValSolo: { color: COLORS.text },
-  // Top Performance only: a two-line right-side block (name over value).
-  statRowStacked: { paddingVertical: wxSc(SPACING.md) + wxSc(SPACING.xs) },
-  statValStack: { flexShrink: 1, alignItems: "center", justifyContent: "center", gap: wxSc(2) },
-  statNameStacked: { textAlign: "center", color: COLORS.text, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
-  statValLarge: { textAlign: "center", color: COLORS.primary, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800" },
   leaderKickerRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 },
   leaderKicker: { color: COLORS.primary, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5 },
   leaderName: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "800" },
