@@ -116,6 +116,12 @@ const ordSuffix = (n: number): string => {
 
 const isWeb = Platform.OS === "web";
 
+// Web-only sticky sidebar (position:"sticky" isn't in RN's style types). Applied to the
+// desktop dashboard right column so it stays visible while the main column scrolls.
+const WEB_STICKY_SIDE: any = isWeb
+  ? { position: "sticky", top: 12, alignSelf: "flex-start" }
+  : null;
+
 // Gap kept between the floating sheet and the top of the keyboard (px).
 const SHEET_KB_GAP = 20;
 
@@ -4335,7 +4341,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     ) : null;
 
     const queueEl = (
-      <DashSection icon="list-outline" title={`Queue (${chip.queue.length})`}>
+      <DashSection
+        icon="list-outline"
+        title={`Queue (${chip.queue.length})`}
+        action={isWeb && chip.queue.length > 0 ? <HeaderBtn label="Manage Queue" onPress={() => { setQueueMenuId(null); setQueueModalOpen(true); }} /> : undefined}
+      >
         {chip.queue.length === 0 ? (
           <View style={styles.qEmpty}>
             <Text style={styles.qEmptyTitle}>Queue is empty</Text>
@@ -4347,7 +4357,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               const e = entryById(qid);
               if (!e) return null;
               return (
-                <TouchableOpacity key={qid} style={[styles.qRow2, i === 0 && styles.noBorderTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
+                <TouchableOpacity key={qid} style={[styles.qRow2, isWeb && styles.qRow2Web, i === 0 && styles.noBorderTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
                   <Text style={styles.qPos2} numberOfLines={1}>{i + 1}</Text>
                   <View style={styles.qNameCol}>
                     <Text style={styles.qName2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
@@ -4383,16 +4393,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <DashSection icon="grid-outline" title="Active Tables" action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
           {activeTables.length === 0 && <Text style={styles.hint}>No active tables.</Text>}
           {(() => {
-            // Always show EVERY waiting-to-start table (even beyond the normal 2-card cap)
-            // plus fill to at least 2; the rest live under "View All Tables".
+            // Web desktop: render EVERY active table in the compact grid (each live card
+            // carries its own Select Winner / Start Match), so there's no "View All" hop.
+            // Mobile/narrow (unchanged): show every waiting-to-start table plus fill to at
+            // least 2; the rest live under "View All Tables".
             const previewCount = Math.max(2, waitingCount);
-            const preview = sortedActiveTables.slice(0, previewCount);
+            const preview = dashTwoCol ? sortedActiveTables : sortedActiveTables.slice(0, previewCount);
             return (
               <>
                 <View style={dashTwoCol ? styles.atGrid : undefined}>
                   {preview.map((t) => renderTableCard(t))}
                 </View>
-                {activeTables.length > preview.length && (
+                {!dashTwoCol && activeTables.length > preview.length && (
                   <TouchableOpacity style={styles.atViewAll} onPress={() => setDashTablesOpen(true)} activeOpacity={0.7}>
                     <Text style={styles.atViewAllText}>View All Tables ({activeTables.length})</Text>
                     <Ionicons name="chevron-forward" size={webMs(15)} color={COLORS.primary} />
@@ -4502,17 +4514,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Desktop: main column (queue/tables/activity) + side column (leader/alerts/
     // standings). Mobile/narrow: the original single-column order (unchanged).
     if (dashTwoCol) {
+      // Web desktop order: main = Active Tables (priority) → Queue → Activity;
+      // sidebar = Chip Leader → Alerts → Chip Leaders (sticky). Shuffle banner + the
+      // 4-card quick stats span full width above the two columns.
       return (
         <View>
           {renderShuffleBanner()}
           {summaryEl}
           <View style={styles.dashCols}>
             <View style={styles.dashMain}>
-              {queueEl}
               {activeTablesEl}
+              {queueEl}
               {activityEl}
             </View>
-            <View style={styles.dashSide}>
+            <View style={[styles.dashSide, WEB_STICKY_SIDE]}>
               {chipLeaderEl}
               {championEl}
               {alertsEl}
@@ -8024,6 +8039,8 @@ const styles = StyleSheet.create({
   alertUrgent: { color: COLORS.error, fontWeight: "600" },
   // Queue rows.
   qRow2: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
+  // Web-only: tighter queue rows for denser scanning (mobile row unchanged).
+  qRow2Web: { paddingVertical: SPACING.xs },
   qPos2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", minWidth: webSc(28), flexShrink: 0 },
   qNameCol: { flex: 1 },
   qName2: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
@@ -8068,9 +8085,11 @@ const styles = StyleSheet.create({
   qmMenuBtn: { width: webSc(30), alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
   // Active table rows.
   atCard: { paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  atGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", overflow: "visible" },
+  // Compact packed grid: consistent gutters via `gap` (not space-between, which scatters
+  // an odd card), cards flow left so 2–3 per row stay tight with no dead space.
+  atGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "flex-start", gap: webSc(SPACING.sm), overflow: "visible" },
   atCardWeb: {
-    width: "48.5%",
+    width: "48%",
     // Own all four borders explicitly so the base atCard's borderBottomColor
     // can't linger and leave the bottom edge a different color on hover.
     borderWidth: 1,
@@ -8088,14 +8107,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.sm,
-    marginBottom: SPACING.sm,
+    // Vertical spacing comes from atGrid's `gap` now (no marginBottom → no double gap).
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
     ...(isWeb ? ({ cursor: "pointer", transitionProperty: "box-shadow,border-color", transitionDuration: "120ms" } as object) : null),
   },
-  atCardUltra: { width: "32%" },
+  atCardUltra: { width: "31.5%" },
   atCardHover: {
     borderColor: COLORS.primary,
     borderTopColor: COLORS.primary,

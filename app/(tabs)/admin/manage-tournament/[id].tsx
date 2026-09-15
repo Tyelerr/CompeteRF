@@ -6469,12 +6469,25 @@ export default function ManageTournamentScreen() {
       )}
 
       {/* Header */}
-      <View style={[styles.header, isWeb && styles.headerWeb, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Text allowFontScaling={false} style={styles.backText}>
-            {GLYPH.back} Back
+      {/* Web: the browser handles Back, so the in-page Back is replaced by a subtle
+          breadcrumb. Mobile keeps the Back button (unchanged). */}
+      {isWeb && (
+        <View style={styles.breadcrumbRow}>
+          <Text allowFontScaling={false} style={styles.breadcrumbText} numberOfLines={1}>
+            Admin / Tournaments / <Text style={styles.breadcrumbCurrent}>{tournamentName}</Text>
           </Text>
-        </TouchableOpacity>
+        </View>
+      )}
+      <View style={[styles.header, isWeb && styles.headerWeb, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
+        {isWeb ? (
+          <View style={styles.placeholderSpace} />
+        ) : (
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <Text allowFontScaling={false} style={styles.backText}>
+              {GLYPH.back} Back
+            </Text>
+          </TouchableOpacity>
+        )}
         <View style={styles.headerCenter}>
           <Text
             allowFontScaling={false}
@@ -6926,7 +6939,11 @@ const styles = StyleSheet.create({
     paddingBottom: webSc(SPACING.md),
     backgroundColor: COLORS.surface,
   },
-  headerWeb: { paddingTop: webSc(SPACING.lg), backgroundColor: COLORS.background },
+  headerWeb: { paddingTop: webSc(SPACING.md), backgroundColor: COLORS.background },
+  // Web-only breadcrumb (replaces the in-page Back button on web).
+  breadcrumbRow: { paddingTop: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.lg), backgroundColor: COLORS.background },
+  breadcrumbText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  breadcrumbCurrent: { color: COLORS.textSecondary, fontWeight: "600" },
   backButton: { padding: webSc(SPACING.xs) },
   backText: {
     fontSize: webMs(FONT_SIZES.sm),
