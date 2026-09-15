@@ -8,11 +8,15 @@ export interface Venue {
   state: string;
   zip_code: string;
   phone?: string;
+  website?: string | null;
   latitude?: number;
   longitude?: number;
   google_place_id?: string;
   tables?: TableInfo[];
   photo_url?: string;
+  // Program flags (already on the venues row; surfaced read-only for discovery badges).
+  has_leagues?: boolean | null;
+  has_tournaments?: boolean | null;
   status: VenueStatus;
   last_verified?: string;
   created_at: string;

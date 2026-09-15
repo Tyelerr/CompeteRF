@@ -110,6 +110,18 @@ export const tournamentService = {
     return (data || []).map(normalizeTournament);
   },
 
+  // Batched upcoming tournaments for a SET of venues — ONE query for the whole venue
+  // grid (never one-per-card). Same public-discovery rule as the main list, ordered
+  // soonest-first so the caller can take the first per venue_id as "next tournament".
+  async getUpcomingByVenueIds(venueIds: number[]): Promise<Tournament[]> {
+    if (venueIds.length === 0) return [];
+    const { data, error } = await applyPublicDiscovery(
+      supabase.from("tournaments").select("*").in("venue_id", venueIds),
+    ).order("tournament_date", { ascending: true });
+    if (error) throw error;
+    return (data || []).map(normalizeTournament);
+  },
+
   async getTournamentsByDirector(directorId: number): Promise<Tournament[]> {
     const { data, error } = await supabase
       .from("tournaments")

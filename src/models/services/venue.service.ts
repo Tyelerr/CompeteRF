@@ -159,4 +159,88 @@ export const venueService = {
       ...new Set(data?.map((d) => d.venue_id).filter(Boolean) as number[]),
     ];
   },
+
+  // Batched equipment summary for a set of venues — ONE query for the whole page,
+  // never one-per-card (avoids N+1). Returns venueId → { tableCount, sizes } where
+  // tableCount sums quantities and sizes is the distinct list of sizes present.
+  async getTableSummariesByVenueIds(
+    venueIds: number[],
+  ): Promise<Record<number, { tableCount: number; sizes: string[] }>> {
+    if (venueIds.length === 0) return {};
+    const { data, error } = await supabase
+      .from("venue_tables")
+      .select("venue_id, table_size, custom_size, quantity")
+      .in("venue_id", venueIds);
+    if (error) throw error;
+    const out: Record<number, { tableCount: number; sizes: string[] }> = {};
+    for (const row of data ?? []) {
+      const vid = row.venue_id as number | null;
+      if (vid == null) continue;
+      const entry = out[vid] ?? { tableCount: 0, sizes: [] };
+      entry.tableCount += Number(row.quantity) || 0;
+      const size = (row.custom_size || row.table_size) as string | null;
+      if (size && !entry.sizes.includes(size)) entry.sizes.push(size);
+      out[vid] = entry;
+    }
+    return out;
+  },
+
+  // Resolve a venue's Google Places photo (fallback only) via the EXISTING google-places
+  // Edge Function — server-side, so the API key never touches the client. Returns null on
+  // any miss/failure so the UI silently keeps its initials fallback. Never persisted.
+  async getGooglePlacePhoto(
+    placeId: string,
+    maxWidth = 800,
+  ): Promise<{ url: string; attribution: string | null } | null> {
+    try {
+      const { data, error } = await supabase.functions.invoke("google-places", {
+        body: { action: "venuePhoto", placeId, maxWidth },
+      });
+      if (error) throw error;
+      if (!data?.url) return null;
+      return { url: data.url as string, attribution: (data.attribution as string) ?? null };
+    } catch (err) {
+      console.warn("[venue] getGooglePlacePhoto failed:", err);
+      return null;
+    }
+  },
+
+  // Geocode a free-typed venue address back to coordinates using the EXISTING
+  // google-places edge function (autocomplete → details) — the same infra
+  // useCreateVenue uses. Returns null on any miss/failure so callers never
+  // overwrite valid coordinates with null. Isolated: touches no DB here.
+  async geocodeAddress(parts: {
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+  }): Promise<{ latitude: number; longitude: number; google_place_id: string } | null> {
+    const query = [parts.address, parts.city, parts.state, parts.zip]
+      .map((p) => (p ?? "").trim())
+      .filter(Boolean)
+      .join(", ");
+    if (!query) return null;
+    try {
+      const { data: ac, error: acErr } = await supabase.functions.invoke(
+        "google-places",
+        { body: { action: "autocomplete", query } },
+      );
+      if (acErr) throw acErr;
+      const placeId = ac?.predictions?.[0]?.place_id as string | undefined;
+      if (!placeId) return null;
+      const { data: det, error: detErr } = await supabase.functions.invoke(
+        "google-places",
+        { body: { action: "details", placeId } },
+      );
+      if (detErr) throw detErr;
+      const loc = det?.result?.geometry?.location;
+      const lat = loc?.lat;
+      const lng = loc?.lng;
+      if (typeof lat !== "number" || typeof lng !== "number") return null;
+      return { latitude: lat, longitude: lng, google_place_id: placeId };
+    } catch (err) {
+      console.warn("[venue] geocodeAddress failed:", err);
+      return null;
+    }
+  },
 };

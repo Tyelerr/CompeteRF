@@ -40,8 +40,13 @@ import { WebContainer } from "../../components/common/WebContainer";
 import { TournamentDetailModal } from "../../components/tournament/TournamentDetailModal";
 import { SearchAlertsModal } from "../../components/profile/SearchAlertsModal";
 import { styles } from "./billiards.styles";
+import { VenuesView } from "./venues.view";
 import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
 import { useAuth } from "../../../viewmodels/hooks/use.auth";
+
+// Top-level Billiards discovery views. Tournaments is the default; Venues is a
+// separate content area beneath the shared header + segmented control.
+type DiscoveryView = "tournaments" | "venues";
 
 const isWeb = Platform.OS === "web";
 const NUM_COLUMNS = isWeb ? 4 : 2;
@@ -97,6 +102,8 @@ export const BilliardsScreen = () => {
 
   const router = useRouter();
   const vm = useBilliards();
+  // Tournaments | Venues switch (local UI only — does not touch tournament querying).
+  const [discoveryView, setDiscoveryView] = useState<DiscoveryView>("tournaments");
   const recommend = useRecommendVenue();
   const scrollRef = useScrollToTopOnFocus();
   const { user } = useAuth();
@@ -340,11 +347,31 @@ export const BilliardsScreen = () => {
         <TouchableWithoutFeedback onPress={isWeb ? undefined : Keyboard.dismiss} accessible={false}>
           <View pointerEvents={isWeb ? "box-none" : "auto"}>
             <View style={styles.header}>
-              <Text allowFontScaling={false} style={styles.headerTitle}>BILLIARDS TOURNAMENTS</Text>
-              <Text allowFontScaling={false} style={styles.headerSubtitle}>Browse all billiards tournaments by game type and location</Text>
+              <Text allowFontScaling={false} style={styles.headerTitle}>BILLIARDS</Text>
+              <Text allowFontScaling={false} style={styles.headerSubtitle}>Find tournaments and venues near you</Text>
             </View>
 
-            {isWeb ? (
+            {/* Top-level view switch. Custom pill toggle so it matches the app. */}
+            <View style={styles.segmentRow}>
+              {([
+                ["tournaments", "Tournaments"],
+                ["venues", "Venues"],
+              ] as [DiscoveryView, string][]).map(([key, label]) => {
+                const active = discoveryView === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.segment, active && styles.segmentActive]}
+                    onPress={() => setDiscoveryView(key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text allowFontScaling={false} style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {discoveryView === "tournaments" && (isWeb ? (
               <>
                 {renderWebFilters()}
                 {renderRadiusSlider()}
@@ -358,11 +385,6 @@ export const BilliardsScreen = () => {
               // appears or disappears, preventing the clipping bug.
               <Animated.View style={filterReady ? { height: filterAnim, overflow: "hidden" } : undefined}>
                 <View onLayout={onFilterLayout}>
-                  {vm.isHomeStateEmpty && (
-                    <View style={{ backgroundColor: COLORS.primary + "15", paddingHorizontal: scale(SPACING.md), paddingVertical: scale(SPACING.sm), marginHorizontal: scale(SPACING.md), marginBottom: scale(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.primary + "30" }}>
-                      <Text allowFontScaling={false} style={{ color: COLORS.text, fontSize: moderateScale(FONT_SIZES.sm), textAlign: "center" }}>No tournaments in your state yet - showing all tournaments</Text>
-                    </View>
-                  )}
                   <View style={styles.searchContainer}>
                     <View style={styles.searchBar}>
                       <Text allowFontScaling={false} style={styles.searchIcon}>{"\uD83D\uDD0D"}</Text>
@@ -406,11 +428,13 @@ export const BilliardsScreen = () => {
                   {renderPagination()}
                 </View>
               </Animated.View>
-            )}
+            ))}
           </View>
         </TouchableWithoutFeedback>
 
-        {vm.error ? (
+        {discoveryView === "venues" ? (
+          <VenuesView />
+        ) : vm.error ? (
           <View style={styles.errorContainer}>
             <Text allowFontScaling={false} style={styles.errorText}>{vm.error}</Text>
           </View>

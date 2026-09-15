@@ -32,6 +32,71 @@ export const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  // ── Tournaments / Venues segmented control ────────────────────────────────────
+  // Custom pill toggle (not a platform SegmentedControl) so it matches the app: a
+  // rounded track in the surface color with a blue-accent active segment.
+  segmentRow: {
+    flexDirection: "row",
+    marginHorizontal: SPACING.md,
+    marginBottom: isWeb ? 6 : SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 3,
+  },
+  segment: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: isWeb ? 7 : SPACING.sm,
+    borderRadius: RADIUS.sm,
+  },
+  segmentActive: {
+    backgroundColor: COLORS.primary,
+  },
+  segmentText: {
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.md,
+    fontWeight: "700",
+    color: COLORS.textSecondary,
+  },
+  segmentTextActive: {
+    color: COLORS.white,
+  },
+
+  // ── Venues discovery ──────────────────────────────────────────────────────────
+  venueCount: {
+    fontSize: isWeb ? FONT_SIZES.sm : FONT_SIZES.sm,
+    fontWeight: "700",
+    color: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  venueRadiusRow: {
+    flexDirection: "row",
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  venueRadiusChip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  venueRadiusChipOn: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  venueRadiusText: {
+    fontSize: isWeb ? FONT_SIZES.xs : FONT_SIZES.sm,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+  },
+  venueRadiusTextOn: { color: COLORS.white },
+
   // ── Search ──────────────────────────────────────────────────────────────────
   searchContainer: {
     paddingHorizontal: SPACING.md,
@@ -212,6 +277,11 @@ export const styles = StyleSheet.create({
   },
   row: {
     justifyContent: "flex-start",
+  },
+  // Web venue grid: even gutters between the flex:1 cards in each row.
+  venueGridRow: {
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
   },
 
   // ── States ───────────────────────────────────────────────────────────────────

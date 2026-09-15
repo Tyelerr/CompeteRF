@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { roleService } from "../models/services/role.service";
+import { venueService } from "../models/services/venue.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export interface VenueDetails {
@@ -116,16 +117,45 @@ export const useEditVenue = (venueId: number) => {
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("venues")
-        .update({
-          venue: editedVenue.venue,
+      const update: Record<string, unknown> = {
+        venue: editedVenue.venue,
+        address: editedVenue.address,
+        city: editedVenue.city,
+        state: editedVenue.state,
+        zip_code: editedVenue.zip_code,
+        phone: editedVenue.phone,
+      };
+
+      // If the address/location fields changed, re-geocode so latitude/longitude/
+      // google_place_id stay in sync (otherwise Near Me / distance goes stale). Reuse
+      // the existing google-places geocoder. On failure we DO NOT null out existing
+      // coordinates — we save the text and warn the owner. Isolated from tournaments.
+      const locationChanged =
+        !!venue &&
+        (venue.address !== editedVenue.address ||
+          venue.city !== editedVenue.city ||
+          venue.state !== editedVenue.state ||
+          venue.zip_code !== editedVenue.zip_code);
+      let geocodeFailed = false;
+      if (locationChanged) {
+        const geo = await venueService.geocodeAddress({
           address: editedVenue.address,
           city: editedVenue.city,
           state: editedVenue.state,
-          zip_code: editedVenue.zip_code,
-          phone: editedVenue.phone,
-        })
+          zip: editedVenue.zip_code,
+        });
+        if (geo) {
+          update.latitude = geo.latitude;
+          update.longitude = geo.longitude;
+          update.google_place_id = geo.google_place_id;
+        } else {
+          geocodeFailed = true; // keep prior coords; surface below
+        }
+      }
+
+      const { error } = await supabase
+        .from("venues")
+        .update(update)
         .eq("id", venueId);
 
       if (error) {
@@ -135,7 +165,14 @@ export const useEditVenue = (venueId: number) => {
       }
 
       setVenue(editedVenue);
-      Alert.alert("Success", "Venue updated successfully");
+      if (geocodeFailed) {
+        Alert.alert(
+          "Saved — location not updated",
+          "Your changes were saved, but we couldn't update the map location for the new address. Distance / Near Me may still use the previous location. Try again later or re-enter the address.",
+        );
+      } else {
+        Alert.alert("Success", "Venue updated successfully");
+      }
     } catch (error) {
       console.error("Error saving venue:", error);
       Alert.alert("Error", "Failed to save changes");
