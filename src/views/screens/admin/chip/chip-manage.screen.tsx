@@ -52,7 +52,7 @@ import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite
 import {
   chipsForFargo,
   dashboard,
-  enteredField,
+  isChipFieldMember,
   finalPlacements,
   determinedFinishers,
   LONG_MATCH_MS,
@@ -90,7 +90,7 @@ import {
   chipHasPartner,
   chipReadyEntries,
 } from "../../../../utils/chip-lifecycle";
-import { parseSidePots } from "../../../../utils/side-pots";
+import { parseSidePots, formatMoney } from "../../../../utils/side-pots";
 import { PlayerSearchResult } from "../../../../models/types/player.registration.types";
 import { playerRegistrationService } from "../../../../models/services/player.registration.service";
 import { TeamCard, TeamCardPlayerVM, TeamCardProps, ActionsAnchor } from "../../../components/tournament/TeamCard";
@@ -116,10 +116,23 @@ const ordSuffix = (n: number): string => {
 
 const isWeb = Platform.OS === "web";
 
+// Web desktop shell width — matches WEB_MAXW in the host manage-tournament screen. The
+// live-page ScrollViews span the full viewport width (so wheel events over the empty
+// gutters scroll the page); this centers their content column to align with the host's
+// persistent header/breadcrumb/phase-nav. No-op on native (applied only inside isWeb styles).
+const WEB_MAXW = 1240;
+
 // Web-only sticky sidebar (position:"sticky" isn't in RN's style types). Applied to the
 // desktop dashboard right column so it stays visible while the main column scrolls.
+// `top` MUST equal the live ScrollView content's top padding (embeddedLiveScrollInner
+// paddingTop = webSc(SPACING.md)); the sidebar's natural top sits at exactly that offset
+// inside the scrollport, so matching it makes the sticky pin point coincide with the
+// initial position — the sidebar stays perfectly stationary from the first scrolled pixel
+// with no drift/jump, aligned with Live Overview. `alignSelf:"flex-start"` keeps the card
+// at natural content height (never stretched to the row / 100vh). No overflow is set here,
+// so wheel/trackpad scrolling over the sidebar bubbles to the page ScrollView as normal.
 const WEB_STICKY_SIDE: any = isWeb
-  ? { position: "sticky", top: 12, alignSelf: "flex-start" }
+  ? { position: "sticky", top: webSc(SPACING.md), alignSelf: "flex-start" }
   : null;
 
 // Gap kept between the floating sheet and the top of the keyboard (px).
@@ -600,6 +613,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     return parts.length < 2 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
   })();
   const vm = useChipTournament(id, actorId, actorName);
+  // Auto-save failure notice (shared Web/iOS/Android). The VM already reloaded authoritative
+  // state; here we just tell the TD so they never keep looking at a result that only existed
+  // locally. Alert.alert renders via WebAlertHost on web and natively on iOS/Android. One
+  // alert per failure (acknowledge clears the flag).
+  useEffect(() => {
+    if (!vm.saveError) return;
+    Alert.alert(
+      "Save failed",
+      "Tournament changes couldn’t be saved. The latest tournament state has been reloaded — please review and redo the action if needed.",
+      [{ text: "OK", onPress: () => vm.acknowledgeSaveError() }],
+      { onDismiss: () => vm.acknowledgeSaveError() } as any,
+    );
+  }, [vm.saveError]); // eslint-disable-line react-hooks/exhaustive-deps
   // Host bumps `reloadSignal` when its tournament-scoped registration Realtime channel
   // sees a change. Silently reload so a cross-client registration surfaces here without
   // a spinner/scroll reset. Refs keep reload stable and skip the initial mount value
@@ -665,8 +691,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const insets = useSafeAreaInsets();
   // Desktop two-column dashboard layout (web only, roomy widths).
   const dashTwoCol = isWeb && winW >= 980;
-  // Ultra-wide: Active Tables can fit three cards per row.
-  const dashUltra = isWeb && winW >= 1500;
+  // Web: Tournament Activity + Chip Leaders sit side by side under Active Tables at wide
+  // widths; below this they stack (the dashMain column gets too narrow for both).
+  const dashActRow = isWeb && winW >= 1180;
+  // Active Tables responsive grid (web only): 3 cols ≥1200px, 2 cols ≥800px, else 1.
+  // Card widths are percentage-based so columns fill evenly (gap-based spacing); native
+  // is unaffected (atCols is 1 and the grid/width styles are isWeb-gated).
+  const atCols = isWeb ? (winW >= 1200 ? 3 : winW >= 800 ? 2 : 1) : 1;
+  const atCardWidth = atCols === 3 ? "32%" : atCols === 2 ? "48.5%" : "100%";
   // Players tab: which team row is expanded in the compact desktop table.
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   // TD player search: pick a REAL user (by player id) so same-named players can't
@@ -847,6 +879,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
   // Dashboard expand toggles.
   const [showFullStandings, setShowFullStandings] = useState(false);
+  // Web-only accordion state for the live dashboard (in-memory, per session — no
+  // persistence). Sidebar Alerts/Queue default open (urgent ops stay visible); the two
+  // lower sections default collapsed to match the target. Native ignores these (DashSection
+  // only collapses when isWeb && collapsible).
+  const [sideAlertsOpen, setSideAlertsOpen] = useState(true);
+  const [sideQueueOpen, setSideQueueOpen] = useState(true);
+  const [actOpen, setActOpen] = useState(false);
+  const [standingsOpen, setStandingsOpen] = useState(false);
   // Restore-chip (eliminated team) reason prompt.
   // Complete-match winner picker (Tables page).
   const [completeMatch, setCompleteMatch] = useState<{ matchId: string; aId: string; bId: string } | null>(null);
@@ -1266,7 +1306,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Match / Incoming Team" popup would be misleading — the table simply reads "Waiting to
     // Start" and the TD taps Start Match again. Normal winner-stays (3+ alive) is untouched.
     const aliveCount = (c?.entries ?? []).filter(
-      (e) => e.status !== "eliminated" && enteredField(e),
+      (e) => e.status !== "eliminated" && !!c && isChipFieldMember(c, e),
     ).length;
     const pend = c?.tables?.find(
       (t) => isPostMatchPending(c, t) && !ackedPendingRef.current.has(`${t.id}:${t.pendingChallengerId}`),
@@ -2038,6 +2078,48 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Queued entry has no live match → the modal offers Forfeit Tournament only.
     openForfeit(e.id);
   };
+
+  // ── Shared player-action menu — single source of truth (WEB) ─────────────────────
+  // The Player Profile ⋮ AND the Players-row ⋮ both render from this one ordered,
+  // state-gated list on web, so the two menus can never drift. Each surface passes its
+  // own `viewHistory` (profile scrolls to its history section; the row opens the profile)
+  // and its own close/defer wrapper (profile defers modal-openers via runAfterProfileClose;
+  // the row calls directly). All handlers/guards are the EXISTING ones (openChipAdjust,
+  // vm.reorderQueue, openForfeit, vm.restoreEntry, vm.buyBack, setCompleteMatch,
+  // vm.resetTableTimer) — nothing here changes chip/queue/forfeit/history logic. Native
+  // keeps each menu's original code untouched (this builder is only used behind isWeb).
+  type PlayerMenuAction = {
+    key: string;
+    icon: React.ComponentProps<typeof Ionicons>["name"];
+    label: string;
+    danger?: boolean;
+    opensModal?: boolean; // must run AFTER the host modal dismisses (iOS stacking)
+    run: () => void;
+  };
+  // Returns the state-gated action list (WITHOUT View History — each surface appends its
+  // own View History last, since its target differs: the profile scrolls to its history
+  // section, the row opens the profile). This keeps the shared/drift-prone actions in one
+  // place while leaving ref access (profScrollRef) in event handlers, not render.
+  const buildPlayerActions = (entry: ChipEntry): PlayerMenuAction[] => {
+    const liveMatch = chip.matches.find(
+      (m) => m.status === "in_progress" && (m.aId === entry.id || m.bId === entry.id),
+    );
+    const queued = chip.queue.includes(entry.id);
+    const eliminated = entry.status === "eliminated";
+    const acts: PlayerMenuAction[] = [];
+    if (eliminated) {
+      acts.push({ key: "restoreChip", icon: "refresh-outline", label: "Restore Chip", run: () => vm.restoreEntry(entry.id) });
+      acts.push({ key: "reenter", icon: "return-up-back-outline", label: "Re-enter Tournament", run: () => vm.buyBack(entry.id) });
+    } else {
+      if (liveMatch) acts.push({ key: "endMatch", icon: "flag-outline", label: "End Match", opensModal: true, run: () => setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId }) });
+      acts.push({ key: "addChip", icon: "add-circle-outline", label: "Add Chip", opensModal: true, run: () => openChipAdjust(entry, 1) });
+      acts.push({ key: "removeChip", icon: "remove-circle-outline", label: "Remove Chip", opensModal: true, run: () => openChipAdjust(entry, -1) });
+      if (liveMatch && entry.tableId) acts.push({ key: "resetTimer", icon: "time-outline", label: "Reset Match Timer", run: () => vm.resetTableTimer(entry.tableId as string) });
+      if (queued) acts.push({ key: "sendBack", icon: "arrow-down-circle-outline", label: "Send to Back of Queue", run: () => vm.reorderQueue(entry.id, "bottom") });
+      acts.push({ key: "forfeit", icon: "exit-outline", label: "Forfeit", danger: true, opensModal: true, run: () => openForfeit(entry.id) });
+    }
+    return acts;
+  };
   const saveRename = () => {
     if (!renameTbl) return;
     const v = renameVal.trim();
@@ -2070,6 +2152,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (!streamLinkId) return;
     vm.updateTable(streamLinkId, { isStream: false, streamUrl: null });
     setStreamLinkId(null);
+  };
+  // Inline stream editor helpers (streamEditId / streamVal). Shared by Setup Tables AND
+  // the web Live → Tables list; both persist through the SAME vm.updateTable path, so
+  // there's no duplicate stream persistence.
+  const openStream = (t: ChipTable) => {
+    setStreamVal(t.streamUrl ?? "");
+    setStreamEditId(t.id);
+  };
+  const saveStream = (t: ChipTable) => {
+    const url = streamVal.trim();
+    vm.updateTable(t.id, { isStream: !!url, streamUrl: url || null });
+    setStreamEditId(null);
   };
   const openAddTables = () => {
     setAddTblCount(1);
@@ -2860,6 +2954,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Desktop = compact expandable table; mobile/narrow = the original stacked cards.
   const renderPlayersSetupDesktop = () => {
     const showPay = winW >= 1000;
+    // Side Pots column: always-visible per-player participation (one line per configured pot:
+    // [checkbox] Name ($amount)). Only shown when the tournament actually has side pots.
+    const showPots = tournamentSidePots.length > 0;
     return (
       <View>
         <View style={styles.ptHeadingRow}>
@@ -2908,6 +3005,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={[styles.ptHcell, styles.ptcFargo]}>Fargo</Text>
               <Text style={[styles.ptHcell, styles.ptcChips]}>Chips</Text>
               {showPay && <Text style={[styles.ptHcell, styles.ptcPay]}>Payment</Text>}
+              {showPots && <Text style={[styles.ptHcell, styles.ptcSidePots]}>Side Pots</Text>}
               <Text style={[styles.ptHcell, styles.ptcStatus]}>Status</Text>
               <Text style={[styles.ptHcell, styles.ptcActions]}>Actions</Text>
             </View>
@@ -2935,6 +3033,38 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                         <TouchableOpacity disabled={setupLocked} onPress={() => confirmTogglePaid(e)} style={[styles.ptBadge, e.paid ? styles.ptBadgeGood : styles.ptBadgeMuted]} activeOpacity={0.7}>
                           <Text allowFontScaling={false} style={[styles.ptBadgeText, e.paid ? styles.ptBadgeTextGood : styles.ptBadgeTextMuted]}>{e.paid ? "Paid" : "Unpaid"}</Text>
                         </TouchableOpacity>
+                      </View>
+                    )}
+                    {showPots && (
+                      <View style={styles.ptcSidePots}>
+                        {tournamentSidePots.map((p) => {
+                          const inPot = (e.paidSidePots ?? []).includes(p.name);
+                          // Tappable to toggle during setup (stopPropagation so it never expands
+                          // the row); read-only + muted once the roster is locked (live/finished).
+                          const body = (
+                            <>
+                              <View style={[styles.ptPotBox, inPot && (setupLocked ? styles.ptPotBoxOnRO : styles.ptPotBoxOn)]}>
+                                {inPot && <Text allowFontScaling={false} style={[styles.ptPotMark, setupLocked && styles.ptPotMarkRO]}>✓</Text>}
+                              </View>
+                              <Text allowFontScaling={false} style={[styles.ptPotLabel, setupLocked && styles.ptPotLabelRO]} numberOfLines={1}>
+                                {p.name} ({formatMoney(p.amount)})
+                              </Text>
+                            </>
+                          );
+                          return setupLocked ? (
+                            <View key={p.name} style={styles.ptPotRow}>{body}</View>
+                          ) : (
+                            <TouchableOpacity
+                              key={p.name}
+                              style={styles.ptPotRow}
+                              activeOpacity={0.7}
+                              hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
+                              onPress={(ev?: any) => { ev?.stopPropagation?.(); confirmToggleSidePot(e, p.name); }}
+                            >
+                              {body}
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                     )}
                     <View style={styles.ptcStatus}>
@@ -3213,15 +3343,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Singular-aware display label (visual only — counts are unchanged).
     const entrantLabel = entrantCount === 1 ? entrantWordSingular : entrantWord;
 
-    const openStream = (t: ChipTable) => {
-      setStreamVal(t.streamUrl ?? "");
-      setStreamEditId(t.id);
-    };
-    const saveStream = (t: ChipTable) => {
-      const url = streamVal.trim();
-      vm.updateTable(t.id, { isStream: !!url, streamUrl: url || null });
-      setStreamEditId(null);
-    };
+    // openStream / saveStream are now component-scoped (shared with the Live Tables list).
     const useRecommended = () => {
       const cur = chip.tables.length;
       if (cur < recommendedTables) vm.addTables(recommendedTables - cur);
@@ -3247,54 +3369,123 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           )}
         </View>
       )}
-      {chip.tables.map((t) => (
-        <View key={t.id} style={styles.tableSetupRow}>
-          <View style={styles.tableSetupTop}>
-            <TouchableOpacity style={styles.tblNameBtn} onPress={() => openRename(t)}>
-              <Text style={styles.tableLabel} numberOfLines={1}>{t.label}</Text>
-              <Text style={styles.tblEditIcon}>✎</Text>
-            </TouchableOpacity>
-            <View style={styles.flexSpacer} />
-            {t.isStream ? (
-              <View style={styles.streamLinkedWrap}>
-                <Text style={styles.streamLinkedText}>🔴 Stream Linked</Text>
-                <TouchableOpacity onPress={() => openStream(t)}>
-                  <Text style={styles.streamEditLink}>Edit</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.addStreamPill} onPress={() => openStream(t)}>
-                <Text style={styles.addStreamText}>+ Add Stream</Text>
+      {/* Stream editor (shared by web + native rows). */}
+      {(() => {
+        const streamEditor = (t: ChipTable) => (
+          <View style={styles.streamEditor}>
+            <TextInput
+              allowFontScaling={false}
+              style={styles.input}
+              value={streamVal}
+              onChangeText={setStreamVal}
+              placeholder="Stream URL (e.g. twitch.tv/yourchannel)"
+              placeholderTextColor={COLORS.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <View style={styles.streamEditorBtns}>
+              <TouchableOpacity style={styles.streamCancel} onPress={() => setStreamEditId(null)}>
+                <Text style={styles.streamCancelText}>Cancel</Text>
               </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => vm.removeTable(t.id)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
-          </View>
-          {streamEditId === t.id && (
-            <View style={styles.streamEditor}>
-              <TextInput
-                allowFontScaling={false}
-                style={styles.input}
-                value={streamVal}
-                onChangeText={setStreamVal}
-                placeholder="Stream URL (e.g. twitch.tv/yourchannel)"
-                placeholderTextColor={COLORS.textMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus
-              />
-              <View style={styles.streamEditorBtns}>
-                <TouchableOpacity style={styles.streamCancel} onPress={() => setStreamEditId(null)}>
-                  <Text style={styles.streamCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.streamSave} onPress={() => saveStream(t)}>
-                  <Text style={styles.streamSaveText}>Save</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={styles.streamSave} onPress={() => saveStream(t)}>
+                <Text style={styles.streamSaveText}>Save</Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
-      ))}
-      {chip.tables.length === 0 && <Text allowFontScaling={false} style={styles.recHelper}>Add at least one table to continue.</Text>}
+          </View>
+        );
+        // WEB: compact desktop table (Table | Stream | Details | Actions). Same
+        // handlers (openRename / openStream / saveStream / vm.removeTable); only the
+        // presentation is denser. NATIVE: the original stacked rows, untouched.
+        if (isWeb) {
+          if (chip.tables.length === 0) {
+            return <Text allowFontScaling={false} style={styles.recHelper}>Add at least one table to continue.</Text>;
+          }
+          return (
+            <View style={styles.webTableWrap}>
+              <View style={styles.webTHeadRow}>
+                <Text style={[styles.webTH, { width: webSc(180) }]}>TABLE</Text>
+                <Text style={[styles.webTH, { width: webSc(150) }]}>STREAM</Text>
+                <Text style={[styles.webTH, { flex: 1, minWidth: 0 }]}>DETAILS</Text>
+                <Text style={[styles.webTH, { width: webSc(72), textAlign: "right" }]}>ACTIONS</Text>
+              </View>
+              {chip.tables.map((t, idx) => {
+                const last = idx === chip.tables.length - 1;
+                const editing = streamEditId === t.id;
+                return (
+                  <View key={t.id}>
+                    <View style={[styles.webTRow, last && !editing && styles.webTRowLast]}>
+                      <View style={{ width: webSc(180) }}>
+                        <TouchableOpacity style={styles.tblNameBtn} onPress={() => openRename(t)} activeOpacity={0.7}>
+                          <Text style={styles.tableLabel} numberOfLines={1}>{t.label}</Text>
+                          <Ionicons name="pencil" size={webMs(12)} color={COLORS.textMuted} />
+                        </TouchableOpacity>
+                      </View>
+                      <View style={{ width: webSc(150) }}>
+                        {t.isStream ? (
+                          <View style={styles.streamLinkedWrap}>
+                            <Text style={styles.streamLinkedText} numberOfLines={1}>🔴 Linked</Text>
+                            <TouchableOpacity onPress={() => openStream(t)}>
+                              <Text style={styles.streamEditLink}>Edit</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity style={styles.webChipBtn} onPress={() => openStream(t)} activeOpacity={0.7}>
+                            <Ionicons name="add" size={webMs(13)} color={COLORS.textSecondary} />
+                            <Text style={styles.webChipBtnText}>Add Stream</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.webTMuted} numberOfLines={1}>{t.isStream && t.streamUrl ? t.streamUrl : "—"}</Text>
+                      </View>
+                      <View style={[styles.webCellActions, { width: webSc(72) }]}>
+                        <TouchableOpacity style={styles.webIconBtn} onPress={() => vm.removeTable(t.id)} hitSlop={6} activeOpacity={0.7}>
+                          <Ionicons name="close" size={webMs(15)} color={COLORS.error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    {editing && (
+                      <View style={[styles.streamEditorWebWrap, last && styles.webTRowLast]}>{streamEditor(t)}</View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        }
+        // NATIVE (unchanged)
+        return (
+          <>
+            {chip.tables.map((t) => (
+              <View key={t.id} style={styles.tableSetupRow}>
+                <View style={styles.tableSetupTop}>
+                  <TouchableOpacity style={styles.tblNameBtn} onPress={() => openRename(t)}>
+                    <Text style={styles.tableLabel} numberOfLines={1}>{t.label}</Text>
+                    <Text style={styles.tblEditIcon}>✎</Text>
+                  </TouchableOpacity>
+                  <View style={styles.flexSpacer} />
+                  {t.isStream ? (
+                    <View style={styles.streamLinkedWrap}>
+                      <Text style={styles.streamLinkedText}>🔴 Stream Linked</Text>
+                      <TouchableOpacity onPress={() => openStream(t)}>
+                        <Text style={styles.streamEditLink}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.addStreamPill} onPress={() => openStream(t)}>
+                      <Text style={styles.addStreamText}>+ Add Stream</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => vm.removeTable(t.id)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
+                </View>
+                {streamEditId === t.id && streamEditor(t)}
+              </View>
+            ))}
+            {chip.tables.length === 0 && <Text allowFontScaling={false} style={styles.recHelper}>Add at least one table to continue.</Text>}
+          </>
+        );
+      })()}
     </Section>
     );
   };
@@ -3459,6 +3650,103 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         <Text allowFontScaling={false} style={styles.revKVVal} numberOfLines={1}>{value}</Text>
       </View>
     );
+
+    // ── WEB DESKTOP dashboard for an ALREADY-STARTED tournament ──────────────────
+    // Presentation only, gated by isWeb && started. Native and web PRE-START both fall
+    // through to the existing <Section> below (Start flow / validation untouched). Reuses
+    // only data already computed above — no new queries.
+    if (isWeb && started) {
+      const running = vm.phase !== "results";
+      const prizeTotal = reviewPrize ? money(reviewPrize.total) : "—";
+      const venueName = (tournament?.venues as any)?.venue ?? null;
+      const dateStr = tournament?.tournament_date ? String(tournament.tournament_date) : null;
+      const prizeOk = !reviewPrize || (reviewPrize.complete && reviewPrize.balanced);
+      const goLive = () => {
+        if (embedded) { onGoLive?.(); }
+        else { setSelectedPhase(vm.phase); setPage(running ? "Tables" : "Standings"); }
+      };
+      const kpi = (num: string, label: string, sub?: string) => (
+        <View key={label} style={styles.revKpi}>
+          <Text allowFontScaling={false} style={styles.revKpiNum} numberOfLines={1}>{num}</Text>
+          <Text allowFontScaling={false} style={styles.revKpiLbl} numberOfLines={1}>{label}</Text>
+          {sub ? <Text allowFontScaling={false} style={styles.revKpiSub} numberOfLines={1}>{sub}</Text> : null}
+        </View>
+      );
+      const statusRow = (label: string, value: string, ok: boolean) => (
+        <View key={label} style={styles.revStatusRow}>
+          <Ionicons name={ok ? "checkmark-circle" : "alert-circle"} size={webMs(16)} color={ok ? COLORS.success : COLORS.warning} />
+          <Text allowFontScaling={false} style={styles.revStatusLabel} numberOfLines={1}>{label}</Text>
+          <Text allowFontScaling={false} style={styles.revStatusVal} numberOfLines={1}>{value}</Text>
+        </View>
+      );
+      return (
+        <View>
+          <DashSection bare icon="clipboard-outline" title="Tournament Summary" subtitle="Quick overview of the tournament"
+            action={(
+              <View style={styles.revRunPill}>
+                <View style={styles.revRunDot} />
+                <Text allowFontScaling={false} style={styles.revRunPillText}>{running ? "Running" : "Finished"}</Text>
+              </View>
+            )}
+          >
+            <Text allowFontScaling={false} style={styles.revDashName} numberOfLines={1}>{tournament?.name ?? "Tournament"}</Text>
+          </DashSection>
+
+          {/* Compact KPI row */}
+          <View style={styles.revKpiRow}>
+            {kpi(String(registered), "Players", `${readyCount} ready`)}
+            {kpi(String(tablesCount), "Tables")}
+            {kpi(String(tierCount), "Chip Tiers")}
+            {kpi(prizeTotal, "Prize Pool")}
+          </View>
+
+          {/* LEFT ~60% details/prize · RIGHT ~40% readiness/state */}
+          <View style={dashTwoCol ? styles.revDashRow : undefined}>
+            <View style={dashTwoCol ? styles.revDashLeft : undefined}>
+              <DashSection icon="information-circle-outline" title="Tournament Details">
+                {kv("Format", `Chip · ${chipFmt}`)}
+                {kv("Game", gameType)}
+                {kv("Entry Fee", entryFee ? money(entryFee) : "—")}
+                {kv("Fargo Cap", fargoLine)}
+                {kv("Buy-backs", chip.settings.buyBacksAllowed ? "Allowed" : "Off")}
+                {venueName ? kv("Venue", venueName) : null}
+                {dateStr ? kv("Date", dateStr) : null}
+              </DashSection>
+              <DashSection icon="cash-outline" title="Prize Pool">
+                {kv("Entry Fee", entryFee ? money(entryFee) : "—")}
+                {kv("Added Money", addedMoney ? money(addedMoney) : "—")}
+                {kv("Side Pots", tournamentSidePots.length ? tournamentSidePots.map((s) => s.name).join(", ") : "None")}
+                {reviewPrize ? kv("Paid Places", String(reviewPrize.paidPlaces)) : null}
+                {kv("Total Prize Pool", prizeTotal)}
+              </DashSection>
+            </View>
+            <View style={dashTwoCol ? styles.revDashRight : undefined}>
+              <DashSection icon="checkmark-circle-outline" title="Readiness">
+                {statusRow("Players", `${readyCount} ready · ${registered} registered`, readyCount > 0)}
+                {statusRow("Tables", `${tablesCount} active`, tablesCount > 0)}
+                {statusRow("Prize Pool", reviewPrize ? (prizeOk ? "Allocated" : "Incomplete") : "—", prizeOk)}
+              </DashSection>
+              <DashSection icon="flash-outline" title="Tournament State">
+                <View style={styles.revStatePill}>
+                  <View style={styles.revRunDot} />
+                  <Text allowFontScaling={false} style={styles.revStatePillText}>{running ? "Running" : "Finished"}</Text>
+                </View>
+                <Text allowFontScaling={false} style={styles.revStateNote}>
+                  Tournament has already started. Setup can be reviewed here.
+                </Text>
+              </DashSection>
+            </View>
+          </View>
+
+          {/* Desktop-sized CTA (not full-width) */}
+          <View style={styles.revCtaRow}>
+            <TouchableOpacity style={styles.revCtaBtn} onPress={goLive} activeOpacity={0.85}>
+              <Text allowFontScaling={false} style={styles.revCtaText}>{running ? "Go to Live →" : "View Results →"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
 
     return (
       <Section title={started ? "Tournament" : "Review & Start"}>
@@ -3693,6 +3981,39 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (onTableIds.has(id)) return null; // seated / live — at table, not yet completed
     return { label: "✓ Played this round", color: COLORS.textMuted };
   };
+  // Shared confirm for the Shuffle Mode "Return active match(es) to queue" override —
+  // used by BOTH the web shuffle section and the native shuffle banner so the flow is
+  // identical on every platform. Returns each live match to the FRONT of the queue with
+  // no winner / chip loss / completed match (the engine voids the match), audited per
+  // table via the existing table_cleared event. Explicit TD action + confirmation only.
+  const confirmReturnActiveMatches = () => {
+    // Count OCCUPIED tables (live match OR seated-but-not-started assignment) — not just
+    // in-progress matches — mirroring the engine's hasOpenTableAssignment predicate. Affected
+    // sides per table match clearTable: a live match = 2 (its two teams); an assignment =
+    // holder + pending challenger present.
+    const occupied = chip.tables.filter(
+      (t) => !t.inactive && (!!t.matchId || !!t.holderId || !!t.pendingChallengerId),
+    );
+    const tableN = occupied.length;
+    if (tableN <= 0) return;
+    let sides = 0;
+    for (const t of occupied) sides += t.matchId ? 2 : (t.holderId ? 1 : 0) + (t.pendingChallengerId ? 1 : 0);
+    const doubles = chip.settings.format === "scotch_doubles";
+    const unit = (n: number) => (doubles ? (n === 1 ? "team" : "teams") : (n === 1 ? "player" : "players"));
+    const title =
+      tableN === 1
+        ? "Return this table's assignment to the queue?"
+        : `Return ${sides} ${unit(sides)} from ${tableN} assigned tables to the queue?`;
+    const body =
+      tableN === 1
+        ? `The ${unit(sides)} on this table will be cleared and moved to the front of the queue.\nNo winner, chip loss, or completed match will be recorded.`
+        : `Their table assignments will be cleared and they will be moved to the front of the queue.\nNo winners, chip losses, or completed matches will be recorded.`;
+    Alert.alert(title, body, [
+      { text: "Keep Playing", style: "cancel" },
+      { text: tableN === 1 ? "Return to Queue" : "Return All to Queue", style: "destructive", onPress: () => vm.returnActiveMatchesToQueue(actorId) },
+    ]);
+  };
+
   // EVERY "start a new cycle" control (Tables toolbar, Dashboard header button,
   // Dashboard banner Begin-Shuffle / switch) calls this — it ONLY opens the setup
   // modal. No control calls beginShuffle directly, and no engine state changes until
@@ -3734,7 +4055,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // removing every table (authoritative — not just the disabled button).
   const confirmShuffle = () => {
     const activeNow = chip.tables.filter((t) => !t.inactive);
-    const hasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && enteredField(e));
+    const hasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
     if (hasActivePlayers && activeNow.length - shuffleRemoveIds.size < 1) return;
     // ONE atomic engine step (startShuffleCycle): applies the removal selection AND
     // either redraws immediately (no live matches) or drains ("Finishing the Round",
@@ -3790,7 +4111,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const readyInitial = ready && !chip.shuffleRound; // initial cycle drained → Ready to Shuffle
     const round = !!chip.shuffleRound && !draining && !ready;
     const roundNum = chip.reshuffleCount ?? 0;
-    const aliveTeams = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
+    const aliveTeams = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
     const totalCount = aliveTeams.length;
     // Format-aware unit label — "Teams" for scotch doubles, "Players" for singles (one
     // chip ENTRY = one team or one player, never individual partners).
@@ -3866,21 +4187,31 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       );
     }
 
+    // WEB: ALL non-finals shuffle UI (available / active / ready + Manage/Start/Cancel) now
+    // lives in the single persistent Shuffle section (see shuffleSection in renderLiveDashboard),
+    // so this banner renders nothing on web except the finals banner (returned above).
+    // Mobile is unaffected (renders every state's full banner as before).
+    if (isWeb) return null;
+
     return (
-      <View style={[styles.shufBanner, { borderColor: roundComplete || readyInitial || round || draining ? accent : COLORS.border }]}>
+      <View style={[styles.shufBanner, isWeb && styles.shufBannerWeb, { borderColor: roundComplete || readyInitial || round || draining ? accent : COLORS.border }]}>
         <View style={styles.shufHead}>
           <View style={styles.shufTitleWrap}>
             <Ionicons name="shuffle" size={webMs(16)} color={accent} />
             <Text style={styles.shufTitle}>Shuffle Mode</Text>
           </View>
-          <Switch
-            // Turning ON opens the setup modal (does NOT enable the engine or flip the
-            // switch until the TD confirms). Turning OFF disables shuffle mode.
-            value={!!chip.shuffleMode}
-            onValueChange={(v) => (v ? openShuffleModal() : vm.setShuffleMode(false))}
-            trackColor={{ true: COLORS.primary, false: COLORS.border }}
-            thumbColor={COLORS.white}
-          />
+          {/* Web: the Shuffle Mode card above already owns the toggle — don't duplicate it
+              in the compact active panel. Mobile keeps its inline toggle unchanged. */}
+          {!isWeb && (
+            <Switch
+              // Turning ON opens the setup modal (does NOT enable the engine or flip the
+              // switch until the TD confirms). Turning OFF disables shuffle mode.
+              value={!!chip.shuffleMode}
+              onValueChange={(v) => (v ? openShuffleModal() : vm.setShuffleMode(false))}
+              trackColor={{ true: COLORS.primary, false: COLORS.border }}
+              thumbColor={COLORS.white}
+            />
+          )}
         </View>
         <Text style={[styles.shufState, { color: accent }]}>{stateLabel}</Text>
         {round && (
@@ -3891,27 +4222,47 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Text style={styles.shufSub}>Every {doubles ? "team" : "player"} plays once before the next shuffle.</Text>
           </>
         )}
-        {draining && (
-          <Text style={styles.shufSub}>
-            {live} match{live === 1 ? "" : "es"} still in progress. Each table clears as its match finishes.
-          </Text>
-        )}
+        {draining && (() => {
+          // Occupied active tables — live match OR seated-but-not-started assignment — still
+          // to resolve before the redraw (mirrors the engine's hasOpenTableAssignment).
+          const occupied = chip.tables.filter(
+            (t) => !t.inactive && (!!t.matchId || !!t.holderId || !!t.pendingChallengerId),
+          ).length;
+          return (
+            <>
+              <Text style={styles.shufSub}>
+                {occupied > 0
+                  ? `${occupied} table assignment${occupied === 1 ? "" : "s"} must be resolved before reshuffling. Each clears as its match finishes, or return them to the queue.`
+                  : "Finishing the round — tables clear as matches end."}
+              </Text>
+              {occupied > 0 && (
+                <TouchableOpacity style={[styles.shufPrimary, isWeb && styles.shufPrimaryWeb]} onPress={confirmReturnActiveMatches} activeOpacity={0.85}>
+                  <Text style={styles.shufPrimaryText}>{occupied === 1 ? "Return to Queue" : "Return All to Queue"}</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          );
+        })()}
         {roundComplete && (
           <>
             <Text style={styles.shufCount}>
               {totalCount} {units(totalCount)} Advance
             </Text>
-            <Text style={styles.shufSub}>
-              Round complete. Adjust the table layout if needed, then Start Shuffle — the new matchups are announced as Waiting to Start, then you start them.
-            </Text>
+            {!isWeb && (
+              <Text style={styles.shufSub}>
+                Round complete. Adjust the table layout if needed, then Start Shuffle — the new matchups are announced as Waiting to Start, then you start them.
+              </Text>
+            )}
             <Text style={styles.shufRec}>Recommended Tables: {rec}</Text>
           </>
         )}
         {readyInitial && (
           <>
-            <Text style={styles.shufSub}>
-              All tables are clear. Adjust the table layout if needed, then Start Shuffle — the new matchups are announced as Waiting to Start, then you start them.
-            </Text>
+            {!isWeb && (
+              <Text style={styles.shufSub}>
+                All tables are clear. Adjust the table layout if needed, then Start Shuffle — the new matchups are announced as Waiting to Start, then you start them.
+              </Text>
+            )}
             <Text style={styles.shufRec}>Recommended Tables: {rec}</Text>
           </>
         )}
@@ -3998,7 +4349,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Pressable
                 key={t.id}
                 onPress={isWeb ? () => setTableDetailId(t.id) : undefined}
-                style={(s: any) => [styles.atCard, dashTwoCol && styles.atCardWeb, dashUltra && styles.atCardUltra, isWeb && s.hovered && styles.atCardHover]}
+                style={(s: any) => [styles.atCard, isWeb && styles.atCardWeb, isWeb && { width: atCardWidth }, isWeb && s.hovered && styles.atCardHover]}
               >
                 <View style={styles.atHeader}>
                   <TouchableOpacity style={styles.atHeaderMain} onPress={() => setTableDetailId(t.id)} activeOpacity={0.7}>
@@ -4008,8 +4359,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     </View>
                   </TouchableOpacity>
                   <View style={styles.atBadge}>
-                    <View style={[styles.atDot, { backgroundColor: dotColor }]} />
-                    <Text style={[styles.atBadgeText, { color: badgeColor }]} numberOfLines={1}>{statusLbl}</Text>
+                    <View style={[styles.atDot, { backgroundColor: isWeb && statusLbl === "Available" ? COLORS.success : dotColor }]} />
+                    <Text style={[styles.atBadgeText, { color: isWeb && statusLbl === "Available" ? COLORS.success : badgeColor }]} numberOfLines={1}>{statusLbl}</Text>
                   </View>
                   <Pressable
                     ref={(r) => { (inModal ? dashModalTableMenuRefs : tableMenuRefs).current[t.id] = r; }}
@@ -4024,7 +4375,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     )}
                   </Pressable>
                 </View>
-                <TouchableOpacity style={styles.atMatch} onPress={() => setTableDetailId(t.id)} activeOpacity={0.7}>
+                <TouchableOpacity style={[styles.atMatch, isWeb && styles.atMatchWeb]} onPress={() => setTableDetailId(t.id)} activeOpacity={0.7}>
                   {m && a && b ? (
                     <>
                       {renderActivePlayer(a)}
@@ -4055,30 +4406,34 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 ) : m && t.locked ? (
                   <Text style={styles.atPendingNote}>Locks after match</Text>
                 ) : null}
-                {pending && (
-                  <TouchableOpacity style={styles.atStartBtn} onPress={() => vm.startPendingMatch(t.id)} activeOpacity={0.85}>
-                    <Text style={styles.atStartBtnText}>Start Match</Text>
-                  </TouchableOpacity>
-                )}
-                {/* Item 12: recording the winner is the most common table action — surface a
-                    visible Winner button on a live-match card that opens the SAME choose-winner
-                    confirmation modal the ⋮ "Set Winner" row uses (no immediate record, no new
-                    mutation). The ⋮ menu keeps the secondary actions. */}
-                {m && a && b && (
-                  <TouchableOpacity
-                    style={styles.atWinnerBtn}
-                    onPress={() => {
-                      const sel = { matchId: m.id, aId: m.aId, bId: m.bId };
-                      // From inside View All Tables: close that modal FIRST, then open the
-                      // winner picker after it has dismissed (never two modals at once).
-                      if (inModal) runAfterTablesClose(() => setCompleteMatch(sel));
-                      else setCompleteMatch(sel);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.atWinnerBtnText}>🏆 Select Winner 🏆</Text>
-                  </TouchableOpacity>
-                )}
+                {/* Action zone — on web it reserves a fixed min-height so Available cards
+                    (no button) keep the same height as Live/Waiting cards. */}
+                <View style={isWeb ? styles.atActionZone : undefined}>
+                  {pending && (
+                    <TouchableOpacity style={styles.atStartBtn} onPress={() => vm.startPendingMatch(t.id)} activeOpacity={0.85}>
+                      <Text style={styles.atStartBtnText}>Start Match</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* Item 12: recording the winner is the most common table action — surface a
+                      visible Winner button on a live-match card that opens the SAME choose-winner
+                      confirmation modal the ⋮ "Set Winner" row uses (no immediate record, no new
+                      mutation). The ⋮ menu keeps the secondary actions. */}
+                  {m && a && b && (
+                    <TouchableOpacity
+                      style={styles.atWinnerBtn}
+                      onPress={() => {
+                        const sel = { matchId: m.id, aId: m.aId, bId: m.bId };
+                        // From inside View All Tables: close that modal FIRST, then open the
+                        // winner picker after it has dismissed (never two modals at once).
+                        if (inModal) runAfterTablesClose(() => setCompleteMatch(sel));
+                        else setCompleteMatch(sel);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.atWinnerBtnText}>🏆 Select Winner 🏆</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </Pressable>
       );
     };
@@ -4157,7 +4512,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const lsPay: any = tournament.live_settings ?? {};
     const cfgPay = lsPay.prizePool ?? null;
     if (cfgPay?.entryPlaces?.length) {
-      const fieldCt = chip.entries.filter(enteredField).length;
+      const fieldCt = chip.entries.filter((e) => isChipFieldMember(chip, e)).length;
       const poolPay = entryPoolTotal(
         fieldCt,
         Number(tournament.entry_fee) || 0,
@@ -4235,7 +4590,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // ── Live · Dashboard (live control center) ───────────────────────────────────
   const renderLiveDashboard = () => {
     const d = dashboard(chip);
-    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
+    const alive = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
     const activeTables = chip.tables.filter((t) => !t.inactive);
     const activeCount = activeTables.length;
     // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
@@ -4281,6 +4636,172 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         ))}
       </View>
     );
+
+    // WEB ONLY — one compact strip: [Shuffle cell (when available)] + KPI tiles. Replaces
+    // the tall Shuffle card + big stat cards. Running/finals shuffle states are NOT inlined
+    // here; they render as the slim banner below (renderShuffleBanner returns null when the
+    // available cell owns the shuffle UI). Reads the same chip flags/data — no logic change.
+    const shuffleOn = !!chip.shuffleMode;
+    const shReady = !!chip.shuffleReady;
+    const shDraining = !!chip.reshufflePending && !shReady;
+    const shRoundComplete = shReady && !!chip.shuffleRound;
+    const shReadyInitial = shReady && !chip.shuffleRound;
+    const shRound = !!chip.shuffleRound && !shDraining && !shReady;
+    const shRoundNum = chip.reshuffleCount ?? 0;
+    const shuffleRunning = shuffleOn && (shDraining || shReady || shRound);
+    const isFinalsState = alive.length === 2 && !chip.finishedAt;
+    // Last reshuffle: the MOST RECENT reshuffle redraw ("shuffle" event, payload.act ===
+    // "reshuffled", with an ISO `at`). chip.events is stored newest-first (pushEvent does
+    // unshift), but we don't rely on array direction — pick the event with the MAX `at`
+    // timestamp so selection is order-independent. (Bug fixed: the previous scan started at
+    // the oldest end and returned the FIRST reshuffle, freezing Last Reshuffle and making
+    // the timer count from hours ago.) No new field/query.
+    const lastReshuffleAt = (() => {
+      let best: string | null = null;
+      let bestMs = -Infinity;
+      for (const ev of chip.events) {
+        if (ev.type !== "shuffle" || (ev.payload as any)?.act !== "reshuffled") continue;
+        const ms = new Date(ev.at).getTime();
+        if (Number.isFinite(ms) && ms > bestMs) { bestMs = ms; best = ev.at; }
+      }
+      return best;
+    })();
+    const lastReshuffleLabel = lastReshuffleAt ? (fmtRelative(lastReshuffleAt, now) ?? fmtEventTime(lastReshuffleAt)) : null;
+    // ── WEB: single "Live Overview" panel ────────────────────────────────────────
+    // One dark panel with divider-separated summary metrics + a secondary Shuffle
+    // control row (available → Begin; active round → progress + Cancel). Replaces the
+    // 5 separate stat/shuffle cards. Same data + handlers; ready-to-shuffle/finals keep
+    // their action banner below (renderShuffleBanner).
+    const shufAliveN = alive.length;
+    const shufRemaining = alive.filter((e) => (chip.roundRemaining ?? []).includes(e.id)).length;
+    // Occupied active tables — a live match OR a seated-but-not-yet-started assignment
+    // (holder / pending challenger) — that must be resolved before a reshuffle can redraw.
+    // The engine enforces this (finalizeReshuffle refuses while hasOpenTableAssignment); the
+    // UI surfaces it. Counts TABLES, not in-progress matches, so not-started assignments count.
+    const assignedTableCount = chip.tables.filter(
+      (t) => !t.inactive && (!!t.matchId || !!t.holderId || !!t.pendingChallengerId),
+    ).length;
+    const shuffleRowLabel = shRound
+      ? `Round ${shRoundNum} in Progress · ${shufAliveN - shufRemaining} of ${shufAliveN} played`
+      : shDraining
+      ? assignedTableCount > 0
+        ? `${assignedTableCount} table assignment${assignedTableCount === 1 ? "" : "s"} must be resolved before reshuffling`
+        : "Finishing the round — tables clear as matches end"
+      : shRoundComplete
+      ? `Round ${shRoundNum} Complete`
+      : shReadyInitial
+      ? "Ready to Shuffle"
+      : "Available";
+    // Persistent Shuffle section derivations (web). Status text, recommended tables, and an
+    // active-round timer derived from the SAME `reshuffled` event we use for Last Reshuffle
+    // (no new field/persistence). Timer only during an active round; other states have none.
+    const shuffleStatusText = !chip.shuffleMode ? "Shuffle Mode Disabled" : shuffleRunning ? shuffleRowLabel : "Shuffle Mode Enabled";
+    const shuffleRec = recommendedActiveTables(shufAliveN);
+    const shuffleTimerMs = shRound && lastReshuffleAt ? Math.max(0, now - new Date(lastReshuffleAt).getTime()) : null;
+    const shuffleTimerLabel = shuffleTimerMs != null ? fmtClock(shuffleTimerMs) : null;
+    const liveOverviewPanel = (
+      <View style={styles.overviewPanel}>
+        {/* Target design: no heavy heading — just the clean 4-stat strip. */}
+        <View style={styles.overviewRow}>
+          {summaryWide.map((c, i) => (
+            <TouchableOpacity
+              key={c.lbl}
+              style={[styles.overviewMetric, i > 0 && styles.overviewMetricDiv]}
+              onPress={() => c.nav && onNavigate?.(c.nav)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.overviewVal} numberOfLines={1}>{c.val}</Text>
+              <Text style={styles.overviewLbl} numberOfLines={1}>{c.lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+
+    // PERSISTENT Shuffle section (web): one bordered card on its own row directly under Live
+    // Overview and above Active Tables. Always present while running (incl. Disabled) — it
+    // does NOT disappear when Shuffle is off/cancelled, and it is the SINGLE active-control
+    // area (no second banner). Hidden only at finals (the finals banner takes over). Same
+    // handlers/sources; Last Reshuffle + timer derived from existing events (see above).
+    const cancelShuffleAlert = () =>
+      Alert.alert(
+        "Cancel Shuffle?",
+        "This stops the shuffle cycle and resumes normal winner-stays play. Any teams still waiting to be re-seated go back to the queue.",
+        [{ text: "Keep Shuffling", style: "cancel" }, { text: "Cancel Shuffle", style: "destructive", onPress: () => vm.cancelReshuffle() }],
+      );
+    // "Return table assignment(s) to queue" override — confirm + engine call live at component
+    // scope (confirmReturnActiveMatches) so web and native share one flow. Here we only
+    // need the button label (count-aware).
+    const returnActiveLabel = assignedTableCount === 1 ? "Return to Queue" : "Return All to Queue";
+    const shuffleSection = !isFinalsState ? (() => {
+      const shufDisabled = !chip.shuffleMode;
+      const statusColor = shufDisabled ? COLORS.textMuted : shRound ? COLORS.success : shDraining ? COLORS.warning : COLORS.primary;
+      return (
+        <View style={styles.shufSection}>
+          {/* Single compact row: icon + label + status + stats … actions (right). */}
+          <View style={styles.shufSecTitleRow}>
+            <Ionicons name="shuffle" size={webMs(15)} color={COLORS.primary} />
+            <Text style={styles.overviewTitle}>SHUFFLE MODE</Text>
+          </View>
+          <Text style={[styles.shufSecStatus, { color: statusColor }]} numberOfLines={1}>{shuffleStatusText}</Text>
+          <View style={styles.shufSecStats}>
+              <Text style={styles.overviewShufMeta} numberOfLines={1}>Reshuffles: {shRoundNum}</Text>
+              {lastReshuffleLabel ? (
+                <Text style={styles.overviewShufMeta} numberOfLines={1}>Last Reshuffle: {lastReshuffleLabel}</Text>
+              ) : null}
+              {shReady ? (
+                <Text style={styles.overviewShufMeta} numberOfLines={1}>Recommended Tables: {shuffleRec}</Text>
+              ) : null}
+              {shuffleTimerLabel ? (
+                <Text style={styles.overviewShufMeta} numberOfLines={1}>Shuffle Timer: {shuffleTimerLabel}</Text>
+              ) : null}
+            </View>
+            <View style={styles.shufSecActionsRow}>
+              {shufDisabled ? (
+                <TouchableOpacity style={styles.shufActBtn} onPress={openShuffleModal} activeOpacity={0.85}>
+                  <Text style={styles.shufActBtnText}>Enable Shuffle</Text>
+                </TouchableOpacity>
+              ) : shReady ? (
+                <>
+                  <TouchableOpacity style={styles.shufActGhost} onPress={() => vm.setShuffleMode(false)} activeOpacity={0.85}>
+                    <Text style={styles.shufActGhostText}>Disable Shuffle</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shufActGhost} onPress={() => setReduceOpen(true)} activeOpacity={0.85}>
+                    <Text style={styles.shufActGhostText}>Manage Tables</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shufActBtn} onPress={startShuffleRedraw} activeOpacity={0.85}>
+                    <Text style={styles.shufActBtnText}>Start Shuffle</Text>
+                  </TouchableOpacity>
+                </>
+              ) : shDraining ? (
+                <>
+                  {assignedTableCount > 0 && (
+                    <TouchableOpacity style={styles.shufActBtn} onPress={confirmReturnActiveMatches} activeOpacity={0.85}>
+                      <Text style={styles.shufActBtnText}>{returnActiveLabel}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.shufActDanger} onPress={cancelShuffleAlert} activeOpacity={0.85}>
+                    <Text style={styles.shufActDangerText}>Cancel Shuffle</Text>
+                  </TouchableOpacity>
+                </>
+              ) : shRound ? (
+                <TouchableOpacity style={styles.shufActDanger} onPress={cancelShuffleAlert} activeOpacity={0.85}>
+                  <Text style={styles.shufActDangerText}>Cancel Shuffle</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.shufActGhost} onPress={() => vm.setShuffleMode(false)} activeOpacity={0.85}>
+                    <Text style={styles.shufActGhostText}>Disable Shuffle</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.shufActBtn} onPress={openShuffleModal} activeOpacity={0.85}>
+                    <Text style={styles.shufActBtnText}>Start Shuffle</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+      );
+    })() : null;
 
     const chipLeaderEl = chipLeader ? (
       <View style={styles.leaderCardN}>
@@ -4329,7 +4850,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // shared component-scope alertRowEl (inline mode: CTA runs directly, no modal open).
     const alertsPreview = visibleAlerts.slice(0, 3);
     const alertsEl = visibleAlerts.length > 0 ? (
-      <DashSection icon="warning-outline" iconColor={COLORS.warning} title="Alerts">
+      <DashSection tightGap icon="warning-outline" iconColor={COLORS.warning} title={isWeb ? `Alerts (${visibleAlerts.length})` : "Alerts"} collapsible open={sideAlertsOpen} onToggle={() => setSideAlertsOpen((v) => !v)}>
         {alertsPreview.map((a, i) => alertRowEl(a, visibleAlerts.length <= 3 && i === alertsPreview.length - 1))}
         {visibleAlerts.length > 3 && (
           <TouchableOpacity style={styles.atViewAll} onPress={() => setAlertsModalOpen(true)} activeOpacity={0.7}>
@@ -4342,8 +4863,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
     const queueEl = (
       <DashSection
+        tightGap
         icon="list-outline"
         title={`Queue (${chip.queue.length})`}
+        collapsible
+        open={sideQueueOpen}
+        onToggle={() => setSideQueueOpen((v) => !v)}
         action={isWeb && chip.queue.length > 0 ? <HeaderBtn label="Manage Queue" onPress={() => { setQueueMenuId(null); setQueueModalOpen(true); }} /> : undefined}
       >
         {chip.queue.length === 0 ? (
@@ -4371,15 +4896,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 </TouchableOpacity>
               );
             })}
-            <Pressable
-              style={({ pressed }) => [styles.qViewAll, pressed && styles.qViewAllPressed]}
-              onPress={() => { setQueueMenuId(null); setQueueModalOpen(true); }}
-            >
-              <Text style={styles.qViewAllText}>
-                {chip.queue.length > 5 ? `View Full Queue (${chip.queue.length})` : `Manage Queue (${chip.queue.length})`}
-              </Text>
-              <Ionicons name="chevron-forward" size={webMs(16)} color={COLORS.primary} />
-            </Pressable>
+            {/* Web already has a Manage Queue button in the header, so drop the redundant
+                bottom link unless there are more than 5 (then it's a useful "View Full
+                Queue"). Mobile keeps the bottom link as-is. */}
+            {(!isWeb || chip.queue.length > 5) && (
+              <Pressable
+                style={({ pressed }) => [styles.qViewAll, pressed && styles.qViewAllPressed]}
+                onPress={() => { setQueueMenuId(null); setQueueModalOpen(true); }}
+              >
+                <Text style={styles.qViewAllText}>
+                  {chip.queue.length > 5 ? `View Full Queue (${chip.queue.length})` : `Manage Queue (${chip.queue.length})`}
+                </Text>
+                <Ionicons name="chevron-forward" size={webMs(16)} color={COLORS.primary} />
+              </Pressable>
+            )}
           </>
         )}
       </DashSection>
@@ -4390,7 +4920,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // untouched.
     const activeTablesEl = (
       <>
-        <DashSection icon="grid-outline" title="Active Tables" action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
+        <DashSection tightGap bare={!isWeb} icon="grid-outline" title={isWeb ? `Active Tables (${activeCount})` : "Active Tables"} subtitle={undefined} action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
           {activeTables.length === 0 && <Text style={styles.hint}>No active tables.</Text>}
           {(() => {
             // Web desktop: render EVERY active table in the compact grid (each live card
@@ -4401,7 +4931,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             const preview = dashTwoCol ? sortedActiveTables : sortedActiveTables.slice(0, previewCount);
             return (
               <>
-                <View style={dashTwoCol ? styles.atGrid : undefined}>
+                <View style={isWeb ? styles.atGrid : undefined}>
                   {preview.map((t) => renderTableCard(t))}
                 </View>
                 {!dashTwoCol && activeTables.length > preview.length && (
@@ -4423,7 +4953,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
     const chipLeadersEl = (
       <View onLayout={(e) => { leadersYRef.current = e.nativeEvent.layout.y; }}>
-        <DashSection icon="trophy-outline" title="Chip Leaders" action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
+        <DashSection tightGap icon="trophy-outline" title="Chip Leaders" collapsible open={standingsOpen} onToggle={() => setStandingsOpen((v) => !v)} action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
               <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
@@ -4436,7 +4966,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
 
     const activityEl = (
-        <DashSection icon="stats-chart-outline" title="Tournament Activity">
+        <DashSection tightGap icon="stats-chart-outline" title="Tournament Activity" collapsible open={actOpen} onToggle={() => setActOpen((v) => !v)}>
           <View style={dashTwoCol ? styles.actStatGrid : undefined}>
           {[
             ["Completed Matches", String(d.matchesPlayed)],
@@ -4514,24 +5044,41 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Desktop: main column (queue/tables/activity) + side column (leader/alerts/
     // standings). Mobile/narrow: the original single-column order (unchanged).
     if (dashTwoCol) {
-      // Web desktop order: main = Active Tables (priority) → Queue → Activity;
-      // sidebar = Chip Leader → Alerts → Chip Leaders (sticky). Shuffle banner + the
-      // 4-card quick stats span full width above the two columns.
+      // Web desktop order: main = Active Tables (priority) → Operations (Tournament
+      // Activity) → Chip Leaders; sidebar = Chip Leader → Alerts → Queue (sticky).
+      // Shuffle banner spans the main column above Active Tables.
       return (
         <View>
-          {renderShuffleBanner()}
-          {summaryEl}
+          {/* Two-column dashboard starts immediately: main-left column leads with the
+              Live Overview panel so the sidebar's Chip Leader aligns with its top. */}
           <View style={styles.dashCols}>
             <View style={styles.dashMain}>
+              {liveOverviewPanel}
+              {/* Persistent Shuffle section on its own row, always under Live Overview and
+                  above Active Tables (finals uses renderShuffleBanner instead). */}
+              {shuffleSection}
+              {renderShuffleBanner()}
               {activeTablesEl}
-              {queueEl}
-              {activityEl}
+              {/* Tournament Activity (~55%) + Chip Leaders (~45%) share one row on wide web
+                  (dashActRow); they stack on medium/narrow. Queue stays in the sidebar. */}
+              {dashActRow ? (
+                <View style={styles.dashActLeadRow}>
+                  <View style={styles.dashActCol}>{activityEl}</View>
+                  <View style={styles.dashLeadCol}>{chipLeadersEl}</View>
+                </View>
+              ) : (
+                <>
+                  {activityEl}
+                  {chipLeadersEl}
+                </>
+              )}
             </View>
             <View style={[styles.dashSide, WEB_STICKY_SIDE]}>
-              {chipLeaderEl}
+              {/* Chip Leader card removed on desktop — Standings / Chip Leaders below is the
+                  source. chipLeaderEl stays defined for the native single-column layout. */}
               {championEl}
               {alertsEl}
-              {chipLeadersEl}
+              {queueEl}
             </View>
           </View>
         </View>
@@ -4611,6 +5158,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           }
         });
 
+    // Web-only stream helpers (presentation): open in a new tab (protocol-safe) and a
+    // short, truncated label instead of a long raw URL. Persistence is unchanged
+    // (openStream / saveStream → vm.updateTable).
+    const openStreamUrl = (url: string) => {
+      if (typeof window === "undefined") return;
+      const u = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      window.open(u, "_blank", "noopener,noreferrer");
+    };
+    const prettyStreamLabel = (url: string) => {
+      const clean = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+      return clean.length > 26 ? `${clean.slice(0, 26)}…` : clean;
+    };
+
     // Compact one-per-line row for List View. Same statuses/wording as the card; the
     // ⋮ opens the SAME unified table menu (openTableMenu → renderTableMenu).
     const renderTableListRow = (t: ChipTable) => {
@@ -4627,6 +5187,96 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       const matchup = m && a && b ? `${shortTeam(a)} vs ${shortTeam(b)}`
         : holder && pending ? `${shortTeam(holder)} vs ${shortTeam(pending)}`
         : holder ? `${shortTeam(holder)} — waiting` : waitShuffle ? "Waiting for Shuffle" : "Open";
+      // WEB: aligned desktop table row (Table | Status | Matchup | ⋮). NATIVE: the
+      // original stacked thin row. Same onPress (detail) / ⋮ (openTableMenu) + the same
+      // menu-anchor ref, so all behavior is identical.
+      if (isWeb) {
+        const streamEditing = streamEditId === t.id;
+        return (
+          <View key={t.id} style={[styles.webTRow, styles.tlRowWeb]}>
+            {/* Detail-open zone (TABLE | STATUS | MATCHUP). Kept separate from the Stream /
+                Actions cells so clicking those never opens the table detail. */}
+            <TouchableOpacity style={styles.tlDetailZone} onPress={() => setTableDetailId(t.id)} activeOpacity={0.7}>
+              <Text style={[styles.tlName, { width: webSc(84) }]} numberOfLines={1}>{t.label}</Text>
+              <View style={{ width: webSc(124) }}>
+                <Text style={[styles.tlStatus, { color: statusLabel === "Available" ? COLORS.success : statusColor }]} numberOfLines={1}>{statusLabel}</Text>
+                {pendingNote && <Text style={{ color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "700" }} numberOfLines={1}>{pendingNote}</Text>}
+              </View>
+              <View style={styles.tlMatchCell}>
+                {m && a && b ? (
+                  <Text style={[styles.webTCell, { flexShrink: 1, minWidth: 0, fontWeight: "600" }]} numberOfLines={1}>
+                    {shortTeam(a)} <Text style={{ color: chipStatusColor(a.chips, a.startChips), fontWeight: "800" }}>({a.chips})</Text> vs {shortTeam(b)} <Text style={{ color: chipStatusColor(b.chips, b.startChips), fontWeight: "800" }}>({b.chips})</Text>
+                  </Text>
+                ) : holder && pending ? (
+                  <Text style={[styles.webTCell, { flexShrink: 1, minWidth: 0, fontWeight: "600" }]} numberOfLines={1}>
+                    {shortTeam(holder)} <Text style={{ color: chipStatusColor(holder.chips, holder.startChips), fontWeight: "800" }}>({holder.chips})</Text> vs {shortTeam(pending)} <Text style={{ color: chipStatusColor(pending.chips, pending.startChips), fontWeight: "800" }}>({pending.chips})</Text>
+                  </Text>
+                ) : (
+                  <Text style={[styles.webTCell, { flexShrink: 1, minWidth: 0, fontWeight: "600" }]} numberOfLines={1}>{matchup}</Text>
+                )}
+                {/* Select Winner sits next to the players (live rows only); stopPropagation so
+                    it never opens the table detail. Reuses the Card view's completeMatch flow. */}
+                {m && a && b && (
+                  <TouchableOpacity style={styles.tlWinPill} onPress={(ev?: any) => { ev?.stopPropagation?.(); setCompleteMatch({ matchId: m.id, aId: m.aId, bId: m.bId }); }} activeOpacity={0.8}>
+                    <Text style={styles.tlWinPillText}>Select Winner</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </TouchableOpacity>
+            {/* STREAM cell */}
+            <View style={styles.tlStreamCell}>
+              {t.isStream && t.streamUrl && !streamEditing ? (
+                <View style={styles.tlStreamLinked}>
+                  <TouchableOpacity style={styles.tlStreamView} onPress={() => openStreamUrl(t.streamUrl as string)} activeOpacity={0.7}>
+                    <Ionicons name="link" size={webMs(13)} color={COLORS.primary} />
+                    <Text style={styles.tlStreamViewText} numberOfLines={1}>{prettyStreamLabel(t.streamUrl as string)}</Text>
+                    <Ionicons name="open-outline" size={webMs(12)} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.webChipBtn} onPress={() => openStream(t)} activeOpacity={0.7}>
+                    <Text style={styles.webChipBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.tlStreamEdit}>
+                  <View style={styles.tlStreamInputWrap}>
+                    <Ionicons name="link-outline" size={webMs(13)} color={COLORS.textMuted} />
+                    <TextInput
+                      allowFontScaling={false}
+                      style={styles.tlStreamInput}
+                      value={streamEditing ? streamVal : ""}
+                      onChangeText={setStreamVal}
+                      onFocus={() => { if (!streamEditing) openStream(t); }}
+                      placeholder="Paste stream URL…"
+                      placeholderTextColor={COLORS.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.tlStreamSave}
+                    disabled={!streamEditing || !streamVal.trim()}
+                    onPress={() => saveStream(t)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.tlStreamSaveText}>Save</Text>
+                  </TouchableOpacity>
+                  {streamEditing && (
+                    <TouchableOpacity style={styles.webChipBtn} onPress={() => setStreamEditId(null)} activeOpacity={0.7}>
+                      <Text style={styles.webChipBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+            {/* ACTIONS — ⋮ only (Select Winner moved next to the matchup). */}
+            <View style={[styles.webCellActions, { width: webSc(64) }]}>
+              <TouchableOpacity ref={(r) => { tableMenuRefs.current[t.id] = r; }} style={styles.tlMenu} onPress={() => openTableMenu(t.id)} hitSlop={10}>
+                <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      }
       return (
         <TouchableOpacity key={t.id} style={styles.tlRow} onPress={() => setTableDetailId(t.id)} activeOpacity={0.7}>
           <Text style={styles.tlName} numberOfLines={1}>{t.label}</Text>
@@ -4653,9 +5303,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
     // Top banner (over-staffed recommendation only). The large Shuffle status card no
     // longer lives on the Tables page — it belongs to the Live Dashboard.
+    // WEB: the recommendation now lives inline in the toolbar (see toolbarWeb) as a compact
+    // status strip. NATIVE: keeps the original card here, above the toolbar.
     const topBanners = (
       <>
-        {overStaffed && (
+        {overStaffed && !isWeb && (
           <View style={styles.recNeutral}>
             <View style={{ flex: 1 }}>
               <Text style={styles.recNeutralTitle}>Recommended: {rec} table{rec === 1 ? "" : "s"}</Text>
@@ -4669,9 +5321,56 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </>
     );
 
+    // WEB: one compact command bar — [Add Table] [Start All?] [Recommended · Reduce] …
+    // [Card|List] [Sort]. Shuffle is intentionally omitted on web (it lives on the Live
+    // Dashboard); the recommendation is an inline status strip here, not a banner. NATIVE:
+    // the original 2×2 toolbar (below), untouched — still includes Shuffle.
+    const toolbarWeb = (
+      <View style={styles.webToolbar}>
+        <TouchableOpacity style={[styles.webToolBtn, styles.webToolBtnFilled]} onPress={openAddTables} activeOpacity={0.85}>
+          <Ionicons name="add" size={webMs(16)} color={COLORS.white} />
+          <Text style={[styles.webToolBtnText, styles.webToolBtnFilledText]}>Add Table</Text>
+        </TouchableOpacity>
+        {vm.startAllMode && (
+          <TouchableOpacity style={[styles.webToolBtn, styles.webToolBtnFilled]} onPress={() => vm.startAllMatches()} activeOpacity={0.85}>
+            <Ionicons name="play" size={webMs(15)} color={COLORS.white} />
+            <Text style={[styles.webToolBtnText, styles.webToolBtnFilledText]}>{vm.startAllMode === "all" ? "Start All" : "Start Remaining"}</Text>
+          </TouchableOpacity>
+        )}
+        {overStaffed && (
+          <View style={styles.recInlineWeb}>
+            <Text style={styles.recInlineText} numberOfLines={1}>
+              <Text style={styles.recStripStrong}>Recommended: {rec} table{rec === 1 ? "" : "s"}</Text>
+              {"  ·  "}
+              <Text style={styles.recActiveCount}>{activeCount} active tables</Text>
+            </Text>
+            <TouchableOpacity style={styles.recReduceBtn} onPress={openReduce} hitSlop={8} activeOpacity={0.85}>
+              <Text style={styles.recReduceBtnText}>Reduce</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={styles.webToolSpacer} />
+        <View style={styles.webSeg}>
+          <TouchableOpacity style={[styles.webSegBtn, tablesView === "card" && styles.webSegBtnOn]} onPress={() => setTablesView("card")} activeOpacity={0.7}>
+            <Ionicons name="grid-outline" size={webMs(14)} color={tablesView === "card" ? COLORS.primary : COLORS.textSecondary} />
+            <Text style={[styles.webSegText, tablesView === "card" && styles.webSegTextOn]}>Card</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.webSegBtn, tablesView === "list" && styles.webSegBtnOn]} onPress={() => setTablesView("list")} activeOpacity={0.7}>
+            <Ionicons name="list-outline" size={webMs(14)} color={tablesView === "list" ? COLORS.primary : COLORS.textSecondary} />
+            <Text style={[styles.webSegText, tablesView === "list" && styles.webSegTextOn]}>List</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={[styles.webToolBtn, tablesSort !== "default" && styles.webToolBtnOn]} onPress={() => setTablesSortMenuOpen(true)} activeOpacity={0.7}>
+          <Ionicons name="swap-vertical-outline" size={webMs(14)} color={tablesSort !== "default" ? COLORS.primary : COLORS.textSecondary} />
+          <Text style={[styles.webToolBtnText, tablesSort !== "default" && styles.webToolBtnPrimaryText]}>Sort</Text>
+          <Ionicons name="chevron-down" size={webMs(13)} color={COLORS.textMuted} />
+        </TouchableOpacity>
+      </View>
+    );
+
     // The 2×2 toolbar — the PINNED region (sticky header) in embedded mode. Row/cell
     // geometry is unchanged; only the surrounding wrapper (bg + divider) is new.
-    const toolbar = (
+    const toolbarNative = (
       <>
         {/* Row 1 — Add Table + Shuffle/Start All. Column widths are owned by the
             shared tbRow/tbCol wrappers (two equal flex cells + one gap), NOT by the
@@ -4738,30 +5437,63 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </>
     );
 
+    const toolbar = isWeb ? toolbarWeb : toolbarNative;
+
     const listContent = (
       <>
         {activeTables.length === 0 && <Text style={styles.hint}>No active tables. Add one above.</Text>}
 
         {tablesView === "card" ? (
-          <View style={dashTwoCol ? styles.atGrid : undefined}>
+          <View style={isWeb ? styles.atGrid : undefined}>
             {sortedActive.map((t) => renderTableCard(t))}
+          </View>
+        ) : isWeb && sortedActive.length > 0 ? (
+          // Desktop list = a real table with a header; rows come from renderTableListRow's web branch.
+          <View style={styles.webTableWrap}>
+            <View style={[styles.webTHeadRow, styles.tlRowWeb]}>
+              <View style={styles.tlDetailZone}>
+                <Text style={[styles.webTH, { width: webSc(84) }]}>TABLE</Text>
+                <Text style={[styles.webTH, { width: webSc(124) }]}>STATUS</Text>
+                <Text style={[styles.webTH, { flex: 1, minWidth: 0 }]}>MATCHUP</Text>
+              </View>
+              <Text style={[styles.webTH, styles.tlStreamCell]}>STREAM</Text>
+              <Text style={[styles.webTH, { width: webSc(64), textAlign: "right" }]} numberOfLines={1}>ACTIONS</Text>
+            </View>
+            {sortedActive.map((t) => renderTableListRow(t))}
           </View>
         ) : (
           <View>{sortedActive.map((t) => renderTableListRow(t))}</View>
         )}
 
         {inactiveTables.length > 0 && (
-          <View style={styles.manageTables}>
-            <Text style={styles.manageHead}>INACTIVE TABLES</Text>
-            {inactiveTables.map((t) => (
-              <View key={t.id} style={styles.inactiveRow}>
-                <Text style={styles.inactiveLabel}>{t.label}</Text>
-                <TouchableOpacity style={styles.reactivateBtn} onPress={() => vm.reactivateTable(t.id)}>
-                  <Text style={styles.reactivateText}>Reactivate</Text>
-                </TouchableOpacity>
+          isWeb ? (
+            // Compact 3-up card grid (consistent with the active grid), tucked close under it.
+            <View style={styles.manageTablesWeb}>
+              <Text style={styles.manageHead}>INACTIVE TABLES ({inactiveTables.length})</Text>
+              <View style={styles.atGrid}>
+                {inactiveTables.map((t) => (
+                  <View key={t.id} style={[styles.webInactiveCard, { width: atCardWidth }]}>
+                    <Text style={styles.webInactiveName} numberOfLines={1}>{t.label}</Text>
+                    <TouchableOpacity style={styles.reactivateBtn} onPress={() => vm.reactivateTable(t.id)} activeOpacity={0.8}>
+                      <Text style={styles.reactivateText}>Reactivate</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </View>
+          ) : (
+            <View style={styles.manageTables}>
+              <Text style={styles.manageHead}>INACTIVE TABLES</Text>
+              {inactiveTables.map((t) => (
+                <View key={t.id} style={styles.inactiveRow}>
+                  <Text style={styles.inactiveLabel}>{t.label}</Text>
+                  <TouchableOpacity style={styles.reactivateBtn} onPress={() => vm.reactivateTable(t.id)}>
+                    <Text style={styles.reactivateText}>Reactivate</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )
         )}
       </>
     );
@@ -4904,15 +5636,92 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // Full Live → Queue page — same card + rows as the pop-out modal (minus the modal's
   // Cancel/Done + "Up Next" chrome). The ⋮ sheet for this surface renders in `modals`.
-  const renderLiveQueue = () => (
-    <Section title={`Queue (${chip.queue.length})`}>
-      {chip.queue.length === 0 ? (
-        <Text style={styles.hint}>Queue is empty.</Text>
-      ) : (
-        chip.queue.map((qid, i) => renderQueueRow(qid, i))
-      )}
-    </Section>
-  );
+  const renderLiveQueue = () => {
+    // NATIVE (unchanged): the stacked Section using the shared renderQueueRow.
+    if (!isWeb) {
+      return (
+        <Section title={`Queue (${chip.queue.length})`}>
+          {chip.queue.length === 0 ? (
+            <Text style={styles.hint}>Queue is empty.</Text>
+          ) : (
+            chip.queue.map((qid, i) => renderQueueRow(qid, i))
+          )}
+        </Section>
+      );
+    }
+    // WEB: Queue (~70%) beside Chip Leaders (~30%). Chip Leaders reuses the SAME data
+    // derivation + row styles as the Live dashboard's Chip Leaders (no new standings calc).
+    const aliveQ = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
+    const leadersQ = [...aliveQ].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
+    const leaderListQ = showFullStandings ? leadersQ : leadersQ.slice(0, 5);
+    const queuePanel = (
+      <View style={styles.plPanel}>
+        <Text style={styles.plPanelTitle}>Queue ({chip.queue.length})</Text>
+        {chip.queue.length === 0 ? (
+          <Text style={styles.hint}>Queue is empty.</Text>
+        ) : (
+          <View style={styles.webTableWrap}>
+            <View style={[styles.webTHeadRow, styles.tlRowWeb]}>
+              <Text style={[styles.webTH, { width: webSc(28) }]}>#</Text>
+              <Text style={[styles.webTH, { flex: 1, minWidth: 0 }]}>PLAYER</Text>
+              <Text style={[styles.webTH, { width: webSc(56), textAlign: "right" }]}>FARGO</Text>
+              <Text style={[styles.webTH, { width: webSc(56), textAlign: "right" }]}>RECORD</Text>
+              <Text style={[styles.webTH, { width: webSc(72), textAlign: "right" }]}>CHIPS</Text>
+              <Text style={[styles.webTH, { width: webSc(96), textAlign: "right" }]} numberOfLines={1}>ACTIONS</Text>
+            </View>
+            {chip.queue.map((qid, i) => {
+              const e = entryById(qid);
+              if (!e) return null;
+              const rs = queueRoundStatus(qid);
+              const last = i === chip.queue.length - 1;
+              return (
+                <View key={qid} style={[styles.webTRow, styles.tlRowWeb, last && styles.webTRowLast]}>
+                  <Text style={[styles.qPagePos, { width: webSc(28) }]} numberOfLines={1}>{i + 1}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.playerName} numberOfLines={1}>{shortTeam(e)}</Text>
+                    {rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null}
+                  </View>
+                  <Text style={[styles.webTMuted, { width: webSc(56), textAlign: "right" }]} numberOfLines={1}>{e.teamFargo != null ? e.teamFargo : "—"}</Text>
+                  <Text style={[styles.webTCell, { width: webSc(56), textAlign: "right" }]} numberOfLines={1}>{e.wins}-{e.losses}</Text>
+                  <Text style={[styles.webTCell, { width: webSc(72), textAlign: "right", color: chipStatusColor(e.chips, e.startChips), fontWeight: "800" }]} numberOfLines={1}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+                  <View style={[styles.webCellActions, { width: webSc(96) }]}>
+                    <TouchableOpacity style={styles.webChipBtn} onPress={() => setQueueMenuId(e.id)} activeOpacity={0.7}>
+                      <Text style={styles.webChipBtnText}>Actions</Text>
+                      <Ionicons name="ellipsis-vertical" size={webMs(13)} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    );
+    const leadersPanel = (
+      <DashSection icon="trophy-outline" title="Chip Leaders" action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
+        {leaderListQ.length === 0 ? (
+          <Text style={styles.hint}>No players yet.</Text>
+        ) : leaderListQ.map((e, i) => (
+          <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
+            <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
+            <Text style={styles.clName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
+            <Text style={[styles.clChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} chips</Text>
+          </TouchableOpacity>
+        ))}
+      </DashSection>
+    );
+    return dashActRow ? (
+      <View style={styles.plPanelRow}>
+        <View style={styles.qPageQueueCol}>{queuePanel}</View>
+        <View style={styles.qPageLeadCol}>{leadersPanel}</View>
+      </View>
+    ) : (
+      <>
+        {queuePanel}
+        {leadersPanel}
+      </>
+    );
+  };
 
   // Measure an anchor node in the window and place a dropdown just below it,
   // right-edge aligned (opens left), clamped to stay on-screen.
@@ -5018,8 +5827,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // ── Live · Players (records + buy-back) ──────────────────────────────────────
 
   const renderLivePlayers = () => {
-    const aliveAll = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
-    const outAll = chip.entries.filter((e) => e.status === "eliminated");
+    const aliveAll = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
+    const outAll = chip.entries.filter((e) => e.status === "eliminated" && isChipFieldMember(chip, e));
 
     // ── Presentation-only search + sort ────────────────────────────────────────
     // Filters/reorders ONLY this display list. It never mutates the queue, table
@@ -5073,6 +5882,76 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (p != null) return `${ordSuffix(p)} Place`;
       return "Eliminated";
     };
+
+    // WEB desktop panels: Players (PLAYER | CHIPS | RECORD | STATE | ⋮) and Eliminated
+    // (PLAYER | RECORD | ⋮) as compact tables. Same data/handlers (setProfileId,
+    // openPlayerMenu + the same playerMenuRefs anchor). NATIVE keeps the stacked rows.
+    const playerActionsCell = (e: ChipEntry) => (
+      <View style={[styles.webCellActions, { width: webSc(40) }]}>
+        {!readOnly && (
+          // stopPropagation so tapping ⋮ opens ONLY the menu, never the row's profile action.
+          <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.tlMenu} onPress={(ev?: any) => { ev?.stopPropagation?.(); openPlayerMenu(e.id); }} hitSlop={10}>
+            <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+    const playersPanelWeb = (
+      <View style={styles.plPanel}>
+        <Text style={styles.plPanelTitle}>Players ({aliveAll.length})</Text>
+        {alive.length === 0 ? (
+          <Text style={styles.hint}>{q ? "No players match your search." : "No players yet."}</Text>
+        ) : (
+          <View style={styles.webTableWrap}>
+            <View style={[styles.webTHeadRow, styles.tlRowWeb]}>
+              <View style={styles.plDetailZone}>
+                <Text style={[styles.webTH, { flex: 1, minWidth: 0 }]}>PLAYER</Text>
+                <Text style={[styles.webTH, { width: webSc(58), textAlign: "right" }]}>RECORD</Text>
+                <Text style={[styles.webTH, { width: webSc(80) }]}>STATE</Text>
+              </View>
+              <Text style={[styles.webTH, { width: webSc(40) }]} />
+            </View>
+            {alive.map((e, idx) => (
+              <Pressable key={e.id} onPress={() => setProfileId(e.id)} style={({ hovered }: any) => [styles.webTRow, styles.tlRowWeb, styles.plRowWeb, hovered && styles.plRowHover, idx === alive.length - 1 && styles.webTRowLast]}>
+                <View style={styles.plDetailZone}>
+                  {/* Chip count in parentheses next to the name — same chipStatusColor used across the Chip UI. */}
+                  <Text style={[styles.playerName, { flex: 1, minWidth: 0 }]} numberOfLines={1}>{shortTeam(e)} <Text style={{ color: chipStatusColor(e.chips, e.startChips), fontWeight: "800" }}>({e.chips})</Text></Text>
+                  <Text style={[styles.webTCell, { width: webSc(58), textAlign: "right" }]} numberOfLines={1}>{e.wins}-{e.losses}</Text>
+                  <View style={{ width: webSc(80) }}>
+                    <Text style={readOnly ? styles.playerRecord : e.status === "playing" ? styles.playerStatusPlaying : styles.playerStatusIdle} numberOfLines={1}>{readOnly ? finalLabel(e) : e.status}</Text>
+                  </View>
+                </View>
+                {playerActionsCell(e)}
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+    const elimPanelWeb = out.length > 0 ? (
+      <View style={styles.plPanel}>
+        <Text style={styles.plPanelTitle}>Eliminated ({out.length})</Text>
+        <View style={styles.webTableWrap}>
+          <View style={[styles.webTHeadRow, styles.tlRowWeb]}>
+            <View style={styles.plDetailZone}>
+              <Text style={[styles.webTH, { flex: 1, minWidth: 0 }]}>PLAYER</Text>
+              <Text style={[styles.webTH, { width: webSc(58), textAlign: "right" }]}>RECORD</Text>
+            </View>
+            <Text style={[styles.webTH, { width: webSc(40) }]} />
+          </View>
+          {out.map((e, idx) => (
+            <Pressable key={e.id} onPress={() => setProfileId(e.id)} style={({ hovered }: any) => [styles.webTRow, styles.tlRowWeb, styles.plRowWeb, hovered && styles.plRowHover, idx === out.length - 1 && styles.webTRowLast]}>
+              <View style={styles.plDetailZone}>
+                <Text style={[styles.playerName, styles.playerOut, { flex: 1, minWidth: 0 }]} numberOfLines={1}>{shortTeam(e)}</Text>
+                <Text style={[styles.webTCell, styles.playerMetaOut, { width: webSc(58), textAlign: "right" }]} numberOfLines={1}>{readOnly ? finalLabel(e) : `${e.wins}-${e.losses}`}</Text>
+              </View>
+              {playerActionsCell(e)}
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    ) : null;
+
     return (
       <>
         {readOnly && (
@@ -5109,47 +5988,63 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <Text style={styles.hint}>Showing {shown} of {totalPlayers}</Text>
         )}
 
-        <Section title={`Players (${aliveAll.length})`}>
-          {alive.length === 0 ? (
-            <Text style={styles.hint}>{q ? "No players match your search." : "No players yet."}</Text>
-          ) : alive.map((e) => (
-            <View key={e.id} style={styles.playerRow}>
-              <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-                <Text style={styles.playerName} numberOfLines={1}>{shortTeam(e)} <Text style={styles.playerChevron}>›</Text></Text>
-                <Text style={styles.playerMeta} numberOfLines={1}>
-                  <Text style={[styles.playerChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
-                  <Text style={styles.playerMetaSep}>{"   ·   "}</Text>
-                  <Text style={styles.playerRecord}>{e.wins}-{e.losses}</Text>
-                  <Text style={styles.playerMetaSep}>{"   ·   "}</Text>
-                  <Text style={readOnly ? styles.playerRecord : e.status === "playing" ? styles.playerStatusPlaying : styles.playerStatusIdle}>
-                    {readOnly ? finalLabel(e) : e.status}
-                  </Text>
-                </Text>
-              </TouchableOpacity>
-              {!readOnly && (
-                <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
-                </TouchableOpacity>
-              )}
+        {isWeb ? (
+          dashActRow && out.length > 0 ? (
+            <View style={styles.plPanelRow}>
+              <View style={styles.plPlayersCol}>{playersPanelWeb}</View>
+              <View style={styles.plElimCol}>{elimPanelWeb}</View>
             </View>
-          ))}
-        </Section>
-        {out.length > 0 && (
-          <Section title={`Eliminated (${out.length})`}>
-            {out.map((e) => (
-              <View key={e.id} style={styles.playerRow}>
-                <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
-                  <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
-                  <Text style={[styles.playerMeta, styles.playerMetaOut]}>{readOnly ? `${finalLabel(e)} · ${e.wins}-${e.losses}` : `${e.wins}-${e.losses}`}</Text>
-                </TouchableOpacity>
-                {!readOnly && (
-                  <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+          ) : (
+            <>
+              {playersPanelWeb}
+              {elimPanelWeb}
+            </>
+          )
+        ) : (
+          <>
+            <Section title={`Players (${aliveAll.length})`}>
+              {alive.length === 0 ? (
+                <Text style={styles.hint}>{q ? "No players match your search." : "No players yet."}</Text>
+              ) : alive.map((e) => (
+                <View key={e.id} style={styles.playerRow}>
+                  <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
+                    <Text style={styles.playerName} numberOfLines={1}>{shortTeam(e)} <Text style={styles.playerChevron}>›</Text></Text>
+                    <Text style={styles.playerMeta} numberOfLines={1}>
+                      <Text style={[styles.playerChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+                      <Text style={styles.playerMetaSep}>{"   ·   "}</Text>
+                      <Text style={styles.playerRecord}>{e.wins}-{e.losses}</Text>
+                      <Text style={styles.playerMetaSep}>{"   ·   "}</Text>
+                      <Text style={readOnly ? styles.playerRecord : e.status === "playing" ? styles.playerStatusPlaying : styles.playerStatusIdle}>
+                        {readOnly ? finalLabel(e) : e.status}
+                      </Text>
+                    </Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </Section>
+                  {!readOnly && (
+                    <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </Section>
+            {out.length > 0 && (
+              <Section title={`Eliminated (${out.length})`}>
+                {out.map((e) => (
+                  <View key={e.id} style={styles.playerRow}>
+                    <TouchableOpacity style={styles.playerTap} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
+                      <Text style={[styles.playerName, styles.playerOut]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
+                      <Text style={[styles.playerMeta, styles.playerMetaOut]}>{readOnly ? `${finalLabel(e)} · ${e.wins}-${e.losses}` : `${e.wins}-${e.losses}`}</Text>
+                    </TouchableOpacity>
+                    {!readOnly && (
+                      <TouchableOpacity ref={(r) => { playerMenuRefs.current[e.id] = r; }} style={styles.playerMenuBtn} onPress={() => openPlayerMenu(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </Section>
+            )}
+          </>
         )}
 
         {/* Sort options (reuses the roster sort-menu UI). */}
@@ -5182,8 +6077,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
   // ── Results · Standings ──────────────────────────────────────────────────────
   const renderStandings = () => {
-    const alive = [...chip.entries].filter((e) => e.status !== "eliminated" && enteredField(e)).sort((a, b) => b.chips - a.chips || b.wins - a.wins);
-    const out = [...chip.entries].filter((e) => e.status === "eliminated").sort((a, b) => b.wins - a.wins);
+    const alive = [...chip.entries].filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e)).sort((a, b) => b.chips - a.chips || b.wins - a.wins);
+    const out = [...chip.entries].filter((e) => e.status === "eliminated" && isChipFieldMember(chip, e)).sort((a, b) => b.wins - a.wins);
     const row = (e: ChipEntry, rank: number) => {
       const isOut = e.status === "eliminated";
       return (
@@ -5274,7 +6169,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Payout pool basis = actual FIELD entrants (enteredField) — the same set the setup /
     // Review pool uses — not a raw paid count (which would count paid-but-not-Ready entries
     // that never entered the field and inflate the pool vs Review).
-    const paidPlayers = chip.entries.filter(enteredField).length;
+    const paidPlayers = chip.entries.filter((e) => isChipFieldMember(chip, e)).length;
     const entryFee = Number(tournament.entry_fee) || 0;
     const addedMoney = Number(tournament.added_money) || 0;
     const ls: any = tournament.live_settings ?? {};
@@ -5389,8 +6284,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
 
   const renderSummary = () => {
-    const alive = chip.entries.filter((e) => e.status !== "eliminated" && enteredField(e));
-    const out = chip.entries.filter((e) => e.status === "eliminated");
+    const alive = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
+    const out = chip.entries.filter((e) => e.status === "eliminated" && isChipFieldMember(chip, e));
     const winner = chip.winnerId ? entryById(chip.winnerId) : alive.length === 1 ? alive[0] : null;
     const d = dashboard(chip);
     const durs = chip.matches.filter((m) => m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
@@ -5398,7 +6293,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const checkedIn = chip.entries.filter((e) => e.checkedIn).length;
     // Field-entrant basis for the recap's entry-fee math (see renderPayouts) — matches the
     // Review/setup pool; excludes paid-but-not-Ready entries that never entered the field.
-    const paidCount = chip.entries.filter(enteredField).length;
+    const paidCount = chip.entries.filter((e) => isChipFieldMember(chip, e)).length;
     const totalChipChanges = chip.entries.reduce((s, e) => s + e.losses, 0);
     const tablesAdded = chip.events.filter((e) => e.type === "table_added").length;
     const tablesRemoved = chip.events.filter((e) => e.type === "table_removed").length;
@@ -5602,7 +6497,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const shuffleRecommended = recommendedActiveTables(dashboard(chip).playersRemaining);
   const shuffleTablesAfter = shuffleModalActiveTables.length - shuffleRemoveCount;
   // Hard safety guard: never remove the last table while players are still active.
-  const shuffleHasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && enteredField(e));
+  const shuffleHasActivePlayers = chip.entries.some((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
   const shuffleWouldStrand = shuffleHasActivePlayers && shuffleTablesAfter < 1;
   // ONE Modal for the whole flow — its content swaps from the setup sheet to the
   // animation (never two Modals racing to present/dismiss on iOS). Visible while
@@ -6948,33 +7843,53 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
                         <View style={styles.pMenu}>
                           <Text style={styles.ddName} numberOfLines={1}>{teamName(entry)}</Text>
-                          {p.status === "playing" && (
+                          {isWeb ? (
+                            // WEB: shared builder (single source of truth with the players-row ⋮),
+                            // then View History appended last (scrolls to this profile's history).
+                            // Inline rows (not the render-scoped <Item>) to keep lint at baseline.
                             <>
-                              {liveMatch && (
-                                <Item icon="flag-outline" label="End Match" onPress={() => { close(); runAfterProfileClose(() => setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId })); }} />
+                              {buildPlayerActions(entry).map((a) => (
+                                <TouchableOpacity key={a.key} style={styles.ddRow} activeOpacity={0.6} onPress={() => { if (a.opensModal) { closeProfile(); requestAnimationFrame(() => a.run()); } else { close(); a.run(); } }}>
+                                  <Ionicons name={a.icon} size={webMs(17)} color={a.danger ? COLORS.error : COLORS.textSecondary} />
+                                  <Text style={[styles.ddRowText, a.danger && { color: COLORS.error }]} numberOfLines={1}>{a.label}</Text>
+                                </TouchableOpacity>
+                              ))}
+                              <TouchableOpacity style={styles.ddRow} activeOpacity={0.6} onPress={viewHistory}>
+                                <Ionicons name="document-text-outline" size={webMs(17)} color={COLORS.textSecondary} />
+                                <Text style={styles.ddRowText} numberOfLines={1}>View History</Text>
+                              </TouchableOpacity>
+                            </>
+                          ) : (
+                            <>
+                              {p.status === "playing" && (
+                                <>
+                                  {liveMatch && (
+                                    <Item icon="flag-outline" label="End Match" onPress={() => { close(); runAfterProfileClose(() => setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId })); }} />
+                                  )}
+                                  <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
+                                  <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
+                                  {entry.tableId && (
+                                    <Item icon="time-outline" label="Reset Match Timer" onPress={() => { close(); vm.resetTableTimer(entry.tableId as string); }} />
+                                  )}
+                                </>
                               )}
-                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
-                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
-                              {entry.tableId && (
-                                <Item icon="time-outline" label="Reset Match Timer" onPress={() => { close(); vm.resetTableTimer(entry.tableId as string); }} />
+                              {(p.status === "waiting" || p.status === "next") && (
+                                <>
+                                  <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
+                                  <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
+                                  <Item icon="arrow-down-circle-outline" label="Send to Back of Queue" onPress={() => { close(); vm.reorderQueue(entry.id, "bottom"); }} />
+                                  <Item icon="exit-outline" danger label="Forfeit" onPress={() => { close(); runAfterProfileClose(() => confirmRemoveFromQueue(entry)); }} />
+                                </>
                               )}
+                              {p.status === "eliminated" && (
+                                <>
+                                  <Item icon="refresh-outline" label="Restore Chip" onPress={() => { close(); vm.restoreEntry(entry.id); }} />
+                                  <Item icon="return-up-back-outline" label="Re-enter Tournament" onPress={() => { close(); vm.buyBack(entry.id); }} />
+                                </>
+                              )}
+                              <Item icon="document-text-outline" label="View History" onPress={viewHistory} />
                             </>
                           )}
-                          {(p.status === "waiting" || p.status === "next") && (
-                            <>
-                              <Item icon="add-circle-outline" label="Add Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, 1)); }} />
-                              <Item icon="remove-circle-outline" label="Remove Chip" onPress={() => { close(); runAfterProfileClose(() => openChipAdjust(entry, -1)); }} />
-                              <Item icon="arrow-down-circle-outline" label="Send to Back of Queue" onPress={() => { close(); vm.reorderQueue(entry.id, "bottom"); }} />
-                              <Item icon="exit-outline" danger label="Forfeit" onPress={() => { close(); runAfterProfileClose(() => confirmRemoveFromQueue(entry)); }} />
-                            </>
-                          )}
-                          {p.status === "eliminated" && (
-                            <>
-                              <Item icon="refresh-outline" label="Restore Chip" onPress={() => { close(); vm.restoreEntry(entry.id); }} />
-                              <Item icon="return-up-back-outline" label="Re-enter Tournament" onPress={() => { close(); vm.buyBack(entry.id); }} />
-                            </>
-                          )}
-                          <Item icon="document-text-outline" label="View History" onPress={viewHistory} />
                         </View>
                       </>
                     );
@@ -7522,7 +8437,23 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Pressable style={[styles.ddCard, { left: playerMenu.left, top: playerMenu.top, bottom: playerMenu.bottom, maxHeight: playerMenu.maxH }]} onPress={() => {}}>
                 <Text style={styles.ddName} numberOfLines={1}>{teamName(e)}</Text>
                 <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  {eliminated ? (
+                  {isWeb ? (
+                    // WEB: shared builder (single source of truth with the Player Profile ⋮),
+                    // then View History appended last (opens the profile → history section).
+                    // Inline rows (not the render-scoped <Row>) to keep lint at baseline.
+                    <>
+                      {buildPlayerActions(e).map((a) => (
+                        <TouchableOpacity key={a.key} style={styles.ddRow} activeOpacity={0.6} onPress={() => { close(); a.run(); }}>
+                          <Ionicons name={a.icon} size={webMs(17)} color={a.danger ? COLORS.error : COLORS.textSecondary} />
+                          <Text style={[styles.ddRowText, a.danger && { color: COLORS.error }]} numberOfLines={1}>{a.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                      <TouchableOpacity style={[styles.ddRow, styles.ddRowLast]} activeOpacity={0.6} onPress={() => { close(); setProfileId(e.id); }}>
+                        <Ionicons name="document-text-outline" size={webMs(17)} color={COLORS.textSecondary} />
+                        <Text style={styles.ddRowText} numberOfLines={1}>View History</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : eliminated ? (
                     <Row icon="refresh-outline" label="Restore Team" onPress={confirmRestore} last />
                   ) : (
                     <>
@@ -7807,18 +8738,51 @@ const HeaderBtn = ({ label, onPress }: { label: string; onPress: () => void }) =
 // visually distinct at a glance.
 // Consistent neutral section: [small icon] Title  …  optional action. Same card
 // style for every section (subtle 1px border, no colored side bar / tint).
-const DashSection = ({ icon, iconColor, title, action, children }: { icon: React.ComponentProps<typeof Ionicons>["name"]; iconColor?: string; title: string; action?: React.ReactNode; children: React.ReactNode }) => (
-  <View style={[styles.dashSection, isWeb && styles.dashSectionWeb]}>
-    <View style={styles.dashSectionHead}>
-      <View style={styles.dashSectionTitleWrap}>
-        <Ionicons name={icon} size={webMs(15)} color={iconColor ?? COLORS.textSecondary} />
+// `collapsible`/`open`/`onToggle` add a WEB-ONLY accordion styled like a standard dropdown
+// header: [icon] [title] on the LEFT, and on the RIGHT an optional (independent) action
+// button followed by a far-right chevron (▾ open / › collapsed). The title area AND the
+// chevron toggle; the action keeps its own handler and never toggles. On native (or when
+// `collapsible` is unset) behavior is unchanged — body always renders, title is a plain View.
+const DashSection = ({ icon, iconColor, title, subtitle, action, children, bare, collapsible, open, onToggle, tightGap }: { icon: React.ComponentProps<typeof Ionicons>["name"]; iconColor?: string; title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode; bare?: boolean; collapsible?: boolean; open?: boolean; onToggle?: () => void; tightGap?: boolean }) => {
+  const canCollapse = isWeb && !!collapsible;
+  const showBody = canCollapse ? !!open : true;
+  const titleInner = (
+    <>
+      <Ionicons name={icon} size={webMs(15)} color={iconColor ?? COLORS.textSecondary} />
+      <View>
         <Text style={styles.dashSectionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.dashSectionSub}>{subtitle}</Text> : null}
       </View>
-      {action}
+    </>
+  );
+  return (
+    <View style={[styles.dashSection, isWeb && styles.dashSectionWeb, tightGap && isWeb && styles.dashSectionTightWeb, bare && isWeb && styles.dashSectionBareWeb]}>
+      <View style={[styles.dashSectionHead, isWeb && styles.dashSectionHeadWeb]}>
+        {canCollapse ? (
+          <TouchableOpacity style={styles.dashSectionTitleWrap} onPress={onToggle} activeOpacity={0.7}>
+            {titleInner}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.dashSectionTitleWrap}>{titleInner}</View>
+        )}
+        {canCollapse ? (
+          <View style={styles.dashSectionHeadRight}>
+            {action}
+            {/* Show/Hide + chevron toggle — mirrors the Profile page accordion pattern
+                (ChipTournamentHubView collapseLabel/chevron). Independent of `action`. */}
+            <TouchableOpacity onPress={onToggle} activeOpacity={0.7} style={styles.dashSectionToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={styles.dashSectionToggleLabel}>{open ? "Hide" : "Show"}</Text>
+              <Ionicons name={open ? "chevron-down" : "chevron-forward"} size={webMs(16)} color={COLORS.primarySoft} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          action
+        )}
+      </View>
+      {showBody ? children : null}
     </View>
-    {children}
-  </View>
-);
+  );
+};
 const styles = StyleSheet.create({
   container: {
     ...Platform.select({
@@ -7972,6 +8936,29 @@ const styles = StyleSheet.create({
   startBtnDisabled: { backgroundColor: COLORS.border },
   startBtnText: { color: "#fff", fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
 
+  // ── WEB Review & Start dashboard (already-started, desktop only) ─────────────────
+  revRunPill: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: COLORS.success + "22", borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(4) },
+  revRunDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.success },
+  revRunPillText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  revDashName: { color: COLORS.text, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800" },
+  revKpiRow: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
+  revKpi: { flexGrow: 1, flexBasis: 0, minWidth: webSc(120), backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  revKpiNum: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
+  revKpiLbl: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
+  revKpiSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs - 1), marginTop: 1 },
+  revDashRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.md) },
+  revDashLeft: { flexGrow: 60, flexBasis: 0, minWidth: 0 },
+  revDashRight: { flexGrow: 40, flexBasis: 0, minWidth: 0 },
+  revStatusRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
+  revStatusLabel: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", width: webSc(88) },
+  revStatusVal: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), flex: 1, minWidth: 0 },
+  revStatePill: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", backgroundColor: COLORS.success + "22", borderRadius: RADIUS.full, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.xs), marginBottom: webSc(SPACING.xs) },
+  revStatePillText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  revStateNote: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), lineHeight: webMs(FONT_SIZES.sm) * 1.4 },
+  revCtaRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: webSc(SPACING.md) },
+  revCtaBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.xl), paddingVertical: webSc(SPACING.sm), alignItems: "center" },
+  revCtaText: { color: "#fff", fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+
   cardGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
 
   // Dashboard control-center.
@@ -7990,9 +8977,25 @@ const styles = StyleSheet.create({
   // Distinct dashboard section wrapper (left accent bar + icon chip).
   dashSection: { backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingBottom: webSc(SPACING.sm), marginBottom: webSc(SPACING.md) },
   dashSectionWeb: { marginBottom: SPACING.lg },
+  // Web: live-dashboard-only tighter section gap (md) so Live Overview / Shuffle / Active
+  // Tables / lower rows / sidebar cards share one rhythm — WITHOUT changing the shared
+  // dashSectionWeb spacing used by Setup → Review and the Queue page.
+  dashSectionTightWeb: { marginBottom: SPACING.md },
+  // Web-only: a "bare" section (no enclosing card) — header + content only, so the
+  // Active Tables grid isn't wrapped in a giant empty panel.
+  dashSectionBareWeb: { backgroundColor: "transparent", borderWidth: 0, paddingHorizontal: 0 },
   dashSectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: webSc(SPACING.sm) },
+  // Web: fixed header-row height so a section WITH an action button (e.g. Chip Leaders'
+  // "View Standings") collapses to the same height as one without (Tournament Activity).
+  dashSectionHeadWeb: { minHeight: 44 },
+  // Web accordion header right cluster: optional action button + far-right Show/Hide toggle.
+  dashSectionHeadRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  // Show/Hide + chevron toggle, styled after the Profile accordion (blue accent, uppercase).
+  dashSectionToggle: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), paddingVertical: 2, paddingLeft: 2 },
+  dashSectionToggleLabel: { color: COLORS.primarySoft, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   dashSectionTitleWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
   dashSectionTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  dashSectionSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
   noBorder: { borderBottomWidth: 0 },
   noBorderTop: { borderTopWidth: 0 },
   // Summary cards (3 equal).
@@ -8000,7 +9003,25 @@ const styles = StyleSheet.create({
   // Desktop two-column dashboard: main content + fixed side column.
   dashCols: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.md) },
   dashMain: { flex: 1, minWidth: 0 },
-  dashSide: { width: 360 },
+  dashSide: { width: 320 },
+  // Wide-web row: Tournament Activity (~55%) beside Chip Leaders (~45%), top-aligned.
+  dashActLeadRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.md) },
+  dashActCol: { flexGrow: 55, flexBasis: 0, minWidth: 0 },
+  dashLeadCol: { flexGrow: 45, flexBasis: 0, minWidth: 0 },
+  // Players page (web): Players (~60%) beside Eliminated (~40%); each a titled table.
+  plPanelRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.md) },
+  plPlayersCol: { flexGrow: 60, flexBasis: 0, minWidth: 0 },
+  plElimCol: { flexGrow: 40, flexBasis: 0, minWidth: 0 },
+  plPanel: { marginBottom: webSc(SPACING.md) },
+  plPanelTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", marginBottom: webSc(SPACING.sm) },
+  plDetailZone: { flexDirection: "row", alignItems: "center", flex: 1, minWidth: 0, gap: webSc(SPACING.sm) },
+  // Queue page (web): Queue (~70%) beside Chip Leaders (~30%).
+  qPageQueueCol: { flexGrow: 70, flexBasis: 0, minWidth: 0 },
+  qPageLeadCol: { flexGrow: 30, flexBasis: 0, minWidth: 0 },
+  qPagePos: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Full-row click affordance (web): pointer cursor + subtle hover background.
+  plRowWeb: { ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  plRowHover: { backgroundColor: COLORS.background },
   sumCard: { flex: 1, backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center", gap: 3 },
   sumCardVal: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
   sumCardLbl: { color: COLORS.textMuted, fontSize: 10, fontWeight: "600", textAlign: "center", paddingHorizontal: 2 },
@@ -8087,9 +9108,16 @@ const styles = StyleSheet.create({
   atCard: { paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   // Compact packed grid: consistent gutters via `gap` (not space-between, which scatters
   // an odd card), cards flow left so 2–3 per row stay tight with no dead space.
-  atGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "flex-start", gap: webSc(SPACING.sm), overflow: "visible" },
+  // alignItems "stretch": every card in a row grows to the row's tallest card, so a
+  // row mixing Live/Waiting/Available cards is height-uniform (web only).
+  atGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "stretch", gap: webSc(SPACING.sm), overflow: "visible" },
   atCardWeb: {
-    width: "48%",
+    // Width is applied inline per the responsive column count (atCardWidth): 32% (3-up),
+    // 48.5% (2-up), 100% (1-up). Cards stay equal-width and don't stretch beyond it.
+    // Baseline height so a card never collapses shorter than a live/waiting card; the
+    // grid's alignItems:stretch then levels each row to its tallest card. The match area
+    // (atMatchWeb flex:1) absorbs the extra height, keeping header top / action bottom.
+    minHeight: 144,
     // Own all four borders explicitly so the base atCard's borderBottomColor
     // can't linger and leave the bottom edge a different color on hover.
     borderWidth: 1,
@@ -8114,7 +9142,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     ...(isWeb ? ({ cursor: "pointer", transitionProperty: "box-shadow,border-color", transitionDuration: "120ms" } as object) : null),
   },
-  atCardUltra: { width: "31.5%" },
   atCardHover: {
     borderColor: COLORS.primary,
     borderTopColor: COLORS.primary,
@@ -8134,6 +9161,12 @@ const styles = StyleSheet.create({
   atDot: { width: 8, height: 8, borderRadius: 4 },
   atBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", fontVariant: ["tabular-nums"] },
   atMatch: { alignItems: "center", marginTop: webSc(SPACING.sm) },
+  // Web: the match/player area grows to fill the card so header stays top, the action
+  // zone stays bottom, and players/"No team assigned" sit vertically centered.
+  atMatchWeb: { flex: 1, justifyContent: "center" },
+  // Web: reserved action area — a fixed min-height keeps Available cards (no button)
+  // the same height as Live/Waiting cards; the button (when present) sits at the bottom.
+  atActionZone: { minHeight: isWeb ? 34 : 40, justifyContent: "flex-end" },
   atMatchTeam: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", lineHeight: webMs(FONT_SIZES.sm) * 1.3 },
   atVs: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "800", letterSpacing: 0.5, marginVertical: 2 },
   atMatchWaiting: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", textAlign: "center" },
@@ -8361,17 +9394,17 @@ const styles = StyleSheet.create({
   // Pinned toolbar wrapper (sticky header in embedded mode). Solid page-colored bg +
   // hairline divider so scrolling table rows never bleed through; zIndex keeps it
   // above the list. Standalone reuses it purely as a static wrapper (same look).
-  stickyToolbar: { backgroundColor: COLORS.background, paddingBottom: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border, zIndex: 10 },
+  stickyToolbar: { backgroundColor: COLORS.background, paddingBottom: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border, zIndex: 10, ...(isWeb ? { paddingBottom: webSc(SPACING.xs) } : null) },
   // Live → Tables self-owned scroll (embedded): fills the host's fill-height slot and
   // reproduces the page padding the shared host ScrollView used to supply.
   liveTablesFlex: { flex: 1 },
-  liveTablesScrollInner: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2) },
-  liveTablesList: { paddingTop: webSc(SPACING.md) },
+  liveTablesScrollInner: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2), ...(isWeb ? { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any } : null) },
+  liveTablesList: { paddingTop: webSc(SPACING.md), ...(isWeb ? { paddingTop: webSc(SPACING.sm) } : null) },
   // Embedded chip LIVE pages own their scrolling in the host's fill-height slot.
   embeddedLiveFlex: { flex: 1 },
   // Dashboard/Queue/Players (flat content) scroll wrapper — same padding the shared
   // host page ScrollView used to supply via its content contentContainerStyle.
-  embeddedLiveScrollInner: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2) },
+  embeddedLiveScrollInner: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl * 2), ...(isWeb ? { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any } : null) },
   // Shuffle confirm modal.
   shufMSub: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(4) },
   shufMMetaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: webSc(SPACING.xs), marginTop: webSc(SPACING.sm) },
@@ -8428,6 +9461,64 @@ const styles = StyleSheet.create({
   tlStatus: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   tlMatch: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", marginTop: 2 },
   tlMenu: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+
+  // ── Reusable WEB primitives (Pass 2) ───────────────────────────────────────────
+  // Shared desktop chrome for the Chip admin redesign (tables, toolbars). Applied only
+  // behind isWeb gates so native rows/toolbars are untouched. Each screen supplies its
+  // own column widths inline; these own the shared borders, densities and button shells.
+  // Desktop data table
+  webTableWrap: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, overflow: "hidden", backgroundColor: COLORS.surface },
+  webTHeadRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.xs), backgroundColor: COLORS.background, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  webTH: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.4 },
+  webTRow: { flexDirection: "row", alignItems: "center", minHeight: webSc(36), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(4), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  webTRowLast: { borderBottomWidth: 0 },
+  webTCell: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm) },
+  webTMuted: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
+  webCellActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: webSc(SPACING.sm) },
+  // Compact toolbar + buttons
+  webToolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.xs) },
+  webToolSpacer: { flex: 1, minWidth: webSc(SPACING.sm) },
+  webToolBtn: { flexDirection: "row", alignItems: "center", gap: 6, height: webSc(34), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  webToolBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  webToolBtnPrimary: { backgroundColor: COLORS.primary + "18", borderColor: COLORS.primary },
+  webToolBtnPrimaryText: { color: COLORS.primary },
+  webToolBtnFilled: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  webToolBtnFilledText: { color: COLORS.white },
+  webToolBtnOn: { backgroundColor: COLORS.primary + "18", borderColor: COLORS.primary },
+  // Segmented control (e.g. Card / List)
+  webSeg: { flexDirection: "row", alignItems: "stretch", height: webSc(34), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, overflow: "hidden", backgroundColor: COLORS.surface },
+  webSegBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: webSc(SPACING.md) },
+  webSegBtnOn: { backgroundColor: COLORS.primary + "22" },
+  webSegText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  webSegTextOn: { color: COLORS.primary },
+  // Compact chip/icon buttons for in-row actions
+  webChipBtn: { flexDirection: "row", alignItems: "center", gap: 5, height: webSc(30), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background },
+  webChipBtnText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  webIconBtn: { width: webSc(30), height: webSc(30), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.background },
+  // Inline stream-URL editor row inside the web tables table.
+  streamEditorWebWrap: { paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(4), paddingBottom: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  // Web inactive-tables 3-up card (uses atCardWidth inline; atGrid stretches equal heights).
+  webInactiveCard: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.sm), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), minHeight: webSc(46) },
+  webInactiveName: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flexShrink: 1, minWidth: 0 },
+  // Live → Tables LIST row (web) with inline Stream column.
+  tlRowWeb: { gap: webSc(SPACING.sm) },
+  // detailZone (TABLE+STATUS+MATCHUP) vs stream weighted so Matchup (which now also holds
+  // Select Winner) is wider and Stream more compact (~2 : 1). ACTIONS fixed-width (64) right.
+  tlDetailZone: { flexDirection: "row", alignItems: "center", flex: 2, minWidth: 0, gap: webSc(SPACING.sm) },
+  tlStreamCell: { flex: 1, minWidth: 0 },
+  // Matchup cell: player text (with colored chip counts) + an inline Select Winner pill.
+  tlMatchCell: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  tlWinPill: { flexDirection: "row", alignItems: "center", gap: 4, height: webSc(26), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.success, backgroundColor: COLORS.success + "18" },
+  tlWinPillText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  tlStreamLinked: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), minWidth: 0 },
+  tlStreamView: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0 },
+  tlStreamViewText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", flexShrink: 1, minWidth: 0 },
+  tlStreamEdit: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  tlStreamInputWrap: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5, height: webSc(30), borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, backgroundColor: COLORS.background, paddingHorizontal: webSc(SPACING.sm) },
+  tlStreamInput: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: webMs(FONT_SIZES.xs), paddingVertical: 0, ...(isWeb ? ({ outlineStyle: "none" } as object) : null) },
+  // Save always uses the full Live-blue (COLORS.primary) — no dimmed/disabled visual.
+  tlStreamSave: { height: webSc(30), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
+  tlStreamSaveText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   // Clean toolbar buttons — colors only; the outer box comes from the shared
   // tbCtrl shell so these line up exactly with the Card/List + Sort row beneath.
   tbAddBtn: { backgroundColor: COLORS.primary + "18", borderColor: COLORS.primary },
@@ -8442,6 +9533,55 @@ const styles = StyleSheet.create({
 
   // Shuffle Mode banner
   shufBanner: { backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },
+  // Web-only: tighter vertical padding so the RUNNING banner reads as a slim strip.
+  // Web: compact active-shuffle panel — constrained width (a compact section, not the full
+  // main column) with tighter padding so it no longer dominates the dashboard.
+  shufBannerWeb: { paddingVertical: SPACING.sm, maxWidth: 460, alignSelf: "flex-start" },
+  // Persistent full-width Shuffle section (its own row under Live Overview): ONE compact
+  // horizontal band — icon+label · status · stats … actions (right). Wraps when narrow.
+  shufSection: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: SPACING.md, rowGap: SPACING.xs, backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginBottom: SPACING.md },
+  shufSecTitleRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },
+  shufSecStatus: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  shufSecStats: { flexGrow: 1, flexShrink: 1, minWidth: 0, flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: SPACING.lg, rowGap: 2 },
+  shufSecActionsRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: SPACING.sm, marginLeft: "auto" as any },
+  // Compact desktop action buttons: primary / ghost / destructive.
+  shufActBtn: { height: webSc(32), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  shufActBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  shufActGhost: { height: webSc(32), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  shufActGhostText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  shufActDanger: { height: webSc(32), paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.error + "66", alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  shufActDangerText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  // Web-only "Live Overview" panel: one dark panel with a header + a single row of
+  // divider-separated stacked KPIs and a Shuffle control cell on the right.
+  overviewPanel: { backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, marginBottom: SPACING.md },
+  overviewHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: SPACING.sm },
+  overviewTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", letterSpacing: 0.5 },
+  overviewSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
+  overviewRow: { flexDirection: "row", alignItems: "stretch" },
+  overviewMetric: { flex: 1, flexDirection: "column", alignItems: "center", justifyContent: "center", paddingVertical: 2, gap: 1 },
+  overviewMetricDiv: { borderLeftWidth: 1, borderLeftColor: COLORS.border },
+  overviewVal: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xl), fontWeight: "800" },
+  overviewLbl: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
+  // Shuffle control cell (right side of the overview row).
+  overviewShufCell: { flexGrow: 1.6, flexBasis: 190, minWidth: 170, justifyContent: "center", gap: SPACING.xs, paddingLeft: SPACING.md },
+  overviewShufTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: SPACING.sm },
+  overviewShufLabel: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", flexShrink: 1 },
+  overviewShufState: { color: COLORS.primary, fontWeight: "800" },
+  // Distinct subsection: a clearer vertical divider with generous spacing on both sides,
+  // separating the Shuffle area from the Live Overview metrics (web only).
+  overviewShufDivide: { borderLeftWidth: 1, borderLeftColor: COLORS.border, marginLeft: SPACING.md, paddingLeft: SPACING.lg },
+  overviewShufHeading: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.6, marginBottom: 2 },
+  // Reshuffles / Last Reshuffle lines under the Shuffle toggle.
+  overviewShufMeta: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  // Begin Shuffle: content-sized (left-aligned) instead of stretching the whole cell.
+  shufBeginBtn: { alignSelf: "flex-start", alignItems: "center", justifyContent: "center", paddingVertical: 6, paddingHorizontal: webSc(SPACING.md), borderRadius: RADIUS.sm, backgroundColor: COLORS.primary, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  shufCancelBtn: { alignItems: "center", justifyContent: "center", paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.error + "66", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  shufTileBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  shufSlimCancel: { color: COLORS.error, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  // Wide desktop: Queue (~45%) + Tournament Activity (~55%) side by side.
+  queueActRow: { flexDirection: "row", alignItems: "flex-start", gap: SPACING.md },
+  queueCol: { flexGrow: 45, flexBasis: 0, minWidth: 0 },
+  activityCol: { flexGrow: 55, flexBasis: 0, minWidth: 0 },
   shufHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   shufTitleWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
   shufTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
@@ -8451,10 +9591,10 @@ const styles = StyleSheet.create({
   shufRec: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", marginTop: webSc(SPACING.sm) },
   shufPrimary: { marginTop: webSc(SPACING.sm), minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
   shufPrimaryWeb: { alignSelf: "center", width: 260, marginTop: SPACING.xs, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
-  shufPrimarySm: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm) },
+  shufPrimarySm: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm), ...(isWeb ? { minHeight: webSc(36) } : null) },
   shufPrimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   shufBtnRow: { flexDirection: "row", alignItems: "stretch", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.sm) },
-  shufGhost: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm) },
+  shufGhost: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm), ...(isWeb ? { minHeight: webSc(36) } : null) },
   shufGhostText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   shufCancel: { marginTop: webSc(SPACING.sm), alignItems: "center", paddingVertical: webSc(SPACING.xs) },
   shufCancelText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
@@ -8463,6 +9603,17 @@ const styles = StyleSheet.create({
   recNeutralTitle: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   recNeutralSub: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
   recNeutralAction: { color: COLORS.warning, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  // Web: inline recommendation status strip in the toolbar row (after Add Table) — compact,
+  // single-line. "Recommended: N table" is amber (recStripStrong), the "N active tables"
+  // supporting text is muted gray (recInlineText), and Reduce is amber (recNeutralAction).
+  recInlineWeb: { flexDirection: "row", alignItems: "center", flexShrink: 1, minWidth: 0, gap: webSc(SPACING.sm), backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(4) },
+  recInlineText: { flexShrink: 1, minWidth: 0, color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm) },
+  recStripStrong: { color: COLORS.primary, fontWeight: "800" },
+  // "6 active tables" in Compete primary blue.
+  recActiveCount: { color: COLORS.warning, fontWeight: "700" },
+  // Reduce is now a compact filled amber button (dark high-contrast text), ≤ toolbar height.
+  recReduceBtn: { height: webSc(26), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.sm, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
+  recReduceBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   // Compact table card.
   tCard: { backgroundColor: COLORS.backgroundCard, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
   tCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.sm) },
@@ -8655,6 +9806,8 @@ const styles = StyleSheet.create({
   liveTableClosing: { borderColor: COLORS.warning },
   tblStatusTag: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   manageTables: { marginTop: webSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: webSc(SPACING.md) },
+  // Web: same divider treatment but a much smaller gap to the active grid above (~16px).
+  manageTablesWeb: { marginTop: webSc(SPACING.sm), paddingTop: 0 },
   manageHead: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.5, marginBottom: webSc(SPACING.sm) },
   inactiveRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: webSc(SPACING.sm) },
   inactiveLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
@@ -8786,6 +9939,16 @@ const styles = StyleSheet.create({
   ptcFargo: { width: 90 },
   ptcChips: { width: 70 },
   ptcPay: { width: 100 },
+  // Side Pots column: a stacked list of [checkbox] Name ($amount) lines, always visible.
+  ptcSidePots: { width: 168, alignSelf: "flex-start", gap: 3 },
+  ptPotRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  ptPotBox: { width: 15, height: 15, borderRadius: RADIUS.sm, borderWidth: 1.5, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.background },
+  ptPotBoxOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  ptPotBoxOnRO: { backgroundColor: COLORS.surfaceLight, borderColor: COLORS.borderLight },
+  ptPotMark: { color: COLORS.white, fontSize: 10, fontWeight: "900", lineHeight: 12 },
+  ptPotMarkRO: { color: COLORS.textMuted },
+  ptPotLabel: { flex: 1, minWidth: 0, color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: "600" },
+  ptPotLabelRO: { color: COLORS.textMuted },
   ptcStatus: { width: 120 },
   ptcActions: { width: 84, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: SPACING.xs },
 

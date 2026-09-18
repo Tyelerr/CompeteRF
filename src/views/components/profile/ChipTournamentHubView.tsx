@@ -14,7 +14,6 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { useRouter } from "expo-router";
 import { chipStatusColor } from "../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../utils/formatters";
-import { estimateChipWaitMs, formatWaitLabel } from "../../../utils/chip-wait";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipHubTable,
@@ -211,17 +210,11 @@ export const ChipTournamentHubView = ({
   const st = STATUS_META[hub.status];
   const entrantWord = hub.isTeam ? "teams" : "players";
   const router = useRouter();
-  // Item 1C: estimated wait for a WAITING player — shared heuristic (presentation only).
-  const waitLabel =
-    hub.status === "waiting"
-      ? formatWaitLabel(
-          estimateChipWaitMs({
-            queuePosition: hub.queuePosition,
-            activeTables: hub.tables.filter((t) => t.live).length,
-            avgMatchMs: hub.avgMatchMs,
-          }),
-        )
-      : null;
+  // Estimated Wait for a queued player — ONE shared value computed in the hub/viewmodel
+  // (hub.estimatedWaitLabel), identical on web / iOS / Android. No per-platform formula or
+  // input set here; the component just renders it. Clamped ≥ 0 upstream so it is never
+  // negative, and null when the player isn't queued or there isn't enough data.
+  const waitLabel = hub.estimatedWaitLabel;
 
   return (
     <View style={styles.root}>
@@ -271,7 +264,10 @@ export const ChipTournamentHubView = ({
                 <Text allowFontScaling={false} style={styles.metaBig}>#{hub.queuePosition}</Text>
                 <Text allowFontScaling={false} style={styles.metaSub}>In Queue</Text>
                 {waitLabel ? (
-                  <Text allowFontScaling={false} style={styles.metaWait}>{waitLabel} wait</Text>
+                  <>
+                    <Text allowFontScaling={false} style={styles.metaWait}>{waitLabel} wait</Text>
+                    <Text allowFontScaling={false} style={styles.metaWaitCaption}>Estimated Time</Text>
+                  </>
                 ) : null}
               </>
             ) : (
@@ -670,6 +666,9 @@ const styles = StyleSheet.create({
   metaBig: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.xl), fontWeight: "900" },
   metaSub: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 1 },
   metaWait: { color: COLORS.primaryLight, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", marginTop: 2 },
+  // Tiny muted caption pinned right under the blue wait value — smaller font, ~1px gap, no
+  // new row/container/padding so the card doesn't grow noticeably.
+  metaWaitCaption: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs - 2), fontWeight: "600", marginTop: 1 },
   // Inside the status card, attached at the bottom: a small top gap after the chips/queue
   // info, comfortable tap padding, and a little bottom padding on top of the card's own so it
   // isn't cramped. Not a filled button — centered blue text + eye.

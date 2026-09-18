@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, type Ref } from "react";
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View, type TextInputProps } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
@@ -27,9 +27,17 @@ interface InputProps {
   autoComplete?: TextInputProps["autoComplete"];
   passwordRules?: string;
   autoFillActive?: boolean;
+  // Optional browser/keyboard form semantics (additive — omitted callers are unchanged):
+  // real submit handling (Enter), return-key type, keep focus on submit, a stable id for
+  // password managers, and a ref so a field can move focus to the next one.
+  onSubmitEditing?: TextInputProps["onSubmitEditing"];
+  returnKeyType?: TextInputProps["returnKeyType"];
+  blurOnSubmit?: boolean;
+  nativeID?: string;
+  inputRef?: Ref<TextInput>;
 }
 
-export const Input = ({ label, value, onChangeText, placeholder, secureTextEntry = false, showPasswordToggle = false, keyboardType = "default", autoCapitalize = "sentences", error, helper, disabled = false, multiline = false, numberOfLines = 1, textContentType, autoComplete, passwordRules, autoFillActive = false }: InputProps) => {
+export const Input = ({ label, value, onChangeText, placeholder, secureTextEntry = false, showPasswordToggle = false, keyboardType = "default", autoCapitalize = "sentences", error, helper, disabled = false, multiline = false, numberOfLines = 1, textContentType, autoComplete, passwordRules, autoFillActive = false, onSubmitEditing, returnKeyType, blurOnSubmit, nativeID, inputRef }: InputProps) => {
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const isSecure = secureTextEntry && !passwordVisible;
@@ -65,6 +73,11 @@ export const Input = ({ label, value, onChangeText, placeholder, secureTextEntry
           textContentType={textContentType}
           autoComplete={autoComplete}
           passwordRules={passwordRules}
+          ref={inputRef}
+          nativeID={nativeID}
+          onSubmitEditing={onSubmitEditing}
+          returnKeyType={returnKeyType}
+          blurOnSubmit={blurOnSubmit}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />

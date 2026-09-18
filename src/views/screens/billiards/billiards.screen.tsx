@@ -39,7 +39,7 @@ import ReportModal from "../../components/common/ReportModal";
 import { WebContainer } from "../../components/common/WebContainer";
 import { TournamentDetailModal } from "../../components/tournament/TournamentDetailModal";
 import { SearchAlertsModal } from "../../components/profile/SearchAlertsModal";
-import { styles } from "./billiards.styles";
+import { styles, GRID_MAX_WIDTH, FILTER_MAX_WIDTH } from "./billiards.styles";
 import { VenuesView } from "./venues.view";
 import { WebTournamentDetailOverlay } from "./WebTournamentDetailOverlay";
 import { useAuth } from "../../../viewmodels/hooks/use.auth";
@@ -247,8 +247,10 @@ export const BilliardsScreen = () => {
           </TouchableOpacity>
         )}
       </View>
-      <View style={webS.dropWrap}><Dropdown placeholder="State" compact={isWeb} options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
-      <View style={webS.dropWrap}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
+      {/* Standard (non-compact) size for a larger, easier-to-read State/City on desktop —
+          per-usage only; the shared compact style (profile/venues) is untouched. */}
+      <View style={webS.dropWrap}><Dropdown placeholder="State" compact={false} options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
+      <View style={webS.dropWrap}><Dropdown placeholder="City" compact={false} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
       <TextInput allowFontScaling={false} style={webS.zipInput} placeholder="Zip" placeholderTextColor={COLORS.textMuted} value={vm.zipCode} onChangeText={vm.setZipCode} keyboardType="numeric" maxLength={5} />
       <TouchableOpacity style={webS.filterBtn} onPress={() => vm.setFilterModalVisible(true)}>
         <Text allowFontScaling={false} style={webS.filterBtnText}>{"\u2630 Filters"}</Text>
@@ -351,31 +353,40 @@ export const BilliardsScreen = () => {
               <Text allowFontScaling={false} style={styles.headerSubtitle}>Find tournaments and venues near you</Text>
             </View>
 
-            {/* Top-level view switch. Custom pill toggle so it matches the app. */}
-            <View style={styles.segmentRow}>
-              {([
-                ["tournaments", "Tournaments"],
-                ["venues", "Venues"],
-              ] as [DiscoveryView, string][]).map(([key, label]) => {
-                const active = discoveryView === key;
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={[styles.segment, active && styles.segmentActive]}
-                    onPress={() => setDiscoveryView(key)}
-                    activeOpacity={0.85}
-                  >
-                    <Text allowFontScaling={false} style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* Top-level view switch. Custom pill toggle so it matches the app.
+               WEB: cap+center the bar to the same GRID_MAX_WIDTH box as the card grid /
+               pagination so its edges align with them (segmentRow's own marginHorizontal:md
+               then insets it within that box). Native renders the bar directly (full-width
+               minus md), unchanged. */}
+            {(() => {
+              const segmentBar = (
+                <View style={styles.segmentRow}>
+                  {([
+                    ["tournaments", "Tournaments"],
+                    ["venues", "Venues"],
+                  ] as [DiscoveryView, string][]).map(([key, label]) => {
+                    const active = discoveryView === key;
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[styles.segment, active && styles.segmentActive]}
+                        onPress={() => setDiscoveryView(key)}
+                        activeOpacity={0.85}
+                      >
+                        <Text allowFontScaling={false} style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+              return isWeb ? <View style={webS.pageBarWeb}>{segmentBar}</View> : segmentBar;
+            })()}
 
             {discoveryView === "tournaments" && (isWeb ? (
               <>
                 {renderWebFilters()}
                 {renderRadiusSlider()}
-                {renderPagination()}
+                <View style={webS.pageBarWeb}>{renderPagination()}</View>
               </>
             ) : (
               // Animated.View controls the visible height for the collapse animation.
@@ -483,7 +494,7 @@ export const BilliardsScreen = () => {
             }}
             ListFooterComponent={
               <>
-                {pagination.totalCount > 0 && renderPagination()}
+                {pagination.totalCount > 0 && (isWeb ? <View style={webS.pageBarWeb}>{renderPagination()}</View> : renderPagination())}
                 {vm.filteredTournaments.length < 15 && renderRecommendCard()}
               </>
             }
@@ -506,18 +517,27 @@ export const BilliardsScreen = () => {
 };
 
 const webS = StyleSheet.create({
-  filterBar: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: 6, marginBottom: SPACING.sm },
-  searchWrap: { width: 220, flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, paddingLeft: SPACING.sm, paddingRight: 0, height: 32 },
-  searchIcon: { fontSize: FONT_SIZES.xs, marginRight: SPACING.xs },
-  searchInput: { flex: 1, fontSize: FONT_SIZES.xs, color: COLORS.text, height: 32 },
-  clearBtn: { height: 32, paddingLeft: SPACING.xs, paddingRight: SPACING.md, justifyContent: "center", alignItems: "center" },
-  clearBtnText: { fontSize: FONT_SIZES.md, color: COLORS.textMuted, fontWeight: "600", lineHeight: FONT_SIZES.md + 4 },
-  dropWrap: { width: 150, height: 32 },
-  zipInput: { width: 100, height: 32, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: SPACING.sm, fontSize: FONT_SIZES.xs, color: COLORS.text },
-  filterBtn: { height: 32, paddingHorizontal: SPACING.md, backgroundColor: COLORS.surface, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center" },
-  filterBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.text },
-  resetBtn: { height: 32, paddingHorizontal: SPACING.md, backgroundColor: COLORS.primary, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
-  resetBtnText: { fontSize: FONT_SIZES.xs, color: COLORS.white, fontWeight: "600" },
+  // Larger, easier-to-hit desktop controls (height 32 → 44, font xs → md/sm) WITHOUT widening
+  // the page: the row is capped at maxWidth 1080 (well under the 1400 tournament grid, which
+  // still defines the page footprint) and centered. Search uses flex:1 so it gets the most
+  // width and the row shrinks gracefully at narrower desktop widths (stays one line). Gaps
+  // trimmed so the bigger controls still fit the same footprint.
+  // Pagination row: full-width parent (keeps side-margin scrolling) but capped + centered to
+  // the SAME width as the card grid (GRID_MAX_WIDTH) so "Showing…" aligns to the first card's
+  // left edge and the page controls to the last card's right edge — not the viewport edges.
+  pageBarWeb: { width: "100%", maxWidth: GRID_MAX_WIDTH, alignSelf: "center" },
+  filterBar: { flexDirection: "row", alignItems: "center", alignSelf: "center", width: "100%", maxWidth: FILTER_MAX_WIDTH, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, gap: 8, marginBottom: SPACING.sm },
+  searchWrap: { flex: 1, minWidth: 240, flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingLeft: SPACING.md, paddingRight: 0, height: 44 },
+  searchIcon: { fontSize: FONT_SIZES.sm, marginRight: SPACING.xs },
+  searchInput: { flex: 1, fontSize: FONT_SIZES.md, color: COLORS.text, height: 44 },
+  clearBtn: { height: 44, paddingLeft: SPACING.xs, paddingRight: SPACING.md, justifyContent: "center", alignItems: "center" },
+  clearBtnText: { fontSize: FONT_SIZES.lg, color: COLORS.textMuted, fontWeight: "600", lineHeight: FONT_SIZES.lg + 4 },
+  dropWrap: { width: 170 }, // non-compact Dropdown sets its own 44 height
+  zipInput: { width: 96, height: 44, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: SPACING.md, fontSize: FONT_SIZES.md, color: COLORS.text },
+  filterBtn: { height: 44, paddingHorizontal: SPACING.lg, backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center" },
+  filterBtnText: { fontSize: FONT_SIZES.sm, color: COLORS.text },
+  resetBtn: { height: 44, paddingHorizontal: SPACING.lg, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
+  resetBtnText: { fontSize: FONT_SIZES.sm, color: COLORS.white, fontWeight: "600" },
 });
 
 export default BilliardsScreen;

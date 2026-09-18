@@ -1,6 +1,6 @@
 ﻿import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useRef, useState } from "react";
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { supabase } from "../../../lib/supabase";
 import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
@@ -20,6 +20,8 @@ export const LoginScreen = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Web only: lets Enter in the username field jump to the password field.
+  const passwordRef = useRef<TextInput>(null);
 
   const handleLogin = async () => {
     setError("");
@@ -54,8 +56,11 @@ export const LoginScreen = () => {
         <View style={styles.webCenter}>
           <Text allowFontScaling={false} style={styles.title}>LOG IN</Text>
           <View style={styles.cardWeb}>
-            <Input label="Email or Username" value={identifier} onChangeText={setIdentifier} placeholder="email or @username" keyboardType="default" autoCapitalize="none" />
-            <Input label="Password" value={password} onChangeText={setPassword} placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"} secureTextEntry showPasswordToggle />
+            {/* Web form semantics for Chrome / password managers: username + current-password
+                autocomplete tokens, stable ids, and Enter-to-submit (Enter on username \u2192
+                focus password; Enter on password \u2192 submit). Auth logic is unchanged. */}
+            <Input label="Email or Username" value={identifier} onChangeText={setIdentifier} placeholder="email or @username" keyboardType="default" autoCapitalize="none" autoComplete="username" textContentType="username" nativeID="login-username" returnKeyType="next" blurOnSubmit={false} onSubmitEditing={() => passwordRef.current?.focus()} />
+            <Input label="Password" value={password} onChangeText={setPassword} placeholder={"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"} secureTextEntry showPasswordToggle autoComplete="current-password" textContentType="password" nativeID="login-password" returnKeyType="go" inputRef={passwordRef} onSubmitEditing={handleLogin} />
             <TouchableOpacity onPress={() => router.push("/auth/forgot-password" as any)} style={styles.forgotPassword}>
               <Text allowFontScaling={false} style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>

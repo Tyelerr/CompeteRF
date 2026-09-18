@@ -69,6 +69,11 @@ export interface ChipEntry {
   isTeam?: boolean; // projected from a tournament_teams row (P1 captain / P2 partner)
   regId?: number | null; // tournament_players.id this entry mirrors (singles only)
   regStatus?: string | null; // source status (tournament_players.status OR team status)
+  // Transient (NOT persisted): set at load when the linked player's tournament_players
+  // registration is cancelled/no_show (and not also active). Combined with participation
+  // evidence by the engine (isChipRegistrationDropout) to keep never-played dropouts out of
+  // live derivations without deleting the row.
+  regInactive?: boolean;
   fargoStatus?: string | null; // linked profile's fargo_status (unverified/verified)
   // Team origin (isTeam only): ids + per-member TD-Fargo-confirmed flags so the
   // chip Players UI can offer per-member "Confirm Fargo" + team "Unlock".

@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService, ChipResultRow } from "../../models/services/chip.service";
-import { dashboard, enteredField, teamName as fullName, chipDisplayName } from "../../models/services/chip.engine";
+import { dashboard, isChipFieldMember, teamName as fullName, chipDisplayName } from "../../models/services/chip.engine";
 import {
   ChipEntry,
   ChipFormat,
@@ -408,7 +408,7 @@ const buildSpectatorView = (
       : "upcoming";
   // Field participants only (checkedIn) — a roster entry that never entered the field is
   // excluded from every standings/leaderboard/players surface, consistent with the engine.
-  const alive = s.entries.filter((e) => isAlive(e) && enteredField(e));
+  const alive = s.entries.filter((e) => isAlive(e) && isChipFieldMember(s, e));
   const byChips = [...alive].sort(compareLiveChipRank);
 
   const entryById = (id: string | null | undefined) =>
@@ -586,7 +586,7 @@ const buildSpectatorView = (
   // Standings = alive ranked by chips, then eliminated below (most-recently-out first,
   // i.e. higher placement). Eliminated rows render "Eliminated" instead of a chip count.
   const eliminatedRanked = s.entries
-    .filter((e) => !isAlive(e) && enteredField(e))
+    .filter((e) => !isAlive(e) && isChipFieldMember(s, e))
     .sort((a, b) => new Date(b.eliminatedAt ?? 0).getTime() - new Date(a.eliminatedAt ?? 0).getTime());
   // Completed → durable chip_results order; live/legacy → recompute (alive by chips, then
   // eliminated by most-recent-out). Enrichment only; the durable order is never re-sorted.
@@ -616,7 +616,7 @@ const buildSpectatorView = (
   // eliminated teams always pinned to the bottom regardless of chips. Status is
   // shown as a badge but never drives the order.
   const players: SpecPlayerRow[] = [...s.entries]
-    .filter(enteredField)
+    .filter((e) => isChipFieldMember(s, e))
     // Sort on the ENTRY (stable): eliminated last, then chips desc, then FULL-name tie-break —
     // unchanged by the display rule so ordering never shifts. Display name is applied on map.
     .sort((a, b) => {
@@ -640,7 +640,7 @@ const buildSpectatorView = (
   // Payouts — reuse the same money math as the TD Prize Pool setup. Basis = actual FIELD
   // entrants (enteredField), the same set the setup/Review pool uses — NOT a raw paid
   // count, which would inflate the pool with paid-but-not-Ready entries that never entered.
-  const paidPlayers = s.entries.filter(enteredField).length;
+  const paidPlayers = s.entries.filter((e) => isChipFieldMember(s, e)).length;
   const entryFee = tournament.entry_fee ?? 0;
   const addedMoney = tournament.added_money ?? 0;
   const ls = tournament.live_settings;
@@ -768,7 +768,7 @@ const buildSpectatorView = (
   // Completed-recap stats (items 13/14) — derived from actual results; null while live.
   let stats: SpecStats | null = null;
   if (finished) {
-    const fieldProfiles = s.entries.filter(enteredField).map((e) => buildProfile(s, e, finished));
+    const fieldProfiles = s.entries.filter((e) => isChipFieldMember(s, e)).map((e) => buildProfile(s, e, finished));
     const lead = (
       arr: typeof fieldProfiles,
       cmp: (a: (typeof fieldProfiles)[number], b: (typeof fieldProfiles)[number]) => number,

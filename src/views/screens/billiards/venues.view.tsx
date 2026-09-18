@@ -27,7 +27,7 @@ import { Loading } from "../../components/common/loading";
 import { Pagination } from "../../components/common/pagination";
 import { PublicVenueCard } from "../../components/venues/PublicVenueCard";
 import { VenueDetailModal } from "../../components/venues/VenueDetailModal";
-import { styles } from "./billiards.styles";
+import { styles, webFilters } from "./billiards.styles";
 
 const isWeb = Platform.OS === "web";
 // Mobile: single-column horizontal list cards. Web: responsive multi-column grid.
@@ -76,7 +76,70 @@ export const VenuesView = () => {
     );
   };
 
-  const filters = (
+  // Radius chips + Reset button are shared between platforms; only their row wrapper differs
+  // (web caps/centers to the filter footprint via webFilters.extrasRow).
+  const radiusChips = vm.zipCode.length === 5 ? RADII.map((r) => {
+    const active = vm.searchRadius === r.value;
+    return (
+      <TouchableOpacity
+        key={r.value}
+        style={[styles.venueRadiusChip, active && styles.venueRadiusChipOn]}
+        onPress={() => vm.setSearchRadius(r.value)}
+      >
+        <Text allowFontScaling={false} style={[styles.venueRadiusText, active && styles.venueRadiusTextOn]}>{r.label}</Text>
+      </TouchableOpacity>
+    );
+  }) : null;
+
+  const resetBtn = vm.hasActiveFilters ? (
+    <TouchableOpacity style={[styles.resetButton, { flex: 1 }]} onPress={vm.resetFilters}>
+      <Text allowFontScaling={false} style={styles.resetButtonText}>{"🗑️"} Reset Filters</Text>
+    </TouchableOpacity>
+  ) : null;
+
+  // WEB: single centered, capped filter bar (search flex:1 · State/City · compact Zip) matching
+  // the tournament tab's design language — larger controls, one row, never edge-to-edge.
+  // NATIVE: the original stacked mobile filters, unchanged.
+  const filters = isWeb ? (
+    <View>
+      <View style={webFilters.filterBar}>
+        <View style={webFilters.searchWrap}>
+          <Text allowFontScaling={false} style={webFilters.searchIcon}>{"🔍"}</Text>
+          <TextInput
+            allowFontScaling={false}
+            style={webFilters.searchInput}
+            placeholder="Search venues by name or city..."
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.searchQuery}
+            onChangeText={vm.setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={Keyboard.dismiss}
+          />
+          {vm.searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => vm.setSearchQuery("")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={webFilters.clearBtn}>
+              <Text allowFontScaling={false} style={webFilters.clearBtnText}>{"✕"}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={webFilters.dropWrap}><Dropdown placeholder="All States" compact={false} options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
+        <View style={webFilters.dropWrap}><Dropdown placeholder="City" compact={false} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
+        <TextInput
+          allowFontScaling={false}
+          style={webFilters.zipInput}
+          placeholder="Zip"
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.zipCode}
+          onChangeText={vm.setZipCode}
+          keyboardType="numeric"
+          maxLength={5}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
+        />
+      </View>
+      {radiusChips && <View style={webFilters.extrasRow}>{radiusChips}</View>}
+      {resetBtn && <View style={webFilters.extrasRow}>{resetBtn}</View>}
+    </View>
+  ) : (
     <View>
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
@@ -100,7 +163,7 @@ export const VenuesView = () => {
       </View>
       <View style={styles.filterRow}>
         <View style={styles.filterItemState}><Dropdown placeholder="All States" options={stateOptions} value={vm.selectedState} onSelect={vm.setSelectedState} /></View>
-        <View style={styles.filterItemCity}><Dropdown placeholder="City" compact={isWeb} options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
+        <View style={styles.filterItemCity}><Dropdown placeholder="City" options={cityOptions} value={vm.selectedCity} onSelect={vm.setSelectedCity} /></View>
         <View style={styles.filterItemZip}>
           <TextInput
             allowFontScaling={false}
@@ -116,29 +179,8 @@ export const VenuesView = () => {
           />
         </View>
       </View>
-      {vm.zipCode.length === 5 && (
-        <View style={styles.venueRadiusRow}>
-          {RADII.map((r) => {
-            const active = vm.searchRadius === r.value;
-            return (
-              <TouchableOpacity
-                key={r.value}
-                style={[styles.venueRadiusChip, active && styles.venueRadiusChipOn]}
-                onPress={() => vm.setSearchRadius(r.value)}
-              >
-                <Text allowFontScaling={false} style={[styles.venueRadiusText, active && styles.venueRadiusTextOn]}>{r.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-      {vm.hasActiveFilters && (
-        <View style={styles.filterButtonsRow}>
-          <TouchableOpacity style={[styles.resetButton, { flex: 1 }]} onPress={vm.resetFilters}>
-            <Text allowFontScaling={false} style={styles.resetButtonText}>{"🗑️"} Reset Filters</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {radiusChips && <View style={styles.venueRadiusRow}>{radiusChips}</View>}
+      {resetBtn && <View style={styles.filterButtonsRow}>{resetBtn}</View>}
     </View>
   );
 

@@ -33,10 +33,19 @@ export const WebAlertHost = () => {
 
   if (Platform.OS !== "web" || !payload) return null;
 
-  const buttons: WebAlertButton[] =
+  const rawButtons: WebAlertButton[] =
     payload.buttons && payload.buttons.length > 0
       ? payload.buttons
       : [{ text: "OK" }];
+
+  // Web action order: primary/destructive actions first, the Cancel action always
+  // last (bottom). Visual-only reordering — each button keeps its own text, style
+  // and onPress. Relative order of the non-cancel buttons is preserved. Native is
+  // unaffected: it uses the OS Alert, not this host (renders on web only).
+  const buttons: WebAlertButton[] = [
+    ...rawButtons.filter((b) => b.style !== "cancel"),
+    ...rawButtons.filter((b) => b.style === "cancel"),
+  ];
 
   const press = (b: WebAlertButton) => {
     setPayload(null);

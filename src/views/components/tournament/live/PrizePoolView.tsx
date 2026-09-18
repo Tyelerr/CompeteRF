@@ -10,10 +10,12 @@
 
 import { useEffect, useState } from "react";
 import {
+  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { COLORS } from "../../../../theme/colors";
@@ -511,6 +513,11 @@ export const PrizePoolView = ({
   fees,
   feesAddedOnTop,
 }: PrizePoolViewProps) => {
+  // WEB desktop: Entry Payouts + Side Pot(s) sit side by side (≥1180px), Summary full width
+  // below. Native/narrow: unchanged single-column stack. Presentation only.
+  const { width: winW } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
+  const twoCol = isWeb && winW >= 1180;
   const grossEntry = Math.max(0, players) * Math.max(0, entryFee);
   // Fee aggregates come from the ONE shared source (utils/prize-pool), the same functions
   // the net-pool math and the Settings validation use — never a second inline sum.
@@ -577,34 +584,41 @@ export const PrizePoolView = ({
           card was removed — the bottom "Summary" is the single consolidated reconciliation
           (collected → fees → net pool → assigned → unassigned); the added-money include
           toggle moved there. */}
-      <PayoutCard
-        title="Entry Payouts"
-        pool={entryPool}
-        poolNote={
-          fees.length > 0 || includedAdded > 0
-            ? `${money(grossEntry)} entry${
-                !feesAddedOnTop && totalFees > 0 ? ` − ${money(totalFees)} fees` : ""
-              }${includedAdded > 0 ? ` + ${money(includedAdded)} added` : ""}`
-            : undefined
-        }
-        places={config.entryPlaces}
-        locked={locked}
-        onPlaces={setEntryPlaces}
-      />
+      {/* WEB (≥1180): LEFT column = Entry Payouts + Side Pot(s) stacked as separate cards;
+          RIGHT column = the Summary card. Native/narrow: everything stacks (the wrappers are
+          plain full-width Views with no style, so the vertical order is unchanged). */}
+      <View style={twoCol ? styles.ppMainRow : undefined}>
+        {/* LEFT — Entry Payouts + Side Pot(s) */}
+        <View style={twoCol ? styles.ppLeftCol : undefined}>
+          <PayoutCard
+            title="Entry Payouts"
+            pool={entryPool}
+            poolNote={
+              fees.length > 0 || includedAdded > 0
+                ? `${money(grossEntry)} entry${
+                    !feesAddedOnTop && totalFees > 0 ? ` − ${money(totalFees)} fees` : ""
+                  }${includedAdded > 0 ? ` + ${money(includedAdded)} added` : ""}`
+                : undefined
+            }
+            places={config.entryPlaces}
+            locked={locked}
+            onPlaces={setEntryPlaces}
+          />
+          {sidePotRows.map((r) => (
+            <PayoutCard
+              key={r.sp.name}
+              title={`Side Pot · ${r.sp.name || "Unnamed"}`}
+              pool={r.pool}
+              poolNote={`${r.sp.players} × ${money(r.sp.amount)} buy-in`}
+              places={r.places}
+              locked={locked}
+              onPlaces={(next) => setSidePotPlaces(r.sp.name, next)}
+            />
+          ))}
+        </View>
 
-      {/* Side pots */}
-      {sidePotRows.map((r) => (
-        <PayoutCard
-          key={r.sp.name}
-          title={`Side Pot · ${r.sp.name || "Unnamed"}`}
-          pool={r.pool}
-          poolNote={`${r.sp.players} × ${money(r.sp.amount)} buy-in`}
-          places={r.places}
-          locked={locked}
-          onPlaces={(next) => setSidePotPlaces(r.sp.name, next)}
-        />
-      ))}
-
+        {/* RIGHT — Summary (separate card) */}
+        <View style={twoCol ? styles.ppSummaryCol : undefined}>
       {/* Item 5B / fee audit — the Summary presents the SAME numbers the Settings fee
           breakdown and the payout math use (entryPoolTotal + feesPerPlayer from
           utils/prize-pool), never a second calculator. It carries over the per-fee
@@ -616,72 +630,144 @@ export const PrizePoolView = ({
           netEntryContribution + side pots + included added money === Net prize pool
           (== totalPrizePool from the shared util) in BOTH modes. */}
       <Card title="Summary">
-        {/* Entry */}
-        <Row
-          label="Entry"
-          value={entryFee > 0 ? `${money(entryFee)} × ${players} entered = ${money(grossEntry)}` : money(grossEntry)}
-        />
-
-        {/* Fees — itemized, respecting the fee mode. Only enabled fees reach here (filtered
-            by the host from live_settings.fees), so a $0 fee still lists as "$0" for parity
-            with Settings without affecting any total. */}
-        {fees.length > 0 && (
+        {isWeb ? (
+          // WEB: compact dashboard — KPI row + two-column detail. Same values/text as the
+          // native receipt below (money(), same derived totals); presentation only.
           <>
-            <View style={styles.summaryGroupDivider} />
-            <Text allowFontScaling={false} style={styles.summarySectionLabel}>
-              {feesAddedOnTop ? "Added-on Fees" : "Fees"}
-            </Text>
-            {fees.map((f) => (
+            <View style={styles.ppKpiRow}>
+              <View style={styles.ppKpi}>
+                <Text allowFontScaling={false} style={styles.ppKpiLabel}>NET ENTRY</Text>
+                <Text allowFontScaling={false} style={styles.ppKpiValue}>{money(netEntryContribution)}</Text>
+              </View>
+              <View style={styles.ppKpi}>
+                <Text allowFontScaling={false} style={styles.ppKpiLabel}>ADDED MONEY</Text>
+                <Text allowFontScaling={false} style={styles.ppKpiValue}>{money(includedAdded)}</Text>
+              </View>
+              <View style={styles.ppKpi}>
+                <Text allowFontScaling={false} style={styles.ppKpiLabel}>NET PRIZE POOL</Text>
+                <Text allowFontScaling={false} style={styles.ppKpiValue}>{money(totalPrizePool)}</Text>
+              </View>
+              <View style={styles.ppKpi}>
+                <Text allowFontScaling={false} style={styles.ppKpiLabel}>ASSIGNED</Text>
+                <Text allowFontScaling={false} style={[styles.ppKpiValue, totalRemaining < -0.004 && { color: COLORS.error }]}>{money(totalPayout)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.ppDetailRow}>
+              {/* LEFT — entry & fee breakdown */}
+              <View style={styles.ppDetailCol}>
+                <Text allowFontScaling={false} style={styles.summarySectionLabel}>ENTRY & FEES</Text>
+                <Row label="Entry" value={entryFee > 0 ? `${money(entryFee)} × ${players} entered = ${money(grossEntry)}` : money(grossEntry)} />
+                {fees.length > 0 && (
+                  <>
+                    <Text allowFontScaling={false} style={styles.summarySectionLabel}>{feesAddedOnTop ? "Added-on Fees" : "Fees"}</Text>
+                    {fees.map((f) => (
+                      <Row key={f.name} indent label={f.name} value={f.perPlayer > 0 ? `${money(f.perPlayer)} × ${players} = ${money(f.perPlayer * players)}` : money(0)} />
+                    ))}
+                    <Row label={feesAddedOnTop ? "Entry Prize Contribution" : "Net Entry"} value={money(netEntryContribution)} strong />
+                  </>
+                )}
+              </View>
+
+              {/* RIGHT — pool detail + status */}
+              <View style={styles.ppDetailCol}>
+                <Text allowFontScaling={false} style={styles.summarySectionLabel}>POOL</Text>
+                {sidePotRows.map((r) => (
+                  <Row key={r.sp.name} label={`Side pot · ${r.sp.name || "Unnamed"}`} value={r.sp.amount > 0 ? `${money(r.sp.amount)} × ${r.sp.players} entered = ${money(r.pool)}` : money(r.pool)} />
+                ))}
+                {addedMoney > 0 ? (
+                  <ToggleSwitch
+                    label={`Added money (${money(addedMoney)})`}
+                    value={config.includeAddedMoney}
+                    onValueChange={(v) => !locked && onChange({ ...config, includeAddedMoney: v })}
+                    disabled={locked}
+                  />
+                ) : (
+                  <Row label="Added money" value={money(0)} />
+                )}
+                <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
+                {/* Pool status mirrors the Entry Payouts over-pool warning using the same
+                    derived totalRemaining (no new logic / no button handler here). */}
+                {totalRemaining < -0.004 && (
+                  <View style={styles.ppPoolStatus}>
+                    <Text allowFontScaling={false} style={styles.ppPoolStatusText}>⚠ {money(-totalRemaining)} over the pool — trim a payout</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Entry */}
+            <Row
+              label="Entry"
+              value={entryFee > 0 ? `${money(entryFee)} × ${players} entered = ${money(grossEntry)}` : money(grossEntry)}
+            />
+
+            {/* Fees — itemized, respecting the fee mode. Only enabled fees reach here (filtered
+                by the host from live_settings.fees), so a $0 fee still lists as "$0" for parity
+                with Settings without affecting any total. */}
+            {fees.length > 0 && (
+              <>
+                <View style={styles.summaryGroupDivider} />
+                <Text allowFontScaling={false} style={styles.summarySectionLabel}>
+                  {feesAddedOnTop ? "Added-on Fees" : "Fees"}
+                </Text>
+                {fees.map((f) => (
+                  <Row
+                    key={f.name}
+                    indent
+                    label={f.name}
+                    value={
+                      f.perPlayer > 0
+                        ? `${money(f.perPlayer)} × ${players} = ${money(f.perPlayer * players)}`
+                        : money(0)
+                    }
+                  />
+                ))}
+                <View style={styles.summaryGroupDivider} />
+                <Row
+                  label={feesAddedOnTop ? "Entry Prize Contribution" : "Net Entry"}
+                  value={money(netEntryContribution)}
+                  strong
+                />
+              </>
+            )}
+
+            {/* Side pots */}
+            {sidePotRows.map((r) => (
               <Row
-                key={f.name}
-                indent
-                label={f.name}
-                value={
-                  f.perPlayer > 0
-                    ? `${money(f.perPlayer)} × ${players} = ${money(f.perPlayer * players)}`
-                    : money(0)
-                }
+                key={r.sp.name}
+                label={`Side pot · ${r.sp.name || "Unnamed"}`}
+                value={r.sp.amount > 0 ? `${money(r.sp.amount)} × ${r.sp.players} entered = ${money(r.pool)}` : money(r.pool)}
               />
             ))}
+
+            {/* Added money (include toggle lives here) */}
+            {addedMoney > 0 ? (
+              <ToggleSwitch
+                label={`Added money (${money(addedMoney)})`}
+                value={config.includeAddedMoney}
+                onValueChange={(v) => !locked && onChange({ ...config, includeAddedMoney: v })}
+                disabled={locked}
+              />
+            ) : (
+              <Row label="Added money" value={money(0)} />
+            )}
+
             <View style={styles.summaryGroupDivider} />
-            <Row
-              label={feesAddedOnTop ? "Entry Prize Contribution" : "Net Entry"}
-              value={money(netEntryContribution)}
-              strong
-            />
+            {/* Net prize pool — authoritative pool from entryPoolTotal + side pots (net of any
+                included fees). Payouts are split over exactly this. */}
+            <Row label="Net prize pool" value={money(totalPrizePool)} strong />
+            <View style={styles.summaryGroupDivider} />
+            {/* Assigned */}
+            <Row label="Total payouts assigned" value={money(totalPayout)} strong />
+            <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
           </>
         )}
-
-        {/* Side pots */}
-        {sidePotRows.map((r) => (
-          <Row
-            key={r.sp.name}
-            label={`Side pot · ${r.sp.name || "Unnamed"}`}
-            value={r.sp.amount > 0 ? `${money(r.sp.amount)} × ${r.sp.players} entered = ${money(r.pool)}` : money(r.pool)}
-          />
-        ))}
-
-        {/* Added money (include toggle lives here) */}
-        {addedMoney > 0 ? (
-          <ToggleSwitch
-            label={`Added money (${money(addedMoney)})`}
-            value={config.includeAddedMoney}
-            onValueChange={(v) => !locked && onChange({ ...config, includeAddedMoney: v })}
-            disabled={locked}
-          />
-        ) : (
-          <Row label="Added money" value={money(0)} />
-        )}
-
-        <View style={styles.summaryGroupDivider} />
-        {/* Net prize pool — authoritative pool from entryPoolTotal + side pots (net of any
-            included fees). Payouts are split over exactly this. */}
-        <Row label="Net prize pool" value={money(totalPrizePool)} strong />
-        <View style={styles.summaryGroupDivider} />
-        {/* Assigned */}
-        <Row label="Total payouts assigned" value={money(totalPayout)} strong />
-        <Row label="Unassigned" value={money(Math.max(0, totalRemaining))} />
       </Card>
+        </View>
+      </View>
     </View>
   );
 };
@@ -696,6 +782,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  // Web page columns: LEFT (Entry Payouts + Side Pot stacked) ~44% beside RIGHT (Summary)
+  // ~56%, top-aligned, with a clear horizontal gap. Entry/Side stack via each card's own
+  // marginBottom (clear vertical gap between them). Native/narrow: wrappers are unstyled.
+  ppMainRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  ppLeftCol: { flexGrow: 44, flexBasis: 0, minWidth: 0 },
+  ppSummaryCol: { flexGrow: 56, flexBasis: 0, minWidth: 0 },
+  // Web Summary dashboard: KPI row + two-column detail.
+  ppKpiRow: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
+  ppKpi: { flexGrow: 1, flexBasis: 0, minWidth: webSc(120), backgroundColor: COLORS.background, borderRadius: webSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
+  ppKpiLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", letterSpacing: 0.4 },
+  ppKpiValue: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", marginTop: 2 },
+  ppDetailRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  ppDetailCol: { flex: 1, minWidth: 0 },
+  ppPoolStatus: { marginTop: webSc(SPACING.xs), borderLeftWidth: 3, borderLeftColor: COLORS.error, paddingLeft: webSc(SPACING.sm), paddingVertical: webSc(4) },
+  ppPoolStatusText: { color: COLORS.error, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",

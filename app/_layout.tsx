@@ -12,6 +12,26 @@ import { QueryProvider } from "../src/providers/QueryProvider";
 import { WebAlertHost } from "../src/views/components/common/WebAlertHost";
 import { COLORS } from "../src/theme/colors";
 
+// WEB ONLY — visually hide scrollbars app-wide while KEEPING scroll (wheel / trackpad /
+// touch / keyboard all still work; only the scrollbar chrome is hidden). Injected once at
+// the root as a global <style> (same approach as range-slider), so it applies to the page
+// scroller and every RN-Web ScrollView without per-page hacks. Native is untouched (this
+// block only runs on web). Content is not clipped — overflow scrolling is unchanged.
+const HIDE_SCROLLBAR_STYLE_ID = "compete-hide-scrollbars";
+if (
+  Platform.OS === "web" &&
+  typeof document !== "undefined" &&
+  !document.getElementById(HIDE_SCROLLBAR_STYLE_ID)
+) {
+  const s = document.createElement("style");
+  s.id = HIDE_SCROLLBAR_STYLE_ID;
+  s.textContent =
+    "html,body,#root{scrollbar-width:none;-ms-overflow-style:none;}" +
+    "*{scrollbar-width:none;}" +
+    "::-webkit-scrollbar{width:0!important;height:0!important;display:none!important;background:transparent!important;}";
+  document.head.appendChild(s);
+}
+
 SplashScreen.preventAutoHideAsync();
 
 // Dark navigation theme so the background BEHIND screen transitions is dark, not

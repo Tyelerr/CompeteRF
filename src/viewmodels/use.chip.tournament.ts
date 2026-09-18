@@ -26,6 +26,7 @@ import {
   closeTables as engineCloseTables,
   resetTableTimer as engineResetTableTimer,
   clearTable as engineClearTable,
+  returnActiveMatchesToQueue as engineReturnActiveMatchesToQueue,
   startPendingMatch as engineStartPendingMatch,
   startAllMatches as engineStartAllMatches,
   startAllState,
@@ -190,6 +191,12 @@ export const useChipTournament = (
   // write was REJECTED because another director changed the tournament first. The screen
   // surfaces it; the action was NOT applied and authoritative state has been reloaded.
   const [casConflict, setCasConflict] = useState(false);
+  // Auto-save failure notice: set true when the debounced whole-state save throws (a
+  // persistence error, possibly a PARTIAL write across the split per-section save). The
+  // screen surfaces it and authoritative state is reloaded so the TD never keeps looking at
+  // an optimistic result that may not have persisted. NOT auto-retried (a blind replay could
+  // double-apply a winner/chip change). Shared across Web/iOS/Android via this VM.
+  const [saveError, setSaveError] = useState(false);
   // Stable handle to load() so flushSave can trigger a post-conflict reload without a
   // circular useCallback dependency (load depends on flushSave). Synced via an effect.
   const loadRef = useRef<((opts?: { silent?: boolean; skipFlush?: boolean }) => Promise<void>) | null>(null);
@@ -267,7 +274,15 @@ export const useChipTournament = (
         versionRef.current = res.version;
       }
     } catch {
-      /* save error already surfaced elsewhere; keep prior version */
+      // A debounced whole-state save FAILED (network/permission/constraint, and — given the
+      // split per-section persistence — possibly a PARTIAL write). NEVER treat this as
+      // success: flag it for the screen and reload authoritative state so the UI stops
+      // showing an optimistic result that may not exist in the DB. We do NOT auto-retry the
+      // mutation (a blind replay of a winner/chip change could double-apply it); the TD sees
+      // the real reloaded state and can redo the action if needed. skipFlush so the reload
+      // never re-persists the just-failed edit.
+      setSaveError(true);
+      await loadRef.current?.({ silent: true, skipFlush: true });
     }
   }, [id]);
 
@@ -635,6 +650,13 @@ export const useChipTournament = (
   const clearTable = useCallback(
     (tableId: string, destination: "next" | "end" = "end") =>
       update((c) => engineClearTable(c, tableId, destination)),
+    [update],
+  );
+  // Shuffle Mode override: return every active match to the FRONT of the queue (no winner /
+  // chip loss / completed match) so a reshuffle can proceed. actorId is threaded to `by`
+  // for the audit event. Explicit TD action only — never called automatically.
+  const returnActiveMatchesToQueue = useCallback(
+    (actorId?: number | null) => update((c) => engineReturnActiveMatchesToQueue(c, actorId ?? null)),
     [update],
   );
   const startPendingMatch = useCallback(
@@ -1242,6 +1264,10 @@ export const useChipTournament = (
     // this action; authoritative state was reloaded and the action was NOT applied.
     casConflict,
     acknowledgeCasConflict: () => setCasConflict(false),
+    // Auto-save failure notice (shared): true when a debounced save threw; authoritative
+    // state has already been reloaded. The screen shows a message and clears it.
+    saveError,
+    acknowledgeSaveError: () => setSaveError(false),
     starting,
     finishing,
     isLive,
@@ -1285,6 +1311,7 @@ export const useChipTournament = (
     reactivateTable,
     resetTableTimer,
     clearTable,
+    returnActiveMatchesToQueue,
     startPendingMatch,
     startAllMatches,
     setTableLocked,

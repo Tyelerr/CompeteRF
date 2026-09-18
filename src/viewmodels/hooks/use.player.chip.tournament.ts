@@ -9,7 +9,8 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService } from "../../models/services/chip.service";
-import { enteredField, teamName as teamNameOf } from "../../models/services/chip.engine";
+import { dashboard, isChipFieldMember, teamName as teamNameOf } from "../../models/services/chip.engine";
+import { estimateChipWaitMs, formatWaitLabel, robustMatchDurationMs } from "../../utils/chip-wait";
 import {
   ChipEntry,
   ChipFormat,
@@ -117,7 +118,18 @@ export interface ChipPlayerHub {
   streakType: ChipStreakType;
   bestStreak: number; // highest consecutive wins this tournament (displayed summary)
   matchesPlayed: number;
-  avgMatchMs: number | null;
+  avgMatchMs: number | null; // THIS player's own average finished-match duration
+  // Tournament-wide average finished-match duration (all players, via engine dashboard()).
+  // Kept as a raw reference / fallback for the wait estimate.
+  tournamentAvgMatchMs: number | null;
+  // Robust expected match duration (median / trimmed mean) for the Estimated Wait ONLY —
+  // outlier-resistant. Never the admin's raw Avg Match. Null when no completed matches.
+  robustMatchDurationMs: number | null;
+  // ONE shared Estimated Wait, identical on web / iOS / Android. Clamped ≥ 0; null when the
+  // player isn't queued or there isn't enough data. Every platform renders THIS — no
+  // per-platform recomputation.
+  estimatedWaitMs: number | null;
+  estimatedWaitLabel: string | null;
   perf: ChipPerf | null; // Fargo/expectation label (enough data only)
   // Standing
   chipRank: number | null; // among still-alive entries
@@ -168,7 +180,7 @@ const buildChipHub = (
 
   // Field participants only (checkedIn) — non-field roster entries never appear in the
   // profile's leaderboard / players-left count, matching the engine + spectator.
-  const alive = s.entries.filter((e) => isAlive(e) && enteredField(e));
+  const alive = s.entries.filter((e) => isAlive(e) && isChipFieldMember(s, e));
   const byChips = [...alive].sort(
     (a, b) => b.chips - a.chips || b.wins - a.wins,
   );
@@ -232,6 +244,35 @@ const buildChipHub = (
   const avgMatchMs = myDurations.length
     ? Math.round(myDurations.reduce((a, b) => a + b, 0) / myDurations.length)
     : null;
+
+  // Robust expected match duration for the Estimated Wait ONLY (never the admin's raw Avg
+  // Match). Derived from ALL completed tournament matches' durations (same startedAt/endedAt
+  // source dashboard() uses), smoothed by median/trimmed-mean so a rare 1-min break-and-run or
+  // one marathon match doesn't distort the wait. Does NOT touch dashboard().avgMatchMs.
+  const tournamentDurations = s.matches
+    .filter((m) => m.status !== "in_progress" && m.endedAt)
+    .map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime())
+    .filter((d) => d > 0);
+  const robustMatchMs = robustMatchDurationMs(tournamentDurations);
+
+  // ── ONE shared Estimated Wait for every platform (web / iOS / Android) ──────────
+  // Inputs (all shared, no platform branches): current queue position, ACTIVE
+  // (non-inactive) table count, and the robust match duration (median / trimmed mean,
+  // falling back to the player's own avg). Runs only for a queued player (waiting/next);
+  // playing/eliminated/finished have queuePosition null → no estimate. The result is
+  // CLAMPED so a non-positive value is never shown (estimateChipWaitMs can't go negative,
+  // but this makes it impossible by construction and future-proof).
+  const activeTableCount = s.tables.filter((t) => !t.inactive).length;
+  const estimatedWaitRaw =
+    queuePosition != null && (status === "waiting" || status === "next")
+      ? estimateChipWaitMs({
+          queuePosition,
+          activeTables: activeTableCount,
+          avgMatchMs: robustMatchMs ?? avgMatchMs,
+        })
+      : null;
+  const estimatedWaitMs = estimatedWaitRaw != null && estimatedWaitRaw > 0 ? estimatedWaitRaw : null;
+  const estimatedWaitLabel = formatWaitLabel(estimatedWaitMs);
 
   const matchesPlayed = me.wins + me.losses;
   const winPct = matchesPlayed ? me.wins / matchesPlayed : 0;
@@ -397,6 +438,12 @@ const buildChipHub = (
     bestStreak: me.bestStreak ?? 0,
     matchesPlayed,
     avgMatchMs,
+    // Tournament-wide avg (all finished matches) — reuses the engine's dashboard() derivation
+    // (the same value the admin dashboard shows), so no new match-time formula is introduced.
+    tournamentAvgMatchMs: dashboard(s).avgMatchMs,
+    robustMatchDurationMs: robustMatchMs,
+    estimatedWaitMs,
+    estimatedWaitLabel,
     perf,
     chipRank,
     playersRemaining: alive.length,

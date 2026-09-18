@@ -28,6 +28,8 @@ import { webMs, webSc } from "../../../utils/scaling";
 import { normalizeGameType } from "../../../utils/game-type.utils";
 import { ReviewContext, ReviewRating, REVIEW_QUESTIONS } from "../../../models/types/review.types";
 
+const isWeb = Platform.OS === "web";
+
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -258,6 +260,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.72)",
     justifyContent: "center",
     paddingHorizontal: webSc(SPACING.lg),
+    // Web: also center horizontally so the constrained card sits in the middle (native
+    // keeps its full-width-minus-padding sheet).
+    ...(isWeb ? { alignItems: "center" as const } : null),
   },
   card: {
     backgroundColor: COLORS.surface,
@@ -267,10 +272,13 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.lg),
     maxHeight: "82%",
     overflow: "hidden",
+    // Web/desktop: compact centered dialog (~620px) instead of a full-width stretch.
+    ...(isWeb ? { width: "100%" as any, maxWidth: 620, alignSelf: "center" as const } : null),
   },
   // Extra bottom room so the comment input + action buttons sit comfortably above the keyboard
-  // once the ScrollView scrolls to the end on focus (not a hard-coded screen height).
-  scrollContent: { paddingBottom: webSc(SPACING.xl) },
+  // once the ScrollView scrolls to the end on focus (not a hard-coded screen height). Web has
+  // no keyboard-clearance need, so trim the bottom padding there for a tighter dialog.
+  scrollContent: { paddingBottom: isWeb ? webSc(SPACING.lg) : webSc(SPACING.xl) },
   close: { position: "absolute", top: webSc(SPACING.sm), right: webSc(SPACING.sm), zIndex: 5, padding: webSc(SPACING.xs) },
   closeText: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.textMuted, fontWeight: "700" },
 

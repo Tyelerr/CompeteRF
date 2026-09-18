@@ -8,6 +8,33 @@
 // ceil(queuePosition / activeTables) match-lengths. Returns null when it can't be estimated
 // (no queue position, no tables running yet, or no average match time to base it on).
 
+// A more representative "expected match duration" for the WAIT ESTIMATE only (never the raw
+// Average Match stat shown to admins). Rare outliers — a 1-minute break-and-run, or one
+// marathon match — should not distort a queued player's wait. Sample-size tiers:
+//   • 0 completed        → null (can't estimate).
+//   • 1–2 completed      → plain mean (LOW confidence; too small to smooth — we still show a
+//                          rough "~" estimate rather than withholding, matching the current
+//                          "show as soon as any average exists" UX).
+//   • 3–9 completed      → MEDIAN (robust to a single fast/slow outlier).
+//   • 10+ completed      → TRIMMED MEAN: drop ~fastest 10% and ~slowest 10%, average the rest.
+// Statistical only — no hardcoded duration cutoffs; a legitimately short match still counts.
+export const robustMatchDurationMs = (durationsMs: number[]): number | null => {
+  const xs = durationsMs
+    .filter((d) => Number.isFinite(d) && d > 0)
+    .sort((a, b) => a - b);
+  const n = xs.length;
+  if (n === 0) return null;
+  const mean = (arr: number[]) => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+  if (n <= 2) return mean(xs); // low-confidence small sample
+  if (n < 10) {
+    const mid = Math.floor(n / 2);
+    return n % 2 === 1 ? xs[mid] : Math.round((xs[mid - 1] + xs[mid]) / 2); // median
+  }
+  const k = Math.floor(n * 0.1); // ~10% off each end
+  const trimmed = xs.slice(k, n - k);
+  return mean(trimmed.length ? trimmed : xs); // trimmed mean (guard against over-trim)
+};
+
 export const estimateChipWaitMs = (opts: {
   queuePosition: number | null; // 1-based spot in the queue (front = 1)
   activeTables: number; // tables currently running

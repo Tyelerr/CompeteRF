@@ -16,6 +16,7 @@ import {
 } from "../types/chip.types";
 import { Tournament } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
+import { isActiveRegistrationStatus } from "../../utils/registration-status";
 import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-pots";
 
 // Phase G3 feature flag. OFF = legacy whole-blob save (default). ON = strict-CAS
@@ -412,13 +413,15 @@ export const chipService = {
       supabase.from("chip_matches").select("*").eq("tournament_id", id),
       supabase.from("chip_events").select("*").eq("tournament_id", id).order("created_at", { ascending: false }),
       supabase.from("chip_results").select("*").eq("tournament_id", id).order("place", { ascending: true }),
+      // Load ALL registration rows (every status) so we can BOTH import active ones AND
+      // detect INACTIVE ones (cancelled / no_show) to reconcile stale chip_entries below.
+      // The active-only filter now lives in the shared isActiveRegistrationStatus rule.
       supabase
         .from("tournament_players")
         .select(
           "*, profiles:player_id (id_auto, user_name, name, first_name, last_name, fargo, fargo_status)",
         )
-        .eq("tournament_id", id)
-        .not("status", "in", "(cancelled,no_show)"),
+        .eq("tournament_id", id),
     ]);
 
     const c = cfg.data;
@@ -441,7 +444,46 @@ export const chipService = {
     // Chip entries the TD has already created/linked, plus any self-service
     // registrations (tournament_players) not yet represented as a chip entry —
     // deduped by linked player id so a player is never listed twice.
-    const chipEntries = (entries.data ?? []).map(rowToEntry);
+    const rawChipEntries = (entries.data ?? []).map(rowToEntry);
+    // ── Participant integrity (shared, all platforms) ──────────────────────────────
+    // A registration is only an ACTIVE participant per the shared isActiveRegistrationStatus
+    // rule. Build the set of players who have an INACTIVE registration (cancelled / no_show)
+    // and NO active one (guards against a player with duplicate rows — one active, one not).
+    const regRows = (regs.data ?? []) as any[];
+    const activeRegProfileIds = new Set<number>();
+    const activeRegPlayerUuids = new Set<string>();
+    const inactiveRegProfileIds = new Set<number>();
+    const inactiveRegPlayerUuids = new Set<string>();
+    for (const r of regRows) {
+      if (isActiveRegistrationStatus(r.status)) {
+        if (r.player_id != null) activeRegProfileIds.add(r.player_id);
+        if (r.player_uuid) activeRegPlayerUuids.add(r.player_uuid);
+      } else {
+        if (r.player_id != null) inactiveRegProfileIds.add(r.player_id);
+        if (r.player_uuid) inactiveRegPlayerUuids.add(r.player_uuid);
+      }
+    }
+    // A linked player is UNREGISTERED only if inactive AND not also actively registered.
+    const isUnregisteredPlayer = (profileId: number | null, uuid: string | null): boolean => {
+      const byUuid = !!uuid && inactiveRegPlayerUuids.has(uuid) && !activeRegPlayerUuids.has(uuid);
+      const byId = profileId != null && inactiveRegProfileIds.has(profileId) && !activeRegProfileIds.has(profileId);
+      return byUuid || byId;
+    };
+    // NON-DESTRUCTIVE: never drop or prune a chip_entries row here. Instead STAMP a transient
+    // `regInactive` flag when a linked player's registration is cancelled/no_show (and not
+    // also active). The engine then treats such an entry as a DROPOUT only if it also has no
+    // durable participation evidence (isChipRegistrationDropout) — excluding it from live
+    // derivations WITHOUT deleting the persisted row. `regInactive` is transient (not written
+    // by entryToRow), so save()/syncTable never prune based on it.
+    // Singles: inactive if the one player is unregistered. Doubles: inactive only if BOTH
+    // linked players are unregistered (a single partner's cancellation shouldn't flag a team
+    // that may still be valid via tournament_teams).
+    const chipEntries = rawChipEntries.map((e) => {
+      const p1Out = isUnregisteredPlayer(e.p1ProfileId ?? null, e.p1PlayerId ?? null);
+      const p2Out = isUnregisteredPlayer(e.p2ProfileId ?? null, e.p2PlayerId ?? null);
+      const regInactive = e.teamId != null ? p1Out && p2Out : p1Out;
+      return regInactive ? { ...e, regInactive: true } : e;
+    });
     // Dedupe by BOTH identities: players.id (uuid) is primary — it covers PENDING
     // players (no id_auto) and is the stable identity — with id_auto as the
     // compatibility fallback for old rows that only carry p1_profile_id.
@@ -498,6 +540,9 @@ export const chipService = {
     } else {
       importedEntries = (regs.data ?? [])
         .filter((r: any) => {
+          // Only ACTIVE registrations become live entries (was a hardcoded query filter;
+          // now the shared rule, applied here since we load every status above).
+          if (!isActiveRegistrationStatus(r.status)) return false;
           if (r.player_uuid && linkedPlayerIds.has(r.player_uuid)) return false;
           if (r.player_id != null && linkedProfileIds.has(r.player_id)) return false;
           return true;

@@ -1,16 +1,20 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuth, useAuthContext } from "../../../providers/AuthProvider";
 import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS } from "../../../theme/spacing";
 import { useReport } from "../../../viewmodels/hooks/useReport";
+import { useSelfRegistration } from "../../../viewmodels/hooks/use.self.registration";
+import { usePendingTeamInvite } from "../../../viewmodels/hooks/use.team.invite";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
 import { Button } from "../../components/common/button";
 import { FullScreenImageViewer } from "../../components/common/FullScreenImageViewer";
 import ReportModal from "../../components/common/ReportModal";
+import { TeamRegisterModal } from "../../components/tournament/TeamRegisterModal";
+import { TeamInviteModal } from "../../components/tournament/TeamInviteModal";
 
 // Web-only component - no scaling needed
 const moderateScale = (v: number) => v;
@@ -36,6 +40,53 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   const { isFavorited, toggleFavorite, isToggling } = useFavorites(profile?.id_auto);
   const [showImg, setShowImg] = useState(false);
   const report = useReport({ userId: session?.user?.id });
+
+  // Self-registration — reuses the SAME shared hooks/state/handlers the mobile modal
+  // (TournamentDetailModal) uses. No registration logic, validation, or handlers are
+  // duplicated: this only calls reg.register / reg.unregister from useSelfRegistration.
+  const reg = useSelfRegistration(vm.tournament?.id, profile?.id_auto);
+  const teamInvite = usePendingTeamInvite(vm.tournament?.id, profile?.id_auto);
+  const [showRegisterConfirm, setShowRegisterConfirm] = useState(false);
+  const [showUnregisterConfirm, setShowUnregisterConfirm] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showTeamInvite, setShowTeamInvite] = useState(false);
+  const [regFargo, setRegFargo] = useState("");
+  const [fargoMode, setFargoMode] = useState<"enter" | "none">("enter");
+
+  // Re-sync registration/invite state when the overlay opens for a tournament.
+  useEffect(() => {
+    reg.refresh();
+    teamInvite.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vm.tournament?.id]);
+
+  const handleRegisterPress = () => {
+    if (!profile?.id_auto) {
+      Alert.alert("Log In Required", "Create a free account or log in to register for tournaments.");
+      return;
+    }
+    setShowRegisterConfirm(true);
+  };
+  const handleConfirmRegister = async () => {
+    const digits = regFargo.replace(/\D/g, "");
+    const fargo = fargoMode === "none" || digits === "" ? null : parseInt(digits, 10);
+    try {
+      await reg.register(fargo);
+      setShowRegisterConfirm(false);
+      setRegFargo("");
+    } catch {
+      Alert.alert("Error", "Couldn't complete registration. Please try again.");
+    }
+  };
+  const handleConfirmUnregister = async () => {
+    try {
+      await reg.unregister();
+      await reg.refresh();
+      setShowUnregisterConfirm(false);
+    } catch {
+      Alert.alert("Error", "Couldn't unregister. Please try again.");
+    }
+  };
 
   if (vm.loading) {
     return (
@@ -80,6 +131,13 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
   };
   const isChip = t.tournament_format === "chip-tournament";
   const chipRanges = isChip && Array.isArray(t.chip_ranges) && t.chip_ranges.length > 0 ? t.chip_ranges : null;
+  // Which registration buttons appear — mirrors the mobile modal's logic exactly.
+  const canRegister = t.live_state === "registration_open";
+  const isTeamFormat = String(t.game_type ?? "").includes("scotch-doubles");
+  const playerName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
+    (profile as any)?.name ||
+    (profile?.user_name ? `@${profile.user_name}` : "Player");
 
   return (
     <>
@@ -178,39 +236,152 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                 </View>
               </View>
 
-              {isExternal && t.external_bracket_url ? (
-                <TouchableOpacity style={s.viewTournamentBtn} onPress={openExternalBracket}>
-                  <Ionicons name="open-outline" size={18} color="#fff" />
-                  <Text allowFontScaling={false} style={s.viewTournamentText}>View Bracket</Text>
-                </TouchableOpacity>
-              ) : hasStarted ? (
-                <TouchableOpacity style={s.viewTournamentBtn} onPress={viewTournament}>
-                  <Ionicons name="eye-outline" size={18} color="#fff" />
-                  <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
-                </TouchableOpacity>
-              ) : null}
-
-              <View style={{ flexDirection: "row", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
-                <TouchableOpacity style={s.reportBtn} onPress={() => report.openReportModal("tournament", t.id.toString())}>
-                  <Ionicons name="flag-outline" size={14} color="#E53935" />
-                  <Text allowFontScaling={false} style={{ color: "#E53935", fontSize: 13, fontWeight: "600", marginLeft: 4 }}>Report</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.closeActionBtn} onPress={onClose}>
-                  <Text allowFontScaling={false} style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>{"\u2715"} Close</Text>
-                </TouchableOpacity>
-              </View>
-
+              {/* View Tournament / Register / Report / Close now live in the fixed footer
+                  below so they stay visible while this content scrolls. */}
               <Text allowFontScaling={false} style={{ fontSize: 11, color: COLORS.textMuted, textAlign: "center", marginTop: 16, opacity: 0.6 }}>
                 This tournament is organized by {t.venues?.venue || "an independent venue"}. Compete is not the organizer.
               </Text>
-              <View style={{ height: 24 }} />
+              <View style={{ height: 8 }} />
             </View>
           </ScrollView>
+
+          {/* Fixed footer \u2014 separated from the scroll body by a top border, matching the
+              modal background. Mirrors the mobile modal's sticky action stack: primary
+              action, then registration action, then Report / Close. */}
+          <View style={s.footer}>
+            {isExternal && t.external_bracket_url ? (
+              <TouchableOpacity style={s.viewTournamentBtn} onPress={openExternalBracket}>
+                <Ionicons name="open-outline" size={18} color="#fff" />
+                <Text allowFontScaling={false} style={s.viewTournamentText}>View Bracket</Text>
+              </TouchableOpacity>
+            ) : hasStarted ? (
+              <TouchableOpacity style={s.viewTournamentBtn} onPress={viewTournament}>
+                <Ionicons name="eye-outline" size={18} color="#fff" />
+                <Text allowFontScaling={false} style={s.viewTournamentText}>View Tournament</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {canRegister && (isTeamFormat ? (
+              teamInvite.invite ? (
+                <TouchableOpacity style={s.registerBtn} onPress={() => setShowTeamInvite(true)}>
+                  <Text allowFontScaling={false} style={s.registerBtnText}>View Team Invite</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={s.registerBtn}
+                  onPress={() => {
+                    if (!profile?.id_auto) { Alert.alert("Log In Required", "Create a free account or log in to register a team."); return; }
+                    setShowTeamModal(true);
+                  }}
+                >
+                  <Text allowFontScaling={false} style={s.registerBtnText}>Register Team</Text>
+                </TouchableOpacity>
+              )
+            ) : reg.isRegistered ? (
+              <TouchableOpacity style={s.registeredPill} onPress={() => setShowUnregisterConfirm(true)} disabled={reg.loading || reg.unregistering} activeOpacity={0.8}>
+                <Text allowFontScaling={false} style={s.registeredPillText}>{"\u2713"} Registered</Text>
+                <Text allowFontScaling={false} style={s.registeredPillHint}>Click to Unregister</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.registerBtn} onPress={handleRegisterPress} disabled={reg.loading}>
+                <Text allowFontScaling={false} style={s.registerBtnText}>Register for Tournament</Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={s.footerSecondaryRow}>
+              <TouchableOpacity style={s.reportBtn} onPress={() => report.openReportModal("tournament", t.id.toString())}>
+                <Ionicons name="flag-outline" size={14} color="#E53935" />
+                <Text allowFontScaling={false} style={{ color: "#E53935", fontSize: 13, fontWeight: "600", marginLeft: 4 }}>Report</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.closeActionBtn} onPress={onClose}>
+                <Text allowFontScaling={false} style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>{"\u2715"} Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
 
+      {/* Register confirm (Fargo enter/none) — same flow/handlers as the mobile modal. */}
+      {showRegisterConfirm && (
+        <View style={s.confirmOverlay}>
+          <Pressable style={s.confirmBackdrop} onPress={() => setShowRegisterConfirm(false)} />
+          <View style={s.confirmCard}>
+            <Text allowFontScaling={false} style={s.confirmTitle}>REGISTER FOR TOURNAMENT</Text>
+            <Text allowFontScaling={false} style={s.confirmName}>{t.name}</Text>
+
+            <Text allowFontScaling={false} style={s.confirmFieldLabel}>Player Name</Text>
+            <View style={s.readonlyField} pointerEvents="none">
+              <Text allowFontScaling={false} style={s.readonlyValue} numberOfLines={1}>{playerName}</Text>
+            </View>
+
+            <View style={s.segment}>
+              <TouchableOpacity style={[s.segmentBtn, fargoMode === "enter" && s.segmentBtnOn]} activeOpacity={0.85} onPress={() => setFargoMode("enter")}>
+                <Text allowFontScaling={false} style={[s.segmentText, fargoMode === "enter" && s.segmentTextOn]}>Enter Fargo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.segmentBtn, fargoMode === "none" && s.segmentBtnOn]} activeOpacity={0.85} onPress={() => setFargoMode("none")}>
+                <Text allowFontScaling={false} style={[s.segmentText, fargoMode === "none" && s.segmentTextOn]}>No Fargo</Text>
+              </TouchableOpacity>
+            </View>
+
+            {fargoMode === "enter" ? (
+              <View style={s.fargoBlock}>
+                <Text allowFontScaling={false} style={s.confirmFieldLabel}>Fargo Rating</Text>
+                <View style={s.confirmFargoField}>
+                  <TextInput
+                    allowFontScaling={false}
+                    style={s.confirmFargoInput}
+                    value={regFargo}
+                    onChangeText={(v) => setRegFargo(v.replace(/\D/g, ""))}
+                    keyboardType="number-pad"
+                    placeholder="500"
+                    placeholderTextColor={COLORS.textMuted}
+                    maxLength={4}
+                  />
+                </View>
+                <Text allowFontScaling={false} style={s.confirmFargoHint}>Your Fargo will be verified by the Tournament Director.</Text>
+              </View>
+            ) : (
+              <View style={s.noFargoBlock}>
+                <Text allowFontScaling={false} style={s.noFargoText}>The Tournament Director will confirm your Fargo status or eligibility to play.</Text>
+              </View>
+            )}
+
+            <View style={s.confirmButtons}>
+              <TouchableOpacity style={s.confirmCancel} onPress={() => setShowRegisterConfirm(false)} disabled={reg.registering}>
+                <Text allowFontScaling={false} style={s.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.confirmConfirm} onPress={handleConfirmRegister} disabled={reg.registering}>
+                <Text allowFontScaling={false} style={s.confirmConfirmText}>{reg.registering ? "Registering..." : "Register"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Unregister confirm — same soft-cancel handler as the mobile modal. */}
+      {showUnregisterConfirm && (
+        <View style={s.confirmOverlay}>
+          <Pressable style={s.confirmBackdrop} onPress={() => setShowUnregisterConfirm(false)} />
+          <View style={s.confirmCard}>
+            <Text allowFontScaling={false} style={s.confirmTitle}>UNREGISTER</Text>
+            <Text allowFontScaling={false} style={s.confirmName}>Unregister from this tournament?</Text>
+            <Text allowFontScaling={false} style={s.unregisterBody}>You will be removed from the tournament registration list.</Text>
+            <View style={s.confirmButtons}>
+              <TouchableOpacity style={s.confirmCancel} onPress={() => setShowUnregisterConfirm(false)} disabled={reg.unregistering}>
+                <Text allowFontScaling={false} style={s.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.unregisterConfirmBtn} onPress={handleConfirmUnregister} disabled={reg.unregistering}>
+                <Text allowFontScaling={false} style={s.unregisterConfirmText}>{reg.unregistering ? "Unregistering..." : "Unregister"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
       <FullScreenImageViewer visible={showImg} imageUrl={imageUrl} title={t.name} onClose={() => setShowImg(false)} />
       <ReportModal visible={report.isModalVisible} onClose={report.closeReportModal} contentType={report.contentType} reason={report.reason} onReasonChange={report.setReason} details={report.details} onDetailsChange={report.setDetails} onSubmit={report.handleSubmit} isSubmitting={report.isSubmitting} />
+      <TeamRegisterModal visible={showTeamModal} tournament={t} playerId={profile?.id_auto} onClose={() => setShowTeamModal(false)} />
+      <TeamInviteModal visible={showTeamInvite} invite={teamInvite.invite} busy={teamInvite.busy} onAccept={teamInvite.accept} onDecline={teamInvite.decline} onClose={() => setShowTeamInvite(false)} />
     </>
   );
 }
@@ -224,8 +395,18 @@ const s = StyleSheet.create({
   backBtnText: { color: COLORS.primary, fontSize: 14 },
   closeBtn: { backgroundColor: COLORS.error, width: 28, height: 28, borderRadius: 6, alignItems: "center", justifyContent: "center" },
   closeBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  scroll: { maxHeight: "calc(88vh - 56px)" as any },
+  // Flex within the dialog column (header + scroll + fixed footer). minHeight:0 lets it
+  // shrink below its content and scroll internally so the footer never moves.
+  scroll: { flex: 1, minHeight: 0 as any },
   content: { padding: 20 },
+  // Fixed footer: separated from the scroll body by a top border, same modal background.
+  footer: { flexShrink: 0, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.background, gap: 8 },
+  footerSecondaryRow: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
+  registerBtn: { backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 12, alignItems: "center" },
+  registerBtnText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  registeredPill: { alignItems: "center", justifyContent: "center", gap: 2, backgroundColor: COLORS.success + "20", borderColor: COLORS.success, borderWidth: 1, borderRadius: 8, paddingVertical: 10 },
+  registeredPillText: { color: COLORS.success, fontSize: 15, fontWeight: "700" },
+  registeredPillHint: { color: COLORS.success, fontSize: 11, fontWeight: "600", opacity: 0.85 },
   topRow: { flexDirection: "row", marginBottom: 16 },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   idBadge: { backgroundColor: "#000", paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4, borderWidth: 1, borderColor: COLORS.border },
@@ -250,4 +431,33 @@ const s = StyleSheet.create({
   viewTournamentText: { color: "#fff", fontSize: 15, fontWeight: "700" },
   reportBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6, borderWidth: 1, borderColor: "#E53935", backgroundColor: "rgba(229,57,53,0.1)" },
   closeActionBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 6, backgroundColor: COLORS.error, alignItems: "center" },
+
+  // Register / Unregister confirm dialogs (web) — centered card over a dark backdrop.
+  confirmOverlay: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 2100, alignItems: "center", justifyContent: "center", padding: 24 },
+  confirmBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.7)" },
+  confirmCard: { width: 460, maxWidth: "92%" as any, backgroundColor: COLORS.backgroundCard, borderRadius: 22, borderWidth: 1, borderColor: COLORS.borderLight, paddingHorizontal: 20, paddingVertical: 20, shadowColor: "#000", shadowOpacity: 0.55, shadowRadius: 24, shadowOffset: { width: 0, height: 12 } },
+  confirmTitle: { fontSize: 12, fontWeight: "700", letterSpacing: 1, color: COLORS.textSecondary, marginBottom: 6 },
+  confirmName: { fontSize: 20, fontWeight: "800", color: COLORS.primaryLight, lineHeight: 26 },
+  confirmFieldLabel: { fontSize: 12, fontWeight: "600", color: COLORS.textSecondary, marginTop: 16, marginBottom: 6 },
+  readonlyField: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  readonlyValue: { fontSize: 15, fontWeight: "600", color: COLORS.textSecondary },
+  segment: { flexDirection: "row", backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 999, padding: 3, marginTop: 16 },
+  segmentBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 9, borderRadius: 999 },
+  segmentBtnOn: { backgroundColor: COLORS.primary },
+  segmentText: { fontSize: 14, fontWeight: "700", color: COLORS.textSecondary },
+  segmentTextOn: { color: "#fff" },
+  fargoBlock: { minHeight: 110 },
+  confirmFargoField: { flexDirection: "row", alignItems: "center", width: 120, height: 48, backgroundColor: COLORS.surfaceLight, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 14 },
+  confirmFargoInput: { flex: 1, height: "100%" as any, color: COLORS.text, fontSize: 15, fontWeight: "600", ...( { outlineStyle: "none" } as object) },
+  confirmFargoHint: { fontSize: 12, color: COLORS.textMuted, marginTop: 10 },
+  noFargoBlock: { minHeight: 110, alignItems: "center", justifyContent: "center" },
+  noFargoText: { fontSize: 14, color: COLORS.textMuted, textAlign: "center", lineHeight: 20 },
+  confirmButtons: { flexDirection: "row", gap: 8, marginTop: 16 },
+  confirmCancel: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", backgroundColor: "transparent", borderWidth: 1, borderColor: COLORS.borderLight },
+  confirmCancelText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: "600" },
+  confirmConfirm: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", backgroundColor: COLORS.primary },
+  confirmConfirmText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  unregisterBody: { fontSize: 14, color: COLORS.textSecondary, marginTop: 10, lineHeight: 20 },
+  unregisterConfirmBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: "center", backgroundColor: COLORS.error },
+  unregisterConfirmText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });

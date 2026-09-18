@@ -149,6 +149,13 @@ import {
 } from "../../../../src/viewmodels/hooks/use.manage.tournament";
 
 const isWeb = Platform.OS === "web";
+// Web desktop shell: the centered content column width shared by every tournament-admin
+// screen (header/breadcrumb/phase-nav AND the scrolled body). The OUTER container is now
+// full-viewport-width so the page's vertical scroll surface spans the whole width — wheel
+// events over the empty left/right gutters scroll the page — while this constraint keeps
+// the actual content centered. See `webShellCenter` (applied to the persistent header
+// block and to each scroll content container).
+const WEB_MAXW = 1240;
 // iOS numeric keypads have no return key — attach this accessory's Done bar so
 // the keyboard can be dismissed.
 const KB_DONE = "kbDoneAccessory";
@@ -2372,12 +2379,23 @@ export default function ManageTournamentScreen() {
       setActiveTab(target);
       return;
     }
-    const idx = setupOrder.indexOf(target);
-    for (let i = 0; i < idx; i++) {
-      const step = setupOrder[i];
-      if (!setupStepComplete[step]) {
-        setGatePrompt({ blocking: step, target });
-        return;
+    // The predecessor-completeness gate (e.g. "finish Prize Pool before Review") is a
+    // PRE-START check only. Once the tournament has already started (running/live/finished),
+    // the setup steps are intentionally LOCKED, not "incomplete", so this gate must not
+    // block simply opening a setup page like Review (which is read-only past start and can't
+    // restart the event). Skip the gate when started; the pre-start flow is unchanged.
+    const started =
+      hub.tournament?.live_state === "in_progress" ||
+      hub.tournament?.live_state === "finished" ||
+      (["bracket_drawn", "running", "completed", "archived"] as ManagePhase[]).includes(hub.phase);
+    if (!started) {
+      const idx = setupOrder.indexOf(target);
+      for (let i = 0; i < idx; i++) {
+        const step = setupOrder[i];
+        if (!setupStepComplete[step]) {
+          setGatePrompt({ blocking: step, target });
+          return;
+        }
       }
     }
     setActiveTab(target);
@@ -6472,26 +6490,25 @@ export default function ManageTournamentScreen() {
       {/* Web: the browser handles Back, so the in-page Back is replaced by a subtle
           breadcrumb. Mobile keeps the Back button (unchanged). */}
       {isWeb && (
-        <View style={styles.breadcrumbRow}>
+        <View style={[styles.breadcrumbRow, styles.webShellCenter]}>
           <Text allowFontScaling={false} style={styles.breadcrumbText} numberOfLines={1}>
             Admin / Tournaments / <Text style={styles.breadcrumbCurrent}>{tournamentName}</Text>
           </Text>
         </View>
       )}
-      <View style={[styles.header, isWeb && styles.headerWeb, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
-        {isWeb ? (
-          <View style={styles.placeholderSpace} />
-        ) : (
+      <View style={[styles.header, isWeb && styles.headerWeb, isWeb && styles.webShellCenter, !isWeb && { paddingTop: insets.top + webSc(SPACING.sm) }]}>
+        {!isWeb && (
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
             <Text allowFontScaling={false} style={styles.backText}>
               {GLYPH.back} Back
             </Text>
           </TouchableOpacity>
         )}
-        <View style={styles.headerCenter}>
+        {/* Web: large left-aligned title with the status pill inline beside it. */}
+        <View style={[styles.headerCenter, isWeb && styles.headerCenterWeb]}>
           <Text
             allowFontScaling={false}
-            style={styles.headerTitle}
+            style={[styles.headerTitle, isWeb && styles.headerTitleWeb]}
             numberOfLines={1}
           >
             {tournamentName}
@@ -6530,13 +6547,15 @@ export default function ManageTournamentScreen() {
       {/* Lifecycle navigation — Setup / Live / Results phase dropdowns. External
           tournaments have only the details page, so no phase nav is shown. */}
       {!isExternal && (
-        <PhaseNav
-          phases={navPhases}
-          selectedKey={selectedPhase}
-          activePageKey={activeTab}
-          onSelectPage={handleSelectPage}
-          onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
-        />
+        <View style={isWeb ? styles.webShellCenter : undefined}>
+          <PhaseNav
+            phases={navPhases}
+            selectedKey={selectedPhase}
+            activePageKey={activeTab}
+            onSelectPage={handleSelectPage}
+            onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
+          />
+        </View>
       )}
 
       {(!isChip &&
@@ -6637,6 +6656,7 @@ export default function ManageTournamentScreen() {
               styles.lockBtnFooter,
               styles.lockBtnFooterInner,
               !setupStepComplete.players && styles.btnDisabled,
+              isWeb && styles.stepBtnWeb,
             ]}
             onPress={() => advanceFromPlayers("tables")}
             disabled={!setupStepComplete.players}
@@ -6656,6 +6676,7 @@ export default function ManageTournamentScreen() {
               styles.lockBtnFooter,
               styles.lockBtnFooterInner,
               !setupStepComplete.players && styles.btnDisabled,
+              isWeb && styles.stepBtnWeb,
             ]}
             onPress={() => advanceFromPlayers("tables")}
             disabled={!setupStepComplete.players}
@@ -6677,6 +6698,7 @@ export default function ManageTournamentScreen() {
               styles.lockBtnFooter,
               styles.lockBtnFooterInner,
               !setupStepComplete.tables && styles.btnDisabled,
+              isWeb && styles.stepBtnWeb,
             ]}
             onPress={() => advanceToNextStep("prizepool")}
             disabled={!setupStepComplete.tables}
@@ -6704,14 +6726,14 @@ export default function ManageTournamentScreen() {
               // (primary blue, larger) persists + relocks. No View Players here.
               <>
                 <TouchableOpacity
-                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
+                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                   onPress={relockSettingsNoSave}
                   disabled={hub.isSaving}
                 >
                   <Text allowFontScaling={false} style={styles.saveBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.startBtn, { flex: 2 }, hub.isSaving && styles.btnDisabled]}
+                  style={[styles.startBtn, { flex: 2 }, hub.isSaving && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                   onPress={handleSaveAndLock}
                   disabled={hub.isSaving}
                 >
@@ -6723,7 +6745,7 @@ export default function ManageTournamentScreen() {
             ) : (
               <>
                 <TouchableOpacity
-                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled]}
+                  style={[styles.saveBtn, { flex: 1 }, hub.isSaving && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                   onPress={isExternal ? () => setSubmitCountdown(5) : handleSave}
                   disabled={hub.isSaving}
                 >
@@ -6740,6 +6762,7 @@ export default function ManageTournamentScreen() {
                     style={[
                       styles.startBtn,
                       !chipRegistrationStarted && !formRequiredComplete && styles.btnDisabled,
+                      isWeb && styles.stepBtnWeb,
                     ]}
                     onPress={beginRegistration}
                     disabled={
@@ -6753,7 +6776,7 @@ export default function ManageTournamentScreen() {
                 )}
                 {!isExternal && !isChip && (
                   <TouchableOpacity
-                    style={[styles.startBtn, !canStartRegistration && styles.btnDisabled]}
+                    style={[styles.startBtn, !canStartRegistration && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                     onPress={beginRegistration}
                     disabled={!canStartRegistration}
                   >
@@ -6782,6 +6805,7 @@ export default function ManageTournamentScreen() {
                 styles.saveBtn,
                 { flex: 1 },
                 (hub.isSavingPrizePool || !prizeComplete) && styles.btnDisabled,
+                isWeb && styles.stepBtnWeb,
               ]}
               onPress={handleSavePrizePool}
               disabled={hub.isSavingPrizePool || !prizeComplete}
@@ -6795,7 +6819,7 @@ export default function ManageTournamentScreen() {
                 Bracket (elimination). */}
             {!isExternal && (
               <TouchableOpacity
-                style={[styles.startBtn, !reviewUnlocked && styles.btnDisabled]}
+                style={[styles.startBtn, !reviewUnlocked && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                 onPress={() => advanceToNextStep(terminalTab)}
                 disabled={!reviewUnlocked}
               >
@@ -6824,6 +6848,7 @@ export default function ManageTournamentScreen() {
                     styles.startBtn,
                     hub.isDrawing && styles.startBtnRunning,
                     !hub.isDrawing && !prizeComplete && styles.btnDisabled,
+                    isWeb && styles.stepBtnWeb,
                   ]}
                   onPress={handleDrawPress}
                   disabled={hub.isDrawing || !prizeComplete}
@@ -6846,7 +6871,7 @@ export default function ManageTournamentScreen() {
           ) : (
             <View style={[styles.saveRow, styles.settingsFooterInner]}>
               <TouchableOpacity
-                style={[styles.reopenBtn, { flex: 1 }]}
+                style={[styles.reopenBtn, { flex: 1 }, isWeb && styles.stepBtnWeb]}
                 onPress={() => {
                   setRedrawReason("");
                   setRedrawVisible(true);
@@ -6858,7 +6883,7 @@ export default function ManageTournamentScreen() {
               </TouchableOpacity>
               {hub.phase === "bracket_drawn" && (
                 <TouchableOpacity
-                  style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled]}
+                  style={[styles.startBtn, hub.isMutatingLive && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                   onPress={handleStartTournament}
                   disabled={hub.isMutatingLive}
                 >
@@ -6893,6 +6918,7 @@ export default function ManageTournamentScreen() {
                   styles.startBtn,
                   { flex: 1 },
                   hub.isMutatingLive && styles.btnDisabled,
+                  isWeb && styles.stepBtnWeb,
                 ]}
                 onPress={handleFinishTournament}
                 disabled={hub.isMutatingLive}
@@ -6910,12 +6936,16 @@ export default function ManageTournamentScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    ...Platform.select({
-      web: { maxWidth: 1240, width: "100%" as any, alignSelf: "center" as any },
-    }),
+    // Web: full viewport width so the page scroll surface (and its wheel target) spans
+    // the whole width — empty gutters scroll the page. Content is centered separately via
+    // `webShellCenter`. Native unchanged (flex fill).
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  // Web: centers a block at the shared shell width. Applied to the persistent header
+  // block and to each scroll content container so the visible column stays centered while
+  // the scroll surface itself is full-width. No-op on native (gated by isWeb at usage).
+  webShellCenter: { width: "100%" as any, maxWidth: WEB_MAXW, alignSelf: "center" as any },
   centerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -6939,9 +6969,10 @@ const styles = StyleSheet.create({
     paddingBottom: webSc(SPACING.md),
     backgroundColor: COLORS.surface,
   },
-  headerWeb: { paddingTop: webSc(SPACING.md), backgroundColor: COLORS.background },
+  // Web: minimal top spacing so the dashboard starts noticeably higher (mobile unchanged).
+  headerWeb: { paddingTop: 2, paddingBottom: SPACING.xs, backgroundColor: COLORS.background },
   // Web-only breadcrumb (replaces the in-page Back button on web).
-  breadcrumbRow: { paddingTop: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.lg), backgroundColor: COLORS.background },
+  breadcrumbRow: { paddingTop: SPACING.xs, paddingBottom: 0, paddingHorizontal: webSc(SPACING.md), backgroundColor: COLORS.background },
   breadcrumbText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
   breadcrumbCurrent: { color: COLORS.textSecondary, fontWeight: "600" },
   backButton: { padding: webSc(SPACING.xs) },
@@ -6955,6 +6986,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: webSc(SPACING.sm),
   },
+  // Web/desktop: title + status pill inline, left-aligned (native stays centered).
+  headerCenterWeb: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: webSc(SPACING.sm), marginHorizontal: 0 },
+  headerTitleWeb: { fontSize: webMs(FONT_SIZES.xxl), fontWeight: "800" },
   headerTitle: {
     fontSize: webMs(FONT_SIZES.lg),
     fontWeight: "700",
@@ -7059,14 +7093,17 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.md),
     paddingBottom: webSc(SPACING.xl * 2),
   },
-  contentWeb: { alignItems: "stretch" },
+  contentWeb: { alignItems: "stretch", width: "100%" as any, maxWidth: WEB_MAXW, alignSelf: "center" as any },
   scrollFlex: { flex: 1 },
   // Web event-builder two-column: the page scrolls; the preview is sticky.
   builderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     width: "100%" as any,
-    maxWidth: 1180,
+    // Match the shared Setup content shell (WEB_MAXW) so the Settings two-column layout's
+    // LEFT edge lines up with Tables / Players / Prize Pool instead of sitting inset from a
+    // narrower centered box.
+    maxWidth: WEB_MAXW,
     alignSelf: "center" as any,
     gap: SPACING.lg,
     padding: SPACING.md,
@@ -7726,6 +7763,9 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     backgroundColor: COLORS.background,
     alignItems: "center",
+    // Web/desktop: a real footer action row — centered at the content width, right-aligned
+    // CTA, compact padding (native/mobile keeps the full-width centered footer above).
+    ...(isWeb ? { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any, alignItems: "flex-end" as any, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.md) } : null),
   },
   lockBtnFooterInner: { width: "95%" },
   settingsFooter: {
@@ -7734,8 +7774,12 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? webSc(15) : webSc(10),
     backgroundColor: COLORS.background,
     alignItems: "center",
+    ...(isWeb ? { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any, alignItems: "stretch" as any, paddingHorizontal: webSc(SPACING.md), paddingTop: webSc(SPACING.md), paddingBottom: webSc(SPACING.md), borderTopWidth: 1, borderTopColor: COLORS.border } : null),
   },
-  settingsFooterInner: { width: "95%", marginTop: 0 },
+  settingsFooterInner: { width: "95%", marginTop: 0, ...(isWeb ? { width: "100%" as any, justifyContent: "flex-end" as any } : null) },
+  // Web/desktop footer button: content-sized (cancels the native flex:1 / 95% width),
+  // sensible min-width, right-aligned. Appended last so it overrides base + inline flex.
+  stepBtnWeb: { width: "auto" as any, flexGrow: 0, flexShrink: 0, flexBasis: "auto" as any, minWidth: webSc(180), paddingHorizontal: webSc(SPACING.xl), alignSelf: "flex-end" as any },
   startHintFooter: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
