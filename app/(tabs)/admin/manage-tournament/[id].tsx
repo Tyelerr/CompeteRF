@@ -481,7 +481,9 @@ interface SettingsForm {
   thumbnail: string;
   venueId: number | null;
   recurrenceType: string;
-  raceMode: RaceMode;
+  // "" = unconfigured (TD has not picked a Race Type yet). Never persisted as a
+  // real race mode — the save omits raceMode entirely while it is "".
+  raceMode: RaceMode | "";
   // Fixed race (numbers — driven by steppers)
   raceWinners: number; // also the single-elim "Match Race To"
   raceLosers: number;
@@ -600,7 +602,10 @@ const toForm = (t: Tournament): SettingsForm => {
       name: p.name ?? "",
       amount: formatMoney(numStr(p.amount as number)),
     })),
-    raceMode: ls.raceMode ?? "fixed",
+    // NO fallback to "fixed": an unsaved race mode must hydrate as "" (unconfigured)
+    // so the dropdown shows "Select Race Type" and no race-specific controls render.
+    // Existing tournaments with a saved raceMode load exactly as before.
+    raceMode: ls.raceMode ?? "",
     raceGroups: (ls.raceGroups ?? []).map((g) => ({
       id: g.id,
       label: g.label,
@@ -678,6 +683,7 @@ const formToSettingsInput = (
   entryFee: f.entryFee,
   maxFargo: f.maxFargo,
   open: f.openTournament,
+  raceMode: f.raceMode, // "" while unconfigured → flagged missing by settings-complete
 });
 
 const toPatch = (f: SettingsForm): Partial<Tournament> => {
@@ -742,7 +748,11 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
         }) as any)
       : undefined,
   live_settings: {
-    raceMode: f.raceMode,
+    // Persist the chosen mode only. While unconfigured ("") write undefined so the
+    // key is dropped from the JSONB blob (the shallow-merge in writeLiveSettings +
+    // JSON serialization omit undefined) — an unrelated Settings save therefore never
+    // silently persists "fixed". Existing saved modes always round-trip unchanged.
+    raceMode: f.raceMode || undefined,
     fixedRaceWinners: f.raceWinners,
     fixedRaceLosers: hasLosers ? f.raceLosers : null,
     fixedRaceFinals: f.raceFinals,
@@ -2090,6 +2100,7 @@ export default function ManageTournamentScreen() {
       entryFee: t.entry_fee,
       maxFargo: t.max_fargo,
       open: t.open_tournament,
+      raceMode: ls.raceMode ?? null,
     });
     const checkedIn = hub.registrations.filter(
       (r) => r.status === "checked_in",
@@ -3945,7 +3956,7 @@ export default function ManageTournamentScreen() {
         <Section title="Race">
           <View style={styles.field}>
             <Dropdown
-              placeholder="Select race type"
+              placeholder="Select Race Type"
               options={RACE_MODE_OPTIONS}
               value={form.raceMode}
               onSelect={(v) => patchForm({ raceMode: v as RaceMode })}

@@ -8,7 +8,7 @@
 // Required fields (and ONLY these — optional metadata like Contact Phone, image,
 // description are never required):
 //   Tournament Name · Game Type · Format · Entry Fee ·
-//   (Maximum Fargo OR Open Tournament) · Date · Time · Venue · Table Size · Equipment
+//   (Maximum Fargo OR Open Tournament) · Race Type · Date · Time · Venue · Table Size · Equipment
 
 export interface SettingsCompleteInput {
   name?: string | null;
@@ -22,6 +22,10 @@ export interface SettingsCompleteInput {
   entryFee?: number | string | null;
   maxFargo?: number | string | null;
   open?: boolean | null;
+  // Race Type (live_settings.raceMode). An unconfigured tournament has no saved
+  // race mode (undefined/""), which counts as missing — the TD must explicitly
+  // pick Fixed Race / A-B-C Groups / Fargo Differential before opening registration.
+  raceMode?: string | null;
 }
 
 const has = (v: unknown): boolean =>
@@ -49,6 +53,7 @@ export const missingSettingsFields = (s: SettingsCompleteInput): string[] => {
   if (!has(s.format)) missing.push("Format");
   if (!feeOk(s)) missing.push("Entry Fee");
   if (!fargoOk(s)) missing.push("Maximum Fargo or Open Tournament");
+  if (!has(s.raceMode)) missing.push("Race Type");
   if (!has(s.date)) missing.push("Date");
   if (!has(s.time)) missing.push("Time");
   if (!has(s.venueId)) missing.push("Venue");

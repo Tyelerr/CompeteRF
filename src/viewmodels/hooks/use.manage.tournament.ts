@@ -53,6 +53,7 @@ const requiredComplete = (t: Tournament): boolean =>
     entryFee: t.entry_fee,
     maxFargo: t.max_fargo,
     open: t.open_tournament,
+    raceMode: t.live_settings?.raceMode ?? null,
   });
 
 const derivePhase = (t: Tournament | null): ManagePhase => {
