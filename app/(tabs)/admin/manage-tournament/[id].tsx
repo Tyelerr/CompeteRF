@@ -7948,7 +7948,12 @@ const styles = StyleSheet.create({
   settingsFooterInner: { width: "95%", marginTop: 0, ...(isWeb ? { width: "100%" as any, justifyContent: "flex-end" as any } : null) },
   // Web/desktop footer button: content-sized (cancels the native flex:1 / 95% width),
   // sensible min-width, right-aligned. Appended last so it overrides base + inline flex.
-  stepBtnWeb: { width: "auto" as any, flexGrow: 0, flexShrink: 0, flexBasis: "auto" as any, minWidth: webSc(180), paddingHorizontal: webSc(SPACING.xl), alignSelf: "flex-end" as any },
+  // Web/desktop footer button: content-sized, right-aligned, NEVER flex-grow. Must override
+  // the base `flex: 1` (and inline {flex:1}/{flex:2}) on the SAME `flex` key: react-native-web
+  // emits `flex: <n>` as a raw CSS shorthand (flex: 1 1 0%) that would otherwise win the
+  // cascade over flexGrow:0 and stretch the button. `flex: -1` is the RN idiom RN-Web expands
+  // to flexGrow:0 / flexShrink:1 / flexBasis:auto — content width, no growth, no shorthand.
+  stepBtnWeb: { flex: -1, minWidth: webSc(180), paddingHorizontal: webSc(SPACING.xl), alignSelf: "flex-end" as any },
   startHintFooter: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
