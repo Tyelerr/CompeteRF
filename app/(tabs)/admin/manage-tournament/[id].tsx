@@ -5703,7 +5703,7 @@ export default function ManageTournamentScreen() {
               Tournament is running
             </Text>
             <TouchableOpacity
-              style={styles.startBtn}
+              style={[styles.startBtn, isWeb && styles.stepBtnWeb]}
               onPress={() => setActiveTab("matches")}
             >
               <Text allowFontScaling={false} style={styles.startBtnText}>
@@ -5721,6 +5721,7 @@ export default function ManageTournamentScreen() {
               style={[
                 styles.startBtn,
                 (!allOk || hub.isMutatingLive) && styles.btnDisabled,
+                isWeb && styles.stepBtnWeb,
               ]}
               onPress={handleStartTournament}
               disabled={!allOk || hub.isMutatingLive}
@@ -7953,7 +7954,10 @@ const styles = StyleSheet.create({
   // emits `flex: <n>` as a raw CSS shorthand (flex: 1 1 0%) that would otherwise win the
   // cascade over flexGrow:0 and stretch the button. `flex: -1` is the RN idiom RN-Web expands
   // to flexGrow:0 / flexShrink:1 / flexBasis:auto — content width, no growth, no shorthand.
-  stepBtnWeb: { flex: -1, minWidth: webSc(180), paddingHorizontal: webSc(SPACING.xl), alignSelf: "flex-end" as any },
+  // width:"auto" is REQUIRED in addition to flex:-1 — some callers also carry an explicit
+  // width (e.g. lockBtnFooterInner width:"95%") that flex:-1 alone wouldn't override, so the
+  // step-nav "Continue to …" buttons would otherwise stay ~full width. auto → content width.
+  stepBtnWeb: { flex: -1, width: "auto" as any, minWidth: webSc(180), paddingHorizontal: webSc(SPACING.xl), alignSelf: "flex-end" as any },
   startHintFooter: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
