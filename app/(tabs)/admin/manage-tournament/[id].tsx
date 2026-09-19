@@ -22,6 +22,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Modal,
+  findNodeHandle,
   Platform,
   Pressable,
   RefreshControl,
@@ -131,7 +132,7 @@ import { teamService } from "../../../../src/models/services/team.service";
 import { chipService } from "../../../../src/models/services/chip.service";
 import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-lifecycle";
 import { buildReadinessSummary, needsReadinessWarning, blocksLeavingPlayers, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
-import { missingSettingsFields, settingsComplete, SettingsCompleteInput } from "../../../../src/utils/settings-complete";
+import { missingSettingsItems, settingsComplete, isSettingsFieldRequired, SettingsCompleteInput, SettingsFieldKey } from "../../../../src/utils/settings-complete";
 import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
 import { LifecyclePhase, deriveLifecycle, paymentSatisfied } from "../../../../src/utils/registration-lifecycle";
 import { useQuery } from "@tanstack/react-query";
@@ -896,6 +897,54 @@ const DismissKeyboardWrap = ({ children }: { children: React.ReactElement }) =>
 // Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
 const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
 
+// Per-requirement red error copy shown under a missing field after the TD attempts Start
+// Registration. Keyed by the shared SettingsFieldKey so wording stays tied to the rules.
+// Composite requirements (fargo) get either/or wording, not a single-field message.
+const FIELD_ERROR_MESSAGE: Record<SettingsFieldKey, string> = {
+  name: "Tournament Name is required",
+  gameType: "Game Type is required",
+  format: "Format is required",
+  entryFee: "Entry Fee is required (enter 0 for free)",
+  fargo: "Set a Maximum Fargo or turn on Open Tournament",
+  raceMode: "Race Type is required",
+  date: "Date is required",
+  time: "Start Time is required",
+  venue: "Venue is required",
+  tableSize: "Table Size is required",
+  equipment: "Equipment is required",
+};
+
+// Wraps a required Settings field: registers a scroll anchor (by key) and — once the TD
+// has attempted Start Registration with this field still missing — draws a red box around
+// the control/section plus a short red helper message. `error` is derived live from the
+// shared missing-items result, so the red state clears the instant the requirement is met
+// (no need to press Start Registration again). No control internals are modified.
+const FieldAnchor = ({
+  anchorKey,
+  error,
+  register,
+  style,
+  children,
+}: {
+  anchorKey: string;
+  error?: string;
+  register: (key: string, node: View | null) => void;
+  style?: object; // preserve host layout (e.g. a flex column) when wrapping
+  children: React.ReactNode;
+}) => (
+  <View
+    ref={(n) => register(anchorKey, n)}
+    style={[style, error ? styles.fieldErrorWrap : undefined]}
+  >
+    {children}
+    {error ? (
+      <Text allowFontScaling={false} style={styles.fieldErrorText}>
+        {error}
+      </Text>
+    ) : null}
+  </View>
+);
+
 // Money fields hold whole dollars typed left-to-right with a fixed ".00" suffix
 // (type 5 -> 5.00, type 590 -> 590.00). The input box shows just the dollars;
 // ".00" is rendered as a separate suffix so typing never fights the decimals.
@@ -937,6 +986,8 @@ const LabeledInput = ({
   accessoryId,
   noCheck,
   money,
+  error,
+  containerRef,
 }: {
   label: string;
   value: string;
@@ -951,6 +1002,8 @@ const LabeledInput = ({
   accessoryId?: string; // iOS keyboard Done bar
   noCheck?: boolean; // opt out of the completion check (e.g. free-text description)
   money?: boolean; // numbers-only; format to two decimals on blur
+  error?: string; // required-field error copy (red border + message); undefined = no error
+  containerRef?: (n: View | null) => void; // scroll anchor for validation
 }) => {
   // Complete when the field holds data; FieldCheck renders nothing otherwise.
   const showCheck = !disabled && !noCheck && !!value.trim();
@@ -958,7 +1011,7 @@ const LabeledInput = ({
   // smooth control; the inner input draws no outline of its own.
   const [focused, setFocused] = useState(false);
   return (
-    <View style={styles.field}>
+    <View style={styles.field} ref={containerRef}>
       <Text
         allowFontScaling={false}
         style={[styles.fieldLabel, disabled && styles.labelDisabled]}
@@ -974,6 +1027,7 @@ const LabeledInput = ({
           focused && !disabled && styles.inputWrapFocused,
           focused && !disabled && (INPUT_WRAP_FOCUS_RING as object),
           disabled && styles.inputDisabled,
+          !!error && styles.inputWrapError,
         ]}
       >
         <FieldCheck complete={showCheck} />
@@ -1006,6 +1060,11 @@ const LabeledInput = ({
       {hint ? (
         <Text allowFontScaling={false} style={styles.hint}>
           {hint}
+        </Text>
+      ) : null}
+      {error ? (
+        <Text allowFontScaling={false} style={styles.fieldErrorText}>
+          {error}
         </Text>
       ) : null}
     </View>
@@ -2221,6 +2280,44 @@ export default function ManageTournamentScreen() {
   // The page ScrollView — chip pages ask to jump to the top (e.g. when a shuffle
   // round completes) so the Shuffle Mode banner / Start Shuffle is in reach.
   const pageScrollRef = useRef<ScrollView>(null);
+
+  // Required-field validation UX: flips true the first time the TD taps Start Registration
+  // with setup incomplete; drives the red field errors. fieldAnchors maps a SettingsFieldKey
+  // to its FieldAnchor wrapper View so we can scroll the first missing requirement into view.
+  const [settingsValidationAttempted, setSettingsValidationAttempted] = useState(false);
+  const fieldAnchors = useRef<Record<string, View | null>>({});
+  const registerFieldAnchor = useCallback((key: string, node: View | null) => {
+    fieldAnchors.current[key] = node;
+  }, []);
+  // Visual top-to-bottom order of the required fields (for scroll-to-first-missing).
+  const FIELD_ANCHOR_ORDER: SettingsFieldKey[] = [
+    "name", "gameType", "format", "fargo", "raceMode", "entryFee",
+    "date", "time", "tableSize", "equipment",
+  ];
+  // Scroll the first still-missing required field into view (no forced keyboard focus — on
+  // mobile that would pop the keyboard unexpectedly; scroll-into-view is the safe signal).
+  const scrollToFirstMissing = (keys: Set<SettingsFieldKey>) => {
+    const firstKey = FIELD_ANCHOR_ORDER.find((k) => keys.has(k));
+    if (!firstKey) return;
+    const node = fieldAnchors.current[firstKey];
+    const scroller = pageScrollRef.current;
+    if (!node || !scroller) return;
+    const handle = findNodeHandle(scroller);
+    if (handle == null) return;
+    try {
+      // measureLayout gives the anchor's y within the ScrollView content on native + web.
+      // @ts-ignore host component method
+      node.measureLayout(
+        handle,
+        (_x: number, y: number) => {
+          pageScrollRef.current?.scrollTo({ y: Math.max(0, y - webSc(24)), animated: true });
+        },
+        () => {},
+      );
+    } catch {
+      // Non-fatal: scroll is a convenience; the red errors + summary still guide the TD.
+    }
+  };
   // Item 1(B): the setup pages share ONE persistent page ScrollView, so switching subtabs
   // (e.g. tapping "Review & Start" from the longer Players/Tables page) would inherit the
   // previous page's scroll offset and open mid-page. Reset to top on every setup subtab
@@ -2522,13 +2619,18 @@ export default function ManageTournamentScreen() {
   // (not goToTab), so it never trips the "You're almost there / Go to Settings" gate.
   const beginRegistration = async () => {
     if (!form) return;
-    const missing = missingSettingsFields(
+    const items = missingSettingsItems(
       formToSettingsInput(form, hub.tournament?.venue_id ?? null),
     );
-    if (missing.length) {
+    if (items.length) {
+      // Incomplete: do NOT start. Turn on the red field-error state, scroll the first
+      // missing requirement into view, and show a concise message. The reds live-clear as
+      // each field is fixed (they derive from the same shared missing-items result).
+      setSettingsValidationAttempted(true);
+      scrollToFirstMissing(new Set(items.map((m) => m.key)));
       Alert.alert(
-        "Finish Settings",
-        `Please complete the following before opening registration:\n\n• ${missing.join("\n• ")}`,
+        "Complete required setup",
+        "Complete the required fields before starting registration.",
       );
       return; // stay on Settings, no save, no navigate
     }
@@ -3954,7 +4056,7 @@ export default function ManageTournamentScreen() {
     // modes, no losers/finals races.
     if (isChip) {
       return (
-        <Section title="Race">
+        <Section title={"Race" + reqStar("raceMode")}>
           <Stepper
             prefix="Race to"
             value={form.raceWinners || 1}
@@ -3970,9 +4072,10 @@ export default function ManageTournamentScreen() {
       );
     }
     return (
-        <Section title="Race">
-          <View style={styles.field}>
+        <Section title={"Race" + reqStar("raceMode")}>
+          <View style={styles.field} ref={(n) => registerFieldAnchor("raceMode", n)}>
             <Dropdown
+              error={errFor("raceMode")}
               placeholder="Select Race Type"
               options={RACE_MODE_OPTIONS}
               value={form.raceMode}
@@ -4166,13 +4269,13 @@ export default function ManageTournamentScreen() {
     if (!form) return null;
     return (
       <View style={styles.entryRow}>
-        <View style={styles.entryCol}>
-          <FieldLabel label="Entry Fee" />
+        <FieldAnchor anchorKey="entryFee" error={errFor("entryFee")} register={registerFieldAnchor} style={styles.entryCol}>
+          <FieldLabel label={"Entry Fee" + reqStar("entryFee")} />
           <MoneyInput
             value={form.entryFee}
             onChange={(v) => patchForm({ entryFee: v })}
           />
-        </View>
+        </FieldAnchor>
         <View style={styles.entryCol}>
           <FieldLabel label="Added Money" />
           <MoneyInput
@@ -4493,14 +4596,17 @@ export default function ManageTournamentScreen() {
         >
         <Section title="Tournament Details">
           <LabeledInput
-            label="Name *"
+            label={"Name" + reqStar("name")}
             value={form.name}
             onChangeText={(v) => patchForm({ name: v })}
             placeholder="Tournament name"
+            error={errFor("name")}
+            containerRef={(n) => registerFieldAnchor("name", n)}
           />
-          <View style={styles.field}>
-            <FieldLabel label="Game Type *" />
+          <View style={styles.field} ref={(n) => registerFieldAnchor("gameType", n)}>
+            <FieldLabel label={"Game Type" + reqStar("gameType")} />
             <Dropdown
+              error={errFor("gameType")}
               placeholder="Select game type"
               options={GAME_TYPES}
               value={form.gameType}
@@ -4527,9 +4633,10 @@ export default function ManageTournamentScreen() {
               }
             />
           </View>
-          <View style={styles.field}>
-            <FieldLabel label="Format *" />
+          <View style={styles.field} ref={(n) => registerFieldAnchor("format", n)}>
+            <FieldLabel label={"Format" + reqStar("format")} />
             <Dropdown
+              error={errFor("format")}
               placeholder="Select format"
               options={TOURNAMENT_FORMATS}
               value={form.tournamentFormat}
@@ -4566,9 +4673,11 @@ export default function ManageTournamentScreen() {
           />
         </Section>
 
-        <Section title="Fargo">
+        <Section title={"Fargo" + reqStar("fargo")}>
           <LabeledInput
-            label="Maximum Fargo"
+            label={"Maximum Fargo" + reqStar("fargo")}
+            error={errFor("fargo")}
+            containerRef={(n) => registerFieldAnchor("fargo", n)}
             value={form.maxFargo}
             onChangeText={(v) =>
               patchForm({ maxFargo: v.replace(/[^0-9]/g, "") })
@@ -4887,17 +4996,18 @@ export default function ManageTournamentScreen() {
 
 
         <Section title="Schedule">
-          <View style={styles.field}>
-            <FieldLabel label="Date *" />
+          <FieldAnchor anchorKey="date" error={errFor("date")} register={registerFieldAnchor} style={styles.field}>
+            <FieldLabel label={"Date" + reqStar("date")} />
             <DatePicker
               value={form.tournamentDate}
               onChange={(v) => patchForm({ tournamentDate: v })}
               placeholder="Select date"
             />
-          </View>
-          <View style={styles.field}>
-            <FieldLabel label="Start Time *" />
+          </FieldAnchor>
+          <View style={styles.field} ref={(n) => registerFieldAnchor("time", n)}>
+            <FieldLabel label={"Start Time" + reqStar("time")} />
             <Dropdown
+              error={errFor("time")}
               placeholder="Select start time"
               options={START_TIMES}
               value={form.startTime}
@@ -4948,18 +5058,20 @@ export default function ManageTournamentScreen() {
               No venue on record.
             </Text>
           )}
-          <View style={styles.field}>
-            <FieldLabel label="Table Size" />
+          <View style={styles.field} ref={(n) => registerFieldAnchor("tableSize", n)}>
+            <FieldLabel label={"Table Size" + reqStar("tableSize")} />
             <Dropdown
+              error={errFor("tableSize")}
               placeholder="Select table size"
               options={TABLE_SIZE_OPTIONS}
               value={form.tableSize}
               onSelect={(v) => patchForm({ tableSize: v })}
             />
           </View>
-          <View style={styles.field}>
-            <FieldLabel label="Equipment" />
+          <View style={styles.field} ref={(n) => registerFieldAnchor("equipment", n)}>
+            <FieldLabel label={"Equipment" + reqStar("equipment")} />
             <Dropdown
+              error={errFor("equipment")}
               placeholder="Select equipment"
               options={EQUIPMENT_OPTIONS}
               value={form.equipment}
@@ -5987,14 +6099,26 @@ export default function ManageTournamentScreen() {
   // registration without a separate Save + refresh. Venue is set at creation
   // (not in this form), so it comes from the loaded tournament.
   // SHARED completion check on the LIVE form (same rules as the badge / Players gate).
-  const formMissingFields = form
-    ? missingSettingsFields(formToSettingsInput(form, hub.tournament?.venue_id ?? null))
-    : ["Tournament Name"];
-  const formRequiredComplete = !!form && formMissingFields.length === 0;
-  const regNotYetOpen =
-    hub.phase === "setup_incomplete" || hub.phase === "ready_to_open";
-  const canStartRegistration =
-    formRequiredComplete && regNotYetOpen && !hub.isMutatingLive;
+  // missingSettingsItems is the single rule set; keys drive the red field errors + scroll,
+  // labels drive the "Still needed…" summary. Both recompute from the LIVE form each render,
+  // so a fixed field clears its error immediately (no need to re-tap Start Registration).
+  const formMissingItems = form
+    ? missingSettingsItems(formToSettingsInput(form, hub.tournament?.venue_id ?? null))
+    : [{ key: "name" as SettingsFieldKey, label: "Tournament Name" }];
+  const formMissingFields = formMissingItems.map((m) => m.label);
+  const missingKeys = new Set<SettingsFieldKey>(formMissingItems.map((m) => m.key));
+  const formRequiredComplete = !!form && formMissingItems.length === 0;
+
+  // Red error for a required field: shown only AFTER the TD attempts Start Registration
+  // (settingsValidationAttempted) AND the field is currently missing. Derived live, so it
+  // disappears the moment the requirement is satisfied.
+  const errFor = (key: SettingsFieldKey): string | undefined =>
+    settingsValidationAttempted && missingKeys.has(key)
+      ? FIELD_ERROR_MESSAGE[key]
+      : undefined;
+  // `*` marker for a required field, derived from the shared rules (format-aware for Race Type).
+  const reqStar = (key: SettingsFieldKey): string =>
+    isSettingsFieldRequired(key, form?.tournamentFormat) ? " *" : "";
 
   return (
     <View style={styles.container}>
@@ -6786,16 +6910,13 @@ export default function ManageTournamentScreen() {
                   </Text>
                 </TouchableOpacity>
                 {!isExternal && isChip && (
+                  // Stays clickable while setup is incomplete so tapping reveals the missing
+                  // requirements (beginRegistration guards + highlights). Only truly disabled
+                  // during an in-flight save.
                   <TouchableOpacity
-                    style={[
-                      styles.startBtn,
-                      !chipRegistrationStarted && !formRequiredComplete && styles.btnDisabled,
-                      isWeb && styles.stepBtnWeb,
-                    ]}
+                    style={[styles.startBtn, hub.isSaving && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                     onPress={beginRegistration}
-                    disabled={
-                      hub.isSaving || (!chipRegistrationStarted && !formRequiredComplete)
-                    }
+                    disabled={hub.isSaving}
                   >
                     <Text allowFontScaling={false} style={styles.startBtnText}>
                       {chipRegistrationStarted ? "View Players →" : "Begin Registration →"}
@@ -6803,10 +6924,13 @@ export default function ManageTournamentScreen() {
                   </TouchableOpacity>
                 )}
                 {!isExternal && !isChip && (
+                  // Stays clickable while setup is incomplete — tapping runs beginRegistration,
+                  // which shows the incomplete-setup message, highlights every missing field,
+                  // and scrolls to the first. Only disabled during an in-flight save/mutation.
                   <TouchableOpacity
-                    style={[styles.startBtn, !canStartRegistration && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
+                    style={[styles.startBtn, (hub.isSaving || hub.isMutatingLive) && styles.btnDisabled, isWeb && styles.stepBtnWeb]}
                     onPress={beginRegistration}
-                    disabled={!canStartRegistration}
+                    disabled={hub.isSaving || hub.isMutatingLive}
                   >
                     <Text allowFontScaling={false} style={styles.startBtnText}>
                       Start Registration
@@ -7192,6 +7316,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: CHECK_INSET,
   },
   inputWrapFocused: { borderColor: COLORS.primary },
+  inputWrapError: { borderColor: COLORS.error },
   inputWrapMultiline: { alignItems: "flex-start" },
   inputWrapNarrow: { width: webSc(120), alignSelf: "flex-start" },
   inputInner: {
@@ -7272,6 +7397,22 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginTop: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.xs),
+  },
+  // Post-attempt required-field error: red box around the missing control/section + red
+  // helper line. Applied by FieldAnchor only after Start Registration is attempted.
+  fieldErrorWrap: {
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    borderRadius: webSc(RADIUS.md),
+    backgroundColor: COLORS.error + "0D",
+    padding: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
+  fieldErrorText: {
+    color: COLORS.error,
+    fontSize: webMs(FONT_SIZES.xs),
+    fontWeight: "600",
+    marginTop: webSc(SPACING.xs),
   },
   hintAmber: {
     fontSize: webMs(FONT_SIZES.xs),
