@@ -81,14 +81,23 @@ export interface UnifiedRegisterModalProps {
   ) => void | Promise<void>;
   // Bracket singles ONLY (no onAddSingles): after register_player_for_tournament creates
   // the registration, persist the TD's Entry-collected + entered-side-pot selections onto
-  // it via the host's authoritative updateRegistration (paid_entry / paid_side_pots). The
-  // modal calls this only when a selection was made, and treats a rejection as a partial
-  // failure (player added, selections not saved) — see performAddSingles.
+  // it via the host's authoritative updateRegistration (paid_entry / paid_side_pots, and —
+  // when markReady — the same checked_in transition the roster's Ready button performs).
+  // The modal calls this only when a selection was made or the player qualifies for Ready,
+  // and treats a rejection as a partial failure (player added, selections not saved).
   onPersistSelections?: (
     registrationId: number,
-    paidEntry: boolean,
-    paidSidePots: string[],
+    sel: {
+      paidEntry: boolean;
+      paidSidePots: string[];
+      markReady: boolean;
+      fargo: number | null;
+    },
   ) => Promise<void>;
+  // Bracket singles ONLY: does the CURRENT (fargo, entry-collected) selection satisfy the
+  // authoritative Ready rule (host reuses RegistrationRow.canBeReady)? Drives the live
+  // "Add as Ready" vs "Add Player" label and whether Ready is requested on add.
+  readyEval?: (fargo: number | null, paidEntry: boolean) => boolean;
   // Tournament entry config for the Add flow's Tournament Entry section (Singles):
   // the required entry fee + the side pots a player can be entered into. Optional —
   // when absent the section shows only the entry fee (or nothing if fee is 0).
@@ -152,6 +161,7 @@ export const UnifiedRegisterModal = ({
   computeChips,
   onAddSingles,
   onPersistSelections,
+  readyEval,
   isPlayerEntered,
   entryFee = null,
   sidePots = [],
@@ -492,6 +502,7 @@ export const UnifiedRegisterModal = ({
     if (tournamentId == null || !selected[1]) return;
     setBusy(true);
     setErrorMsg(null);
+    let addedAsReady = false; // bracket path: reflected in the success flash
     try {
       if (onAddSingles) {
         // Chip Singles: add directly to chip_entries via the screen's callback
@@ -508,9 +519,16 @@ export const UnifiedRegisterModal = ({
           selected[1].player_id,
           parseFargo(1),
         );
-        if (onPersistSelections && (entryPaid || enteredPots.length > 0)) {
+        // Ready iff the current selection satisfies the host's authoritative rule.
+        const markReady = !!readyEval && readyEval(parseFargo(1), entryPaid);
+        if (onPersistSelections && (markReady || entryPaid || enteredPots.length > 0)) {
           try {
-            await onPersistSelections(regId, entryPaid, enteredPots);
+            await onPersistSelections(regId, {
+              paidEntry: entryPaid,
+              paidSidePots: enteredPots,
+              markReady,
+              fargo: parseFargo(1),
+            });
           } catch {
             // The player WAS registered; only the entry/side-pot save failed. Refresh the
             // roster so the (added) player appears, reset the flow so the TD can't blindly
@@ -529,14 +547,15 @@ export const UnifiedRegisterModal = ({
             setStep("search");
             Alert.alert(
               "Added — but selections not saved",
-              `${nm} was added to the tournament, but saving the Entry / Side Pot selections failed. Open the player in the roster to set them.`,
+              `${nm} was added to the tournament, but saving the Entry / Side Pot / Ready selections failed. Open the player in the roster to set them.`,
             );
             return; // do NOT fall through to the success flash / duplicate re-register
           }
         }
+        addedAsReady = markReady;
         onRegistered?.(selected[1].player_id, regId);
       }
-      setFlash(`${selected[1].display_name} added.`);
+      setFlash(`${selected[1].display_name} added${addedAsReady ? " as Ready" : ""}.`);
       setSelected({ 1: null, 2: null });
       setFargo({ 1: "", 2: "" });
       setEnteredPots([]);
@@ -825,9 +844,9 @@ export const UnifiedRegisterModal = ({
   // can't squash it). The modal as a whole rises above the keyboard (see overlay).
   const renderFargo = () => {
     // Dynamic CTA + helper so the label ALWAYS matches the state that will be created.
-    // Chip path (onAddSingles) is lifecycle-aware; the bracket path keeps "Add Player"
-    // (elimination lifecycle is Phase 3). Chip needs a Fargo to compute chips, so a
-    // missing Fargo is a hard blocker even when the fee is marked paid.
+    // Chip path (onAddSingles) is lifecycle-aware and needs a Fargo (to compute chips).
+    // Bracket path (readyEval) reuses the host's authoritative Ready rule so a TD-added
+    // player who already meets it is created Ready, not Pre-Registered/Registered.
     const feeRequired = (Number(entryFee) || 0) > 0;
     const paymentOk = !feeRequired || entryPaid;
     const hardBlocker = !!onAddSingles && parseFargo(1) == null;
@@ -836,14 +855,20 @@ export const UnifiedRegisterModal = ({
     const overBy = onAddSingles ? fargoOverBy(parseFargo(1), maxFargo) : 0;
     const overCap = overBy > 0;
     const willBeReady = paymentOk && !hardBlocker && !overCap;
+    // Bracket: does the current selection satisfy the host's Ready rule (canBeReady)?
+    const bracketReady = !onAddSingles && !!readyEval && readyEval(parseFargo(1), entryPaid);
     const fieldWord = onAddSingles ? "live field" : "bracket";
     const ctaLabel = !onAddSingles
-      ? "Add Player"
+      ? bracketReady
+        ? "Add as Ready"
+        : "Add Player"
       : willBeReady
         ? "Add as Ready"
         : "Register Player";
     const ctaHelper = !onAddSingles
-      ? ""
+      ? bracketReady
+        ? "All Ready requirements met — this player will be added as Ready."
+        : "This player will be added as Registered — you can mark them Ready from the roster."
       : overCap && paymentOk && !hardBlocker
         ? "Over the Fargo cap — this player will be registered and needs override approval before they can be Ready."
         : hardBlocker && paymentOk

@@ -344,17 +344,21 @@ const tableStatusColor = (s: TableStatus): string =>
 // ── Registration presentation ────────────────────────────────────────────────
 // The DB has six raw statuses; the Players tab collapses them to four display
 // states. "Ready" = checked_in (confirmed + paid -> eligible for the bracket).
-type DisplayStatus = "prereg" | "ready" | "no_show" | "removed";
+type DisplayStatus = "prereg" | "registered" | "ready" | "no_show" | "removed";
 
 const displayStatusOf = (s: RegistrationStatus): DisplayStatus => {
   if (s === "checked_in") return "ready";
   if (s === "no_show") return "no_show";
   if (s === "cancelled") return "removed";
-  return "prereg"; // preregistered / queued / approved
+  // "approved" = a TD-processed entry (manual add / approve) that isn't Ready yet →
+  // Registered. Only an untouched self-signup (preregistered / queued) is Pre-Registered.
+  if (s === "approved") return "registered";
+  return "prereg"; // preregistered / queued
 };
 
 const DISPLAY_META: Record<DisplayStatus, { label: string; color: string }> = {
-  prereg: { label: "Pre-Registered", color: "#EAB308" }, // yellow
+  prereg: { label: "Pre-Registered", color: "#EAB308" }, // yellow — untouched self-signup
+  registered: { label: "Registered", color: COLORS.primary }, // blue — TD-processed, not Ready
   ready: { label: "Ready", color: COLORS.success }, // green
   no_show: { label: "No Show", color: COLORS.error }, // red
   removed: { label: "Removed", color: COLORS.textMuted }, // gray
@@ -364,13 +368,15 @@ const DISPLAY_META: Record<DisplayStatus, { label: string; color: string }> = {
 // action, then no-shows, then removed.
 const STATUS_RANK: Record<DisplayStatus, number> = {
   ready: 0,
-  prereg: 1,
-  no_show: 2,
-  removed: 3,
+  registered: 1,
+  prereg: 2,
+  no_show: 3,
+  removed: 4,
 };
 
 const PLAYER_FILTERS = [
   { label: "All", value: "all" },
+  { label: "Registered", value: "registered" },
   { label: "Pre-Registered", value: "prereg" },
   { label: "Ready", value: "ready" },
   { label: "No Show", value: "no_show" },
@@ -1768,7 +1774,7 @@ const RegistrationRow = ({
         </>
       )}
 
-      {!locked && d === "prereg" &&
+      {!locked && (d === "prereg" || d === "registered") &&
         renderEditableBody(
           () => onReady(fargoNum, false, paidEntry, paidPots, committedOverride),
           "Ready",
@@ -3984,6 +3990,7 @@ export default function ManageTournamentScreen() {
   const statusCounts = useMemo(() => {
     const c: Record<DisplayStatus, number> = {
       prereg: 0,
+      registered: 0,
       ready: 0,
       no_show: 0,
       removed: 0,
@@ -5164,6 +5171,7 @@ export default function ManageTournamentScreen() {
     const raceGroups = hub.tournament?.live_settings?.raceGroups ?? [];
     const summary = [
       { key: "prereg" as DisplayStatus, short: "Pre-Reg", n: statusCounts.prereg },
+      { key: "registered" as DisplayStatus, short: "Registered", n: statusCounts.registered },
       { key: "ready" as DisplayStatus, short: "Ready", n: statusCounts.ready },
       { key: "no_show" as DisplayStatus, short: "No Show", n: statusCounts.no_show },
     ];
@@ -6147,17 +6155,43 @@ export default function ManageTournamentScreen() {
         mode="singles"
         entryFee={hub.tournament?.entry_fee ?? null}
         sidePots={parseSidePots(hub.tournament?.side_pots)}
+        // Whether the CURRENT Add-flow selections satisfy the SAME bracket Ready rule the
+        // roster's Ready button enforces (RegistrationRow.canBeReady): a valid Fargo, the
+        // entry fee collected (or no fee), and — in groups mode — the Fargo landing in a
+        // configured race group. Drives the live "Add as Ready" vs "Add Player" label and
+        // whether the modal requests the Ready transition on add.
+        readyEval={(fargo, paidEntry) => {
+          const feeRequired = (Number(hub.tournament?.entry_fee) || 0) > 0;
+          const fargoValid = fargo != null && fargo > 0;
+          if (!fargoValid) return false;
+          if (feeRequired && !paidEntry) return false;
+          const rm = hub.tournament?.live_settings?.raceMode ?? "fixed";
+          if (rm === "groups") {
+            const groups = hub.tournament?.live_settings?.raceGroups ?? [];
+            return groupForFargo(fargo, groups as RaceGroup[]) != null;
+          }
+          return true;
+        }}
         onRegistered={() => hub.refetchRegistrations()}
         // Persist the TD's Entry-collected + side-pot selections onto the just-created
         // registration via the SAME authoritative field/path the Ready/Edit flow uses
-        // (paid_entry / paid_side_pots). No RPC or schema change. The modal only calls
+        // (paid_entry / paid_side_pots, and — when markReady — the same checked_in
+        // transition handleReady performs). No RPC or schema change. The modal only calls
         // this AFTER register_player_for_tournament succeeds, and surfaces a clear warning
         // (without a duplicate re-register) if this update fails.
-        onPersistSelections={async (registrationId, paidEntry, paidSidePots) => {
-          await hub.updateRegistration({
-            id: registrationId,
-            updates: { paid_entry: paidEntry, paid_side_pots: paidSidePots },
-          });
+        onPersistSelections={async (registrationId, sel) => {
+          const updates = sel.markReady
+            ? {
+                status: "checked_in" as RegistrationStatus,
+                checked_in_at: new Date().toISOString(),
+                fargo_rating: sel.fargo,
+                is_starter_rating: false,
+                race_override: null,
+                paid_entry: sel.paidEntry,
+                paid_side_pots: sel.paidSidePots,
+              }
+            : { paid_entry: sel.paidEntry, paid_side_pots: sel.paidSidePots };
+          await hub.updateRegistration({ id: registrationId, updates });
         }}
       />
 
