@@ -23,6 +23,10 @@ interface PreviewForm {
   name: string;
   description: string;
   gameType: string;
+  // Selected image: "custom:<url>" for an upload, a THUMBNAIL_OPTIONS id, or "" for the
+  // game-type default. Resolved via the same getTournamentImageUrl helper the Settings
+  // image area uses, so the preview reflects the live selection (with the same fallback).
+  thumbnail: string;
   tournamentFormat: string;
   tournamentDate: string;
   startTime: string;
@@ -109,9 +113,13 @@ export const TournamentSettingsPreview = ({
   const gameLabel = form.gameType
     ? GAME_TYPE_MAP[form.gameType] ?? prettify(form.gameType)
     : "";
-  const imageUrl = form.gameType
-    ? getTournamentImageUrl({ game_type: form.gameType } as Tournament)
-    : null;
+  // Prefer the currently-selected tournament image (custom upload or chosen default),
+  // falling back to the game-type default — identical resolution/fallback to the large
+  // Settings image preview, so the card never lags behind the form until save/reload.
+  const imageUrl = getTournamentImageUrl({
+    thumbnail: form.thumbnail || undefined,
+    game_type: form.gameType,
+  } as Tournament);
   const dateStr = form.tournamentDate ? formatDate(form.tournamentDate) : "";
   const timeStr = form.startTime ? formatTime(form.startTime) : "";
   const dateTime = [dateStr, timeStr].filter(Boolean).join(" · ");
