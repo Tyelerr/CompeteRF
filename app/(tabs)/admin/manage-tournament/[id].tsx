@@ -56,6 +56,7 @@ import {
 } from "../../../../src/utils/tournament-helpers";
 import { useTournamentImage } from "../../../../src/viewmodels/hooks/use.tournament.image";
 import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
+import { formatDate, formatTime } from "../../../../src/utils/formatters";
 import {
   GameType,
   RegistrationStatus,
@@ -5204,6 +5205,128 @@ export default function ManageTournamentScreen() {
     );
   };
 
+  // Export the current roster as CSV (reads existing registration data only — no service
+  // or DB change). Web downloads a file; native shows a brief notice (web-focused).
+  const handleExportPlayers = () => {
+    const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const header = "Name,Player ID,Status,Fargo,Entry Paid,Side Pots";
+    const rows = hub.registrations.map((r) =>
+      [
+        esc(getDisplayName(r, pendingNames)),
+        esc(r.profiles?.id_auto != null ? String(r.profiles.id_auto) : ""),
+        esc(DISPLAY_META[displayStatusOf(r.status)].label),
+        esc(r.fargo_rating != null ? String(r.fargo_rating) : ""),
+        esc(r.paid_entry ? "Yes" : "No"),
+        esc(safePaidSidePots(r.paid_side_pots).join("; ")),
+      ].join(","),
+    );
+    const csv = [header, ...rows].join("\n");
+    if (isWeb && typeof document !== "undefined") {
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `players-${tournamentId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      Alert.alert("Export Player List", "Player list export is available on the web app.");
+    }
+  };
+
+  // Right-side Tournament Summary (sticky on wide web; stacked below the roster on
+  // narrow/mobile). Read-only — reuses data already on the page (hub.tournament,
+  // statusCounts). Entry/Payout intentionally excluded per the design.
+  const renderTournamentSummary = () => {
+    const t = hub.tournament;
+    const fmt = t?.tournament_format ? prettyFormat(t.tournament_format) : "—";
+    const gameLabel = t?.game_type
+      ? (GAME_TYPE_MAP[t.game_type.toLowerCase()] ?? prettifySlug(t.game_type))
+      : "—";
+    const activePlayers =
+      statusCounts.ready + statusCounts.registered + statusCounts.prereg;
+    const bracketSize =
+      activePlayers <= 1 ? 2 : Math.pow(2, Math.ceil(Math.log2(activePlayers)));
+    const regLabel =
+      hub.liveState === "registration_open"
+        ? "Open"
+        : hub.liveState === "registration_closed"
+          ? "Closed"
+          : hub.liveState === "in_progress"
+            ? "Running"
+            : hub.liveState === "finished"
+              ? "Completed"
+              : "Setup";
+    const whenStr =
+      [t?.tournament_date ? formatDate(t.tournament_date) : "", t?.start_time ? formatTime(t.start_time) : ""]
+        .filter(Boolean)
+        .join(" · ") || "—";
+    const venue = t?.venues;
+    const venueSub = venue ? [venue.city, venue.state].filter(Boolean).join(", ") : "";
+    const breakdown = [
+      { label: "Ready", n: statusCounts.ready, color: DISPLAY_META.ready.color },
+      { label: "Registered", n: statusCounts.registered, color: DISPLAY_META.registered.color },
+      { label: "Pre-Registered", n: statusCounts.prereg, color: DISPLAY_META.prereg.color },
+      { label: "No Show", n: statusCounts.no_show, color: DISPLAY_META.no_show.color },
+    ];
+    const totalPlayers = breakdown.reduce((s, b) => s + b.n, 0);
+    const sumRow = (label: string, value: string, valueColor?: string) => (
+      <View style={styles.sumRow}>
+        <Text allowFontScaling={false} style={styles.tsLabel}>{label}</Text>
+        <Text allowFontScaling={false} style={[styles.tsValue, valueColor ? { color: valueColor } : null]} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+    );
+    return (
+      <View style={styles.summaryCard}>
+        <Text allowFontScaling={false} style={styles.summaryTitle}>Tournament Summary</Text>
+        <View style={styles.sumDivider} />
+        {sumRow("Format", fmt)}
+        {sumRow("Game", gameLabel)}
+        {sumRow("Players", `${activePlayers} / ${bracketSize}`)}
+        {sumRow("Registration", regLabel, regLabel === "Open" ? COLORS.success : undefined)}
+        {sumRow("Start Date", whenStr)}
+        <View style={styles.sumRow}>
+          <Text allowFontScaling={false} style={styles.tsLabel}>Venue</Text>
+          <View style={styles.sumVenueVal}>
+            <Text allowFontScaling={false} style={styles.tsValue} numberOfLines={1}>{venue?.venue ?? "—"}</Text>
+            {!!venueSub && (
+              <Text allowFontScaling={false} style={styles.sumValueSub} numberOfLines={1}>{venueSub}</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sumDivider} />
+        <Text allowFontScaling={false} style={styles.breakdownTitle}>Player Breakdown</Text>
+        <View style={styles.breakdownWrap}>
+          <View style={styles.breakdownList}>
+            {breakdown.map((b) => (
+              <View key={b.label} style={styles.breakdownRow}>
+                <View style={[styles.breakdownDot, { backgroundColor: b.color }]} />
+                <Text allowFontScaling={false} style={styles.breakdownLabel}>{b.label}</Text>
+                <Text allowFontScaling={false} style={styles.breakdownCount}>{b.n}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.donutRing}>
+            <Text allowFontScaling={false} style={styles.donutNum}>{totalPlayers}</Text>
+            <Text allowFontScaling={false} style={styles.donutLbl}>Players</Text>
+          </View>
+        </View>
+
+        <View style={styles.sumDivider} />
+        <Text allowFontScaling={false} style={styles.breakdownTitle}>Quick Actions</Text>
+        <TouchableOpacity style={styles.qaBtn} onPress={() => router.push("/compose-message" as any)}>
+          <Text allowFontScaling={false} style={styles.qaBtnText}>✉  Message Players</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.qaBtn} onPress={handleExportPlayers}>
+          <Text allowFontScaling={false} style={styles.qaBtnText}>⬇  Export Player List</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderPlayers = () => {
     const sidePots = (hub.tournament?.side_pots ?? []).map((p) => ({
       name: p.name,
@@ -5218,94 +5341,119 @@ export default function ManageTournamentScreen() {
       { key: "ready" as DisplayStatus, short: "Ready", n: statusCounts.ready },
       { key: "no_show" as DisplayStatus, short: "No Show", n: statusCounts.no_show },
     ];
+    const chipsNode = (
+      <View style={[styles.summaryPills, isWeb && styles.summaryPillsWeb]}>
+        {summary.map((sp) => (
+          <View key={sp.key} style={styles.summaryPill}>
+            <View style={[styles.statusDotSm, { backgroundColor: DISPLAY_META[sp.key].color }]} />
+            <Text allowFontScaling={false} style={styles.summaryPillText}>
+              {sp.short} {sp.n}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+    const searchNode = (
+      <View style={styles.searchInputWrapper}>
+        <Text allowFontScaling={false} style={styles.searchIcon}>{GLYPH.search}</Text>
+        <TextInput
+          allowFontScaling={false}
+          style={styles.searchInput}
+          placeholder="Search players..."
+          placeholderTextColor={COLORS.textMuted}
+          value={playerSearch}
+          onChangeText={setPlayerSearch}
+        />
+      </View>
+    );
+    const filterNode = (
+      <Dropdown
+        placeholder="All Players"
+        options={PLAYER_FILTERS}
+        value={statusFilter}
+        onSelect={(v) => setStatusFilter(v as "all" | DisplayStatus)}
+      />
+    );
+    const addNode = (
+      <TouchableOpacity style={styles.addButton} onPress={() => setAddModalVisible(true)}>
+        <Text allowFontScaling={false} style={styles.addButtonText}>+ Add Player</Text>
+      </TouchableOpacity>
+    );
+    // Search / All Players filter / Add Player grouped in one control row. Web: single row
+    // (chips · search · filter · add). Mobile: chips, search, then filter + add together.
+    const controls = isWeb ? (
+      <View style={styles.controlsRowWeb}>
+        {chipsNode}
+        <View style={styles.controlsSearchWeb}>{searchNode}</View>
+        <View style={styles.controlsFilterWeb}>{filterNode}</View>
+        {addNode}
+      </View>
+    ) : (
+      <>
+        {chipsNode}
+        {searchNode}
+        <View style={styles.controlsFilterRowMobile}>
+          <View style={styles.controlsFilterFlex}>{filterNode}</View>
+          {addNode}
+        </View>
+      </>
+    );
+    const list = hub.registrationsLoading ? (
+      <View style={styles.centerBlock}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    ) : filteredRegs.length === 0 ? (
+      <EmptyState message="No players to show" submessage="Add players or adjust the filter." />
+    ) : (
+      filteredRegs.map((item) => (
+        <RegistrationRow
+          key={item.id}
+          registration={item}
+          pendingNames={pendingNames}
+          sidePots={sidePots}
+          entryFee={entryFee}
+          raceMode={raceMode}
+          raceGroups={raceGroups}
+          onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
+            handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
+          }
+          onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
+            handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
+          }
+          onTogglePaidPot={(name, paid) => handleTogglePaidPot(item, name, paid)}
+          onNoShow={() => handleNoShow(item)}
+          onRemove={() => handleRemove(item)}
+          onUndo={() => handleUndoReady(item)}
+          onRestore={() => handleRestore(item)}
+          isProcessing={processingId === item.id}
+          locked={settingsLocked}
+        />
+      ))
+    );
+    // Wide web: two columns — roster (scrolls) + sticky Tournament Summary aligned to the
+    // first player card (both columns start at the same row). Narrow/mobile: single column
+    // with the summary stacked below the roster.
+    if (isWeb && winW >= 980) {
+      return (
+        <ScrollView
+          style={styles.scrollFlex}
+          contentContainerStyle={styles.playersPageWeb}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {controls}
+          <View style={styles.playersTwoCol}>
+            <View style={styles.playersRosterCol}>{list}</View>
+            <View style={styles.playersSummaryCol}>{renderTournamentSummary()}</View>
+          </View>
+        </ScrollView>
+      );
+    }
     return (
       <View>
-        <View style={styles.playersTopRow}>
-          <View style={styles.summaryPills}>
-            {summary.map((sp) => (
-              <View key={sp.key} style={styles.summaryPill}>
-                <View
-                  style={[
-                    styles.statusDotSm,
-                    { backgroundColor: DISPLAY_META[sp.key].color },
-                  ]}
-                />
-                <Text allowFontScaling={false} style={styles.summaryPillText}>
-                  {sp.short} {sp.n}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setAddModalVisible(true)}
-          >
-            <Text allowFontScaling={false} style={styles.addButtonText}>
-              + Add Player
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchInputWrapper}>
-          <Text allowFontScaling={false} style={styles.searchIcon}>
-            {GLYPH.search}
-          </Text>
-          <TextInput
-            allowFontScaling={false}
-            style={styles.searchInput}
-            placeholder="Search players..."
-            placeholderTextColor={COLORS.textMuted}
-            value={playerSearch}
-            onChangeText={setPlayerSearch}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Dropdown
-            placeholder="Filter status"
-            options={PLAYER_FILTERS}
-            value={statusFilter}
-            onSelect={(v) => setStatusFilter(v as "all" | DisplayStatus)}
-          />
-        </View>
-
-        {hub.registrationsLoading ? (
-          <View style={styles.centerBlock}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-          </View>
-        ) : filteredRegs.length === 0 ? (
-          <EmptyState
-            message="No players to show"
-            submessage="Add players or adjust the filter."
-          />
-        ) : (
-          filteredRegs.map((item) => (
-            <RegistrationRow
-              key={item.id}
-              registration={item}
-              pendingNames={pendingNames}
-              sidePots={sidePots}
-              entryFee={entryFee}
-              raceMode={raceMode}
-              raceGroups={raceGroups}
-              onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
-                handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
-              }
-              onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
-                handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
-              }
-              onTogglePaidPot={(name, paid) =>
-                handleTogglePaidPot(item, name, paid)
-              }
-              onNoShow={() => handleNoShow(item)}
-              onRemove={() => handleRemove(item)}
-              onUndo={() => handleUndoReady(item)}
-              onRestore={() => handleRestore(item)}
-              isProcessing={processingId === item.id}
-              locked={settingsLocked}
-            />
-          ))
-        )}
+        {controls}
+        {list}
+        <View style={styles.summaryStackedMobile}>{renderTournamentSummary()}</View>
       </View>
     );
   };
@@ -8843,6 +8991,90 @@ const styles = StyleSheet.create({
     // wrapper's padding, so the focus area looks short and not full-width.
     ...(Platform.OS === "web" ? ({ outlineStyle: "none", outlineWidth: 0 } as object) : null),
   },
+  // ── Players controls row + two-column (web) + Tournament Summary panel ──
+  // Web: chips (content width) · search (flex) · filter · Add Player, all one row.
+  summaryPillsWeb: { flex: -1 as any }, // override summaryPills' flex:1 → content width
+  controlsRowWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    flexWrap: "wrap",
+    marginBottom: webSc(SPACING.md),
+  },
+  controlsSearchWeb: { flex: 1, minWidth: 200 },
+  controlsFilterWeb: { width: 170 },
+  controlsFilterRowMobile: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  controlsFilterFlex: { flex: 1 },
+  playersPageWeb: {
+    width: "100%" as any,
+    maxWidth: WEB_MAXW,
+    alignSelf: "center" as any,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+    paddingBottom: webSc(SPACING.xl) * 2,
+  },
+  playersTwoCol: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  playersRosterCol: { flex: 1, minWidth: 0 as any },
+  // Sticky right column (same pattern as the Settings builder preview).
+  playersSummaryCol: {
+    width: 320,
+    position: "sticky" as any,
+    top: webSc(SPACING.md),
+    alignSelf: "flex-start" as any,
+  },
+  summaryStackedMobile: { marginTop: webSc(SPACING.md) },
+  summaryCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.md),
+    gap: webSc(SPACING.xs),
+  },
+  summaryTitle: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  sumDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: webSc(SPACING.xs) },
+  sumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(3),
+  },
+  tsLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  tsValue: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700", flexShrink: 1, textAlign: "right" },
+  sumValueSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, textAlign: "right" },
+  sumVenueVal: { alignItems: "flex-end", flexShrink: 1 },
+  breakdownTitle: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text, marginBottom: webSc(SPACING.xs) },
+  breakdownWrap: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.md) },
+  breakdownList: { flex: 1, gap: webSc(4) },
+  breakdownRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  breakdownDot: { width: webSc(9), height: webSc(9), borderRadius: webSc(5) },
+  breakdownLabel: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  breakdownCount: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "800" },
+  donutRing: {
+    width: webSc(72),
+    height: webSc(72),
+    borderRadius: webSc(36),
+    borderWidth: webSc(6),
+    borderColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  donutNum: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "900", color: COLORS.text },
+  donutLbl: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  qaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: webSc(SPACING.sm),
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.md),
+    paddingVertical: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.xs),
+  },
+  qaBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700" },
 
   // Placeholders
   placeholder: { alignItems: "center", paddingVertical: webSc(SPACING.xl * 2) },
