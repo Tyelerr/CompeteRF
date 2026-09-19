@@ -107,13 +107,16 @@ export const missingSettingsFields = (s: SettingsCompleteInput): string[] =>
 export const settingsComplete = (s: SettingsCompleteInput): boolean =>
   missingSettingsItems(s).length === 0;
 
-// Whether a field is required for a given format — the single source for the `*` marker.
-// Everything except Race Type is always required; Race Type is bracket-only. Derived from
-// the same rules above so markers, validation, and errors can never drift apart.
+// Whether a field should show an individual required `*` marker — the single source for it.
+// Composite requirements (fargo = Maximum Fargo OR Open Tournament) are NOT marked on a
+// single field: they are still required (missingSettingsItems enforces the either/or and the
+// section shows the red error + helper), but a `*` on Maximum Fargo would misleadingly imply
+// it alone is mandatory. Race Type is bracket-only. Everything else is always required.
 export const isSettingsFieldRequired = (
   key: SettingsFieldKey,
   format?: string | null,
 ): boolean => {
+  if (key === "fargo") return false; // composite (either/or) — no individual marker
   if (key === "raceMode") return raceTypeApplies(format);
   return true;
 };
