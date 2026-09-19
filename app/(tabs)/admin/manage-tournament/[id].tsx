@@ -91,6 +91,7 @@ import {
 import {
   detectSidePotRenames,
   parseAmount,
+  parseSidePots,
   reconcileSidePotMembership,
 } from "../../../../src/utils/side-pots";
 import {
@@ -6144,7 +6145,20 @@ export default function ManageTournamentScreen() {
         onClose={() => setAddModalVisible(false)}
         tournamentId={tournamentId}
         mode="singles"
+        entryFee={hub.tournament?.entry_fee ?? null}
+        sidePots={parseSidePots(hub.tournament?.side_pots)}
         onRegistered={() => hub.refetchRegistrations()}
+        // Persist the TD's Entry-collected + side-pot selections onto the just-created
+        // registration via the SAME authoritative field/path the Ready/Edit flow uses
+        // (paid_entry / paid_side_pots). No RPC or schema change. The modal only calls
+        // this AFTER register_player_for_tournament succeeds, and surfaces a clear warning
+        // (without a duplicate re-register) if this update fails.
+        onPersistSelections={async (registrationId, paidEntry, paidSidePots) => {
+          await hub.updateRegistration({
+            id: registrationId,
+            updates: { paid_entry: paidEntry, paid_side_pots: paidSidePots },
+          });
+        }}
       />
 
       {/* External submit countdown — cancellable before it lists */}

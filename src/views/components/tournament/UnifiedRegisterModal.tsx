@@ -79,6 +79,16 @@ export interface UnifiedRegisterModalProps {
     paidSidePots: string[],
     paidEntry: boolean,
   ) => void | Promise<void>;
+  // Bracket singles ONLY (no onAddSingles): after register_player_for_tournament creates
+  // the registration, persist the TD's Entry-collected + entered-side-pot selections onto
+  // it via the host's authoritative updateRegistration (paid_entry / paid_side_pots). The
+  // modal calls this only when a selection was made, and treats a rejection as a partial
+  // failure (player added, selections not saved) — see performAddSingles.
+  onPersistSelections?: (
+    registrationId: number,
+    paidEntry: boolean,
+    paidSidePots: string[],
+  ) => Promise<void>;
   // Tournament entry config for the Add flow's Tournament Entry section (Singles):
   // the required entry fee + the side pots a player can be entered into. Optional —
   // when absent the section shows only the entry fee (or nothing if fee is 0).
@@ -141,6 +151,7 @@ export const UnifiedRegisterModal = ({
   onEdited,
   computeChips,
   onAddSingles,
+  onPersistSelections,
   isPlayerEntered,
   entryFee = null,
   sidePots = [],
@@ -488,13 +499,41 @@ export const UnifiedRegisterModal = ({
         // pots + the entry-fee-paid flag ride along (paid defaults Unpaid).
         await onAddSingles(selected[1], parseFargo(1), enteredPots, entryPaid);
       } else {
-        // Bracket singles: register_player_for_tournament has no side-pot param yet,
-        // so pots aren't persisted on this path (elim Add flow is a separate surface).
+        // Bracket singles: create the registration via the existing RPC (unchanged), then
+        // persist the TD's Entry-collected + entered-side-pot selections onto it using the
+        // host's authoritative updateRegistration (paid_entry / paid_side_pots). No RPC or
+        // schema change. Two-step, so partial failure is handled explicitly below.
         const regId = await playerRegistrationService.registerPlayer(
           tournamentId,
           selected[1].player_id,
           parseFargo(1),
         );
+        if (onPersistSelections && (entryPaid || enteredPots.length > 0)) {
+          try {
+            await onPersistSelections(regId, entryPaid, enteredPots);
+          } catch {
+            // The player WAS registered; only the entry/side-pot save failed. Refresh the
+            // roster so the (added) player appears, reset the flow so the TD can't blindly
+            // re-add the SAME player (which would duplicate — the registration already
+            // exists), and warn clearly. The selections are recoverable from the roster's
+            // Ready/Edit flow (same authoritative fields).
+            const nm = selected[1].display_name;
+            onRegistered?.(selected[1].player_id, regId);
+            setSelected({ 1: null, 2: null });
+            setFargo({ 1: "", 2: "" });
+            setEnteredPots([]);
+            setEntryPaid(false);
+            setSlot(1);
+            search.reset();
+            search.loadRecents();
+            setStep("search");
+            Alert.alert(
+              "Added — but selections not saved",
+              `${nm} was added to the tournament, but saving the Entry / Side Pot selections failed. Open the player in the roster to set them.`,
+            );
+            return; // do NOT fall through to the success flash / duplicate re-register
+          }
+        }
         onRegistered?.(selected[1].player_id, regId);
       }
       setFlash(`${selected[1].display_name} added.`);
@@ -865,12 +904,13 @@ export const UnifiedRegisterModal = ({
 
       {/* Tournament Entry: entry-fee PAYMENT (Unpaid by default; tap to mark Paid) +
           the side pots the TD enters this player into, with a live Total Selected
-          (amount owed/entered — payment state does not change it). Pots persist only on
-          the chip path (onAddSingles); the bracket RPC has no side-pot param yet. */}
+          (amount owed/entered — payment state does not change it). Both concepts persist
+          on the chip path (onAddSingles → chip_entries) AND the bracket path (via
+          onPersistSelections → paid_entry / paid_side_pots on the new registration). */}
       <TournamentEntrySection
         variant="select"
         entryFee={entryFee}
-        sidePots={onAddSingles ? sidePots : []}
+        sidePots={sidePots}
         enteredPots={enteredPots}
         paidEntry={entryPaid}
         onTogglePaidEntry={() => setEntryPaid((v) => !v)}
