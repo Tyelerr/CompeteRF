@@ -876,6 +876,23 @@ const Section = ({
   </View>
 );
 
+// Tap-outside-to-dismiss-keyboard wrapper for modal overlays.
+// NATIVE: wraps children in a TouchableWithoutFeedback that calls Keyboard.dismiss,
+// so tapping the backdrop / card padding hides the soft keyboard (existing behavior).
+// WEB: renders children directly. On react-native-web a click ANYWHERE inside the
+// Touchable — including on a TextInput — bubbles to its onPress, and Keyboard.dismiss()
+// resolves to TextInputState.blurTextInput(currentlyFocusedField()), which blurs the
+// input the user just clicked (the reported focus-steal). There is no soft keyboard on
+// web, so the wrapper is unnecessary and is skipped there.
+const DismissKeyboardWrap = ({ children }: { children: React.ReactElement }) =>
+  Platform.OS === "web" ? (
+    children
+  ) : (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
+
 // Web: suppress the inner <input>'s own focus ring so only the wrapper highlights.
 const INPUT_NO_OUTLINE = { outlineStyle: "none", outlineWidth: 0 };
 
@@ -6042,9 +6059,9 @@ export default function ManageTournamentScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={styles.flexOne}
           >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <DismissKeyboardWrap>
               <View style={styles.modalOverlay}>
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                <DismissKeyboardWrap>
                   <View style={styles.modalContent}>
                     <Text allowFontScaling={false} style={styles.modalTitle}>
                       Add Fee
@@ -6118,9 +6135,9 @@ export default function ManageTournamentScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                </TouchableWithoutFeedback>
+                </DismissKeyboardWrap>
               </View>
-            </TouchableWithoutFeedback>
+            </DismissKeyboardWrap>
           </KeyboardAvoidingView>
         </Modal>
       )}
