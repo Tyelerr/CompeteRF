@@ -1595,10 +1595,6 @@ const RegistrationRow = ({
       ? `Group ${g.label || "?"} · Race to ${g.raceTo}`
       : "No matching race group";
   };
-  const fargoText =
-    registration.fargo_rating != null
-      ? `Fargo ${registration.fargo_rating}`
-      : "No Fargo set";
   // Race line shown on read-only / locked cards. A manual override wins.
   const raceLine = (): string | null => {
     if (registration.race_override != null)
@@ -1606,6 +1602,10 @@ const RegistrationRow = ({
     if (isGroups) return groupLineFor(registration.fargo_rating ?? null);
     return null;
   };
+  // Read-only states show the Fargo number in the compact header (right side); editable
+  // states (prereg/registered/editing) put the Fargo INPUT in the body instead.
+  const showReadFargo =
+    locked || d === "no_show" || d === "removed" || (d === "ready" && !editing);
 
   const renderEditableBody = (onCommit: () => void, commitLabel: string, onCancel?: () => void) => (
     <>
@@ -1711,8 +1711,10 @@ const RegistrationRow = ({
 
   return (
     <View style={styles.regCard}>
-      <View style={styles.regHeader}>
-        <View style={styles.nameRow}>
+      {/* Compact header: name · #id · status pill on the left; Fargo (read states) on the
+          right — one row instead of name-row + a separate status line + a big Fargo block. */}
+      <View style={styles.regTopRow}>
+        <View style={styles.regTopLeft}>
           <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
             {getDisplayName(registration, pendingNames)}
           </Text>
@@ -1722,30 +1724,43 @@ const RegistrationRow = ({
             </View>
           ) : (
             registration.profiles && (
-              <Text allowFontScaling={false} style={styles.playerId}>
-                Player ID #{registration.profiles.id_auto}
+              <Text allowFontScaling={false} style={styles.playerIdInline}>
+                #{registration.profiles.id_auto}
               </Text>
             )
           )}
+          <View
+            style={[
+              styles.statusPill,
+              { borderColor: meta.color, backgroundColor: meta.color + "22" },
+            ]}
+          >
+            <View style={[styles.statusDotSm, { backgroundColor: meta.color }]} />
+            <Text
+              allowFontScaling={false}
+              style={[styles.statusPillText, { color: meta.color }]}
+            >
+              {meta.label}
+            </Text>
+          </View>
         </View>
-      </View>
-
-      <View style={styles.statusLine}>
-        <View style={[styles.statusDotSm, { backgroundColor: meta.color }]} />
-        <Text
-          allowFontScaling={false}
-          style={[styles.statusLineText, { color: meta.color }]}
-        >
-          {meta.label}
-        </Text>
+        {showReadFargo && (
+          <View style={styles.fargoInline}>
+            <Text allowFontScaling={false} style={styles.fargoInlineLabel}>Fargo</Text>
+            <Text allowFontScaling={false} style={styles.fargoInlineValue}>
+              {registration.fargo_rating ?? "—"}
+            </Text>
+          </View>
+        )}
       </View>
 
       {locked && (
         <>
-          <Text allowFontScaling={false} style={styles.assignText}>
-            {fargoText}
-            {raceLine() ? ` · ${raceLine()}` : ""}
-          </Text>
+          {raceLine() && (
+            <Text allowFontScaling={false} style={styles.assignText}>
+              {raceLine()}
+            </Text>
+          )}
           {/* Side-pot entries stay visible (grayed) once locked, so a player who
               forgot which pots they're in can just ask. */}
           {sidePots.length > 0 && (
@@ -1795,7 +1810,45 @@ const RegistrationRow = ({
 
       {!locked && d === "ready" && !editing && (
         <>
-          <View style={styles.assignPayRow}>
+          {/* Compact payment: entry (read) + tappable side-pot chips. Fargo is in the
+              header. WEB uses dense chips; native keeps the checkbox rows (touch-friendly).
+              Side pots remain one-tap toggleable so a newly added pot applies instantly. */}
+          {isWeb ? (
+            <View style={styles.payChipRow}>
+              <View style={[styles.payChip, !!registration.paid_entry && styles.payChipOn]}>
+                {!!registration.paid_entry && (
+                  <Text allowFontScaling={false} style={styles.payChipCheck}>✓</Text>
+                )}
+                <Text
+                  allowFontScaling={false}
+                  style={[styles.payChipText, !!registration.paid_entry && styles.payChipTextOn]}
+                >
+                  {registration.paid_entry ? `${entryLabel} Paid` : `${entryLabel} Unpaid`}
+                </Text>
+              </View>
+              {sidePots.map((pot, i) => {
+                const paid = safePaidSidePots(registration.paid_side_pots).includes(pot.name);
+                return (
+                  <TouchableOpacity
+                    key={`${pot.name}-${i}`}
+                    style={[styles.payChip, paid && styles.payChipOn]}
+                    onPress={isProcessing ? undefined : () => onTogglePaidPot(pot.name, !paid)}
+                    disabled={isProcessing}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    activeOpacity={0.7}
+                  >
+                    {paid && <Text allowFontScaling={false} style={styles.payChipCheck}>✓</Text>}
+                    <Text
+                      allowFontScaling={false}
+                      style={[styles.payChipText, paid && styles.payChipTextOn]}
+                    >
+                      {potLabel(pot)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
             <View style={styles.payCol}>
               <PayCheckbox
                 label={
@@ -1806,9 +1859,6 @@ const RegistrationRow = ({
                 checked={!!registration.paid_entry}
                 readOnly
               />
-              {/* All current side pots, tappable: a newly added pot shows up
-                  here instantly so the TD can add a player with one tap, no
-                  edit cycle. */}
               {sidePots.map((pot, i) => {
                 const paid = safePaidSidePots(registration.paid_side_pots).includes(
                   pot.name,
@@ -1827,20 +1877,12 @@ const RegistrationRow = ({
                 );
               })}
             </View>
-            <View style={styles.fargoRight}>
-              <Text allowFontScaling={false} style={styles.fargoReadLabel}>
-                Fargo
-              </Text>
-              <Text allowFontScaling={false} style={styles.fargoReadNumber}>
-                {registration.fargo_rating ?? "—"}
-              </Text>
-              {raceLine() && (
-                <Text allowFontScaling={false} style={styles.assignText}>
-                  {raceLine()}
-                </Text>
-              )}
-            </View>
-          </View>
+          )}
+          {raceLine() && (
+            <Text allowFontScaling={false} style={styles.assignText}>
+              {raceLine()}
+            </Text>
+          )}
           <View style={styles.regActions}>
             <TouchableOpacity
               style={[styles.regActionBtn, styles.checkInBtn]}
@@ -1874,10 +1916,11 @@ const RegistrationRow = ({
 
       {!locked && (d === "no_show" || d === "removed") && (
         <>
-          <Text allowFontScaling={false} style={styles.assignText}>
-            {fargoText}
-            {raceLine() ? ` · ${raceLine()}` : ""}
-          </Text>
+          {raceLine() && (
+            <Text allowFontScaling={false} style={styles.assignText}>
+              {raceLine()}
+            </Text>
+          )}
           <View style={styles.regActions}>
             <TouchableOpacity
               style={[styles.regActionBtn, styles.restoreBtn]}
@@ -8345,11 +8388,12 @@ const styles = StyleSheet.create({
   regCard: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.md),
-    padding: webSc(SPACING.md),
+    // Web: tighter padding + gap for a dense roster; native keeps roomier spacing.
+    padding: isWeb ? webSc(SPACING.sm) : webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: webSc(SPACING.sm),
+    gap: isWeb ? webSc(SPACING.xs) : webSc(SPACING.sm),
   },
   regMain: {
     flexDirection: "row",
@@ -8396,7 +8440,8 @@ const styles = StyleSheet.create({
   regActions: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.sm) },
   regActionBtn: {
     flex: 1,
-    paddingVertical: webSc(SPACING.sm),
+    // Web: shorter buttons for a compact action row; native keeps a full touch target.
+    paddingVertical: isWeb ? webSc(6) : webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.sm),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
@@ -8467,6 +8512,51 @@ const styles = StyleSheet.create({
   },
   statusDotSm: { width: webSc(9), height: webSc(9), borderRadius: webSc(5) },
   statusLineText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // ── Compact roster card: single-row header (name · #id · status pill · Fargo) ──
+  regTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+  },
+  regTopLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    flexShrink: 1,
+    flexWrap: "wrap",
+  },
+  playerIdInline: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(5),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    borderRadius: webSc(RADIUS.full),
+    borderWidth: 1,
+  },
+  statusPillText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  fargoInline: { flexDirection: "row", alignItems: "baseline", gap: webSc(5) },
+  fargoInlineLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "500" },
+  fargoInlineValue: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.primary, fontWeight: "800" },
+  // Compact payment chips (web Ready card): entry (read) + tappable side pots.
+  payChipRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: webSc(SPACING.xs) },
+  payChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(4),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(4),
+    borderRadius: webSc(RADIUS.full),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  payChipOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1A" },
+  payChipText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
+  payChipTextOn: { color: COLORS.success },
+  payChipCheck: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.success },
   payRow: {
     flexDirection: "row",
     alignItems: "center",
