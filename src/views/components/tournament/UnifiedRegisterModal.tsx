@@ -1060,7 +1060,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
     marginBottom: webSc(SPACING.sm),
   },
-  searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), paddingVertical: webSc(SPACING.md) },
+  // Web: suppress the inner <input> native focus ring; the searchBar wrapper is the visible
+  // field (otherwise the ring shows as a smaller inset box that doesn't reach the edges).
+  searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.md), paddingVertical: webSc(SPACING.md), ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null) },
   results: { marginTop: webSc(SPACING.sm) },
   sectionLabel: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), textTransform: "uppercase", letterSpacing: 1, marginBottom: webSc(SPACING.xs) },
 
@@ -1132,6 +1134,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: webSc(SPACING.md),
     fontSize: webMs(FONT_SIZES.md),
     color: COLORS.text,
+    // Web: match the other create-form inputs (fieldInput) — no inner native focus ring.
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
   },
 
   selectedCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.backgroundCard, borderRadius: RADIUS.md, padding: webSc(SPACING.md), marginBottom: webSc(SPACING.md) },

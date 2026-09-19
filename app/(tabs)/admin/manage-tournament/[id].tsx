@@ -8700,6 +8700,10 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.text,
     height: webSc(40),
+    // Web: suppress the inner <input>'s native focus ring. The wrapper (searchInputWrapper)
+    // is the visible field; without this the ring renders as a smaller box inset by the
+    // wrapper's padding, so the focus area looks short and not full-width.
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none", outlineWidth: 0 } as object) : null),
   },
 
   // Placeholders
