@@ -21,6 +21,7 @@ const MatchNodeBase = ({
   highlighted,
   mine,
   onPress,
+  elapsed,
 }: {
   match: LiveMatch;
   highlighted?: boolean;
@@ -28,12 +29,15 @@ const MatchNodeBase = ({
   // not-yet-decided match of theirs.
   mine?: "win" | "loss" | "mine" | null;
   onPress: (m: LiveMatch) => void;
+  // Ticking elapsed string for a LIVE node, computed by the parent from the shared
+  // ticker (only live nodes get a changing value, so memo re-renders just those).
+  elapsed?: string | null;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
   const completed = m.status === "completed";
-  // No per-node ticking timer (it lives in the match modal). Completed shows its
-  // final elapsed time, computed once.
+  // Completed shows its final elapsed time (frozen); live shows the ticking elapsed
+  // from the parent (replaces the literal "Live"); scheduled/no-start show text.
   const finalSeconds =
     m.startedAt && m.completedAt
       ? Math.max(0, (new Date(m.completedAt).getTime() - new Date(m.startedAt).getTime()) / 1000)
@@ -42,7 +46,7 @@ const MatchNodeBase = ({
     m.status === "scheduled"
       ? "Not started"
       : running
-        ? "Live"
+        ? elapsed ?? "Live"
         : m.startedAt
           ? `Final ${formatClock(finalSeconds)}`
           : "Completed";

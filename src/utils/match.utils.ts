@@ -22,7 +22,8 @@ export type MatchActionStep =
   | "winner"
   | "winnerScore"
   | "score"
-  | "timer"
+  | "timer" // overtime time-LIMIT (allowed minutes) editor
+  | "elapsed" // ELAPSED match-time editor (corrects/ resets startedAt)
   | "forfeit"
   | "withdraw"
   | "details";

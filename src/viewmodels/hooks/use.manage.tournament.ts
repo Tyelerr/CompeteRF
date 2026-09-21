@@ -11,8 +11,10 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
+import { TournamentTableUpdate } from "../../models/types/tournament-table.types";
 import { Tournament } from "../../models/types/tournament.types";
-import { settingsComplete } from "../../utils/settings-complete";
+import { derivePhase } from "../../utils/tournament-phase";
+import type { ManagePhase } from "../../utils/tournament-phase";
 import {
   AutoAssignMode,
   DrawLogEntry,
@@ -27,48 +29,10 @@ import {
 } from "../../models/types/common.types";
 import { useRegistrations } from "./use.registrations";
 
-// Front-end lifecycle the hub gates on. Derived from (status, live_state, and
-// whether the required setup fields are present) — no dedicated DB column.
-export type ManagePhase =
-  | "setup_incomplete"
-  | "ready_to_open"
-  | "registration_open"
-  | "registration_closed"
-  | "bracket_drawn"
-  | "running"
-  | "completed"
-  | "archived";
-
-// The badge (Setup Incomplete vs Ready) uses the SHARED Settings-completion check.
-const requiredComplete = (t: Tournament): boolean =>
-  settingsComplete({
-    name: t.name,
-    gameType: t.game_type,
-    format: t.tournament_format,
-    venueId: t.venue_id,
-    date: t.tournament_date,
-    time: t.start_time,
-    tableSize: t.table_size,
-    equipment: t.equipment,
-    entryFee: t.entry_fee,
-    maxFargo: t.max_fargo,
-    open: t.open_tournament,
-    raceMode: t.live_settings?.raceMode ?? null,
-  });
-
-const derivePhase = (t: Tournament | null): ManagePhase => {
-  if (!t) return "setup_incomplete";
-  if (t.status === "archived") return "archived";
-  if (t.status === "completed" || t.live_state === "finished")
-    return "completed";
-  const ls: TournamentLiveState = t.live_state ?? "not_started";
-  if (ls === "in_progress") return "running";
-  if (ls === "registration_closed")
-    // Registration only closes when the bracket is drawn.
-    return t.live_settings?.bracket ? "bracket_drawn" : "registration_closed";
-  if (ls === "registration_open") return "registration_open";
-  return requiredComplete(t) ? "ready_to_open" : "setup_incomplete";
-};
+// Lifecycle phase (derivePhase) + the ManagePhase type now live in the shared
+// utils/tournament-phase module so the Manage hub, the Tournament Manager list
+// badges and the public LIVE card can't diverge. Re-exported for existing importers.
+export type { ManagePhase };
 
 export const useManageTournament = (tournamentId?: number) => {
   const queryClient = useQueryClient();
@@ -242,6 +206,13 @@ export const useManageTournament = (tournamentId?: number) => {
 
   // Merge a patch into one match's live state (Matches tab). Stored in
   // live_settings.matchState keyed by match number.
+  //
+  // Lifecycle: starting the FIRST real match (patch.status === "in_progress") also transitions
+  // the tournament to the canonical Running state (live_state = "in_progress") in the SAME
+  // atomic write — so the Admin header ("Bracket Drawn" → Running) and the public Billiards
+  // card ("Registration Closed" → LIVE), which both already derive from live_state, update
+  // together. Idempotent: only flips when the tournament isn't already running/finished, so it
+  // never duplicates the explicit "Start Tournament" transition (both converge on in_progress).
   const setMatchStateMutation = useMutation({
     mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) =>
       writeLiveSettings((prevLS) => {
@@ -253,7 +224,18 @@ export const useManageTournament = (tournamentId?: number) => {
           ...vars.patch,
           status: vars.patch.status ?? existing?.status ?? "scheduled",
         };
-        return { live_settings: { matchState: { ...prevMS, [key]: merged } } };
+        const t = currentTournament();
+        const startsMatch = vars.patch.status === "in_progress";
+        const notYetRunning =
+          !!t &&
+          t.live_state !== "in_progress" &&
+          t.live_state !== "finished" &&
+          t.status !== "completed" &&
+          t.status !== "archived";
+        return {
+          ...(startsMatch && notYetRunning ? { live_state: "in_progress" as TournamentLiveState } : {}),
+          live_settings: { matchState: { ...prevMS, [key]: merged } },
+        };
       }),
     onSettled: invalidateTournament,
   });
@@ -297,6 +279,13 @@ export const useManageTournament = (tournamentId?: number) => {
         vars.isStreaming,
         vars.streamLink,
       ),
+    onSuccess: invalidateTables,
+  });
+
+  // Generic table field update (used by web Rename Pool Table: label + table_number).
+  const updateTableMutation = useMutation({
+    mutationFn: (vars: { id: number; updates: TournamentTableUpdate }) =>
+      tournamentTableService.updateTable(vars.id, vars.updates),
     onSuccess: invalidateTables,
   });
 
@@ -393,6 +382,7 @@ export const useManageTournament = (tournamentId?: number) => {
     createTablesBulk: createTablesBulkMutation.mutateAsync,
     setTableStatus: setTableStatusMutation.mutateAsync,
     setTableStreaming: setTableStreamingMutation.mutateAsync,
+    updateTable: updateTableMutation.mutateAsync,
     deleteTable: deleteTableMutation.mutateAsync,
 
     // Registrations passthrough (Players tab)

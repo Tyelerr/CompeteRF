@@ -8,7 +8,7 @@
 // dollar editing lives behind a "Custom Edit" toggle and is clamped to the pool.
 // The parent owns the working config + persistence; this component emits changes.
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -66,6 +66,9 @@ interface PrizePoolViewProps {
   sidePots: PrizePoolSidePot[];
   fees: PrizePoolFee[]; // built-in entry-fee deductions (defined in Settings)
   feesAddedOnTop: boolean; // true = fees collected on top of entry, not deducted
+  // Optional actions rendered directly under the Summary card (web Setup sidebar): the host
+  // passes the Save / Continue controls here so they sit with the Summary instead of a footer.
+  summaryFooter?: ReactNode;
 }
 
 // Dollar nudge for the Custom-mode steppers (type an exact amount, then adjust).
@@ -512,6 +515,7 @@ export const PrizePoolView = ({
   sidePots,
   fees,
   feesAddedOnTop,
+  summaryFooter,
 }: PrizePoolViewProps) => {
   // WEB desktop: Entry Payouts + Side Pot(s) sit side by side (≥1180px), Summary full width
   // below. Native/narrow: unchanged single-column stack. Presentation only.
@@ -766,6 +770,7 @@ export const PrizePoolView = ({
           </>
         )}
       </Card>
+      {summaryFooter}
         </View>
       </View>
     </View>

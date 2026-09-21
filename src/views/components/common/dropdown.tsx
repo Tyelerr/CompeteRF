@@ -15,9 +15,20 @@ interface DropdownProps {
   label?: string; placeholder?: string; options: DropdownOption[]; value?: string;
   onSelect: (value: string) => void; error?: string; disabled?: boolean;
   searchable?: boolean; searchPlaceholder?: string; compact?: boolean;
+  // Web menu: show the SELECTED option as blue text on a BLACK menu background instead of
+  // the default solid-blue fill on a surface background. Opt-in so existing dropdowns keep
+  // their current look.
+  selectedBlueText?: boolean;
+  // Hide the green completion check in the CLOSED control (some filters read cleaner as a
+  // plain label). Does not affect other dropdowns.
+  hideCheck?: boolean;
 }
 
-const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, compact, onSelect, onClose }: { anchorRef: React.RefObject<any>; options: DropdownOption[]; value?: string; searchable?: boolean; searchPlaceholder?: string; compact?: boolean; onSelect: (v: string) => void; onClose: () => void }) => {
+// The web popover is rendered as raw <div>/<input> (portaled to document.body), which do NOT
+// inherit react-native-web's font — so set the system font stack explicitly to match the app.
+const MENU_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, compact, selectedBlueText, onSelect, onClose }: { anchorRef: React.RefObject<any>; options: DropdownOption[]; value?: string; searchable?: boolean; searchPlaceholder?: string; compact?: boolean; selectedBlueText?: boolean; onSelect: (v: string) => void; onClose: () => void }) => {
   const [searchText, setSearchText] = useState("");
   const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -32,18 +43,22 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
   const filtered = searchable && searchText.trim() ? options.filter((o) => o.label.toLowerCase().includes(searchText.toLowerCase())) : options;
   if (!rect) return null;
 
-  const popoverStyle: React.CSSProperties = { position: "fixed", top: rect.top, left: rect.left, width: Math.max(rect.width, compact ? 180 : 220), backgroundColor: COLORS.surface, border: `1px solid ${COLORS.primary}`, borderRadius: 6, zIndex: 999999, maxHeight: 280, overflowY: "auto", boxShadow: `0 4px 16px rgba(0,0,0,0.4), 0 0 0 3px ${COLORS.primary}33` };
+  // The blue-selected variant reads on a BLACK menu; its hover shade is the (lighter) surface
+  // color so hovered rows stay visible. The default variant keeps surface bg / background hover.
+  const menuBg = selectedBlueText ? COLORS.background : COLORS.surface;
+  const hoverBg = selectedBlueText ? COLORS.surface : COLORS.background;
+  const popoverStyle: React.CSSProperties = { position: "fixed", top: rect.top, left: rect.left, width: Math.max(rect.width, compact ? 180 : 220), backgroundColor: menuBg, border: `1px solid ${COLORS.primary}`, borderRadius: 6, zIndex: 999999, maxHeight: 280, overflowY: "auto", boxShadow: `0 4px 16px rgba(0,0,0,0.4), 0 0 0 3px ${COLORS.primary}33` };
   const overlayStyle: React.CSSProperties = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999998 };
-  const optionStyle = (isSelected: boolean): React.CSSProperties => ({ padding: compact ? "6px 10px" : "8px 12px", fontSize: compact ? 12 : 13, color: isSelected ? "#fff" : COLORS.text, backgroundColor: isSelected ? COLORS.primary : "transparent", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, transition: "background-color 0.12s ease" });
+  const optionStyle = (isSelected: boolean): React.CSSProperties => ({ padding: compact ? "6px 10px" : "8px 12px", fontSize: compact ? 12 : 13, fontFamily: MENU_FONT, fontWeight: isSelected && selectedBlueText ? 700 : 400, color: isSelected ? (selectedBlueText ? COLORS.primary : "#fff") : COLORS.text, backgroundColor: isSelected && !selectedBlueText ? COLORS.primary : "transparent", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, transition: "background-color 0.12s ease" });
 
   if (typeof document === "undefined") return null;
   const content = (
     <>
       <div style={overlayStyle} onClick={onClose} />
       <div style={popoverStyle}>
-        {searchable && <input autoFocus type="text" placeholder={searchPlaceholder || "Search..."} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", backgroundColor: COLORS.background, border: "none", borderBottom: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 12, outline: "none" }} />}
+        {searchable && <input autoFocus type="text" placeholder={searchPlaceholder || "Search..."} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", backgroundColor: COLORS.background, border: "none", borderBottom: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 12, fontFamily: MENU_FONT, outline: "none" }} />}
         {filtered.map((item) => (
-          <div key={item.value} style={optionStyle(item.value === value)} onMouseEnter={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = COLORS.background; }} onMouseLeave={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }} onClick={() => { onSelect(item.value); onClose(); }}>{item.label}</div>
+          <div key={item.value} style={optionStyle(item.value === value)} onMouseEnter={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = hoverBg; }} onMouseLeave={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }} onClick={() => { onSelect(item.value); onClose(); }}>{item.label}</div>
         ))}
         {filtered.length === 0 && <div style={{ padding: "10px", color: COLORS.textMuted, fontSize: 12 }}>No results</div>}
       </div>
@@ -53,7 +68,7 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
   return createPortal(content, document.body);
 };
 
-export const Dropdown = ({ label, placeholder = "Select...", options, value, onSelect, error, disabled = false, searchable = false, searchPlaceholder = "Search...", compact = false }: DropdownProps) => {
+export const Dropdown = ({ label, placeholder = "Select...", options, value, onSelect, error, disabled = false, searchable = false, searchPlaceholder = "Search...", compact = false, selectedBlueText = false, hideCheck = false }: DropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -64,7 +79,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
   const handlePress = () => { if (!disabled) setIsOpen(!isOpen); };
   // "Complete" only when a real option is selected — a placeholder (empty value)
   // never counts, even if an empty-valued option happens to match.
-  const showCheck = !disabled && !!value && !!selectedOption?.label;
+  const showCheck = !disabled && !!value && !!selectedOption?.label && !hideCheck;
 
   if (isWeb) {
     return (
@@ -77,7 +92,7 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
           <Text allowFontScaling={false} style={[wStyles.arrow, isOpen && wStyles.arrowOpen]}>{isOpen ? "\u25B2" : "\u25BC"}</Text>
         </TouchableOpacity>
         {error && <Text allowFontScaling={false} style={styles.error}>{error}</Text>}
-        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} onSelect={onSelect} onClose={() => setIsOpen(false)} />}
+        {isOpen && <WebPopover anchorRef={anchorRef} options={options} value={value} searchable={searchable} searchPlaceholder={searchPlaceholder} compact={compact} selectedBlueText={selectedBlueText} onSelect={onSelect} onClose={() => setIsOpen(false)} />}
       </View>
     );
   }
@@ -152,7 +167,7 @@ const styles = StyleSheet.create({
 const wStyles = StyleSheet.create({
   container: { marginTop: 0 },
   labelActive: { color: COLORS.primary },
-  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, height: 38, paddingHorizontal: CHECK_INSET, paddingVertical: 0, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  selector: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 6, height: 40, paddingHorizontal: CHECK_INSET, paddingVertical: 0, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   selectorCompact: { height: 32, paddingHorizontal: 8, borderRadius: 4 },
   selectorHovered: { borderColor: COLORS.primary + "80" } as any,
   selectorOpen: { borderColor: COLORS.primary } as any,

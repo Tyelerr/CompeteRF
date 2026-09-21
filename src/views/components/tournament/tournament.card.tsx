@@ -7,6 +7,7 @@ import { Platform } from "react-native";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
 import { isTournamentArchived, isTournamentCompleted } from "../../../utils/tournament.archive";
+import { tournamentBadge } from "../../../utils/tournament-phase";
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
@@ -19,6 +20,7 @@ export interface TournamentCardData {
   can_delete: boolean; cancelled_at?: string; cancelled_by_name?: string;
   cancellation_reason?: string; archived_at?: string; archived_by_name?: string;
   completed_at?: string | null; live_state?: string | null;
+  live_settings?: { bracket?: unknown; raceMode?: string | null } | null;
 }
 
 interface TournamentCardProps {
@@ -50,16 +52,6 @@ const formatDateTime = (dateString: string | null): string => {
   return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
-const getStatusColor = (status: string): string => {
-  switch (status) {
-    case "active": return COLORS.success;
-    case "completed": return COLORS.primary;
-    case "cancelled": return COLORS.error;
-    case "archived": return COLORS.textSecondary;
-    default: return COLORS.textSecondary;
-  }
-};
-
 export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCancel, onRestore, onReassign, isProcessing = false, showActions = true }: TournamentCardProps) => {
   // Archival is derived (archived_at set OR 30 days since completed_at) and is
   // separate from the lifecycle status, which stays "completed".
@@ -67,8 +59,11 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
   const isCancelled = tournament.status === "cancelled";
   const isCompleted = isTournamentCompleted(tournament);
   const isActive = !isCancelled && !isCompleted && tournament.status === "active";
-  const displayStatus = isArchived ? "archived" : isCompleted ? "completed" : tournament.status;
-  const statusColor = getStatusColor(displayStatus);
+  // Visible badge = the real lifecycle phase (shared authoritative derivation),
+  // except derived archival (which the phase model doesn't track) → "Archived".
+  const badge = isArchived
+    ? { label: "Archived", color: COLORS.textSecondary }
+    : tournamentBadge(tournament);
 
   const actions: ActionMenuItem[] = [];
   if (showActions) {
@@ -86,8 +81,8 @@ export const TournamentCard = ({ tournament, onPress, onEdit, onArchive, onCance
       <View style={styles.cardHeader}>
         <Text allowFontScaling={false} style={[styles.tournamentName, isArchived && styles.textArchived]} numberOfLines={1}>{tournament.name}</Text>
         <View style={styles.headerRight}>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
-            <Text allowFontScaling={false} style={[styles.statusText, { color: statusColor }]}>{displayStatus}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: badge.color + "20" }]}>
+            <Text allowFontScaling={false} style={[styles.statusText, { color: badge.color }]} numberOfLines={1}>{badge.label}</Text>
           </View>
           <View style={styles.idBadge}>
             <Text allowFontScaling={false} style={styles.idText}>ID: {tournament.id}</Text>

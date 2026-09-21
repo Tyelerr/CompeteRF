@@ -32,6 +32,9 @@ import { useMatchTimer } from "./useMatchTimer";
 type Step = MatchActionStep;
 
 const now = () => new Date().toISOString();
+// Module-level indirection (react-compiler-safe) for reading wall-clock time.
+const nowMs = () => Date.now();
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 // Increment/decrement a numeric string field, clamped.
 const bump = (val: string, delta: number, min = 0, max = 99): string => {
@@ -64,6 +67,12 @@ export const MatchActionsModal = ({
   const [p2Score, setP2Score] = useState("");
   const [timerMin, setTimerMin] = useState("");
   const [winnerSlot, setWinnerSlot] = useState<1 | 2 | null>(null);
+  // Elapsed-time editor fields — prefilled ONCE from the live elapsed when the
+  // modal opens, then owned by the TD's typing (they don't keep re-syncing).
+  const [elH, setElH] = useState("");
+  const [elM, setElM] = useState("");
+  const [elS, setElS] = useState("");
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   useEffect(() => {
     if (!match) return;
@@ -88,6 +97,15 @@ export const MatchActionsModal = ({
     setTimerMin(
       match.hasCustomTimer ? String(Math.round(match.allowedSeconds / 60)) : "",
     );
+    // Prefill the elapsed editor from the current live elapsed (once, at open).
+    const elapsed =
+      match.startedAt && match.status === "in_progress"
+        ? Math.max(0, Math.floor((nowMs() - Date.parse(match.startedAt)) / 1000))
+        : 0;
+    setElH(pad2(Math.floor(elapsed / 3600)));
+    setElM(pad2(Math.floor((elapsed % 3600) / 60)));
+    setElS(pad2(elapsed % 60));
+    setConfirmingReset(false);
   }, [match, initialStep]);
 
   // Live ticking timer lives here (a single instance) rather than on every card.
@@ -206,7 +224,7 @@ export const MatchActionsModal = ({
       },
     });
     items.push({ label: "Assign Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
-    items.push({ label: "Set Timer", onPress: () => setStep("timer") });
+    items.push({ label: "Set Time Limit", onPress: () => setStep("timer") });
     items.push({ label: "Forfeit", danger: true, onPress: () => setStep("forfeit") });
     items.push({ label: "Withdraw", danger: true, onPress: () => setStep("withdraw") });
   } else if (m.status === "in_progress") {
@@ -214,7 +232,8 @@ export const MatchActionsModal = ({
     items.push({ label: "Edit Score", onPress: () => setStep("score") });
     items.push({ label: "Set Winner", onPress: () => setStep("winner") });
     items.push({ label: "Change Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
-    items.push({ label: "Change Timer", onPress: () => setStep("timer") });
+    items.push({ label: "Change Match Timer", onPress: () => setStep("elapsed") });
+    items.push({ label: "Set Time Limit", onPress: () => setStep("timer") });
     // Started by mistake? Reset clears the table, score and start so the match
     // goes back to the queue as not-started and can be re-assigned.
     items.push({
@@ -529,9 +548,9 @@ export const MatchActionsModal = ({
 
           {step === "timer" && (
             <>
-              <Header title="Match timer" />
+              <Header title="Match time limit" />
               <Text allowFontScaling={false} style={styles.fieldLabel}>
-                Allowed minutes (blank = auto)
+                Allowed minutes (blank = auto) — turns the elapsed timer red past this
               </Text>
               <View style={styles.stepperRow}>
                 <TouchableOpacity
@@ -568,6 +587,117 @@ export const MatchActionsModal = ({
                   })
                 }
               />
+            </>
+          )}
+
+          {step === "elapsed" && confirmingReset && (
+            <>
+              <View style={styles.sheetHeader}>
+                <Text allowFontScaling={false} style={styles.sheetTitle} numberOfLines={1}>
+                  Reset Timer
+                </Text>
+                <TouchableOpacity style={styles.closeX} onPress={onClose} hitSlop={10}>
+                  <Text allowFontScaling={false} style={styles.closeLink}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <Text allowFontScaling={false} style={styles.resetNote}>
+                This will clear the current elapsed match time and reset it to 0:00.
+              </Text>
+              <Text allowFontScaling={false} style={styles.resetMatchName} numberOfLines={1}>
+                {m.label}
+              </Text>
+              {!m.bye && (m.p1Name || m.p2Name) && (
+                <Text allowFontScaling={false} style={styles.resetNames} numberOfLines={1}>
+                  {namesLine}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={[styles.btn, styles.btnDanger, busy && styles.disabled]}
+                onPress={() => apply({ startedAt: now() })}
+                disabled={busy}
+              >
+                <Text allowFontScaling={false} style={styles.btnDangerText}>
+                  {busy ? "..." : "Reset"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnGhost, styles.closeBtn]}
+                onPress={() => setConfirmingReset(false)}
+                disabled={busy}
+              >
+                <Text allowFontScaling={false} style={styles.btnGhostText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {step === "elapsed" && !confirmingReset && (
+            <>
+              {/* Inline header (avoids the in-render Header component pattern). */}
+              <View style={styles.sheetHeader}>
+                <Text allowFontScaling={false} style={styles.sheetTitle} numberOfLines={1}>
+                  Change Match Timer
+                </Text>
+                <TouchableOpacity style={styles.closeX} onPress={onClose} hitSlop={10}>
+                  <Text allowFontScaling={false} style={styles.closeLink}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Current, live-ticking match time (authoritative now − startedAt). */}
+              <Text allowFontScaling={false} style={styles.currentLabel}>
+                Current Match Time
+              </Text>
+              <Text
+                allowFontScaling={false}
+                style={[styles.currentTime, timer.isOvertime && styles.liveTimerOver]}
+              >
+                {formatClock(timer.elapsedSeconds)}
+              </Text>
+              <Text allowFontScaling={false} style={styles.fieldLabel}>
+                Set Elapsed Time
+              </Text>
+              <View style={styles.hmsRow}>
+                <HmsField value={elH} onChange={setElH} caption="HH" max={99} />
+                <Text allowFontScaling={false} style={styles.hmsColon}>:</Text>
+                <HmsField value={elM} onChange={setElM} caption="MM" max={59} />
+                <Text allowFontScaling={false} style={styles.hmsColon}>:</Text>
+                <HmsField value={elS} onChange={setElS} caption="SS" max={59} />
+              </View>
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnGhost, busy && styles.disabled]}
+                  onPress={() => setConfirmingReset(true)}
+                  disabled={busy}
+                >
+                  <Text allowFontScaling={false} style={styles.btnGhostText}>
+                    Reset Timer
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnPrimary, busy && styles.disabled]}
+                  onPress={() => {
+                    const h = parseInt(elH || "0", 10) || 0;
+                    const mm = parseInt(elM || "0", 10) || 0;
+                    const s = parseInt(elS || "0", 10) || 0;
+                    if (h < 0 || mm < 0 || mm > 59 || s < 0 || s > 59) {
+                      Alert.alert(
+                        "Invalid time",
+                        "Minutes and seconds must be 0–59, hours 0 or more.",
+                      );
+                      return;
+                    }
+                    // Correct the AUTHORITATIVE startedAt so every timer surface
+                    // (derived from startedAt) shows this elapsed and keeps ticking.
+                    const totalMs = (h * 3600 + mm * 60 + s) * 1000;
+                    apply({ startedAt: new Date(nowMs() - totalMs).toISOString() });
+                  }}
+                  disabled={busy}
+                >
+                  <Text allowFontScaling={false} style={styles.btnPrimaryText}>
+                    {busy ? "..." : "Save Changes"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -660,6 +790,39 @@ export const MatchActionsModal = ({
     </Modal>
   );
 };
+
+// One HH / MM / SS field for the elapsed-time editor: numeric, clamped to `max`.
+const HmsField = ({
+  value,
+  onChange,
+  caption,
+  max,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  caption: string;
+  max: number;
+}) => (
+  <View style={styles.hmsCol}>
+    <TextInput
+      allowFontScaling={false}
+      style={styles.hmsInput}
+      value={value}
+      onChangeText={(v) => {
+        const n = v.replace(/[^0-9]/g, "");
+        onChange(n === "" ? "" : String(Math.min(max, Number(n))));
+      }}
+      keyboardType="numeric"
+      maxLength={2}
+      placeholder="00"
+      placeholderTextColor={COLORS.textMuted}
+      selectTextOnFocus
+    />
+    <Text allowFontScaling={false} style={styles.hmsCaption}>
+      {caption}
+    </Text>
+  </View>
+);
 
 const Detail = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.detailRow}>
@@ -864,7 +1027,29 @@ const styles = StyleSheet.create({
   btnPrimaryText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.md) },
   btnGhost: { borderWidth: 1, borderColor: COLORS.border },
   btnGhostText: { color: COLORS.textSecondary, fontWeight: "700", fontSize: webMs(FONT_SIZES.md) },
+  btnDanger: { backgroundColor: COLORS.error, marginTop: webSc(SPACING.lg) },
+  btnDangerText: { color: "#fff", fontWeight: "800", fontSize: webMs(FONT_SIZES.md) },
   closeBtn: { marginTop: webSc(SPACING.md) },
+  // Reset-timer confirmation copy
+  resetNote: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: webMs(FONT_SIZES.md) * 1.35,
+    marginBottom: webSc(SPACING.md),
+  },
+  resetMatchName: {
+    fontSize: webMs(FONT_SIZES.lg),
+    fontWeight: "800",
+    color: COLORS.text,
+    textAlign: "center",
+  },
+  resetNames: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textMuted,
+    textAlign: "center",
+    marginTop: webSc(2),
+  },
   liveTimerBox: {
     alignItems: "center",
     paddingVertical: webSc(SPACING.sm),
@@ -883,6 +1068,55 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   liveTimerOver: { color: COLORS.error },
+  // Elapsed editor: prominent live "Current Match Time" + HH:MM:SS inputs.
+  currentLabel: {
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: webSc(SPACING.xs),
+  },
+  currentTime: {
+    fontSize: webMs(FONT_SIZES.xxxl),
+    fontWeight: "900",
+    color: COLORS.success,
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
+    marginBottom: webSc(SPACING.md),
+  },
+  hmsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+  },
+  hmsCol: { alignItems: "center" },
+  hmsInput: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "900",
+    textAlign: "center",
+    width: webSc(64),
+    paddingVertical: webSc(SPACING.sm),
+    fontVariant: ["tabular-nums"],
+  },
+  hmsColon: {
+    fontSize: webMs(FONT_SIZES.xl),
+    fontWeight: "900",
+    color: COLORS.textSecondary,
+    marginTop: webSc(SPACING.sm),
+  },
+  hmsCaption: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.textMuted,
+    fontWeight: "700",
+    marginTop: webSc(2),
+  },
   detailBox: { marginTop: webSc(SPACING.xs) },
   detailRow: {
     flexDirection: "row",

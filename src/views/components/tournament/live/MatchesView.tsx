@@ -3,7 +3,7 @@
 // and a Bracket View (pinch/pan visual navigation). Both share one match action
 // sheet (MatchActionsModal). Fills available height; Card View scrolls itself.
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -13,10 +13,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { COLORS } from "../../../../theme/colors";
-import { RADIUS, SPACING } from "../../../../theme/spacing";
+import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch, MatchActionStep } from "../../../../utils/match.utils";
@@ -26,12 +27,17 @@ import {
 } from "../../../../models/types/tournament-settings.types";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { Dropdown } from "../../common/dropdown";
+import { Pagination } from "../../common/pagination";
+import { usePagination } from "../../../../viewmodels/usePagination";
 import { MatchCard } from "./MatchCard";
+import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
 import { BracketCanvas } from "./BracketCanvas";
 import { MatchActionsModal } from "./MatchActionsModal";
 import { SpectatorMatchModal } from "./SpectatorMatchModal";
 
 const isWeb = Platform.OS === "web";
+// Same centered content width the other admin Setup pages use (Players/Pool Tables), so the
+// Live page sits in the same contained column with black gutters on wide screens.
 
 type ViewMode = "cards" | "bracket";
 type CardFilter = "all" | "scheduled" | "in_progress" | "completed" | "bye";
@@ -104,6 +110,28 @@ export const MatchesView = ({
     });
   }, [matches, query, filter]);
 
+  // One shared per-second ticker for live elapsed clocks — runs only while a match
+  // is in progress, cleaned up otherwise. Passed to each MatchCard so its timer
+  // visibly advances (no per-card interval).
+  const hasLive = useMemo(() => matches.some((m) => m.status === "in_progress"), [matches]);
+  const now = useLiveNow(hasLive);
+
+  // Web/desktop dense layout: compact toggle beside pagination, paginated compact cards.
+  const { width: winW } = useWindowDimensions();
+  const desktop = isWeb && winW >= 980;
+  // Card View columns: 3 on wide desktop, 2 on medium desktop/tablet web. Widths
+  // account for the fixed gap (SPACING.md = 16) so rows LEFT-PACK cleanly — an
+  // incomplete last row leaves the trailing column empty instead of spreading.
+  const cardCols = winW >= 1200 ? 3 : 2;
+  const cardColWidth =
+    cardCols === 3 ? ("calc((100% - 32px) / 3)" as any) : ("calc((100% - 16px) / 2)" as any);
+  const pager = usePagination(filtered, { itemsPerPage: 20 });
+  // Reset to page 1 whenever the search or filter changes (so results start at the top).
+  useEffect(() => {
+    pager.resetPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, filter]);
+
   const openSheet = (m: LiveMatch, step: MatchActionStep) => setSheet({ match: m, step });
 
   const onPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
@@ -127,6 +155,128 @@ export const MatchesView = ({
         <Text allowFontScaling={false} style={styles.emptyBody}>
           Draw the bracket on the Bracket / Draw tab to generate matches.
         </Text>
+      </View>
+    );
+  }
+
+  // Compact segmented Cards | Bracket toggle (desktop) — reuses the SAME mode state/handlers.
+  const compactToggle = (
+    <View style={styles.segToggle}>
+      {(["cards", "bracket"] as ViewMode[]).map((m) => (
+        <TouchableOpacity
+          key={m}
+          activeOpacity={1}
+          style={[styles.segBtn, mode === m && styles.segBtnActive]}
+          onPress={() => {
+            Keyboard.dismiss();
+            setMode(m);
+          }}
+        >
+          <Text allowFontScaling={false} style={[styles.segText, mode === m && styles.segTextActive]}>
+            {m === "cards" ? "Card View" : "Bracket View"}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+  const pagerNode = (rightAccessory?: React.ReactNode) => (
+    <Pagination
+      totalCount={pager.totalCount}
+      displayStart={pager.displayRange.start}
+      displayEnd={pager.displayRange.end}
+      currentPage={pager.currentPage}
+      totalPages={pager.totalPages}
+      onPrevPage={pager.prevPage}
+      onNextPage={pager.nextPage}
+      canGoPrev={pager.canGoPrev}
+      canGoNext={pager.canGoNext}
+      noun="matches"
+      rightAccessory={rightAccessory}
+    />
+  );
+
+  if (desktop) {
+    return (
+      <View style={styles.root}>
+       <View style={styles.webContainer}>
+        {viewMode === "cards" ? (
+          <View style={styles.cardsWrap}>
+            <View style={styles.searchRowDesktop}>
+              <TextInput
+                allowFontScaling={false}
+                style={styles.searchDesktop}
+                placeholder="Search player, M#, or table"
+                placeholderTextColor={COLORS.textMuted}
+                value={query}
+                onChangeText={setQuery}
+              />
+              <View style={styles.filterWrapDesktop}>
+                <Dropdown
+                  hideCheck
+                  selectedBlueText
+                  options={FILTERS}
+                  value={filter}
+                  onSelect={(v) => setFilter(v as CardFilter)}
+                />
+              </View>
+              {/* One toggle per view: Card View's lives here (right of search/filter). */}
+              <View style={styles.toggleRight}>{compactToggle}</View>
+            </View>
+            {filtered.length === 0 ? (
+              <Text allowFontScaling={false} style={styles.noResults}>
+                No matches for this search / filter.
+              </Text>
+            ) : (
+              <>
+                {pagerNode()}
+                <ScrollView
+                  style={styles.cardsScroll}
+                  contentContainerStyle={[styles.cardsContent, styles.cardsGridDesktop]}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {pager.paginatedItems.map((m) => (
+                    <View key={m.id} style={[styles.cardCell, { width: cardColWidth }]}>
+                      {readOnly ? (
+                        <MatchCard match={m} readOnly onPress={() => setDetail(m)} compact now={now} />
+                      ) : (
+                        <MatchCard match={m} onAction={openSheet} busy={busy} compact now={now} />
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+                {pagerNode()}
+              </>
+            )}
+          </View>
+        ) : (
+          <View style={styles.bracketWrapDesktop}>
+            <BracketCanvas
+              matches={matches}
+              onNodePress={(m) => (readOnly ? setDetail(m) : openSheet(m, "menu"))}
+              focusMatchId={focusMatchId}
+              focusKey={focusKey}
+              highlightRegId={highlightRegId}
+              rightAccessory={compactToggle}
+            />
+          </View>
+        )}
+       </View>
+
+        {!readOnly && sheet && (
+          <MatchActionsModal
+            match={sheet.match}
+            initialStep={sheet.step}
+            tables={tables}
+            occupancy={occupancy}
+            onPatch={onPatch}
+            onClose={() => setSheet(null)}
+            busy={busy}
+          />
+        )}
+        {readOnly && (
+          <SpectatorMatchModal match={detail} groups={groups} onClose={() => setDetail(null)} />
+        )}
       </View>
     );
   }
@@ -196,9 +346,9 @@ export const MatchesView = ({
                   style={isWeb ? styles.cardCell : undefined}
                 >
                   {readOnly ? (
-                    <MatchCard match={m} readOnly onPress={() => setDetail(m)} />
+                    <MatchCard match={m} readOnly onPress={() => setDetail(m)} now={now} />
                   ) : (
-                    <MatchCard match={m} onAction={openSheet} busy={busy} />
+                    <MatchCard match={m} onAction={openSheet} busy={busy} now={now} />
                   )}
                 </View>
               ))
@@ -242,6 +392,8 @@ export const MatchesView = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  // Centered contained column (matches Players/Pool Tables): black gutters on wide screens.
+  webContainer: { flex: 1, width: "100%" as any, maxWidth: WEB_MAXW, alignSelf: "center" as any },
   toggle: {
     flexDirection: "row",
     backgroundColor: COLORS.surface,
@@ -281,10 +433,55 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
   },
   filterWrap: { width: webSc(150) },
+  // ── Desktop compact layout ──
+  segToggle: { flexDirection: "row", borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.sm), overflow: "hidden" },
+  segBtn: { minWidth: 100, height: 38, paddingHorizontal: webSc(SPACING.md), alignItems: "center", justifyContent: "center" },
+  segBtnActive: { backgroundColor: COLORS.primary },
+  segText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  segTextActive: { color: COLORS.white },
+  searchRowDesktop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
+  searchDesktop: {
+    width: 320,
+    height: 40,
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: 0,
+    fontSize: webMs(FONT_SIZES.sm),
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none", outlineWidth: 0 } as object) : null),
+  },
+  filterWrapDesktop: { width: 200 },
+  toggleRight: { marginLeft: "auto" as any },
+  // Desktop bracket wrapper: same top gap as the Card View search row (searchRowDesktop
+  // paddingTop) so the toolbar sits at the SAME Y in both views and doesn't touch the phase nav.
+  bracketWrapDesktop: {
+    flex: 1,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+    paddingBottom: webSc(SPACING.sm),
+  },
   cardsScroll: { flex: 1 },
   cardsContent: { paddingHorizontal: webSc(SPACING.md), paddingBottom: webSc(SPACING.xl) },
   // Web: two match cards per row.
   cardsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  // Desktop card grid: left-packed with a fixed gap (no space-between), so an
+  // incomplete last row leaves the trailing column(s) empty instead of spreading.
+  cardsGridDesktop: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "stretch",
+    gap: webSc(SPACING.md),
+  },
   cardCell: { width: "49%" },
   noResults: {
     textAlign: "center",

@@ -26,7 +26,8 @@ export type SettingsFieldKey =
   | "time"
   | "venue"
   | "tableSize"
-  | "equipment";
+  | "equipment"
+  | "raceGroups";
 
 export interface MissingSettingsItem {
   key: SettingsFieldKey;
@@ -50,6 +51,10 @@ export interface SettingsCompleteInput {
   // Fixed Race / A-B-C Groups / Fargo Differential before opening registration. Chip
   // tournaments are exempt (see CHIP_FORMAT below).
   raceMode?: string | null;
+  // A/B/C Race Groups validity, computed by the caller (validateRaceGroups). Consulted ONLY
+  // when raceMode === "groups" on a bracket format; undefined/other modes are never blocked,
+  // so Fixed / Fargo Differential / Chip are unaffected.
+  raceGroupsValid?: boolean;
 }
 
 // Chip tournaments don't use the bracket Race Type selector, so Race Type is not
@@ -91,6 +96,10 @@ export const missingSettingsItems = (
     missing.push({ key: "fargo", label: "Maximum Fargo or Open Tournament" });
   if (raceTypeApplies(s.format) && !has(s.raceMode))
     missing.push({ key: "raceMode", label: "Race Type" });
+  // A/B/C Race Groups: block only when groups mode is active on a bracket format AND the caller
+  // reports the ranges invalid (min>max, over tournament max, overlap, missing race-to, none).
+  if (raceTypeApplies(s.format) && s.raceMode === "groups" && s.raceGroupsValid === false)
+    missing.push({ key: "raceGroups", label: "Race Groups" });
   if (!has(s.date)) missing.push({ key: "date", label: "Date" });
   if (!has(s.time)) missing.push({ key: "time", label: "Time" });
   if (!has(s.venueId)) missing.push({ key: "venue", label: "Venue" });

@@ -41,6 +41,13 @@ export interface AssignmentPlan {
 export const isReady = (m: LiveMatch): boolean =>
   m.status === "scheduled" && !m.pending && !m.bye && !m.empty && m.tableId == null;
 
+// A match ASSIGNED to a table and waiting to START — the exact condition an individual
+// "Start Match" satisfies (both players resolved, not a bye, not started/completed, has a
+// table). This is what "Start All" acts on. Distinct from isReady (unassigned/queue-ready):
+// Auto Assign moves isReady matches onto tables; Start All then starts the isStartable ones.
+export const isStartable = (m: LiveMatch): boolean =>
+  m.status === "scheduled" && !m.pending && !m.bye && !m.empty && m.tableId != null;
+
 export const bracketLocation = (m: LiveMatch): string => {
   if (m.side === "grand") return m.id === "GF2" ? "Finals (Reset)" : "Finals";
   if (m.label && m.label.toLowerCase().includes("hotseat")) return "Hotseat";

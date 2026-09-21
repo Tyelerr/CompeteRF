@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../../../src/lib/supabase";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { isTournamentArchived, isTournamentCompleted } from "../../../../src/utils/tournament.archive";
+import { tournamentBadge } from "../../../../src/utils/tournament-phase";
 import { COLORS } from "../../../../src/theme/colors";
 import { RADIUS, SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
@@ -57,20 +58,14 @@ const fmtTime = (t: string): string => {
   const hr = parseInt(h, 10);
   return `${hr % 12 || 12}:${min} ${hr >= 12 ? "PM" : "AM"}`;
 };
-const statusColor = (s: string): string =>
-  s === "active" ? COLORS.success
-    : s === "completed" ? COLORS.primary
-      : s === "cancelled" ? COLORS.error
-        : COLORS.textSecondary;
-
-// Derived, user-facing status label: completion is status="completed" OR
-// live_state="finished", and archival is derived (archived_at / 30-day). Keeps the
-// desktop table in lockstep with the shared card + list filters.
-const displayStatusOf = (t: BarTournamentWithStats): string =>
-  t.status === "cancelled" ? "cancelled"
-    : isTournamentArchived(t) ? "archived"
-      : isTournamentCompleted(t) ? "completed"
-        : t.status;
+// Visible status badge = the real lifecycle phase (Registration Open / Closed /
+// Bracket Drawn / Running / Completed), from the shared authoritative derivation —
+// except derived archival (archived_at / 30-day), which the phase model doesn't
+// track, is kept as an "Archived" override so the archived tab stays labelled.
+const statusBadgeOf = (t: BarTournamentWithStats): { label: string; color: string } =>
+  isTournamentArchived(t)
+    ? { label: "Archived", color: COLORS.textSecondary }
+    : tournamentBadge(t);
 
 // One desktop table row (web only): scannable columns + Open Manager + ⋯ menu,
 // with a subtle hover state. Mobile keeps the TournamentCard.
@@ -85,8 +80,7 @@ const DesktopRow = ({
   processing: boolean;
   onOpen: () => void;
 }) => {
-  const displayStatus = displayStatusOf(t);
-  const sc = statusColor(displayStatus);
+  const badge = statusBadgeOf(t);
   return (
     <Pressable
       onPress={onOpen}
@@ -109,8 +103,8 @@ const DesktopRow = ({
         </View>
       </View>
       <View style={styles.colStatus}>
-        <View style={[styles.dtStatusBadge, { backgroundColor: sc + "22" }]}>
-          <Text allowFontScaling={false} style={[styles.dtStatusText, { color: sc }]}>{displayStatus}</Text>
+        <View style={[styles.dtStatusBadge, { backgroundColor: badge.color + "22" }]}>
+          <Text allowFontScaling={false} style={[styles.dtStatusText, { color: badge.color }]} numberOfLines={1}>{badge.label}</Text>
         </View>
       </View>
       <View style={styles.colActions}>

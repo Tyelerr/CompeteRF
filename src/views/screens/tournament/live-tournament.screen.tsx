@@ -6,13 +6,12 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -20,59 +19,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { RaceConfig } from "../../../utils/bracket.utils";
 import { moderateScale, scale } from "../../../utils/scaling";
-import {
-  SpectatorPlayer,
-  useTournamentSpectator,
-} from "../../../viewmodels/useTournamentSpectator";
-import { Dropdown } from "../../components/common/dropdown";
+import { useTournamentSpectator } from "../../../viewmodels/useTournamentSpectator";
 import { Loading } from "../../components/common/loading";
 import { MatchesView } from "../../components/tournament/live/MatchesView";
+import { PayoutSummary } from "../../components/tournament/live/PayoutSummary";
+import { PayoutsView } from "../../components/tournament/live/PayoutsView";
+import { SpectatorOverview } from "../../components/tournament/live/SpectatorOverview";
 import { StatsView } from "../../components/tournament/live/StatsView";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
 const wxSc = (v: number) => (isWeb ? v : scale(v));
 
-type Tab = "overview" | "matches" | "players" | "stats";
+type Tab = "overview" | "matches" | "stats" | "payouts";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "matches", label: "Matches" },
-  { key: "players", label: "Players" },
   { key: "stats", label: "Stats" },
+  { key: "payouts", label: "Payouts" },
 ];
-
-type PlayerSort = "active" | "seed" | "fargo" | "name";
-const SORTS: { label: string; value: PlayerSort }[] = [
-  { label: "Still In", value: "active" },
-  { label: "Seed", value: "seed" },
-  { label: "Fargo", value: "fargo" },
-  { label: "Name", value: "name" },
-];
-
-// "Still In" first (active before eliminated), then deeper run, then seed.
-const sortPlayers = (players: SpectatorPlayer[], sort: PlayerSort): SpectatorPlayer[] => {
-  const bySeed = (a: SpectatorPlayer, b: SpectatorPlayer) => {
-    if (a.seed != null && b.seed != null) return a.seed - b.seed;
-    if (a.seed != null) return -1;
-    if (b.seed != null) return 1;
-    return a.name.localeCompare(b.name);
-  };
-  const copy = [...players];
-  if (sort === "seed") return copy.sort(bySeed);
-  if (sort === "name") return copy.sort((a, b) => a.name.localeCompare(b.name));
-  if (sort === "fargo")
-    return copy.sort((a, b) => (b.fargo ?? -1) - (a.fargo ?? -1) || bySeed(a, b));
-  // "active": still-in first, then by wins (deeper run), then seed.
-  return copy.sort((a, b) => {
-    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
-    const aw = a.record.filter((x) => x === "W").length;
-    const bw = b.record.filter((x) => x === "W").length;
-    if (aw !== bw) return bw - aw;
-    return bySeed(a, b);
-  });
-};
 
 const prettify = (s?: string) =>
   (s ?? "")
@@ -80,36 +46,6 @@ const prettify = (s?: string) =>
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
-
-const fmtDate = (d?: string): string => {
-  if (!d) return "—";
-  const dt = new Date(d);
-  return isNaN(dt.getTime())
-    ? d
-    : dt.toLocaleDateString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-};
-
-const fmtTime = (t?: string | null): string => {
-  if (!t) return "";
-  const [h, m] = t.split(":");
-  const hh = parseInt(h, 10);
-  if (isNaN(hh)) return t;
-  const ap = hh >= 12 ? "PM" : "AM";
-  const h12 = ((hh + 11) % 12) + 1;
-  return `${h12}:${m ?? "00"} ${ap}`;
-};
-
-const raceSummary = (cfg: RaceConfig): string =>
-  cfg.mode === "fixed"
-    ? `Race to ${cfg.fixedWinners}`
-    : cfg.mode === "groups"
-      ? `${cfg.groups.length} race group${cfg.groups.length === 1 ? "" : "s"}`
-      : "Fargo differential";
 
 const liveStatus = (
   liveState?: string | null,
@@ -120,45 +56,6 @@ const liveStatus = (
     return { label: "FINAL", live: false, done: true };
   return { label: prettify(liveState ?? status ?? "").toUpperCase(), live: false, done: false };
 };
-
-// Small W/L boxes under a player's name so spectators can see their run + if
-// they're still in.
-const RecordBoxes = ({ player }: { player: SpectatorPlayer }) => (
-  <View style={styles.recordRow}>
-    {player.record.length === 0 ? (
-      <Text allowFontScaling={false} style={styles.recordEmpty}>
-        {player.eliminated ? "—" : "Not played yet"}
-      </Text>
-    ) : (
-      player.record.map((r, idx) => (
-        <View
-          key={idx}
-          style={[styles.recBox, r === "W" ? styles.recWin : styles.recLoss]}
-        >
-          <Text allowFontScaling={false} style={styles.recBoxText}>
-            {r}
-          </Text>
-        </View>
-      ))
-    )}
-    {player.eliminated && (
-      <Text allowFontScaling={false} style={styles.outTag}>
-        OUT
-      </Text>
-    )}
-  </View>
-);
-
-const Row = ({ label, value }: { label: string; value: string }) => (
-  <View style={styles.row}>
-    <Text allowFontScaling={false} style={styles.rowLabel}>
-      {label}
-    </Text>
-    <Text allowFontScaling={false} style={styles.rowVal} numberOfLines={2}>
-      {value}
-    </Text>
-  </View>
-);
 
 export const LiveTournamentScreen = ({
   id,
@@ -187,8 +84,11 @@ export const LiveTournamentScreen = ({
     if (from === "profile") router.navigate("/profile" as any);
     else router.back();
   };
-  const validTab = TABS.some((t) => t.key === initialTab)
-    ? (initialTab as Tab)
+  // Players is consolidated into Stats — map any saved ?tab=players deep link to Stats
+  // (otherwise unknown tabs fall back to Overview).
+  const requestedTab = initialTab === "players" ? "stats" : initialTab;
+  const validTab = TABS.some((t) => t.key === requestedTab)
+    ? (requestedTab as Tab)
     : "overview";
   const [tab, setTab] = useState<Tab>(validTab);
   const matchesInitialMode = initialView === "bracket" ? "bracket" : "cards";
@@ -200,24 +100,13 @@ export const LiveTournamentScreen = ({
     setTab(validTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey, initialTab]);
-  const [playerQuery, setPlayerQuery] = useState("");
-  const [playerSort, setPlayerSort] = useState<PlayerSort>("active");
 
-  const displayedPlayers = useMemo(() => {
-    const q = playerQuery.trim().toLowerCase();
-    const filtered = q
-      ? sp.players.filter((p) => p.name.toLowerCase().includes(q))
-      : sp.players;
-    return sortPlayers(filtered, playerSort);
-  }, [sp.players, playerQuery, playerSort]);
+  // Which registration ids are in a live match right now (drives the "Playing" tag
+  // on Overview leaders + the Stats player list).
+  const playingRegIds = sp.playingRegIds;
 
   const t: any = sp.tournament;
   const status = liveStatus(t?.live_state, t?.status);
-  const director = t?.profiles ?? null;
-  const directorName = director
-    ? [director.first_name, director.last_name].filter(Boolean).join(" ") ||
-      (director.user_name ? `@${director.user_name}` : "Unknown")
-    : "Unknown";
 
   return (
     <View style={styles.root}>
@@ -276,7 +165,24 @@ export const LiveTournamentScreen = ({
         </View>
       ) : tab === "stats" ? (
         <View style={styles.matchesWrap}>
-          <StatsView matches={sp.matches} highlightRegId={highlightRegId} />
+          <StatsView
+            matches={sp.matches}
+            players={sp.players}
+            playingRegIds={playingRegIds}
+            raceConfig={sp.raceConfig}
+            highlightRegId={highlightRegId}
+          />
+        </View>
+      ) : tab === "payouts" ? (
+        <View style={styles.matchesWrap}>
+          <PayoutsView
+            matches={sp.matches}
+            config={sp.prizeConfig}
+            entryPool={sp.entryPool}
+            sidePotPools={sp.sidePotPools}
+            sidePotEntrants={sp.sidePotEntrants}
+            summary={<PayoutSummary data={sp.payoutSummary} />}
+          />
         </View>
       ) : tab === "matches" ? (
         <View style={styles.matchesWrap}>
@@ -292,120 +198,23 @@ export const LiveTournamentScreen = ({
             highlightRegId={highlightRegId}
           />
         </View>
-      ) : tab === "players" ? (
+      ) : (
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
         >
-          <View style={styles.searchRow}>
-            <TextInput
-              allowFontScaling={false}
-              style={styles.search}
-              placeholder="Search players"
-              placeholderTextColor={COLORS.textMuted}
-              value={playerQuery}
-              onChangeText={setPlayerQuery}
-            />
-            <View style={styles.sortWrap}>
-              <Dropdown
-                compact
-                options={SORTS}
-                value={playerSort}
-                onSelect={(v) => setPlayerSort(v as PlayerSort)}
-              />
-            </View>
-          </View>
-
-          <Text allowFontScaling={false} style={styles.sectionHeader}>
-            {displayedPlayers.length} PLAYER{displayedPlayers.length === 1 ? "" : "S"}
-          </Text>
-          <View style={styles.card}>
-            {displayedPlayers.length === 0 ? (
-              <Text allowFontScaling={false} style={styles.empty}>
-                {sp.players.length === 0 ? "No players yet." : "No players match your search."}
-              </Text>
-            ) : (
-              displayedPlayers.map((p, i) => (
-                <View key={p.id}>
-                  {i > 0 && <View style={styles.divider} />}
-                  <View style={styles.playerRow}>
-                    <View style={styles.seedBadge}>
-                      <Text allowFontScaling={false} style={styles.seedText}>
-                        {p.seed ?? i + 1}
-                      </Text>
-                    </View>
-                    <View style={styles.playerMain}>
-                      <Text
-                        allowFontScaling={false}
-                        style={[styles.playerName, p.eliminated && styles.playerNameOut]}
-                        numberOfLines={1}
-                      >
-                        {p.name}
-                      </Text>
-                      <RecordBoxes player={p} />
-                    </View>
-                    <View style={styles.playerRight}>
-                      <View style={styles.statPill}>
-                        <Text allowFontScaling={false} style={styles.statPillLabel}>FARGO</Text>
-                        <Text allowFontScaling={false} style={styles.statPillVal}>
-                          {p.fargo != null ? p.fargo : "—"}
-                        </Text>
-                      </View>
-                      {p.group != null && (
-                        <View style={[styles.statPill, styles.statPillGroup]}>
-                          <Text allowFontScaling={false} style={[styles.statPillLabel, styles.statPillLabelGroup]}>GROUP</Text>
-                          <Text allowFontScaling={false} style={[styles.statPillVal, styles.statPillValGroup]}>
-                            {p.group}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        </ScrollView>
-      ) : (
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.card}>
-            <Text allowFontScaling={false} style={styles.cardTitle}>Tournament</Text>
-            <Row label="Game" value={prettify(t.game_type)} />
-            <Row label="Format" value={prettify(t.tournament_format)} />
-            <Row label="Race" value={raceSummary(sp.raceConfig)} />
-            <Row label="Players" value={String(sp.players.length)} />
-          </View>
-
-          <View style={styles.card}>
-            <Text allowFontScaling={false} style={styles.cardTitle}>When & Where</Text>
-            <Row label="Date" value={fmtDate(t.tournament_date)} />
-            {!!fmtTime(t.start_time) && <Row label="Time" value={fmtTime(t.start_time)} />}
-            <Row
-              label="Venue"
-              value={t.venues?.venue ?? "—"}
-            />
-            {t.venues?.city && (
-              <Row label="City" value={`${t.venues.city}, ${t.venues.state ?? ""}`.trim()} />
-            )}
-            <Row label="Director" value={directorName} />
-          </View>
-
-          <View style={styles.card}>
-            <Text allowFontScaling={false} style={styles.cardTitle}>Entry & Prize Pool</Text>
-            <Row
-              label="Entry Fee"
-              value={t.entry_fee != null ? `$${t.entry_fee}` : "Free"}
-            />
-            {t.added_money > 0 && <Row label="Added Money" value={`$${t.added_money}`} />}
-            <View style={styles.poolNote}>
-              <Ionicons name="trophy-outline" size={wxMs(16)} color={COLORS.textMuted} />
-              <Text allowFontScaling={false} style={styles.poolText}>
-                Prize pool breakdown coming soon.
-              </Text>
-            </View>
-          </View>
+          <SpectatorOverview
+            players={sp.players}
+            playingRegIds={playingRegIds}
+            kpis={sp.kpis}
+            activeMatches={sp.activeMatches}
+            upNext={sp.upNext}
+            autoAssignMode={sp.autoAssignMode}
+            events={sp.events}
+            live={status.live}
+            onOpenPlayers={() => setTab("stats")}
+            onOpenMatches={() => setTab("matches")}
+          />
         </ScrollView>
       )}
       </View>
@@ -607,4 +416,68 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   statPillValGroup: { color: COLORS.primary },
+
+  // Players status filter (segmented)
+  filterRow: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: wxSc(SPACING.xs),
+    marginBottom: wxSc(SPACING.sm),
+  },
+  filterBtn: {
+    flex: 1,
+    paddingVertical: wxSc(SPACING.xs),
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+  },
+  filterBtnOn: { backgroundColor: COLORS.primary },
+  filterText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textSecondary },
+  filterTextOn: { color: "#fff" },
+
+  // Compact standings rows
+  pRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: wxSc(SPACING.sm),
+    paddingVertical: wxSc(SPACING.sm),
+  },
+  pRank: {
+    minWidth: wxSc(22),
+    fontSize: wxMs(FONT_SIZES.sm),
+    fontWeight: "900",
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+  pMain: { flex: 1, minWidth: 0 as any, gap: wxSc(2) },
+  pNameRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.xs) },
+  pName: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text, flexShrink: 1 },
+  pNameOut: { color: COLORS.textMuted },
+  pPlaying: {
+    fontSize: wxMs(9),
+    fontWeight: "800",
+    color: COLORS.primary,
+    letterSpacing: 0.3,
+  },
+  pSubRow: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), flexWrap: "wrap" },
+  pFargo: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  pGroupTag: {
+    paddingHorizontal: wxSc(SPACING.xs),
+    paddingVertical: wxSc(1),
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.primary + "18",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  pGroupText: { fontSize: wxMs(9), fontWeight: "800", color: COLORS.primary, letterSpacing: 0.3 },
+  pRec: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", fontVariant: ["tabular-nums"] },
+  pRecEmpty: { color: COLORS.textMuted },
+  win: { color: COLORS.success },
+  loss: { color: COLORS.error },
+  recSep: { color: COLORS.textMuted },
+  pIn: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.success },
+  pOut: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.error },
 });

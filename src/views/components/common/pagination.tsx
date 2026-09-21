@@ -18,15 +18,19 @@ interface PaginationProps {
   // Optional item noun for the summary text, e.g. "tournaments" →
   // "Showing 1–10 of 11 tournaments". Omitted → "Showing 1–10 of 11".
   noun?: string;
+  // Optional node rendered between the count (left) and the page arrows (right), e.g. a
+  // view toggle. Omitted → nothing (unchanged for every existing caller).
+  rightAccessory?: React.ReactNode;
 }
 
-export function Pagination({ totalCount, displayStart, displayEnd, currentPage, totalPages, onPrevPage, onNextPage, canGoPrev, canGoNext, noun }: PaginationProps) {
+export function Pagination({ totalCount, displayStart, displayEnd, currentPage, totalPages, onPrevPage, onNextPage, canGoPrev, canGoNext, noun, rightAccessory }: PaginationProps) {
   if (totalCount === 0) return null;
   return (
     <View style={styles.container}>
       <Text allowFontScaling={false} style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
         Showing {displayStart}{"–"}{displayEnd} of {totalCount}{noun ? ` ${noun}` : ""}
       </Text>
+      {rightAccessory}
       <View style={styles.pagination}>
         <TouchableOpacity onPress={onPrevPage} disabled={!canGoPrev} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Text allowFontScaling={false} style={[styles.pageArrow, !canGoPrev && styles.pageArrowDisabled]}>{"<"}</Text>

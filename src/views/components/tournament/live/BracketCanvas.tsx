@@ -28,7 +28,8 @@ import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
-import { LiveMatch } from "../../../../utils/match.utils";
+import { formatClock, LiveMatch } from "../../../../utils/match.utils";
+import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
 import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
 const GAP_X = 140;
@@ -350,6 +351,7 @@ export const BracketCanvas = ({
   focusMatchId,
   focusKey,
   highlightRegId,
+  rightAccessory,
 }: {
   matches: LiveMatch[];
   onNodePress: (m: LiveMatch) => void;
@@ -361,9 +363,17 @@ export const BracketCanvas = ({
   // Changing this re-triggers the centering even to the same match (so a repeat
   // "View Bracket" re-centers instead of keeping the last pan/zoom).
   focusKey?: string | number;
+  // Optional node pinned to the RIGHT end of the toolbar (e.g. the Cards/Bracket toggle).
+  // When present the toolbar spans full width; otherwise it stays compact/left-aligned.
+  rightAccessory?: React.ReactNode;
 }) => {
   const built = useMemo(() => layout(matches), [matches]);
   const { positioned, labels, lines, width, height, hasLosers, dividerY } = built;
+
+  // One shared per-second ticker; only LIVE nodes get a changing `elapsed` string
+  // (so the memoized MatchNode re-renders only those, not the whole bracket).
+  const anyLive = useMemo(() => matches.some((m) => m.status === "in_progress"), [matches]);
+  const now = useLiveNow(anyLive);
 
   const scaleA = useRef(new Animated.Value(START_SCALE)).current;
   const txA = useRef(new Animated.Value(PAD)).current;
@@ -616,7 +626,7 @@ export const BracketCanvas = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, rightAccessory ? styles.toolbarFull : null]}>
         <View style={styles.searchWrap}>
           <TextInput
             allowFontScaling={false}
@@ -667,6 +677,7 @@ export const BracketCanvas = ({
             </TouchableOpacity>
           </>
         )}
+        {rightAccessory ? <View style={styles.toolbarRight}>{rightAccessory}</View> : null}
       </View>
 
       {results.length > 0 && (
@@ -822,6 +833,13 @@ export const BracketCanvas = ({
                               highlighted={highlight === p.match.id}
                               mine={mineFor(p.match)}
                               onPress={handleNodePress}
+                              elapsed={
+                                p.match.status === "in_progress" && p.match.startedAt
+                                  ? formatClock(
+                                      Math.max(0, (now - Date.parse(p.match.startedAt)) / 1000),
+                                    )
+                                  : undefined
+                              }
                             />
                             {route ? (
                               <Text
@@ -897,6 +915,9 @@ const styles = StyleSheet.create({
     marginBottom: webSc(SPACING.sm),
     alignSelf: isWeb ? "flex-start" : "stretch",
   },
+  // With a right accessory, the toolbar spans the full contained width and wraps if needed.
+  toolbarFull: { alignSelf: "stretch", flexWrap: "wrap" },
+  toolbarRight: { marginLeft: "auto" as any },
   searchWrap: isWeb ? { width: 300 } : { flex: 1 },
   search: {
     height: webSc(40),

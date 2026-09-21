@@ -11,6 +11,7 @@ import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { describeRace } from "../../../utils/bracket.utils";
 import { useFavorites } from "../../../viewmodels/hooks/use.favorites";
 import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useSelfRegistration } from "../../../viewmodels/hooks/use.self.registration";
@@ -193,6 +194,10 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
   const director = tournament?.profiles ?? null;
   const directorName = getDirectorName(director);
   const directorId = getDirectorId(director);
+  // Authoritative race display from live_settings (not the stale `race` column).
+  const raceDisplay = !isChipTournament
+    ? describeRace((tournament as any)?.live_settings, tournament?.tournament_format ?? "")
+    : null;
   // Read-only player name shown in the register modal — the signed-in player's
   // profile first + last name (falls back to legacy name / @username). Display only.
   const playerName =
@@ -332,7 +337,21 @@ export function TournamentDetailModal({ id, visible, onClose, origin = "billiard
               {!isChipTournament && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Open Tournament:</Text><Text allowFontScaling={false} style={s.val}>{tournament.open_tournament ? "Yes" : "No"}</Text></View>}
               {tournament.max_fargo && !isChipTournament && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Max Fargo:</Text><Text allowFontScaling={false} style={s.val}>{tournament.max_fargo}</Text></View>}
               {tournament.game_spot && !isChipTournament && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Game Spot:</Text><Text allowFontScaling={false} style={s.val}>{tournament.game_spot}</Text></View>}
-              {tournament.race && !isChipTournament && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{tournament.race}</Text></View>}
+              {!isChipTournament && (
+                raceDisplay ? (
+                  <>
+                    <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{raceDisplay.summary}</Text></View>
+                    {raceDisplay.groups.map((g) => (
+                      <View key={g.label} style={s.row}><Text allowFontScaling={false} style={s.label}>{g.label}</Text><Text allowFontScaling={false} style={s.val}>{`${g.range} · ${g.race}`}</Text></View>
+                    ))}
+                    {raceDisplay.rows.map((r) => (
+                      <View key={r.label} style={s.row}><Text allowFontScaling={false} style={s.label}>{r.label}</Text><Text allowFontScaling={false} style={s.val}>{r.value}</Text></View>
+                    ))}
+                  </>
+                ) : tournament.race ? (
+                  <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{tournament.race}</Text></View>
+                ) : null
+              )}
             </View>
 
             <View style={s.section}>

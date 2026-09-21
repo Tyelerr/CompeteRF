@@ -10,10 +10,13 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
+  TextStyle,
   TouchableOpacity,
   View,
+  ViewStyle,
   useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -36,6 +39,10 @@ interface ActionMenuProps {
   disabled?: boolean;
   // Compact icon-only ⋯ trigger (desktop table rows) instead of a labeled button.
   compact?: boolean;
+  // Optional overrides so a caller can size the labeled trigger to match a
+  // neighboring button (e.g. the Queue row's Start/Manage), forming one button group.
+  triggerStyle?: StyleProp<ViewStyle>;
+  triggerTextStyle?: StyleProp<TextStyle>;
 }
 
 const MENU_WIDTH = 200;
@@ -46,6 +53,8 @@ export const ActionMenu = ({
   label = "Manage",
   disabled,
   compact,
+  triggerStyle,
+  triggerTextStyle,
 }: ActionMenuProps) => {
   const triggerRef = useRef<View>(null);
   const { width: winW, height: winH } = useWindowDimensions();
@@ -82,7 +91,11 @@ export const ActionMenu = ({
     <>
       <TouchableOpacity
         ref={triggerRef}
-        style={[compact ? styles.triggerCompact : styles.trigger, disabled && styles.triggerDisabled]}
+        style={[
+          compact ? styles.triggerCompact : styles.trigger,
+          !compact && triggerStyle,
+          disabled && styles.triggerDisabled,
+        ]}
         onPress={openMenu}
         disabled={disabled}
         activeOpacity={0.7}
@@ -91,10 +104,10 @@ export const ActionMenu = ({
           <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
         ) : (
           <>
-            <Text allowFontScaling={false} style={styles.triggerText}>
+            <Text allowFontScaling={false} style={[styles.triggerText, triggerTextStyle]}>
               {label}
             </Text>
-            <Text allowFontScaling={false} style={styles.triggerArrow}>
+            <Text allowFontScaling={false} style={[styles.triggerArrow, triggerTextStyle]}>
               {"▾"}
             </Text>
           </>

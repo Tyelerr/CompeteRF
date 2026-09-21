@@ -10,6 +10,7 @@ import { useReport } from "../../../viewmodels/hooks/useReport";
 import { useSelfRegistration } from "../../../viewmodels/hooks/use.self.registration";
 import { usePendingTeamInvite } from "../../../viewmodels/hooks/use.team.invite";
 import { useTournamentDetail } from "../../../viewmodels/useTournamentDetail";
+import { describeRace } from "../../../utils/bracket.utils";
 import { Button } from "../../components/common/button";
 import { FullScreenImageViewer } from "../../components/common/FullScreenImageViewer";
 import ReportModal from "../../components/common/ReportModal";
@@ -130,6 +131,10 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
     if (typeof window !== "undefined") window.open(t.external_bracket_url, "_blank");
   };
   const isChip = t.tournament_format === "chip-tournament";
+  // Authoritative race display from live_settings (not the stale `race` column).
+  const raceDisplay = !isChip
+    ? describeRace((t as any).live_settings, t.tournament_format ?? "")
+    : null;
   const chipRanges = isChip && Array.isArray(t.chip_ranges) && t.chip_ranges.length > 0 ? t.chip_ranges : null;
   // Which registration buttons appear — mirrors the mobile modal's logic exactly.
   const canRegister = t.live_state === "registration_open";
@@ -222,7 +227,21 @@ export function WebTournamentDetailOverlay({ id, onClose }: Props) {
                 <View style={s.row}><Text allowFontScaling={false} style={s.label}>Calcutta:</Text><Text allowFontScaling={false} style={s.val}>{t.calcutta ? "Yes" : "No"}</Text></View>
                 {!isChip && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Open Tournament:</Text><Text allowFontScaling={false} style={s.val}>{t.open_tournament ? "Yes" : "No"}</Text></View>}
                 {t.max_fargo && !isChip && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Max Fargo:</Text><Text allowFontScaling={false} style={s.val}>{t.max_fargo}</Text></View>}
-                {t.race && !isChip && <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{t.race}</Text></View>}
+                {!isChip && (
+                  raceDisplay ? (
+                    <>
+                      <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{raceDisplay.summary}</Text></View>
+                      {raceDisplay.groups.map((g) => (
+                        <View key={g.label} style={s.row}><Text allowFontScaling={false} style={s.label}>{g.label}</Text><Text allowFontScaling={false} style={s.val}>{`${g.range} · ${g.race}`}</Text></View>
+                      ))}
+                      {raceDisplay.rows.map((r) => (
+                        <View key={r.label} style={s.row}><Text allowFontScaling={false} style={s.label}>{r.label}</Text><Text allowFontScaling={false} style={s.val}>{r.value}</Text></View>
+                      ))}
+                    </>
+                  ) : t.race ? (
+                    <View style={s.row}><Text allowFontScaling={false} style={s.label}>Race:</Text><Text allowFontScaling={false} style={s.val}>{t.race}</Text></View>
+                  ) : null
+                )}
               </View>
 
               <View style={s.section}>

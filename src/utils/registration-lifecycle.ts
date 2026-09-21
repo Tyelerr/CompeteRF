@@ -91,6 +91,18 @@ export const isFargoOverCap = (
   maxFargo: number | null | undefined,
 ): boolean => fargoOverBy(rating, maxFargo) > 0;
 
+// Elimination-only: a Fargo is "TD-verified for THIS event" when the per-event snapshot
+// (tournament_players.fargo_at_registration) equals the current fargo_rating. Editing the
+// rating breaks the equality, so verification auto-clears until the TD re-verifies — no
+// separate boolean/migration needed. Does NOT touch the player's global profile Fargo.
+export const isFargoVerified = (
+  fargoRating: number | null | undefined,
+  fargoAtRegistration: number | null | undefined,
+): boolean =>
+  fargoRating != null &&
+  fargoAtRegistration != null &&
+  fargoRating === fargoAtRegistration;
+
 export const deriveLifecycle = (i: LifecycleInput): LifecycleStatus => {
   if (i.exception === "no_show") return "no_show";
   if (i.exception === "removed") return "removed";

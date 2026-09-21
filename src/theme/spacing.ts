@@ -7,6 +7,11 @@
   xxl: 48,
 };
 
+// Shared centered max width for desktop/web admin + tournament pages. One token so
+// every Setup / Live / Results page lines up to the same left/right boundaries
+// instead of each capping itself at a different width.
+export const WEB_MAXW = 1240;
+
 export const RADIUS = {
   xs: 4,
   sm: 8,

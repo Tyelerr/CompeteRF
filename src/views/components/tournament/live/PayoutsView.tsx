@@ -4,10 +4,17 @@
 // finished there from the final standings. Pure over the saved prize-pool config,
 // the derived pools and the live match list.
 
-import { useMemo } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ReactNode, useMemo } from "react";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { COLORS } from "../../../../theme/colors";
-import { RADIUS, SPACING } from "../../../../theme/spacing";
+import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
@@ -38,6 +45,7 @@ export const PayoutsView = ({
   entryPool,
   sidePotPools,
   sidePotEntrants,
+  summary,
 }: {
   matches: LiveMatch[];
   config: PrizePoolConfig | null;
@@ -45,7 +53,13 @@ export const PayoutsView = ({
   sidePotPools: Record<string, number>;
   // Side pot name -> standings keys (r<registrationId>) of the players who entered.
   sidePotEntrants?: Record<string, string[]>;
+  // Optional sticky summary (spectator). When provided AND wide web, the page
+  // becomes two-column with this pinned on the right. Admin passes nothing →
+  // the single-column layout is unchanged.
+  summary?: ReactNode;
 }) => {
+  const { width } = useWindowDimensions();
+  const twoCol = !!summary && Platform.OS === "web" && width >= 980;
   const standings = useMemo(() => computeStandings(matches), [matches]);
   // Side pots pay the BEST-finishing entrants, which isn't known until the event
   // is over (a champion exists). Before that, leave side-pot winners blank so we
@@ -76,11 +90,8 @@ export const PayoutsView = ({
     );
   }
 
-  return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+  const body = (
+    <>
       {/* Entry prize pool */}
       <View style={styles.card}>
         <View style={styles.head}>
@@ -151,6 +162,29 @@ export const PayoutsView = ({
           </View>
         );
       })}
+    </>
+  );
+
+  if (twoCol) {
+    return (
+      <ScrollView
+        style={styles.scrollFlex}
+        contentContainerStyle={styles.contentWide}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.twoColRow}>
+          <View style={styles.leftCol}>{body}</View>
+          <View style={styles.rightCol}>{summary}</View>
+        </View>
+      </ScrollView>
+    );
+  }
+  return (
+    <ScrollView
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {body}
     </ScrollView>
   );
 };
@@ -160,8 +194,26 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.md),
     paddingBottom: webSc(SPACING.xl * 2),
     ...Platform.select({
-      web: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
+      web: { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any },
     }),
+  },
+  // Wide web two-column (spectator, with a sticky summary on the right).
+  scrollFlex: { flex: 1 },
+  contentWide: {
+    padding: webSc(SPACING.md),
+    paddingBottom: webSc(SPACING.xl * 2),
+    width: "100%" as any,
+    maxWidth: WEB_MAXW,
+    alignSelf: "center" as any,
+  },
+  twoColRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  leftCol: { flex: 68, minWidth: 0 as any },
+  rightCol: {
+    flex: 32,
+    minWidth: 0 as any,
+    position: "sticky" as any,
+    top: webSc(SPACING.sm),
+    alignSelf: "flex-start" as any,
   },
   card: {
     backgroundColor: COLORS.surface,

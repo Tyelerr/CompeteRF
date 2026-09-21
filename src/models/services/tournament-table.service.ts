@@ -14,6 +14,21 @@ import {
 } from "../types/tournament-table.types";
 import { TableStatus } from "../types/common.types";
 
+// ── Pool-table identity (single source of truth) ─────────────────────────────
+// A pool table is uniquely identified within a tournament by its NORMALIZED label plus its
+// number. This MUST mirror the DB unique index exactly:
+//   UNIQUE (tournament_id, lower(btrim(coalesce(label, ''))), table_number)
+// Normalization: trim + lowercase; null/empty/whitespace-only labels collapse to the same
+// default (unlabeled). Both single-add and bulk-add validation + the bulk preview use these
+// so the UI catches duplicates before the DB and never disagrees with persistence.
+export const normalizeTableLabel = (label: string | null | undefined): string =>
+  (label ?? "").trim().toLowerCase();
+
+export const tableIdentityKey = (
+  label: string | null | undefined,
+  tableNumber: number,
+): string => `${normalizeTableLabel(label)}|${tableNumber}`;
+
 export const tournamentTableService = {
   // ---- Reads -------------------------------------------------------------
 

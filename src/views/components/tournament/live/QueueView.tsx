@@ -1,9 +1,14 @@
 // src/views/components/tournament/live/QueueView.tsx
-// Queue Manager — the TD's live operations screen. Shows ready-to-play matches
-// with wait time + bracket location, lets the TD reorder the queue and assign a
-// match to a specific table, and runs Auto Assign (preview → apply) to fill free
-// tables using the selected mode. Assigning a table PARKS the match on it; the TD
-// then starts it from the On Tables list (or uses Assign & Start to do both).
+// Queue Manager — the TD's live operations screen, built on the shared projected
+// schedule (utils/schedule.projection via useProjectedSchedule):
+//   • On Tables        = schedule.active (parked or in progress)
+//   • Scheduled Matches = schedule.scheduled — every remaining match, Ready first,
+//     then Waiting/future matches with feeder placeholders. Next ~10 inline, the
+//     rest in View Full Schedule.
+// Reordering (Up/Down/Top/Bottom) changes PRIORITY only and persists through the
+// existing queueOrder path; Auto Assign still plans from schedule.readyQueue (the
+// unchanged orderQueue result). Assigning a table PARKS the match on it; the TD
+// then starts it from On Tables (or uses Assign & Start to do both).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -13,37 +18,40 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { COLORS } from "../../../../theme/colors";
-import { RADIUS, SPACING } from "../../../../theme/spacing";
+import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
-import {
-  AutoAssignMode,
-  GeneratedBracket,
-  MatchLiveState,
-} from "../../../../models/types/tournament-settings.types";
+import { AutoAssignMode } from "../../../../models/types/tournament-settings.types";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
-import { LiveMatch } from "../../../../utils/match.utils";
+import { formatClock, LiveMatch, MatchActionStep } from "../../../../utils/match.utils";
 import {
   AUTO_ASSIGN_MODES,
   AssignmentPlan,
-  buildQueueEntries,
-  computeReadyAtMap,
   formatWait,
   freeTables,
-  orderQueue,
   planAutoAssign,
 } from "../../../../utils/queue.utils";
+import { ProjectedMatch, ProjectedSchedule } from "../../../../utils/schedule.projection";
+import {
+  reorderScheduled,
+  scheduleMoveAvailability,
+  ScheduleMove,
+} from "../../../../utils/schedule.reorder";
 import { Dropdown } from "../../common/dropdown";
 import { ActionMenu, ActionMenuItem } from "../../admin/ActionMenu";
+import { ScheduledMatchRow } from "./ScheduledMatchRow";
+
+// Scheduled rows shown inline before "View Full Schedule".
+const SCHEDULE_PREVIEW = 10;
 
 interface QueueViewProps {
   matches: LiveMatch[];
   tables: TournamentTable[];
-  bracket: GeneratedBracket | null;
-  matchState: Record<string, MatchLiveState>;
+  schedule: ProjectedSchedule; // shared projection (useProjectedSchedule)
   occupancy: Record<number, string>; // tableId -> occupying match label
   mode: AutoAssignMode;
   queueOrder: string[];
@@ -53,23 +61,31 @@ interface QueueViewProps {
   onUnassign: (matchId: string) => void;
   onSetMode: (mode: AutoAssignMode) => void;
   onSetQueueOrder: (ids: string[]) => void;
+  // Opens the shared match-actions modal (score/end/reopen/etc.) for an on-table
+  // match — reuses the hub's existing MatchActionsModal, no second flow.
+  onManageMatch?: (m: LiveMatch, step: MatchActionStep) => void;
+  // Players still in / total field, for the right summary card (the hub already
+  // derives these — QueueView can't from matches alone). "—" when not provided.
+  playersRemaining?: number;
+  playersTotal?: number;
 }
+
+const isWeb = Platform.OS === "web";
 
 const tableLabelOf = (t: TournamentTable): string =>
   t.label ? `${t.label} ${t.table_number}` : `Table ${t.table_number}`;
 
-const waitColor = (ms: number): string => {
-  const m = ms / 60000;
-  if (m >= 20) return COLORS.error;
-  if (m >= 10) return COLORS.warning;
-  return COLORS.textSecondary;
-};
+const SummaryRow = ({ label, value }: { label: string; value: string }) => (
+  <View style={styles.summaryRow}>
+    <Text allowFontScaling={false} style={styles.summaryLabel}>{label}</Text>
+    <Text allowFontScaling={false} style={styles.summaryValue}>{value}</Text>
+  </View>
+);
 
 export const QueueView = ({
   matches,
   tables,
-  bracket,
-  matchState,
+  schedule,
   occupancy,
   mode,
   queueOrder,
@@ -79,8 +95,14 @@ export const QueueView = ({
   onUnassign,
   onSetMode,
   onSetQueueOrder,
+  onManageMatch,
+  playersRemaining,
+  playersTotal,
 }: QueueViewProps) => {
-  // Tick so wait times update live.
+  const { width: winW, height: winH } = useWindowDimensions();
+  const wide = isWeb && winW >= 980;
+  // Display-only tick so wait times update live. Order never depends on it — the
+  // schedule is memoized upstream on real state changes.
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000);
@@ -89,45 +111,55 @@ export const QueueView = ({
 
   const [showOnTables, setShowOnTables] = useState(true);
   const [autoOpen, setAutoOpen] = useState(false);
+  const [fullOpen, setFullOpen] = useState(false);
   // Match ids assigned during this Auto Assign session — listed under the
   // preview as "Recently Applied" so the TD can move them or send them back.
   const [appliedIds, setAppliedIds] = useState<string[]>([]);
 
-  const readyAtMap = useMemo(
-    () => computeReadyAtMap(bracket, matchState),
-    [bracket, matchState],
-  );
-  const entries = useMemo(
-    () => buildQueueEntries(matches, readyAtMap, now),
-    [matches, readyAtMap, now],
-  );
-  const ordered = useMemo(
-    () => orderQueue(entries, mode, queueOrder),
-    [entries, mode, queueOrder],
-  );
+  // The ready queue is the existing orderQueue() result (exposed by the projection);
+  // it is the ONLY list Auto Assign plans from.
+  const ordered = schedule.readyQueue;
+  const scheduled = schedule.scheduled;
+  const waitingCount = scheduled.length - ordered.length;
   const available = useMemo(
     () => freeTables(tables, occupancy),
     [tables, occupancy],
   );
   // Every match sitting on a table — parked (assigned, not started) or in progress.
   // Parked matches get a Start button; in-progress ones show their live status.
-  const onTables = useMemo(
-    () =>
-      matches.filter(
-        (m) =>
-          m.tableId != null && m.status !== "completed" && !m.bye && !m.empty,
-      ),
-    [matches],
-  );
+  const onTables = schedule.active;
   // Longest current wait among ready matches — surfaced in the top summary so the
   // TD can spot anyone sitting too long at a glance.
   const longestWaitMs = useMemo(
-    () => ordered.reduce((a, e) => Math.max(a, e.waitMs), 0),
-    [ordered],
+    () => ordered.reduce((a, e) => Math.max(a, e.readyAt != null ? now - e.readyAt : 0), 0),
+    [ordered, now],
   );
   const summaryText =
-    `${ordered.length} Ready  ·  ${available.length} Table${available.length === 1 ? "" : "s"} Free` +
+    `${ordered.length} Ready  ·  ${waitingCount} Waiting  ·  ${available.length} Table${available.length === 1 ? "" : "s"} Free` +
     (ordered.length > 0 ? `  ·  Longest Wait ${formatWait(longestWaitMs)}` : "");
+
+  // Right-summary values — derived from the same authoritative match list (no new
+  // business logic). Players Remaining comes from the hub (can't derive from matches).
+  const activeMatchesCount = useMemo(
+    () => matches.filter((m) => m.status === "in_progress" && !m.bye && !m.empty).length,
+    [matches],
+  );
+  const completedCount = useMemo(
+    () => matches.filter((m) => m.status === "completed" && !m.bye && !m.empty).length,
+    [matches],
+  );
+  const avgMatchText = useMemo(() => {
+    const durs = matches
+      .filter((m) => m.status === "completed" && m.startedAt && m.completedAt)
+      .map((m) => (Date.parse(m.completedAt as string) - Date.parse(m.startedAt as string)) / 1000)
+      .filter((s) => s > 0);
+    return durs.length ? formatClock(durs.reduce((a, b) => a + b, 0) / durs.length) : "—";
+  }, [matches]);
+  const modeLabel = AUTO_ASSIGN_MODES.find((o) => o.value === mode)?.label ?? "Balanced";
+  const playersText =
+    playersRemaining != null && playersTotal != null
+      ? `${playersRemaining} / ${playersTotal}`
+      : "—";
 
   const matchById = useMemo(() => {
     const map: Record<string, LiveMatch> = {};
@@ -140,15 +172,15 @@ export const QueueView = ({
     return map;
   }, [tables]);
 
-  // Reordering takes the TD into Manual mode with the current order applied.
+  // Reordering takes the TD into Manual mode with the displayed order + the move
+  // applied (same queueOrder path as before). Priority only: reorderScheduled refuses
+  // moves across the Ready/Waiting boundary or past a feeder, and the projection
+  // re-derives eligibility independently.
   const reorderRef = useRef(onSetQueueOrder);
   reorderRef.current = onSetQueueOrder;
-  const move = (i: number, dir: -1 | 1) => {
-    const j = i + dir;
-    if (j < 0 || j >= ordered.length) return;
-    const ids = ordered.map((e) => e.match.id);
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    reorderRef.current(ids);
+  const move = (matchId: string, dir: ScheduleMove) => {
+    const ids = reorderScheduled(scheduled, matchId, dir);
+    if (ids) reorderRef.current(ids);
   };
 
   // The pending plan, recomputed live from the current queue + free tables.
@@ -182,16 +214,88 @@ export const QueueView = ({
   const players = (m: LiveMatch | undefined): string =>
     m ? `${m.p1Name ?? "TBD"} vs ${m.p2Name ?? "TBD"}` : "—";
 
+  // One Scheduled row (inline list + Full Schedule modal share it). Ready rows keep
+  // the existing Assign / Assign & Start menu; every row gets priority controls.
+  const renderScheduledRow = (pm: ProjectedMatch, i: number) => {
+    const can = scheduleMoveAvailability(scheduled, i);
+    const assign =
+      pm.eligibility.ready &&
+      (available.length > 0 ? (
+        <ActionMenu
+          label="Assign"
+          triggerStyle={styles.rowBtn}
+          triggerTextStyle={styles.rowBtnText}
+          items={[
+            ...available.map<ActionMenuItem>((t) => ({
+              label: `Assign — ${tableLabelOf(t)}`,
+              onPress: () => onAssign(pm.matchId, t.id),
+            })),
+            ...available.map<ActionMenuItem>((t) => ({
+              label: `Assign & Start — ${tableLabelOf(t)}`,
+              onPress: () => onAssignStart(pm.matchId, t.id),
+            })),
+          ]}
+        />
+      ) : (
+        <Text allowFontScaling={false} style={styles.noTable}>
+          No table free
+        </Text>
+      ));
+    const arrow = (dir: "up" | "down", enabled: boolean) => (
+      <TouchableOpacity
+        onPress={() => move(pm.matchId, dir)}
+        disabled={!enabled}
+        style={[styles.reorderBtn, !enabled && styles.reorderOff]}
+        hitSlop={6}
+        accessibilityLabel={dir === "up" ? "Move up" : "Move down"}
+      >
+        <Text allowFontScaling={false} style={styles.reorderText}>
+          {dir === "up" ? "▲" : "▼"}
+        </Text>
+      </TouchableOpacity>
+    );
+    const actions = (
+      <>
+        {assign || null}
+        {arrow("up", can.up)}
+        {arrow("down", can.down)}
+        <ActionMenu
+          compact
+          disabled={!can.up && !can.down}
+          items={[
+            { label: "Move to Top", disabled: !can.top, onPress: () => move(pm.matchId, "top") },
+            { label: "Move Up", disabled: !can.up, onPress: () => move(pm.matchId, "up") },
+            { label: "Move Down", disabled: !can.down, onPress: () => move(pm.matchId, "down") },
+            { label: "Move to Bottom", disabled: !can.bottom, onPress: () => move(pm.matchId, "bottom") },
+          ]}
+        />
+      </>
+    );
+    return (
+      <ScheduledMatchRow
+        key={pm.matchId}
+        pm={pm}
+        position={i + 1}
+        now={now}
+        actions={actions}
+        stackActions={!wide}
+      />
+    );
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+       <View style={wide ? styles.twoColRow : undefined}>
+        <View style={wide ? styles.leftCol : undefined}>
         {/* Quick status summary */}
         <Text allowFontScaling={false} style={styles.summary} numberOfLines={1} adjustsFontSizeToFit>
           {summaryText}
         </Text>
+        {/* Compact controls row: content-sized Auto Assign + mode dropdown. */}
         <View style={styles.controls}>
           <TouchableOpacity
             style={[styles.autoBtn, available.length === 0 && styles.btnDisabled]}
@@ -225,7 +329,7 @@ export const QueueView = ({
               </Text>
             </TouchableOpacity>
             {showOnTables &&
-              onTables.map((m) => {
+              onTables.map(({ match: m, numberLabel, location }) => {
                 const playing = m.status === "in_progress";
                 return (
                   <View key={m.id} style={styles.onTableRow}>
@@ -237,21 +341,33 @@ export const QueueView = ({
                       >
                         {players(m)}
                       </Text>
-                      <Text allowFontScaling={false} style={styles.onTableTable}>
+                      <Text allowFontScaling={false} style={styles.onTableTable} numberOfLines={1}>
                         {m.tableLabel ?? "Table"}
-                        {!playing ? " · Not started" : ""}
+                        {"  ·  "}
+                        <Text style={playing ? styles.onTableLive : styles.onTableParked}>
+                          {playing ? "In progress" : "Not started"}
+                        </Text>
+                        <Text style={styles.onTableMeta}>
+                          {`  ·  ${numberLabel || m.id}  ·  ${location}`}
+                        </Text>
                       </Text>
                     </View>
                     <View style={styles.onTableActions}>
+                      {playing && m.isStream && (
+                        <Text allowFontScaling={false} style={styles.liveBadgeText}>
+                          {"● LIVE"}
+                        </Text>
+                      )}
                       {playing ? (
-                        m.isStream ? (
-                          <Text allowFontScaling={false} style={styles.liveBadgeText}>
-                            {"● LIVE"}
-                          </Text>
-                        ) : (
-                          <Text allowFontScaling={false} style={styles.playingTag}>
-                            Playing
-                          </Text>
+                        onManageMatch && (
+                          <TouchableOpacity
+                            style={styles.manageBtn}
+                            onPress={() => onManageMatch(m, "menu")}
+                          >
+                            <Text allowFontScaling={false} style={styles.manageBtnText}>
+                              Manage
+                            </Text>
+                          </TouchableOpacity>
                         )
                       ) : (
                         <TouchableOpacity
@@ -263,15 +379,28 @@ export const QueueView = ({
                           </Text>
                         </TouchableOpacity>
                       )}
-                      {/* Undo — send back to the queue (parked or just-started). */}
-                      <TouchableOpacity
-                        style={styles.backBtn}
-                        onPress={() => onUnassign(m.id)}
-                      >
-                        <Text allowFontScaling={false} style={styles.backBtnText}>
-                          {"↩"}
-                        </Text>
-                      </TouchableOpacity>
+                      {/* Labeled Actions menu — sized to match Start/Manage exactly. */}
+                      <ActionMenu
+                        label="Actions"
+                        triggerStyle={styles.qActionTrigger}
+                        triggerTextStyle={styles.qActionTriggerText}
+                        items={[
+                          ...(onManageMatch
+                            ? [
+                                {
+                                  label: playing ? "Edit score" : "Manage match",
+                                  onPress: () =>
+                                    onManageMatch(m, playing ? "score" : "menu"),
+                                } as ActionMenuItem,
+                              ]
+                            : []),
+                          {
+                            label: "Send back to queue",
+                            destructive: true,
+                            onPress: () => onUnassign(m.id),
+                          } as ActionMenuItem,
+                        ]}
+                      />
                     </View>
                   </View>
                 );
@@ -279,95 +408,86 @@ export const QueueView = ({
           </View>
         )}
 
-        {/* Up next */}
-        <Text allowFontScaling={false} style={styles.upNextLabel}>
-          Up Next ({ordered.length})
-        </Text>
-        {ordered.length === 0 ? (
-          <View style={styles.empty}>
-            <Text allowFontScaling={false} style={styles.emptyText}>
-              No matches are ready right now. They&apos;ll appear here as players
-              finish.
+        {/* Scheduled Matches — the shared projected schedule: Ready first, then
+            Waiting/future matches. Next ~10 inline; the rest in View Full Schedule. */}
+        <View style={styles.section}>
+          <View style={styles.schedHead}>
+            <Text allowFontScaling={false} style={styles.sectionTitle}>
+              Scheduled Matches ({scheduled.length})
+            </Text>
+            <Text allowFontScaling={false} style={styles.schedCounts}>
+              {`${ordered.length} ready · ${waitingCount} waiting`}
             </Text>
           </View>
-        ) : (
-          ordered.map((e, i) => (
-            <View key={e.match.id} style={styles.queueCard}>
-              <View style={styles.cardRow}>
-                {/* Left: queue position with the up/down arrows under it. */}
-                <View style={styles.rankCol}>
-                  <Text allowFontScaling={false} style={styles.rankNum}>
-                    {`#${i + 1}`}
-                  </Text>
-                  <View style={styles.reorder}>
-                    <TouchableOpacity
-                      onPress={() => move(i, -1)}
-                      disabled={i === 0}
-                      style={[styles.reorderBtn, i === 0 && styles.reorderOff]}
-                      hitSlop={6}
-                    >
-                      <Text allowFontScaling={false} style={styles.reorderText}>
-                        ▲
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => move(i, 1)}
-                      disabled={i === ordered.length - 1}
-                      style={[
-                        styles.reorderBtn,
-                        i === ordered.length - 1 && styles.reorderOff,
-                      ]}
-                      hitSlop={6}
-                    >
-                      <Text allowFontScaling={false} style={styles.reorderText}>
-                        ▼
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+          {scheduled.length === 0 ? (
+            <Text allowFontScaling={false} style={styles.emptyText}>
+              No matches left to schedule.
+            </Text>
+          ) : (
+            scheduled.slice(0, SCHEDULE_PREVIEW).map(renderScheduledRow)
+          )}
+          {scheduled.length > SCHEDULE_PREVIEW && (
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => setFullOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Text allowFontScaling={false} style={styles.viewAllBtnText}>
+                View Full Schedule ({scheduled.length})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        </View>
 
-                {/* Right: players, then location + wait, then Assign (right-aligned). */}
-                <View style={styles.cardBody}>
-                  <Text
-                    allowFontScaling={false}
-                    style={styles.matchPlayers}
-                    numberOfLines={1}
-                  >
-                    {players(e.match)}
-                  </Text>
-                  <Text allowFontScaling={false} style={styles.metaLine} numberOfLines={1}>
-                    {`${e.location}  ·  `}
-                    <Text style={{ color: waitColor(e.waitMs), fontWeight: "700" }}>
-                      {e.waitMs < 60000 ? "Just now" : `Waiting ${formatWait(e.waitMs)}`}
-                    </Text>
-                  </Text>
-                  <View style={styles.actionRow}>
-                    {available.length > 0 ? (
-                      <ActionMenu
-                        label="Assign"
-                        items={[
-                          ...available.map<ActionMenuItem>((t) => ({
-                            label: `Assign — ${tableLabelOf(t)}`,
-                            onPress: () => onAssign(e.match.id, t.id),
-                          })),
-                          ...available.map<ActionMenuItem>((t) => ({
-                            label: `Assign & Start — ${tableLabelOf(t)}`,
-                            onPress: () => onAssignStart(e.match.id, t.id),
-                          })),
-                        ]}
-                      />
-                    ) : (
-                      <Text allowFontScaling={false} style={styles.noTable}>
-                        No table free
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-            </View>
-          ))
-        )}
+        {/* RIGHT — sticky Queue Summary (wide web); stacks below on mobile. */}
+        <View style={wide ? styles.rightColWrap : styles.summaryStack}>
+          <View style={styles.summaryCard}>
+            <Text allowFontScaling={false} style={styles.summaryTitle}>Queue Summary</Text>
+            <SummaryRow label="Players Remaining" value={playersText} />
+            <SummaryRow label="Active Matches" value={String(activeMatchesCount)} />
+            <SummaryRow label="Ready / Waiting" value={`${ordered.length} / ${waitingCount}`} />
+            <SummaryRow label="Tables Available" value={String(available.length)} />
+            <SummaryRow label="Avg Match" value={avgMatchText} />
+            <SummaryRow label="Completed Matches" value={String(completedCount)} />
+            <View style={styles.summaryDivider} />
+            <SummaryRow label="Assignment Mode" value={modeLabel} />
+          </View>
+        </View>
+       </View>
       </ScrollView>
+
+      {/* Full Schedule — every remaining scheduled match, same rows + controls. */}
+      <Modal
+        visible={fullOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullOpen(false)}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.previewCard, styles.fullCard]}>
+            <View style={styles.schedHead}>
+              <Text allowFontScaling={false} style={styles.previewTitle}>
+                Full Schedule ({scheduled.length})
+              </Text>
+              <Text allowFontScaling={false} style={styles.schedCounts}>
+                {`${ordered.length} ready · ${waitingCount} waiting`}
+              </Text>
+            </View>
+            <ScrollView style={[styles.fullList, { maxHeight: winH * 0.65 }]} bounces={false}>
+              {scheduled.map(renderScheduledRow)}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.previewCancel}
+              onPress={() => setFullOpen(false)}
+            >
+              <Text allowFontScaling={false} style={styles.previewCancelText}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Auto Assign — preview on top, Recently Applied stacked below */}
       <Modal
@@ -522,7 +642,7 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.md),
     paddingBottom: webSc(SPACING.xl * 2),
     ...Platform.select({
-      web: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
+      web: { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any },
     }),
   },
   summary: {
@@ -531,15 +651,18 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: webSc(SPACING.sm),
   },
+  // Compact control row: content-sized Auto Assign + a fixed-width mode dropdown
+  // (wraps on very narrow screens). No longer full-page-width.
   controls: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: webSc(SPACING.sm),
     marginBottom: webSc(SPACING.md),
   },
   autoBtn: {
-    flex: 1,
-    height: webSc(44),
+    height: webSc(40),
+    paddingHorizontal: webSc(SPACING.md),
     backgroundColor: COLORS.primary,
     borderRadius: webSc(RADIUS.sm),
     alignItems: "center",
@@ -549,9 +672,47 @@ const styles = StyleSheet.create({
   autoBtnText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.white,
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  modeWrap: { flex: 1 },
+  modeWrap: { width: webSc(220), maxWidth: "100%" as any },
+  // Two-column (wide web): operational left, sticky summary right.
+  twoColRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  leftCol: { flex: 70, minWidth: 0 as any },
+  rightColWrap: {
+    flex: 30,
+    minWidth: 0 as any,
+    position: "sticky" as any,
+    top: webSc(SPACING.sm),
+    alignSelf: "flex-start" as any,
+  },
+  summaryStack: { marginTop: webSc(SPACING.md) },
+  summaryCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.md),
+  },
+  summaryTitle: {
+    fontSize: webMs(FONT_SIZES.md),
+    fontWeight: "800",
+    color: COLORS.text,
+    marginBottom: webSc(SPACING.sm),
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  summaryLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  summaryValue: {
+    fontSize: webMs(FONT_SIZES.sm),
+    fontWeight: "800",
+    color: COLORS.text,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: webSc(SPACING.xs) },
   // Sections
   section: {
     backgroundColor: COLORS.surface,
@@ -580,13 +741,40 @@ const styles = StyleSheet.create({
   onTableActions: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
   onTableText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "600" },
   playingTag: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
+  // Start / Manage / Actions form one button group: identical height, radius,
+  // padding, min-width and font so they align exactly row-to-row.
   startBtn: {
-    paddingVertical: webSc(SPACING.xs),
-    paddingHorizontal: webSc(SPACING.sm),
+    height: webSc(40),
+    minWidth: webSc(88),
+    paddingHorizontal: webSc(SPACING.md),
     borderRadius: webSc(RADIUS.sm),
     backgroundColor: COLORS.success,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
   },
-  startBtnText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.white, fontWeight: "800" },
+  startBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "800" },
+  manageBtn: {
+    height: webSc(40),
+    minWidth: webSc(88),
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  manageBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "800" },
+  // Passed to ActionMenu so its trigger matches Start/Manage exactly.
+  qActionTrigger: {
+    height: webSc(40),
+    minWidth: webSc(96),
+    paddingVertical: 0,
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.sm),
+  },
+  qActionTriggerText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   liveBadgeText: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.error,
@@ -599,49 +787,44 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: webSc(2),
   },
-  upNextLabel: {
-    fontSize: webMs(FONT_SIZES.md),
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: webSc(SPACING.sm),
+  onTableMeta: { color: COLORS.textSecondary, fontWeight: "600" },
+  onTableLive: { color: COLORS.success, fontWeight: "800" },
+  onTableParked: { color: COLORS.warning, fontWeight: "800" },
+  // Scheduled Matches (compact list)
+  schedHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
   },
-  empty: {
-    backgroundColor: COLORS.surface,
-    borderRadius: webSc(RADIUS.md),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: webSc(SPACING.lg),
-  },
+  schedCounts: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
   emptyText: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,
     textAlign: "center",
+    paddingVertical: webSc(SPACING.md),
   },
-  // Queue card — three clean lines: who's up, where + wait, one action.
-  queueCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: webSc(RADIUS.md),
+  viewAllBtn: {
+    marginTop: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: webSc(SPACING.md),
-    marginBottom: webSc(SPACING.sm),
-  },
-  cardRow: { flexDirection: "row", alignItems: "flex-start" },
-  rankCol: {
+    borderColor: COLORS.primary,
     alignItems: "center",
-    minWidth: webSc(36),
-    marginRight: webSc(SPACING.md),
   },
-  cardBody: { flex: 1 },
-  reorder: {
-    flexDirection: "column",
-    alignItems: "center",
-    gap: webSc(SPACING.xs),
-    marginTop: webSc(SPACING.xs),
+  viewAllBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "800" },
+  // Row-sized Assign trigger (smaller than the On Tables button group).
+  rowBtn: {
+    height: webSc(28),
+    paddingVertical: 0,
+    paddingHorizontal: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
   },
+  rowBtnText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   reorderBtn: {
     width: webSc(28),
-    height: webSc(24),
+    height: webSc(28),
     borderRadius: webSc(RADIUS.sm),
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -651,30 +834,13 @@ const styles = StyleSheet.create({
   },
   reorderOff: { opacity: 0.3 },
   reorderText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
-  rankNum: {
-    fontSize: webMs(FONT_SIZES.md),
-    fontWeight: "900",
-    color: COLORS.primary,
-    fontVariant: ["tabular-nums"],
-  },
-  matchPlayers: {
-    fontSize: webMs(FONT_SIZES.md),
-    fontWeight: "800",
-    color: COLORS.text,
-  },
-  metaLine: {
-    fontSize: webMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    marginTop: webSc(SPACING.xs),
-    marginBottom: webSc(SPACING.sm),
-  },
-  actionRow: { flexDirection: "row", justifyContent: "flex-end" },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.textMuted,
     fontStyle: "italic",
   },
+  fullCard: Platform.select({ web: { maxWidth: 760 }, default: {} }) as any,
+  fullList: { flexGrow: 0 },
   // Preview modal
   overlay: {
     flex: 1,

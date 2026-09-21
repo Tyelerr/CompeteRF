@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
-import { RADIUS, SPACING } from "../../../../theme/spacing";
+import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { LiveMatch } from "../../../../utils/match.utils";
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     padding: webSc(SPACING.md),
     paddingBottom: webSc(SPACING.xl * 2),
     ...Platform.select({
-      web: { maxWidth: 760, width: "100%" as any, alignSelf: "center" as any },
+      web: { maxWidth: WEB_MAXW, width: "100%" as any, alignSelf: "center" as any },
     }),
   },
   title: {

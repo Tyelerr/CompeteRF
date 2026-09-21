@@ -13,7 +13,7 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRegistrationRealtime } from "../../../../src/viewmodels/hooks/use.registration.realtime";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -57,12 +57,15 @@ import {
 import { useTournamentImage } from "../../../../src/viewmodels/hooks/use.tournament.image";
 import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import { formatDate, formatTime } from "../../../../src/utils/formatters";
+import { usePagination } from "../../../../src/viewmodels/usePagination";
+import { Pagination } from "../../../../src/views/components/common/pagination";
 import {
   GameType,
   RegistrationStatus,
   TableSize,
   TableStatus,
   TournamentFormat,
+  TournamentLiveState,
 } from "../../../../src/models/types/common.types";
 import { Profile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
@@ -73,6 +76,7 @@ import {
   DrawLogEntry,
   FeeCategory,
   GeneratedBracket,
+  MatchLiveState,
   PrizePoolConfig,
   RaceGroup,
   RaceMode,
@@ -101,10 +105,13 @@ import {
   STANDARD_SIZES,
   averageRace,
   computeBracketStats,
+  estimateTournamentDuration,
   minutesPerGameForType,
   recommendedBracketSize,
   round1FromSeeds,
   seedPlayers,
+  validateRaceGroups,
+  RaceGroupRange,
 } from "../../../../src/utils/bracket.utils";
 import { buildBracketGraph } from "../../../../src/utils/bracket.double";
 import { simulateBracket } from "../../../../src/utils/bracket.simulate";
@@ -126,7 +133,19 @@ import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.setti
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
-import { buildLiveMatches, computeEliminatedRegIds, LiveMatch } from "../../../../src/utils/match.utils";
+import { buildLiveMatches, computeEliminatedRegIds, formatClock, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
+import {
+  buildQueueEntries,
+  computeReadyAtMap,
+  orderQueue,
+  planAutoAssign,
+  freeTables,
+  isStartable,
+  bracketLocation,
+} from "../../../../src/utils/queue.utils";
+import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
+import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
+import { tournamentEventService, TournamentEvent } from "../../../../src/models/services/tournament-event.service";
 import { tournamentService } from "../../../../src/models/services/tournament.service";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
@@ -136,13 +155,14 @@ import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-
 import { buildReadinessSummary, needsReadinessWarning, blocksLeavingPlayers, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
 import { missingSettingsItems, settingsComplete, isSettingsFieldRequired, SettingsCompleteInput, SettingsFieldKey } from "../../../../src/utils/settings-complete";
 import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
-import { LifecyclePhase, deriveLifecycle, paymentSatisfied } from "../../../../src/utils/registration-lifecycle";
+import { LifecyclePhase, deriveLifecycle, paymentSatisfied, isFargoVerified } from "../../../../src/utils/registration-lifecycle";
 import { useQuery } from "@tanstack/react-query";
 import {
   useVenuesByDirector,
   useVenuesByOwner,
 } from "../../../../src/viewmodels/hooks/use.venues";
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
+import { normalizeTableLabel, tableIdentityKey } from "../../../../src/models/services/tournament-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
 import { CHECK_INSET, FieldCheck } from "../../../../src/views/components/common/field-check";
 import { MoneyInput, formatCurrency, sanitizeCurrencyInput } from "../../../../src/views/components/common/money-input";
@@ -150,6 +170,7 @@ import {
   ManagePhase,
   useManageTournament,
 } from "../../../../src/viewmodels/hooks/use.manage.tournament";
+import { useProjectedSchedule } from "../../../../src/viewmodels/hooks/use.projected.schedule";
 
 const isWeb = Platform.OS === "web";
 // Web desktop shell: the centered content column width shared by every tournament-admin
@@ -164,7 +185,10 @@ const WEB_MAXW = 1240;
 const KB_DONE = "kbDoneAccessory";
 
 // Unicode-escaped glyphs (raw emoji in the source corrupt under our toolchain).
-const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1", check: "\u2713" };
+const GLYPH = { back: "\u2190", search: "\uD83D\uDD0D", lock: "\uD83D\uDD12", bolt: "\u26A1", check: "\u2713", link: "\uD83D\uDD17", pool: "\uD83C\uDFB1", trash: "\uD83D\uDDD1\uFE0F" };
+// Current epoch ms via a module-level indirection so the derived-stats render path (queue wait
+// times) doesn't call the impure Date.now() builtin directly inside the component render.
+const nowMs = (): number => Date.now();
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 type TabKey =
@@ -174,6 +198,7 @@ type TabKey =
   | "prizepool"
   | "bracket"
   | "review"
+  | "dashboard"
   | "matches"
   | "queue"
   | "stats"
@@ -191,6 +216,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   prizepool: "Prize Pool",
   bracket: "Bracket / Draw",
   review: "Review",
+  dashboard: "Dashboard",
   matches: "Matches",
   queue: "Queue",
   stats: "Stats",
@@ -248,6 +274,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
   live: {
     label: "Live",
     tabs: [
+      { tab: "dashboard", label: "Dashboard" },
       { tab: "matches", label: "Matches / Bracket" },
       { tab: "tables", label: "Tables" },
       { tab: "queue", label: "Queue" },
@@ -677,6 +704,21 @@ const feesToForm = (saved: TournamentFee[] | undefined | null): FeeForm[] => {
 
 // Map the live Settings form to the SHARED completion-check shape (utils/settings-
 // complete). Venue can be set on the saved tournament, so fall back to it.
+// Resolve the form's group rows into numeric ranges (blank min ⇒ null⇒0, blank max ⇒
+// null⇒open) for the shared validator, and compute the tournament max / open context.
+const formGroupRanges = (f: SettingsForm): RaceGroupRange[] =>
+  f.raceGroups.map((g) => ({
+    label: g.label,
+    min: g.minFargo.trim() === "" ? null : intOrNull(g.minFargo),
+    max: g.maxFargo.trim() === "" ? null : intOrNull(g.maxFargo),
+    raceTo: g.raceTo.trim() === "" ? null : intOrNull(g.raceTo),
+  }));
+const formRaceGroupValidation = (f: SettingsForm) =>
+  validateRaceGroups(formGroupRanges(f), {
+    tournamentMax: f.maxFargo.trim() === "" ? null : intOrNull(f.maxFargo),
+    open: f.openTournament,
+  });
+
 const formToSettingsInput = (
   f: SettingsForm,
   fallbackVenueId?: number | null,
@@ -693,6 +735,8 @@ const formToSettingsInput = (
   maxFargo: f.maxFargo,
   open: f.openTournament,
   raceMode: f.raceMode, // "" while unconfigured → flagged missing by settings-complete
+  // Groups mode only: report range validity so invalid A/B/C groups block Start Registration.
+  raceGroupsValid: f.raceMode === "groups" ? formRaceGroupValidation(f).ok : undefined,
 });
 
 const toPatch = (f: SettingsForm): Partial<Tournament> => {
@@ -920,6 +964,7 @@ const FIELD_ERROR_MESSAGE: Record<SettingsFieldKey, string> = {
   venue: "Venue is required",
   tableSize: "Table Size is required",
   equipment: "Equipment is required",
+  raceGroups: "Fix the race group ranges before continuing",
 };
 
 // Wraps a required Settings field: registers a scroll anchor (by key) and — once the TD
@@ -1497,6 +1542,7 @@ const RegistrationRow = ({
   isProcessing,
   locked,
   pendingNames,
+  initialEditing,
 }: {
   registration: Registration;
   sidePots: { name: string; amount: number }[];
@@ -1509,6 +1555,7 @@ const RegistrationRow = ({
     paidEntry: boolean,
     paidPots: string[],
     raceOverride: number | null,
+    verified: boolean,
   ) => void;
   onSaveEdit: (
     fargo: number,
@@ -1516,6 +1563,8 @@ const RegistrationRow = ({
     paidEntry: boolean,
     paidPots: string[],
     raceOverride: number | null,
+    verified: boolean,
+    stillReady: boolean,
   ) => void;
   onTogglePaidPot: (name: string, paid: boolean) => void;
   onNoShow: () => void;
@@ -1525,6 +1574,7 @@ const RegistrationRow = ({
   isProcessing: boolean;
   locked?: boolean;
   pendingNames?: Map<string, string>;
+  initialEditing?: boolean; // list view "Edit" expands a Ready row straight into edit mode
 }) => {
   const d = displayStatusOf(registration.status);
   const meta = DISPLAY_META[d];
@@ -1543,7 +1593,7 @@ const RegistrationRow = ({
     ...new Set(safePaidSidePots(registration.paid_side_pots).filter(potExists)),
   ];
 
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!initialEditing);
   const [paidEntry, setPaidEntry] = useState(!!registration.paid_entry);
   const [paidPots, setPaidPots] = useState<string[]>(livePaidPots());
   const [fargoInput, setFargoInput] = useState(
@@ -1555,6 +1605,12 @@ const RegistrationRow = ({
   const [overrideRace, setOverrideRace] = useState(
     registration.race_override ?? 5,
   );
+  // Elimination-only: TD-verified Fargo (per-event). Derived-persisted via
+  // fargo_at_registration === fargo_rating; here it's the local intent that persists on
+  // Ready/Save. Editing the Fargo away from the verified snapshot auto-clears it.
+  const [verified, setVerified] = useState(
+    isFargoVerified(registration.fargo_rating, registration.fargo_at_registration),
+  );
 
   const reseed = () => {
     setPaidEntry(!!registration.paid_entry);
@@ -1564,7 +1620,20 @@ const RegistrationRow = ({
     );
     setOverrideOn(registration.race_override != null);
     setOverrideRace(registration.race_override ?? 5);
+    setVerified(isFargoVerified(registration.fargo_rating, registration.fargo_at_registration));
   };
+
+  // Confirm before turning OFF a previously-set verified/paid item (never when turning on).
+  const confirmOff = (title: string, message: string, onConfirm: () => void) =>
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Confirm", style: "destructive", onPress: onConfirm },
+    ]);
+  // Ready-card side-pot quick toggle: confirm on removal (turning off), immediate on add.
+  const toggleReadyPot = (name: string, paid: boolean) =>
+    paid
+      ? confirmOff("Remove side pot?", `Remove ${name} from this player?`, () => onTogglePaidPot(name, false))
+      : onTogglePaidPot(name, true);
 
   const togglePot = (name: string) =>
     setPaidPots((prev) =>
@@ -1587,7 +1656,26 @@ const RegistrationRow = ({
     : isGroups
       ? fargoValid && !!selectedGroup
       : fargoValid;
-  const canBeReady = assignReady && paidEntry;
+  // Ready requires: valid Fargo, TD-verified Fargo, entry paid, and race/group satisfied.
+  // Side pots are optional and never gate Ready.
+  const canBeReady = assignReady && paidEntry && verified;
+
+  // Single Actions menu (replaces the permanent Edit/Undo/Remove buttons). Only shows the
+  // actions valid for the current state; destructive/reversal actions confirm first.
+  const openActions = () => {
+    const opts: { text: string; style?: "cancel" | "destructive"; onPress?: () => void }[] = [];
+    if (d === "ready") {
+      opts.push({ text: "Edit", onPress: () => { reseed(); setEditing(true); } });
+      opts.push({ text: "Undo Ready", onPress: () => confirmOff("Undo Ready?", "This moves the player back to Registered.", onUndo) });
+      opts.push({ text: "Mark No Show", style: "destructive", onPress: () => confirmOff("Mark No Show?", "This marks the player as a no-show.", onNoShow) });
+      opts.push({ text: "Remove Player", style: "destructive", onPress: () => confirmOff("Remove player?", "This removes the player from the tournament registration.", onRemove) });
+    } else {
+      opts.push({ text: "Mark No Show", style: "destructive", onPress: () => confirmOff("Mark No Show?", "This marks the player as a no-show.", onNoShow) });
+      opts.push({ text: "Remove Player", style: "destructive", onPress: () => confirmOff("Remove player?", "This removes the player from the tournament registration.", onRemove) });
+    }
+    opts.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Actions", getDisplayName(registration, pendingNames), opts);
+  };
 
   // "Group A · Race to 5" line derived from a Fargo rating (groups mode).
   const groupLineFor = (fargo: number | null): string => {
@@ -1615,14 +1703,22 @@ const RegistrationRow = ({
           <PayCheckbox
             label={entryLabel}
             checked={paidEntry}
-            onToggle={() => setPaidEntry((v) => !v)}
+            onToggle={() =>
+              paidEntry
+                ? confirmOff("Mark entry fee unpaid?", "This player was marked paid.", () => setPaidEntry(false))
+                : setPaidEntry(true)
+            }
           />
           {sidePots.map((p, i) => (
             <PayCheckbox
               key={`${p.name}-${i}`}
               label={potLabel(p)}
               checked={paidPots.includes(p.name)}
-              onToggle={() => togglePot(p.name)}
+              onToggle={() =>
+                paidPots.includes(p.name)
+                  ? confirmOff("Remove side pot?", `Remove ${p.name} from this player?`, () => togglePot(p.name))
+                  : togglePot(p.name)
+              }
             />
           ))}
         </View>
@@ -1632,12 +1728,34 @@ const RegistrationRow = ({
             allowFontScaling={false}
             style={[styles.input, styles.inputNarrow]}
             value={fargoInput}
-            onChangeText={(v) => setFargoInput(v.replace(/[^0-9]/g, ""))}
+            onChangeText={(v) => {
+              const clean = v.replace(/[^0-9]/g, "");
+              setFargoInput(clean);
+              // Editing the rating auto-clears verification unless it matches the saved
+              // verified snapshot (typing the exact verified value keeps it verified).
+              const n = parseInt(clean, 10);
+              setVerified(
+                !isNaN(n) && registration.fargo_at_registration === n,
+              );
+            }}
             placeholder="e.g., 525"
             placeholderTextColor={COLORS.textMuted}
             keyboardType="numeric"
             maxLength={3}
           />
+          {fargoValid &&
+            (verified ? (
+              <TouchableOpacity
+                onPress={() => confirmOff("Un-verify Fargo?", "This player's Fargo will need to be verified again before they can be Ready.", () => setVerified(false))}
+                style={styles.fargoVerifyTag}
+              >
+                <Text allowFontScaling={false} style={styles.fargoVerifiedText}>✓ Verified</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => setVerified(true)} style={styles.fargoVerifyBtn}>
+                <Text allowFontScaling={false} style={styles.fargoVerifyBtnText}>Verify</Text>
+              </TouchableOpacity>
+            ))}
         </View>
       </View>
       {isGroups && !overrideOn && (
@@ -1663,11 +1781,15 @@ const RegistrationRow = ({
       )}
       {!canBeReady && (
         <Text allowFontScaling={false} style={styles.hint}>
-          {!paidEntry
-            ? "Mark the entry fee paid to make this player ready."
-            : !fargoValid
-              ? "Enter a Fargo rating to mark this player ready."
-              : 'Fargo is outside all race groups — turn on "Set race manually" to continue.'}
+          {!fargoValid
+            ? "Enter a Fargo rating to mark this player ready."
+            : isGroups && !overrideOn && !selectedGroup
+              ? 'Fargo is outside all race groups — turn on "Set race manually" to continue.'
+              : !verified
+                ? "Verify the Fargo to mark this player ready."
+                : !paidEntry
+                  ? "Mark the entry fee paid to make this player ready."
+                  : ""}
         </Text>
       )}
       <View style={styles.regActions}>
@@ -1689,22 +1811,13 @@ const RegistrationRow = ({
             <Text allowFontScaling={false} style={styles.undoBtnText}>Cancel</Text>
           </TouchableOpacity>
         ) : (
-          <>
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.noShowBtn]}
-              onPress={onNoShow}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.noShowBtnText}>No Show</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.removeBtn]}
-              onPress={onRemove}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.removeBtnText}>Remove</Text>
-            </TouchableOpacity>
-          </>
+          <TouchableOpacity
+            style={[styles.regActionBtn, styles.rowActionsBtn]}
+            onPress={openActions}
+            disabled={isProcessing}
+          >
+            <Text allowFontScaling={false} style={styles.rowActionsBtnText}>Actions ▾</Text>
+          </TouchableOpacity>
         )}
       </View>
     </>
@@ -1751,6 +1864,9 @@ const RegistrationRow = ({
             <Text allowFontScaling={false} style={styles.fargoInlineValue}>
               {registration.fargo_rating ?? "—"}
             </Text>
+            {isFargoVerified(registration.fargo_rating, registration.fargo_at_registration) && (
+              <Text allowFontScaling={false} style={styles.fargoVerifiedText}>✓</Text>
+            )}
           </View>
         )}
       </View>
@@ -1792,14 +1908,14 @@ const RegistrationRow = ({
 
       {!locked && (d === "prereg" || d === "registered") &&
         renderEditableBody(
-          () => onReady(fargoNum, false, paidEntry, paidPots, committedOverride),
+          () => onReady(fargoNum, false, paidEntry, paidPots, committedOverride, verified),
           "Ready",
         )}
 
       {!locked && d === "ready" && editing &&
         renderEditableBody(
           () => {
-            onSaveEdit(fargoNum, false, paidEntry, paidPots, committedOverride);
+            onSaveEdit(fargoNum, false, paidEntry, paidPots, committedOverride, verified, canBeReady);
             setEditing(false);
           },
           "Save",
@@ -1833,7 +1949,7 @@ const RegistrationRow = ({
                   <TouchableOpacity
                     key={`${pot.name}-${i}`}
                     style={[styles.payChip, paid && styles.payChipOn]}
-                    onPress={isProcessing ? undefined : () => onTogglePaidPot(pot.name, !paid)}
+                    onPress={isProcessing ? undefined : () => toggleReadyPot(pot.name, paid)}
                     disabled={isProcessing}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     activeOpacity={0.7}
@@ -1872,7 +1988,7 @@ const RegistrationRow = ({
                     onToggle={
                       isProcessing
                         ? undefined
-                        : () => onTogglePaidPot(pot.name, !paid)
+                        : () => toggleReadyPot(pot.name, paid)
                     }
                   />
                 );
@@ -1886,30 +2002,13 @@ const RegistrationRow = ({
           )}
           <View style={styles.regActions}>
             <TouchableOpacity
-              style={[styles.regActionBtn, styles.checkInBtn]}
-              onPress={() => {
-                reseed();
-                setEditing(true);
-              }}
+              style={[styles.regActionBtn, styles.rowActionsBtn]}
+              onPress={openActions}
               disabled={isProcessing}
             >
-              <Text allowFontScaling={false} style={styles.checkInBtnText}>Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.undoBtn]}
-              onPress={onUndo}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.undoBtnText}>
-                {isProcessing ? "..." : "Undo"}
+              <Text allowFontScaling={false} style={styles.rowActionsBtnText}>
+                {isProcessing ? "..." : "Actions ▾"}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.regActionBtn, styles.removeBtn]}
-              onPress={onRemove}
-              disabled={isProcessing}
-            >
-              <Text allowFontScaling={false} style={styles.removeBtnText}>Remove</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1935,6 +2034,488 @@ const RegistrationRow = ({
           </View>
         </>
       )}
+    </View>
+  );
+};
+
+// ── Web List View: single Actions menu (Alert) shared by list rows ────────────
+// UI orchestration only — every option calls the SAME registration handlers the card
+// view uses; destructive/reversal actions confirm first. Matches RegistrationRow's menu.
+// ── Web Actions popover ───────────────────────────────────────────────────────
+// Small dark menu anchored under the tapped Actions button (portaled to document.body),
+// closes on outside click / after a selection. Same design language + anchoring technique as
+// the shared Dropdown's WebPopover. Confirmations/handlers are supplied by the caller (via
+// actionItemsFor) so behavior is unchanged — this only replaces the centered Alert modal.
+const ACTIONS_MENU_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const WebActionsMenu = ({
+  anchorRef,
+  items,
+  onClose,
+}: {
+  anchorRef: React.RefObject<any>;
+  items: { label: string; danger?: boolean; onPress: () => void }[];
+  onClose: () => void;
+}) => {
+  // Anchor rect in VIEWPORT coords (position:fixed) so flip/clamp math is straightforward.
+  const [rect, setRect] = useState<{ top: number; bottom: number; left: number; width: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = anchorRef.current as HTMLElement | null;
+    if (el && typeof el.getBoundingClientRect === "function") {
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.top, bottom: r.bottom, left: r.left, width: r.width });
+    }
+  }, [anchorRef]);
+  // Measure the rendered menu so we can flip up / clamp against its ACTUAL size (not a guess).
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      setSize({ w: menuRef.current.offsetWidth, h: menuRef.current.offsetHeight });
+    }
+  }, [rect, items.length]);
+  if (!rect || typeof document === "undefined") return null;
+
+  const MARGIN = 8;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+  const menuW = size?.w ?? Math.max(rect.width, 180);
+  const menuH = size?.h ?? 0;
+  const spaceBelow = vh - rect.bottom;
+  const spaceAbove = rect.top;
+  // Prefer below when it fits; otherwise flip up if there's more room above.
+  const placeBelow = menuH === 0 || spaceBelow >= menuH + MARGIN || spaceBelow >= spaceAbove;
+  let top = placeBelow ? rect.bottom + 4 : rect.top - menuH - 4;
+  if (menuH > 0) top = Math.max(MARGIN, Math.min(top, vh - menuH - MARGIN));
+  const left = Math.max(MARGIN, Math.min(rect.left, vw - menuW - MARGIN));
+
+  const overlayStyle: React.CSSProperties = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999998 };
+  const menuStyle: React.CSSProperties = {
+    position: "fixed", top, left, minWidth: Math.max(rect.width, 180), maxHeight: vh - 2 * MARGIN, overflowY: "auto",
+    backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 8,
+    zIndex: 999999, boxShadow: "0 8px 24px rgba(0,0,0,0.5)", fontFamily: ACTIONS_MENU_FONT,
+    // Hide the first paint until measured so it never flashes in the wrong place.
+    opacity: size ? 1 : 0,
+  };
+  const rowStyle = (danger?: boolean, last?: boolean): React.CSSProperties => ({
+    padding: "9px 14px", fontSize: 13, fontWeight: 600,
+    color: danger ? COLORS.error : COLORS.primary, backgroundColor: "transparent",
+    cursor: "pointer", borderBottom: last ? "none" : `1px solid ${COLORS.border}`,
+    whiteSpace: "nowrap", transition: "background-color 0.12s ease",
+  });
+
+  const { createPortal } = require("react-dom");
+  return createPortal(
+    <>
+      <div style={overlayStyle} onClick={onClose} />
+      <div ref={menuRef} style={menuStyle}>
+        {items.map((it, i) => (
+          <div
+            key={i}
+            style={rowStyle(it.danger, i === items.length - 1)}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.backgroundColor = COLORS.background)}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent")}
+            onClick={() => { onClose(); it.onPress(); }}
+          >
+            {it.label}
+          </div>
+        ))}
+      </div>
+    </>,
+    document.body,
+  );
+};
+
+// ── Web List View: one compact table row per player ───────────────────────────
+// DISPLAY + inline Entry/side-pot quick toggles (immediate persist, confirm on turn-off)
+// + a single Actions menu. Fargo VERIFICATION status is shown here; verifying/editing the
+// Fargo happens via Actions → Edit (which expands the full RegistrationRow). Reuses the
+// same handlers/state as the cards — no separate registration logic.
+const EliminationPlayerListRow = ({
+  registration,
+  sidePots,
+  entryFee,
+  isProcessing,
+  onToggleEntry,
+  onToggleSidePot,
+  onActions,
+  pendingNames,
+  groupLabel,
+}: {
+  registration: Registration;
+  sidePots: { name: string; amount: number }[];
+  entryFee: number;
+  isProcessing: boolean;
+  onToggleEntry: (nextPaid: boolean) => void;
+  onToggleSidePot: (name: string, entered: boolean) => void;
+  onActions: (anchor: React.RefObject<any>) => void;
+  pendingNames?: Map<string, string>;
+  groupLabel?: string;
+}) => {
+  const actionsAnchor = useRef<any>(null);
+  const d = displayStatusOf(registration.status);
+  const meta = DISPLAY_META[d];
+  const verified = isFargoVerified(registration.fargo_rating, registration.fargo_at_registration);
+  const paid = !!registration.paid_entry;
+  const entered = new Set(safePaidSidePots(registration.paid_side_pots));
+  const pots = sidePots.filter((p) => (p.name ?? "").trim());
+  const idText = registration.profiles ? `Player ID #${registration.profiles.id_auto}` : (!registration.player_id && !registration.player_uuid ? "Guest" : "");
+  return (
+    <View style={[styles.listRow, isProcessing && styles.btnDisabled]}>
+      {/* Player */}
+      <View style={styles.lcPlayer}>
+        <Text allowFontScaling={false} style={styles.listName} numberOfLines={1}>
+          {getDisplayName(registration, pendingNames)}
+        </Text>
+        {!!idText && <Text allowFontScaling={false} style={styles.listSub} numberOfLines={1}>{idText}</Text>}
+        {!!groupLabel && <Text allowFontScaling={false} style={styles.listGroupLabel} numberOfLines={1}>{`Group ${groupLabel}`}</Text>}
+      </View>
+      {/* Fargo + verification status */}
+      <View style={styles.lcFargo}>
+        <Text allowFontScaling={false} style={styles.listFargoNum}>{registration.fargo_rating ?? "—"}</Text>
+        {registration.fargo_rating != null && (
+          <Text allowFontScaling={false} style={verified ? styles.listVerified : styles.listUnverified}>
+            {verified ? "✓ Verified" : "Needs Verification"}
+          </Text>
+        )}
+      </View>
+      {/* Entry — tap toggles; confirm on turn-off handled by caller */}
+      <View style={styles.lcEntry}>
+        <TouchableOpacity
+          style={[styles.listChip, paid && styles.listChipOn]}
+          onPress={isProcessing ? undefined : () => onToggleEntry(!paid)}
+          disabled={isProcessing}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          activeOpacity={0.7}
+        >
+          <Text allowFontScaling={false} style={[styles.listChipText, paid && styles.listChipTextOn]}>
+            {paid ? "✓ Paid" : "Unpaid"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {/* Side pots — dynamic chips; "—" when none configured */}
+      <View style={styles.lcPots}>
+        {pots.length === 0 ? (
+          <Text allowFontScaling={false} style={styles.listSub}>—</Text>
+        ) : (
+          pots.map((p, i) => {
+            const on = entered.has(p.name);
+            return (
+              <TouchableOpacity
+                key={`${p.name}-${i}`}
+                style={[styles.listPotChip, on && styles.listChipOn]}
+                onPress={isProcessing ? undefined : () => onToggleSidePot(p.name, !on)}
+                disabled={isProcessing}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                activeOpacity={0.7}
+              >
+                <Text allowFontScaling={false} style={[styles.listPotText, on && styles.listChipTextOn]} numberOfLines={1}>
+                  {on ? "✓ " : ""}{p.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+      {/* Status */}
+      <View style={styles.lcStatus}>
+        <View style={[styles.statusPill, { borderColor: meta.color, backgroundColor: meta.color + "22" }]}>
+          <View style={[styles.statusDotSm, { backgroundColor: meta.color }]} />
+          <Text allowFontScaling={false} style={[styles.statusPillText, { color: meta.color }]}>{meta.label}</Text>
+        </View>
+      </View>
+      {/* Actions */}
+      <View style={styles.lcActions}>
+        {/* @ts-ignore web ref → DOM node for popover anchoring */}
+        <TouchableOpacity ref={actionsAnchor} style={styles.listActionsBtn} onPress={() => onActions(actionsAnchor)} disabled={isProcessing}>
+          <Text allowFontScaling={false} style={styles.rowActionsBtnText}>Actions ▾</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// ── Web Card View: one vertical, sectioned player card (Chip-style hierarchy) ──
+// DISPLAY + inline quick actions only (immediate persist, confirm on turn-off). Full Fargo /
+// race editing happens via Actions → Edit (which expands the shared RegistrationRow), exactly
+// like the List View. Reuses the SAME handlers/state as the rows — no separate logic. Sections:
+//   header (avatar + name + muted Player ID) → status row → divider → Fargo row (rating +
+//   verify state) → divider → Entry Fee row → one full row per configured Side Pot →
+//   divider → footer [Actions] + [✓ Ready / current-state control].
+const EliminationPlayerCard = ({
+  registration,
+  sidePots,
+  entryFee,
+  raceMode,
+  raceGroups,
+  groupLabel,
+  isProcessing,
+  pendingNames,
+  onToggleEntry,
+  onToggleSidePot,
+  onVerify,
+  onUnverify,
+  onReady,
+  onUndo,
+  onActions,
+}: {
+  registration: Registration;
+  sidePots: { name: string; amount: number }[];
+  entryFee: number;
+  raceMode: RaceMode;
+  raceGroups: RaceGroup[];
+  groupLabel?: string;
+  isProcessing: boolean;
+  pendingNames?: Map<string, string>;
+  onToggleEntry: (nextPaid: boolean) => void;
+  onToggleSidePot: (name: string, entered: boolean) => void;
+  onVerify: () => void;
+  onUnverify: () => void;
+  onReady: () => void;
+  onUndo: () => void;
+  onActions: (anchor: React.RefObject<any>) => void;
+}) => {
+  const actionsAnchor = useRef<any>(null);
+  const d = displayStatusOf(registration.status);
+  const meta = DISPLAY_META[d];
+  const isGuest = !registration.player_id && !registration.player_uuid;
+  const name = getDisplayName(registration, pendingNames);
+  const fargo = registration.fargo_rating;
+  const fargoValid = fargo != null && fargo > 0;
+  const verified = isFargoVerified(fargo, registration.fargo_at_registration);
+  const paid = !!registration.paid_entry;
+  const entered = new Set(safePaidSidePots(registration.paid_side_pots));
+  const pots = sidePots.filter((p) => (p.name ?? "").trim());
+  // Ready eligibility from PERSISTED state — same rule as RegistrationRow.canBeReady. Side
+  // pots never gate Ready; a manual race override stands in for the group requirement.
+  const isGroups = raceMode === "groups";
+  const overrideOn = registration.race_override != null;
+  const inGroup = isGroups && fargoValid ? !!groupForFargo(fargo, raceGroups) : false;
+  const assignReady = overrideOn ? fargoValid : isGroups ? fargoValid && inGroup : fargoValid;
+  const canReady = assignReady && paid && verified;
+  const idText = registration.profiles
+    ? `Player ID #${registration.profiles.id_auto}`
+    : isGuest
+      ? "Guest"
+      : "";
+  const initial = (name.trim()[0] ?? "?").toUpperCase();
+  const entryLabel = entryFee ? `Entry Fee ($${entryFee})` : "Entry Fee";
+  const potLabel = (p: { name: string; amount: number }) =>
+    p.amount ? `${p.name} ($${p.amount})` : p.name;
+
+  const payRow = (
+    key: string,
+    on: boolean,
+    label: string,
+    onPress: () => void,
+  ) => (
+    <TouchableOpacity
+      key={key}
+      style={styles.epPayRow}
+      onPress={isProcessing ? undefined : onPress}
+      disabled={isProcessing}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.epCheck, on && styles.epCheckOn]}>
+        {on && <Text allowFontScaling={false} style={styles.epCheckMark}>✓</Text>}
+      </View>
+      <Text allowFontScaling={false} style={styles.epPayLabel} numberOfLines={1}>{label}</Text>
+      <Text allowFontScaling={false} style={[styles.epPayStatus, on && styles.epPayStatusOn]}>
+        {on ? "Paid" : "Unpaid"}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[styles.epCard, isProcessing && styles.btnDisabled]}>
+      {/* Header — avatar initial + prominent name + muted Player ID */}
+      <View style={styles.epHeader}>
+        <View style={styles.epAvatar}>
+          <Text allowFontScaling={false} style={styles.epAvatarText}>{initial}</Text>
+        </View>
+        <View style={styles.epHeaderText}>
+          <Text allowFontScaling={false} style={styles.epName} numberOfLines={1}>{name}</Text>
+          {!!idText && <Text allowFontScaling={false} style={styles.epId} numberOfLines={1}>{idText}</Text>}
+        </View>
+        {!!groupLabel && (
+          <View style={styles.epGroupTag}>
+            <Text allowFontScaling={false} style={styles.epGroupLabel} numberOfLines={1}>{`Group ${groupLabel}`}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Status — its own row */}
+      <View style={styles.epStatusRow}>
+        <View style={[styles.statusDotSm, { backgroundColor: meta.color }]} />
+        <Text allowFontScaling={false} style={[styles.epStatusText, { color: meta.color }]}>{meta.label}</Text>
+      </View>
+
+      <View style={styles.epDivider} />
+
+      {/* Fargo — label left, bold rating + verification state right */}
+      <View style={styles.epFargoRow}>
+        <Text allowFontScaling={false} style={styles.epRowLabel}>Fargo</Text>
+        <View style={styles.epFargoRight}>
+          <Text allowFontScaling={false} style={styles.epFargoNum}>{fargo ?? "—"}</Text>
+          {fargoValid ? (
+            verified ? (
+              <TouchableOpacity onPress={isProcessing ? undefined : onUnverify} disabled={isProcessing} activeOpacity={0.7}>
+                <Text allowFontScaling={false} style={styles.epVerified}>✓ Verified</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.epVerifyBtn}
+                onPress={isProcessing ? undefined : onVerify}
+                disabled={isProcessing}
+                activeOpacity={0.7}
+              >
+                <Text allowFontScaling={false} style={styles.epVerifyBtnText}>Verify</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            <Text allowFontScaling={false} style={styles.epUnrated}>Unrated</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.epDivider} />
+
+      {/* Entry Fee + one full row per configured Side Pot (same visual pattern) */}
+      {payRow("entry", paid, entryLabel, () => onToggleEntry(!paid))}
+      {pots.map((p) =>
+        payRow(`pot-${p.name}`, entered.has(p.name), potLabel(p), () =>
+          onToggleSidePot(p.name, !entered.has(p.name)),
+        ),
+      )}
+
+      <View style={styles.epDivider} />
+
+      {/* Footer — compact [Actions] + current-state control side by side */}
+      <View style={styles.epFooter}>
+        {/* @ts-ignore web ref → DOM node for popover anchoring */}
+        <TouchableOpacity ref={actionsAnchor} style={styles.epActionsBtn} onPress={() => onActions(actionsAnchor)} disabled={isProcessing} activeOpacity={0.7}>
+          <Text allowFontScaling={false} style={styles.epActionsText}>Actions</Text>
+        </TouchableOpacity>
+        {d === "ready" ? (
+          <TouchableOpacity style={[styles.epStateBtn, styles.epStateReady]} onPress={onUndo} disabled={isProcessing} activeOpacity={0.7}>
+            <Text allowFontScaling={false} style={styles.epStateReadyText}>✓ Ready</Text>
+          </TouchableOpacity>
+        ) : d === "no_show" || d === "removed" ? (
+          <TouchableOpacity style={styles.epStateBtn} onPress={() => onActions(actionsAnchor)} disabled={isProcessing} activeOpacity={0.7}>
+            <Text allowFontScaling={false} style={styles.epStateMutedText}>{meta.label}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.epStateBtn, canReady ? styles.epStateReadyFill : styles.epStateDisabled]}
+            onPress={canReady && !isProcessing ? onReady : undefined}
+            disabled={isProcessing || !canReady}
+            activeOpacity={0.7}
+          >
+            <Text allowFontScaling={false} style={canReady ? styles.epStateReadyFillText : styles.epStateMutedText}>
+              ✓ Ready
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// ── Web Pool Table card ───────────────────────────────────────────────────────
+// Compact card: header (icon + name + status pill), a COLLAPSED stream-link section, and a
+// bottom-right Actions button anchoring the shared WebActionsMenu popover. Stream section:
+//   • no link, collapsed → "+ Add Stream Link" (tap → expand, parent-controlled)
+//   • expanded → inline input + Save/Update (+ Cancel); persists then collapses
+//   • link saved, collapsed → "✓ Stream Link" + View Stream (edit/remove via Actions)
+// Expansion is driven by the parent (`expanded`) so Actions → Edit Stream Link can open it.
+const PoolTableCard = ({
+  name,
+  statusLabel,
+  statusColor,
+  streamLink,
+  expanded,
+  disabled,
+  onEdit,
+  onCancelEdit,
+  onSaveStream,
+  onViewStream,
+  onActions,
+}: {
+  name: string;
+  statusLabel: string;
+  statusColor: string;
+  streamLink: string;
+  expanded: boolean;
+  disabled?: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveStream: (url: string) => void;
+  onViewStream: (url: string) => void;
+  onActions: (anchor: React.RefObject<any>) => void;
+}) => {
+  const anchor = useRef<any>(null);
+  // Seeded from the persisted link. The parent keys this card by table id + stream_link, so a
+  // saved change remounts it with a fresh draft; typing (prop unchanged) never gets clobbered.
+  const [draft, setDraft] = useState(streamLink);
+  const hasStream = !!streamLink.trim();
+  const trimmed = draft.trim();
+  const dirty = trimmed !== streamLink.trim();
+  return (
+    <View style={[styles.ptCard, disabled && styles.btnDisabled]}>
+      <View style={styles.ptCardTop}>
+        <Text allowFontScaling={false} style={styles.ptCardIcon}>{GLYPH.pool}</Text>
+        <Text allowFontScaling={false} style={styles.ptCardName} numberOfLines={1}>{name}</Text>
+        <View style={[styles.ptStatusPill, { backgroundColor: statusColor + "22", borderColor: statusColor }]}>
+          <Text allowFontScaling={false} style={[styles.ptStatusPillText, { color: statusColor }]}>{statusLabel}</Text>
+        </View>
+      </View>
+
+      {expanded ? (
+        <View style={styles.ptStreamRow}>
+          <Text allowFontScaling={false} style={styles.ptStreamIcon}>{GLYPH.link}</Text>
+          <TextInput
+            allowFontScaling={false}
+            style={styles.ptStreamInput}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Paste stream link..."
+            placeholderTextColor={COLORS.textMuted}
+            autoCapitalize="none"
+            editable={!disabled}
+            autoFocus
+          />
+          <TouchableOpacity style={styles.ptStreamViewBtn} onPress={onCancelEdit} disabled={disabled} activeOpacity={0.7}>
+            <Text allowFontScaling={false} style={styles.ptStreamViewText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.ptStreamSaveBtn, (!dirty || disabled) && styles.btnDisabled]}
+            onPress={() => onSaveStream(trimmed)}
+            disabled={!dirty || disabled}
+            activeOpacity={0.7}
+          >
+            <Text allowFontScaling={false} style={styles.ptStreamSaveText}>{hasStream ? "Update" : "Save"}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : hasStream ? (
+        <View style={styles.ptStreamRow}>
+          <Text allowFontScaling={false} style={styles.ptStreamSaved}>{GLYPH.check} Stream Link</Text>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => onViewStream(streamLink)} disabled={disabled} activeOpacity={0.7} hitSlop={6}>
+            <Text allowFontScaling={false} style={styles.ptStreamViewLink}>View Stream</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.ptStreamRow} onPress={onEdit} disabled={disabled} activeOpacity={0.7}>
+          <Text allowFontScaling={false} style={styles.ptStreamIcon}>{GLYPH.link}</Text>
+          <Text allowFontScaling={false} style={styles.ptStreamAdd}>+ Add Stream Link</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.ptCardFooter}>
+        {/* @ts-ignore web ref → DOM node for popover anchoring */}
+        <TouchableOpacity ref={anchor} style={styles.ptActionsBtn} onPress={() => onActions(anchor)} disabled={disabled} activeOpacity={0.7}>
+          <Text allowFontScaling={false} style={styles.ptActionsBtnText}>Actions ▾</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -1993,6 +2574,11 @@ export default function ManageTournamentScreen() {
 
   const isChipTournament =
     hub.tournament?.tournament_format === "chip-tournament";
+  // Elimination Live Dashboard: durable activity feed + a focused match-action sheet + Start All
+  // busy flag. All elimination-only; chip has its own engine and never uses these.
+  const [tournamentEvents, setTournamentEvents] = useState<TournamentEvent[]>([]);
+  const [dashboardSheet, setDashboardSheet] = useState<{ match: LiveMatch; step: MatchActionStep } | null>(null);
+  const [dashBusy, setDashBusy] = useState(false);
   // Chip Prize Pool counts come from the SAME unified roster the chip Players tab and
   // Review & Start use — chipService.load() owns the dedupe across chip_entries +
   // tournament_players (self-reg singles) + tournament_teams (doubles). Counting a single
@@ -2146,6 +2732,16 @@ export default function ManageTournamentScreen() {
   const [bulkLabel, setBulkLabel] = useState("");
   const [streamDrafts, setStreamDrafts] = useState<Record<number, string>>({});
   const [tableBusy, setTableBusy] = useState(false);
+  // Web Pool Tables redesign: single-add optional stream field + Bulk Add modal visibility.
+  const [singleTableStream, setSingleTableStream] = useState("");
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  // Web pool-table card interactions: anchored Actions popover + focused stream/rename modals.
+  const [tableActionsMenu, setTableActionsMenu] = useState<{ anchor: React.RefObject<any>; id: number } | null>(null);
+  // Which pool-table card currently has its inline stream editor expanded (collapsed default).
+  const [editingStreamId, setEditingStreamId] = useState<number | null>(null);
+  const [renameModalTableId, setRenameModalTableId] = useState<number | null>(null);
+  const [renameLabel, setRenameLabel] = useState("");
+  const [renameNum, setRenameNum] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
@@ -2769,7 +3365,7 @@ export default function ManageTournamentScreen() {
       .setTableStreaming({ id, isStreaming: on, streamLink: link })
       .catch(() => Alert.alert("Error", "Failed to update streaming."));
   const handleDeleteTable = (id: number) =>
-    Alert.alert("Remove Table", "Remove this table?", [
+    Alert.alert("Remove Pool Table", "Remove this pool table?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -2777,9 +3373,156 @@ export default function ManageTournamentScreen() {
         onPress: () =>
           hub
             .deleteTable(id)
-            .catch(() => Alert.alert("Error", "Failed to remove the table.")),
+            .catch(() => Alert.alert("Error", "Failed to remove the pool table.")),
       },
     ]);
+
+  // Shared pool-table identity helpers (used by single add, bulk add, and the bulk preview).
+  // Duplicate = same NORMALIZED label + number as an existing table — the SAME rule as the DB
+  // unique index (tableIdentityKey mirrors it). Catches dupes in the UI before the DB errors.
+  const poolTableDisplayName = (t: { table_number: number; label?: string | null }) =>
+    t.label && t.label.trim() ? `${t.label.trim()} ${t.table_number}` : `Pool Table ${t.table_number}`;
+  const findTableConflict = (label: string, tableNumber: number) => {
+    const key = tableIdentityKey(label, tableNumber);
+    return hub.tables.find((t) => tableIdentityKey(t.label, t.table_number) === key) ?? null;
+  };
+
+  // Web Pool Tables redesign — single add with optional stream link. Reuses the SAME
+  // persistence (createTable → returns the row; setTableStreaming for the optional link),
+  // so numbering/label semantics are unchanged; native keeps handleAddTable above.
+  const handleAddPoolTable = async () => {
+    const n = parseInt(singleTableNum, 10);
+    if (isNaN(n)) {
+      Alert.alert("Required", "Enter a pool table number.");
+      return;
+    }
+    const conflict = findTableConflict(singleTableLabel, n);
+    if (conflict) {
+      Alert.alert("Duplicate pool table", `${poolTableDisplayName(conflict)} already exists.`);
+      return;
+    }
+    setTableBusy(true);
+    try {
+      const created = await hub.createTable({
+        tableNumber: n,
+        label: singleTableLabel.trim() || null,
+      });
+      const url = singleTableStream.trim();
+      if (url && created?.id) {
+        await hub.setTableStreaming({ id: created.id, isStreaming: true, streamLink: url });
+      }
+      setSingleTableNum("");
+      setSingleTableLabel("");
+      setSingleTableStream("");
+    } catch {
+      Alert.alert("Error", "Couldn't add the pool table — that number may already exist.");
+    } finally {
+      setTableBusy(false);
+    }
+  };
+  // Web Bulk Add modal submit — same range logic + persistence as handleBulkAddTables, then
+  // closes the modal on success.
+  const handleBulkAddPoolTables = async () => {
+    const from = parseInt(bulkFrom, 10);
+    const to = parseInt(bulkTo, 10);
+    if (isNaN(from) || isNaN(to) || to < from) {
+      Alert.alert("Invalid range", "Enter a valid From / To range.");
+      return;
+    }
+    if (to - from > 100) {
+      Alert.alert("Too many", "Add at most 100 pool tables at once.");
+      return;
+    }
+    // Pre-check the whole range against existing tables under the shared identity rule.
+    const conflicts: string[] = [];
+    for (let n = from; n <= to; n++) {
+      const c = findTableConflict(bulkLabel, n);
+      if (c) conflicts.push(poolTableDisplayName(c));
+    }
+    if (conflicts.length) {
+      Alert.alert(
+        "Duplicate pool tables",
+        conflicts.length === 1
+          ? `${conflicts[0]} already exists.`
+          : `These already exist: ${conflicts.slice(0, 6).join(", ")}${conflicts.length > 6 ? ", …" : ""}.`,
+      );
+      return;
+    }
+    setTableBusy(true);
+    try {
+      await hub.createTablesBulk({ from, to, label: bulkLabel.trim() || null });
+      setBulkFrom("");
+      setBulkTo("");
+      setBulkLabel("");
+      setBulkModalOpen(false);
+    } catch {
+      Alert.alert("Error", "One or more pool tables already exist with the same label and number.");
+    } finally {
+      setTableBusy(false);
+    }
+  };
+
+  // Inline stream-link save (web cards): reuses the existing setTableStreaming persistence
+  // (streaming on ⇔ a link is present). Only touches is_streaming + stream_link.
+  const handleSaveStreamInline = (id: number, url: string) => {
+    const u = url.trim();
+    return withProcessing(
+      id,
+      () => hub.setTableStreaming({ id, isStreaming: !!u, streamLink: u || null }),
+      "Failed to save the stream link.",
+    );
+  };
+  const handleRemoveStreamLink = (id: number) =>
+    Alert.alert("Remove stream link?", "Spectators will no longer see a stream for this table.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () =>
+          withProcessing(
+            id,
+            () => hub.setTableStreaming({ id, isStreaming: false, streamLink: null }),
+            "Failed to remove the stream link.",
+          ),
+      },
+    ]);
+  // Open a stream URL in a new tab (web); tolerate links pasted without a protocol.
+  const openStreamUrl = (url: string) => {
+    const u = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+    if (typeof window !== "undefined") window.open(u, "_blank", "noopener,noreferrer");
+  };
+
+  // Focused Rename modal (web cards): edits BOTH label and number, reusing updateTable
+  // persistence. Duplicate-checked under the shared identity rule (excluding the row itself).
+  const openRenameModal = (id: number) => {
+    const t = hub.tables.find((x) => x.id === id);
+    setRenameLabel(t?.label ?? "");
+    setRenameNum(t?.table_number != null ? String(t.table_number) : "");
+    setRenameModalTableId(id);
+  };
+  const handleSaveRename = async () => {
+    if (renameModalTableId == null) return;
+    const id = renameModalTableId;
+    const n = parseInt(renameNum, 10);
+    if (isNaN(n)) {
+      Alert.alert("Required", "Enter a pool table number.");
+      return;
+    }
+    const key = tableIdentityKey(renameLabel, n);
+    const conflict = hub.tables.find(
+      (t) => t.id !== id && tableIdentityKey(t.label, t.table_number) === key,
+    );
+    if (conflict) {
+      Alert.alert("Duplicate pool table", `${poolTableDisplayName(conflict)} already exists.`);
+      return;
+    }
+    setRenameModalTableId(null);
+    await withProcessing(
+      id,
+      () => hub.updateTable({ id, updates: { label: renameLabel.trim() || null, table_number: n } }),
+      "Failed to rename the pool table.",
+    );
+  };
 
   // ---- Status-flow actions ------------------------------------------------
   const handleStartTournament = () => {
@@ -2972,7 +3715,7 @@ export default function ManageTournamentScreen() {
   };
   const defaultTabForPhase = (p: PhaseKey): TabKey =>
     p === "live"
-      ? "matches"
+      ? (!isChip && isWeb ? "dashboard" : "matches") // elimination web Live lands on the Dashboard; native keeps Matches
       : p === "results"
         ? "standings"
         : isChip
@@ -3246,6 +3989,16 @@ export default function ManageTournamentScreen() {
     [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
   );
 
+  // Shared projected elimination schedule (Phase 1): Queue → On Tables / Scheduled
+  // Matches and the Dashboard's Match Schedule all read this one derivation.
+  const projectedSchedule = useProjectedSchedule(
+    hub.bracket,
+    liveMatches,
+    hub.matchState,
+    hub.autoAssignMode as AutoAssignMode,
+    hub.queueOrder ?? [],
+  );
+
   // Operator-side persistence of the bracket engine's elimination set (covers the case where
   // the TD runs the event on this screen and no participant is viewing their own Tournament
   // View). Idempotent + self-correcting server-side; guarded per session so it only writes when
@@ -3361,39 +4114,166 @@ export default function ManageTournamentScreen() {
   // Assigning a table PARKS the match on it (table set, still "scheduled") — the
   // TD then starts it separately. This keeps a table reserved without the clock
   // running until play actually begins.
+  // Refresh the durable activity feed (elimination only). Newest-first via the service.
+  const refreshEvents = useCallback(() => {
+    if (!tournamentId || isChipTournament) return;
+    tournamentEventService.list(tournamentId).then(setTournamentEvents).catch(() => {});
+  }, [tournamentId, isChipTournament]);
+  // Load the activity feed when the elimination Dashboard is opened.
+  useEffect(() => {
+    if (activeTab === "dashboard") refreshEvents();
+  }, [activeTab, refreshEvents]);
+
+  // Derive + write the durable activity event(s) for a match mutation, from the resolved
+  // LiveMatch (names/round/side/table) + the patch. Structured payload; fire-and-forget so an
+  // audit-log failure never affects the real mutation. tournament_started is emitted here when
+  // the live_state was not yet Running (matches the Phase 1 atomic flip in setMatchState).
+  const logMatchDerivedEvent = (
+    prev: LiveMatch | null,
+    patch: Partial<MatchLiveState>,
+    prevLiveState: TournamentLiveState | undefined,
+  ) => {
+    if (!tournamentId || isChipTournament) return;
+    const actor = tdProfile?.id_auto ?? null;
+    const tableId = "tableId" in patch ? patch.tableId ?? null : prev?.tableId ?? null;
+    const tbl = tableId != null ? hub.tables.find((t) => t.id === tableId) : undefined;
+    const tableLabel = tbl ? tbl.label?.trim() || `Table ${tbl.table_number}` : null;
+    const base: Record<string, unknown> = prev
+      ? {
+          matchId: prev.id,
+          label: prev.label,
+          side: prev.side,
+          round: prev.round,
+          location: bracketLocation(prev),
+          p1Name: prev.p1Name,
+          p2Name: prev.p2Name,
+        }
+      : {};
+    const emit = (type: Parameters<typeof tournamentEventService.log>[1], extra: Record<string, unknown>) =>
+      tournamentEventService.log(tournamentId, type, { ...base, ...extra }, "", actor).catch(() => {});
+    if (patch.status === "in_progress") {
+      if (prevLiveState && prevLiveState !== "in_progress" && prevLiveState !== "finished")
+        emit("tournament_started", {});
+      emit("match_started", { tableId, tableLabel });
+    } else if (patch.status === "completed") {
+      const winner = patch.winner ?? prev?.winner ?? null;
+      const winnerName = winner === 1 ? prev?.p1Name : winner === 2 ? prev?.p2Name : null;
+      const loserName = winner === 1 ? prev?.p2Name : winner === 2 ? prev?.p1Name : null;
+      emit("match_completed", { winner, winnerName, loserName, tableLabel });
+    } else if (patch.status === "scheduled") {
+      if (prev?.status === "completed") emit("match_reopened", {});
+      else if ("tableId" in patch) {
+        if (patch.tableId == null) emit("table_unassigned", {});
+        else if (prev?.tableId == null) emit("table_assigned", { tableId, tableLabel });
+        else if (prev?.tableId !== patch.tableId) emit("table_changed", { tableId, tableLabel });
+      }
+    } else if (patch.status === undefined && "startedAt" in patch && prev?.status === "in_progress") {
+      // Elapsed-timer correction/reset (startedAt-only patch on a live match).
+      const nowT = Date.now();
+      const prevEl = prev?.startedAt ? Math.max(0, (nowT - Date.parse(prev.startedAt)) / 1000) : 0;
+      const newEl = patch.startedAt ? Math.max(0, (nowT - Date.parse(patch.startedAt)) / 1000) : 0;
+      emit("match_timer_adjusted", {
+        reset: newEl < 2,
+        prevElapsed: formatClock(prevEl),
+        newElapsed: formatClock(newEl),
+        prevStartedAt: prev?.startedAt ?? null,
+        newStartedAt: patch.startedAt ?? null,
+      });
+    }
+  };
+
+  // One authoritative match-mutation path for the Live screen (web + native): persist via the
+  // hub (which also flips live_state → Running on the first start), then write the durable
+  // event(s) and refresh the feed. Every Live match action routes through this.
+  const runMatchPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
+    const prev = liveMatches.find((m) => m.id === matchId) ?? null;
+    const prevLiveState = hub.tournament?.live_state;
+    await hub.setMatchState({ matchId, patch });
+    logMatchDerivedEvent(prev, patch, prevLiveState);
+    refreshEvents();
+  };
+
   const handleQueueAssign = (matchId: string, tableId: number) =>
-    hub
-      .setMatchState({
-        matchId,
-        patch: { tableId, status: "scheduled", startedAt: null },
-      })
-      .catch(() => Alert.alert("Error", "Failed to assign the table."));
+    runMatchPatch(matchId, { tableId, status: "scheduled", startedAt: null }).catch(() =>
+      Alert.alert("Error", "Failed to assign the table."),
+    );
   // Assign + start in one step (table set + in_progress + startedAt).
   const handleQueueAssignStart = (matchId: string, tableId: number) =>
-    hub
-      .setMatchState({
-        matchId,
-        patch: { tableId, status: "in_progress", startedAt: new Date().toISOString() },
-      })
+    runMatchPatch(matchId, { tableId, status: "in_progress", startedAt: new Date().toISOString() })
       .then(() => notifyMatchPlayers(matchId, tableId))
       .catch(() => Alert.alert("Error", "Failed to assign and start the match."));
   // Start a match already parked on a table (keeps its table).
   const handleQueueStart = (matchId: string) =>
-    hub
-      .setMatchState({
-        matchId,
-        patch: { status: "in_progress", startedAt: new Date().toISOString() },
-      })
+    runMatchPatch(matchId, { status: "in_progress", startedAt: new Date().toISOString() })
       .then(() => notifyMatchPlayers(matchId))
       .catch(() => Alert.alert("Error", "Failed to start the match."));
   // Send a match back to the queue: clear its table and revert to scheduled.
   const handleQueueUnassign = (matchId: string) =>
-    hub
-      .setMatchState({
-        matchId,
-        patch: { tableId: null, status: "scheduled", startedAt: null },
-      })
-      .catch(() => Alert.alert("Error", "Failed to update the match."));
+    runMatchPatch(matchId, { tableId: null, status: "scheduled", startedAt: null }).catch(() =>
+      Alert.alert("Error", "Failed to update the match."),
+    );
+
+  // Start All (Dashboard): start ONLY matches already assigned to a table and waiting to start
+  // (isStartable — the same condition an individual Start Match satisfies). Does NOT auto-assign.
+  // Sequential awaited (writeLiveSettings is built for chained writes); partial failures reported.
+  const handleStartAll = () => {
+    const startable = liveMatches.filter(isStartable);
+    if (startable.length === 0) return;
+    const run = async () => {
+      setDashBusy(true);
+      let ok = 0;
+      let fail = 0;
+      for (const m of startable) {
+        try {
+          await runMatchPatch(m.id, {
+            status: "in_progress",
+            tableId: m.tableId,
+            startedAt: new Date().toISOString(),
+          });
+          notifyMatchPlayers(m.id, m.tableId ?? undefined);
+          ok += 1;
+        } catch {
+          fail += 1;
+        }
+      }
+      setDashBusy(false);
+      if (fail > 0)
+        Alert.alert(
+          "Start All",
+          `${ok} match${ok === 1 ? "" : "es"} started. ${fail} could not be started.`,
+        );
+    };
+    if (startable.length > 1) {
+      Alert.alert("Start assigned matches?", `Start ${startable.length} assigned matches?`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Start All", onPress: run },
+      ]);
+    } else {
+      run();
+    }
+  };
+
+  // Auto Assign (Dashboard): reuse the authoritative planner — order the ready (unassigned)
+  // queue by the current mode and pair the front with free tables. Distinct from Start All.
+  const handleDashAutoAssign = async () => {
+    const readyAtMap = computeReadyAtMap(hub.bracket, hub.matchState);
+    const entries = buildQueueEntries(liveMatches, readyAtMap, Date.now());
+    const ordered = orderQueue(entries, hub.autoAssignMode as AutoAssignMode, hub.queueOrder ?? []);
+    const plan = planAutoAssign(ordered, freeTables(hub.tables, tableOccupancy));
+    if (plan.length === 0) {
+      Alert.alert("Auto Assign", "No ready matches or free tables to assign.");
+      return;
+    }
+    setDashBusy(true);
+    for (const p of plan) {
+      try {
+        await runMatchPatch(p.matchId, { tableId: p.tableId, status: "scheduled", startedAt: null });
+      } catch {
+        /* keep going; reconciled by the mutation's invalidate */
+      }
+    }
+    setDashBusy(false);
+  };
   const handleSetAutoMode = (m: AutoAssignMode) =>
     hub.saveQueueSettings({ autoAssignMode: m }).catch(() => {});
   // A manual reorder takes the TD into Manual mode with the new order.
@@ -3491,10 +4371,24 @@ export default function ManageTournamentScreen() {
       bracketSize: size,
       drawType: "random",
     };
+    const wasRedraw = !!hub.bracket;
     hub
       .drawBracket({ bracket, logEntry })
       .then(() => {
         pendingRedrawReason.current = null;
+        // Durable activity: record a redraw (a fresh draw over an existing bracket).
+        if (wasRedraw && tournamentId && !isChipTournament) {
+          tournamentEventService
+            .log(
+              tournamentId,
+              "bracket_redrawn",
+              { drawNumber: logEntry.drawNumber, reason },
+              "",
+              tdProfile?.id_auto ?? null,
+            )
+            .catch(() => {});
+          refreshEvents();
+        }
       })
       .catch(() => Alert.alert("Error", "Failed to draw the bracket."));
   };
@@ -3928,6 +4822,7 @@ export default function ManageTournamentScreen() {
     paidEntry: boolean,
     paidPots: string[],
     raceOverride: number | null,
+    verified: boolean,
   ) =>
     withProcessing(
       r.id,
@@ -3941,13 +4836,19 @@ export default function ManageTournamentScreen() {
             race_override: raceOverride,
             paid_entry: paidEntry,
             paid_side_pots: paidPots,
+            // Persist the per-event Fargo verification as the snapshot (verified ⇔ snapshot
+            // === rating). Ready is gated on `verified` upstream, so this is always the rating.
+            fargo_at_registration: verified ? fargo : null,
             checked_in_at: new Date().toISOString(),
           },
         }),
       "Failed to mark the player ready.",
     );
 
-  // Edit a Ready player's rating/payment without changing their status.
+  // Edit a player's rating/payment/verification. Reconciles status: if the player was Ready
+  // (checked_in) but the edit leaves them not-Ready (e.g. Fargo changed → unverified, or
+  // entry marked unpaid), demote to Registered (approved) so persisted state never claims
+  // Ready with a stale/unverified Fargo.
   const handleSaveEdit = (
     r: Registration,
     fargo: number,
@@ -3955,6 +4856,8 @@ export default function ManageTournamentScreen() {
     paidEntry: boolean,
     paidPots: string[],
     raceOverride: number | null,
+    verified: boolean,
+    stillReady: boolean,
   ) =>
     withProcessing(
       r.id,
@@ -3967,6 +4870,10 @@ export default function ManageTournamentScreen() {
             race_override: raceOverride,
             paid_entry: paidEntry,
             paid_side_pots: paidPots,
+            fargo_at_registration: verified ? fargo : null,
+            ...(r.status === "checked_in" && !stillReady
+              ? { status: "approved" as RegistrationStatus, checked_in_at: null }
+              : {}),
           },
         }),
       "Failed to save changes.",
@@ -3985,6 +4892,54 @@ export default function ManageTournamentScreen() {
       "Failed to update side pots.",
     );
   };
+
+  // Card/List inline Fargo verification (per-event snapshot). Requires a Fargo rating.
+  const handleVerifyFargo = (r: Registration) => {
+    if (r.fargo_rating == null) {
+      Alert.alert("Add a Fargo first", "Enter a Fargo rating (Actions → Edit) before verifying.");
+      return;
+    }
+    return withProcessing(
+      r.id,
+      () => hub.updateRegistration({ id: r.id, updates: { fargo_at_registration: r.fargo_rating } }),
+      "Failed to verify Fargo.",
+    );
+  };
+  // Un-verify (clears the snapshot). If the player was Ready, reconcile to Registered.
+  const handleUnverifyFargo = (r: Registration) =>
+    withProcessing(
+      r.id,
+      () =>
+        hub.updateRegistration({
+          id: r.id,
+          updates: {
+            fargo_at_registration: null,
+            ...(r.status === "checked_in"
+              ? { status: "approved" as RegistrationStatus, checked_in_at: null }
+              : {}),
+          },
+        }),
+      "Failed to update Fargo verification.",
+    );
+
+  // List-view quick toggle of the entry-fee-paid flag (immediate persist). Marking a Ready
+  // player's entry UNPAID reconciles them back to Registered (payment gate fails), so status
+  // never claims Ready with an unpaid entry.
+  const handleTogglePaidEntry = (r: Registration, paid: boolean) =>
+    withProcessing(
+      r.id,
+      () =>
+        hub.updateRegistration({
+          id: r.id,
+          updates: {
+            paid_entry: paid,
+            ...(r.status === "checked_in" && !paid
+              ? { status: "approved" as RegistrationStatus, checked_in_at: null }
+              : {}),
+          },
+        }),
+      "Failed to update entry payment.",
+    );
 
   const handleNoShow = (r: Registration) =>
     withProcessing(r.id, () => hub.markNoShow(r.id), "Failed to mark no-show.");
@@ -4065,6 +5020,20 @@ export default function ManageTournamentScreen() {
         return getDisplayName(a, pendingNames).localeCompare(getDisplayName(b, pendingNames));
       });
   }, [hub.registrations, playerSearch, statusFilter]);
+
+  // Players roster pagination (shared by the top + bottom controls) + Card/List view.
+  // Paginate AFTER filtering/sorting so pages reflect the current result set.
+  const [playersView, setPlayersView] = useState<"cards" | "list">("cards");
+  // List View: which row is expanded into the full editor (Actions → Edit). Card view
+  // is unaffected. Cleared on save/ready/cancel/remove so it collapses back to the row.
+  const [editingListId, setEditingListId] = useState<number | null>(null);
+  // Web Actions popover: which row's menu is open + the button it's anchored to.
+  const [actionsMenu, setActionsMenu] = useState<{ anchor: React.RefObject<any>; item: Registration } | null>(null);
+  const playersPagination = usePagination(filteredRegs, { itemsPerPage: 20 });
+  const resetPlayersPage = playersPagination.resetPage;
+  useEffect(() => {
+    resetPlayersPage();
+  }, [playerSearch, statusFilter, resetPlayersPage]);
 
   // ---- Tab renderers ------------------------------------------------------
   // Contact name picker: the director's profile name or a custom one. Shared by
@@ -4227,12 +5196,27 @@ export default function ManageTournamentScreen() {
             </View>
           )}
 
-          {form.raceMode === "groups" && (
+          {form.raceMode === "groups" && (() => {
+            const gv = formRaceGroupValidation(form);
+            const invalid = (i: number) => gv.invalidIndices.includes(i);
+            return (
             <View>
               <Text allowFontScaling={false} style={styles.hint}>
-                Players are auto-assigned a race from the group their Fargo falls
-                in (manual override per player later).
+                Group labels are custom — use A/B/C, APA skill levels, SL7, Advanced,
+                or any label that fits your tournament.
               </Text>
+              <Text allowFontScaling={false} style={styles.hint}>
+                Leave Min blank for 0; leave Max blank for no upper limit.
+              </Text>
+              {form.raceGroups.length > 0 && (
+                <View style={styles.groupHeaderRow}>
+                  <Text allowFontScaling={false} style={[styles.groupHeaderText, styles.groupLabel]}>Group Label</Text>
+                  <Text allowFontScaling={false} style={[styles.groupHeaderText, styles.groupNum]}>Min Fargo</Text>
+                  <Text allowFontScaling={false} style={[styles.groupHeaderText, styles.groupNum]}>Max Fargo</Text>
+                  <Text allowFontScaling={false} style={[styles.groupHeaderText, styles.groupNum]}>Race To</Text>
+                  <View style={styles.groupHeaderSpacer} />
+                </View>
+              )}
               {form.raceGroups.map((g, i) => (
                 <View key={g.id} style={styles.groupRow}>
                   <TextInput
@@ -4240,12 +5224,12 @@ export default function ManageTournamentScreen() {
                     style={[styles.input, styles.groupLabel]}
                     value={g.label}
                     onChangeText={(v) => updateRaceGroup(i, "label", v)}
-                    placeholder="A"
+                    placeholder="A, APA 5, SL7..."
                     placeholderTextColor={COLORS.textMuted}
                   />
                   <TextInput
                     allowFontScaling={false}
-                    style={[styles.input, styles.groupNum]}
+                    style={[styles.input, styles.groupNum, invalid(i) && styles.groupInputError]}
                     value={g.minFargo}
                     onChangeText={(v) => updateRaceGroup(i, "minFargo", v)}
                     placeholder="Min"
@@ -4254,7 +5238,7 @@ export default function ManageTournamentScreen() {
                   />
                   <TextInput
                     allowFontScaling={false}
-                    style={[styles.input, styles.groupNum]}
+                    style={[styles.input, styles.groupNum, invalid(i) && styles.groupInputError]}
                     value={g.maxFargo}
                     onChangeText={(v) => updateRaceGroup(i, "maxFargo", v)}
                     placeholder="Max"
@@ -4263,7 +5247,7 @@ export default function ManageTournamentScreen() {
                   />
                   <TextInput
                     allowFontScaling={false}
-                    style={[styles.input, styles.groupNum]}
+                    style={[styles.input, styles.groupNum, invalid(i) && styles.groupInputError]}
                     value={g.raceTo}
                     onChangeText={(v) => updateRaceGroup(i, "raceTo", v)}
                     placeholder="Race to"
@@ -4285,22 +5269,28 @@ export default function ManageTournamentScreen() {
                   + Add Group
                 </Text>
               </TouchableOpacity>
+              {!gv.ok && (
+                <View style={styles.groupErrorBox}>
+                  {gv.errors.map((e, idx) => (
+                    <Text key={idx} allowFontScaling={false} style={styles.groupErrorText}>{e}</Text>
+                  ))}
+                </View>
+              )}
               {form.raceGroups.length > 0 && (
                 <View style={styles.exampleBox}>
                   <Text allowFontScaling={false} style={styles.exampleTitle}>
                     Group Settings
                   </Text>
-                  {form.raceGroups.map((g, i) => (
-                    <Text
-                      key={g.id}
-                      allowFontScaling={false}
-                      style={styles.exampleText}
-                    >
-                      Group {g.label || String.fromCharCode(65 + i)}:{" "}
-                      {g.minFargo.trim() || "0"}-{g.maxFargo.trim() || "+"} · Race
-                      to {g.raceTo.trim() || "?"}
-                    </Text>
-                  ))}
+                  {form.raceGroups.map((g, i) => {
+                    const mn = g.minFargo.trim() || "0";
+                    const mx = g.maxFargo.trim();
+                    const range = mx === "" ? `${mn}+` : `${mn}–${mx}`;
+                    return (
+                      <Text key={g.id} allowFontScaling={false} style={styles.exampleText}>
+                        Group {g.label || String.fromCharCode(65 + i)}: {range} · Race to {g.raceTo.trim() || "?"}
+                      </Text>
+                    );
+                  })}
                   <Text allowFontScaling={false} style={styles.exampleText}>
                     A blank minimum counts as 0; a blank maximum has no upper
                     limit.
@@ -4308,7 +5298,8 @@ export default function ManageTournamentScreen() {
                 </View>
               )}
             </View>
-          )}
+            );
+          })()}
         </Section>
     );
   };
@@ -5335,6 +6326,13 @@ export default function ManageTournamentScreen() {
     const entryFee = Number(hub.tournament?.entry_fee) || 0;
     const raceMode = hub.tournament?.live_settings?.raceMode ?? "fixed";
     const raceGroups = hub.tournament?.live_settings?.raceGroups ?? [];
+    // A/B/C groups only: the player's assigned group LABEL, via the SAME groupForFargo matcher
+    // the race assignment uses. Undefined when not groups mode, no rating, or no matching group.
+    const groupLabelFor = (r: Registration): string | undefined => {
+      if (raceMode !== "groups") return undefined;
+      const g = groupForFargo(r.fargo_rating ?? null, raceGroups);
+      return g ? (g.label?.trim() || undefined) : undefined;
+    };
     const summary = [
       { key: "prereg" as DisplayStatus, short: "Pre-Reg", n: statusCounts.prereg },
       { key: "registered" as DisplayStatus, short: "Registered", n: statusCounts.registered },
@@ -5371,6 +6369,8 @@ export default function ManageTournamentScreen() {
         placeholder="All Players"
         options={PLAYER_FILTERS}
         value={statusFilter}
+        selectedBlueText
+        hideCheck={isWeb}
         onSelect={(v) => setStatusFilter(v as "all" | DisplayStatus)}
       />
     );
@@ -5398,61 +6398,319 @@ export default function ManageTournamentScreen() {
         </View>
       </>
     );
-    const list = hub.registrationsLoading ? (
+    const renderRow = (item: Registration) => (
+      <RegistrationRow
+        key={item.id}
+        registration={item}
+        pendingNames={pendingNames}
+        sidePots={sidePots}
+        entryFee={entryFee}
+        raceMode={raceMode}
+        raceGroups={raceGroups}
+        onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified) =>
+          handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified)
+        }
+        onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady) =>
+          handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady)
+        }
+        onTogglePaidPot={(name, paid) => handleTogglePaidPot(item, name, paid)}
+        onNoShow={() => handleNoShow(item)}
+        onRemove={() => handleRemove(item)}
+        onUndo={() => handleUndoReady(item)}
+        onRestore={() => handleRestore(item)}
+        isProcessing={processingId === item.id}
+        locked={settingsLocked}
+      />
+    );
+    const loadingOrEmpty = hub.registrationsLoading ? (
       <View style={styles.centerBlock}>
         <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     ) : filteredRegs.length === 0 ? (
       <EmptyState message="No players to show" submessage="Add players or adjust the filter." />
-    ) : (
-      filteredRegs.map((item) => (
-        <RegistrationRow
-          key={item.id}
-          registration={item}
-          pendingNames={pendingNames}
-          sidePots={sidePots}
-          entryFee={entryFee}
-          raceMode={raceMode}
-          raceGroups={raceGroups}
-          onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
-            handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
-          }
-          onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride) =>
-            handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride)
-          }
-          onTogglePaidPot={(name, paid) => handleTogglePaidPot(item, name, paid)}
-          onNoShow={() => handleNoShow(item)}
-          onRemove={() => handleRemove(item)}
-          onUndo={() => handleUndoReady(item)}
-          onRestore={() => handleRestore(item)}
-          isProcessing={processingId === item.id}
-          locked={settingsLocked}
-        />
-      ))
-    );
-    // Wide web: two columns — roster (scrolls) + sticky Tournament Summary aligned to the
-    // first player card (both columns start at the same row). Narrow/mobile: single column
-    // with the summary stacked below the roster.
+    ) : null;
+    // Wide web: paginated (20/page) with SYNCED pagination above + below, a Cards (2-col
+    // grid) / List (single column) toggle, and a sticky Tournament Summary aligned to the
+    // first player card. Narrow/mobile: single column, all players, summary stacked below.
     if (isWeb && winW >= 980) {
+      const cardsView = playersView === "cards";
+      // Cards/List toggle — lives on the RIGHT of the (top) pagination row, next to the page
+      // selector, instead of the top controls row.
+      const viewToggleNode = (
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, cardsView && styles.viewToggleBtnOn]}
+            onPress={() => setPlayersView("cards")}
+          >
+            <Text allowFontScaling={false} style={[styles.viewToggleText, cardsView && styles.viewToggleTextOn]}>Cards</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, !cardsView && styles.viewToggleBtnOn]}
+            onPress={() => setPlayersView("list")}
+          >
+            <Text allowFontScaling={false} style={[styles.viewToggleText, !cardsView && styles.viewToggleTextOn]}>List</Text>
+          </TouchableOpacity>
+        </View>
+      );
+      const makePager = (rightAccessory?: React.ReactNode) => (
+        <Pagination
+          totalCount={playersPagination.totalCount}
+          displayStart={playersPagination.displayRange.start}
+          displayEnd={playersPagination.displayRange.end}
+          currentPage={playersPagination.currentPage}
+          totalPages={playersPagination.totalPages}
+          onPrevPage={playersPagination.prevPage}
+          onNextPage={playersPagination.nextPage}
+          canGoPrev={playersPagination.canGoPrev}
+          canGoNext={playersPagination.canGoNext}
+          noun="players"
+          rightAccessory={rightAccessory}
+        />
+      );
+      const pagerTop = makePager(viewToggleNode);
+      const pager = makePager();
+      const confirmOff = (title: string, msg: string, fn: () => void) =>
+        Alert.alert(title, msg, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", style: "destructive", onPress: fn },
+        ]);
+      // State-appropriate Actions-menu items for a row (same set + confirmations as the old
+      // Alert menu). Selecting an item closes the popover (handled by WebActionsMenu) first.
+      const actionItemsFor = (item: Registration): { label: string; danger?: boolean; onPress: () => void }[] => {
+        const dd = displayStatusOf(item.status);
+        if (dd === "no_show" || dd === "removed") {
+          return [{ label: "Restore", onPress: () => handleRestore(item) }];
+        }
+        const out: { label: string; danger?: boolean; onPress: () => void }[] = [
+          { label: "Edit", onPress: () => setEditingListId(item.id) },
+        ];
+        if (dd === "ready")
+          out.push({ label: "Undo Ready", onPress: () => confirmOff("Undo Ready?", "This moves the player back to Registered.", () => handleUndoReady(item)) });
+        out.push({ label: "Mark No Show", danger: true, onPress: () => confirmOff("Mark No Show?", "This marks the player as a no-show.", () => handleNoShow(item)) });
+        out.push({ label: "Remove Player", danger: true, onPress: () => confirmOff("Remove player?", "This removes the player from the tournament registration.", () => handleRemove(item)) });
+        return out;
+      };
+      const listHeader = (
+        <View style={styles.listHead}>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcPlayer]}>Player</Text>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcFargo]}>Fargo</Text>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcEntry]}>Entry</Text>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcPots]}>Side Pots</Text>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcStatus]}>Status</Text>
+          <Text allowFontScaling={false} style={[styles.listHeadText, styles.lcActions]}>Actions</Text>
+        </View>
+      );
+      const roster =
+        loadingOrEmpty ??
+        (cardsView ? (
+          <>
+            {pagerTop}
+            <View style={styles.rosterGrid}>
+              {playersPagination.paginatedItems.map((item) => (
+                <View key={item.id} style={styles.rosterCardCell}>
+                  {editingListId === item.id ? (
+                    // Actions → Edit expands the card into the SAME full editor (Fargo input +
+                    // Verify + race controls + entry/pots) the List View uses. Callbacks clear
+                    // the editing id so it collapses back to the compact card after commit.
+                    <View style={styles.listEditWrap}>
+                      <RegistrationRow
+                        registration={item}
+                        pendingNames={pendingNames}
+                        sidePots={sidePots}
+                        entryFee={entryFee}
+                        raceMode={raceMode}
+                        raceGroups={raceGroups}
+                        initialEditing
+                        onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified) => {
+                          handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified);
+                          setEditingListId(null);
+                        }}
+                        onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady) => {
+                          handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady);
+                          setEditingListId(null);
+                        }}
+                        onTogglePaidPot={(name, paid) => handleTogglePaidPot(item, name, paid)}
+                        onNoShow={() => { handleNoShow(item); setEditingListId(null); }}
+                        onRemove={() => { handleRemove(item); setEditingListId(null); }}
+                        onUndo={() => { handleUndoReady(item); setEditingListId(null); }}
+                        onRestore={() => { handleRestore(item); setEditingListId(null); }}
+                        isProcessing={processingId === item.id}
+                        locked={settingsLocked}
+                      />
+                      <TouchableOpacity style={styles.listDoneBtn} onPress={() => setEditingListId(null)}>
+                        <Text allowFontScaling={false} style={styles.listDoneText}>Done editing</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <EliminationPlayerCard
+                      registration={item}
+                      sidePots={sidePots}
+                      entryFee={entryFee}
+                      raceMode={raceMode}
+                      raceGroups={raceGroups}
+                      groupLabel={groupLabelFor(item)}
+                      isProcessing={processingId === item.id}
+                      pendingNames={pendingNames}
+                      onToggleEntry={(next) =>
+                        next
+                          ? handleTogglePaidEntry(item, true)
+                          : confirmOff("Mark entry fee unpaid?", "This player was marked paid.", () => handleTogglePaidEntry(item, false))
+                      }
+                      onToggleSidePot={(name, ent) =>
+                        ent
+                          ? handleTogglePaidPot(item, name, true)
+                          : confirmOff("Remove side pot?", `Remove ${name} from this player?`, () => handleTogglePaidPot(item, name, false))
+                      }
+                      onVerify={() => handleVerifyFargo(item)}
+                      onUnverify={() =>
+                        confirmOff("Un-verify Fargo?", "This clears the verified Fargo for this event.", () => handleUnverifyFargo(item))
+                      }
+                      onReady={() =>
+                        handleReady(
+                          item,
+                          item.fargo_rating as number,
+                          !!item.is_starter_rating,
+                          !!item.paid_entry,
+                          safePaidSidePots(item.paid_side_pots).filter((n) => sidePots.some((p) => p.name === n)),
+                          item.race_override ?? null,
+                          true,
+                        )
+                      }
+                      onUndo={() =>
+                        confirmOff("Undo Ready?", "This moves the player back to Registered.", () => handleUndoReady(item))
+                      }
+                      onActions={(anchor) => setActionsMenu({ anchor, item })}
+                    />
+                  )}
+                </View>
+              ))}
+            </View>
+            {pager}
+          </>
+        ) : (
+          <>
+            {pagerTop}
+            <View style={styles.listTable}>
+              {listHeader}
+              {playersPagination.paginatedItems.map((item) =>
+                editingListId === item.id ? (
+                  // Actions → Edit expands the row into the SAME full editor the cards use
+                  // (Fargo input + Verify + race controls + entry/pots). Callbacks clear the
+                  // editing id so it collapses back to the compact row after commit.
+                  <View key={item.id} style={styles.listEditWrap}>
+                    <RegistrationRow
+                      registration={item}
+                      pendingNames={pendingNames}
+                      sidePots={sidePots}
+                      entryFee={entryFee}
+                      raceMode={raceMode}
+                      raceGroups={raceGroups}
+                      initialEditing
+                      onReady={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified) => {
+                        handleReady(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified);
+                        setEditingListId(null);
+                      }}
+                      onSaveEdit={(fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady) => {
+                        handleSaveEdit(item, fargo, isStarter, paidEntry, paidPots, raceOverride, verified, stillReady);
+                        setEditingListId(null);
+                      }}
+                      onTogglePaidPot={(name, paid) => handleTogglePaidPot(item, name, paid)}
+                      onNoShow={() => { handleNoShow(item); setEditingListId(null); }}
+                      onRemove={() => { handleRemove(item); setEditingListId(null); }}
+                      onUndo={() => { handleUndoReady(item); setEditingListId(null); }}
+                      onRestore={() => { handleRestore(item); setEditingListId(null); }}
+                      isProcessing={processingId === item.id}
+                      locked={settingsLocked}
+                    />
+                    <TouchableOpacity style={styles.listDoneBtn} onPress={() => setEditingListId(null)}>
+                      <Text allowFontScaling={false} style={styles.listDoneText}>Done editing</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <EliminationPlayerListRow
+                    key={item.id}
+                    registration={item}
+                    sidePots={sidePots}
+                    entryFee={entryFee}
+                    isProcessing={processingId === item.id}
+                    pendingNames={pendingNames}
+                    groupLabel={groupLabelFor(item)}
+                    onToggleEntry={(next) =>
+                      next
+                        ? handleTogglePaidEntry(item, true)
+                        : confirmOff("Mark entry fee unpaid?", "This player was marked paid.", () => handleTogglePaidEntry(item, false))
+                    }
+                    onToggleSidePot={(name, ent) =>
+                      ent
+                        ? handleTogglePaidPot(item, name, true)
+                        : confirmOff("Remove side pot?", `Remove ${name} from this player?`, () => handleTogglePaidPot(item, name, false))
+                    }
+                    onActions={(anchor) => setActionsMenu({ anchor, item })}
+                  />
+                ),
+              )}
+            </View>
+            {pager}
+          </>
+        ));
       return (
-        <ScrollView
-          style={styles.scrollFlex}
-          contentContainerStyle={styles.playersPageWeb}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {controls}
-          <View style={styles.playersTwoCol}>
-            <View style={styles.playersRosterCol}>{list}</View>
-            <View style={styles.playersSummaryCol}>{renderTournamentSummary()}</View>
+        <View style={styles.playersPaneWeb}>
+          {/* Controls live ABOVE the scroll region (fixed), so the two-column area starts at
+              the very top of the scroll content. That lets the Tournament Summary stick from
+              the first scrolled pixel with zero drift — no travel down to a sticky threshold. */}
+          <View style={styles.playersControlsBarWeb}>
+            <View style={styles.controlsRowWeb}>
+              {/* Status count chips removed on desktop — the Tournament Summary's Player
+                  Breakdown already shows these totals. Cards/List moved to the pagination row.
+                  Search is a compact fixed width so it doesn't consume the row; controls pack left. */}
+              <View style={styles.controlsSearchDesktop}>{searchNode}</View>
+              <View style={styles.controlsFilterWeb}>{filterNode}</View>
+              {addNode}
+            </View>
           </View>
-        </ScrollView>
+          <ScrollView
+            style={styles.scrollFlex}
+            contentContainerStyle={styles.playersPageWeb}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.playersTwoCol}>
+              <View style={styles.playersRosterCol}>{roster}</View>
+              <View style={styles.playersSummaryCol}>
+                {/* No pager spacer here: the summary starts at the scroll-content top so it
+                    aligns with the pagination row on the left, and (matching the sticky top)
+                    is already at its sticky position → zero drift on first scroll. */}
+                {renderTournamentSummary()}
+                {/* Continue to Tables lives with the sticky summary (not a bottom footer),
+                    matching the summary column width and keeping its gold styling. */}
+                {!isChip && hub.liveState === "registration_open" && (
+                  <TouchableOpacity
+                    style={[styles.lockBtn, styles.summaryContinueBtn, !setupStepComplete.players && styles.btnDisabled]}
+                    onPress={() => advanceFromPlayers("tables")}
+                    disabled={!setupStepComplete.players}
+                  >
+                    <Text allowFontScaling={false} style={styles.lockBtnText}>
+                      Continue to Tables →
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </ScrollView>
+          {actionsMenu && (
+            <WebActionsMenu
+              anchorRef={actionsMenu.anchor}
+              items={actionItemsFor(actionsMenu.item)}
+              onClose={() => setActionsMenu(null)}
+            />
+          )}
+        </View>
       );
     }
     return (
       <View>
         {controls}
-        {list}
+        {loadingOrEmpty ?? filteredRegs.map(renderRow)}
         <View style={styles.summaryStackedMobile}>{renderTournamentSummary()}</View>
       </View>
     );
@@ -5470,6 +6728,561 @@ export default function ManageTournamentScreen() {
     const editDraft = editingTable
       ? (streamDrafts[editingTable.id] ?? editingTable.stream_link ?? "")
       : "";
+
+    // Display naming (UI only — persistence stays table_number + optional label):
+    //   label present → "<label> <number>" (e.g. "Diamond 1"); none → "Pool Table <number>".
+    // The Bulk Add preview uses this SAME logic so the preview matches what's created.
+    const poolTableName = (t: { table_number: number; label?: string | null }) =>
+      t.label && t.label.trim() ? `${t.label.trim()} ${t.table_number}` : `Pool Table ${t.table_number}`;
+
+    // Edit sheet, reused by native (pool=false → "Table N — label", unchanged) and the web
+    // redesign (pool=true → "Pool Table N" / "Label N"). Status / streaming / remove identical.
+    const editModalNode = (pool: boolean) => (
+      <Modal
+        transparent
+        visible={editingTable != null}
+        animationType="fade"
+        onRequestClose={() => setEditingTableId(null)}
+      >
+        <Pressable style={styles.tableInfoBackdrop} onPress={() => setEditingTableId(null)}>
+          <Pressable style={styles.tableInfoCard} onPress={() => {}}>
+            {editingTable && (
+              <>
+                <View style={styles.editHead}>
+                  <Text allowFontScaling={false} style={styles.editTitle} numberOfLines={1}>
+                    {pool
+                      ? poolTableName(editingTable)
+                      : `Table ${editingTable.table_number}${editingTable.label ? ` — ${editingTable.label}` : ""}`}
+                  </Text>
+                  <TouchableOpacity onPress={() => setEditingTableId(null)} hitSlop={10}>
+                    <Text allowFontScaling={false} style={styles.editClose}>
+                      ✕
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {editOcc && (
+                  <View style={styles.editOccBanner}>
+                    <Text allowFontScaling={false} style={styles.editOccLabel} numberOfLines={1}>
+                      In use · {editOcc.label}
+                    </Text>
+                    <Text allowFontScaling={false} style={styles.editOccNames} numberOfLines={1}>
+                      {(editOcc.p1Name ?? "TBD")} vs {(editOcc.p2Name ?? "TBD")}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setEditingTableId(null);
+                        setSelectedPhase("live");
+                        setActiveTab("matches");
+                      }}
+                    >
+                      <Text allowFontScaling={false} style={styles.editOccLink}>
+                        View in Matches ›
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <Text allowFontScaling={false} style={styles.fieldLabel}>
+                  Status
+                </Text>
+                <View style={styles.tableStatusRow}>
+                  {(
+                    [
+                      { s: "available", label: "Available" },
+                      { s: "in_use", label: "In Use" },
+                      { s: "unavailable", label: "Unavailable" },
+                    ] as { s: TableStatus; label: string }[]
+                  ).map((o) => (
+                    <TouchableOpacity
+                      key={o.s}
+                      style={[
+                        styles.tableStatusBtn,
+                        editStatus === o.s && styles.tableStatusBtnActive,
+                        editOcc && o.s !== "in_use" && styles.tableStatusBtnLocked,
+                      ]}
+                      disabled={!!editOcc && o.s !== "in_use"}
+                      onPress={() => {
+                        if (!editOcc) handleSetTableStatus(editingTable.id, o.s);
+                      }}
+                    >
+                      <Text
+                        allowFontScaling={false}
+                        style={[
+                          styles.tableStatusBtnText,
+                          editStatus === o.s && styles.tableStatusBtnTextActive,
+                        ]}
+                      >
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {editOcc && (
+                  <Text allowFontScaling={false} style={styles.editLockHint}>
+                    Finish or move this match to change the status.
+                  </Text>
+                )}
+
+                <View style={styles.editStreamWrap}>
+                  <ToggleSwitch
+                    label="Streaming Table"
+                    value={editingTable.is_streaming}
+                    onValueChange={(on) =>
+                      handleToggleStreaming(editingTable.id, on, editDraft)
+                    }
+                  />
+                  {editingTable.is_streaming && (
+                    <TextInput
+                      allowFontScaling={false}
+                      style={[styles.input, { marginTop: webSc(SPACING.sm) }]}
+                      value={editDraft}
+                      onChangeText={(v) =>
+                        setStreamDrafts((m) => ({ ...m, [editingTable.id]: v }))
+                      }
+                      onEndEditing={() =>
+                        handleToggleStreaming(editingTable.id, true, editDraft)
+                      }
+                      placeholder="Stream link URL"
+                      placeholderTextColor={COLORS.textMuted}
+                      autoCapitalize="none"
+                    />
+                  )}
+                </View>
+
+                <View style={styles.tableInfoBtns}>
+                  <TouchableOpacity
+                    style={[styles.tableInfoBtn, styles.editRemoveBtn]}
+                    onPress={() => {
+                      const id = editingTable.id;
+                      setEditingTableId(null);
+                      handleDeleteTable(id);
+                    }}
+                  >
+                    <Text allowFontScaling={false} style={styles.editRemoveText}>
+                      {pool ? "Remove Pool Table" : "Remove Table"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary]}
+                    onPress={() => setEditingTableId(null)}
+                  >
+                    <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+
+    // Bulk Add preview — same naming + identity logic that will be persisted, incl. duplicate
+    // detection (so the preview flags conflicts and the Add button disables before submit).
+    const bulkFromN = parseInt(bulkFrom, 10);
+    const bulkToN = parseInt(bulkTo, 10);
+    const bulkValid =
+      !isNaN(bulkFromN) && !isNaN(bulkToN) && bulkToN >= bulkFromN && bulkToN - bulkFromN <= 100;
+    const bulkPreview = bulkValid
+      ? Array.from({ length: bulkToN - bulkFromN + 1 }, (_, i) => {
+          const num = bulkFromN + i;
+          const lbl = bulkLabel.trim();
+          const conflict = findTableConflict(bulkLabel, num);
+          return { name: lbl ? `${lbl} ${num}` : `Pool Table ${num}`, conflict: !!conflict };
+        })
+      : [];
+    const bulkPreviewNames = bulkPreview.map((p) => p.name);
+    const bulkConflictNames = bulkPreview.filter((p) => p.conflict).map((p) => p.name);
+    const bulkHasConflict = bulkConflictNames.length > 0;
+    const bulkModalNode = (
+      <Modal
+        transparent
+        visible={bulkModalOpen}
+        animationType="fade"
+        onRequestClose={() => setBulkModalOpen(false)}
+      >
+        <Pressable style={styles.tableInfoBackdrop} onPress={() => setBulkModalOpen(false)}>
+          <Pressable style={styles.ptBulkModalCard} onPress={() => {}}>
+            <View style={styles.editHead}>
+              <Text allowFontScaling={false} style={styles.editTitle}>Bulk Add Pool Tables</Text>
+              <TouchableOpacity onPress={() => setBulkModalOpen(false)} hitSlop={10}>
+                <Text allowFontScaling={false} style={styles.editClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text allowFontScaling={false} style={styles.ptModalSub}>
+              Create multiple pool tables at once using a number range.
+            </Text>
+            <Text allowFontScaling={false} style={styles.fieldLabel}>Pool Table Label / Prefix (optional)</Text>
+            <TextInput
+              allowFontScaling={false}
+              style={styles.input}
+              value={bulkLabel}
+              onChangeText={setBulkLabel}
+              placeholder="e.g. Diamond, 7ft"
+              placeholderTextColor={COLORS.textMuted}
+            />
+            <View style={styles.ptBulkRangeRow}>
+              <View style={styles.ptBulkRangeCol}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>From</Text>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.input}
+                  value={bulkFrom}
+                  onChangeText={(v) => setBulkFrom(v.replace(/[^0-9]/g, ""))}
+                  placeholder="1"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+              </View>
+              <View style={styles.ptBulkRangeCol}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>To</Text>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.input}
+                  value={bulkTo}
+                  onChangeText={(v) => setBulkTo(v.replace(/[^0-9]/g, ""))}
+                  placeholder="4"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+              </View>
+            </View>
+            <Text allowFontScaling={false} style={styles.fieldLabel}>Preview</Text>
+            <View style={styles.ptPreviewBox}>
+              {bulkPreviewNames.length === 0 ? (
+                <Text allowFontScaling={false} style={styles.ptPreviewEmpty}>
+                  Enter a valid From / To range to preview names.
+                </Text>
+              ) : (
+                <Text allowFontScaling={false} style={styles.ptPreviewText}>
+                  {bulkPreviewNames.slice(0, 8).join(", ")}
+                  {bulkPreviewNames.length > 8 ? `, … (${bulkPreviewNames.length} total)` : ""}
+                </Text>
+              )}
+            </View>
+            {bulkHasConflict && (
+              <Text allowFontScaling={false} style={styles.ptConflictText}>
+                {bulkConflictNames.length === 1
+                  ? `${bulkConflictNames[0]} already exists.`
+                  : `Already exist: ${bulkConflictNames.slice(0, 6).join(", ")}${bulkConflictNames.length > 6 ? ", …" : ""}.`}
+              </Text>
+            )}
+            <View style={styles.tableInfoBtns}>
+              <TouchableOpacity
+                style={[styles.tableInfoBtn, styles.ptModalCancelBtn]}
+                onPress={() => setBulkModalOpen(false)}
+              >
+                <Text allowFontScaling={false} style={styles.ptModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary, (!bulkValid || bulkHasConflict || tableBusy) && styles.btnDisabled]}
+                onPress={handleBulkAddPoolTables}
+                disabled={!bulkValid || bulkHasConflict || tableBusy}
+              >
+                <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>Add Pool Tables</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+
+    // Focused Rename modal (web) — edits label + number; reuses updateTable.
+    const renameModalNode = (
+      <Modal
+        transparent
+        visible={renameModalTableId != null}
+        animationType="fade"
+        onRequestClose={() => setRenameModalTableId(null)}
+      >
+        <Pressable style={styles.tableInfoBackdrop} onPress={() => setRenameModalTableId(null)}>
+          <Pressable style={styles.ptSmallModalCard} onPress={() => {}}>
+            <View style={styles.editHead}>
+              <Text allowFontScaling={false} style={styles.editTitle}>Rename Pool Table</Text>
+              <TouchableOpacity onPress={() => setRenameModalTableId(null)} hitSlop={10}>
+                <Text allowFontScaling={false} style={styles.editClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.ptBulkRangeRow}>
+              <View style={styles.ptRenameLabelCol}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>Label</Text>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.input}
+                  value={renameLabel}
+                  onChangeText={setRenameLabel}
+                  placeholder="e.g. Diamond, Front Room"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+              </View>
+              <View style={styles.ptRenameNumCol}>
+                <Text allowFontScaling={false} style={styles.fieldLabel}>Number</Text>
+                <TextInput
+                  allowFontScaling={false}
+                  style={styles.input}
+                  value={renameNum}
+                  onChangeText={(v) => setRenameNum(v.replace(/[^0-9]/g, ""))}
+                  placeholder="#"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+              </View>
+            </View>
+            <View style={styles.tableInfoBtns}>
+              <TouchableOpacity style={[styles.tableInfoBtn, styles.ptModalCancelBtn]} onPress={() => setRenameModalTableId(null)}>
+                <Text allowFontScaling={false} style={styles.ptModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary]} onPress={handleSaveRename}>
+                <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+
+    // ── Web/desktop redesign: Pool Table Management (two-column, sticky sidebar) ──
+    if (isWeb && winW >= 980) {
+      const signedUp = statusCounts.ready + statusCounts.registered + statusCounts.prereg;
+      const poolTablesCount = hub.tables.length;
+      // Available = not currently occupied by a match AND status "available" (existing data).
+      const availableCount = hub.tables.filter(
+        (t) => !tableMatch[t.id] && t.status === "available",
+      ).length;
+      // Presentation-only stable sort (label → number) so same-numbered tables with different
+      // labels group cleanly now that numbers can repeat. Does not affect persistence/native.
+      const sortedTables = [...hub.tables].sort(
+        (a, b) =>
+          normalizeTableLabel(a.label).localeCompare(normalizeTableLabel(b.label)) ||
+          a.table_number - b.table_number,
+      );
+      return (
+        <View style={styles.ptPaneWeb}>
+          <ScrollView
+            style={styles.scrollFlex}
+            contentContainerStyle={styles.ptScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.ptTwoCol}>
+              {/* LEFT — management */}
+              <View style={styles.ptMainCol}>
+                <View style={styles.ptHeaderText}>
+                  <Text allowFontScaling={false} style={styles.ptTitle}>Pool Table Management</Text>
+                  <Text allowFontScaling={false} style={styles.ptSubtitle}>
+                    Add and manage pool tables for this tournament.
+                  </Text>
+                </View>
+
+                {!hub.tablesReady && (
+                  <Text allowFontScaling={false} style={styles.hint}>
+                    Pool tables need the database update applied before they can be saved.
+                  </Text>
+                )}
+
+                {/* Add a Pool Table — single compact row */}
+                <View style={styles.ptAddCard}>
+                  <Text allowFontScaling={false} style={styles.ptCardTitle}>Add a Pool Table</Text>
+                  <View style={styles.ptAddRowOne}>
+                    <View style={styles.ptFieldLabelCol}>
+                      <Text allowFontScaling={false} style={styles.fieldLabel}>Label</Text>
+                      <TextInput
+                        allowFontScaling={false}
+                        style={styles.input}
+                        value={singleTableLabel}
+                        onChangeText={setSingleTableLabel}
+                        placeholder="e.g. Diamond, Front Room"
+                        placeholderTextColor={COLORS.textMuted}
+                      />
+                    </View>
+                    <View style={styles.ptFieldNumCol}>
+                      <Text allowFontScaling={false} style={styles.fieldLabel}>Number</Text>
+                      <TextInput
+                        allowFontScaling={false}
+                        style={styles.input}
+                        value={singleTableNum}
+                        onChangeText={(v) => setSingleTableNum(v.replace(/[^0-9]/g, ""))}
+                        placeholder="#"
+                        placeholderTextColor={COLORS.textMuted}
+                        keyboardType="numeric"
+                        maxLength={3}
+                      />
+                    </View>
+                    <View style={styles.ptFieldStreamCol}>
+                      <Text allowFontScaling={false} style={styles.fieldLabel}>Stream Link — optional</Text>
+                      <TextInput
+                        allowFontScaling={false}
+                        style={styles.input}
+                        value={singleTableStream}
+                        onChangeText={setSingleTableStream}
+                        placeholder="YouTube, Twitch, Facebook, etc."
+                        placeholderTextColor={COLORS.textMuted}
+                        autoCapitalize="none"
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.ptPrimaryBtn, styles.ptAddBtnInline, tableBusy && styles.btnDisabled]}
+                      onPress={handleAddPoolTable}
+                      disabled={tableBusy}
+                    >
+                      <Text allowFontScaling={false} style={styles.ptPrimaryBtnText}>Add Pool Table</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Bulk Add — compact horizontal callout */}
+                <View style={styles.ptBulkCalloutRow}>
+                  <View style={styles.ptBulkCalloutText}>
+                    <Text allowFontScaling={false} style={styles.ptCalloutTitle}>Add Multiple Pool Tables</Text>
+                    <Text allowFontScaling={false} style={styles.ptSubtitle}>
+                      Need to add a bunch of pool tables at once?
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.ptBulkBtn}
+                    onPress={() => setBulkModalOpen(true)}
+                    disabled={tableBusy}
+                  >
+                    <Text allowFontScaling={false} style={styles.ptBulkBtnText}>+ Bulk Add Pool Tables</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text allowFontScaling={false} style={styles.ptListTitle}>
+                  Pool Tables ({poolTablesCount})
+                </Text>
+                <Text allowFontScaling={false} style={styles.ptListHelp}>
+                  Manage your tournament pool tables.
+                </Text>
+                {poolTablesCount === 0 ? (
+                  <Text allowFontScaling={false} style={styles.hint}>
+                    No pool tables yet. Add one above or use Bulk Add.
+                  </Text>
+                ) : (
+                  <View style={styles.ptGrid}>
+                    {sortedTables.map((tbl) => {
+                      const occupiedBy = tableMatch[tbl.id] ?? null;
+                      const effStatus: TableStatus = occupiedBy ? "in_use" : tbl.status;
+                      const color = tableStatusColor(effStatus);
+                      return (
+                        <PoolTableCard
+                          key={`${tbl.id}:${tbl.stream_link ?? ""}`}
+                          name={poolTableName(tbl)}
+                          statusLabel={TABLE_STATUS_LABEL[effStatus]}
+                          statusColor={color}
+                          streamLink={tbl.stream_link ?? ""}
+                          expanded={editingStreamId === tbl.id}
+                          disabled={processingId === tbl.id}
+                          onEdit={() => setEditingStreamId(tbl.id)}
+                          onCancelEdit={() => setEditingStreamId(null)}
+                          onSaveStream={(url) => {
+                            setEditingStreamId(null);
+                            handleSaveStreamInline(tbl.id, url);
+                          }}
+                          onViewStream={(url) => openStreamUrl(url)}
+                          onActions={(anchor) => setTableActionsMenu({ anchor, id: tbl.id })}
+                        />
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {/* RIGHT — sticky Tournament Summary + tools */}
+              <View style={styles.ptSummaryCol}>
+                <View style={styles.summaryCard}>
+                  <Text allowFontScaling={false} style={styles.summaryTitle}>Tournament Summary</Text>
+                  <Text allowFontScaling={false} style={styles.ptSummarySub}>
+                    Quick overview and tools for this tournament.
+                  </Text>
+                  <View style={styles.sumDivider} />
+                  <View style={styles.ptSumRow}>
+                    <Text allowFontScaling={false} style={styles.ptSumLabel}>Players Signed Up</Text>
+                    <Text allowFontScaling={false} style={styles.ptSumValue}>{signedUp}</Text>
+                  </View>
+                  <View style={styles.ptSumRow}>
+                    <Text allowFontScaling={false} style={styles.ptSumLabel}>Pool Tables</Text>
+                    <Text allowFontScaling={false} style={styles.ptSumValue}>{poolTablesCount}</Text>
+                  </View>
+                  <View style={styles.ptSumRow}>
+                    <Text allowFontScaling={false} style={styles.ptSumLabel}>Available Tables</Text>
+                    <Text allowFontScaling={false} style={styles.ptSumValue}>{availableCount}</Text>
+                  </View>
+
+                  <View style={styles.sumDivider} />
+                  <Text allowFontScaling={false} style={styles.ptSumSection}>Quick Actions</Text>
+                  <TouchableOpacity
+                    style={styles.ptBulkBtnFull}
+                    onPress={() => setBulkModalOpen(true)}
+                    disabled={tableBusy}
+                  >
+                    <Text allowFontScaling={false} style={styles.ptBulkBtnText}>+ Bulk Add Pool Tables</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.ptHelpCard}>
+                    <Text allowFontScaling={false} style={styles.ptHelpTitle}>Need help?</Text>
+                    <Text allowFontScaling={false} style={styles.ptHelpText}>
+                      Each pool table can have an optional stream link for spectators (YouTube,
+                      Twitch, etc.). You can also bulk add multiple pool tables at once.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.lockBtn, styles.summaryContinueBtn, !setupStepComplete.tables && styles.btnDisabled]}
+                    onPress={() => advanceToNextStep("prizepool")}
+                    disabled={!setupStepComplete.tables}
+                  >
+                    <Text allowFontScaling={false} style={styles.lockBtnText}>Continue to Prize Pool →</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          {bulkModalNode}
+          {renameModalNode}
+          {tableActionsMenu &&
+            (() => {
+              const tbl = hub.tables.find((t) => t.id === tableActionsMenu.id);
+              if (!tbl) return null;
+              const occupied = !!tableMatch[tbl.id];
+              const hasStream = !!(tbl.stream_link && tbl.stream_link.trim());
+              const items: { label: string; danger?: boolean; onPress: () => void }[] = [
+                { label: "Rename Pool Table", onPress: () => openRenameModal(tbl.id) },
+              ];
+              // Manual status is Available / Unavailable only; "In Use" is automatic and its
+              // status is locked while a match is assigned (occupied).
+              if (!occupied) {
+                if (tbl.status !== "available")
+                  items.push({ label: "Mark Available", onPress: () => handleSetTableStatus(tbl.id, "available") });
+                if (tbl.status !== "unavailable")
+                  items.push({ label: "Mark Unavailable", onPress: () => handleSetTableStatus(tbl.id, "unavailable") });
+              }
+              // Stream link is added inline on the card; when one exists, Actions can reopen the
+              // inline editor (prefilled) or remove it.
+              if (hasStream) {
+                items.push({ label: "Edit Stream Link", onPress: () => setEditingStreamId(tbl.id) });
+                items.push({ label: "Remove Stream Link", danger: true, onPress: () => handleRemoveStreamLink(tbl.id) });
+              }
+              // Remove Pool Table is offered only when not occupied (preserves the prior
+              // in-use delete safety), and keeps its existing confirmation.
+              if (!occupied)
+                items.push({ label: "Remove Pool Table", danger: true, onPress: () => handleDeleteTable(tbl.id) });
+              return (
+                <WebActionsMenu
+                  anchorRef={tableActionsMenu.anchor}
+                  items={items}
+                  onClose={() => setTableActionsMenu(null)}
+                />
+              );
+            })()}
+        </View>
+      );
+    }
 
     return (
     <View>
@@ -5662,144 +7475,7 @@ export default function ManageTournamentScreen() {
       </View>
 
       {/* Table edit sheet — tap a table card to change status / streaming / remove */}
-      <Modal
-        transparent
-        visible={editingTable != null}
-        animationType="fade"
-        onRequestClose={() => setEditingTableId(null)}
-      >
-        <Pressable style={styles.tableInfoBackdrop} onPress={() => setEditingTableId(null)}>
-          <Pressable style={styles.tableInfoCard} onPress={() => {}}>
-            {editingTable && (
-              <>
-                <View style={styles.editHead}>
-                  <Text allowFontScaling={false} style={styles.editTitle} numberOfLines={1}>
-                    Table {editingTable.table_number}
-                    {editingTable.label ? ` — ${editingTable.label}` : ""}
-                  </Text>
-                  <TouchableOpacity onPress={() => setEditingTableId(null)} hitSlop={10}>
-                    <Text allowFontScaling={false} style={styles.editClose}>
-                      ✕
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {editOcc && (
-                  <View style={styles.editOccBanner}>
-                    <Text allowFontScaling={false} style={styles.editOccLabel} numberOfLines={1}>
-                      In use · {editOcc.label}
-                    </Text>
-                    <Text allowFontScaling={false} style={styles.editOccNames} numberOfLines={1}>
-                      {(editOcc.p1Name ?? "TBD")} vs {(editOcc.p2Name ?? "TBD")}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setEditingTableId(null);
-                        setSelectedPhase("live");
-                        setActiveTab("matches");
-                      }}
-                    >
-                      <Text allowFontScaling={false} style={styles.editOccLink}>
-                        View in Matches ›
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <Text allowFontScaling={false} style={styles.fieldLabel}>
-                  Status
-                </Text>
-                <View style={styles.tableStatusRow}>
-                  {(
-                    [
-                      { s: "available", label: "Available" },
-                      { s: "in_use", label: "In Use" },
-                      { s: "unavailable", label: "Unavailable" },
-                    ] as { s: TableStatus; label: string }[]
-                  ).map((o) => (
-                    <TouchableOpacity
-                      key={o.s}
-                      style={[
-                        styles.tableStatusBtn,
-                        editStatus === o.s && styles.tableStatusBtnActive,
-                        editOcc && o.s !== "in_use" && styles.tableStatusBtnLocked,
-                      ]}
-                      disabled={!!editOcc && o.s !== "in_use"}
-                      onPress={() => {
-                        if (!editOcc) handleSetTableStatus(editingTable.id, o.s);
-                      }}
-                    >
-                      <Text
-                        allowFontScaling={false}
-                        style={[
-                          styles.tableStatusBtnText,
-                          editStatus === o.s && styles.tableStatusBtnTextActive,
-                        ]}
-                      >
-                        {o.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                {editOcc && (
-                  <Text allowFontScaling={false} style={styles.editLockHint}>
-                    Finish or move this match to change the status.
-                  </Text>
-                )}
-
-                <View style={styles.editStreamWrap}>
-                  <ToggleSwitch
-                    label="Streaming Table"
-                    value={editingTable.is_streaming}
-                    onValueChange={(on) =>
-                      handleToggleStreaming(editingTable.id, on, editDraft)
-                    }
-                  />
-                  {editingTable.is_streaming && (
-                    <TextInput
-                      allowFontScaling={false}
-                      style={[styles.input, { marginTop: webSc(SPACING.sm) }]}
-                      value={editDraft}
-                      onChangeText={(v) =>
-                        setStreamDrafts((m) => ({ ...m, [editingTable.id]: v }))
-                      }
-                      onEndEditing={() =>
-                        handleToggleStreaming(editingTable.id, true, editDraft)
-                      }
-                      placeholder="Stream link URL"
-                      placeholderTextColor={COLORS.textMuted}
-                      autoCapitalize="none"
-                    />
-                  )}
-                </View>
-
-                <View style={styles.tableInfoBtns}>
-                  <TouchableOpacity
-                    style={[styles.tableInfoBtn, styles.editRemoveBtn]}
-                    onPress={() => {
-                      const id = editingTable.id;
-                      setEditingTableId(null);
-                      handleDeleteTable(id);
-                    }}
-                  >
-                    <Text allowFontScaling={false} style={styles.editRemoveText}>
-                      Remove Table
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.tableInfoBtn, styles.tableInfoBtnPrimary]}
-                    onPress={() => setEditingTableId(null)}
-                  >
-                    <Text allowFontScaling={false} style={styles.tableInfoBtnPrimaryText}>
-                      Done
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {editModalNode(false)}
     </View>
     );
   };
@@ -5992,12 +7668,11 @@ export default function ManageTournamentScreen() {
               p.fargo >= g.minFargo &&
               (g.maxFargo <= 0 || p.fargo <= g.maxFargo),
           ).length;
+          const range = g.maxFargo > 0 ? `${g.minFargo}–${g.maxFargo}` : `${g.minFargo}+`;
           return (
-            <BracketCalc
-              key={g.id}
-              label={`Group ${g.label || "?"} (${g.minFargo}-${g.maxFargo || "+"})`}
-              value={`${count} players · Race ${g.raceTo}`}
-            />
+            <Text key={g.id} allowFontScaling={false} style={styles.raceAssignRow}>
+              {`Group ${g.label || "?"} (${range}) — ${count} ${count === 1 ? "player" : "players"} • Race to ${g.raceTo}`}
+            </Text>
           );
         });
       }
@@ -6017,16 +7692,262 @@ export default function ManageTournamentScreen() {
       );
     };
 
+    // Shared building blocks so the wide-web two-column and the native single-column reuse the
+    // SAME control sections (no divergence). Summary/Calculation content is consolidated into
+    // the right sidebar on wide web, and kept as full-width cards on native.
+    const staleBanner = bracket && !locked ? (
+      <View style={styles.staleBanner}>
+        <Text allowFontScaling={false} style={styles.staleBannerText}>
+          Showing a previous draw (Draw #{bracket.drawNumber}). Draw again to apply changes.
+        </Text>
+      </View>
+    ) : null;
+    const bracketSizeSection = !locked ? (
+      <Section title="Bracket Size">
+        <Text allowFontScaling={false} style={styles.hint}>
+          Recommended {recommended} for {ready.length} Ready players.
+        </Text>
+        <Dropdown
+          hideCheck={isWeb}
+          options={[
+            ...sizeOptions.map((s) => ({ label: `${s} players`, value: String(s) })),
+            { label: "256 players (Coming Soon)", value: "256" },
+          ]}
+          value={String(size)}
+          onSelect={(v) => {
+            if (v === "256") {
+              Alert.alert("Coming Soon", "256-player brackets aren't available yet.");
+              return;
+            }
+            setBracketSizeSel(Number(v));
+          }}
+        />
+      </Section>
+    ) : null;
+    const drawTypeSection = !locked ? (
+      <Section title="Draw Type">
+        <Text allowFontScaling={false} style={styles.hint}>
+          How first-round pairings are set.
+        </Text>
+        <Dropdown
+          hideCheck={isWeb}
+          options={DRAW_TYPE_OPTIONS}
+          value={drawType}
+          onSelect={(v) => {
+            const dt = v as DrawType;
+            if (!DRAW_TYPE_SUPPORTED.includes(dt)) {
+              Alert.alert("Coming Soon", "Only Random Draw is available in this version.");
+              return;
+            }
+            setDrawType(dt);
+          }}
+        />
+      </Section>
+    ) : null;
+    const raceSection = <Section title="Race Assignment">{racePreview()}</Section>;
+    const round1Section = bracket ? (
+      <Section title={`Round 1 — ${bracket.round1.length} matches`}>
+        {bracket.round1.map((m) => (
+          <View key={m.matchNumber} style={styles.matchRow}>
+            <Text allowFontScaling={false} style={styles.matchNum}>M{m.matchNumber}</Text>
+            <Text allowFontScaling={false} style={styles.matchText} numberOfLines={2}>{matchLabel(m)}</Text>
+          </View>
+        ))}
+      </Section>
+    ) : null;
+    const historyBtn = (hub.drawLog?.length ?? 0) > 0 ? (
+      <TouchableOpacity style={styles.historyBtn} onPress={() => setShowDrawHistory(true)}>
+        <Text allowFontScaling={false} style={styles.historyBtnText}>
+          View Draw History ({hub.drawLog.length})
+        </Text>
+      </TouchableOpacity>
+    ) : null;
+    const simBtn = __DEV__ && hub.bracket ? (
+      <TouchableOpacity style={styles.simBtn} onPress={handleSimulateHalf}>
+        <Text allowFontScaling={false} style={styles.simBtnText}>{"🧪"} Simulate ~50% &amp; Start (dev)</Text>
+      </TouchableOpacity>
+    ) : null;
+
+    // Wide-web: two-column with ONE consolidated sticky summary + Generate actions on the right.
+    if (isWeb && winW >= 980) {
+      const sumRow = (label: string, value: React.ReactNode) => (
+        <View style={styles.ptSumRow}>
+          <Text allowFontScaling={false} style={styles.ptSumLabel}>{label}</Text>
+          <Text allowFontScaling={false} style={styles.ptSumValue}>{value}</Text>
+        </View>
+      );
+      // Race-aware, dependency-respecting elapsed-time estimate (pure util). Reads per-side
+      // fixed races from the persisted live_settings; groups/differential derive from the field.
+      const ls = hub.tournament?.live_settings ?? {};
+      const dur = estimateTournamentDuration({
+        players: ready.length,
+        format,
+        tables: tablesAvail,
+        minPerGame,
+        cfg: raceConfig,
+        field: ready,
+        fixedLosers: ls.fixedRaceLosers,
+        fixedFinals: ls.fixedRaceFinals,
+      });
+      const durText = dur.estElapsedHours == null ? "—" : fmtHours(dur.estElapsedHours);
+      // Race Configuration rows — derived from the SAME raceConfig the left panel uses.
+      const hasLosers = formatHasLosersSide(format);
+      const raceModeLabel =
+        raceConfig.mode === "groups"
+          ? "A/B/C Race Groups"
+          : raceConfig.mode === "differential"
+            ? "Fargo Differential"
+            : "Fixed Race";
+      return (
+        <View style={styles.ptPaneWeb}>
+          <ScrollView
+            style={styles.scrollFlex}
+            contentContainerStyle={styles.ptScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.ptTwoCol}>
+              {/* LEFT — configuration only. Bracket Size + Draw Type share one row on wide web. */}
+              <View style={styles.ptMainCol}>
+                {staleBanner}
+                {!locked ? (
+                  <View style={styles.bracketConfigRow}>
+                    <View style={styles.bracketConfigCol}>{bracketSizeSection}</View>
+                    <View style={styles.bracketConfigCol}>{drawTypeSection}</View>
+                  </View>
+                ) : null}
+                {raceSection}
+                {round1Section}
+                {historyBtn}
+                {simBtn}
+              </View>
+
+              {/* RIGHT — one consolidated sticky Tournament Summary + Generate action */}
+              <View style={styles.ptSummaryCol}>
+                <View style={styles.summaryCard}>
+                  <Text allowFontScaling={false} style={styles.summaryTitle}>Tournament Summary</Text>
+                  <View style={styles.sumDivider} />
+                  {sumRow("Players Added", ready.length)}
+                  {sumRow("Recommended Size", recommended)}
+                  {sumRow("Bracket Size", size)}
+                  {sumRow("Byes", stats.byes)}
+                  {sumRow("Format", shortFormat(format))}
+                  {sumRow("Tables Available", tablesAvail)}
+                  {sumRow("Estimated Matches", stats.totalMatches)}
+                  {sumRow("Est. Min / Game", stats.minPerGame)}
+                  {sumRow("Est. Tournament Time", durText)}
+                  <View style={styles.sumDivider} />
+                  {sumRow("Winner Side", stats.winnerSideMatches)}
+                  {sumRow("Loser Side", stats.loserSideMatches)}
+
+                  {/* Race Configuration — reflects the ACTIVE race mode (same raceConfig as
+                      the left Race Assignment panel). */}
+                  <View style={styles.sumDivider} />
+                  <Text allowFontScaling={false} style={styles.ptSumSection}>Race Configuration</Text>
+                  {sumRow("Race", raceModeLabel)}
+                  {raceConfig.mode === "fixed" && (
+                    hasLosers ? (
+                      <>
+                        {sumRow("Winners", `Race to ${raceConfig.fixedWinners}`)}
+                        {sumRow("Losers", `Race to ${ls.fixedRaceLosers ?? raceConfig.fixedWinners}`)}
+                        {sumRow("Finals", `Race to ${ls.fixedRaceFinals ?? raceConfig.fixedWinners}`)}
+                      </>
+                    ) : (
+                      <>
+                        {sumRow("Match", `Race to ${raceConfig.fixedWinners}`)}
+                        {ls.fixedRaceFinals != null && ls.fixedRaceFinals !== raceConfig.fixedWinners &&
+                          sumRow("Finals", `Race to ${ls.fixedRaceFinals}`)}
+                      </>
+                    )
+                  )}
+                  {raceConfig.mode === "groups" && (
+                    raceConfig.groups.length > 0 ? (
+                      <>
+                        {raceConfig.groups.map((g) => (
+                          <View key={g.id} style={styles.ptSumRow}>
+                            <Text allowFontScaling={false} style={styles.ptSumLabel}>
+                              {g.label || "?"}
+                              {g.minFargo > 0 || g.maxFargo > 0 ? (
+                                <Text style={styles.ptSumRange}>{`  ${g.minFargo}–${g.maxFargo > 0 ? g.maxFargo : "+"}`}</Text>
+                              ) : null}
+                            </Text>
+                            <Text allowFontScaling={false} style={styles.ptSumValue}>{`Race to ${g.raceTo}`}</Text>
+                          </View>
+                        ))}
+                      </>
+                    ) : (
+                      <Text allowFontScaling={false} style={styles.startHintSidebar}>No race groups configured.</Text>
+                    )
+                  )}
+                  {raceConfig.mode === "differential" && (
+                    <>
+                      {sumRow("Minimum Race", raceConfig.diffMin)}
+                      {sumRow("Points / Game", raceConfig.diffPerGame)}
+                      {sumRow("Maximum Race", raceConfig.diffMax ?? "No Limit")}
+                    </>
+                  )}
+
+                  <View style={styles.ppSidebarActions}>
+                    {!settingsLocked ? (
+                      <>
+                        {!prizeComplete && (
+                          <Text allowFontScaling={false} style={styles.startHintSidebar}>
+                            Complete the prize pool before drawing the bracket.
+                          </Text>
+                        )}
+                        <View style={styles.ppSidebarBtnRow}>
+                          <TouchableOpacity
+                            style={[styles.startBtn, hub.isDrawing && styles.startBtnRunning, !hub.isDrawing && !prizeComplete && styles.btnDisabled]}
+                            onPress={handleDrawPress}
+                            disabled={hub.isDrawing || !prizeComplete}
+                          >
+                            {hub.isDrawing ? (
+                              <View style={styles.btnRow}>
+                                <ActivityIndicator size="small" color={COLORS.white} />
+                                <Text allowFontScaling={false} style={styles.startBtnText}>Generating…</Text>
+                              </View>
+                            ) : (
+                              <Text allowFontScaling={false} style={styles.startBtnText}>
+                                {hub.bracket ? "Regenerate Bracket" : "Generate Bracket"}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.ppSidebarBtnRow}>
+                        <TouchableOpacity
+                          style={[styles.reopenBtn]}
+                          onPress={() => {
+                            setRedrawReason("");
+                            setRedrawVisible(true);
+                          }}
+                        >
+                          <Text allowFontScaling={false} style={styles.reopenBtnText}>Reopen &amp; Redraw</Text>
+                        </TouchableOpacity>
+                        {hub.phase === "bracket_drawn" && (
+                          <TouchableOpacity
+                            style={[styles.startBtn, styles.ppSidebarBtnWide, hub.isMutatingLive && styles.btnDisabled]}
+                            onPress={handleStartTournament}
+                            disabled={hub.isMutatingLive}
+                          >
+                            <Text allowFontScaling={false} style={styles.startBtnText}>Start Tournament</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
+
     return (
       <View>
-        {bracket && !locked && (
-          <View style={styles.staleBanner}>
-            <Text allowFontScaling={false} style={styles.staleBannerText}>
-              Showing a previous draw (Draw #{bracket.drawNumber}). Draw again to
-              apply changes.
-            </Text>
-          </View>
-        )}
+        {staleBanner}
 
         <Section title="Summary">
           <View style={styles.sumGrid}>
@@ -6041,55 +7962,9 @@ export default function ManageTournamentScreen() {
           </View>
         </Section>
 
-        {!locked && (
-          <Section title="Bracket Size">
-            <Text allowFontScaling={false} style={styles.hint}>
-              Recommended {recommended} for {ready.length} Ready players.
-            </Text>
-            <Dropdown
-              options={[
-                ...sizeOptions.map((s) => ({
-                  label: `${s} players`,
-                  value: String(s),
-                })),
-                { label: "256 players (Coming Soon)", value: "256" },
-              ]}
-              value={String(size)}
-              onSelect={(v) => {
-                if (v === "256") {
-                  Alert.alert(
-                    "Coming Soon",
-                    "256-player brackets aren't available yet.",
-                  );
-                  return;
-                }
-                setBracketSizeSel(Number(v));
-              }}
-            />
-          </Section>
-        )}
-
-        {!locked && (
-          <Section title="Draw Type">
-            <Dropdown
-              options={DRAW_TYPE_OPTIONS}
-              value={drawType}
-              onSelect={(v) => {
-                const dt = v as DrawType;
-                if (!DRAW_TYPE_SUPPORTED.includes(dt)) {
-                  Alert.alert(
-                    "Coming Soon",
-                    "Only Random Draw is available in this version.",
-                  );
-                  return;
-                }
-                setDrawType(dt);
-              }}
-            />
-          </Section>
-        )}
-
-        <Section title="Race Assignment">{racePreview()}</Section>
+        {bracketSizeSection}
+        {drawTypeSection}
+        {raceSection}
 
         <Section title="Calculation Summary">
           <BracketCalc label="Players" value={stats.players} />
@@ -6101,64 +7976,79 @@ export default function ManageTournamentScreen() {
           <BracketCalc label="Estimated Games" value={stats.estGames} />
           <BracketCalc label="Avg Min / Game" value={stats.minPerGame} />
           <BracketCalc label="Tables Available" value={tablesAvail} />
-          <BracketCalc
-            label="Est. Completion"
-            value={fmtHours(stats.estCompletionHours)}
-          />
-          <Text
-            allowFontScaling={false}
-            style={[styles.hint, { marginTop: webSc(SPACING.sm) }]}
-          >
+          <BracketCalc label="Est. Completion" value={fmtHours(stats.estCompletionHours)} />
+          <Text allowFontScaling={false} style={[styles.hint, { marginTop: webSc(SPACING.sm) }]}>
             Estimated time by table count
           </Text>
           {stats.byTable.map((b) => (
-            <BracketCalc
-              key={b.tables}
-              label={`Using ${b.tables} tables`}
-              value={fmtHours(b.hours)}
-            />
+            <BracketCalc key={b.tables} label={`Using ${b.tables} tables`} value={fmtHours(b.hours)} />
           ))}
         </Section>
 
-        {bracket && (
-          <Section title={`Round 1 — ${bracket.round1.length} matches`}>
-            {bracket.round1.map((m) => (
-              <View key={m.matchNumber} style={styles.matchRow}>
-                <Text allowFontScaling={false} style={styles.matchNum}>
-                  M{m.matchNumber}
-                </Text>
-                <Text
-                  allowFontScaling={false}
-                  style={styles.matchText}
-                  numberOfLines={2}
-                >
-                  {matchLabel(m)}
-                </Text>
-              </View>
-            ))}
-          </Section>
-        )}
-
-        {(hub.drawLog?.length ?? 0) > 0 && (
-          <TouchableOpacity
-            style={styles.historyBtn}
-            onPress={() => setShowDrawHistory(true)}
-          >
-            <Text allowFontScaling={false} style={styles.historyBtnText}>
-              View Draw History ({hub.drawLog.length})
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {__DEV__ && hub.bracket && (
-          <TouchableOpacity style={styles.simBtn} onPress={handleSimulateHalf}>
-            <Text allowFontScaling={false} style={styles.simBtnText}>
-              {"🧪"} Simulate ~50% &amp; Start (dev)
-            </Text>
-          </TouchableOpacity>
-        )}
-
+        {round1Section}
+        {historyBtn}
+        {simBtn}
       </View>
+    );
+  };
+
+  // ── Elimination Live Dashboard (web/desktop control center) ──────────────────
+  const renderEliminationDashboard = () => {
+    const now = nowMs();
+    const readyAtMap = computeReadyAtMap(hub.bracket, hub.matchState);
+    const entries = buildQueueEntries(liveMatches, readyAtMap, now);
+    const tblNum = (id: number | null | undefined) =>
+      id == null ? 0 : hub.tables.find((t) => t.id === id)?.table_number ?? 0;
+    const activeMatches = liveMatches
+      .filter((m) => m.tableId != null && m.status !== "completed" && !m.bye && !m.empty)
+      .sort((a, b) => tblNum(a.tableId) - tblNum(b.tableId));
+    const startableCount = liveMatches.filter(isStartable).length;
+
+    const eliminated = computeEliminatedRegIds(liveMatches).length;
+    const durations = liveMatches
+      .filter((m) => m.status === "completed" && !m.bye && m.startedAt && m.completedAt)
+      .map((m) => (new Date(m.completedAt as string).getTime() - new Date(m.startedAt as string).getTime()) / 60000)
+      .filter((d) => d >= 0);
+    const kpis: DashboardKpis = {
+      playersRemaining: Math.max(0, readyPlayers.length - eliminated),
+      activeMatches: liveMatches.filter((m) => m.status === "in_progress").length,
+      waiting: entries.length,
+      tablesInUse: hub.tables.filter((t) => tableOccupancy[t.id]).length,
+      tablesAvailable: freeTables(hub.tables, tableOccupancy).length,
+      completed: liveMatches.filter((m) => m.status === "completed" && !m.bye && !m.empty).length,
+      avgMatchText: durations.length
+        ? `${Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)}m`
+        : "—",
+    };
+
+    return (
+      <>
+        <EliminationDashboard
+          kpis={kpis}
+          activeMatches={activeMatches}
+          schedule={projectedSchedule.scheduled}
+          mode={hub.autoAssignMode as AutoAssignMode}
+          events={tournamentEvents}
+          startableCount={startableCount}
+          busy={dashBusy}
+          onSetMode={handleSetAutoMode}
+          onAutoAssign={handleDashAutoAssign}
+          onStartAll={handleStartAll}
+          onAction={(m, step) => setDashboardSheet({ match: m, step })}
+          onOpenPage={(tab) => setActiveTab(tab)}
+        />
+        {dashboardSheet && (
+          <MatchActionsModal
+            match={dashboardSheet.match}
+            initialStep={dashboardSheet.step}
+            tables={hub.tables}
+            occupancy={tableOccupancy}
+            onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
+            onClose={() => setDashboardSheet(null)}
+            busy={dashBusy}
+          />
+        )}
+      </>
     );
   };
 
@@ -6220,38 +8110,56 @@ export default function ManageTournamentScreen() {
             sidePots={prizeSidePots}
             fees={prizeFees}
             feesAddedOnTop={prizeFeesOnTop}
+            summaryFooter={prizeSummaryFooter}
           />
         ) : null;
       case "bracket":
         return renderBracket();
       case "review":
         return renderReview();
+      case "dashboard":
+        return renderEliminationDashboard();
       case "matches":
         return (
           <MatchesView
             matches={liveMatches}
             tables={hub.tables}
-            onSetMatchState={hub.setMatchState}
+            onSetMatchState={(vars) => runMatchPatch(vars.matchId, vars.patch)}
             occupancy={tableOccupancy}
           />
         );
       case "queue":
         return (
-          <QueueView
-            matches={liveMatches}
-            tables={hub.tables}
-            bracket={hub.bracket}
-            matchState={hub.matchState}
-            occupancy={tableOccupancy}
-            mode={hub.autoAssignMode as AutoAssignMode}
-            queueOrder={hub.queueOrder}
-            onAssign={handleQueueAssign}
-            onAssignStart={handleQueueAssignStart}
-            onStart={handleQueueStart}
-            onUnassign={handleQueueUnassign}
-            onSetMode={handleSetAutoMode}
-            onSetQueueOrder={handleSetQueueOrder}
-          />
+          <>
+            <QueueView
+              matches={liveMatches}
+              tables={hub.tables}
+              schedule={projectedSchedule}
+              occupancy={tableOccupancy}
+              mode={hub.autoAssignMode as AutoAssignMode}
+              queueOrder={hub.queueOrder}
+              onAssign={handleQueueAssign}
+              onAssignStart={handleQueueAssignStart}
+              onStart={handleQueueStart}
+              onUnassign={handleQueueUnassign}
+              onSetMode={handleSetAutoMode}
+              onSetQueueOrder={handleSetQueueOrder}
+              onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}
+              playersTotal={readyPlayers.length}
+              playersRemaining={readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
+            />
+            {dashboardSheet && (
+              <MatchActionsModal
+                match={dashboardSheet.match}
+                initialStep={dashboardSheet.step}
+                tables={hub.tables}
+                occupancy={tableOccupancy}
+                onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
+                onClose={() => setDashboardSheet(null)}
+                busy={dashBusy}
+              />
+            )}
+          </>
         );
       case "stats":
         return <StatsView matches={liveMatches} />;
@@ -6310,6 +8218,93 @@ export default function ManageTournamentScreen() {
   const missingKeys = new Set<SettingsFieldKey>(formMissingItems.map((m) => m.key));
   const formRequiredComplete = !!form && formMissingItems.length === 0;
 
+  // Setup sidebar actions (wide-web elimination): Settings under the Live Preview, Prize Pool
+  // under the Summary. Precomputed so the render path stays simple. Same handlers + disabled
+  // logic as the removed footers; chip/native keep their footers.
+  const settingsSidebarActions =
+    !isChip && form && !settingsLocked ? (
+      <View style={styles.ppSidebarActions}>
+        {!isExternal && !formRequiredComplete && (
+          <Text allowFontScaling={false} style={styles.startHintSidebar}>
+            Still needed to open registration: {formMissingFields.join(", ")}.
+          </Text>
+        )}
+        <View style={styles.ppSidebarBtnRow}>
+          {settingsUnlocked ? (
+            <>
+              <TouchableOpacity
+                style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
+                onPress={relockSettingsNoSave}
+                disabled={hub.isSaving}
+              >
+                <Text allowFontScaling={false} style={styles.saveBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.startBtn, styles.ppSidebarBtnWide, hub.isSaving && styles.btnDisabled]}
+                onPress={handleSaveAndLock}
+                disabled={hub.isSaving}
+              >
+                <Text allowFontScaling={false} style={styles.startBtnText}>
+                  {hub.isSaving ? "Saving..." : "Save & Lock"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.saveBtn, hub.isSaving && styles.btnDisabled]}
+                onPress={isExternal ? () => setSubmitCountdown(5) : handleSave}
+                disabled={hub.isSaving}
+              >
+                <Text allowFontScaling={false} style={styles.saveBtnText}>
+                  {isExternal ? "Submit Tournament" : hub.isSaving ? "Saving..." : "Save Settings"}
+                </Text>
+              </TouchableOpacity>
+              {!isExternal && (
+                <TouchableOpacity
+                  style={[styles.startBtn, styles.ppSidebarBtnWide, (hub.isSaving || hub.isMutatingLive) && styles.btnDisabled]}
+                  onPress={beginRegistration}
+                  disabled={hub.isSaving || hub.isMutatingLive}
+                >
+                  <Text allowFontScaling={false} style={styles.startBtnText}>Start Registration</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      </View>
+    ) : null;
+  const prizeSummaryFooter =
+    isWeb && winW >= 980 && !isChip && !prizeLocked ? (
+      <View style={styles.ppSidebarActions}>
+        {!prizeComplete && (
+          <Text allowFontScaling={false} style={styles.startHintSidebar}>
+            Keep each pool&apos;s payouts within the available money to save.
+          </Text>
+        )}
+        <View style={styles.ppSidebarBtnRow}>
+          <TouchableOpacity
+            style={[styles.saveBtn, (hub.isSavingPrizePool || !prizeComplete) && styles.btnDisabled]}
+            onPress={handleSavePrizePool}
+            disabled={hub.isSavingPrizePool || !prizeComplete}
+          >
+            <Text allowFontScaling={false} style={styles.saveBtnText}>
+              {hub.isSavingPrizePool ? "Saving..." : "Save Prize Pool"}
+            </Text>
+          </TouchableOpacity>
+          {!isExternal && (
+            <TouchableOpacity
+              style={[styles.startBtn, styles.ppSidebarBtnWide, !reviewUnlocked && styles.btnDisabled]}
+              onPress={() => advanceToNextStep(terminalTab)}
+              disabled={!reviewUnlocked}
+            >
+              <Text allowFontScaling={false} style={styles.startBtnText}>Continue to Bracket →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    ) : undefined;
+
   // Red error for a required field: shown only AFTER the TD attempts Start Registration
   // (settingsValidationAttempted) AND the field is currently missing. Derived live, so it
   // disappears the moment the requirement is satisfied.
@@ -6346,23 +8341,10 @@ export default function ManageTournamentScreen() {
         mode="singles"
         entryFee={hub.tournament?.entry_fee ?? null}
         sidePots={parseSidePots(hub.tournament?.side_pots)}
-        // Whether the CURRENT Add-flow selections satisfy the SAME bracket Ready rule the
-        // roster's Ready button enforces (RegistrationRow.canBeReady): a valid Fargo, the
-        // entry fee collected (or no fee), and — in groups mode — the Fargo landing in a
-        // configured race group. Drives the live "Add as Ready" vs "Add Player" label and
-        // whether the modal requests the Ready transition on add.
-        readyEval={(fargo, paidEntry) => {
-          const feeRequired = (Number(hub.tournament?.entry_fee) || 0) > 0;
-          const fargoValid = fargo != null && fargo > 0;
-          if (!fargoValid) return false;
-          if (feeRequired && !paidEntry) return false;
-          const rm = hub.tournament?.live_settings?.raceMode ?? "fixed";
-          if (rm === "groups") {
-            const groups = hub.tournament?.live_settings?.raceGroups ?? [];
-            return groupForFargo(fargo, groups as RaceGroup[]) != null;
-          }
-          return true;
-        }}
+        // Elimination Ready now requires EXPLICIT TD Fargo verification, which the Add modal
+        // does not offer. So a newly-added player is never auto-Ready — they enter as
+        // Registered and the TD verifies + marks Ready from the roster. Always false here.
+        readyEval={() => false}
         onRegistered={() => hub.refetchRegistrations()}
         // Persist the TD's Entry-collected + side-pot selections onto the just-created
         // registration via the SAME authoritative field/path the Ready/Edit flow uses
@@ -6951,13 +8933,19 @@ export default function ManageTournamentScreen() {
       )}
 
       {(!isChip &&
-        (activeTab === "matches" ||
+        (activeTab === "dashboard" ||
+          activeTab === "matches" ||
           activeTab === "queue" ||
           activeTab === "stats" ||
           activeTab === "standings" ||
           activeTab === "payouts" ||
           activeTab === "history" ||
           activeTab === "summary")) ||
+      // Wide-web elimination Players owns its scrolling: renderPlayers returns a bounded
+      // ScrollView (roster + controls) so its right-hand Tournament Summary column can use
+      // position:sticky and stay pinned while the roster scrolls. Narrow/mobile Players keeps
+      // the page KeyboardAwareScroll path below (a plain View, no inner ScrollView).
+      (!isChip && isWeb && winW >= 980 && (activeTab === "players" || activeTab === "tables" || activeTab === "bracket")) ||
       // Chip LIVE pages own their scrolling and fill the available height. Keeping ALL
       // of them (Dashboard/Tables/Queue/Players) in this ONE stable slot preserves the
       // single embedded ChipManageScreen instance across live-tab switches (no reload
@@ -6989,6 +8977,9 @@ export default function ManageTournamentScreen() {
               tablesCount={hub.tables.length}
               isExternal={isExternal}
             />
+            {/* Settings actions live UNDER the Live Preview (footer removed below on wide web).
+                Same handlers + disabled logic as the old footer; chip keeps its footer. */}
+            {settingsSidebarActions}
           </View>
         </ScrollView>
       ) : (
@@ -7039,8 +9030,10 @@ export default function ManageTournamentScreen() {
       {/* Guided flow — Players step. Both formats advance to Tables once the field
           is valid (≥2 Ready/checked-in); disabled until then so the sequence stays
           in order. Elimination shows it while registration is open (when players
-          are actually added); chip shows it throughout the setup Players page. */}
-      {!isChip && activeTab === "players" && hub.liveState === "registration_open" && (
+          are actually added); chip shows it throughout the setup Players page.
+          Wide-web elimination moves this CTA into the sticky summary column (below), so the
+          full-width bottom footer is suppressed there; narrow/mobile keep the footer. */}
+      {!isChip && activeTab === "players" && hub.liveState === "registration_open" && !(isWeb && winW >= 980) && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
             style={[
@@ -7081,8 +9074,9 @@ export default function ManageTournamentScreen() {
       )}
 
       {/* Guided flow — Tables step advances to Prize Pool once tables are
-          configured (both formats). */}
-      {selectedPhase === "setup" && activeTab === "tables" && (
+          configured (both formats). Wide-web elimination moves this CTA into the sticky
+          summary sidebar (below), so the full-width footer is suppressed there. */}
+      {selectedPhase === "setup" && activeTab === "tables" && !(isWeb && winW >= 980 && !isChip) && (
         <View style={styles.playersFooter}>
           <TouchableOpacity
             style={[
@@ -7102,8 +9096,9 @@ export default function ManageTournamentScreen() {
         </View>
       )}
 
-      {/* Fixed footer: Save Settings / Start Registration */}
-      {activeTab === "settings" && form && !settingsLocked && (
+      {/* Fixed footer: Save Settings / Start Registration.
+          Wide-web elimination moves these under the Live Preview (above); footer suppressed. */}
+      {activeTab === "settings" && form && !settingsLocked && !(isWeb && winW >= 980 && !isChip) && (
         <View style={styles.settingsFooter}>
           {!isExternal && !formRequiredComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
@@ -7183,8 +9178,9 @@ export default function ManageTournamentScreen() {
         </View>
       )}
 
-      {/* Fixed footer: Save Prize Pool (prizepool tab, pre-lock) */}
-      {activeTab === "prizepool" && prizeForm && !prizeLocked && (
+      {/* Fixed footer: Save Prize Pool (prizepool tab, pre-lock).
+          Wide-web elimination moves these under the Summary (via PrizePoolView summaryFooter). */}
+      {activeTab === "prizepool" && prizeForm && !prizeLocked && !(isWeb && winW >= 980 && !isChip) && (
         <View style={styles.settingsFooter}>
           {!prizeComplete && (
             <Text allowFontScaling={false} style={styles.startHintFooter}>
@@ -7224,8 +9220,9 @@ export default function ManageTournamentScreen() {
         </View>
       )}
 
-      {/* Fixed footer: Draw / Reopen & Redraw / Start Tournament (bracket tab) */}
-      {activeTab === "bracket" && readyPlayers.length >= 2 && (
+      {/* Fixed footer: Draw / Reopen & Redraw / Start Tournament (bracket tab).
+          Wide-web elimination moves these into the sticky summary sidebar; footer suppressed. */}
+      {activeTab === "bracket" && readyPlayers.length >= 2 && !(isWeb && winW >= 980 && !isChip) && (
         <View style={styles.settingsFooter}>
           {!settingsLocked ? (
             <>
@@ -7718,8 +9715,22 @@ const styles = StyleSheet.create({
     marginBottom: webSc(SPACING.xs),
     alignItems: "center",
   },
-  groupLabel: { width: webSc(48) },
+  // Group Label is a CUSTOM name (not just A/B/C) — wider on desktop, still responsive.
+  groupLabel: { width: isWeb ? 160 : webSc(48), flexShrink: 0 as any },
   groupNum: { flex: 1, minWidth: webSc(48) },
+  groupHeaderRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs), marginBottom: webSc(SPACING.xs) },
+  groupHeaderText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
+  groupHeaderSpacer: { width: webSc(32) },
+  groupInputError: { borderColor: COLORS.error },
+  groupErrorBox: {
+    marginTop: webSc(SPACING.sm),
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.error,
+    paddingLeft: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+    gap: webSc(2),
+  },
+  groupErrorText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.error, fontWeight: "600" },
   groupRemove: {
     width: webSc(32),
     height: webSc(32),
@@ -8101,6 +10112,13 @@ const styles = StyleSheet.create({
     gap: webSc(SPACING.sm),
     marginTop: webSc(SPACING.xs),
   },
+  // Setup sidebar actions (Settings under Live Preview / Prize Pool under Summary): stacked
+  // full-width buttons matching the Players/Pool Tables sidebar action pattern.
+  ppSidebarActions: { marginTop: webSc(SPACING.md), gap: webSc(SPACING.sm) },
+  // Side-by-side action row: Save (outline, flex 1) left, primary (blue, slightly wider) right.
+  ppSidebarBtnRow: { flexDirection: "row", gap: webSc(SPACING.sm) },
+  ppSidebarBtnWide: { flex: 1.4 as any },
+  startHintSidebar: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.warning, marginBottom: webSc(SPACING.xs) },
   saveBtn: {
     flex: 1,
     paddingVertical: webSc(SPACING.md),
@@ -8360,6 +10378,233 @@ const styles = StyleSheet.create({
   },
   // Web: two-up grid for the tables list.
   tableGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  // ── Web/desktop Pool Table Management redesign (two-column, sticky sidebar) ──
+  ptPaneWeb: { flex: 1 },
+  ptScrollContent: {
+    width: "100%" as any,
+    maxWidth: WEB_MAXW,
+    alignSelf: "center" as any,
+    paddingHorizontal: webSc(SPACING.md),
+    paddingTop: webSc(SPACING.sm),
+    paddingBottom: webSc(SPACING.xl) * 2,
+  },
+  ptTwoCol: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  // Generate Bracket: Bracket Size + Draw Type side by side (wraps at narrow desktop widths).
+  bracketConfigRow: { flexDirection: "row", alignItems: "stretch", gap: webSc(SPACING.md), flexWrap: "wrap" },
+  bracketConfigCol: { flex: 1, minWidth: webSc(240) },
+  // Race Assignment: group · players · race as one compact inline line (wraps naturally).
+  raceAssignRow: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, paddingVertical: webSc(SPACING.xs) },
+  ptMainCol: { flex: 1, minWidth: 0 as any, gap: webSc(SPACING.md) },
+  ptSummaryCol: {
+    width: 320,
+    position: "sticky" as any,
+    top: webSc(SPACING.sm),
+    alignSelf: "flex-start" as any,
+  },
+  ptHeaderText: { minWidth: 0 as any },
+  ptTitle: { fontSize: webMs(FONT_SIZES.xl), fontWeight: "800", color: COLORS.text },
+  ptSubtitle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: webSc(2) },
+  ptAddCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.md),
+  },
+  ptCardTitle: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text, marginBottom: webSc(SPACING.sm) },
+  ptAddRowOne: { flexDirection: "row", gap: webSc(SPACING.sm), alignItems: "flex-end", flexWrap: "wrap" },
+  ptFieldLabelCol: { width: 280 },
+  ptFieldNumCol: { width: 110 },
+  ptFieldStreamCol: { flex: 1, minWidth: 240 },
+  ptAddBtnInline: { marginTop: 0, alignSelf: "flex-end" as any },
+  ptPrimaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: webSc(SPACING.xs),
+    alignSelf: "flex-start" as any,
+    paddingHorizontal: webSc(SPACING.lg),
+  },
+  ptPrimaryBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  ptBulkCalloutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.md),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed" as any,
+    padding: webSc(SPACING.md),
+  },
+  ptBulkCalloutText: { flex: 1, minWidth: 0 as any },
+  ptCalloutTitle: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  ptListHelp: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginTop: webSc(-4), marginBottom: webSc(SPACING.sm) },
+  ptBulkBtn: {
+    backgroundColor: COLORS.primary + "22",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    alignItems: "center",
+    marginTop: webSc(SPACING.xs),
+    alignSelf: "flex-start" as any,
+  },
+  ptBulkBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Sticky sidebar (Tournament Summary + tools) — same design language as the Players summary.
+  ptBulkBtnFull: {
+    backgroundColor: COLORS.primary + "22",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingVertical: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    alignItems: "center",
+    marginTop: webSc(SPACING.xs),
+  },
+  ptSummarySub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(2) },
+  ptSumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: webSc(SPACING.xs),
+  },
+  ptSumLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  ptSumRange: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  ptSumValue: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  ptSumSection: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text, marginBottom: webSc(SPACING.xs) },
+  ptHelpCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+    marginTop: webSc(SPACING.md),
+  },
+  ptHelpTitle: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text, marginBottom: webSc(2) },
+  ptHelpText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, lineHeight: webMs(FONT_SIZES.md) },
+  ptListTitle: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text, marginBottom: webSc(SPACING.sm) },
+  ptGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.md) },
+  ptCard: {
+    width: "48.5%" as any,
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.md),
+    gap: webSc(SPACING.sm),
+  },
+  ptCardTop: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  ptCardIcon: { fontSize: webMs(FONT_SIZES.md) },
+  ptCardNameWrap: { flex: 1, minWidth: 0 as any },
+  ptCardName: { flex: 1, minWidth: 0 as any, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  ptCardFooter: { flexDirection: "row", justifyContent: "flex-end", marginTop: webSc(SPACING.xs) },
+  ptActionsBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    paddingVertical: webSc(6),
+    backgroundColor: COLORS.surface,
+  },
+  ptActionsBtnText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  ptSmallModalCard: {
+    width: "100%",
+    maxWidth: webSc(440),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.lg),
+    gap: webSc(SPACING.xs),
+  },
+  ptRenameLabelCol: { flex: 1 },
+  ptRenameNumCol: { width: webSc(110) },
+  ptStatusPill: {
+    borderWidth: 1,
+    borderRadius: webSc(RADIUS.full),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+  },
+  ptStatusPillText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  ptTrashBtn: { paddingHorizontal: webSc(4), paddingVertical: webSc(2) },
+  ptTrashText: { fontSize: webMs(FONT_SIZES.md), color: COLORS.error },
+  ptStreamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: webSc(SPACING.sm),
+  },
+  ptStreamIcon: { fontSize: webMs(FONT_SIZES.sm) },
+  ptStreamText: { flex: 1, minWidth: 0 as any, fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  ptStreamAdd: { color: COLORS.primary, fontWeight: "600" },
+  ptStreamLive: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.error },
+  // Inline stream-link input row
+  ptStreamInput: {
+    flex: 1,
+    minWidth: 0 as any,
+    height: webSc(32),
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    fontSize: webMs(FONT_SIZES.sm),
+    color: COLORS.text,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none", outlineWidth: 0 } as object) : null),
+  },
+  ptStreamSaveBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.md),
+    height: webSc(32),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ptStreamSaveText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  ptStreamViewBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    height: webSc(32),
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ptStreamViewText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  ptStreamSaved: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "700" },
+  ptStreamViewLink: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "700" },
+  ptBulkModalCard: {
+    width: "100%",
+    maxWidth: webSc(460),
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.lg),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.lg),
+    gap: webSc(SPACING.xs),
+  },
+  ptModalSub: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: webSc(SPACING.sm) },
+  ptBulkRangeRow: { flexDirection: "row", gap: webSc(SPACING.md) },
+  ptBulkRangeCol: { flex: 1 },
+  ptPreviewBox: {
+    backgroundColor: COLORS.background,
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+    marginBottom: webSc(SPACING.sm),
+  },
+  ptPreviewText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  ptPreviewEmpty: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted },
+  ptConflictText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.error, marginBottom: webSc(SPACING.sm), fontWeight: "600" },
+  ptModalCancelBtn: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: "transparent" },
+  ptModalCancelText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   tableRowWeb: { width: "48.5%" },
   tableRowMain: {
     flex: 1,
@@ -8526,6 +10771,9 @@ const styles = StyleSheet.create({
     borderRadius: webSc(RADIUS.sm),
     paddingVertical: webSc(SPACING.sm),
     paddingHorizontal: webSc(SPACING.md),
+    // Web: fixed 40px height + centered content so it matches the search input and status
+    // dropdown exactly (all three align top/bottom). Native keeps its intrinsic sizing.
+    ...(Platform.OS === "web" ? { height: 40, paddingVertical: 0, justifyContent: "center", alignItems: "center" } : null),
   },
   addButtonText: {
     color: COLORS.white,
@@ -8644,6 +10892,22 @@ const styles = StyleSheet.create({
     fontSize: webMs(FONT_SIZES.sm),
     fontWeight: "600",
   },
+  // Single Actions button (replaces permanent Edit/Undo/Remove) on a player card.
+  rowActionsBtn: { backgroundColor: COLORS.surface, borderColor: COLORS.border },
+  rowActionsBtnText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  // Fargo verification control (edit body).
+  fargoVerifyTag: { marginTop: webSc(SPACING.xs) },
+  fargoVerifiedText: { color: COLORS.success, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  fargoVerifyBtn: {
+    marginTop: webSc(SPACING.xs),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(3),
+    alignSelf: "flex-start",
+  },
+  fargoVerifyBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
   // Player card — header / status / payment
   regHeader: {
     flexDirection: "row",
@@ -8974,7 +11238,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     height: webSc(40),
-    marginBottom: webSc(SPACING.sm),
+    // Web keeps this in a single controls row (no bottom margin → aligns with the filter/Add
+    // button); native stacks it above the filter row, where the bottom margin is the spacer.
+    marginBottom: Platform.OS === "web" ? 0 : webSc(SPACING.sm),
   },
   searchIcon: {
     fontSize: webMs(14),
@@ -9002,6 +11268,7 @@ const styles = StyleSheet.create({
     marginBottom: webSc(SPACING.md),
   },
   controlsSearchWeb: { flex: 1, minWidth: 200 },
+  controlsSearchDesktop: { width: 320 },
   controlsFilterWeb: { width: 170 },
   controlsFilterRowMobile: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   controlsFilterFlex: { flex: 1 },
@@ -9013,13 +11280,172 @@ const styles = StyleSheet.create({
     paddingTop: webSc(SPACING.sm),
     paddingBottom: webSc(SPACING.xl) * 2,
   },
+  // Sticky-summary layout: controls sit in a fixed bar; only the two-column area scrolls.
+  playersPaneWeb: { flex: 1 },
+  playersControlsBarWeb: {
+    width: "100%" as any,
+    maxWidth: WEB_MAXW,
+    alignSelf: "center" as any,
+    paddingHorizontal: webSc(SPACING.md),
+    // A bit more breathing room above/below the search/filter/Add row so it isn't cramped
+    // against the tabs above or the roster below. (controlsRowWeb adds its own marginBottom.)
+    paddingTop: webSc(SPACING.md),
+    paddingBottom: webSc(SPACING.xs),
+  },
   playersTwoCol: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
+  // Continue-to-Tables inside the sticky summary column: full column width, spaced below the
+  // summary card. Reuses lockBtn's gold styling.
+  summaryContinueBtn: { marginTop: webSc(SPACING.md), marginBottom: 0 },
   playersRosterCol: { flex: 1, minWidth: 0 as any },
+  // Card view: 2-column grid (each cell ~half, small gutter). List view uses no grid.
+  rosterGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  rosterCardCell: { width: "49%" as any },
+  // ── Card View player card: vertical, sectioned hierarchy (web/desktop only) ──
+  epCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.md),
+    marginBottom: webSc(SPACING.md),
+    gap: webSc(SPACING.sm),
+  },
+  epHeader: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  epAvatar: {
+    width: webSc(38),
+    height: webSc(38),
+    borderRadius: webSc(19),
+    backgroundColor: COLORS.primary + "22",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  epAvatarText: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.primary },
+  epHeaderText: { flex: 1, minWidth: 0 as any },
+  epName: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
+  epId: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: webSc(2) },
+  epGroupTag: {
+    backgroundColor: COLORS.primary + "1A",
+    borderRadius: webSc(RADIUS.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(2),
+    alignSelf: "flex-start",
+  },
+  epGroupLabel: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.primary },
+  epStatusRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.xs) },
+  epStatusText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  epDivider: { height: 1, backgroundColor: COLORS.border },
+  epFargoRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  epRowLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "600" },
+  epFargoRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  epFargoNum: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
+  epVerified: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.success },
+  epUnrated: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  epVerifyBtn: {
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(4),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  epVerifyBtnText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.primary },
+  epPayRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  epCheck: {
+    width: webSc(20),
+    height: webSc(20),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  epCheckOn: { backgroundColor: COLORS.success, borderColor: COLORS.success },
+  epCheckMark: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "900", color: COLORS.white },
+  epPayLabel: { flex: 1, fontSize: webMs(FONT_SIZES.sm), color: COLORS.text },
+  epPayStatus: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textMuted },
+  epPayStatusOn: { color: COLORS.success },
+  epFooter: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  epActionsBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  epActionsText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  epStateBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: webSc(SPACING.sm),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  epStateReady: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1A" },
+  epStateReadyText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.success },
+  epStateReadyFill: { borderColor: COLORS.success, backgroundColor: COLORS.success },
+  epStateReadyFillText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.white },
+  epStateDisabled: { opacity: 0.5 },
+  epStateMutedText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.textMuted },
+  // Cards / List segmented toggle in the controls row.
+  viewToggle: { flexDirection: "row", borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.sm), overflow: "hidden" },
+  viewToggleBtn: { paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(6) },
+  viewToggleBtnOn: { backgroundColor: COLORS.primary },
+  viewToggleText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  viewToggleTextOn: { color: COLORS.white },
+  // ── True compact List/table view (wide web) ──
+  listTable: { borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.md), overflow: "hidden", marginVertical: webSc(SPACING.sm) },
+  listHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+    backgroundColor: COLORS.background,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  listHeadText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.sm),
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  lcPlayer: { flex: 3, minWidth: 0 as any },
+  lcFargo: { flex: 1.6 as any },
+  lcEntry: { flex: 1.3 as any },
+  lcPots: { flex: 2.6 as any, flexDirection: "row", flexWrap: "wrap", gap: webSc(4) },
+  lcStatus: { flex: 1.6 as any },
+  lcActions: { flex: 1.4 as any, alignItems: "flex-end" },
+  listName: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", color: COLORS.text },
+  listSub: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  listGroupLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "700", marginTop: webSc(1) },
+  listFargoNum: { fontSize: webMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.primary },
+  listVerified: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700" },
+  listUnverified: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.warning, fontWeight: "700" },
+  listChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.full), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(3), alignSelf: "flex-start" },
+  listChipOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1A" },
+  listChipText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
+  listChipTextOn: { color: COLORS.success },
+  listPotChip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.full), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(2) },
+  listPotText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
+  listActionsBtn: { borderWidth: 1, borderColor: COLORS.border, borderRadius: webSc(RADIUS.sm), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(4), backgroundColor: COLORS.surface },
+  listEditWrap: { padding: webSc(SPACING.sm), borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.background },
+  listDoneBtn: { alignSelf: "flex-end", marginTop: webSc(SPACING.xs), paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(6), borderWidth: 1, borderColor: COLORS.primary, borderRadius: webSc(RADIUS.sm) },
+  listDoneText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   // Sticky right column (same pattern as the Settings builder preview).
   playersSummaryCol: {
     width: 320,
     position: "sticky" as any,
-    top: webSc(SPACING.md),
+    // Match the scroll content's paddingTop so the column is ALREADY at its sticky position
+    // on first render — it locks from the first scrolled pixel with no downward drift.
+    top: webSc(SPACING.sm),
     alignSelf: "flex-start" as any,
   },
   summaryStackedMobile: { marginTop: webSc(SPACING.md) },
