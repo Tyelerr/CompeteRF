@@ -38,7 +38,7 @@ const SECTIONS: { title: string; items: ActionItem[] }[] = [
   },
   {
     title: "TABLES",
-    items: [{ label: "Auto Assign Tables" }, { label: "Clear Table Assignments" }],
+    items: [{ label: "Assign Ready Matches" }, { label: "Clear Table Assignments" }],
   },
   {
     title: "PLAYERS",

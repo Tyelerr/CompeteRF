@@ -23,6 +23,7 @@ import { buildBracketGraph } from "../../src/utils/bracket.double";
 import { RaceConfig } from "../../src/utils/bracket.utils";
 import { resolveBracket, MatchResult } from "../../src/utils/bracket.resolve";
 import { buildLiveMatches } from "../../src/utils/match.utils";
+import { autoAssignPayload, keepModeMovePayload, manualReorderPayload, queueModePayload } from "../../src/utils/queue-settings";
 import { buildQueueEntries, computeReadyAtMap, freeTables, orderQueue, planAutoAssign } from "../../src/utils/queue.utils";
 
 const ROOT = join(__dirname, "..", "..");
@@ -687,4 +688,44 @@ test("queuePins: set only through set_queue, shape-validated, never through the 
   assert.deepEqual((await ls(T)).queuePins, []);
   await assert.rejects(q("select public.elim_merge_live_settings($1, $2::jsonb)", [T, JSON.stringify({ queuePins: [] })]), /Scheduler-owned/);
   await assert.rejects(q("select public.elim_merge_live_settings($1, '{}'::jsonb, $2)", [T, ["queuePins"]]), /Scheduler-owned/);
+});
+
+test("Auto Assign ON survives every queue action the Manage screen sends (exact client payloads)", async () => {
+  await reset(T, {}, { autoAssignEnabled: true, autoAssignMode: "losersFirst" });
+  await as(U.td);
+  const setQ = async (payload: object) => {
+    const r = await apply(T, [{ op: "set_queue", ...payload }]);
+    assert.equal(r.results[0].ok, true, JSON.stringify(payload));
+    return ls(T);
+  };
+  // Move & Keep Losers First → pins saved, mode kept, Auto Assign still ON
+  let l = await setQ(keepModeMovePayload([{ matchId: "W1M3", place: "top" }]));
+  assert.equal(l.autoAssignEnabled, true);
+  assert.equal(l.autoAssignMode, "losersFirst");
+  assert.deepEqual(l.queuePins, [{ matchId: "W1M3", place: "top" }]);
+  // every Queue Order mode change, incl. Manual → Auto Assign still ON
+  for (const m of ["balanced", "winnersFirst", "longestWait", "manual", "losersFirst"] as const) {
+    l = await setQ(queueModePayload(m));
+    assert.equal(l.autoAssignMode, m);
+    assert.equal(l.autoAssignEnabled, true, m);
+  }
+  // Move & Switch to Manual → Manual order, pins cleared, Auto Assign still ON
+  l = await setQ(manualReorderPayload(["W1M4", "W1M3", "W1M2", "W1M1"]));
+  assert.equal(l.autoAssignMode, "manual");
+  assert.deepEqual(l.queuePins, []);
+  assert.equal(l.autoAssignEnabled, true);
+  // Settings / Prize Pool save cannot clobber it either (scheduler-owned key → refused outright)
+  await assert.rejects(
+    q("select public.elim_merge_live_settings($1, $2::jsonb, '{}')", [T, JSON.stringify({ prizePool: { a: 1 }, autoAssignEnabled: false })]),
+    /Scheduler-owned/,
+  );
+  await q("select public.elim_merge_live_settings($1, $2::jsonb, '{}')", [T, JSON.stringify({ prizePool: { a: 1 } })]);
+  assert.equal((await ls(T)).autoAssignEnabled, true);
+  // ONLY the explicit Off turns it off — and Manual mode stays selected
+  l = await setQ(autoAssignPayload(false));
+  assert.equal(l.autoAssignEnabled, false);
+  assert.equal(l.autoAssignMode, "manual");
+  l = await setQ(autoAssignPayload(true));
+  assert.equal(l.autoAssignEnabled, true);
+  assert.equal(l.autoAssignMode, "manual");
 });

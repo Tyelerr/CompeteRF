@@ -18,6 +18,7 @@ import { TournamentEvent } from "../../../../models/services/tournament-event.se
 import { Dropdown } from "../../common/dropdown";
 import { MatchCard } from "./MatchCard";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
+import { AutoAssignToggle } from "./AutoAssignToggle";
 import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
 
 const isWeb = Platform.OS === "web";
@@ -120,7 +121,9 @@ export const EliminationDashboard = ({
   startableCount,
   busy,
   onSetMode,
-  onAutoAssign,
+  autoAssignEnabled,
+  onSetAutoAssignEnabled,
+  onAssignReady,
   onStartAll,
   onAction,
   onOpenPage,
@@ -133,7 +136,11 @@ export const EliminationDashboard = ({
   startableCount: number;
   busy?: boolean;
   onSetMode: (m: AutoAssignMode) => void;
-  onAutoAssign: () => void;
+  // Persistent Auto Assign ON/OFF (live_settings.autoAssignEnabled) — the same value the Queue shows.
+  autoAssignEnabled: boolean;
+  onSetAutoAssignEnabled: (on: boolean) => void;
+  // One-time batch: assign the currently Ready matches now (offered only while Auto Assign is Off).
+  onAssignReady: () => void;
   onStartAll: () => void;
   onAction: (m: LiveMatch, step: MatchActionStep) => void;
   onOpenPage: (tab: "matches" | "tables" | "queue") => void;
@@ -187,7 +194,7 @@ export const EliminationDashboard = ({
             >
               {activeMatches.length === 0 ? (
                 <Text allowFontScaling={false} style={styles.muted}>
-                  No matches on tables yet. Use Auto Assign to place ready matches.
+                  No matches on tables yet. Turn on Auto Assign or use Assign Ready Matches.
                 </Text>
               ) : (
                 <View style={styles.activeGrid}>
@@ -229,14 +236,10 @@ export const EliminationDashboard = ({
           <View style={styles.sideCol}>
             <View style={styles.card}>
               <Text allowFontScaling={false} style={styles.cardTitle}>Table Assignment</Text>
-              <TouchableOpacity
-                style={[styles.autoBtn, busy && styles.btnDisabled]}
-                onPress={onAutoAssign}
-                disabled={busy}
-                activeOpacity={0.7}
-              >
-                <Text allowFontScaling={false} style={styles.autoBtnText}>⚡ Auto Assign</Text>
-              </TouchableOpacity>
+              <View style={styles.cardBlock}>
+                <AutoAssignToggle stacked enabled={autoAssignEnabled} onChange={onSetAutoAssignEnabled} />
+              </View>
+              <Text allowFontScaling={false} style={styles.fieldLabel}>Queue Order</Text>
               <View style={styles.modeWrap}>
                 <Dropdown
                   hideCheck={isWeb}
@@ -246,6 +249,16 @@ export const EliminationDashboard = ({
                   onSelect={(v) => onSetMode(v as AutoAssignMode)}
                 />
               </View>
+              {!autoAssignEnabled && (
+                <TouchableOpacity
+                  style={[styles.assignBtn, busy && styles.btnDisabled]}
+                  onPress={onAssignReady}
+                  disabled={busy}
+                  activeOpacity={0.7}
+                >
+                  <Text allowFontScaling={false} style={styles.assignBtnText}>Assign Ready Matches</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity onPress={() => onOpenPage("queue")} activeOpacity={0.7}>
                 <Text allowFontScaling={false} style={styles.link}>Manage Queue ›</Text>
               </TouchableOpacity>
@@ -321,8 +334,10 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   activeGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.md) },
   activeCell: { width: "48.5%" as any },
-  autoBtn: { backgroundColor: COLORS.primary, borderRadius: webSc(RADIUS.sm), paddingVertical: webSc(SPACING.sm), alignItems: "center", marginBottom: webSc(SPACING.sm) },
-  autoBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
+  cardBlock: { marginTop: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
+  fieldLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700", marginBottom: webSc(SPACING.xs) },
+  assignBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: webSc(RADIUS.sm), paddingVertical: webSc(SPACING.sm), alignItems: "center", marginBottom: webSc(SPACING.sm) },
+  assignBtnText: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   modeWrap: { marginBottom: webSc(SPACING.sm) },
   actRow: { flexDirection: "row", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs), borderTopWidth: 1, borderTopColor: COLORS.border },
   actTime: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, width: webSc(64) },

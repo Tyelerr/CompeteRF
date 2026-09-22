@@ -136,6 +136,12 @@ import { SettingsTemplates } from "../../../../src/views/components/tournament/S
 import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
+import {
+  autoAssignPayload,
+  keepModeMovePayload,
+  manualReorderPayload,
+  queueModePayload,
+} from "../../../../src/utils/queue-settings";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { buildLiveMatches, computeEliminatedRegIds, formatClock, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
@@ -4260,7 +4266,7 @@ export default function ManageTournamentScreen() {
     runLiveOp({ op: "unassign", matchId }, { tableId: null, status: "scheduled", startedAt: null }).catch(
       (e: Error) => Alert.alert("Error", `Failed to update the match (${e.message}).`),
     );
-  // Queue Auto Assign "Assign All" / "Assign & Start All": ONE batch call (was an un-awaited
+  // Queue "Assign Ready Matches" preview — "Assign All" / "Assign & Start All": ONE batch call (was an un-awaited
   // loop). Returns per-match results so the preview can list only what actually landed.
   // displacedIds = parked (NOT started) matches the TD chose to bump: they are unassigned FIRST
   // in the same server call, and the whole call is atomic, so a bumped match is never left
@@ -4288,7 +4294,7 @@ export default function ManageTournamentScreen() {
       return assignResults.map((r, k) => ({ matchId: plan[k].matchId, ok: r.ok, error: r.error }));
     } catch (e) {
       Alert.alert(
-        "Auto Assign",
+        "Assign Ready Matches",
         displacedIds.length
           ? `Nothing was changed — a table or match changed meanwhile (${(e as Error).message}). Review and try again.`
           : `Could not assign matches (${(e as Error).message}).`,
@@ -4345,22 +4351,22 @@ export default function ManageTournamentScreen() {
     }
   };
 
-  // Auto Assign (Dashboard): reuse the authoritative planner — order the ready (unassigned)
+  // Assign Ready Matches (Dashboard, one-time batch): reuse the authoritative planner — order the ready (unassigned)
   // queue by the current mode and pair the front with free tables. Distinct from Start All.
   // The plan is unchanged; it is now applied as ONE batch call with per-op results.
-  const handleDashAutoAssign = async () => {
+  const handleAssignReady = async () => {
     // The projection's readyQueue = the mode's order + TD pins (Manual order in Manual mode).
     const plan = planAutoAssign(projectedSchedule.readyQueue, freeTables(hub.tables, tableOccupancy));
     if (plan.length === 0) {
-      Alert.alert("Auto Assign", "No ready matches or free tables to assign.");
+      Alert.alert("Assign Ready Matches", "No ready matches or free tables to assign.");
       return;
     }
     setDashBusy(true);
     try {
       const results = await runLiveOps(plan.map((p) => assignItem(p.matchId, p.tableId, false)));
-      if (results.some((r) => !r.ok)) Alert.alert("Auto Assign", summarizeOpResults(results, "assigned"));
+      if (results.some((r) => !r.ok)) Alert.alert("Assign Ready Matches", summarizeOpResults(results, "assigned"));
     } catch (e) {
-      Alert.alert("Auto Assign", `Could not assign matches (${(e as Error).message}).`);
+      Alert.alert("Assign Ready Matches", `Could not assign matches (${(e as Error).message}).`);
     } finally {
       setDashBusy(false);
     }
@@ -4372,7 +4378,7 @@ export default function ManageTournamentScreen() {
     );
   const handleSetAutoAssignEnabled = (on: boolean) =>
     hub
-      .saveQueueSettings({ autoAssignEnabled: on })
+      .saveQueueSettings(autoAssignPayload(on))
       .catch((e: Error) => Alert.alert("Auto Assign", `Could not change Auto Assign (${e.message}).`));
 
   // Auto Assign ENABLED is executed SERVER-SIDE (auto-assign-run, triggered by the database on
@@ -4381,20 +4387,20 @@ export default function ManageTournamentScreen() {
 
   const handleSetAutoMode = (m: AutoAssignMode) =>
     hub
-      .saveQueueSettings({ autoAssignMode: m })
+      .saveQueueSettings(queueModePayload(m))
       .catch((e: Error) => Alert.alert("Queue", `Could not change the mode (${e.message}).`));
-  // A manual reorder takes the TD into Manual mode with the new order.
-  // Switching to Manual makes queueOrder authoritative, so any Keep-mode pins are cleared in the
-  // SAME set_queue write.
+  // A manual reorder takes the TD into Manual mode with the new order ("Move & Switch to
+  // Manual"). Switching to Manual makes queueOrder authoritative, so any Keep-mode pins are
+  // cleared in the SAME set_queue write. Auto Assign On/Off is untouched (queue-settings.ts).
   const handleSetQueueOrder = (ids: string[]) =>
     hub
-      .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual", queuePins: [] })
+      .saveQueueSettings(manualReorderPayload(ids))
       .catch((e: Error) => Alert.alert("Queue", `Could not save the new order (${e.message}).`));
   // "Move & Keep {mode}": the mode keeps ordering everything; the moved match is pinned relative
   // to its neighbour (queuePins) instead of freezing the whole order.
   const handleSetQueuePins = (pins: QueuePin[]) =>
     hub
-      .saveQueueSettings({ queuePins: pins })
+      .saveQueueSettings(keepModeMovePayload(pins))
       .catch((e: Error) => Alert.alert("Queue", `Could not save the new order (${e.message}).`));
 
   // Finish the event: marks it completed (live_state finished) which unlocks the
@@ -8147,7 +8153,9 @@ export default function ManageTournamentScreen() {
           startableCount={startableCount}
           busy={dashBusy}
           onSetMode={handleSetAutoMode}
-          onAutoAssign={handleDashAutoAssign}
+          autoAssignEnabled={hub.autoAssignEnabled}
+          onSetAutoAssignEnabled={handleSetAutoAssignEnabled}
+          onAssignReady={handleAssignReady}
           onStartAll={handleStartAll}
           onAction={(m, step) => setDashboardSheet({ match: m, step })}
           onOpenPage={(tab) => setActiveTab(tab)}

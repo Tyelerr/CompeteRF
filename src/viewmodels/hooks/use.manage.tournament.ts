@@ -306,8 +306,8 @@ export const useManageTournament = (tournamentId?: number) => {
     onSettled: invalidateTournament,
   });
 
-  // Persist Queue Manager settings (auto-assign mode + manual queue order). Server-side
-  // set_queue op: changes ONLY these two keys.
+  // Persist Queue settings (Queue Order mode, Manual order, Keep-mode pins, Auto Assign On/Off).
+  // Server-side set_queue op: writes ONLY the keys present (payloads: src/utils/queue-settings.ts).
   const saveQueueSettingsMutation = useMutation({
     mutationFn: (vars: {
       autoAssignMode?: AutoAssignMode;
@@ -316,6 +316,24 @@ export const useManageTournament = (tournamentId?: number) => {
       queuePins?: QueuePin[];
     }) =>
       applyOneLiveOp({ op: "set_queue", ...vars }),
+    // Optimistic: the Dashboard and Queue both read these keys from the SAME cached tournament,
+    // so an Auto Assign On/Off (or mode / order) change shows on both immediately. Only the keys
+    // actually sent are touched — a mode or order change never alters autoAssignEnabled.
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
+      const prev = queryClient.getQueryData<Tournament>(["tournament", tournamentId]);
+      if (prev) {
+        const patch = Object.fromEntries(Object.entries(vars).filter(([, v]) => v !== undefined));
+        queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+          ...prev,
+          live_settings: { ...(prev.live_settings ?? {}), ...patch },
+        });
+      }
+      return { prev };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["tournament", tournamentId], ctx.prev);
+    },
     onSettled: invalidateTournament,
   });
 

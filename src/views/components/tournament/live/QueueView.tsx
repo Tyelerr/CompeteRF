@@ -53,6 +53,7 @@ import {
 } from "../../../../utils/schedule.reorder";
 import { Dropdown } from "../../common/dropdown";
 import { ActionMenu, ActionMenuItem } from "../../admin/ActionMenu";
+import { AutoAssignToggle } from "./AutoAssignToggle";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
 
 const projectedPlayers = (pm: ProjectedMatch): string =>
@@ -72,7 +73,7 @@ interface QueueViewProps {
   onAssignStart: (matchId: string, tableId: number) => void; // park + start
   onStart: (matchId: string) => void; // start a match already parked on a table
   onUnassign: (matchId: string) => void;
-  // Auto Assign "Assign All" / "Assign & Start All" — ONE server batch; resolves with
+  // Assign Ready Matches "Assign All" / "Assign & Start All" — ONE server batch; resolves with
   // per-match results (the server may skip some, e.g. a table that just became occupied).
   // displacedIds: parked (NOT started) matches to unassign first — same atomic server call.
   onAssignMany: (
@@ -86,7 +87,8 @@ interface QueueViewProps {
   // TD relative overrides kept alongside an automatic mode ("Move & Keep {mode}").
   queuePins: QueuePin[];
   onSetQueuePins: (pins: QueuePin[]) => void;
-  // Auto Assign enabled/disabled (separate from the queue ordering mode).
+  // Persistent Auto Assign On/Off (live_settings.autoAssignEnabled) — independent of the Queue
+  // Order mode; only the TD turning it Off disables it.
   autoAssignEnabled: boolean;
   onSetAutoAssignEnabled: (on: boolean) => void;
   onSetMode: (mode: AutoAssignMode) => void;
@@ -191,7 +193,7 @@ export const QueueView = ({
   const [showOnTables, setShowOnTables] = useState(true);
   const [autoOpen, setAutoOpen] = useState(false);
   const [fullOpen, setFullOpen] = useState(false);
-  // Match ids assigned during this Auto Assign session — listed under the
+  // Match ids assigned during this Assign Ready Matches session — listed under the
   // preview as "Recently Applied" so the TD can move them or send them back.
   const [appliedIds, setAppliedIds] = useState<string[]>([]);
 
@@ -552,39 +554,36 @@ export const QueueView = ({
         <Text allowFontScaling={false} style={styles.summary} numberOfLines={1} adjustsFontSizeToFit>
           {summaryText}
         </Text>
-        {/* Compact controls row: content-sized Auto Assign + mode dropdown. */}
+        {/* Controls: the persistent Auto Assign On/Off (same value as the Dashboard), the
+            independent Queue Order mode, and — only while Auto Assign is Off — the one-time
+            "Assign Ready Matches" batch (opens the editable preview). */}
         <View style={styles.controls}>
-          <TouchableOpacity
-            style={[styles.autoBtn, available.length === 0 && styles.btnDisabled]}
-            onPress={runAutoAssign}
-            disabled={available.length === 0 || ordered.length === 0}
-            activeOpacity={0.85}
-          >
-            <Text allowFontScaling={false} style={styles.autoBtnText}>
-              {"⚡"} Auto Assign
+          <AutoAssignToggle enabled={autoAssignEnabled} onChange={onSetAutoAssignEnabled} />
+          <View style={styles.orderGroup}>
+            <Text allowFontScaling={false} style={styles.controlLabel}>
+              Queue Order
             </Text>
-          </TouchableOpacity>
-          <View style={styles.modeWrap}>
-            <Dropdown
-              options={AUTO_ASSIGN_MODES}
-              value={mode}
-              onSelect={(v) => onSetMode(v as AutoAssignMode)}
-              placeholder="Mode"
-            />
+            <View style={styles.modeWrap}>
+              <Dropdown
+                options={AUTO_ASSIGN_MODES}
+                value={mode}
+                onSelect={(v) => onSetMode(v as AutoAssignMode)}
+                placeholder="Mode"
+              />
+            </View>
           </View>
-          <TouchableOpacity
-            style={[styles.autoToggle, autoAssignEnabled && styles.autoToggleOn]}
-            onPress={() => onSetAutoAssignEnabled(!autoAssignEnabled)}
-            activeOpacity={0.85}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: autoAssignEnabled }}
-            accessibilityLabel="Auto Assign"
-          >
-            <View style={[styles.autoDot, autoAssignEnabled && styles.autoDotOn]} />
-            <Text allowFontScaling={false} style={[styles.autoToggleText, autoAssignEnabled && styles.autoToggleTextOn]}>
-              {autoAssignEnabled ? "Auto Assign: On" : "Auto Assign: Off"}
-            </Text>
-          </TouchableOpacity>
+          {!autoAssignEnabled && (
+            <TouchableOpacity
+              style={[styles.autoBtn, (available.length === 0 || ordered.length === 0) && styles.btnDisabled]}
+              onPress={runAutoAssign}
+              disabled={available.length === 0 || ordered.length === 0}
+              activeOpacity={0.85}
+            >
+              <Text allowFontScaling={false} style={styles.autoBtnText}>
+                Assign Ready Matches
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* On tables now */}
@@ -721,8 +720,8 @@ export const QueueView = ({
             <SummaryRow label="Avg Match" value={avgMatchText} />
             <SummaryRow label="Completed Matches" value={String(completedCount)} />
             <View style={styles.summaryDivider} />
-            <SummaryRow label="Assignment Mode" value={modeLabel} />
-            <SummaryRow label="Auto Assign" value={autoAssignEnabled ? "Enabled" : "Disabled"} />
+            <SummaryRow label="Queue Order" value={modeLabel} />
+            <SummaryRow label="Auto Assign" value={autoAssignEnabled ? "On" : "Off"} />
           </View>
         </View>
        </View>
@@ -760,7 +759,7 @@ export const QueueView = ({
         </View>
       </Modal>
 
-      {/* Auto Assign — preview on top, Recently Applied stacked below */}
+      {/* Assign Ready Matches (one-time batch) — preview on top, Recently Applied stacked below */}
       <Modal
         visible={autoOpen}
         transparent
@@ -770,7 +769,7 @@ export const QueueView = ({
         <View style={styles.overlay}>
           <View style={styles.previewCard}>
             <Text allowFontScaling={false} style={styles.previewTitle}>
-              {"⚡"} Auto Assign
+              Assign Ready Matches
             </Text>
 
             {/* Pending plan */}
@@ -934,8 +933,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: webSc(SPACING.sm),
   },
-  // Compact control row: content-sized Auto Assign + a fixed-width mode dropdown
-  // (wraps on very narrow screens). No longer full-page-width.
+  // Compact control row: Auto Assign On/Off, Queue Order dropdown, one-time Assign Ready Matches
+  // (wraps on narrow screens).
   controls: {
     flexDirection: "row",
     alignItems: "center",
@@ -958,21 +957,8 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   modeWrap: { width: webSc(220), maxWidth: "100%" as any },
-  autoToggle: {
-    height: webSc(40),
-    paddingHorizontal: webSc(SPACING.md),
-    borderRadius: webSc(RADIUS.sm),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: webSc(SPACING.xs),
-  },
-  autoToggleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1A" },
-  autoDot: { width: webSc(8), height: webSc(8), borderRadius: webSc(4), backgroundColor: COLORS.textMuted },
-  autoDotOn: { backgroundColor: COLORS.success },
-  autoToggleText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "800" },
-  autoToggleTextOn: { color: COLORS.success },
+  orderGroup: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  controlLabel: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "800" },
   // Two-column (wide web): operational left, sticky summary right.
   twoColRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
   leftCol: { flex: 70, minWidth: 0 as any },
