@@ -27,6 +27,8 @@ import { buildQueueEntries, computeReadyAtMap, freeTables, orderQueue, planAutoA
 
 const ROOT = join(__dirname, "..", "..");
 const MIGRATION = readFileSync(join(ROOT, "supabase/migrations/20260922120000_elim_live_apply.sql"), "utf8");
+// Scheduler phase 4 (ifUnassigned / assignedAt / preferredTableId / autoAssignEnabled / log).
+const MIGRATION2 = readFileSync(join(ROOT, "supabase/migrations/20260923120000_elim_assign_notify.sql"), "utf8");
 const PHASE5 = readFileSync(join(ROOT, "supabase/migrations/20260805120000_phase5_pending_accounts_registration.sql"), "utf8");
 const cut = (src: string, head: string) => {
   const s = src.indexOf(head);
@@ -107,6 +109,7 @@ before(async () => {
   `);
   await db.exec(CAN_MANAGE);
   await db.exec(MIGRATION);
+  await db.exec(MIGRATION2);
   await db.exec(`
     insert into public.profiles (id, id_auto, role) values
       ('${U.td}', 1, 'tournament_director'), ('${U.admin}', 2, 'compete_admin'),
@@ -349,7 +352,7 @@ test("patch_match changes only the targeted match; field whitelist + value valid
   assert.deepEqual(after.W1M2, before.W1M2);
   assert.deepEqual(after.W1M1, { ...before.W1M1, p1Score: 4, p2Score: 2, timerSeconds: 3600 });
   const bad = await apply(T, [
-    { op: "patch_match", matchId: "W1M1", set: { preferredTableId: 72 } },
+    { op: "patch_match", matchId: "W1M1", set: { preferredTableId: 72 } }, // Play Next: refused while the match is on a table
     { op: "patch_match", matchId: "W1M1", set: { winner: 3 } },
     { op: "patch_match", matchId: "W1M1", set: { p1Score: -1 } },
     { op: "patch_match", matchId: "W1M1", set: { p1Score: 1.5 } },
@@ -364,7 +367,7 @@ test("patch_match changes only the targeted match; field whitelist + value valid
     { op: "explode" },
   ]);
   assert.deepEqual(bad.results.map((x: any) => x.error), [
-    "invalid_field", "invalid_value", "invalid_value", "invalid_value", "invalid_value", "invalid_value",
+    "match_assigned", "invalid_value", "invalid_value", "invalid_value", "invalid_value", "invalid_value",
     "invalid_transition", "table_unavailable", "table_not_found", "table_occupied", "unknown_match", "invalid_table", "invalid_op",
   ]);
   assert.deepEqual(await ms(T), after);
@@ -394,7 +397,7 @@ test("server time for starts; reopen keeps the original start time", async () =>
   // start requires a table; unassign clears table + start
   const r = await apply(T, [{ op: "start", matchId: "W1M3" }, { op: "unassign", matchId: "W1M1" }]);
   assert.deepEqual(r.results.map((x: any) => x.error ?? "ok"), ["no_table", "ok"]);
-  assert.deepEqual((await ms(T)).W1M1, { status: "scheduled", tableId: null, startedAt: null });
+  assert.deepEqual((await ms(T)).W1M1, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null });
 });
 
 // ── submit_match_state hardening ─────────────────────────────────────────────────────────
@@ -521,4 +524,167 @@ test("input guards: op count, shape, missing tournament", async () => {
   // internal helpers are not callable by clients
   const priv = await q("select has_function_privilege('authenticated', 'public._elim_resolve(jsonb)', 'execute') as a, has_function_privilege('authenticated', 'public.elim_live_apply(bigint, jsonb, boolean)', 'execute') as b, has_function_privilege('anon', 'public.elim_live_apply(bigint, jsonb, boolean)', 'execute') as c");
   assert.deepEqual(priv[0], { a: false, b: true, c: false });
+});
+
+test("displacement: unassign parked match + assign new match to its table, atomically", async () => {
+  await reset(T, {
+    W1M1: { status: "scheduled", tableId: 71, startedAt: null }, // parked, not started
+    W1M2: { status: "in_progress", tableId: 72, p1Score: 3 },    // playing
+  });
+  await as(U.td);
+  // Take W1M1's parked table for W1M3; W1M1 returns to Ready (no table), bracket state untouched.
+  const r = await apply(T, [{ op: "unassign", matchId: "W1M1" }, { op: "assign", matchId: "W1M3", tableId: 71 }], true);
+  assert.deepEqual(r.results.map((x: any) => x.ok), [true, true]);
+  const s = await ms(T);
+  assert.deepEqual(s.W1M1, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null });
+  assert.equal(s.W1M3.tableId, 71);
+  assert.equal(s.W1M2.p1Score, 3);
+  // An in-progress table can never be taken: the assign is rejected and (atomic) nothing changes.
+  const before = await ls(T);
+  await assert.rejects(apply(T, [{ op: "assign", matchId: "W1M4", tableId: 72 }], true), /table_occupied/);
+  assert.deepEqual(await ls(T), before);
+});
+
+// ── Phase 4: ifUnassigned / assignedAt / preferredTableId / autoAssignEnabled / log ─────
+test("ifUnassigned: Auto Assign never moves a match that already has a table", async () => {
+  await reset(T, { W1M1: { status: "scheduled", tableId: 71 } });
+  await as(U.td);
+  const r = await apply(T, [
+    { op: "assign", matchId: "W1M1", tableId: 72, ifUnassigned: true },
+    { op: "assign", matchId: "W1M2", tableId: 72, ifUnassigned: true },
+    { op: "assign", matchId: "W1M3", tableId: 73, ifUnassigned: "yes" },
+  ]);
+  assert.deepEqual(r.results.map((x: any) => x.error ?? "ok"), ["match_assigned", "ok", "invalid_value"]);
+  const s = await ms(T);
+  assert.equal(s.W1M1.tableId, 71); // untouched
+  assert.equal(s.W1M2.tableId, 72);
+  // without the flag a TD can still deliberately move a parked match
+  assert.equal((await apply(T, [{ op: "assign", matchId: "W1M1", tableId: 73 }])).results[0].ok, true);
+});
+
+test("assignedAt: stamped on assignment/table change, kept on same-table re-assign, cleared on unassign, never client-set", async () => {
+  await reset(T);
+  await as(U.td);
+  await apply(T, [{ op: "assign", matchId: "W1M1", tableId: 71 }]);
+  const a1 = (await ms(T)).W1M1.assignedAt;
+  assert.match(a1, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  await new Promise((r) => setTimeout(r, 15));
+  await apply(T, [{ op: "assign", matchId: "W1M1", tableId: 71 }]); // same table → same event
+  assert.equal((await ms(T)).W1M1.assignedAt, a1);
+  await new Promise((r) => setTimeout(r, 15));
+  await apply(T, [{ op: "assign", matchId: "W1M1", tableId: 72 }]); // table change → new event
+  const a2 = (await ms(T)).W1M1.assignedAt;
+  assert.notEqual(a2, a1);
+  await new Promise((r) => setTimeout(r, 15));
+  await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { tableId: 73 } }]); // move via sheet
+  const a3 = (await ms(T)).W1M1.assignedAt;
+  assert.notEqual(a3, a2);
+  await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { timerSeconds: 60 } }]); // unrelated edit
+  assert.equal((await ms(T)).W1M1.assignedAt, a3);
+  await apply(T, [{ op: "start", matchId: "W1M1" }]); // start keeps it
+  assert.equal((await ms(T)).W1M1.assignedAt, a3);
+  const bad = await apply(T, [{ op: "patch_match", matchId: "W1M2", set: { assignedAt: "2001-01-01T00:00:00Z" } }]);
+  assert.equal(bad.results[0].error, "invalid_field");
+  await apply(T, [{ op: "assign", matchId: "W1M2", tableId: 71 }]);
+  await apply(T, [{ op: "unassign", matchId: "W1M2" }]);
+  assert.equal((await ms(T)).W1M2.assignedAt, null);
+});
+
+test("preferredTableId (Play Next): validated soft preference, cleared on assignment / completion / manually", async () => {
+  await reset(T, { W1M1: { status: "in_progress", tableId: 71 } });
+  await as(U.td);
+  // a BUSY table is allowed (that is the point) and does not occupy it
+  const ok = await apply(T, [{ op: "patch_match", matchId: "W1M2", set: { preferredTableId: 71 } }]);
+  assert.equal(ok.results[0].ok, true);
+  assert.equal((await ms(T)).W1M2.preferredTableId, 71);
+  assert.equal((await ms(T)).W1M1.tableId, 71); // playing match untouched
+  const bad = await apply(T, [
+    { op: "patch_match", matchId: "W1M3", set: { preferredTableId: 74 } }, // unavailable
+    { op: "patch_match", matchId: "W1M3", set: { preferredTableId: 75 } }, // other tournament
+    { op: "patch_match", matchId: "W1M3", set: { preferredTableId: "71" } },
+    { op: "patch_match", matchId: "W1M1", set: { preferredTableId: 72 } }, // already on a table
+  ]);
+  assert.deepEqual(bad.results.map((x: any) => x.error), ["table_unavailable", "table_not_found", "invalid_table", "match_assigned"]);
+  // assigning (anywhere) fulfils and clears it
+  await apply(T, [{ op: "assign", matchId: "W1M2", tableId: 72 }]);
+  assert.equal("preferredTableId" in (await ms(T)).W1M2, false);
+  // manual clear
+  await apply(T, [{ op: "patch_match", matchId: "W1M3", set: { preferredTableId: 71 } }]);
+  await apply(T, [{ op: "patch_match", matchId: "W1M3", set: { preferredTableId: null } }]);
+  assert.equal((await ms(T)).W1M3.preferredTableId, null);
+  // completion by the TD clears it
+  await apply(T, [{ op: "patch_match", matchId: "W1M4", set: { preferredTableId: 71 } }]);
+  await apply(T, [{ op: "patch_match", matchId: "W1M4", set: { status: "completed", winner: 1 } }]);
+  assert.equal("preferredTableId" in (await ms(T)).W1M4, false);
+  // completion by a PLAYER (submit_match_state) clears it too; players can't set it
+  await reset(T, { W1M1: { status: "in_progress", preferredTableId: 73 } });
+  await as(P(1));
+  await score(T, "W1M1", { preferredTableId: 72, p1Score: 1 });
+  assert.equal((await ms(T)).W1M1.preferredTableId, 73);
+  await score(T, "W1M1", { status: "completed", winner: 1, p1Score: 5 });
+  assert.equal("preferredTableId" in (await ms(T)).W1M1, false);
+});
+
+test("autoAssignEnabled: set only through set_queue, never through the settings merge", async () => {
+  await reset(T);
+  await as(U.td);
+  assert.equal((await apply(T, [{ op: "set_queue", autoAssignEnabled: true }])).results[0].ok, true);
+  assert.equal((await ls(T)).autoAssignEnabled, true);
+  assert.equal((await apply(T, [{ op: "set_queue", autoAssignEnabled: "on" }])).results[0].error, "invalid_value");
+  await assert.rejects(q("select public.elim_merge_live_settings($1, $2::jsonb)", [T, JSON.stringify({ autoAssignEnabled: false })]), /Scheduler-owned/);
+  await assert.rejects(q("select public.elim_merge_live_settings($1, '{}'::jsonb, $2)", [T, ["autoAssignEnabled"]]), /Scheduler-owned/);
+  assert.equal((await ls(T)).autoAssignEnabled, true);
+});
+
+test("notification log: unique per assignment instance, RLS on, no client privileges", async () => {
+  await as(null);
+  const ins = (at: string) =>
+    q(
+      "insert into public.match_assignment_notifications (tournament_id, match_id, recipient_id_auto, draw_number, assigned_at, table_id, kind) values ($1, 'W1M1', 101, 1, $2, 71, 'assigned') on conflict do nothing returning id",
+      [T, at],
+    );
+  assert.equal((await ins("2026-09-23T10:00:00Z")).length, 1);
+  assert.equal((await ins("2026-09-23T10:00:00Z")).length, 0); // replay → nothing to send
+  assert.equal((await ins("2026-09-23T10:05:00Z")).length, 1); // new assignment instance
+  const meta = await q(
+    "select relrowsecurity as rls, has_table_privilege('authenticated', 'public.match_assignment_notifications', 'select') as auth_select, has_table_privilege('authenticated', 'public.match_assignment_notifications', 'insert') as auth_insert, has_table_privilege('anon', 'public.match_assignment_notifications', 'select') as anon_select, (select count(*)::int from pg_policies where tablename = 'match_assignment_notifications') as policies from pg_class where relname = 'match_assignment_notifications'",
+  );
+  assert.deepEqual(meta[0], { rls: true, auth_select: false, auth_insert: false, anon_select: false, policies: 0 });
+  await assert.rejects(
+    q("insert into public.match_assignment_notifications (tournament_id, match_id, recipient_id_auto, assigned_at, table_id, kind) values ($1, 'W1M1; drop', 1, now(), 1, 'assigned')", [T]),
+    /check/i,
+  );
+});
+
+test("queuePins: set only through set_queue, shape-validated, never through the settings merge", async () => {
+  await reset(T, { W1M1: { status: "in_progress", tableId: 71, p1Score: 2 } }, { autoAssignMode: "losersFirst" });
+  await as(U.td);
+  const good = [
+    { matchId: "L1M1", place: "before", anchorId: "W1M2" },
+    { matchId: "W2M1", place: "top" },
+  ];
+  const r = await apply(T, [{ op: "set_queue", queuePins: good }]);
+  assert.equal(r.results[0].ok, true);
+  const l = await ls(T);
+  assert.deepEqual(l.queuePins, good);
+  assert.equal(l.autoAssignMode, "losersFirst"); // mode unchanged
+  assert.equal(l.matchState.W1M1.p1Score, 2); // scores untouched
+  const bad = await apply(T, [
+    { op: "set_queue", queuePins: "nope" },
+    { op: "set_queue", queuePins: [{ matchId: "ZZZ", place: "top" }] }, // not in bracket
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "sideways" }] },
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "before" }] }, // anchor missing
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "before", anchorId: "W1M1" }] }, // self
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "top", anchorId: "W1M2" }] }, // anchor on top
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "top", extra: 1 }] }, // unknown key
+    { op: "set_queue", queuePins: [{ matchId: "W1M1", place: "top" }, { matchId: "W1M1", place: "bottom" }] }, // dup
+    { op: "set_queue", queuePins: Array.from({ length: 33 }, (_, i) => ({ matchId: i % 2 ? "W1M1" : "W1M2", place: "top" })) },
+  ]);
+  assert.deepEqual(bad.results.map((x: any) => x.error), Array(9).fill("invalid_queue_pins"));
+  assert.deepEqual((await ls(T)).queuePins, good); // failed ops changed nothing
+  // clearing (Switch to Manual writes [] with the manual order in one op)
+  await apply(T, [{ op: "set_queue", queueOrder: ["W1M2"], autoAssignMode: "manual", queuePins: [] }]);
+  assert.deepEqual((await ls(T)).queuePins, []);
+  await assert.rejects(q("select public.elim_merge_live_settings($1, $2::jsonb)", [T, JSON.stringify({ queuePins: [] })]), /Scheduler-owned/);
+  await assert.rejects(q("select public.elim_merge_live_settings($1, '{}'::jsonb, $2)", [T, ["queuePins"]]), /Scheduler-owned/);
 });
