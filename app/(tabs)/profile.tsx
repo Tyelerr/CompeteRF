@@ -18,6 +18,7 @@ import { Alert,
   View,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
+import { useAuthContext } from "../../src/providers/AuthProvider";
 import { authService } from "../../src/models/services/auth.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
@@ -255,6 +256,7 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { signOut: authSignOut } = useAuthContext();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(storeProfile ?? null);
   // Favorites come from the shared useFavorites React Query cache (single source
@@ -372,8 +374,9 @@ export default function ProfileScreen() {
     setRefreshing(false);
   };
 
+  // Shared sign-out (AuthProvider): deactivates this device's push token, then ends the session.
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await authSignOut();
     setUser(null); setProfile(null); setUnreadCount(0);
     router.replace("/(tabs)" as any);
   };

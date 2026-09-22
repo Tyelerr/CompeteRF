@@ -289,13 +289,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // ── Sign out ──────────────────────────────────────────────────────────────
   const signOut = async () => {
-    if (user?.id) {
+    // Deactivate ONLY this device's push token (before the session ends — RLS needs it). The
+    // account's other devices keep receiving notifications.
+    if (user?.id && pushToken) {
       try {
         const { notificationService } =
           await import('../models/services/notification.service');
-        await notificationService.removeUserTokens(user.id);
+        await notificationService.deactivateDeviceToken(user.id, pushToken);
       } catch (err) {
-        console.error('Error removing push tokens on sign out:', err);
+        console.error('Error deactivating push token on sign out:', err);
       }
     }
     onboardingCheckedRef.current = false;

@@ -163,6 +163,19 @@ export const notificationService = {
     if (error) console.error("Error deactivating token:", error);
   },
 
+  // Sign-out on THIS device: deactivate only this device's token for this account. The user's
+  // other devices keep their push. (Account switching is handled server-side: registering a token
+  // that another account holds transfers ownership — migration 20260925120000.)
+  async deactivateDeviceToken(userId: string, token: string): Promise<void> {
+    const { error } = await supabase
+      .from("push_tokens")
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("token", token);
+
+    if (error) console.error("Error deactivating device token:", error);
+  },
+
   async removeUserTokens(userId: string): Promise<void> {
     const { error } = await supabase
       .from("push_tokens")
