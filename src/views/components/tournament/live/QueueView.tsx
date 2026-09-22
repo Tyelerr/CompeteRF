@@ -284,7 +284,7 @@ export const QueueView = ({
     // with exactly this move (and clears pins) in one set_queue write. Cancel changes nothing.
     const pin = pinForMove(scheduled, matchId, dir);
     Alert.alert(
-      "Change Queue Order?",
+      "Change Match Order?",
       `You're currently using ${modeLabel}.\n\n${describeMove(matchId, dir)}`,
       [
         { text: "Cancel", style: "cancel" },
@@ -555,20 +555,21 @@ export const QueueView = ({
           {summaryText}
         </Text>
         {/* Controls: the persistent Auto Assign On/Off (same value as the Dashboard), the
-            independent Queue Order mode, and — only while Auto Assign is Off — the one-time
+            independent Match Order mode, and — only while Auto Assign is Off — the one-time
             "Assign Ready Matches" batch (opens the editable preview). */}
         <View style={styles.controls}>
           <AutoAssignToggle enabled={autoAssignEnabled} onChange={onSetAutoAssignEnabled} />
           <View style={styles.orderGroup}>
             <Text allowFontScaling={false} style={styles.controlLabel}>
-              Queue Order
+              Match Order
             </Text>
             <View style={styles.modeWrap}>
               <Dropdown
+                hideCheck
                 options={AUTO_ASSIGN_MODES}
                 value={mode}
                 onSelect={(v) => onSetMode(v as AutoAssignMode)}
-                placeholder="Mode"
+                placeholder="Match Order"
               />
             </View>
           </View>
@@ -720,7 +721,7 @@ export const QueueView = ({
             <SummaryRow label="Avg Match" value={avgMatchText} />
             <SummaryRow label="Completed Matches" value={String(completedCount)} />
             <View style={styles.summaryDivider} />
-            <SummaryRow label="Queue Order" value={modeLabel} />
+            <SummaryRow label="Match Order" value={modeLabel} />
             <SummaryRow label="Auto Assign" value={autoAssignEnabled ? "On" : "Off"} />
           </View>
         </View>
@@ -933,7 +934,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: webSc(SPACING.sm),
   },
-  // Compact control row: Auto Assign On/Off, Queue Order dropdown, one-time Assign Ready Matches
+  // Compact control row: Auto Assign On/Off, Match Order dropdown, one-time Assign Ready Matches
   // (wraps on narrow screens).
   controls: {
     flexDirection: "row",

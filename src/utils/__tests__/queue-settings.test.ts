@@ -1,6 +1,6 @@
 // src/utils/__tests__/queue-settings.test.ts
 // Run: npx tsx --test src/utils/__tests__/queue-settings.test.ts
-// Auto Assign On/Off and Queue Order are independent: only the explicit toggle payload carries
+// Auto Assign On/Off and Match Order are independent: only the explicit toggle payload carries
 // autoAssignEnabled, so no queue action can turn Auto Assign on or off.
 /// <reference types="node" />
 

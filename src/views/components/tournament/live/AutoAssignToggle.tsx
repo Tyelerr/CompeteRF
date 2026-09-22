@@ -1,6 +1,6 @@
 // src/views/components/tournament/live/AutoAssignToggle.tsx
 // THE Auto Assign control — one persistent tournament-level ON/OFF (live_settings.autoAssignEnabled),
-// shown identically on the Dashboard and the Queue. It is independent of the Queue Order mode:
+// shown identically on the Dashboard and the Queue. It is independent of the Match Order mode:
 // only an explicit tap on "Off" here turns Auto Assign off. Assignments themselves run
 // server-side (auto-assign-run), so leaving the screen changes nothing.
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";

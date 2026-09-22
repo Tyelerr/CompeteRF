@@ -306,7 +306,7 @@ export const useManageTournament = (tournamentId?: number) => {
     onSettled: invalidateTournament,
   });
 
-  // Persist Queue settings (Queue Order mode, Manual order, Keep-mode pins, Auto Assign On/Off).
+  // Persist Queue settings (Match Order mode, Manual order, Keep-mode pins, Auto Assign On/Off).
   // Server-side set_queue op: writes ONLY the keys present (payloads: src/utils/queue-settings.ts).
   const saveQueueSettingsMutation = useMutation({
     mutationFn: (vars: {

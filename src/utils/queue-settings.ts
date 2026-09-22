@@ -1,6 +1,6 @@
 // src/utils/queue-settings.ts
 // The exact set_queue payloads the Manage screen sends. Auto Assign (autoAssignEnabled) and the
-// Queue Order mode are INDEPENDENT settings: only autoAssignPayload ever carries
+// Match Order mode are INDEPENDENT settings: only autoAssignPayload ever carries
 // autoAssignEnabled, so changing the mode, reordering (Move & Switch to Manual) or pinning
 // (Move & Keep {mode}) can never turn Auto Assign on or off. The server's set_queue only writes
 // keys that are present, so an absent autoAssignEnabled is left exactly as it was.
@@ -16,7 +16,7 @@ export interface QueueSettingsPayload {
 /** Auto Assign On/Off — the ONLY payload that touches autoAssignEnabled. */
 export const autoAssignPayload = (on: boolean): QueueSettingsPayload => ({ autoAssignEnabled: on });
 
-/** Queue Order dropdown. */
+/** Match Order dropdown. */
 export const queueModePayload = (mode: AutoAssignMode): QueueSettingsPayload => ({ autoAssignMode: mode });
 
 /** "Move & Switch to Manual": the displayed order becomes the Manual order; Keep-mode pins are

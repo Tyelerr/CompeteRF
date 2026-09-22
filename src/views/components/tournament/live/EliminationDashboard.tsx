@@ -5,7 +5,7 @@
 // visual reference — this component is elimination-specific and does not touch Chip.
 
 import { useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
@@ -20,8 +20,6 @@ import { MatchCard } from "./MatchCard";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
 import { AutoAssignToggle } from "./AutoAssignToggle";
 import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
-
-const isWeb = Platform.OS === "web";
 
 export interface DashboardKpis {
   playersRemaining: number;
@@ -239,10 +237,10 @@ export const EliminationDashboard = ({
               <View style={styles.cardBlock}>
                 <AutoAssignToggle stacked enabled={autoAssignEnabled} onChange={onSetAutoAssignEnabled} />
               </View>
-              <Text allowFontScaling={false} style={styles.fieldLabel}>Queue Order</Text>
+              <Text allowFontScaling={false} style={styles.fieldLabel}>Match Order</Text>
               <View style={styles.modeWrap}>
                 <Dropdown
-                  hideCheck={isWeb}
+                  hideCheck
                   selectedBlueText
                   options={MODE_OPTIONS}
                   value={mode}
