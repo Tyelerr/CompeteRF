@@ -30,6 +30,8 @@ const ROOT = join(__dirname, "..", "..");
 const MIGRATION = readFileSync(join(ROOT, "supabase/migrations/20260922120000_elim_live_apply.sql"), "utf8");
 // Scheduler phase 4 (ifUnassigned / assignedAt / preferredTableId / autoAssignEnabled / log).
 const MIGRATION2 = readFileSync(join(ROOT, "supabase/migrations/20260923120000_elim_assign_notify.sql"), "utf8");
+// Clear Table: unassign / table-removing patch stamp clearedAt; assign clears it.
+const MIGRATION3 = readFileSync(join(ROOT, "supabase/migrations/20260926120000_elim_clear_table.sql"), "utf8");
 const PHASE5 = readFileSync(join(ROOT, "supabase/migrations/20260805120000_phase5_pending_accounts_registration.sql"), "utf8");
 const cut = (src: string, head: string) => {
   const s = src.indexOf(head);
@@ -111,6 +113,7 @@ before(async () => {
   await db.exec(CAN_MANAGE);
   await db.exec(MIGRATION);
   await db.exec(MIGRATION2);
+  await db.exec(MIGRATION3);
   await db.exec(`
     insert into public.profiles (id, id_auto, role) values
       ('${U.td}', 1, 'tournament_director'), ('${U.admin}', 2, 'compete_admin'),
@@ -398,7 +401,9 @@ test("server time for starts; reopen keeps the original start time", async () =>
   // start requires a table; unassign clears table + start
   const r = await apply(T, [{ op: "start", matchId: "W1M3" }, { op: "unassign", matchId: "W1M1" }]);
   assert.deepEqual(r.results.map((x: any) => x.error ?? "ok"), ["no_table", "ok"]);
-  assert.deepEqual((await ms(T)).W1M1, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null });
+  const un = (await ms(T)).W1M1;
+  assert.equal(typeof un.clearedAt, "string", "unassign stamps the Clear Table hold");
+  assert.deepEqual({ ...un, clearedAt: undefined }, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null, clearedAt: undefined });
 });
 
 // ── submit_match_state hardening ─────────────────────────────────────────────────────────
@@ -537,7 +542,8 @@ test("displacement: unassign parked match + assign new match to its table, atomi
   const r = await apply(T, [{ op: "unassign", matchId: "W1M1" }, { op: "assign", matchId: "W1M3", tableId: 71 }], true);
   assert.deepEqual(r.results.map((x: any) => x.ok), [true, true]);
   const s = await ms(T);
-  assert.deepEqual(s.W1M1, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null });
+  assert.equal(typeof s.W1M1.clearedAt, "string", "a displaced match gets the same brief Auto Assign hold");
+  assert.deepEqual({ ...s.W1M1, clearedAt: undefined }, { status: "scheduled", tableId: null, startedAt: null, assignedAt: null, clearedAt: undefined });
   assert.equal(s.W1M3.tableId, 71);
   assert.equal(s.W1M2.p1Score, 3);
   // An in-progress table can never be taken: the assign is rejected and (atomic) nothing changes.
@@ -728,4 +734,79 @@ test("Auto Assign ON survives every queue action the Manage screen sends (exact 
   l = await setQ(autoAssignPayload(true));
   assert.equal(l.autoAssignEnabled, true);
   assert.equal(l.autoAssignMode, "manual");
+});
+
+test("Clear Table: unassign frees the table, stamps clearedAt and changes nothing else", async () => {
+  await reset(T, {
+    W1M1: { status: "scheduled", tableId: 71, assignedAt: "2026-09-01T10:10:00.000Z", p1Score: 0, p2Score: 0, allowedSeconds: 1800 },
+    W1M2: { status: "in_progress", tableId: 72, startedAt: "2026-09-01T10:05:00.000Z", p1Score: 2, p2Score: 1 },
+    W1M3: done(1),
+  });
+  const before = await ms(T);
+  await as(U.td);
+  const r = await apply(T, [{ op: "unassign", matchId: "W1M1" }]);
+  assert.equal(r.results[0].ok, true);
+  const after = await ms(T);
+
+  assert.equal(after.W1M1.tableId, null, "table freed");
+  assert.equal(after.W1M1.status, "scheduled", "never started or completed");
+  assert.equal(after.W1M1.assignedAt, null);
+  assert.equal(typeof after.W1M1.clearedAt, "string", "server-stamped hold marker");
+  // untouched: scores, winner, result, timer, and every other match
+  assert.equal(after.W1M1.p1Score, 0);
+  assert.equal(after.W1M1.p2Score, 0);
+  assert.equal(after.W1M1.winner ?? null, null);
+  assert.equal(after.W1M1.result ?? null, null);
+  assert.equal(after.W1M1.allowedSeconds, 1800);
+  assert.deepEqual(after.W1M2, before.W1M2, "the match on another table is untouched");
+  assert.deepEqual(after.W1M3, before.W1M3, "a completed match is untouched");
+  const l = await ls(T);
+  assert.deepEqual(l.bracket, (await ls(T)).bracket, "bracket unchanged");
+});
+
+test("Clear Table: a new assignment ends the hold; a completed match cannot be cleared", async () => {
+  await reset(T, { W1M1: { status: "scheduled", tableId: 71, assignedAt: "2026-09-01T10:10:00.000Z" }, W1M4: done(1) });
+  await as(U.td);
+  await apply(T, [{ op: "unassign", matchId: "W1M1" }]);
+  assert.equal(typeof (await ms(T)).W1M1.clearedAt, "string");
+  await apply(T, [{ op: "assign", matchId: "W1M1", tableId: 73 }]);
+  const s = await ms(T);
+  assert.equal(s.W1M1.clearedAt ?? null, null, "manual assign clears the hold immediately");
+  assert.equal(s.W1M1.tableId, 73);
+  assert.equal(s.W1M1.status, "scheduled", "assign never starts the match");
+  const r = await apply(T, [{ op: "unassign", matchId: "W1M4" }]);
+  assert.equal(r.results[0].ok, false);
+  assert.equal(r.results[0].error, "match_completed");
+});
+
+test("Clear Table: a table-removing patch (Reset Match) gets the same hold; setting a table clears it", async () => {
+  await reset(T, { W1M1: { status: "in_progress", tableId: 71, startedAt: "2026-09-01T10:05:00.000Z", p1Score: 3 } });
+  await as(U.td);
+  await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { status: "scheduled", tableId: null, startedAt: null, p1Score: null } }]);
+  let s = await ms(T);
+  assert.equal(s.W1M1.tableId, null);
+  assert.equal(typeof s.W1M1.clearedAt, "string");
+  await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { tableId: 71 } }]);
+  s = await ms(T);
+  assert.equal(s.W1M1.clearedAt ?? null, null);
+  // a patch that does not touch the table leaves the marker alone
+  await apply(T, [{ op: "unassign", matchId: "W1M1" }]);
+  await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { p1Score: 1 } }]);
+  assert.equal(typeof (await ms(T)).W1M1.clearedAt, "string");
+});
+
+test("Clear Table in Manual order: unassign + set_queue land atomically in one call", async () => {
+  await reset(T, { W1M1: { status: "scheduled", tableId: 71, assignedAt: "2026-09-01T10:10:00.000Z" } },
+    { autoAssignMode: "manual", queueOrder: ["W1M2", "W1M3", "W1M1"], autoAssignEnabled: true });
+  await as(U.td);
+  const r = await apply(T, [
+    { op: "unassign", matchId: "W1M1" },
+    { op: "set_queue", queueOrder: ["W1M1", "W1M2", "W1M3"] },
+  ], true);
+  assert.ok(r.results.every((x: any) => x.ok));
+  const l = await ls(T);
+  assert.equal(l.matchState.W1M1.tableId, null);
+  assert.deepEqual(l.queueOrder, ["W1M1", "W1M2", "W1M3"], "cleared match is next in the manual order");
+  assert.equal(l.autoAssignMode, "manual", "mode unchanged");
+  assert.equal(l.autoAssignEnabled, true, "Auto Assign stays ON");
 });

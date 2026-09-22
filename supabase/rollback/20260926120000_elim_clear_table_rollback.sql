@@ -1,0 +1,11 @@
+-- supabase/rollback/20260926120000_elim_clear_table_rollback.sql
+-- Restores _elim_apply_one to its 20260923120000 definition (no clearedAt stamping). Any
+-- clearedAt already written stays in live_settings.matchState and is simply ignored — harmless,
+-- and the planner only honours it for 90 seconds anyway. Run supabase/migrations/
+-- 20260923120000_elim_assign_notify.sql's _elim_apply_one definition:
+--
+--   psql "$DB_URL" -c "$(sed -n '/create or replace function public._elim_apply_one(/,/^\$\$;/p' \
+--     supabase/migrations/20260923120000_elim_assign_notify.sql)"
+--
+-- After rolling this back, redeploy auto-assign-run from a scheduler bundle built WITHOUT the
+-- clear-table hold, or Clear Table will be undone by the next Auto Assign run.
