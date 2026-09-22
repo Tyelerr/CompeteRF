@@ -3,13 +3,14 @@
 // bucketed into Live / Registered / Completed. Favorites + Following are sourced
 // separately (favorites hook; following is not built yet).
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { registrationService } from "../../models/services/registration.service";
 import { teamService } from "../../models/services/team.service";
 import { PlayerTournament } from "../../models/types/registration.types";
 import { isTournamentCompleted, isTournamentArchived } from "../../utils/tournament.archive";
 import { isTournamentViewEligible, isTournamentDeleted, isTournamentCurrent } from "../../utils/tournament-view";
+import { liveListNeedsResync, mergeLiveEntries } from "../../utils/live-entries";
 
 // Team-format (Scotch Doubles) events register as a TEAM, not an individual
 // tournament_players row. A leftover players row (e.g. after a partner swap
@@ -135,26 +136,28 @@ export const useProfileTournaments = (
   // working if the RPC isn't deployed yet). Deduped by tournament id — the client row
   // wins when both have it (it carries eliminated_at for the "eliminated but still
   // live" note) — and re-sorted most-recently-started first for a deterministic primary.
-  const live = useMemo(() => {
-    const clientLive = all.filter(isLive);
-    // Guard the RPC path too: until the get_my_live_tournament migration (terminal-state
-    // exclusion) is applied, the RPC can still return a removed event. Keep only genuinely
-    // current tournaments (the shared predicate).
-    const rpcLive = (!liveQuery.isError ? liveQuery.data ?? [] : []).filter((t) => isTournamentCurrent(t));
-    const byId = new Map<number, PlayerTournament>();
-    for (const t of clientLive) {
-      if (t.tournament?.id != null) byId.set(t.tournament.id, t);
-    }
-    for (const t of rpcLive) {
-      if (t.tournament?.id != null && !byId.has(t.tournament.id))
-        byId.set(t.tournament.id, t);
-    }
-    return Array.from(byId.values()).sort(
-      (a, b) =>
-        new Date(b.tournament?.gameplay_started_at ?? 0).getTime() -
-        new Date(a.tournament?.gameplay_started_at ?? 0).getTime(),
-    );
-  }, [all, liveQuery.data, liveQuery.isError]);
+  const clientLive = useMemo(() => all.filter(isLive), [all]);
+  const rpcLive = useMemo(
+    () => (!liveQuery.isError ? liveQuery.data ?? [] : []).filter((t) => isTournamentCurrent(t)),
+    [liveQuery.data, liveQuery.isError],
+  );
+  // Registration identity always comes from the player's own registration row; the RPC only
+  // says WHICH events are live (its id is the tournament id). See utils/live-entries.ts.
+  const live = useMemo(() => mergeLiveEntries(clientLive, rpcLive, all), [clientLive, rpcLive, all]);
+
+  // The registration list isn't polled, so when an event goes live while Profile is open the
+  // RPC sees it first. Refetch the registration rows once per newly-live set so the entry
+  // carries its real registration row (and leaves the Registered bucket) promptly.
+  const resyncKey = useRef("");
+  useEffect(() => {
+    if (!liveListNeedsResync(clientLive, rpcLive)) return;
+    const key = rpcLive.map((t) => t.tournament?.id).sort().join(",");
+    if (key === resyncKey.current) return;
+    resyncKey.current = key;
+    refetch();
+    teamsQuery.refetch();
+  }, [clientLive, rpcLive, refetch, teamsQuery]);
+
   const completed = useMemo(() => all.filter(isCompleted), [all]);
   // "Registered" = signed up but gameplay has NOT begun (and not completed). Once a
   // tournament enters gameplay it moves to the live/Tournament-View bucket, and when it

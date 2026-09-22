@@ -55,7 +55,10 @@ export interface RegistrationInsert {
 
 // A player's registration joined to its tournament + venue (profile tabs).
 export interface PlayerTournament {
-  id: number; // registration id
+  id: number; // registration id (EXCEPT when liveRpcOnly — then it is the tournament id)
+  // Set only on a Live entry built solely from get_my_live_tournament (no registration row
+  // loaded yet). Such an entry has no registration id; see src/utils/live-entries.ts.
+  liveRpcOnly?: boolean;
   status: RegistrationStatus;
   registered_at: string;
   // Authoritative per-player elimination (elimination-format), set by the bracket engine via
