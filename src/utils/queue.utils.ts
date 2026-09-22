@@ -187,14 +187,32 @@ export const freeTables = (
 
 // Pair the front of the ordered queue with free tables (lowest table number
 // first). Only fills currently-free tables; never touches a playing match.
+//
+// Play Next: a Ready match whose preferredTableId is one of the FREE tables gets that table
+// first (earliest in queue order wins a contested table). Everything else is paired exactly as
+// before — the remaining queue, in order, with the remaining free tables, lowest number first.
+// A preference for a busy table does nothing now (the table is never held idle for it).
 export const planAutoAssign = (
   ordered: QueueEntry[],
   available: TournamentTable[],
 ): AssignmentPlan[] => {
-  const n = Math.min(ordered.length, available.length);
   const plan: AssignmentPlan[] = [];
+  const freeIds = new Set(available.map((t) => t.id));
+  const takenTables = new Set<number>();
+  const placed = new Set<string>();
+  for (const e of ordered) {
+    const pref = e.match.preferredTableId;
+    if (pref != null && freeIds.has(pref) && !takenTables.has(pref)) {
+      plan.push({ matchId: e.match.id, tableId: pref });
+      takenTables.add(pref);
+      placed.add(e.match.id);
+    }
+  }
+  const rest = ordered.filter((e) => !placed.has(e.match.id));
+  const tables = available.filter((t) => !takenTables.has(t.id));
+  const n = Math.min(rest.length, tables.length);
   for (let i = 0; i < n; i++) {
-    plan.push({ matchId: ordered[i].match.id, tableId: available[i].id });
+    plan.push({ matchId: rest[i].match.id, tableId: tables[i].id });
   }
   return plan;
 };

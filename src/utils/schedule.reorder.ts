@@ -16,6 +16,7 @@
 // dependency-valid, so the projection keeps it as-is.
 
 import { ProjectedMatch } from "./schedule.projection";
+import { QueuePin } from "../models/types/tournament-settings.types";
 
 export type ScheduleMove = "up" | "down" | "top" | "bottom";
 
@@ -127,4 +128,19 @@ export const reorderScheduled = (
   ids.splice(i, 1);
   ids.splice(move === "top" ? first : last, 0, cur.matchId);
   return ids;
+};
+
+// "Move & Keep {mode}": the same move expressed as a relative pin over the mode's order
+// (up → before the row above; down → after the row below; top/bottom → tier edge). Legality is
+// exactly scheduleMoveAvailability's — a move that is refused in Manual is refused here too.
+export const pinForMove = (
+  scheduled: ProjectedMatch[],
+  matchId: string,
+  move: ScheduleMove,
+): QueuePin | null => {
+  const i = scheduled.findIndex((pm) => pm.matchId === matchId);
+  if (i < 0 || !scheduleMoveAvailability(scheduled, i)[move]) return null;
+  if (move === "up") return { matchId, place: "before", anchorId: scheduled[i - 1].matchId };
+  if (move === "down") return { matchId, place: "after", anchorId: scheduled[i + 1].matchId };
+  return { matchId, place: move };
 };

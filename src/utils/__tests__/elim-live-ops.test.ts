@@ -4,7 +4,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyOpsLocally, liveOpErrorText, summarizeOpResults } from "../elim-live-ops";
+import {
+  applyOpsLocally,
+  buildAssignOps,
+  classifyTables,
+  liveOpErrorText,
+  planDisplacements,
+  summarizeOpResults,
+} from "../elim-live-ops";
 
 const NOW = "2026-09-01T12:00:00.000Z";
 
@@ -49,4 +56,47 @@ test("partial-success summary text", () => {
   );
   assert.equal(liveOpErrorText("match_in_progress"), "already in progress");
   assert.equal(liveOpErrorText("something_new"), "could not be saved");
+});
+
+
+const TABLES = [
+  { id: 1, status: "available" },
+  { id: 2, status: "available" },
+  { id: 3, status: "in_use" },
+  { id: 4, status: "unavailable" },
+];
+const ON_TABLE = [
+  { id: "W1M1", tableId: 2, status: "scheduled", p1Name: "Ann", p2Name: "Bo" }, // parked
+  { id: "W1M2", tableId: 3, status: "in_progress", p1Name: "Cy", p2Name: "Di" }, // playing
+  { id: "W1M3", tableId: 1, status: "completed", p1Name: "Ed", p2Name: "Fay" }, // done → frees table
+];
+
+test("table classification: free / parked (displaceable) / playing / unavailable", () => {
+  const st = classifyTables(TABLES, ON_TABLE);
+  assert.deepEqual(st[1], { kind: "free" });
+  assert.deepEqual(st[2], { kind: "assigned", matchId: "W1M1", label: "Ann vs Bo" });
+  assert.deepEqual(st[3], { kind: "playing", matchId: "W1M2", label: "Cy vs Di" });
+  assert.deepEqual(st[4], { kind: "unavailable" });
+});
+
+test("displacement: only parked occupants of chosen tables; never the in-progress one", () => {
+  const st = classifyTables(TABLES, ON_TABLE);
+  assert.deepEqual(planDisplacements([{ matchId: "L1M1", tableId: 1 }], st), []);
+  assert.deepEqual(planDisplacements([{ matchId: "L1M1", tableId: 2 }], st), [{ matchId: "W1M1", tableId: 2, label: "Ann vs Bo" }]);
+  assert.deepEqual(planDisplacements([{ matchId: "L1M1", tableId: 3 }], st), []); // playing: not a displacement
+  // the bumped match isn't counted when it is itself being re-placed in the same plan
+  assert.deepEqual(planDisplacements([{ matchId: "L1M1", tableId: 2 }, { matchId: "W1M1", tableId: 1 }], st), []);
+});
+
+test("assign batch: displaced unassigns first, atomic only when something is displaced", () => {
+  const plain = buildAssignOps([{ matchId: "L1M1", tableId: 1 }], false);
+  assert.deepEqual(plain, { ops: [{ op: "assign", matchId: "L1M1", tableId: 1, start: false }], atomic: false });
+  const bump = buildAssignOps([{ matchId: "L1M1", tableId: 2 }], true, ["W1M1"]);
+  assert.deepEqual(bump, {
+    ops: [
+      { op: "unassign", matchId: "W1M1" },
+      { op: "assign", matchId: "L1M1", tableId: 2, start: true },
+    ],
+    atomic: true,
+  });
 });

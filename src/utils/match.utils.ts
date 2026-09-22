@@ -57,6 +57,8 @@ export interface LiveMatch {
   p1Score: number | null;
   p2Score: number | null;
   result: MatchResult | null;
+  assignedAt: string | null; // server-stamped when the match got its current table
+  preferredTableId: number | null; // Play Next preference (soft), if any
   // Per-side match number + label for the bracket routing labels. Winners and
   // losers are numbered separately (W1, W2 … / L1, L2 …; grand = Finals), so a
   // winners match's loser reads "L to L34" and a losers winner reads "W to L73".
@@ -328,6 +330,8 @@ export const buildLiveMatches = (
       p1Score: st?.p1Score ?? null,
       p2Score: st?.p2Score ?? null,
       result: st?.result ?? null,
+      assignedAt: st?.assignedAt ?? null,
+      preferredTableId: st?.preferredTableId ?? null,
       number: route?.number ?? 0,
       numberLabel: route?.numberLabel ?? "",
       winnerToLabel: route?.winnerToLabel ?? null,
@@ -359,6 +363,40 @@ export const computeEliminatedRegIds = (matches: LiveMatch[]): number[] => {
     if (loserReg != null) out.add(loserReg);
   }
   return [...out];
+};
+
+// Race text for a match, from the SAME per-side races the bracket resolver computed
+// (buildLiveMatches → resolveBracket → matchRaces): fixed winners/losers/finals, A/B/C groups,
+// Fargo differential and manual overrides are all already applied. Never recomputes races.
+//   equal   → "Race to 7"
+//   unequal → ["Tyelerr Hill — Race to 5", "John Smith — Race to 4"]
+export interface MatchRaceInfo {
+  equal: boolean;
+  common: number | null; // the shared race when equal
+  lines: { name: string; raceTo: number | null }[]; // p1, p2
+}
+export const matchRaceInfo = (
+  m: Pick<LiveMatch, "p1Name" | "p2Name" | "p1Race" | "p2Race" | "raceTo">,
+): MatchRaceInfo => {
+  const r1 = m.p1Race ?? m.raceTo;
+  const r2 = m.p2Race ?? m.raceTo;
+  const equal = r1 != null && r1 === r2;
+  return {
+    equal,
+    common: equal ? r1 : null,
+    lines: [
+      { name: m.p1Name ?? "TBD", raceTo: r1 },
+      { name: m.p2Name ?? "TBD", raceTo: r2 },
+    ],
+  };
+};
+export const matchRaceText = (
+  m: Pick<LiveMatch, "p1Name" | "p2Name" | "p1Race" | "p2Race" | "raceTo">,
+  sep = "\n",
+): string => {
+  const info = matchRaceInfo(m);
+  if (info.equal) return `Race to ${info.common}`;
+  return info.lines.map((l) => `${l.name} — ${l.raceTo != null ? `Race to ${l.raceTo}` : "Race TBD"}`).join(sep);
 };
 
 // mm:ss (or h:mm:ss) for a positive seconds count.

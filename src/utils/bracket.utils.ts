@@ -19,12 +19,54 @@ export interface DrawPlayer {
 
 export interface RaceConfig {
   mode: RaceMode;
-  fixedWinners: number; // fixed-mode match race
+  fixedWinners: number; // fixed-mode match race (winners side / every non-final match)
+  // Fixed mode only: losers-side and finals races as configured in Settings. Absent ⇒ the
+  // winners race (so older callers / configs behave exactly as before).
+  fixedLosers?: number | null;
+  fixedFinals?: number | null;
   groups: RaceGroup[];
   diffMin: number;
   diffPerGame: number;
   diffMax: number | null; // null = uncapped
 }
+
+// Where a match sits for FIXED-race purposes: the losers side, the finals (double elim:
+// the grand final + its reset; single elim: the championship match), or everything else.
+export type RaceStage = "winners" | "losers" | "finals";
+
+// The ONE builder for a tournament's live RaceConfig (Manage hub, player view, spectator,
+// player stats all read it from here so they can't drift).
+export const raceConfigFromLiveSettings = (
+  ls:
+    | {
+        raceMode?: RaceMode | null;
+        fixedRaceWinners?: number | null;
+        fixedRaceLosers?: number | null;
+        fixedRaceFinals?: number | null;
+        raceGroups?: RaceGroup[] | null;
+        fargoDiffMinRace?: number | null;
+        fargoDiffPerGame?: number | null;
+        fargoDiffMaxRace?: number | null;
+      }
+    | null
+    | undefined,
+): RaceConfig => ({
+  mode: ls?.raceMode ?? "fixed",
+  fixedWinners: ls?.fixedRaceWinners ?? 5,
+  fixedLosers: ls?.fixedRaceLosers ?? null,
+  fixedFinals: ls?.fixedRaceFinals ?? null,
+  groups: ls?.raceGroups ?? [],
+  diffMin: ls?.fargoDiffMinRace ?? 3,
+  diffPerGame: ls?.fargoDiffPerGame ?? 40,
+  diffMax: ls?.fargoDiffMaxRace ?? null,
+});
+
+// Fixed-mode race for a bracket stage (falls back to the winners race when unset).
+export const fixedRaceFor = (cfg: RaceConfig, stage: RaceStage = "winners"): number => {
+  if (stage === "losers" && cfg.fixedLosers != null) return cfg.fixedLosers;
+  if (stage === "finals" && cfg.fixedFinals != null) return cfg.fixedFinals;
+  return cfg.fixedWinners;
+};
 
 // ── Sizing ───────────────────────────────────────────────────────────────────
 export const nextPowerOfTwo = (n: number): number => {
@@ -145,15 +187,15 @@ export const describeRace = (
 };
 
 // A player's race independent of opponent (fixed/groups, or differential solo).
-// A manual override always wins.
-const soloRace = (player: DrawPlayer | null, cfg: RaceConfig): number => {
+// A manual override always wins. `stage` only affects FIXED mode (winners/losers/finals).
+const soloRace = (player: DrawPlayer | null, cfg: RaceConfig, stage: RaceStage = "winners"): number => {
   if (player?.raceOverride != null) return player.raceOverride;
   if (cfg.mode === "groups") {
     const g = groupForFargo(player?.fargo ?? null, cfg.groups);
     return g ? g.raceTo : cfg.fixedWinners;
   }
   if (cfg.mode === "differential") return cfg.diffMin;
-  return cfg.fixedWinners;
+  return fixedRaceFor(cfg, stage);
 };
 
 export const averageRace = (players: DrawPlayer[], cfg: RaceConfig): number => {
@@ -167,6 +209,7 @@ export const matchRaces = (
   p1: DrawPlayer | null,
   p2: DrawPlayer | null,
   cfg: RaceConfig,
+  stage: RaceStage = "winners",
 ): { p1Race: number | null; p2Race: number | null; common: number | null } => {
   if (
     cfg.mode === "differential" &&
@@ -189,13 +232,13 @@ export const matchRaces = (
       p2.raceOverride ?? (p2.fargo <= p1.fargo ? cfg.diffMin : hiRace);
     return { p1Race, p2Race, common: p1Race === p2Race ? p1Race : null };
   }
-  const p1Race = p1 ? soloRace(p1, cfg) : null;
-  const p2Race = p2 ? soloRace(p2, cfg) : null;
+  const p1Race = p1 ? soloRace(p1, cfg, stage) : null;
+  const p2Race = p2 ? soloRace(p2, cfg, stage) : null;
   const common =
     p1Race != null && p1Race === p2Race
       ? p1Race
       : cfg.mode === "fixed" && !p1?.raceOverride && !p2?.raceOverride
-        ? cfg.fixedWinners
+        ? fixedRaceFor(cfg, stage)
         : null;
   return { p1Race, p2Race, common };
 };

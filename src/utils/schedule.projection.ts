@@ -34,6 +34,7 @@ import {
   orderQueue,
   QueueEntry,
 } from "./queue.utils";
+import { applyPinsToTier } from "./queue-pins";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,9 @@ export interface ProjectScheduleInput {
   mode: AutoAssignMode;
   queueOrder: string[];
   now: number; // only feeds the existing ready-queue wait calc
+  // TD relative overrides kept alongside an automatic mode (ignored in Manual, where queueOrder
+  // is authoritative). Untrusted shape: sanitized and resolved by utils/queue-pins.ts.
+  queuePins?: unknown;
 }
 
 // ── Display helpers (derived, never persisted) ─────────────────────────────────
@@ -148,7 +152,8 @@ const EMPTY_SCHEDULE = (mode: AutoAssignMode): ProjectedSchedule => ({
 });
 
 export const projectSchedule = (input: ProjectScheduleInput): ProjectedSchedule => {
-  const { bracket, matches, matchState, mode, queueOrder, now } = input;
+  const { bracket, matches, matchState, mode, queueOrder, now, queuePins } = input;
+  const pinsActive = mode !== "manual" && Array.isArray(queuePins) && queuePins.length > 0;
   const graph = bracket?.graph;
   if (!graph || !matches.length) return EMPTY_SCHEDULE(mode);
 
@@ -322,16 +327,30 @@ export const projectSchedule = (input: ProjectScheduleInput): ProjectedSchedule 
   for (const pm of base.values()) pm.dependencyDepth = depthOf(pm.matchId);
 
   // Ready subset: the existing, unchanged ordering path.
-  const readyQueue = orderQueue(buildQueueEntries(matches, readyAtMap, now), mode, queueOrder);
+  // Ready tier: the mode's order (unchanged orderQueue), then TD pins within the tier. This is
+  // the ONE list Auto Assign plans from, so it honors the TD's overrides.
+  const modeReady = orderQueue(buildQueueEntries(matches, readyAtMap, now), mode, queueOrder);
+  const readyQueue = pinsActive ? applyPinsToTier(modeReady, (e) => e.match.id, queuePins) : modeReady;
 
   const futures = [...base.values()].filter((pm) => pm.lifecycle === "waiting");
-  const ordered = mergeProjected(
+  const merged = mergeProjected(
     readyQueue.map((e) => base.get(e.match.id) as ProjectedMatch),
     futures,
     mode,
     queueOrder,
     graphIndex,
   );
+  // Waiting tier: TD pins applied after the dependency-safe merge, clamped so nothing lands
+  // above its own unresolved feeder or below a dependent; a possible GF2 stays last.
+  const ordered = pinsActive
+    ? [
+        ...merged.slice(0, readyQueue.length),
+        ...applyPinsToTier(merged.slice(readyQueue.length), (pm) => pm.matchId, queuePins, {
+          feedersOf: (id) => base.get(id)?.eligibility.blockedBy ?? [],
+          pinnedLast: (id) => base.get(id)?.conditional === "possible",
+        }),
+      ]
+    : merged;
 
   // Finalize (fresh objects so priority/readyRank never alias eligibility).
   const readyRankOf = new Map(readyQueue.map((e, i) => [e.match.id, i]));

@@ -6,7 +6,7 @@
 // these numbers match what the bracket / results show. No Fargo stats (no data).
 
 import { TournamentLiveSettings } from "../models/types/tournament-settings.types";
-import { RaceConfig } from "./bracket.utils";
+import { RaceConfig, raceConfigFromLiveSettings } from "./bracket.utils";
 import { buildLiveMatches } from "./match.utils";
 import { computeStandings } from "./tournament.stats";
 
@@ -57,14 +57,7 @@ export const prettyGameType = (g: string | null): string =>
         .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
         .join(" ");
 
-const raceConfigOf = (ls: TournamentLiveSettings | null): RaceConfig => ({
-  mode: ls?.raceMode ?? "fixed",
-  fixedWinners: ls?.fixedRaceWinners ?? 5,
-  groups: ls?.raceGroups ?? [],
-  diffMin: ls?.fargoDiffMinRace ?? 3,
-  diffPerGame: ls?.fargoDiffPerGame ?? 40,
-  diffMax: ls?.fargoDiffMaxRace ?? null,
-});
+const raceConfigOf = (ls: TournamentLiveSettings | null): RaceConfig => raceConfigFromLiveSettings(ls);
 
 // Inclusive of startMs, exclusive of endMs (rows are dated by tournament_date).
 const computeWindow = (

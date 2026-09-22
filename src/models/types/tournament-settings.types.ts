@@ -86,6 +86,13 @@ export interface MatchLiveState {
   p2Score?: number | null;
   timerSeconds?: number | null; // custom allowed-time override (seconds)
   result?: MatchResult | null; // how the match ended
+  // Server-stamped when the match gets (or changes) a table; cleared when unassigned. Drives
+  // assignment-notification dedupe. Never written by clients.
+  assignedAt?: string | null;
+  // Play Next: a SOFT preference for a table (typically one that is busy now). Auto Assign
+  // tries it first when that table frees and the match is Ready; never holds a table idle.
+  // Cleared by the server when the match is assigned or completed.
+  preferredTableId?: number | null;
 }
 
 // ── Full bracket graph (winners + losers + grand final) ───────────────────────
@@ -199,6 +206,12 @@ export interface TournamentLiveSettings {
   // Queue Manager (Live phase): the TD's chosen auto-assign strategy and their
   // manual queue order (match ids). queueOrder takes precedence in manual mode.
   autoAssignMode?: AutoAssignMode;
+  // Auto Assign ON: a TD's Manage screen assigns Ready matches to free tables as state changes
+  // (the queue ordering mode above still decides WHICH Ready match goes first).
+  autoAssignEnabled?: boolean;
+  // TD relative overrides that coexist with an automatic mode ("Move & Keep {mode}"). Resolved
+  // deterministically over the mode's order by src/utils/queue-pins.ts. Ignored in Manual.
+  queuePins?: QueuePin[];
   queueOrder?: string[];
   // How fees relate to the entry fee. false (default) = included in the entry
   // (fees reduce the pool). true = collected on top of the entry (fees are
@@ -210,16 +223,30 @@ export interface TournamentLiveSettings {
   chip?: ChipState;
 }
 
+// ── Queue pins (TD override kept alongside an automatic mode) ─────────────────
+export type QueuePinPlace = "before" | "after" | "top" | "bottom";
+export interface QueuePin {
+  matchId: string;
+  place: QueuePinPlace;
+  anchorId?: string; // required for before/after; absent for top/bottom
+}
+
 // ── Elimination live-state ops (Phase 3) ──────────────────────────────────────
 // Typed operations for the elim_live_apply RPC (supabase/migrations/
 // 20260922120000_elim_live_apply.sql). The server validates every op under a row
 // lock and changes only the targeted match / queue keys — never the whole blob.
 export type ElimLiveOp =
-  | { op: "assign"; matchId: string; tableId: number; start?: boolean }
+  | { op: "assign"; matchId: string; tableId: number; start?: boolean; ifUnassigned?: boolean }
   | { op: "start"; matchId: string }
   | { op: "unassign"; matchId: string }
   | { op: "patch_match"; matchId: string; set: Partial<MatchLiveState> }
-  | { op: "set_queue"; queueOrder?: string[]; autoAssignMode?: AutoAssignMode };
+  | {
+      op: "set_queue";
+      queueOrder?: string[];
+      autoAssignMode?: AutoAssignMode;
+      autoAssignEnabled?: boolean;
+      queuePins?: QueuePin[];
+    };
 
 // Machine-readable rejection reasons returned per op.
 export type ElimLiveOpError =
@@ -229,12 +256,14 @@ export type ElimLiveOpError =
   | "invalid_table"
   | "match_in_progress"
   | "match_completed"
+  | "match_assigned"
   | "no_table"
   | "unknown_match"
   | "invalid_field"
   | "invalid_value"
   | "invalid_transition"
   | "invalid_queue_order"
+  | "invalid_queue_pins"
   | "invalid_mode"
   | "invalid_op"
   | "empty_op";

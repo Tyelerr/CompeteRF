@@ -78,3 +78,63 @@ export const summarizeOpResults = (results: ElimLiveOpResult[], verb: string): s
   const reasons = [...new Set(failed.map((r) => liveOpErrorText(r.error)))].join(", ");
   return `${ok} ${verb} · ${failed.length} skipped — ${reasons}`;
 };
+
+// ── Table state + displacement (Auto Assign preview / Assign Table) ───────────
+// Pure classification of every tournament table from the SAME data the Queue renders
+// (tournament_tables + the matches currently on tables). No new scheduler state.
+export type TableState =
+  | { kind: "free" }
+  | { kind: "unavailable" }
+  | { kind: "assigned"; matchId: string; label: string } // parked, NOT started → may be displaced
+  | { kind: "playing"; matchId: string; label: string }; // in progress → never taken
+
+export const classifyTables = (
+  tables: { id: number; status: string }[],
+  onTable: { id: string; tableId: number | null; status: string; p1Name: string | null; p2Name: string | null }[],
+): Record<number, TableState> => {
+  const out: Record<number, TableState> = {};
+  for (const t of tables) out[t.id] = t.status === "unavailable" ? { kind: "unavailable" } : { kind: "free" };
+  for (const m of onTable) {
+    if (m.tableId == null || m.status === "completed" || !(m.tableId in out)) continue;
+    const label = `${m.p1Name ?? "TBD"} vs ${m.p2Name ?? "TBD"}`;
+    out[m.tableId] =
+      m.status === "in_progress"
+        ? { kind: "playing", matchId: m.id, label }
+        : { kind: "assigned", matchId: m.id, label };
+  }
+  return out;
+};
+
+// Matches a draft plan would bump off their (not-started) tables. In-progress tables are
+// never displaced (the caller must not offer them); free tables displace nobody.
+export const planDisplacements = (
+  plan: { matchId: string; tableId: number }[],
+  state: Record<number, TableState>,
+): { matchId: string; tableId: number; label: string }[] => {
+  const moving = new Set(plan.map((p) => p.matchId));
+  const seen = new Set<string>();
+  const out: { matchId: string; tableId: number; label: string }[] = [];
+  for (const p of plan) {
+    const s = state[p.tableId];
+    if (s?.kind === "assigned" && !moving.has(s.matchId) && !seen.has(s.matchId)) {
+      seen.add(s.matchId);
+      out.push({ matchId: s.matchId, tableId: p.tableId, label: s.label });
+    }
+  }
+  return out;
+};
+
+// Ops for "assign these matches, bumping these parked matches first". The unassigns run
+// first in the SAME server call (row-locked); with any displacement the call is atomic, so
+// a displaced match is never left unassigned without its replacement landing.
+export const buildAssignOps = (
+  plan: { matchId: string; tableId: number }[],
+  start: boolean,
+  displacedIds: string[] = [],
+): { ops: ElimLiveOp[]; atomic: boolean } => ({
+  ops: [
+    ...displacedIds.map((matchId) => ({ op: "unassign", matchId }) as ElimLiveOp),
+    ...plan.map((p) => ({ op: "assign", matchId: p.matchId, tableId: p.tableId, start }) as ElimLiveOp),
+  ],
+  atomic: displacedIds.length > 0,
+});

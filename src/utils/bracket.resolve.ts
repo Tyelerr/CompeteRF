@@ -10,7 +10,7 @@ import {
   BracketSide,
   BracketSlotRef,
 } from "../models/types/tournament-settings.types";
-import { DrawPlayer, matchRaces, RaceConfig } from "./bracket.utils";
+import { DrawPlayer, matchRaces, RaceConfig, RaceStage } from "./bracket.utils";
 
 export type SlotState = "player" | "empty" | "pending";
 
@@ -57,6 +57,19 @@ export const resolveBracket = (
 ): ResolvedBracket => {
   const byId = new Map(graph.map((n) => [n.id, n]));
   const cache = new Map<string, ResolvedMatch>();
+
+  // Fixed-race stage per match: double elim finals = the grand final (+ reset); single elim
+  // finals = the top winners round (the championship match).
+  const hasLosers = graph.some((n) => n.side === "losers");
+  const maxWinnersRound = graph.reduce((a, n) => (n.side === "winners" ? Math.max(a, n.round) : a), 0);
+  const stageOf = (n: BracketGraphNode): RaceStage =>
+    n.side === "grand"
+      ? "finals"
+      : n.side === "losers"
+        ? "losers"
+        : !hasLosers && n.round === maxWinnersRound
+          ? "finals"
+          : "winners";
 
   const winnerOf = (rm: ResolvedMatch): { player: DrawPlayer | null; decided: boolean } => {
     if (rm.skipped || rm.isEmpty) return { player: null, decided: true };
@@ -129,7 +142,7 @@ export const resolveBracket = (
     let s2Race: number | null = null;
     let common: number | null = null;
     if (present === 2) {
-      const r = matchRaces(a.player, b.player, cfg);
+      const r = matchRaces(a.player, b.player, cfg, stageOf(node));
       s1Race = r.p1Race;
       s2Race = r.p2Race;
       common = r.common;
