@@ -55,6 +55,20 @@ var matchRaces = (p1, p2, cfg, stage = "winners") => {
   return { p1Race, p2Race, common };
 };
 
+// src/utils/clear-table.ts
+var CLEAR_TABLE_HOLD_MS = 12e4;
+var isClearHeld = (state, now) => {
+  const at = state?.clearedAt;
+  if (!at) return false;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && now - t >= 0 && now - t < CLEAR_TABLE_HOLD_MS;
+};
+var clearHeldIds = (matchState, now) => {
+  const held = /* @__PURE__ */ new Set();
+  for (const [id, st] of Object.entries(matchState ?? {})) if (isClearHeld(st, now)) held.add(id);
+  return held;
+};
+
 // src/utils/bracket.resolve.ts
 var resolveBracket = (graph, seededPlayers, results, cfg) => {
   const byId = new Map(graph.map((n) => [n.id, n]));
@@ -798,7 +812,9 @@ var planAutoAssignFromState = (args) => {
     queuePins: ls.queuePins ?? [],
     now: args.now
   });
-  return planAutoAssign(schedule.readyQueue, freeTables(args.tables, computeTableOccupancy(matches)));
+  const held = clearHeldIds(matchState, args.now);
+  const ready = held.size ? schedule.readyQueue.filter((e) => !held.has(e.match.id)) : schedule.readyQueue;
+  return planAutoAssign(ready, freeTables(args.tables, computeTableOccupancy(matches)));
 };
 export {
   autoAssignActive,

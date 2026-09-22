@@ -12,6 +12,7 @@
 import { GeneratedBracket, MatchLiveState, TournamentLiveSettings } from "../models/types/tournament-settings.types";
 import { TournamentTable } from "../models/types/tournament-table.types";
 import { raceConfigFromLiveSettings } from "./bracket.utils";
+import { clearHeldIds } from "./clear-table";
 import { buildLiveMatches, LiveMatch } from "./match.utils";
 import { AssignmentPlan, freeTables, planAutoAssign } from "./queue.utils";
 import { projectSchedule } from "./schedule.projection";
@@ -65,5 +66,10 @@ export const planAutoAssignFromState = (args: {
     queuePins: ls.queuePins ?? [],
     now: args.now,
   });
-  return planAutoAssign(schedule.readyQueue, freeTables(args.tables, computeTableOccupancy(matches)));
+  // A just-cleared match is held back for 2 minutes so Clear Table isn't undone by the run its own
+  // write triggers (src/utils/clear-table.ts). Every other Ready match still competes for the
+  // freed table, and the hold ends on its own — Auto Assign itself is untouched.
+  const held = clearHeldIds(matchState, args.now);
+  const ready = held.size ? schedule.readyQueue.filter((e) => !held.has(e.match.id)) : schedule.readyQueue;
+  return planAutoAssign(ready, freeTables(args.tables, computeTableOccupancy(matches)));
 };

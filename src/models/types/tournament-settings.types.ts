@@ -93,6 +93,10 @@ export interface MatchLiveState {
   // tries it first when that table frees and the match is Ready; never holds a table idle.
   // Cleared by the server when the match is assigned or completed.
   preferredTableId?: number | null;
+  // Server-stamped when the TD takes the match OFF a table ("Clear Table" / a reset that removes
+  // the table). Auto Assign skips the match for CLEAR_TABLE_HOLD_MS after it, so clearing a table
+  // is not instantly undone; cleared again by any new assignment. See src/utils/clear-table.ts.
+  clearedAt?: string | null;
 }
 
 // ── Full bracket graph (winners + losers + grand final) ───────────────────────

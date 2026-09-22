@@ -36,11 +36,27 @@ test("scheduler.bundle.js is up to date with the app scheduler source", () => {
   assert.equal(norm(readFileSync(outFile, "utf8")), norm(buildBundle()), "run: npm run build:scheduler");
 });
 
+test("the bundle carries the Clear Table hold: a just-cleared match is not re-assigned", () => {
+  const ms: any = {
+    W1M1: done(1, 20), W1M2: done(2, 50), W1M3: done(1, 30), W1M4: done(1, 40),
+    W2M2: { status: "in_progress", tableId: 72 }, L1M1: { status: "in_progress", tableId: 73 }, L1M2: { status: "in_progress", tableId: 74 },
+    W2M1: { status: "scheduled", clearedAt: new Date(NOW - 5_000).toISOString() },
+  };
+  const input = (state: any) => ({ liveSettings: { bracket, matchState: state, autoAssignMode: "longestWait" }, tables: tables(4), gameType: "9-ball", now: NOW });
+  assert.deepEqual(bundle.planAutoAssignFromState(input(ms) as any), [], "held: the freed table stays free for now");
+  const expired = { ...ms, W2M1: { status: "scheduled", clearedAt: new Date(NOW - 10 * 60_000).toISOString() } };
+  assert.deepEqual(bundle.planAutoAssignFromState(input(expired) as any).map((p: any) => p.matchId), ["W2M1"], "after the hold: normal");
+});
+
 test("bundled planner === app planner on the same state (modes, pins, Play Next, busy tables)", () => {
   const states: any[] = [
     {},
     { W1M1: done(1, 20), W1M2: done(2, 50), W1M3: done(1, 30), W1M4: done(1, 40) },
     { W1M1: done(1, 20), W1M2: done(2, 50), W1M3: { status: "in_progress", tableId: 71 }, W2M1: { preferredTableId: 73 } },
+    // a just-cleared match (Clear Table hold) and one whose hold has expired
+    { W1M1: done(1, 20), W1M2: done(2, 50), W1M3: done(1, 30), W1M4: done(1, 40),
+      W2M1: { status: "scheduled", clearedAt: new Date(NOW - 5_000).toISOString() },
+      L1M1: { status: "scheduled", clearedAt: new Date(NOW - 10 * 60_000).toISOString() } },
   ];
   const extras: any[] = [
     { autoAssignMode: "balanced" },
@@ -54,7 +70,7 @@ test("bundled planner === app planner on the same state (modes, pins, Play Next,
     assert.deepEqual(bundle.planAutoAssignFromState(input as any), appPlan(input as any), JSON.stringify({ ms, ex, n }));
     compared++;
   }
-  assert.equal(compared, 36);
+  assert.equal(compared, 48);
 });
 
 // ── Orchestration ────────────────────────────────────────────────────────────────────────────
