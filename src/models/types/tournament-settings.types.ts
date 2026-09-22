@@ -209,3 +209,44 @@ export interface TournamentLiveSettings {
   // when tournament_format === "chip-tournament".
   chip?: ChipState;
 }
+
+// ── Elimination live-state ops (Phase 3) ──────────────────────────────────────
+// Typed operations for the elim_live_apply RPC (supabase/migrations/
+// 20260922120000_elim_live_apply.sql). The server validates every op under a row
+// lock and changes only the targeted match / queue keys — never the whole blob.
+export type ElimLiveOp =
+  | { op: "assign"; matchId: string; tableId: number; start?: boolean }
+  | { op: "start"; matchId: string }
+  | { op: "unassign"; matchId: string }
+  | { op: "patch_match"; matchId: string; set: Partial<MatchLiveState> }
+  | { op: "set_queue"; queueOrder?: string[]; autoAssignMode?: AutoAssignMode };
+
+// Machine-readable rejection reasons returned per op.
+export type ElimLiveOpError =
+  | "table_occupied"
+  | "table_unavailable"
+  | "table_not_found"
+  | "invalid_table"
+  | "match_in_progress"
+  | "match_completed"
+  | "no_table"
+  | "unknown_match"
+  | "invalid_field"
+  | "invalid_value"
+  | "invalid_transition"
+  | "invalid_queue_order"
+  | "invalid_mode"
+  | "invalid_op"
+  | "empty_op";
+
+export interface ElimLiveOpResult {
+  i: number; // index into the submitted ops
+  ok: boolean;
+  error?: ElimLiveOpError | string;
+}
+
+export interface ElimLiveApplyResponse {
+  live_settings: TournamentLiveSettings;
+  live_state: string;
+  results: ElimLiveOpResult[];
+}

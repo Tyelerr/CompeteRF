@@ -36,6 +36,7 @@ import {
   planAutoAssign,
 } from "../../../../utils/queue.utils";
 import { ProjectedMatch, ProjectedSchedule } from "../../../../utils/schedule.projection";
+import { liveOpErrorText } from "../../../../utils/elim-live-ops";
 import {
   reorderScheduled,
   MOVE_BLOCKED_TEXT,
@@ -60,6 +61,13 @@ interface QueueViewProps {
   onAssignStart: (matchId: string, tableId: number) => void; // park + start
   onStart: (matchId: string) => void; // start a match already parked on a table
   onUnassign: (matchId: string) => void;
+  // Auto Assign "Assign All" / "Assign & Start All" — ONE server batch; resolves with
+  // per-match results (the server may skip some, e.g. a table that just became occupied).
+  onAssignMany: (
+    plan: AssignmentPlan[],
+    start: boolean,
+  ) => Promise<{ matchId: string; ok: boolean; error?: string }[]>;
+  onUnassignMany: (matchIds: string[]) => Promise<void>; // Recently Applied "Undo All"
   onSetMode: (mode: AutoAssignMode) => void;
   onSetQueueOrder: (ids: string[]) => void;
   // Opens the shared match-actions modal (score/end/reopen/etc.) for an on-table
@@ -136,6 +144,8 @@ export const QueueView = ({
   onAssignStart,
   onStart,
   onUnassign,
+  onAssignMany,
+  onUnassignMany,
   onSetMode,
   onSetQueueOrder,
   onManageMatch,
@@ -234,24 +244,43 @@ export const QueueView = ({
 
   const runAutoAssign = () => {
     setAppliedIds([]);
+    setApplyNote(null);
     setAutoOpen(true);
   };
   // Assign ALL planned matches at once; they drop into Recently Applied below.
   // start = also begin the matches (Assign & Start), otherwise just park them.
-  const applyAll = (plan: AssignmentPlan[], start: boolean) => {
-    for (const p of plan) {
-      if (start) onAssignStart(p.matchId, p.tableId);
-      else onAssign(p.matchId, p.tableId);
+  // ONE awaited batch (the server applies every op under one lock). Only matches the server
+  // accepted go into Recently Applied; skipped ones are summarized for the TD.
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyNote, setApplyNote] = useState<string | null>(null);
+  const applyAll = async (plan: AssignmentPlan[], start: boolean) => {
+    if (applyBusy || plan.length === 0) return;
+    setApplyBusy(true);
+    try {
+      const results = await onAssignMany(plan, start);
+      const okIds = results.filter((r) => r.ok).map((r) => r.matchId);
+      setAppliedIds((prev) => [...prev, ...okIds]);
+      const skipped = results.filter((r) => !r.ok);
+      setApplyNote(
+        skipped.length
+          ? `${okIds.length} ${start ? "started" : "assigned"} · ${skipped.length} skipped — ${[
+              ...new Set(skipped.map((r) => liveOpErrorText(r.error))),
+            ].join(", ")}`
+          : null,
+      );
+    } finally {
+      setApplyBusy(false);
     }
-    setAppliedIds((prev) => [...prev, ...plan.map((p) => p.matchId)]);
   };
   const sendBackToQueue = (matchId: string) => {
     onUnassign(matchId);
     setAppliedIds((ids) => ids.filter((id) => id !== matchId));
   };
-  const undoAll = () => {
-    for (const id of appliedIds) onUnassign(id);
+  const undoAll = async () => {
+    const ids = appliedIds;
     setAppliedIds([]);
+    setApplyNote(null);
+    await onUnassignMany(ids);
   };
 
   const players = (m: LiveMatch | undefined): string =>
@@ -574,7 +603,8 @@ export const QueueView = ({
                   ))}
                 </ScrollView>
                 <TouchableOpacity
-                  style={styles.previewApply}
+                  style={[styles.previewApply, applyBusy && styles.btnDisabled]}
+                  disabled={applyBusy}
                   onPress={() => applyAll(autoPlan, false)}
                 >
                   <Text allowFontScaling={false} style={styles.previewApplyText}>
@@ -582,7 +612,8 @@ export const QueueView = ({
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.previewApplyStart}
+                  style={[styles.previewApplyStart, applyBusy && styles.btnDisabled]}
+                  disabled={applyBusy}
                   onPress={() => applyAll(autoPlan, true)}
                 >
                   <Text allowFontScaling={false} style={styles.previewApplyStartText}>
@@ -595,6 +626,12 @@ export const QueueView = ({
                 {available.length === 0
                   ? "No tables free."
                   : "No matches ready to assign."}
+              </Text>
+            )}
+
+            {!!applyNote && (
+              <Text allowFontScaling={false} style={styles.applyNote}>
+                {applyNote}
               </Text>
             )}
 
@@ -640,7 +677,10 @@ export const QueueView = ({
                               </Text>
                             </TouchableOpacity>
                           )}
-                          {available.length > 0 && (
+                          {/* Move re-parks a not-yet-started match; a started match changes
+                              table from the match-actions sheet (the server rejects re-assigning
+                              a live match rather than silently un-starting it). */}
+                          {available.length > 0 && m?.status !== "in_progress" && (
                             <ActionMenu
                               label="Move"
                               items={available.map<ActionMenuItem>((t) => ({
@@ -977,6 +1017,12 @@ const styles = StyleSheet.create({
   },
   previewApplyStartText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.white, fontWeight: "800" },
   // Recently applied
+  applyNote: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    fontWeight: "700",
+    marginTop: webSc(SPACING.sm),
+  },
   appliedEmpty: {
     fontSize: webMs(FONT_SIZES.sm),
     color: COLORS.textSecondary,

@@ -18,11 +18,14 @@ import type { ManagePhase } from "../../utils/tournament-phase";
 import {
   AutoAssignMode,
   DrawLogEntry,
+  ElimLiveApplyResponse,
+  ElimLiveOp,
   GeneratedBracket,
   MatchLiveState,
   PrizePoolConfig,
   TournamentLiveSettings,
 } from "../../models/types/tournament-settings.types";
+import { applyOpsLocally, liveOpErrorText } from "../../utils/elim-live-ops";
 import {
   TournamentLiveState,
   TableStatus,
@@ -108,13 +111,108 @@ export const useManageTournament = (tournamentId?: number) => {
     }
   };
 
+  // ---- Elimination live-state writes (Phase 3) ------------------------------
+  // Every elimination TD/admin match + queue write goes through the elim_live_apply RPC:
+  // the server applies typed ops under a row lock and changes ONLY the targeted match /
+  // queue keys, so it can never overwrite a player's concurrent score (the old
+  // whole-live_settings write could). No fallback to the old path — that would bring the
+  // race back. The cache is updated optimistically, then replaced by the server's
+  // authoritative live_settings. Per-op results are returned for partial-success UI.
+  const applyLiveOps = async (
+    ops: ElimLiveOp[],
+    opts: { atomic?: boolean } = {},
+  ): Promise<ElimLiveApplyResponse> => {
+    await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
+    const prev = currentTournament();
+    if (prev) {
+      queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+        ...prev,
+        live_settings: applyOpsLocally(prev.live_settings ?? {}, ops, new Date().toISOString()),
+      });
+    }
+    try {
+      const res = await tournamentService.applyElimLiveOps(tournamentId!, ops, opts.atomic ?? false);
+      const latest = currentTournament() ?? prev;
+      if (latest) {
+        queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+          ...latest,
+          live_settings: res.live_settings,
+          live_state: res.live_state as TournamentLiveState,
+        });
+      }
+      return res;
+    } catch (e) {
+      if (prev) queryClient.setQueryData(["tournament", tournamentId], prev);
+      throw e;
+    }
+  };
+  // Single-op convenience: throws (with the server's reason) when the op was rejected, so
+  // existing callers keep their error alerts.
+  const applyOneLiveOp = async (op: ElimLiveOp): Promise<ElimLiveApplyResponse> => {
+    const res = await applyLiveOps([op]);
+    const r = res.results[0];
+    if (!r?.ok) throw new Error(liveOpErrorText(r?.error));
+    return res;
+  };
+  const liveOpsMutation = useMutation({
+    mutationFn: (vars: { ops: ElimLiveOp[]; atomic?: boolean }) =>
+      applyLiveOps(vars.ops, { atomic: vars.atomic }),
+    onSettled: invalidateTournament,
+  });
+
+  // Settings / Prize Pool saves. Chip keeps the existing shared writeLiveSettings path
+  // untouched. Elimination saves split into (1) a plain column update WITHOUT live_settings
+  // and (2) a server-side TOP-LEVEL merge of the live_settings delta that can never touch the
+  // scheduler keys (matchState / queueOrder / autoAssignMode / bracket / drawLog) — so saving
+  // Settings mid-tournament can no longer revert a live score. A delta key whose value is
+  // `undefined` is REMOVED, matching the old whole-object write (JSON drops undefined).
+  const saveLiveSettingsPatch = async (patch: Partial<Tournament>): Promise<Tournament> => {
+    const cur = currentTournament();
+    const format = patch.tournament_format ?? cur?.tournament_format;
+    if (format === "chip-tournament") return writeLiveSettings(() => patch);
+
+    await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
+    const { live_settings: delta, ...columns } = patch;
+    if (cur) {
+      queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
+        ...cur,
+        ...columns,
+        ...(delta ? { live_settings: { ...(cur.live_settings ?? {}), ...delta } } : {}),
+      });
+    }
+    try {
+      let saved: Tournament | undefined = cur;
+      if (Object.keys(columns).length > 0) {
+        saved = await tournamentService.updateTournament(tournamentId!, columns);
+      }
+      if (delta) {
+        const set: Record<string, unknown> = {};
+        const remove: string[] = [];
+        for (const [k, v] of Object.entries(delta)) {
+          if (v === undefined) remove.push(k);
+          else set[k] = v;
+        }
+        const merged = await tournamentService.mergeElimLiveSettings(tournamentId!, set, remove);
+        const base = saved ?? currentTournament();
+        if (base) {
+          saved = { ...base, live_settings: merged };
+          queryClient.setQueryData<Tournament>(["tournament", tournamentId], saved);
+        }
+      }
+      return saved as Tournament;
+    } catch (e) {
+      if (cur) queryClient.setQueryData(["tournament", tournamentId], cur);
+      throw e;
+    }
+  };
+
   // ---- Mutations ---------------------------------------------------------
 
   // Settings save MERGES live_settings into the existing blob so it never
   // clobbers sibling keys (bracket, drawLog, matchState, prizePool) that the
   // Settings form's toPatch() doesn't know about.
   const saveSettingsMutation = useMutation({
-    mutationFn: (patch: Partial<Tournament>) => writeLiveSettings(() => patch),
+    mutationFn: (patch: Partial<Tournament>) => saveLiveSettingsPatch(patch),
     onSettled: invalidateTournament,
   });
 
@@ -122,7 +220,7 @@ export const useManageTournament = (tournamentId?: number) => {
   // so it survives a Settings save and rides along when the bracket is drawn.
   const savePrizePoolMutation = useMutation({
     mutationFn: (config: PrizePoolConfig) =>
-      writeLiveSettings(() => ({ live_settings: { prizePool: config } })),
+      saveLiveSettingsPatch({ live_settings: { prizePool: config } }),
     onSettled: invalidateTournament,
   });
 
@@ -196,47 +294,21 @@ export const useManageTournament = (tournamentId?: number) => {
     onSettled: invalidateTournament,
   });
 
-  // Persist Queue Manager settings (auto-assign mode + manual queue order),
-  // merged into live_settings.
+  // Persist Queue Manager settings (auto-assign mode + manual queue order). Server-side
+  // set_queue op: changes ONLY these two keys.
   const saveQueueSettingsMutation = useMutation({
     mutationFn: (vars: { autoAssignMode?: AutoAssignMode; queueOrder?: string[] }) =>
-      writeLiveSettings(() => ({ live_settings: { ...vars } })),
+      applyOneLiveOp({ op: "set_queue", ...vars }),
     onSettled: invalidateTournament,
   });
 
-  // Merge a patch into one match's live state (Matches tab). Stored in
-  // live_settings.matchState keyed by match number.
-  //
-  // Lifecycle: starting the FIRST real match (patch.status === "in_progress") also transitions
-  // the tournament to the canonical Running state (live_state = "in_progress") in the SAME
-  // atomic write — so the Admin header ("Bracket Drawn" → Running) and the public Billiards
-  // card ("Registration Closed" → LIVE), which both already derive from live_state, update
-  // together. Idempotent: only flips when the tournament isn't already running/finished, so it
-  // never duplicates the explicit "Start Tournament" transition (both converge on in_progress).
+  // Merge a patch into one match's live state (Matches tab / match-actions sheet). Server-side
+  // patch_match op: changes ONLY that match (whitelisted, validated fields). The server also
+  // flips live_state → in_progress on the first real start and stamps a first start with
+  // server time (never the device clock). Rejections throw with the server's reason.
   const setMatchStateMutation = useMutation({
     mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) =>
-      writeLiveSettings((prevLS) => {
-        const prevMS = prevLS.matchState ?? {};
-        const key = vars.matchId;
-        const existing = prevMS[key];
-        const merged: MatchLiveState = {
-          ...existing,
-          ...vars.patch,
-          status: vars.patch.status ?? existing?.status ?? "scheduled",
-        };
-        const t = currentTournament();
-        const startsMatch = vars.patch.status === "in_progress";
-        const notYetRunning =
-          !!t &&
-          t.live_state !== "in_progress" &&
-          t.live_state !== "finished" &&
-          t.status !== "completed" &&
-          t.status !== "archived";
-        return {
-          ...(startsMatch && notYetRunning ? { live_state: "in_progress" as TournamentLiveState } : {}),
-          live_settings: { matchState: { ...prevMS, [key]: merged } },
-        };
-      }),
+      applyOneLiveOp({ op: "patch_match", matchId: vars.matchId, set: vars.patch }),
     onSettled: invalidateTournament,
   });
 
@@ -363,6 +435,10 @@ export const useManageTournament = (tournamentId?: number) => {
     // Live matches (Matches tab)
     matchState: tournament?.live_settings?.matchState ?? {},
     setMatchState: setMatchStateMutation.mutateAsync,
+    // Elimination typed-op batch (assign / start / unassign / patch_match / set_queue) with
+    // per-op results — Assign All / Start All / Auto Assign use this as ONE call.
+    applyLiveOps: (ops: ElimLiveOp[], opts?: { atomic?: boolean }) =>
+      liveOpsMutation.mutateAsync({ ops, atomic: opts?.atomic }),
     bulkSetMatchState: bulkSetMatchStateMutation.mutateAsync,
 
     // Queue Manager

@@ -74,6 +74,8 @@ import {
   AutoAssignMode,
   BracketMatch,
   DrawLogEntry,
+  ElimLiveOp,
+  ElimLiveOpResult,
   FeeCategory,
   GeneratedBracket,
   MatchLiveState,
@@ -142,7 +144,9 @@ import {
   freeTables,
   isStartable,
   bracketLocation,
+  AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
+import { liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
 import { tournamentEventService, TournamentEvent } from "../../../../src/models/services/tournament-event.service";
@@ -4193,55 +4197,116 @@ export default function ManageTournamentScreen() {
     refreshEvents();
   };
 
+  // ── Elimination typed-op writes (Phase 3) ──────────────────────────────────────────────
+  // Queue/table actions go through the server-side elim_live_apply ops (row-locked, validated,
+  // touch only the targeted match). Batches are ONE call with per-op results; activity events
+  // and player notifications are sent ONLY for ops the server accepted.
+  // `eventPatch` is the equivalent MatchLiveState change, used for the durable activity log.
+  const runLiveOps = async (
+    items: { op: ElimLiveOp; eventPatch: Partial<MatchLiveState> }[],
+  ): Promise<ElimLiveOpResult[]> => {
+    const prevById = new Map(liveMatches.map((m) => [m.id, m]));
+    const prevLiveState = hub.tournament?.live_state;
+    const res = await hub.applyLiveOps(items.map((x) => x.op));
+    let firstStart = true;
+    res.results.forEach((r) => {
+      if (!r.ok) return;
+      const it = items[r.i];
+      const mid = "matchId" in it.op ? it.op.matchId : null;
+      if (!mid) return;
+      // Only the first successful start may emit "tournament_started".
+      const lsForEvent = it.eventPatch.status === "in_progress" && !firstStart ? "in_progress" : prevLiveState;
+      if (it.eventPatch.status === "in_progress") firstStart = false;
+      logMatchDerivedEvent(prevById.get(mid) ?? null, it.eventPatch, lsForEvent);
+    });
+    refreshEvents();
+    return res.results;
+  };
+  // Single op → throws on rejection so the existing error alerts still fire.
+  const runLiveOp = async (op: ElimLiveOp, eventPatch: Partial<MatchLiveState>) => {
+    const [r] = await runLiveOps([{ op, eventPatch }]);
+    if (!r?.ok) throw new Error(liveOpErrorText(r?.error));
+  };
+  const assignItem = (matchId: string, tableId: number, start: boolean) => ({
+    op: { op: "assign", matchId, tableId, start } as ElimLiveOp,
+    eventPatch: start
+      ? ({ tableId, status: "in_progress" } as Partial<MatchLiveState>)
+      : ({ tableId, status: "scheduled", startedAt: null } as Partial<MatchLiveState>),
+  });
+
   const handleQueueAssign = (matchId: string, tableId: number) =>
-    runMatchPatch(matchId, { tableId, status: "scheduled", startedAt: null }).catch(() =>
-      Alert.alert("Error", "Failed to assign the table."),
+    runLiveOp(assignItem(matchId, tableId, false).op, assignItem(matchId, tableId, false).eventPatch).catch(
+      (e: Error) => Alert.alert("Error", `Failed to assign the table (${e.message}).`),
     );
-  // Assign + start in one step (table set + in_progress + startedAt).
+  // Assign + start in one step (server stamps startedAt).
   const handleQueueAssignStart = (matchId: string, tableId: number) =>
-    runMatchPatch(matchId, { tableId, status: "in_progress", startedAt: new Date().toISOString() })
+    runLiveOp(assignItem(matchId, tableId, true).op, assignItem(matchId, tableId, true).eventPatch)
       .then(() => notifyMatchPlayers(matchId, tableId))
-      .catch(() => Alert.alert("Error", "Failed to assign and start the match."));
-  // Start a match already parked on a table (keeps its table).
+      .catch((e: Error) => Alert.alert("Error", `Failed to assign and start the match (${e.message}).`));
+  // Start a match already parked on a table (keeps its table; server stamps startedAt).
   const handleQueueStart = (matchId: string) =>
-    runMatchPatch(matchId, { status: "in_progress", startedAt: new Date().toISOString() })
+    runLiveOp({ op: "start", matchId }, { status: "in_progress" })
       .then(() => notifyMatchPlayers(matchId))
-      .catch(() => Alert.alert("Error", "Failed to start the match."));
+      .catch((e: Error) => Alert.alert("Error", `Failed to start the match (${e.message}).`));
   // Send a match back to the queue: clear its table and revert to scheduled.
   const handleQueueUnassign = (matchId: string) =>
-    runMatchPatch(matchId, { tableId: null, status: "scheduled", startedAt: null }).catch(() =>
-      Alert.alert("Error", "Failed to update the match."),
+    runLiveOp({ op: "unassign", matchId }, { tableId: null, status: "scheduled", startedAt: null }).catch(
+      (e: Error) => Alert.alert("Error", `Failed to update the match (${e.message}).`),
     );
+  // Queue Auto Assign "Assign All" / "Assign & Start All": ONE batch call (was an un-awaited
+  // loop). Returns per-match results so the preview can list only what actually landed.
+  const handleQueueAssignMany = async (
+    plan: AssignmentPlan[],
+    start: boolean,
+  ): Promise<{ matchId: string; ok: boolean; error?: string }[]> => {
+    if (plan.length === 0) return [];
+    try {
+      const results = await runLiveOps(plan.map((p) => assignItem(p.matchId, p.tableId, start)));
+      if (start) results.forEach((r) => r.ok && notifyMatchPlayers(plan[r.i].matchId, plan[r.i].tableId));
+      return results.map((r) => ({ matchId: plan[r.i].matchId, ok: r.ok, error: r.error }));
+    } catch (e) {
+      Alert.alert("Auto Assign", `Could not assign matches (${(e as Error).message}).`);
+      return plan.map((p) => ({ matchId: p.matchId, ok: false }));
+    }
+  };
+  // Recently Applied "Undo All": one batch unassign.
+  const handleQueueUnassignMany = async (matchIds: string[]) => {
+    if (matchIds.length === 0) return;
+    try {
+      const results = await runLiveOps(
+        matchIds.map((matchId) => ({
+          op: { op: "unassign", matchId } as ElimLiveOp,
+          eventPatch: { tableId: null, status: "scheduled", startedAt: null } as Partial<MatchLiveState>,
+        })),
+      );
+      if (results.some((r) => !r.ok)) Alert.alert("Undo All", summarizeOpResults(results, "sent back"));
+    } catch (e) {
+      Alert.alert("Undo All", `Could not send matches back (${(e as Error).message}).`);
+    }
+  };
 
   // Start All (Dashboard): start ONLY matches already assigned to a table and waiting to start
   // (isStartable — the same condition an individual Start Match satisfies). Does NOT auto-assign.
-  // Sequential awaited (writeLiveSettings is built for chained writes); partial failures reported.
+  // ONE batch call; partial failures reported; notifications only for matches that started.
   const handleStartAll = () => {
     const startable = liveMatches.filter(isStartable);
     if (startable.length === 0) return;
     const run = async () => {
       setDashBusy(true);
-      let ok = 0;
-      let fail = 0;
-      for (const m of startable) {
-        try {
-          await runMatchPatch(m.id, {
-            status: "in_progress",
-            tableId: m.tableId,
-            startedAt: new Date().toISOString(),
-          });
-          notifyMatchPlayers(m.id, m.tableId ?? undefined);
-          ok += 1;
-        } catch {
-          fail += 1;
-        }
-      }
-      setDashBusy(false);
-      if (fail > 0)
-        Alert.alert(
-          "Start All",
-          `${ok} match${ok === 1 ? "" : "es"} started. ${fail} could not be started.`,
+      try {
+        const results = await runLiveOps(
+          startable.map((m) => ({
+            op: { op: "start", matchId: m.id } as ElimLiveOp,
+            eventPatch: { status: "in_progress", tableId: m.tableId } as Partial<MatchLiveState>,
+          })),
         );
+        results.forEach((r) => r.ok && notifyMatchPlayers(startable[r.i].id, startable[r.i].tableId ?? undefined));
+        if (results.some((r) => !r.ok)) Alert.alert("Start All", summarizeOpResults(results, "started"));
+      } catch (e) {
+        Alert.alert("Start All", `Could not start matches (${(e as Error).message}).`);
+      } finally {
+        setDashBusy(false);
+      }
     };
     if (startable.length > 1) {
       Alert.alert("Start assigned matches?", `Start ${startable.length} assigned matches?`, [
@@ -4255,6 +4320,7 @@ export default function ManageTournamentScreen() {
 
   // Auto Assign (Dashboard): reuse the authoritative planner — order the ready (unassigned)
   // queue by the current mode and pair the front with free tables. Distinct from Start All.
+  // The plan is unchanged; it is now applied as ONE batch call with per-op results.
   const handleDashAutoAssign = async () => {
     const readyAtMap = computeReadyAtMap(hub.bracket, hub.matchState);
     const entries = buildQueueEntries(liveMatches, readyAtMap, Date.now());
@@ -4265,22 +4331,24 @@ export default function ManageTournamentScreen() {
       return;
     }
     setDashBusy(true);
-    for (const p of plan) {
-      try {
-        await runMatchPatch(p.matchId, { tableId: p.tableId, status: "scheduled", startedAt: null });
-      } catch {
-        /* keep going; reconciled by the mutation's invalidate */
-      }
+    try {
+      const results = await runLiveOps(plan.map((p) => assignItem(p.matchId, p.tableId, false)));
+      if (results.some((r) => !r.ok)) Alert.alert("Auto Assign", summarizeOpResults(results, "assigned"));
+    } catch (e) {
+      Alert.alert("Auto Assign", `Could not assign matches (${(e as Error).message}).`);
+    } finally {
+      setDashBusy(false);
     }
-    setDashBusy(false);
   };
   const handleSetAutoMode = (m: AutoAssignMode) =>
-    hub.saveQueueSettings({ autoAssignMode: m }).catch(() => {});
+    hub
+      .saveQueueSettings({ autoAssignMode: m })
+      .catch((e: Error) => Alert.alert("Queue", `Could not change the mode (${e.message}).`));
   // A manual reorder takes the TD into Manual mode with the new order.
   const handleSetQueueOrder = (ids: string[]) =>
     hub
       .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual" })
-      .catch(() => {});
+      .catch((e: Error) => Alert.alert("Queue", `Could not save the new order (${e.message}).`));
 
   // Finish the event: marks it completed (live_state finished) which unlocks the
   // Results phase. Confirmed first since it stops live editing.
@@ -8142,6 +8210,8 @@ export default function ManageTournamentScreen() {
               onAssignStart={handleQueueAssignStart}
               onStart={handleQueueStart}
               onUnassign={handleQueueUnassign}
+              onAssignMany={handleQueueAssignMany}
+              onUnassignMany={handleQueueUnassignMany}
               onSetMode={handleSetAutoMode}
               onSetQueueOrder={handleSetQueueOrder}
               onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}

@@ -6,6 +6,11 @@ import {
   TournamentTemplate,
 } from "../types/tournament.types";
 import { TournamentLiveState } from "../types/common.types";
+import {
+  ElimLiveApplyResponse,
+  ElimLiveOp,
+  TournamentLiveSettings,
+} from "../types/tournament-settings.types";
 import { searchAlertService } from "./search-alert.service";
 
 function normalizeTournament<T extends { game_type?: any }>(t: T): T {
@@ -290,6 +295,42 @@ export const tournamentService = {
       p_patch: patch,
     });
     if (error) throw error;
+  },
+
+  // Elimination TD/admin live-state writes (Phase 3). Applies typed ops (assign / start /
+  // unassign / patch_match / set_queue) server-side under a row lock — never replaces the
+  // whole live_settings. Best-effort by default: each op reports ok/error on its own and a
+  // failed op changes nothing; atomic=true makes the whole call all-or-nothing.
+  // See supabase/migrations/20260922120000_elim_live_apply.sql.
+  async applyElimLiveOps(
+    tournamentId: number,
+    ops: ElimLiveOp[],
+    atomic = false,
+  ): Promise<ElimLiveApplyResponse> {
+    const { data, error } = await supabase.rpc("elim_live_apply", {
+      p_tournament_id: tournamentId,
+      p_ops: ops,
+      p_atomic: atomic,
+    });
+    if (error) throw error;
+    return data as unknown as ElimLiveApplyResponse;
+  },
+
+  // Elimination Settings / Prize Pool save: merges TOP-LEVEL live_settings keys (and removes
+  // `remove` keys) server-side so a save can never overwrite the live scheduler keys
+  // (matchState / queueOrder / autoAssignMode / bracket / drawLog). Returns the new blob.
+  async mergeElimLiveSettings(
+    tournamentId: number,
+    set: Record<string, unknown>,
+    remove: string[] = [],
+  ): Promise<TournamentLiveSettings> {
+    const { data, error } = await supabase.rpc("elim_merge_live_settings", {
+      p_tournament_id: tournamentId,
+      p_set: set,
+      p_remove: remove,
+    });
+    if (error) throw error;
+    return data as unknown as TournamentLiveSettings;
   },
 
   // Persist the elimination-format eliminated set (registration ids) computed by the bracket
