@@ -25,6 +25,7 @@ import {
   MatchActionStep,
 } from "../../../../utils/match.utils";
 import { MatchLiveState } from "../../../../models/types/tournament-settings.types";
+import { clearTableConfirm } from "../../../../utils/clear-table";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { Dropdown } from "../../common/dropdown";
 import { useMatchTimer } from "./useMatchTimer";
@@ -48,6 +49,8 @@ export const MatchActionsModal = ({
   tables,
   occupancy,
   onPatch,
+  onClearTable,
+  autoAssignEnabled,
   onClose,
   busy,
 }: {
@@ -57,6 +60,11 @@ export const MatchActionsModal = ({
   // tableId -> label of the match currently on it (to block double-booking).
   occupancy?: Record<number, string>;
   onPatch: (matchId: string, patch: Partial<MatchLiveState>) => Promise<unknown>;
+  // Clear Table — removes only the table assignment (and, in Manual order, puts the match next
+  // in line). Omit to hide the action.
+  onClearTable?: (matchId: string) => Promise<unknown>;
+  // Persistent Auto Assign state, for the confirmation copy only.
+  autoAssignEnabled?: boolean;
   onClose: () => void;
   busy: boolean;
 }) => {
@@ -122,6 +130,11 @@ export const MatchActionsModal = ({
   const apply = async (patch: Partial<MatchLiveState>) => {
     await onPatch(m.id, patch);
     onClose();
+  };
+
+  const tableName = (id: number | null): string => {
+    const t = tables.find((x) => x.id === id);
+    return t ? (t.label ? `${t.label} ${t.table_number}` : `Table ${t.table_number}`) : "the table";
   };
 
   // A table is "busy" if a DIFFERENT in-progress match is on it.
@@ -224,6 +237,17 @@ export const MatchActionsModal = ({
       },
     });
     items.push({ label: "Assign Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
+    // Clear Table: ONLY removes the table (never starts/completes/scores). Offered just for a
+    // match that currently has one; the match goes straight back to the Ready queue.
+    if (m.tableId != null && onClearTable)
+      items.push({
+        label: "Clear Table",
+        onPress: () =>
+          Alert.alert("Clear Table?", clearTableConfirm(tableName(m.tableId), autoAssignEnabled === true), [
+            { text: "Cancel", style: "cancel" },
+            { text: "Clear Table", onPress: async () => { await onClearTable(m.id); onClose(); } },
+          ]),
+      });
     items.push({ label: "Set Time Limit", onPress: () => setStep("timer") });
     items.push({ label: "Forfeit", danger: true, onPress: () => setStep("forfeit") });
     items.push({ label: "Withdraw", danger: true, onPress: () => setStep("withdraw") });

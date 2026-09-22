@@ -136,6 +136,7 @@ import { SettingsTemplates } from "../../../../src/views/components/tournament/S
 import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
+import { buildClearTableOps } from "../../../../src/utils/clear-table";
 import {
   autoAssignPayload,
   keepModeMovePayload,
@@ -4371,6 +4372,30 @@ export default function ManageTournamentScreen() {
       setDashBusy(false);
     }
   };
+  // Clear Table (Match Actions): take the match OFF its table and back to the Ready queue —
+  // table only, never a start/score/bracket change. In Manual order the same atomic call puts it
+  // at the front of the queue ("next available"). The server stamps clearedAt so a server-side
+  // Auto Assign run doesn't hand the same table straight back (src/utils/clear-table.ts).
+  const handleClearTable = async (matchId: string) => {
+    const ops = buildClearTableOps({
+      matchId,
+      mode: hub.autoAssignMode as AutoAssignMode,
+      queueOrder: hub.queueOrder,
+    });
+    try {
+      const results = await runLiveOps(
+        ops.map((op) => ({
+          op,
+          eventPatch: op.op === "unassign" ? ({ tableId: null, status: "scheduled", startedAt: null } as Partial<MatchLiveState>) : {},
+        })),
+        { atomic: true },
+      );
+      const bad = results.find((r) => !r.ok);
+      if (bad) Alert.alert("Clear Table", `Could not clear the table (${bad.error ?? "unknown error"}).`);
+    } catch (e) {
+      Alert.alert("Clear Table", `Could not clear the table (${(e as Error).message}).`);
+    }
+  };
   // Play Next: soft preference for a (usually busy) table; null clears it. Never assigns now.
   const handleSetPreferredTable = (matchId: string, tableId: number | null) =>
     runLiveOp({ op: "patch_match", matchId, set: { preferredTableId: tableId } }, {}).catch((e: Error) =>
@@ -8167,6 +8192,8 @@ export default function ManageTournamentScreen() {
             tables={hub.tables}
             occupancy={tableOccupancy}
             onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
+            onClearTable={handleClearTable}
+            autoAssignEnabled={hub.autoAssignEnabled}
             onClose={() => setDashboardSheet(null)}
             busy={dashBusy}
           />
@@ -8285,6 +8312,8 @@ export default function ManageTournamentScreen() {
                 tables={hub.tables}
                 occupancy={tableOccupancy}
                 onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
+                onClearTable={handleClearTable}
+                autoAssignEnabled={hub.autoAssignEnabled}
                 onClose={() => setDashboardSheet(null)}
                 busy={dashBusy}
               />
