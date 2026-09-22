@@ -49,6 +49,54 @@ export const scheduleMoveAvailability = (
   return { up, down, top: up, bottom: down };
 };
 
+// ── Why a move is unavailable (UI explanation only) ───────────────────────────
+// Legality always comes from scheduleMoveAvailability above; these reasons are
+// only computed for moves it already refused, so they can never make a move legal
+// or illegal.
+export type MoveBlockedReason =
+  | "conditional" // GF2 reset that may never be played — pinned last
+  | "dependsOnAbove" // the row above is one of this match's feeders
+  | "dependentBelow" // the row below is waiting on this match
+  | "highest" // top of its tier (or of the list)
+  | "lowest"; // bottom of its tier (or above the pinned reset)
+
+export const MOVE_BLOCKED_TEXT: Record<MoveBlockedReason, string> = {
+  conditional: "This conditional match stays at the end until it is required.",
+  dependsOnAbove: "Can't move above a match this one depends on.",
+  dependentBelow: "Can't move below a match that depends on this one.",
+  highest: "Already at the highest available position.",
+  lowest: "Already at the lowest available position.",
+};
+
+export interface ScheduleMoveState {
+  can: ScheduleMoveAvailability;
+  // null when the move is allowed
+  reason: Record<ScheduleMove, MoveBlockedReason | null>;
+}
+
+export const scheduleMoveState = (
+  scheduled: ProjectedMatch[],
+  index: number,
+): ScheduleMoveState => {
+  const can = scheduleMoveAvailability(scheduled, index);
+  const cur = scheduled[index];
+  const prev = scheduled[index - 1];
+  const next = scheduled[index + 1];
+  const upReason = (): MoveBlockedReason => {
+    if (cur && pinnedLast(cur)) return "conditional";
+    if (cur && prev && cur.eligibility.blockedBy.includes(prev.matchId)) return "dependsOnAbove";
+    return "highest";
+  };
+  const downReason = (): MoveBlockedReason => {
+    if (cur && pinnedLast(cur)) return "conditional";
+    if (cur && next && next.eligibility.blockedBy.includes(cur.matchId)) return "dependentBelow";
+    return "lowest";
+  };
+  const up = can.up ? null : upReason();
+  const down = can.down ? null : downReason();
+  return { can, reason: { up, down, top: can.top ? null : up, bottom: can.bottom ? null : down } };
+};
+
 // The new queueOrder for a move, or null when the move isn't allowed.
 export const reorderScheduled = (
   scheduled: ProjectedMatch[],

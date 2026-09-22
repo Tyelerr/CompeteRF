@@ -14,7 +14,12 @@ import { RaceConfig } from "../bracket.utils";
 import { buildLiveMatches } from "../match.utils";
 import { buildQueueEntries, computeReadyAtMap, orderQueue } from "../queue.utils";
 import { ProjectedSchedule, projectSchedule } from "../schedule.projection";
-import { reorderScheduled, scheduleMoveAvailability } from "../schedule.reorder";
+import {
+  MOVE_BLOCKED_TEXT,
+  reorderScheduled,
+  scheduleMoveAvailability,
+  scheduleMoveState,
+} from "../schedule.reorder";
 
 const cfg: RaceConfig = { mode: "fixed", fixedWinners: 7, groups: [], diffMin: 0, diffPerGame: 0, diffMax: null };
 const DRAWN = "2026-09-01T10:00:00.000Z";
@@ -152,4 +157,50 @@ test("conditional GF2 is pinned last", () => {
   assert.equal(s.scheduled[last].matchId, "GF2");
   assert.deepEqual(scheduleMoveAvailability(s.scheduled, last), { up: false, down: false, top: false, bottom: false });
   assert.equal(scheduleMoveAvailability(s.scheduled, last - 1).down, false);
+});
+
+test("disabled reasons: present exactly when a move is blocked, never change legality", () => {
+  for (const mode of ["balanced", "winnersFirst", "losersFirst", "longestWait", "manual"] as AutoAssignMode[]) {
+    const s = project(mode);
+    s.scheduled.forEach((_, i) => {
+      const st = scheduleMoveState(s.scheduled, i);
+      assert.deepEqual(st.can, scheduleMoveAvailability(s.scheduled, i), `${mode} #${i}`);
+      for (const mv of ["up", "down", "top", "bottom"] as const) {
+        assert.equal(st.reason[mv] == null, st.can[mv], `${mode} #${i} ${mv}`);
+        // and the helper that actually moves agrees
+        assert.equal(reorderScheduled(s.scheduled, s.scheduled[i].matchId, mv) != null, st.can[mv]);
+      }
+    });
+  }
+});
+
+test("disabled reasons: specific cases", () => {
+  const s = project("balanced");
+  const o = ids(s);
+  const n = readyCount(s);
+  // very first row
+  assert.equal(scheduleMoveState(s.scheduled, 0).reason.up, "highest");
+  assert.equal(scheduleMoveState(s.scheduled, 0).reason.top, "highest");
+  // last Ready row can't sink below the Waiting tier (unless its dependent is right below)
+  const lastReady = scheduleMoveState(s.scheduled, n - 1).reason.down;
+  const belowDependsOnIt = s.scheduled[n].eligibility.blockedBy.includes(o[n - 1]);
+  assert.equal(lastReady, belowDependsOnIt ? "dependentBelow" : "lowest");
+  // adjacent feeder pair: lower row "depends on above", upper row "dependent below"
+  const k = s.scheduled.findIndex((p, i) => i > 0 && p.eligibility.blockedBy.includes(o[i - 1]));
+  assert.ok(k > 0);
+  assert.equal(scheduleMoveState(s.scheduled, k).reason.up, "dependsOnAbove");
+  assert.equal(scheduleMoveState(s.scheduled, k - 1).reason.down, "dependentBelow");
+  // conditional GF2: every direction explains the pin; row above it is "lowest"
+  const last = s.scheduled.length - 1;
+  assert.deepEqual(scheduleMoveState(s.scheduled, last).reason, {
+    up: "conditional", down: "conditional", top: "conditional", bottom: "conditional",
+  });
+  const aboveGf2 = scheduleMoveState(s.scheduled, last - 1).reason.down;
+  assert.ok(aboveGf2 === "lowest" || aboveGf2 === "dependentBelow");
+  // exact user-facing copy
+  assert.equal(MOVE_BLOCKED_TEXT.dependsOnAbove, "Can't move above a match this one depends on.");
+  assert.equal(MOVE_BLOCKED_TEXT.dependentBelow, "Can't move below a match that depends on this one.");
+  assert.equal(MOVE_BLOCKED_TEXT.conditional, "This conditional match stays at the end until it is required.");
+  assert.equal(MOVE_BLOCKED_TEXT.highest, "Already at the highest available position.");
+  assert.equal(MOVE_BLOCKED_TEXT.lowest, "Already at the lowest available position.");
 });

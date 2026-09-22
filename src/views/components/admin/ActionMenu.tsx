@@ -31,6 +31,9 @@ export interface ActionMenuItem {
   destructive?: boolean;
   icon?: string;
   disabled?: boolean;
+  // Optional muted helper line under a DISABLED item explaining why it's
+  // unavailable (tap-friendly on native; no hover needed).
+  hint?: string;
 }
 
 interface ActionMenuProps {
@@ -80,7 +83,10 @@ export const ActionMenu = ({
   // long list (e.g. one row per table) reads as taller than it renders and the
   // flip-up math throws the menu off the top of the screen.
   const estHeight = Math.min(
-    visibleItems.length * webSc(46) + webSc(8),
+    visibleItems.length * webSc(46) +
+      // disabled items with a reason render a second (wrapping) line
+      visibleItems.filter((it) => it.disabled && it.hint).length * webSc(30) +
+      webSc(8),
     webSc(MENU_MAX_HEIGHT),
   );
   const below = anchor.y + anchor.h + 4;
@@ -148,15 +154,22 @@ export const ActionMenu = ({
                       {item.icon}
                     </Text>
                   ) : null}
-                  <Text
-                    allowFontScaling={false}
-                    style={[
-                      styles.itemText,
-                      item.destructive && styles.itemTextDestructive,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
+                  <View style={styles.itemBody}>
+                    <Text
+                      allowFontScaling={false}
+                      style={[
+                        styles.itemText,
+                        item.destructive && styles.itemTextDestructive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                    {item.disabled && !!item.hint && (
+                      <Text allowFontScaling={false} style={styles.itemHint}>
+                        {item.hint}
+                      </Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -227,6 +240,14 @@ const styles = StyleSheet.create({
   },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.border },
   itemDisabled: { opacity: 0.4 },
+  itemBody: { flex: 1, minWidth: 0 as any },
+  // Reason under a disabled item — kept readable despite the item's dimmed opacity.
+  itemHint: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.text,
+    fontStyle: "italic",
+    marginTop: webSc(2),
+  },
   itemIcon: {
     fontSize: webMs(FONT_SIZES.md),
     marginRight: webSc(SPACING.sm),

@@ -38,7 +38,8 @@ import {
 import { ProjectedMatch, ProjectedSchedule } from "../../../../utils/schedule.projection";
 import {
   reorderScheduled,
-  scheduleMoveAvailability,
+  MOVE_BLOCKED_TEXT,
+  scheduleMoveState,
   ScheduleMove,
 } from "../../../../utils/schedule.reorder";
 import { Dropdown } from "../../common/dropdown";
@@ -74,6 +75,48 @@ const isWeb = Platform.OS === "web";
 
 const tableLabelOf = (t: TournamentTable): string =>
   t.label ? `${t.label} ${t.table_number}` : `Table ${t.table_number}`;
+
+// ▲/▼ priority control. When disabled it explains why: a native browser tooltip on
+// web (title set on a plain wrapper View — a disabled RN-web touchable is
+// pointerEvents box-none, so it wouldn't receive the hover itself) plus an
+// accessibility hint everywhere. Presentational only; legality is passed in.
+const ReorderArrow = ({
+  dir,
+  enabled,
+  blockedReason,
+  onPress,
+}: {
+  dir: "up" | "down";
+  enabled: boolean;
+  blockedReason?: string;
+  onPress: () => void;
+}) => {
+  const wrapRef = useRef<View>(null);
+  const label = dir === "up" ? "Move Up" : "Move Down";
+  const tip = !enabled && blockedReason ? blockedReason : label;
+  useEffect(() => {
+    if (!isWeb) return;
+    const node = wrapRef.current as unknown as { setAttribute?: (k: string, v: string) => void } | null;
+    node?.setAttribute?.("title", tip);
+  }, [tip]);
+  return (
+    <View ref={wrapRef}>
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={!enabled}
+        style={[styles.reorderBtn, !enabled && styles.reorderOff]}
+        hitSlop={6}
+        accessibilityLabel={label}
+        accessibilityHint={!enabled ? blockedReason : undefined}
+        accessibilityState={{ disabled: !enabled }}
+      >
+        <Text allowFontScaling={false} style={styles.reorderText}>
+          {dir === "up" ? "▲" : "▼"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const SummaryRow = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.summaryRow}>
@@ -217,7 +260,12 @@ export const QueueView = ({
   // One Scheduled row (inline list + Full Schedule modal share it). Ready rows keep
   // the existing Assign / Assign & Start menu; every row gets priority controls.
   const renderScheduledRow = (pm: ProjectedMatch, i: number) => {
-    const can = scheduleMoveAvailability(scheduled, i);
+    // Legality + the reason a move is unavailable both come from the reorder helper.
+    const { can, reason } = scheduleMoveState(scheduled, i);
+    const why = (mv: ScheduleMove): string | undefined => {
+      const r = reason[mv];
+      return r ? MOVE_BLOCKED_TEXT[r] : undefined;
+    };
     const assign =
       pm.eligibility.ready &&
       (available.length > 0 ? (
@@ -242,31 +290,27 @@ export const QueueView = ({
         </Text>
       ));
     const arrow = (dir: "up" | "down", enabled: boolean) => (
-      <TouchableOpacity
+      <ReorderArrow
+        dir={dir}
+        enabled={enabled}
+        blockedReason={why(dir)}
         onPress={() => move(pm.matchId, dir)}
-        disabled={!enabled}
-        style={[styles.reorderBtn, !enabled && styles.reorderOff]}
-        hitSlop={6}
-        accessibilityLabel={dir === "up" ? "Move up" : "Move down"}
-      >
-        <Text allowFontScaling={false} style={styles.reorderText}>
-          {dir === "up" ? "▲" : "▼"}
-        </Text>
-      </TouchableOpacity>
+      />
     );
     const actions = (
       <>
         {assign || null}
         {arrow("up", can.up)}
         {arrow("down", can.down)}
+        {/* Always openable so a fully-pinned row (e.g. the conditional reset) can
+            still explain itself — each disabled item shows its reason (works on native). */}
         <ActionMenu
           compact
-          disabled={!can.up && !can.down}
           items={[
-            { label: "Move to Top", disabled: !can.top, onPress: () => move(pm.matchId, "top") },
-            { label: "Move Up", disabled: !can.up, onPress: () => move(pm.matchId, "up") },
-            { label: "Move Down", disabled: !can.down, onPress: () => move(pm.matchId, "down") },
-            { label: "Move to Bottom", disabled: !can.bottom, onPress: () => move(pm.matchId, "bottom") },
+            { label: "Move to Top", disabled: !can.top, hint: why("top"), onPress: () => move(pm.matchId, "top") },
+            { label: "Move Up", disabled: !can.up, hint: why("up"), onPress: () => move(pm.matchId, "up") },
+            { label: "Move Down", disabled: !can.down, hint: why("down"), onPress: () => move(pm.matchId, "down") },
+            { label: "Move to Bottom", disabled: !can.bottom, hint: why("bottom"), onPress: () => move(pm.matchId, "bottom") },
           ]}
         />
       </>
