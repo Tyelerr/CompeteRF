@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "web:build": "npx expo export --platform web",
     "web:publish": "npm run web:build && node scripts/deploy-web.js",
+    "build:scheduler": "node scripts/build-scheduler-bundle.js",
     "lint": "expo lint"
   },
   "dependencies": {
@@ -60,6 +61,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.10",
+    "esbuild": "0.27.2",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~57.0.2",
     "tsx": "^4.21.0",
