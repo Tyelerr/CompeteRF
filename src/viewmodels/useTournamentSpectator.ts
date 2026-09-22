@@ -19,7 +19,8 @@ import {
   PrizePoolConfig,
   RaceGroup,
 } from "../models/types/tournament-settings.types";
-import { groupForFargo, RaceConfig } from "../utils/bracket.utils";
+import { groupForFargo, RaceConfig, raceConfigFromLiveSettings } from "../utils/bracket.utils";
+import { applyPinsToTier } from "../utils/queue-pins";
 import {
   buildLiveMatches,
   computeEliminatedRegIds,
@@ -101,17 +102,10 @@ export const useTournamentSpectator = (tournamentId?: number) => {
 
   const tournament = tournamentQuery.data ?? null;
 
-  const raceConfig: RaceConfig = useMemo(() => {
-    const ls = tournament?.live_settings ?? {};
-    return {
-      mode: ls.raceMode ?? "fixed",
-      fixedWinners: ls.fixedRaceWinners ?? 5,
-      groups: ls.raceGroups ?? [],
-      diffMin: ls.fargoDiffMinRace ?? 3,
-      diffPerGame: ls.fargoDiffPerGame ?? 40,
-      diffMax: ls.fargoDiffMaxRace ?? null,
-    };
-  }, [tournament]);
+  const raceConfig: RaceConfig = useMemo(
+    () => raceConfigFromLiveSettings(tournament?.live_settings),
+    [tournament],
+  );
 
   const groups: RaceGroup[] = raceConfig.groups;
 
@@ -214,7 +208,11 @@ export const useTournamentSpectator = (tournamentId?: number) => {
     const matchState = tournament?.live_settings?.matchState ?? {};
     const readyAtMap = computeReadyAtMap(bracket, matchState);
     const entries = buildQueueEntries(matches, readyAtMap, nowMs());
-    return orderQueue(entries, autoAssignMode, queueOrder);
+    const ordered = orderQueue(entries, autoAssignMode, queueOrder);
+    // Same TD overrides the Manage screen applies (ignored in Manual mode).
+    return autoAssignMode === "manual"
+      ? ordered
+      : applyPinsToTier(ordered, (e) => e.match.id, tournament?.live_settings?.queuePins);
   }, [tournament, matches, autoAssignMode, queueOrder]);
 
   // Currently Playing / Active Tables: every match sitting on a table that hasn't

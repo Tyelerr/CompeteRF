@@ -28,9 +28,11 @@ export const useProjectedSchedule = (
   matchState: Record<string, MatchLiveState>,
   mode: AutoAssignMode,
   queueOrder: string[],
+  queuePins: unknown = [],
 ): ProjectedSchedule => {
   // Hub returns a fresh [] when queueOrder is unset — key on content, not identity.
   const queueKey = queueOrder.join("|");
+  const pinsKey = JSON.stringify(Array.isArray(queuePins) ? queuePins : []);
   return useMemo(
     () =>
       projectSchedule({
@@ -40,7 +42,8 @@ export const useProjectedSchedule = (
         mode,
         queueOrder: queueKey ? queueKey.split("|") : [],
         now: nowMs(),
+        queuePins: JSON.parse(pinsKey),
       }),
-    [bracket, matches, matchState, mode, queueKey],
+    [bracket, matches, matchState, mode, queueKey, pinsKey],
   );
 };

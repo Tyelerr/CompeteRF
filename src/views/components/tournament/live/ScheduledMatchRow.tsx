@@ -52,6 +52,7 @@ export const ScheduledMatchRow = ({
   actions,
   stackActions,
   dense,
+  note,
 }: {
   pm: ProjectedMatch;
   position: number; // 1-based
@@ -59,6 +60,7 @@ export const ScheduledMatchRow = ({
   actions?: ReactNode;
   stackActions?: boolean; // narrow layouts: actions on their own line
   dense?: boolean; // side-panel variant (Dashboard)
+  note?: string | null; // extra meta, e.g. "Next on Diamond 2" (Play Next)
 }) => {
   const status = statusOf(pm);
   const waitMs =
@@ -83,6 +85,8 @@ export const ScheduledMatchRow = ({
           <Text allowFontScaling={false} style={styles.meta} numberOfLines={1}>
             {pm.location}
             {status === "conditional" ? "  ·  Only if the reset is needed" : ""}
+            {status === "ready" ? "  ·  No table assigned" : ""}
+            {note ? <Text style={styles.note}>{`  ·  ${note}`}</Text> : null}
             {waitMs != null && (
               <Text style={{ color: waitTone(waitMs), fontWeight: "700" }}>
                 {waitMs < 60000 ? "  ·  Just now" : `  ·  Waiting ${formatWait(waitMs)}`}
@@ -135,6 +139,7 @@ const styles = StyleSheet.create({
   // Unresolved feeder — a legitimate future opponent, not a disabled state.
   placeholder: { color: COLORS.primarySoft, fontWeight: "600", fontStyle: "italic" },
   vs: { color: COLORS.textMuted, fontWeight: "600" },
+  note: { color: COLORS.primaryLight, fontWeight: "700" },
   meta: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(2) },
   pill: {
     paddingHorizontal: webSc(SPACING.sm),

@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -25,7 +26,7 @@ import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
-import { AutoAssignMode } from "../../../../models/types/tournament-settings.types";
+import { AutoAssignMode, QueuePin } from "../../../../models/types/tournament-settings.types";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { formatClock, LiveMatch, MatchActionStep } from "../../../../utils/match.utils";
 import {
@@ -35,9 +36,16 @@ import {
   freeTables,
   planAutoAssign,
 } from "../../../../utils/queue.utils";
-import { ProjectedMatch, ProjectedSchedule } from "../../../../utils/schedule.projection";
-import { liveOpErrorText } from "../../../../utils/elim-live-ops";
+import { ProjectedMatch, ProjectedSchedule, projectedSlotText } from "../../../../utils/schedule.projection";
 import {
+  classifyTables,
+  liveOpErrorText,
+  planDisplacements,
+  TableState,
+} from "../../../../utils/elim-live-ops";
+import { pinsWithMove, pinsWithout, sanitizePins } from "../../../../utils/queue-pins";
+import {
+  pinForMove,
   reorderScheduled,
   MOVE_BLOCKED_TEXT,
   scheduleMoveState,
@@ -46,6 +54,9 @@ import {
 import { Dropdown } from "../../common/dropdown";
 import { ActionMenu, ActionMenuItem } from "../../admin/ActionMenu";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
+
+const projectedPlayers = (pm: ProjectedMatch): string =>
+  `${projectedSlotText(pm.slot1)} vs ${projectedSlotText(pm.slot2)}`;
 
 // Scheduled rows shown inline before "View Full Schedule".
 const SCHEDULE_PREVIEW = 10;
@@ -63,11 +74,21 @@ interface QueueViewProps {
   onUnassign: (matchId: string) => void;
   // Auto Assign "Assign All" / "Assign & Start All" — ONE server batch; resolves with
   // per-match results (the server may skip some, e.g. a table that just became occupied).
+  // displacedIds: parked (NOT started) matches to unassign first — same atomic server call.
   onAssignMany: (
     plan: AssignmentPlan[],
     start: boolean,
+    displacedIds?: string[],
   ) => Promise<{ matchId: string; ok: boolean; error?: string }[]>;
   onUnassignMany: (matchIds: string[]) => Promise<void>; // Recently Applied "Undo All"
+  // Play Next: soft preference for a (busy) table; null clears it. Persisted server-side.
+  onSetPreferredTable: (matchId: string, tableId: number | null) => void;
+  // TD relative overrides kept alongside an automatic mode ("Move & Keep {mode}").
+  queuePins: QueuePin[];
+  onSetQueuePins: (pins: QueuePin[]) => void;
+  // Auto Assign enabled/disabled (separate from the queue ordering mode).
+  autoAssignEnabled: boolean;
+  onSetAutoAssignEnabled: (on: boolean) => void;
   onSetMode: (mode: AutoAssignMode) => void;
   onSetQueueOrder: (ids: string[]) => void;
   // Opens the shared match-actions modal (score/end/reopen/etc.) for an on-table
@@ -146,6 +167,11 @@ export const QueueView = ({
   onUnassign,
   onAssignMany,
   onUnassignMany,
+  onSetPreferredTable,
+  queuePins,
+  onSetQueuePins,
+  autoAssignEnabled,
+  onSetAutoAssignEnabled,
   onSetMode,
   onSetQueueOrder,
   onManageMatch,
@@ -231,10 +257,64 @@ export const QueueView = ({
   // re-derives eligibility independently.
   const reorderRef = useRef(onSetQueueOrder);
   reorderRef.current = onSetQueueOrder;
+  // The specific requested move, in words: "Move "A vs B" above "C vs D"?" / "…to the top of
+  // the Ready queue?" — derived from the displayed list (the same one the move is computed on).
+  const describeMove = (matchId: string, dir: ScheduleMove): string => {
+    const i = scheduled.findIndex((pm) => pm.matchId === matchId);
+    const cur = scheduled[i];
+    const nameOf = (pm: ProjectedMatch | undefined) =>
+      pm ? `"${pm.numberLabel || pm.matchId} — ${projectedPlayers(pm)}"` : "";
+    const tier = cur?.eligibility.ready ? "Ready" : "waiting";
+    if (dir === "up") return `Move:\n${nameOf(cur)}\n\nabove:\n${nameOf(scheduled[i - 1])}?`;
+    if (dir === "down") return `Move:\n${nameOf(cur)}\n\nbelow:\n${nameOf(scheduled[i + 1])}?`;
+    if (dir === "top") return `Move:\n${nameOf(cur)}\n\nto the top of the ${tier} queue?`;
+    return `Move:\n${nameOf(cur)}\n\nto the bottom of the ${tier} queue?`;
+  };
   const move = (matchId: string, dir: ScheduleMove) => {
     const ids = reorderScheduled(scheduled, matchId, dir);
-    if (ids) reorderRef.current(ids);
+    if (!ids) return;
+    if (mode === "manual") {
+      reorderRef.current(ids);
+      return;
+    }
+    // An automatic mode is active: the TD chooses. "Keep" stores ONE relative pin (the mode keeps
+    // ordering everything else around it); "Switch to Manual" writes Manual + the displayed order
+    // with exactly this move (and clears pins) in one set_queue write. Cancel changes nothing.
+    const pin = pinForMove(scheduled, matchId, dir);
+    Alert.alert(
+      "Change Queue Order?",
+      `You're currently using ${modeLabel}.\n\n${describeMove(matchId, dir)}`,
+      [
+        { text: "Cancel", style: "cancel" },
+        ...(pin
+          ? [{
+              text: `Move & Keep ${modeLabel}`,
+              onPress: () => onSetQueuePins(pinsWithMove(queuePins, scheduled.map((pm) => pm.matchId), pin)),
+            }]
+          : []),
+        { text: "Move & Switch to Manual", onPress: () => reorderRef.current(ids) },
+      ],
+    );
   };
+
+  // Every table's state from the SAME data the page renders (free / parked / playing).
+  const tableState = useMemo<Record<number, TableState>>(
+    () => classifyTables(tables, onTables.map((pm) => pm.match)),
+    [tables, onTables],
+  );
+  const pickableTables = useMemo(
+    () => tables.filter((t) => t.status !== "unavailable").sort((a, b) => a.table_number - b.table_number),
+    [tables],
+  );
+  const confirmDisplace = (tableName: string, occupant: string, onYes: () => void) =>
+    Alert.alert(
+      "Replace table assignment?",
+      `${tableName} is currently assigned to:\n${occupant}.\n\nAssigning this table to the new match will remove the existing assignment.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", style: "destructive", onPress: onYes },
+      ],
+    );
 
   // The pending plan, recomputed live from the current queue + free tables.
   const autoPlan = useMemo(
@@ -242,11 +322,42 @@ export const QueueView = ({
     [ordered, available],
   );
 
+  // The TD reviews (and may edit) a SNAPSHOT of the plan; the live plan is only the default.
+  const [draft, setDraft] = useState<AssignmentPlan[] | null>(null);
+  const shownPlan = draft ?? autoPlan;
+  const setDraftTable = (matchId: string, tableId: number) =>
+    setDraft((cur) => (cur ?? autoPlan).map((p) => (p.matchId === matchId ? { ...p, tableId } : p)));
   const runAutoAssign = () => {
     setAppliedIds([]);
     setApplyNote(null);
+    setDraft(autoPlan.map((p) => ({ ...p })));
     setAutoOpen(true);
   };
+  // Table choices for one preview row: free → pick; parked (not started) → warn, then pick
+  // (displaces it); in progress → never offered (disabled); chosen by another row → disabled.
+  const tableChoices = (p: AssignmentPlan): ActionMenuItem[] =>
+    pickableTables.map((t) => {
+      const name = tableLabelOf(t);
+      const st = tableState[t.id] ?? { kind: "free" };
+      const takenInPlan = shownPlan.some((q) => q.matchId !== p.matchId && q.tableId === t.id);
+      if (st.kind === "playing")
+        return {
+          label: `${name} — in progress · Play Next here`,
+          onPress: () => {
+            onSetPreferredTable(p.matchId, t.id);
+            setDraft((cur) => (cur ?? autoPlan).filter((q) => q.matchId !== p.matchId));
+          },
+        };
+      if (takenInPlan)
+        return { label: `${name} — used in this plan`, disabled: true, onPress: () => {} };
+      if (st.kind === "assigned")
+        return {
+          label: `${name} — replace ${st.label}`,
+          tone: "danger",
+          onPress: () => confirmDisplace(name, st.label, () => setDraftTable(p.matchId, t.id)),
+        };
+      return { label: `${name}${t.id === p.tableId ? "  ✓" : ""}`, onPress: () => setDraftTable(p.matchId, t.id) };
+    });
   // Assign ALL planned matches at once; they drop into Recently Applied below.
   // start = also begin the matches (Assign & Start), otherwise just park them.
   // ONE awaited batch (the server applies every op under one lock). Only matches the server
@@ -255,12 +366,31 @@ export const QueueView = ({
   const [applyNote, setApplyNote] = useState<string | null>(null);
   const applyAll = async (plan: AssignmentPlan[], start: boolean) => {
     if (applyBusy || plan.length === 0) return;
+    const displaced = planDisplacements(plan, tableState);
+    if (displaced.length > 0) {
+      const n = plan.length;
+      const d = displaced.length;
+      Alert.alert(
+        start ? "Assign & Start All?" : "Assign All?",
+        `${n} match${n === 1 ? "" : "es"} will be assigned.\n${d} existing match${d === 1 ? "" : "es"} will become unassigned and need a table:\n` +
+          displaced.map((x) => `• ${x.label}`).join("\n"),
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: start ? "Assign & Start All" : "Assign All", onPress: () => runApply(plan, start, displaced.map((x) => x.matchId)) },
+        ],
+      );
+      return;
+    }
+    await runApply(plan, start, []);
+  };
+  const runApply = async (plan: AssignmentPlan[], start: boolean, displacedIds: string[]) => {
     setApplyBusy(true);
     try {
-      const results = await onAssignMany(plan, start);
+      const results = await onAssignMany(plan, start, displacedIds);
       const okIds = results.filter((r) => r.ok).map((r) => r.matchId);
       setAppliedIds((prev) => [...prev, ...okIds]);
       const skipped = results.filter((r) => !r.ok);
+      setDraft(null); // back to the live plan for whatever is still Ready
       setApplyNote(
         skipped.length
           ? `${okIds.length} ${start ? "started" : "assigned"} · ${skipped.length} skipped — ${[
@@ -288,6 +418,17 @@ export const QueueView = ({
 
   // One Scheduled row (inline list + Full Schedule modal share it). Ready rows keep
   // the existing Assign / Assign & Start menu; every row gets priority controls.
+  // Matches carrying a TD override that is in effect (automatic modes only; expired pins —
+  // match/anchor no longer scheduled — are not shown).
+  const pinnedIds = useMemo(() => {
+    if (mode === "manual") return new Set<string>();
+    const live = new Set(scheduled.map((pm) => pm.matchId));
+    return new Set(
+      sanitizePins(queuePins)
+        .filter((p) => live.has(p.matchId) && (!p.anchorId || live.has(p.anchorId)))
+        .map((p) => p.matchId),
+    );
+  }, [mode, queuePins, scheduled]);
   const renderScheduledRow = (pm: ProjectedMatch, i: number) => {
     // Legality + the reason a move is unavailable both come from the reorder helper.
     const { can, reason } = scheduleMoveState(scheduled, i);
@@ -295,23 +436,53 @@ export const QueueView = ({
       const r = reason[mv];
       return r ? MOVE_BLOCKED_TEXT[r] : undefined;
     };
+    const assignItems: ActionMenuItem[] = !pm.eligibility.ready
+      ? []
+      : [
+          ...available.map<ActionMenuItem>((t) => ({
+            label: `Assign — ${tableLabelOf(t)}`,
+            onPress: () => onAssign(pm.matchId, t.id),
+          })),
+          ...available.map<ActionMenuItem>((t) => ({
+            label: `Assign & Start — ${tableLabelOf(t)}`,
+            onPress: () => onAssignStart(pm.matchId, t.id),
+          })),
+          // Tables parked with a not-started match can be taken over after a warning; the
+          // bumped match returns to Ready (atomic unassign + assign). Playing tables never.
+          ...pickableTables.flatMap<ActionMenuItem>((t) => {
+            const st = tableState[t.id];
+            if (st?.kind !== "assigned") return [];
+            const name = tableLabelOf(t);
+            return [
+              {
+                label: `Assign — ${name} (replace ${st.label})`,
+                tone: "danger",
+                onPress: () =>
+                  confirmDisplace(name, st.label, () =>
+                    onAssignMany([{ matchId: pm.matchId, tableId: t.id }], false, [st.matchId]),
+                  ),
+              },
+            ];
+          }),
+          // Play Next on a table that is IN PROGRESS: nothing is assigned now; the match gets
+          // that table first when it frees up (soft — the table is never held idle).
+          ...pickableTables.flatMap<ActionMenuItem>((t) =>
+            tableState[t.id]?.kind === "playing"
+              ? [{ label: `Play next on ${tableLabelOf(t)}`, tone: "primary", onPress: () => onSetPreferredTable(pm.matchId, t.id) }]
+              : [],
+          ),
+          ...(pm.match.preferredTableId != null
+            ? [{ label: "Clear Play Next", onPress: () => onSetPreferredTable(pm.matchId, null) } as ActionMenuItem]
+            : []),
+        ];
     const assign =
       pm.eligibility.ready &&
-      (available.length > 0 ? (
+      (assignItems.length > 0 ? (
         <ActionMenu
-          label="Assign"
+          label="Assign Table"
           triggerStyle={styles.rowBtn}
           triggerTextStyle={styles.rowBtnText}
-          items={[
-            ...available.map<ActionMenuItem>((t) => ({
-              label: `Assign — ${tableLabelOf(t)}`,
-              onPress: () => onAssign(pm.matchId, t.id),
-            })),
-            ...available.map<ActionMenuItem>((t) => ({
-              label: `Assign & Start — ${tableLabelOf(t)}`,
-              onPress: () => onAssignStart(pm.matchId, t.id),
-            })),
-          ]}
+          items={assignItems}
         />
       ) : (
         <Text allowFontScaling={false} style={styles.noTable}>
@@ -336,10 +507,13 @@ export const QueueView = ({
         <ActionMenu
           compact
           items={[
-            { label: "Move to Top", disabled: !can.top, hint: why("top"), onPress: () => move(pm.matchId, "top") },
-            { label: "Move Up", disabled: !can.up, hint: why("up"), onPress: () => move(pm.matchId, "up") },
-            { label: "Move Down", disabled: !can.down, hint: why("down"), onPress: () => move(pm.matchId, "down") },
-            { label: "Move to Bottom", disabled: !can.bottom, hint: why("bottom"), onPress: () => move(pm.matchId, "bottom") },
+            { label: "Move to Top", tone: "primary", disabled: !can.top, hint: why("top"), onPress: () => move(pm.matchId, "top") },
+            { label: "Move Up", tone: "primary", disabled: !can.up, hint: why("up"), onPress: () => move(pm.matchId, "up") },
+            { label: "Move Down", tone: "danger", disabled: !can.down, hint: why("down"), onPress: () => move(pm.matchId, "down") },
+            { label: "Move to Bottom", tone: "danger", disabled: !can.bottom, hint: why("bottom"), onPress: () => move(pm.matchId, "bottom") },
+            ...(pinnedIds.has(pm.matchId)
+              ? [{ label: "Clear override", onPress: () => onSetQueuePins(pinsWithout(queuePins, pm.matchId)) } as ActionMenuItem]
+              : []),
           ]}
         />
       </>
@@ -352,6 +526,16 @@ export const QueueView = ({
         now={now}
         actions={actions}
         stackActions={!wide}
+        note={
+          [
+            pinnedIds.has(pm.matchId) ? "Override" : null,
+            pm.match.preferredTableId != null
+              ? `Next on ${tableById[pm.match.preferredTableId] ? tableLabelOf(tableById[pm.match.preferredTableId]) : "table"}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("  ·  ") || null
+        }
       />
     );
   };
@@ -388,6 +572,19 @@ export const QueueView = ({
               placeholder="Mode"
             />
           </View>
+          <TouchableOpacity
+            style={[styles.autoToggle, autoAssignEnabled && styles.autoToggleOn]}
+            onPress={() => onSetAutoAssignEnabled(!autoAssignEnabled)}
+            activeOpacity={0.85}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: autoAssignEnabled }}
+            accessibilityLabel="Auto Assign"
+          >
+            <View style={[styles.autoDot, autoAssignEnabled && styles.autoDotOn]} />
+            <Text allowFontScaling={false} style={[styles.autoToggleText, autoAssignEnabled && styles.autoToggleTextOn]}>
+              {autoAssignEnabled ? "Auto Assign: On" : "Auto Assign: Off"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* On tables now */}
@@ -525,6 +722,7 @@ export const QueueView = ({
             <SummaryRow label="Completed Matches" value={String(completedCount)} />
             <View style={styles.summaryDivider} />
             <SummaryRow label="Assignment Mode" value={modeLabel} />
+            <SummaryRow label="Auto Assign" value={autoAssignEnabled ? "Enabled" : "Disabled"} />
           </View>
         </View>
        </View>
@@ -582,7 +780,7 @@ export const QueueView = ({
                   Will place:
                 </Text>
                 <ScrollView style={styles.previewList} bounces={false}>
-                  {autoPlan.map((p) => (
+                  {shownPlan.map((p) => (
                     <View key={p.matchId} style={styles.previewRow}>
                       <Text
                         allowFontScaling={false}
@@ -594,18 +792,19 @@ export const QueueView = ({
                       <Text allowFontScaling={false} style={styles.previewArrow}>
                         {"→"}
                       </Text>
-                      <Text allowFontScaling={false} style={styles.previewTable}>
-                        {tableById[p.tableId]
-                          ? tableLabelOf(tableById[p.tableId])
-                          : "Table"}
-                      </Text>
+                      <ActionMenu
+                        label={tableById[p.tableId] ? tableLabelOf(tableById[p.tableId]) : "Table"}
+                        triggerStyle={styles.rowBtn}
+                        triggerTextStyle={styles.rowBtnText}
+                        items={tableChoices(p)}
+                      />
                     </View>
                   ))}
                 </ScrollView>
                 <TouchableOpacity
                   style={[styles.previewApply, applyBusy && styles.btnDisabled]}
                   disabled={applyBusy}
-                  onPress={() => applyAll(autoPlan, false)}
+                  onPress={() => applyAll(shownPlan, false)}
                 >
                   <Text allowFontScaling={false} style={styles.previewApplyText}>
                     Assign All ({autoPlan.length})
@@ -614,7 +813,7 @@ export const QueueView = ({
                 <TouchableOpacity
                   style={[styles.previewApplyStart, applyBusy && styles.btnDisabled]}
                   disabled={applyBusy}
-                  onPress={() => applyAll(autoPlan, true)}
+                  onPress={() => applyAll(shownPlan, true)}
                 >
                   <Text allowFontScaling={false} style={styles.previewApplyStartText}>
                     {"▶ Assign & Start All"} ({autoPlan.length})
@@ -759,6 +958,21 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   modeWrap: { width: webSc(220), maxWidth: "100%" as any },
+  autoToggle: {
+    height: webSc(40),
+    paddingHorizontal: webSc(SPACING.md),
+    borderRadius: webSc(RADIUS.sm),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(SPACING.xs),
+  },
+  autoToggleOn: { borderColor: COLORS.success, backgroundColor: COLORS.success + "1A" },
+  autoDot: { width: webSc(8), height: webSc(8), borderRadius: webSc(4), backgroundColor: COLORS.textMuted },
+  autoDotOn: { backgroundColor: COLORS.success },
+  autoToggleText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "800" },
+  autoToggleTextOn: { color: COLORS.success },
   // Two-column (wide web): operational left, sticky summary right.
   twoColRow: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.lg) },
   leftCol: { flex: 70, minWidth: 0 as any },

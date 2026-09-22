@@ -14,7 +14,7 @@ import {
   MatchLiveState,
   MatchResult,
 } from "../../models/types/tournament-settings.types";
-import { groupForFargo, RaceConfig } from "../../utils/bracket.utils";
+import { groupForFargo, RaceConfig, raceConfigFromLiveSettings } from "../../utils/bracket.utils";
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { registrationIdOf } from "../../utils/live-entries";
@@ -31,7 +31,8 @@ export interface PlayerLiveMatch {
   myScore: number;
   oppScore: number;
   table: string | null;
-  raceTo: number | null;
+  raceTo: number | null; // the player's own race
+  oppRaceTo: number | null; // the opponent's race (differs under groups / differential)
   roundLabel: string; // e.g. "Winners Round 4", "Finals"
 }
 
@@ -148,17 +149,10 @@ export const usePlayerLiveMatch = (
       queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] }),
   });
 
-  const raceConfig: RaceConfig = useMemo(() => {
-    const ls = tournament?.live_settings ?? {};
-    return {
-      mode: ls.raceMode ?? "fixed",
-      fixedWinners: ls.fixedRaceWinners ?? 5,
-      groups: ls.raceGroups ?? [],
-      diffMin: ls.fargoDiffMinRace ?? 3,
-      diffPerGame: ls.fargoDiffPerGame ?? 40,
-      diffMax: ls.fargoDiffMaxRace ?? null,
-    };
-  }, [tournament]);
+  const raceConfig: RaceConfig = useMemo(
+    () => raceConfigFromLiveSettings(tournament?.live_settings),
+    [tournament],
+  );
 
   const hub: PlayerTournamentHub | null = useMemo(() => {
     if (!tournament || !myRegId) return null;
@@ -202,6 +196,7 @@ export const usePlayerLiveMatch = (
         oppScore: (iAmP1 ? m.p2Score : m.p1Score) ?? 0,
         table: m.tableLabel,
         raceTo: myRace,
+        oppRaceTo: (iAmP1 ? m.p2Race : m.p1Race) ?? m.raceTo,
         roundLabel: roundLabelFor(m),
       };
     }

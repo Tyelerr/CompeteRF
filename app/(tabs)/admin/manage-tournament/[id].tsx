@@ -76,6 +76,7 @@ import {
   DrawLogEntry,
   ElimLiveOp,
   ElimLiveOpResult,
+  QueuePin,
   FeeCategory,
   GeneratedBracket,
   MatchLiveState,
@@ -104,6 +105,7 @@ import {
 import {
   DrawPlayer,
   RaceConfig,
+  raceConfigFromLiveSettings,
   STANDARD_SIZES,
   averageRace,
   computeBracketStats,
@@ -139,14 +141,14 @@ import { buildLiveMatches, computeEliminatedRegIds, formatClock, LiveMatch, Matc
 import {
   buildQueueEntries,
   computeReadyAtMap,
-  orderQueue,
   planAutoAssign,
   freeTables,
   isStartable,
   bracketLocation,
   AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
-import { liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { buildAssignOps, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { matchNotificationService } from "../../../../src/models/services/match-notification.service";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
 import { tournamentEventService, TournamentEvent } from "../../../../src/models/services/tournament-event.service";
@@ -3969,17 +3971,10 @@ export default function ManageTournamentScreen() {
   );
 
   // Live matches for the Matches tab: bracket round 1 + per-match state + tables.
-  const raceConfig: RaceConfig = useMemo(() => {
-    const ls = hub.tournament?.live_settings ?? {};
-    return {
-      mode: ls.raceMode ?? "fixed",
-      fixedWinners: ls.fixedRaceWinners ?? 5,
-      groups: ls.raceGroups ?? [],
-      diffMin: ls.fargoDiffMinRace ?? 3,
-      diffPerGame: ls.fargoDiffPerGame ?? 40,
-      diffMax: ls.fargoDiffMaxRace ?? null,
-    };
-  }, [hub.tournament]);
+  const raceConfig: RaceConfig = useMemo(
+    () => raceConfigFromLiveSettings(hub.tournament?.live_settings),
+    [hub.tournament],
+  );
 
   const liveMatches = useMemo(
     () =>
@@ -4001,6 +3996,7 @@ export default function ManageTournamentScreen() {
     hub.matchState,
     hub.autoAssignMode as AutoAssignMode,
     hub.queueOrder ?? [],
+    hub.queuePins,
   );
 
   // Operator-side persistence of the bracket engine's elimination set (covers the case where
@@ -4195,6 +4191,11 @@ export default function ManageTournamentScreen() {
     await hub.setMatchState({ matchId, patch });
     logMatchDerivedEvent(prev, patch, prevLiveState);
     refreshEvents();
+    // Table set/changed from the sheet → assignment notification (server dedupes; a no-op
+    // re-save of the same table is not a new assignment and sends nothing).
+    if (tournamentId && typeof patch.tableId === "number" && patch.status !== "completed") {
+      matchNotificationService.notifyMatchAssigned(tournamentId, matchId);
+    }
   };
 
   // ── Elimination typed-op writes (Phase 3) ──────────────────────────────────────────────
@@ -4204,10 +4205,11 @@ export default function ManageTournamentScreen() {
   // `eventPatch` is the equivalent MatchLiveState change, used for the durable activity log.
   const runLiveOps = async (
     items: { op: ElimLiveOp; eventPatch: Partial<MatchLiveState> }[],
+    opts: { atomic?: boolean } = {},
   ): Promise<ElimLiveOpResult[]> => {
     const prevById = new Map(liveMatches.map((m) => [m.id, m]));
     const prevLiveState = hub.tournament?.live_state;
-    const res = await hub.applyLiveOps(items.map((x) => x.op));
+    const res = await hub.applyLiveOps(items.map((x) => x.op), opts);
     let firstStart = true;
     res.results.forEach((r) => {
       if (!r.ok) return;
@@ -4218,6 +4220,11 @@ export default function ManageTournamentScreen() {
       const lsForEvent = it.eventPatch.status === "in_progress" && !firstStart ? "in_progress" : prevLiveState;
       if (it.eventPatch.status === "in_progress") firstStart = false;
       logMatchDerivedEvent(prevById.get(mid) ?? null, it.eventPatch, lsForEvent);
+      // Persisted first, THEN notify both players (in-app + push). Only for ops the server
+      // accepted; the Edge Function dedupes per assignment instance (server assignedAt).
+      const assignsTable =
+        it.op.op === "assign" || (it.op.op === "patch_match" && typeof it.op.set.tableId === "number");
+      if (assignsTable && tournamentId) matchNotificationService.notifyMatchAssigned(tournamentId, mid);
     });
     refreshEvents();
     return res.results;
@@ -4255,17 +4262,37 @@ export default function ManageTournamentScreen() {
     );
   // Queue Auto Assign "Assign All" / "Assign & Start All": ONE batch call (was an un-awaited
   // loop). Returns per-match results so the preview can list only what actually landed.
+  // displacedIds = parked (NOT started) matches the TD chose to bump: they are unassigned FIRST
+  // in the same server call, and the whole call is atomic, so a bumped match is never left
+  // without its replacement landing. A bumped match simply returns to Ready (no table).
   const handleQueueAssignMany = async (
     plan: AssignmentPlan[],
     start: boolean,
+    displacedIds: string[] = [],
   ): Promise<{ matchId: string; ok: boolean; error?: string }[]> => {
     if (plan.length === 0) return [];
+    const { atomic } = buildAssignOps(plan, start, displacedIds);
     try {
-      const results = await runLiveOps(plan.map((p) => assignItem(p.matchId, p.tableId, start)));
-      if (start) results.forEach((r) => r.ok && notifyMatchPlayers(plan[r.i].matchId, plan[r.i].tableId));
-      return results.map((r) => ({ matchId: plan[r.i].matchId, ok: r.ok, error: r.error }));
+      const results = await runLiveOps(
+        [
+          ...displacedIds.map((matchId) => ({
+            op: { op: "unassign", matchId } as ElimLiveOp,
+            eventPatch: { tableId: null, status: "scheduled", startedAt: null } as Partial<MatchLiveState>,
+          })),
+          ...plan.map((p) => assignItem(p.matchId, p.tableId, start)),
+        ],
+        { atomic },
+      );
+      const assignResults = results.slice(displacedIds.length);
+      if (start) assignResults.forEach((r, k) => r.ok && notifyMatchPlayers(plan[k].matchId, plan[k].tableId));
+      return assignResults.map((r, k) => ({ matchId: plan[k].matchId, ok: r.ok, error: r.error }));
     } catch (e) {
-      Alert.alert("Auto Assign", `Could not assign matches (${(e as Error).message}).`);
+      Alert.alert(
+        "Auto Assign",
+        displacedIds.length
+          ? `Nothing was changed — a table or match changed meanwhile (${(e as Error).message}). Review and try again.`
+          : `Could not assign matches (${(e as Error).message}).`,
+      );
       return plan.map((p) => ({ matchId: p.matchId, ok: false }));
     }
   };
@@ -4322,10 +4349,8 @@ export default function ManageTournamentScreen() {
   // queue by the current mode and pair the front with free tables. Distinct from Start All.
   // The plan is unchanged; it is now applied as ONE batch call with per-op results.
   const handleDashAutoAssign = async () => {
-    const readyAtMap = computeReadyAtMap(hub.bracket, hub.matchState);
-    const entries = buildQueueEntries(liveMatches, readyAtMap, Date.now());
-    const ordered = orderQueue(entries, hub.autoAssignMode as AutoAssignMode, hub.queueOrder ?? []);
-    const plan = planAutoAssign(ordered, freeTables(hub.tables, tableOccupancy));
+    // The projection's readyQueue = the mode's order + TD pins (Manual order in Manual mode).
+    const plan = planAutoAssign(projectedSchedule.readyQueue, freeTables(hub.tables, tableOccupancy));
     if (plan.length === 0) {
       Alert.alert("Auto Assign", "No ready matches or free tables to assign.");
       return;
@@ -4340,14 +4365,36 @@ export default function ManageTournamentScreen() {
       setDashBusy(false);
     }
   };
+  // Play Next: soft preference for a (usually busy) table; null clears it. Never assigns now.
+  const handleSetPreferredTable = (matchId: string, tableId: number | null) =>
+    runLiveOp({ op: "patch_match", matchId, set: { preferredTableId: tableId } }, {}).catch((e: Error) =>
+      Alert.alert("Play Next", `Could not save (${e.message}).`),
+    );
+  const handleSetAutoAssignEnabled = (on: boolean) =>
+    hub
+      .saveQueueSettings({ autoAssignEnabled: on })
+      .catch((e: Error) => Alert.alert("Auto Assign", `Could not change Auto Assign (${e.message}).`));
+
+  // Auto Assign ENABLED is executed SERVER-SIDE (auto-assign-run, triggered by the database on
+  // meaningful state changes + a recovery sweep). This screen only toggles it and polls for fresh
+  // UI while it is on — it never runs assignments itself, so closing it changes nothing.
+
   const handleSetAutoMode = (m: AutoAssignMode) =>
     hub
       .saveQueueSettings({ autoAssignMode: m })
       .catch((e: Error) => Alert.alert("Queue", `Could not change the mode (${e.message}).`));
   // A manual reorder takes the TD into Manual mode with the new order.
+  // Switching to Manual makes queueOrder authoritative, so any Keep-mode pins are cleared in the
+  // SAME set_queue write.
   const handleSetQueueOrder = (ids: string[]) =>
     hub
-      .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual" })
+      .saveQueueSettings({ queueOrder: ids, autoAssignMode: "manual", queuePins: [] })
+      .catch((e: Error) => Alert.alert("Queue", `Could not save the new order (${e.message}).`));
+  // "Move & Keep {mode}": the mode keeps ordering everything; the moved match is pinned relative
+  // to its neighbour (queuePins) instead of freezing the whole order.
+  const handleSetQueuePins = (pins: QueuePin[]) =>
+    hub
+      .saveQueueSettings({ queuePins: pins })
       .catch((e: Error) => Alert.alert("Queue", `Could not save the new order (${e.message}).`));
 
   // Finish the event: marks it completed (live_state finished) which unlocks the
@@ -8212,6 +8259,11 @@ export default function ManageTournamentScreen() {
               onUnassign={handleQueueUnassign}
               onAssignMany={handleQueueAssignMany}
               onUnassignMany={handleQueueUnassignMany}
+              onSetPreferredTable={handleSetPreferredTable}
+              queuePins={hub.queuePins}
+              onSetQueuePins={handleSetQueuePins}
+              autoAssignEnabled={hub.autoAssignEnabled}
+              onSetAutoAssignEnabled={handleSetAutoAssignEnabled}
               onSetMode={handleSetAutoMode}
               onSetQueueOrder={handleSetQueueOrder}
               onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}

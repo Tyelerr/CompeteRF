@@ -23,8 +23,11 @@ import {
   GeneratedBracket,
   MatchLiveState,
   PrizePoolConfig,
+  QueuePin,
   TournamentLiveSettings,
 } from "../../models/types/tournament-settings.types";
+import { sanitizePins } from "../../utils/queue-pins";
+import { autoAssignActive } from "../../utils/auto-assign";
 import { applyOpsLocally, liveOpErrorText } from "../../utils/elim-live-ops";
 import {
   TournamentLiveState,
@@ -42,10 +45,18 @@ export const useManageTournament = (tournamentId?: number) => {
 
   // ---- Reads -------------------------------------------------------------
 
+  // UI freshness while Auto Assign is on: poll every 5s ONLY while Auto Assign is active
+  // (enabled, running, unpaused, elimination) so the Manage screen shows the server's automatic
+  // assignments promptly. Polling NEVER executes assignments — the server-side auto-assign-run
+  // function does. React Query stops the interval on disable / unmount / a hidden tab.
+  const AUTO_ASSIGN_POLL_MS = 5000;
+  const autoAssignPolling = (t: Tournament | undefined | null): boolean => autoAssignActive(t);
   const tournamentQuery = useQuery({
     queryKey: ["tournament", tournamentId],
     queryFn: () => tournamentService.getTournament(tournamentId!),
     enabled: !!tournamentId,
+    refetchInterval: (query) =>
+      autoAssignPolling(query.state.data as Tournament | undefined) ? AUTO_ASSIGN_POLL_MS : false,
   });
 
   // Error-tolerant: tournament_tables may not exist until the migration is
@@ -55,6 +66,7 @@ export const useManageTournament = (tournamentId?: number) => {
     queryFn: () => tournamentTableService.getTables(tournamentId!),
     enabled: !!tournamentId,
     retry: false,
+    refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : false,
   });
 
   const registrationsApi = useRegistrations(tournamentId);
@@ -297,7 +309,12 @@ export const useManageTournament = (tournamentId?: number) => {
   // Persist Queue Manager settings (auto-assign mode + manual queue order). Server-side
   // set_queue op: changes ONLY these two keys.
   const saveQueueSettingsMutation = useMutation({
-    mutationFn: (vars: { autoAssignMode?: AutoAssignMode; queueOrder?: string[] }) =>
+    mutationFn: (vars: {
+      autoAssignMode?: AutoAssignMode;
+      queueOrder?: string[];
+      autoAssignEnabled?: boolean;
+      queuePins?: QueuePin[];
+    }) =>
       applyOneLiveOp({ op: "set_queue", ...vars }),
     onSettled: invalidateTournament,
   });
@@ -443,6 +460,8 @@ export const useManageTournament = (tournamentId?: number) => {
 
     // Queue Manager
     autoAssignMode: tournament?.live_settings?.autoAssignMode ?? "balanced",
+    autoAssignEnabled: tournament?.live_settings?.autoAssignEnabled === true,
+    queuePins: sanitizePins(tournament?.live_settings?.queuePins),
     queueOrder: tournament?.live_settings?.queueOrder ?? [],
     saveQueueSettings: saveQueueSettingsMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,

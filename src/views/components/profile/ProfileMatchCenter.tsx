@@ -43,6 +43,7 @@ const scoreLine = (
 const Avatar = ({
   label,
   mine,
+  race,
   score,
   onMinus,
   onPlus,
@@ -50,6 +51,7 @@ const Avatar = ({
 }: {
   label: string;
   mine?: boolean;
+  race?: string | null; // "Race to 5" — only when the two races differ
   score?: number;
   onMinus?: () => void;
   onPlus?: () => void;
@@ -66,6 +68,11 @@ const Avatar = ({
     <Text allowFontScaling={false} style={styles.playerName} numberOfLines={1}>
       {label}
     </Text>
+    {!!race && (
+      <Text allowFontScaling={false} style={styles.playerRace} numberOfLines={1}>
+        {race}
+      </Text>
+    )}
     {onMinus && onPlus && (
       <View style={styles.stepper}>
         <TouchableOpacity
@@ -102,8 +109,10 @@ export const ProfileMatchCenter = ({
   onAdjustScore,
   busy,
 }: ProfileMatchCenterProps) => {
-  const { isPlaying, opponentName, myScore, oppScore, table, raceTo, roundLabel } =
+  const { isPlaying, opponentName, myScore, oppScore, table, raceTo, oppRaceTo, roundLabel } =
     data;
+  // Races come from the bracket resolver (fixed stage / groups / differential already applied).
+  const racesDiffer = raceTo != null && oppRaceTo != null && raceTo !== oppRaceTo;
   const editable = isPlaying && !!onAdjustScore;
   const oppSlot: 1 | 2 = data.mySlot === 1 ? 2 : 1;
   const score = scoreLine(isPlaying, myScore, oppScore, opponentName);
@@ -114,7 +123,7 @@ export const ProfileMatchCenter = ({
 
   const meta = [
     table ?? "Table TBD",
-    raceTo ? `Race to ${raceTo}` : null,
+    raceTo && !racesDiffer ? `Race to ${raceTo}` : null,
     roundLabel,
   ]
     .filter(Boolean)
@@ -141,6 +150,7 @@ export const ProfileMatchCenter = ({
         <Avatar
           label={data.myName ?? "You"}
           mine
+          race={racesDiffer ? `Race to ${raceTo}` : null}
           score={editable ? myScore : undefined}
           onMinus={editable ? () => onAdjustScore!(data.mySlot, -1) : undefined}
           onPlus={editable ? () => onAdjustScore!(data.mySlot, 1) : undefined}
@@ -153,6 +163,7 @@ export const ProfileMatchCenter = ({
         </View>
         <Avatar
           label={opponentName ?? "TBD"}
+          race={racesDiffer ? `Race to ${oppRaceTo}` : null}
           score={editable ? oppScore : undefined}
           onMinus={editable ? () => onAdjustScore!(oppSlot, -1) : undefined}
           onPlus={editable ? () => onAdjustScore!(oppSlot, 1) : undefined}
@@ -194,6 +205,12 @@ export const ProfileMatchCenter = ({
 };
 
 const styles = StyleSheet.create({
+  playerRace: {
+    fontSize: wxMs(FONT_SIZES.xs),
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+    marginTop: wxSc(2),
+  },
   card: {
     marginHorizontal: wxSc(SPACING.md),
     marginTop: wxSc(SPACING.sm),
