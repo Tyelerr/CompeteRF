@@ -12,6 +12,7 @@
 // this draw for a DIFFERENT table, the message is worded as a table change.
 import { resolveMatchSides } from "./bracket.ts";
 import { computeMatchRace } from "./race.ts";
+import { buildAssignmentMessage } from "./assignment_message.ts";
 
 // deno-lint-ignore no-explicit-any
 type Admin = any;
@@ -87,10 +88,10 @@ export async function notifyMatchAssignment(admin: Admin, tournamentId: number, 
       .from("notification_preferences").select("tournament_updates").eq("user_id", rp.id).maybeSingle();
     const pushAllowed = !(prefs && prefs.tournament_updates === false);
 
-    const title = kind === "table_changed" ? "Your table has changed" : `Table assigned: ${tableLabel}`;
-    const text = kind === "table_changed"
-      ? `Your table has changed.\n\n${race.p1.name} vs ${race.p2.name}\nNow playing on ${tableLabel}\n\n${race.text}`
-      : `You have been assigned to ${tableLabel} against ${opp.name}.\n\n${race.text}\n\nReport to your table when ready.`;
+    // Title = tournament name; body = table + opponent + race (assignment_message.ts).
+    const { title, body: text } = buildAssignmentMessage({
+      tournamentName: tourn.name, kind, tableLabel, opponentName: opp.name, raceText: race.text,
+    });
     const data = { type: "match_assigned", kind, tournament_id: tournamentId, match_id: matchId, table_id: tableId };
 
     const { data: notif } = await admin.from("notifications").insert({
