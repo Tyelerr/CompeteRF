@@ -13,6 +13,7 @@ import {
   LiveMatch,
   MatchActionStep,
 } from "../../../../utils/match.utils";
+import { GLYPH_TEXT, MatchPlayerGlyph } from "../../../../models/types/match-checkin.types";
 import { LiveDot } from "./LiveDot";
 
 // Built at runtime so no raw emoji lives in source (toolchain-safe).
@@ -31,6 +32,7 @@ export const MatchCard = ({
   onPress,
   compact,
   now,
+  glyphs,
 }: {
   match: LiveMatch;
   onAction?: (m: LiveMatch, step: MatchActionStep) => void;
@@ -44,6 +46,9 @@ export const MatchCard = ({
   // Current-time from the parent's shared ticker (useLiveNow) so the live elapsed
   // clock visibly advances. Falls back to a one-shot read when not provided.
   now?: number;
+  // Per-assignment check-in state for each side (○ / ✓ / ?). Computed by the screen from
+  // match_player_status; omitted for spectators.
+  glyphs?: { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
@@ -133,8 +138,10 @@ export const MatchCard = ({
           won={m.winner === 1}
           lost={m.winner === 2}
           compact={compact}
+          glyph={glyphs?.p1 ?? null}
         />
         <PlayerRow
+          glyph={glyphs?.p2 ?? null}
           name={m.bye ? "Bye" : m.p2Name}
           race={m.bye ? null : m.p2Race}
           score={m.p2Score}
@@ -242,6 +249,7 @@ const PlayerRow = ({
   won,
   lost,
   compact,
+  glyph,
 }: {
   name: string | null;
   race: number | null;
@@ -251,6 +259,8 @@ const PlayerRow = ({
   won: boolean;
   lost: boolean;
   compact?: boolean;
+  // Per-assignment check-in: ○ waiting · ✓ checked in · ? raised an issue. Null hides it.
+  glyph?: MatchPlayerGlyph | null;
 }) => (
   <View style={styles.playerRow}>
     <Text
@@ -264,6 +274,17 @@ const PlayerRow = ({
       {race != null ? ` (${race})` : ""}
       {won ? "  ✓" : ""}
     </Text>
+    {!!glyph && (
+      <Text
+        allowFontScaling={false}
+        style={[styles.checkGlyph, glyph === "checked_in" && styles.checkGlyphOn, glyph === "issue" && styles.checkGlyphIssue]}
+        accessibilityLabel={
+          glyph === "checked_in" ? "Checked in" : glyph === "issue" ? "Needs attention" : "Not checked in"
+        }
+      >
+        {GLYPH_TEXT[glyph]}
+      </Text>
+    )}
     <View style={[styles.scoreBox, compact && styles.scoreBoxCompact, won && styles.scoreBoxWon]}>
       <Text
         allowFontScaling={false}
@@ -363,6 +384,9 @@ const styles = StyleSheet.create({
     marginTop: webSc(SPACING.sm),
     gap: webSc(SPACING.sm),
   },
+  checkGlyph: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textMuted, marginHorizontal: webSc(4) },
+  checkGlyphOn: { color: COLORS.success },
+  checkGlyphIssue: { color: COLORS.warning },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -34,6 +34,7 @@ import {
   TableStatus,
 } from "../../models/types/common.types";
 import { useRegistrations } from "./use.registrations";
+import { matchCheckInService } from "../../models/services/match-checkin.service";
 
 // Lifecycle phase (derivePhase) + the ManagePhase type now live in the shared
 // utils/tournament-phase module so the Manage hub, the Tournament Manager list
@@ -67,6 +68,16 @@ export const useManageTournament = (tournamentId?: number) => {
     enabled: !!tournamentId,
     retry: false,
     refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : false,
+  });
+
+  // Per-assignment player check-in / issue rows (migration 20260927120000). RLS gives a manager
+  // every player's row for this event — the ○ / ✓ / ? beside each name on an assigned match.
+  const playerStatusQuery = useQuery({
+    queryKey: ["match-player-status", tournamentId],
+    queryFn: () => matchCheckInService.listForTournament(tournamentId!),
+    enabled: !!tournamentId,
+    retry: false,
+    refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : 30000,
   });
 
   const registrationsApi = useRegistrations(tournamentId);
@@ -481,6 +492,7 @@ export const useManageTournament = (tournamentId?: number) => {
     autoAssignEnabled: tournament?.live_settings?.autoAssignEnabled === true,
     queuePins: sanitizePins(tournament?.live_settings?.queuePins),
     queueOrder: tournament?.live_settings?.queueOrder ?? [],
+    playerStatuses: playerStatusQuery.data ?? [],
     saveQueueSettings: saveQueueSettingsMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,
     isDrawing: drawBracketMutation.isPending,

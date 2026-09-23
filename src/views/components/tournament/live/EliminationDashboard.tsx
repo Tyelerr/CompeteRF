@@ -19,6 +19,7 @@ import { Dropdown } from "../../common/dropdown";
 import { MatchCard } from "./MatchCard";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
 import { AutoAssignToggle } from "./AutoAssignToggle";
+import { MatchPlayerGlyph } from "../../../../models/types/match-checkin.types";
 import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
 
 export interface DashboardKpis {
@@ -122,6 +123,7 @@ export const EliminationDashboard = ({
   autoAssignEnabled,
   onSetAutoAssignEnabled,
   onAssignReady,
+  glyphsFor,
   onStartAll,
   onAction,
   onOpenPage,
@@ -139,6 +141,8 @@ export const EliminationDashboard = ({
   onSetAutoAssignEnabled: (on: boolean) => void;
   // One-time batch: assign the currently Ready matches now (offered only while Auto Assign is Off).
   onAssignReady: () => void;
+  // Per-assignment check-in glyphs (○ / ✓ / ?) for each side of an assigned match.
+  glyphsFor?: (m: LiveMatch) => { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
   onStartAll: () => void;
   onAction: (m: LiveMatch, step: MatchActionStep) => void;
   onOpenPage: (tab: "matches" | "tables" | "queue") => void;
@@ -198,7 +202,7 @@ export const EliminationDashboard = ({
                 <View style={styles.activeGrid}>
                   {activeMatches.map((m) => (
                     <View key={m.id} style={styles.activeCell}>
-                      <MatchCard match={m} onAction={onAction} busy={busy} compact now={now} />
+                      <MatchCard match={m} onAction={onAction} busy={busy} compact now={now} glyphs={glyphsFor?.(m)} />
                     </View>
                   ))}
                 </View>

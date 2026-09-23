@@ -137,6 +137,7 @@ import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.setti
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { buildClearTableOps } from "../../../../src/utils/clear-table";
+import { byMatchId, glyphFor } from "../../../../src/utils/match-player-status";
 import {
   autoAssignPayload,
   keepModeMovePayload,
@@ -4372,6 +4373,20 @@ export default function ManageTournamentScreen() {
       setDashBusy(false);
     }
   };
+  // Per-assignment check-in state for the ○ / ✓ / ? beside each player on an assigned match
+  // (match_player_status, read through the hub). Null for anything not currently assigned.
+  const statusesByMatch = useMemo(() => byMatchId(hub.playerStatuses), [hub.playerStatuses]);
+  const glyphsFor = useCallback(
+    (m: LiveMatch) => {
+      const rows = statusesByMatch[m.id];
+      const args = { matchId: m.id, assignedAt: m.assignedAt, status: m.status };
+      const p1 = glyphFor(rows, { ...args, registrationId: m.p1RegId });
+      const p2 = glyphFor(rows, { ...args, registrationId: m.p2RegId });
+      return p1 || p2 ? { p1, p2 } : null;
+    },
+    [statusesByMatch],
+  );
+
   // Clear Table (Match Actions): take the match OFF its table and back to the Ready queue —
   // table only, never a start/score/bracket change. In Manual order the same atomic call puts it
   // at the front of the queue ("next available"). The server stamps clearedAt so a server-side
@@ -8181,6 +8196,7 @@ export default function ManageTournamentScreen() {
           autoAssignEnabled={hub.autoAssignEnabled}
           onSetAutoAssignEnabled={handleSetAutoAssignEnabled}
           onAssignReady={handleAssignReady}
+          glyphsFor={glyphsFor}
           onStartAll={handleStartAll}
           onAction={(m, step) => setDashboardSheet({ match: m, step })}
           onOpenPage={(tab) => setActiveTab(tab)}
@@ -8302,6 +8318,7 @@ export default function ManageTournamentScreen() {
               onSetMode={handleSetAutoMode}
               onSetQueueOrder={handleSetQueueOrder}
               onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}
+              glyphsFor={glyphsFor}
               playersTotal={readyPlayers.length}
               playersRemaining={readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
             />

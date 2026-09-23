@@ -55,6 +55,7 @@ import {
 import { Dropdown } from "../../common/dropdown";
 import { ActionMenu, ActionMenuItem } from "../../admin/ActionMenu";
 import { AutoAssignToggle } from "./AutoAssignToggle";
+import { GLYPH_TEXT, MatchPlayerGlyph } from "../../../../models/types/match-checkin.types";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
 
 const projectedPlayers = (pm: ProjectedMatch): string =>
@@ -97,6 +98,8 @@ interface QueueViewProps {
   // Opens the shared match-actions modal (score/end/reopen/etc.) for an on-table
   // match — reuses the hub's existing MatchActionsModal, no second flow.
   onManageMatch?: (m: LiveMatch, step: MatchActionStep) => void;
+  // Per-assignment check-in glyphs for the On Tables rows (same resolver as the Dashboard).
+  glyphsFor?: (m: LiveMatch) => { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
   // Players still in / total field, for the right summary card (the hub already
   // derives these — QueueView can't from matches alone). "—" when not provided.
   playersRemaining?: number;
@@ -178,6 +181,7 @@ export const QueueView = ({
   onSetMode,
   onSetQueueOrder,
   onManageMatch,
+  glyphsFor,
   playersRemaining,
   playersTotal,
 }: QueueViewProps) => {
@@ -628,6 +632,16 @@ export const QueueView = ({
                         numberOfLines={1}
                       >
                         {players(m)}
+                        {(() => {
+                          // ○ waiting · ✓ checked in · ? issue — per side, for THIS assignment.
+                          const g = glyphsFor?.(m);
+                          if (!g?.p1 && !g?.p2) return null;
+                          return (
+                            <Text style={styles.onTableMeta}>
+                              {`   ${g?.p1 ? GLYPH_TEXT[g.p1] : ""} / ${g?.p2 ? GLYPH_TEXT[g.p2] : ""}`}
+                            </Text>
+                          );
+                        })()}
                       </Text>
                       <Text allowFontScaling={false} style={styles.onTableTable} numberOfLines={1}>
                         {m.tableLabel ?? "Table"}
