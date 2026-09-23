@@ -430,3 +430,8 @@ verify_jwt = false
 # player); recipients are the event's managers only. See migration 20260927120000.
 [functions.notify-match-issue]
 verify_jwt = true
+
+# notify-match-review: push for the Forfeit Review threshold. Called only by Postgres (pg_net)
+# from _match_review_sweep; authenticated by the shared secret header. See migration 20260929120000.
+[functions.notify-match-review]
+verify_jwt = false
