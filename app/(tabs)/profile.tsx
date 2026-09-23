@@ -2,7 +2,7 @@
 
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useIsFocused } from "expo-router/react-navigation";
 import { ComponentProps, useEffect, useMemo, useRef, useState } from "react";
 import { Alert,
@@ -27,6 +27,10 @@ import { moderateScale, scale } from "../../src/utils/scaling";
 import { useFavorites } from "../../src/viewmodels/hooks/use.favorites";
 import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.tournaments";
 import { usePlayerLiveMatch } from "../../src/viewmodels/hooks/use.player.live.match";
+import { usePlayerMatchActions } from "../../src/viewmodels/hooks/use.player.match.actions";
+import { MatchCheckInModal } from "../../src/views/components/profile/MatchCheckInModal";
+import { MatchIssueReason } from "../../src/models/types/match-checkin.types";
+import { parseAssignmentDeepLink, resolvePlayerMatchTarget } from "../../src/utils/player-match-link";
 import { usePlayerPerformance } from "../../src/viewmodels/hooks/use.player.performance";
 import { PerformanceSnapshot } from "../../src/views/components/profile/PerformanceSnapshot";
 import { RecentActivity } from "../../src/views/components/profile/RecentActivity";
@@ -216,11 +220,47 @@ export default function ProfileScreen() {
   // switcher (shown only when the player is in >1 live event) lets them change it, so a
   // newly-started Tournament B never gets locked out by a still-running Tournament A.
   const [selectedLiveId, setSelectedLiveId] = useState<number | null>(null);
+  // A tapped "Table Assigned" push lands here carrying the EXACT assignment. Everything below is
+  // derived (no effects): the link picks the tournament, then the target is re-resolved against
+  // live state — the tap can be minutes old — into the Check-In modal, the player's current
+  // match, or Tournament View with a small notice. Never a broken modal.
+  const linkParams = useLocalSearchParams<{ liveId?: string; matchId?: string; assignedAt?: string; action?: string }>();
+  const assignmentLink = useMemo(
+    () => parseAssignmentDeepLink(linkParams as Record<string, string | string[] | undefined>),
+    [linkParams],
+  );
+  const linkKey = `${assignmentLink.tournamentId}|${assignmentLink.matchId}|${assignmentLink.assignedAt}`;
+  const [dismissedLinkKey, setDismissedLinkKey] = useState<string | null>(null);
+  const linkLive =
+    assignmentLink.action === "check_in" &&
+    assignmentLink.tournamentId != null &&
+    dismissedLinkKey !== linkKey &&
+    live.some((t) => t.tournament?.id === assignmentLink.tournamentId);
+
   const effectiveLiveId =
+    (linkLive ? assignmentLink.tournamentId : null) ??
     (selectedLiveId != null && live.some((t) => t.tournament?.id === selectedLiveId)
       ? selectedLiveId
-      : live[0]?.tournament?.id) ?? null;
+      : live[0]?.tournament?.id) ??
+    null;
   const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto, effectiveLiveId);
+  // Per-assignment check-in / Contact TD — the SAME hook Home uses, so there is one source of
+  // match + race + check-in state.
+  const matchActions = usePlayerMatchActions(storeProfile?.id_auto, effectiveLiveId);
+  const [manualCheckInOpen, setManualCheckInOpen] = useState(false);
+  const linkTarget =
+    linkLive && !matchActions.isLoading && effectiveLiveId === assignmentLink.tournamentId
+      ? resolvePlayerMatchTarget(assignmentLink, matchActions.snapshot)
+      : null;
+  const checkInOpen =
+    manualCheckInOpen || linkTarget?.kind === "check_in" || linkTarget?.kind === "current_match";
+  const checkInNotice = manualCheckInOpen ? null : (linkTarget?.notice ?? null);
+  // The exact assignment is gone and so is any other live match: a quiet line in Tournament View.
+  const staleMatchNotice = linkTarget?.kind === "no_active_match" ? linkTarget.notice : null;
+  const closeCheckIn = () => {
+    setManualCheckInOpen(false);
+    setDismissedLinkKey(linkKey);
+  };
   const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto, effectiveLiveId);
   const performance = usePlayerPerformance(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
@@ -583,6 +623,13 @@ export default function ProfileScreen() {
             </View>
           )}
 
+          {/* A tapped notification whose assignment is gone (completed / cleared / reassigned
+              away): a quiet line instead of a broken modal. */}
+          {!!staleMatchNotice && profileTab === "tournament" && (
+            <Text allowFontScaling={false} style={styles.staleMatchNotice}>
+              {staleMatchNotice}
+            </Text>
+          )}
           {inLiveTournament && profileTab === "tournament" ? (
             chipHub ? (
               <ChipTournamentHubView
@@ -602,6 +649,10 @@ export default function ProfileScreen() {
                   );
                 }}
                 isScoring={isScoring}
+                onCheckIn={matchActions.isAssigned ? () => setManualCheckInOpen(true) : undefined}
+                onContactTd={matchActions.isAssigned ? () => setManualCheckInOpen(true) : undefined}
+                checkedIn={matchActions.checkedIn}
+                checkInBusy={matchActions.busy}
               />
             ) : null
           ) : (
@@ -655,6 +706,25 @@ export default function ProfileScreen() {
         onViewTournament={(id) => { setInboxVisible(false); setTimeout(() => openDetailModal(id), 150); }}
       />
 
+      {/* Match Check-In — opened by a Table Assigned notification tap and from the match card. */}
+      <MatchCheckInModal
+        visible={checkInOpen}
+        context={matchActions.context}
+        checkedIn={matchActions.checkedIn}
+        issueReason={matchActions.issueReason as MatchIssueReason | null}
+        busy={matchActions.busy}
+        notice={checkInNotice}
+        onCheckIn={() =>
+          matchActions.checkIn().catch((e: Error) => Alert.alert("Check In", `Could not check in (${e.message}).`))
+        }
+        onContactTd={(reason, message) =>
+          matchActions
+            .contactTd(reason, message)
+            .catch((e: Error) => Alert.alert("Contact TD", `Could not send (${e.message}).`))
+        }
+        onClose={closeCheckIn}
+      />
+
       {isWeb && showDetailModal && detailTournamentId && <WebTournamentDetailOverlay id={detailTournamentId} onClose={closeDetailModal} />}
       {!isWeb && <TournamentDetailModal id={detailTournamentId} visible={showDetailModal && detailIsFocused} onClose={closeDetailModal} origin="profile" />}
 
@@ -677,6 +747,7 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  staleMatchNotice: { color: COLORS.warning, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "700", textAlign: "center", paddingHorizontal: wxSc(SPACING.md), paddingBottom: wxSc(SPACING.xs) },
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollView: { flex: 1 },
   pageWrapper: { flex: 1, paddingBottom: wxSc(SPACING.xl) },

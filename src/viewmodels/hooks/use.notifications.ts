@@ -40,6 +40,9 @@ export function useNotifications(userId?: string): UseNotificationsReturn {
   const notificationListener = useRef<Notifications.Subscription | null>(null);
   const responseListener = useRef<Notifications.Subscription | null>(null);
   const listenersRegisteredRef = useRef(false);
+  // The cold-start tap is replayed on every mount until another notification arrives, so it is
+  // routed at most once per launch.
+  const coldStartHandledRef = useRef<string | null>(null);
 
   /**
    * Request permission, get token, register in database.
@@ -109,24 +112,35 @@ export function useNotifications(userId?: string): UseNotificationsReturn {
             );
           });
 
+        // ONE routing rule for every entry point: a deep link wins (a Table Assigned push
+        // carries the exact assignment, so Profile can open the right match's Check-In modal),
+        // then the tournament, then the inbox.
+        const routeFor = (data: Record<string, unknown> | null | undefined) => {
+          try {
+            if (data?.deep_link) router.push(data.deep_link as string as any);
+            else if (data?.tournament_id) router.push(`/tournament-detail?id=${data.tournament_id}` as any);
+            else router.push("/notifications" as any);
+          } catch (err) {
+            console.warn("Error handling notification response:", err);
+          }
+        };
+
         responseListener.current =
           Notifications.addNotificationResponseReceivedListener((response) => {
-            try {
-              const data = response.notification.request.content.data;
-
-              if (data?.deep_link) {
-                router.push(data.deep_link as string as any);
-              } else if (data?.tournament_id) {
-                router.push(
-                  `/tournament-detail?id=${data.tournament_id}` as any,
-                );
-              } else {
-                router.push("/notifications" as any);
-              }
-            } catch (err) {
-              console.warn("Error handling notification response:", err);
-            }
+            routeFor(response.notification.request.content.data as Record<string, unknown>);
           });
+
+        // COLD START: a tap that launched the app from a killed state is not delivered to the
+        // listener above — it is only available as the "last response". Handled once per mount.
+        Notifications.getLastNotificationResponseAsync()
+          .then((response) => {
+            if (!response) return;
+            const id = response.notification.request.identifier;
+            if (coldStartHandledRef.current === id) return;
+            coldStartHandledRef.current = id;
+            routeFor(response.notification.request.content.data as Record<string, unknown>);
+          })
+          .catch((err) => console.warn("Cold-start notification check failed:", err));
 
         listenersRegisteredRef.current = true;
       } catch (err) {

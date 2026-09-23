@@ -273,8 +273,10 @@ const NotificationCard = ({ item, isExpanded, onPress, onDelete, onTournamentPre
         {isExpanded ? (
           <View style={s.expandedBody}>
             <Text allowFontScaling={false} style={s.bodyText}>{item.body}</Text>
-            {item.tournament_id && <TouchableOpacity style={s.linkButton} onPress={() => onTournamentPress(item.tournament_id!)}><Text allowFontScaling={false} style={s.linkButtonText}>🏆 View Tournament</Text></TouchableOpacity>}
-            {item.deep_link && !item.tournament_id && <TouchableOpacity style={s.linkButton} onPress={() => onDeepLink(item.deep_link!)}><Text allowFontScaling={false} style={s.linkButtonText}>View Details →</Text></TouchableOpacity>}
+            {/* A deep link is the precise destination (e.g. a Table Assigned notice → that
+                match's Check-In), so it wins over the generic tournament page. */}
+            {item.deep_link && <TouchableOpacity style={s.linkButton} onPress={() => onDeepLink(item.deep_link!)}><Text allowFontScaling={false} style={s.linkButtonText}>View Details →</Text></TouchableOpacity>}
+            {item.tournament_id && !item.deep_link && <TouchableOpacity style={s.linkButton} onPress={() => onTournamentPress(item.tournament_id!)}><Text allowFontScaling={false} style={s.linkButtonText}>🏆 View Tournament</Text></TouchableOpacity>}
             <View style={s.cardActions}><TouchableOpacity onPress={onDelete}><Text allowFontScaling={false} style={s.deleteLabel}>🗑️ Delete</Text></TouchableOpacity></View>
           </View>
         ) : (

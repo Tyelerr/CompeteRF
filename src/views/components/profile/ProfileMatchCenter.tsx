@@ -22,6 +22,12 @@ interface ProfileMatchCenterProps {
   // When provided and the match is live, score steppers render under each player.
   onAdjustScore?: (slot: 1 | 2, delta: number) => void;
   busy?: boolean;
+  // Per-assignment check-in (usePlayerMatchActions). Omit to hide the action row — e.g. when the
+  // match has no table yet.
+  onCheckIn?: () => void;
+  onContactTd?: () => void;
+  checkedIn?: boolean;
+  checkInBusy?: boolean;
 }
 
 // "You lead 3-2" / "Carlo leads 3-2" / "Tied 2-2"
@@ -108,6 +114,10 @@ export const ProfileMatchCenter = ({
   onPress,
   onAdjustScore,
   busy,
+  onCheckIn,
+  onContactTd,
+  checkedIn,
+  checkInBusy,
 }: ProfileMatchCenterProps) => {
   const { isPlaying, opponentName, myScore, oppScore, table, raceTo, oppRaceTo, roundLabel } =
     data;
@@ -184,6 +194,30 @@ export const ProfileMatchCenter = ({
             <Text allowFontScaling={false} style={styles.scoreText}>
               {score}
             </Text>
+          )}
+        </View>
+      )}
+
+      {/* Check In / Contact TD — the same actions as the notification modal and the Home card,
+          all driven by usePlayerMatchActions. Shown only for a real table assignment. */}
+      {!!onCheckIn && (
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={[styles.actionPrimary, (checkInBusy || checkedIn) && styles.actionDisabled]}
+            disabled={checkInBusy || checkedIn}
+            onPress={onCheckIn}
+            activeOpacity={0.85}
+          >
+            <Text allowFontScaling={false} style={styles.actionPrimaryText}>
+              {checkedIn ? "✓ Checked In" : "Check In"}
+            </Text>
+          </TouchableOpacity>
+          {!!onContactTd && (
+            <TouchableOpacity style={styles.actionSecondary} onPress={onContactTd} activeOpacity={0.85}>
+              <Text allowFontScaling={false} style={styles.actionSecondaryText}>
+                Contact TD
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -331,6 +365,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  actionsRow: { flexDirection: "row", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm) },
+  actionPrimary: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    borderRadius: wxSc(RADIUS.sm),
+    paddingVertical: wxSc(SPACING.sm),
+    alignItems: "center",
+  },
+  actionPrimaryText: { color: COLORS.white, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
+  actionSecondary: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: wxSc(RADIUS.sm),
+    paddingVertical: wxSc(SPACING.sm),
+    alignItems: "center",
+  },
+  actionSecondaryText: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
+  actionDisabled: { opacity: 0.5 },
   footer: {
     flexDirection: "row",
     alignItems: "center",

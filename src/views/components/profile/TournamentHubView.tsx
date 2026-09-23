@@ -32,6 +32,11 @@ interface TournamentHubViewProps {
   // Adjust a side's score by +/-1 (only used while the match is live).
   onAdjustScore: (matchId: string, slot: 1 | 2, delta: number) => void;
   isScoring: boolean;
+  // Per-assignment check-in actions (usePlayerMatchActions), passed straight to the match card.
+  onCheckIn?: () => void;
+  onContactTd?: () => void;
+  checkedIn?: boolean;
+  checkInBusy?: boolean;
 }
 
 const resultNote = (r: PlayerMatchResult): string | null => {
@@ -81,6 +86,10 @@ export const TournamentHubView = ({
   onOpenTournament,
   onAdjustScore,
   isScoring,
+  onCheckIn,
+  onContactTd,
+  checkedIn,
+  checkInBusy,
 }: TournamentHubViewProps) => {
   const open = () => onOpenTournament(hub.tournamentId);
   const current = hub.current;
@@ -94,6 +103,10 @@ export const TournamentHubView = ({
           onPress={open}
           onAdjustScore={(slot, delta) => onAdjustScore(current.matchId, slot, delta)}
           busy={isScoring}
+          onCheckIn={onCheckIn}
+          onContactTd={onContactTd}
+          checkedIn={checkedIn}
+          checkInBusy={checkInBusy}
         />
       ) : (
         <TouchableOpacity style={styles.idle} activeOpacity={0.85} onPress={open}>
