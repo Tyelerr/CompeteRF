@@ -1,7 +1,7 @@
 // supabase/tests/authz_lockdown.test.ts
 // Adversarial + regression tests for the Phase 1 authorization hardening:
 //   supabase/migrations/20260930120000_authz_rpcs.sql        (M1, additive RPCs)
-//   supabase/pending/20260930130000_authz_write_lockdown.sql    (M2, lockdown — parked until approved)
+//   supabase/migrations/20260930130000_authz_write_lockdown.sql (M2, lockdown)
 // PGlite, with the EXACT prod policies/functions replayed from the M0 capture
 // (supabase/rollback/20260930110000_authz_baseline_capture.sql), not local assumptions.
 // Every attack is first shown to SUCCEED on the baseline, then shown to FAIL after M1+M2.
