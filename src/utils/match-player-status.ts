@@ -26,9 +26,10 @@ export const statusForAssignment = (
 };
 
 /**
- * ○ not checked in · ✓ checked in · ? raised an issue (issue wins — it needs attention).
- * Returns null when the match has no current assignment: an unassigned or finished match shows
- * no glyph at all.
+ * ○ not checked in · ✓ checked in. Check-in and issues are INDEPENDENT: raising an issue never
+ * clears a check-in, and resolving one never requires checking in again — the unresolved issue is
+ * surfaced separately by openIssueFor(). Returns null when the match has no current assignment
+ * (unassigned or finished): no glyph at all.
  */
 export const glyphFor = (
   rows: MatchPlayerStatus[] | null | undefined,
@@ -42,8 +43,26 @@ export const glyphFor = (
   if (!args.assignedAt || args.registrationId == null) return null;
   if (args.status === "completed") return null;
   const row = statusForAssignment(rows, args);
-  if (row?.issue_at && !row.resolved_at) return "issue";
   return row?.checked_in_at ? "checked_in" : "not_checked_in";
+};
+
+/**
+ * The player's UNRESOLVED "Contact TD" message on the current assignment, or null. Drives the red
+ * "✉ View Message" indicator beside the name — independent of the ○/✓ above.
+ */
+export const openIssueFor = (
+  rows: MatchPlayerStatus[] | null | undefined,
+  args: {
+    matchId: string;
+    registrationId: number | null | undefined;
+    assignedAt: string | null | undefined;
+    status?: string | null;
+  },
+): MatchPlayerStatus | null => {
+  if (!args.assignedAt || args.registrationId == null) return null;
+  if (args.status === "completed") return null;
+  const row = statusForAssignment(rows, args);
+  return row?.issue_at && !row.resolved_at ? row : null;
 };
 
 /** Index rows by match id, for a single pass over the TD's match list. */

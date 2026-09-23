@@ -13,7 +13,7 @@ import {
   LiveMatch,
   MatchActionStep,
 } from "../../../../utils/match.utils";
-import { GLYPH_TEXT, MatchPlayerGlyph } from "../../../../models/types/match-checkin.types";
+import { GLYPH_TEXT, MatchPlayerGlyph, VIEW_MESSAGE_LABEL } from "../../../../models/types/match-checkin.types";
 import { LiveDot } from "./LiveDot";
 
 // Built at runtime so no raw emoji lives in source (toolchain-safe).
@@ -33,6 +33,7 @@ export const MatchCard = ({
   compact,
   now,
   glyphs,
+  onViewMessage,
 }: {
   match: LiveMatch;
   onAction?: (m: LiveMatch, step: MatchActionStep) => void;
@@ -46,9 +47,17 @@ export const MatchCard = ({
   // Current-time from the parent's shared ticker (useLiveNow) so the live elapsed
   // clock visibly advances. Falls back to a one-shot read when not provided.
   now?: number;
-  // Per-assignment check-in state for each side (○ / ✓ / ?). Computed by the screen from
+  // Per-assignment player status for each side: check-in glyph (○ / ✓) and, INDEPENDENTLY,
+  // whether that player has an unresolved "Contact TD" message. Computed by the screen from
   // match_player_status; omitted for spectators.
-  glyphs?: { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
+  glyphs?: {
+    p1: MatchPlayerGlyph | null;
+    p2: MatchPlayerGlyph | null;
+    p1Issue?: boolean;
+    p2Issue?: boolean;
+  } | null;
+  // Opens the Player Message modal for that side (only called when its issue flag is set).
+  onViewMessage?: (slot: 1 | 2) => void;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
@@ -139,9 +148,11 @@ export const MatchCard = ({
           lost={m.winner === 2}
           compact={compact}
           glyph={glyphs?.p1 ?? null}
+          onViewMessage={glyphs?.p1Issue ? () => onViewMessage?.(1) : undefined}
         />
         <PlayerRow
           glyph={glyphs?.p2 ?? null}
+          onViewMessage={glyphs?.p2Issue ? () => onViewMessage?.(2) : undefined}
           name={m.bye ? "Bye" : m.p2Name}
           race={m.bye ? null : m.p2Race}
           score={m.p2Score}
@@ -250,6 +261,7 @@ const PlayerRow = ({
   lost,
   compact,
   glyph,
+  onViewMessage,
 }: {
   name: string | null;
   race: number | null;
@@ -259,8 +271,10 @@ const PlayerRow = ({
   won: boolean;
   lost: boolean;
   compact?: boolean;
-  // Per-assignment check-in: ○ waiting · ✓ checked in · ? raised an issue. Null hides it.
+  // Per-assignment check-in: ○ waiting · ✓ checked in. Null hides it.
   glyph?: MatchPlayerGlyph | null;
+  // Set when this player has an UNRESOLVED Contact TD message (separate from the check-in above).
+  onViewMessage?: () => void;
 }) => (
   <View style={styles.playerRow}>
     <Text
@@ -277,13 +291,18 @@ const PlayerRow = ({
     {!!glyph && (
       <Text
         allowFontScaling={false}
-        style={[styles.checkGlyph, glyph === "checked_in" && styles.checkGlyphOn, glyph === "issue" && styles.checkGlyphIssue]}
-        accessibilityLabel={
-          glyph === "checked_in" ? "Checked in" : glyph === "issue" ? "Needs attention" : "Not checked in"
-        }
+        style={[styles.checkGlyph, glyph === "checked_in" && styles.checkGlyphOn]}
+        accessibilityLabel={glyph === "checked_in" ? "Checked in" : "Not checked in"}
       >
         {GLYPH_TEXT[glyph]}
       </Text>
+    )}
+    {!!onViewMessage && (
+      <TouchableOpacity onPress={onViewMessage} activeOpacity={0.7} hitSlop={6} accessibilityRole="button">
+        <Text allowFontScaling={false} style={styles.viewMessage} numberOfLines={1}>
+          {VIEW_MESSAGE_LABEL}
+        </Text>
+      </TouchableOpacity>
     )}
     <View style={[styles.scoreBox, compact && styles.scoreBoxCompact, won && styles.scoreBoxWon]}>
       <Text
@@ -386,7 +405,8 @@ const styles = StyleSheet.create({
   },
   checkGlyph: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textMuted, marginHorizontal: webSc(4) },
   checkGlyphOn: { color: COLORS.success },
-  checkGlyphIssue: { color: COLORS.warning },
+  // Unresolved player message — red, compact, on the same line as the name.
+  viewMessage: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.error, marginRight: webSc(4) },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -51,6 +51,19 @@ export const matchCheckInService = {
   },
 
   /**
+   * Manager action: mark a player's issue resolved (stamps resolved_at). Narrow RPC — it touches
+   * only that one status row, never live_settings, and only for a tournament the caller manages.
+   */
+  async resolveIssue(tournamentId: number, matchId: string, registrationId: number): Promise<void> {
+    const { error } = await supabase.rpc("match_issue_resolve", {
+      p_tournament_id: tournamentId,
+      p_match_id: matchId,
+      p_registration_id: registrationId,
+    });
+    if (error) throw error;
+  },
+
+  /**
    * Status rows for a tournament. RLS decides the scope: a player sees only their own rows, a
    * manager sees every player's (that is the TD ✓ / ○ / ? view).
    */

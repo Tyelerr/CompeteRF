@@ -493,6 +493,7 @@ export const useManageTournament = (tournamentId?: number) => {
     queuePins: sanitizePins(tournament?.live_settings?.queuePins),
     queueOrder: tournament?.live_settings?.queueOrder ?? [],
     playerStatuses: playerStatusQuery.data ?? [],
+    refetchPlayerStatuses: playerStatusQuery.refetch,
     saveQueueSettings: saveQueueSettingsMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,
     isDrawing: drawBracketMutation.isPending,

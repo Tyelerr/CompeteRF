@@ -1,14 +1,15 @@
 // src/views/components/tournament/live/QueueView.tsx
 // Queue Manager — the TD's live operations screen, built on the shared projected
 // schedule (utils/schedule.projection via useProjectedSchedule):
-//   • On Tables        = schedule.active (parked or in progress)
+//   • Active Tables    = schedule.active (parked or in progress) — the SAME MatchCard grid the
+//                        Dashboard uses on web; the compact rows remain on native.
 //   • Scheduled Matches = schedule.scheduled — every remaining match, Ready first,
 //     then Waiting/future matches with feeder placeholders. Next ~10 inline, the
 //     rest in View Full Schedule.
 // Reordering (Up/Down/Top/Bottom) changes PRIORITY only and persists through the
 // existing queueOrder path; Auto Assign still plans from schedule.readyQueue (the
 // unchanged orderQueue result). Assigning a table PARKS the match on it; the TD
-// then starts it from On Tables (or uses Assign & Start to do both).
+// then starts it from Active Tables (or uses Assign & Start to do both).
 
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -56,6 +57,7 @@ import { Dropdown } from "../../common/dropdown";
 import { ActionMenu, ActionMenuItem } from "../../admin/ActionMenu";
 import { AutoAssignToggle } from "./AutoAssignToggle";
 import { GLYPH_TEXT, MatchPlayerGlyph } from "../../../../models/types/match-checkin.types";
+import { MatchCard } from "./MatchCard";
 import { ScheduledMatchRow } from "./ScheduledMatchRow";
 
 const projectedPlayers = (pm: ProjectedMatch): string =>
@@ -98,8 +100,15 @@ interface QueueViewProps {
   // Opens the shared match-actions modal (score/end/reopen/etc.) for an on-table
   // match — reuses the hub's existing MatchActionsModal, no second flow.
   onManageMatch?: (m: LiveMatch, step: MatchActionStep) => void;
-  // Per-assignment check-in glyphs for the On Tables rows (same resolver as the Dashboard).
-  glyphsFor?: (m: LiveMatch) => { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
+  // Per-assignment player status for the Active Tables cards (same resolver as the Dashboard).
+  glyphsFor?: (m: LiveMatch) => {
+    p1: MatchPlayerGlyph | null;
+    p2: MatchPlayerGlyph | null;
+    p1Issue?: boolean;
+    p2Issue?: boolean;
+  } | null;
+  // Opens the shared Player Message modal for that side of the match.
+  onViewMessage?: (m: LiveMatch, slot: 1 | 2) => void;
   // Players still in / total field, for the right summary card (the hub already
   // derives these — QueueView can't from matches alone). "—" when not provided.
   playersRemaining?: number;
@@ -182,6 +191,7 @@ export const QueueView = ({
   onSetQueueOrder,
   onManageMatch,
   glyphsFor,
+  onViewMessage,
   playersRemaining,
   playersTotal,
 }: QueueViewProps) => {
@@ -526,7 +536,7 @@ export const QueueView = ({
               : []),
           ]}
         />
-        {/* MATCH ACTIONS (⋯) — the SAME lifecycle-aware modal the On Tables rows use, so a
+        {/* MATCH ACTIONS (⋯) — the SAME lifecycle-aware modal the Active Tables cards use, so a
             queued match keeps its normal controls (Assign Table / Forfeit / Withdraw / details).
             Never disabled by the queue-order rules above. */}
         {onManageMatch && (
@@ -617,10 +627,28 @@ export const QueueView = ({
               onPress={() => setShowOnTables((s) => !s)}
             >
               <Text allowFontScaling={false} style={styles.sectionTitle}>
-                {showOnTables ? "▾" : "▸"} On Tables ({onTables.length})
+                {showOnTables ? "▾" : "▸"} Active Tables ({onTables.length})
               </Text>
             </TouchableOpacity>
-            {showOnTables &&
+            {showOnTables && isWeb && (
+              // WEB/DESKTOP: the Dashboard's Active Tables layout, reused verbatim (same
+              // MatchCard, same two-column grid, same actions) so the two screens can't drift.
+              <View style={styles.activeGrid}>
+                {onTables.map(({ match: m }) => (
+                  <View key={m.id} style={styles.activeCell}>
+                    <MatchCard
+                      match={m}
+                      compact
+                      now={now}
+                      onAction={onManageMatch}
+                      glyphs={glyphsFor?.(m)}
+                      onViewMessage={(slot) => onViewMessage?.(m, slot)}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+            {showOnTables && !isWeb &&
               onTables.map(({ match: m, numberLabel, location }) => {
                 const playing = m.status === "in_progress";
                 return (
@@ -633,12 +661,16 @@ export const QueueView = ({
                       >
                         {players(m)}
                         {(() => {
-                          // ○ waiting · ✓ checked in · ? issue — per side, for THIS assignment.
+                          // Native compact row: ○ waiting · ✓ checked in per side, plus a red ✉
+                          // when that player has an unresolved message (independent states).
                           const g = glyphsFor?.(m);
                           if (!g?.p1 && !g?.p2) return null;
                           return (
                             <Text style={styles.onTableMeta}>
-                              {`   ${g?.p1 ? GLYPH_TEXT[g.p1] : ""} / ${g?.p2 ? GLYPH_TEXT[g.p2] : ""}`}
+                              {`   ${g?.p1 ? GLYPH_TEXT[g.p1] : ""}`}
+                              {g?.p1Issue ? <Text style={styles.onTableIssue}>{" ✉"}</Text> : null}
+                              {` / ${g?.p2 ? GLYPH_TEXT[g.p2] : ""}`}
+                              {g?.p2Issue ? <Text style={styles.onTableIssue}>{" ✉"}</Text> : null}
                             </Text>
                           );
                         })()}
@@ -1045,6 +1077,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
   },
+  // Same grid as EliminationDashboard's Active Tables (two columns on web).
+  onTableIssue: { color: COLORS.error, fontWeight: "800" },
+  activeGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.md) },
+  activeCell: { width: "48.5%" as any },
   onTableRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1131,7 +1167,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   viewAllBtnText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.primary, fontWeight: "800" },
-  // Row-sized Assign trigger (smaller than the On Tables button group).
+  // Row-sized Assign trigger (smaller than the Active Tables button group).
   rowBtn: {
     height: webSc(28),
     paddingVertical: 0,

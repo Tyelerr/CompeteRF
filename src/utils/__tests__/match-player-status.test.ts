@@ -1,13 +1,13 @@
 // src/utils/__tests__/match-player-status.test.ts
 // Run: npx tsx --test src/utils/__tests__/match-player-status.test.ts
-// What the TD sees beside each player (○ / ✓ / ?) and, crucially, that a check-in from an older
-// assignment is never shown against the current one.
+// What the TD sees beside each player (○ / ✓ plus a separate unresolved-message indicator) and,
+// crucially, that state from an older assignment is never shown against the current one.
 /// <reference types="node" />
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MatchPlayerStatus } from "../../models/types/match-checkin.types";
-import { byMatchId, glyphFor, statusForAssignment } from "../match-player-status";
+import { byMatchId, glyphFor, openIssueFor, statusForAssignment } from "../match-player-status";
 
 const A1 = "2026-09-22T18:00:00.000Z";
 const A2 = "2026-09-22T19:30:00.000Z";
@@ -22,13 +22,40 @@ test("no row yet → ○ (waiting on the player)", () => {
   assert.equal(glyphFor(null, args()), "not_checked_in");
 });
 
-test("checked in → ✓, open issue → ? (the issue wins, it needs attention)", () => {
+test("check-in and an open message are INDEPENDENT states", () => {
+  // ✓ with no message
   assert.equal(glyphFor([row({ checked_in_at: A1 })], args()), "checked_in");
-  assert.equal(glyphFor([row({ issue_at: A1, issue_reason: "running_late" })], args()), "issue");
-  assert.equal(glyphFor([row({ checked_in_at: A1, issue_at: A1, issue_reason: "equipment" })], args()), "issue");
-  // a resolved issue goes back to the check-in state
-  assert.equal(glyphFor([row({ checked_in_at: A1, issue_at: A1, resolved_at: A2 })], args()), "checked_in");
+  assert.equal(openIssueFor([row({ checked_in_at: A1 })], args()), null);
+  // ○ with a message
+  const openIssue = row({ issue_at: A1, issue_reason: "running_late" });
+  assert.equal(glyphFor([openIssue], args()), "not_checked_in");
+  assert.equal(openIssueFor([openIssue], args())?.issue_reason, "running_late");
+  // ✓ AND a message — contacting the TD never clears the check-in
+  const both = row({ checked_in_at: A1, issue_at: A1, issue_reason: "equipment" });
+  assert.equal(glyphFor([both], args()), "checked_in");
+  assert.ok(openIssueFor([both], args()));
+  // resolved → the indicator disappears, the ✓ stays
+  const resolved = row({ checked_in_at: A1, issue_at: A1, resolved_at: A2 });
+  assert.equal(glyphFor([resolved], args()), "checked_in");
+  assert.equal(openIssueFor([resolved], args()), null);
+  // resolved with no check-in stays ○
   assert.equal(glyphFor([row({ issue_at: A1, resolved_at: A2 })], args()), "not_checked_in");
+  assert.equal(openIssueFor([row({ issue_at: A1, resolved_at: A2 })], args()), null);
+});
+
+test("a message only counts for the CURRENT assignment and never for a finished match", () => {
+  const old = [row({ issue_at: A1, assigned_at: A1, issue_reason: "dispute" })];
+  assert.equal(openIssueFor(old, args({ assignedAt: A2 })), null, "previous assignment");
+  assert.equal(openIssueFor(old, args({ status: "completed" })), null);
+  assert.equal(openIssueFor(old, args({ assignedAt: null })), null);
+  assert.equal(openIssueFor(old, args({ registrationId: null })), null);
+});
+
+test("one player's message never shows on the other player", () => {
+  const rows = [row({ id: 1, registration_id: 501, issue_at: A1, issue_reason: "watch_shot" }), row({ id: 2, registration_id: 502, checked_in_at: A1 })];
+  assert.ok(openIssueFor(rows, args({ registrationId: 501 })));
+  assert.equal(openIssueFor(rows, args({ registrationId: 502 })), null);
+  assert.equal(glyphFor(rows, args({ registrationId: 502 })), "checked_in");
 });
 
 test("a check-in from a PREVIOUS assignment is never shown on the new one", () => {

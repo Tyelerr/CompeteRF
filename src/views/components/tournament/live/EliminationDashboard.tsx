@@ -124,6 +124,7 @@ export const EliminationDashboard = ({
   onSetAutoAssignEnabled,
   onAssignReady,
   glyphsFor,
+  onViewMessage,
   onStartAll,
   onAction,
   onOpenPage,
@@ -141,8 +142,16 @@ export const EliminationDashboard = ({
   onSetAutoAssignEnabled: (on: boolean) => void;
   // One-time batch: assign the currently Ready matches now (offered only while Auto Assign is Off).
   onAssignReady: () => void;
-  // Per-assignment check-in glyphs (○ / ✓ / ?) for each side of an assigned match.
-  glyphsFor?: (m: LiveMatch) => { p1: MatchPlayerGlyph | null; p2: MatchPlayerGlyph | null } | null;
+  // Per-assignment player status for each side: check-in glyph (○ / ✓) and, separately, whether
+  // that player has an unresolved "Contact TD" message.
+  glyphsFor?: (m: LiveMatch) => {
+    p1: MatchPlayerGlyph | null;
+    p2: MatchPlayerGlyph | null;
+    p1Issue?: boolean;
+    p2Issue?: boolean;
+  } | null;
+  // Opens the shared Player Message modal for that side.
+  onViewMessage?: (m: LiveMatch, slot: 1 | 2) => void;
   onStartAll: () => void;
   onAction: (m: LiveMatch, step: MatchActionStep) => void;
   onOpenPage: (tab: "matches" | "tables" | "queue") => void;
@@ -202,7 +211,15 @@ export const EliminationDashboard = ({
                 <View style={styles.activeGrid}>
                   {activeMatches.map((m) => (
                     <View key={m.id} style={styles.activeCell}>
-                      <MatchCard match={m} onAction={onAction} busy={busy} compact now={now} glyphs={glyphsFor?.(m)} />
+                      <MatchCard
+                        match={m}
+                        onAction={onAction}
+                        busy={busy}
+                        compact
+                        now={now}
+                        glyphs={glyphsFor?.(m)}
+                        onViewMessage={(slot) => onViewMessage?.(m, slot)}
+                      />
                     </View>
                   ))}
                 </View>
