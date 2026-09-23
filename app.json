@@ -43,6 +43,16 @@
                                                                             "scheme":  "https",
                                                                             "host":  "thecompeteapp.com",
                                                                             "pathPrefix":  "/join"
+                                                                        },
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "www.thecompeteapp.com",
+                                                                            "pathPrefix":  "/r/"
+                                                                        },
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "thecompeteapp.com",
+                                                                            "pathPrefix":  "/r/"
                                                                         }
                                                                     ],
                                                            "category":  [

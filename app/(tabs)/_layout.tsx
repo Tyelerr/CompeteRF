@@ -7,6 +7,7 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import AnimatedTabBarButton from "../../src/views/components/common/AnimatedTabBarButton";
 import TabBarIcon from "../../src/views/components/common/tabbaricon";
+import { usePendingReferralClaim } from "../../src/viewmodels/hooks/use.pending.referral.claim";
 
 function WebNavBar() {
   const router = useRouter();
@@ -173,6 +174,8 @@ const styles = StyleSheet.create({
 
 export default function TabLayout() {
   const { profile } = useAuthContext();
+  // Claims any pending referral (from a /r link or the signup code field) once a profile loads.
+  usePendingReferralClaim();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
   const insets = useSafeAreaInsets();
 

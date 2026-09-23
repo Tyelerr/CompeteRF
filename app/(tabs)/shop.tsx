@@ -27,6 +27,7 @@ import {
   GiveawayStatsCard,
 } from "../../src/views/components/shop";
 import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/common/ConfettiBurst";
+import { ReferralShareCard } from "../../src/views/components/referral/ReferralShareCard";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -292,6 +293,12 @@ export default function ShopScreen() {
         </View>
       )}
 
+      {profile && (
+        <View style={s.referralWrapper}>
+          <ReferralShareCard />
+        </View>
+      )}
+
       <View style={s.statsWrapper}>
         <GiveawayStatsCard stats={giveawaysVm.stats} />
       </View>
@@ -438,6 +445,7 @@ const s = StyleSheet.create({
   subtitleMobile: { fontSize: wxMs(FONT_SIZES.sm), color: T.gray, marginTop: wxSc(4) },
 
   statsWrapper: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.xs) },
+  referralWrapper: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.xs) },
 
   webGrid: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.md), paddingHorizontal: wxSc(SPACING.md) },
   webGridItem: { flex: 1, minWidth: 300 },

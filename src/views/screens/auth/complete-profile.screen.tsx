@@ -17,6 +17,8 @@ import { containsBadWord, isValidUsername } from "../../../utils/validation";
 import { Button } from "../../components/common/button";
 import { Dropdown } from "../../components/common/dropdown";
 import { Input } from "../../components/common/input";
+import { ReferralCodeField } from "../../components/referral/ReferralCodeField";
+import { useReferralCodeField } from "../../../viewmodels/hooks/use.referral.code.field";
 
 const SECTION_GAP = 28;
 const FIELD_GAP = 18;
@@ -33,6 +35,7 @@ export const CompleteProfileScreen = () => {
   const [favoritePlayer, setFavoritePlayer] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeAge, setAgreeAge] = useState(false);
+  const referral = useReferralCodeField();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -52,6 +55,9 @@ export const CompleteProfileScreen = () => {
 
   const handleComplete = async () => {
     if (!validateForm()) return;
+    // Hand any referral code to the pending store; it is claimed server-side once the
+    // profile exists (usePendingReferralClaim). Optional — never blocks signup.
+    await referral.commit();
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -148,6 +154,10 @@ export const CompleteProfileScreen = () => {
 
         <View style={styles.fieldGroup}>
           <Input label="Favorite Player" value={favoritePlayer} onChangeText={setFavoritePlayer} placeholder="Your Favorite Player (optional)" autoCapitalize="words" />
+        </View>
+
+        <View style={styles.fieldGroup}>
+          <ReferralCodeField code={referral.code} onChangeCode={referral.setCode} check={referral.check} inviter={referral.inviter} />
         </View>
 
         <Text allowFontScaling={false} style={styles.sectionTitle}>Terms & Conditions</Text>
