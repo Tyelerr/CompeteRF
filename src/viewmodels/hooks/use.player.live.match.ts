@@ -15,6 +15,7 @@ import {
   MatchResult,
 } from "../../models/types/tournament-settings.types";
 import { groupForFargo, RaceConfig, raceConfigFromLiveSettings } from "../../utils/bracket.utils";
+import { CheckInSettings, readCheckInSettings } from "../../utils/check-in-timer";
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { registrationIdOf } from "../../utils/live-entries";
@@ -62,6 +63,9 @@ export interface PlayerTournamentHub {
   myName: string | null; // the player's own display name in this tournament
   current: PlayerLiveMatch | null; // the match that matters now (or null between rounds / eliminated)
   history: PlayerMatchResult[]; // completed matches, earliest first
+  // Tournament check-in settings (live_settings.checkIn) — whether check-in is required before a
+  // PLAYER may Start Match, and the timer thresholds. Read-only here.
+  checkIn: CheckInSettings;
 }
 
 const roundLabelFor = (m: LiveMatch): string => {
@@ -243,6 +247,7 @@ export const usePlayerLiveMatch = (
       myName,
       current,
       history,
+      checkIn: readCheckInSettings(tournament.live_settings ?? null),
     };
   }, [tournament, myRegId, tablesQuery.data, raceConfig]);
 

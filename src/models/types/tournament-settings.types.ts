@@ -213,6 +213,15 @@ export interface TournamentLiveSettings {
   // Auto Assign ON: a TD's Manage screen assigns Ready matches to free tables as state changes
   // (the queue ordering mode above still decides WHICH Ready match goes first).
   autoAssignEnabled?: boolean;
+
+  // Match check-in (phase: timer). Whether players must check in before a PLAYER may start the
+  // match, and the amber-warning / Forfeit Review thresholds in minutes from assignedAt. Purely
+  // informational to the TD: nothing is ever forfeited or penalised automatically.
+  checkIn?: {
+    required?: boolean;
+    warnAfterMinutes?: number;
+    forfeitReviewAfterMinutes?: number;
+  };
   // TD relative overrides that coexist with an automatic mode ("Move & Keep {mode}"). Resolved
   // deterministically over the mode's order by src/utils/queue-pins.ts. Ignored in Manual.
   queuePins?: QueuePin[];

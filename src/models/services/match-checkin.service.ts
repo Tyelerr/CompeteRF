@@ -6,7 +6,7 @@
 // player's status, or touch live_settings. Reads come straight from match_player_status, whose
 // RLS gives a player their own rows and a tournament manager the whole event's.
 import { supabase } from "../../lib/supabase";
-import { MatchIssueReason, MatchPlayerStatus } from "../types/match-checkin.types";
+import { MatchAssignmentStatus, MatchIssueReason, MatchPlayerStatus } from "../types/match-checkin.types";
 
 const ROW_COLUMNS =
   "id, tournament_id, match_id, registration_id, assigned_at, draw_number, checked_in_at, issue_reason, issue_message, issue_at, resolved_at";
@@ -48,6 +48,56 @@ export const matchCheckInService = {
       console.warn("[matchCheckIn] issue push failed (in-app notification already sent):", err);
     }
     return { recipients: Number((data as { recipients?: number })?.recipients ?? 0) };
+  },
+
+  /**
+   * A PLAYER starts their own match. The server re-checks that they are in this match, that it is
+   * assigned and not started, that check-in is complete when the TD requires it, and stamps
+   * startedAt itself — the same start path the TD uses. Never another player's match.
+   */
+  async playerStart(tournamentId: number, matchId: string): Promise<void> {
+    const { error } = await supabase.rpc("match_player_start", {
+      p_tournament_id: tournamentId,
+      p_match_id: matchId,
+    });
+    if (error) throw error;
+  },
+
+  /** Manager marks a player present (guest / no phone / verbal), or undoes it. */
+  async markCheckedIn(
+    tournamentId: number,
+    matchId: string,
+    registrationId: number,
+    checkedIn = true,
+  ): Promise<void> {
+    const { error } = await supabase.rpc("match_mark_checked_in", {
+      p_tournament_id: tournamentId,
+      p_match_id: matchId,
+      p_registration_id: registrationId,
+      p_checked_in: checkedIn,
+    });
+    if (error) throw error;
+  },
+
+  /** Manager extends the check-in/start deadline for THIS assignment only. */
+  async extendDeadline(tournamentId: number, matchId: string, minutes: number): Promise<number> {
+    const { data, error } = await supabase.rpc("match_extend_deadline", {
+      p_tournament_id: tournamentId,
+      p_match_id: matchId,
+      p_minutes: minutes,
+    });
+    if (error) throw error;
+    return Number((data as { extendedMinutes?: number })?.extendedMinutes ?? 0);
+  },
+
+  /** Match-level assignment rows (extension + review stamps) for a tournament. */
+  async listAssignmentStatus(tournamentId: number): Promise<MatchAssignmentStatus[]> {
+    const { data, error } = await supabase
+      .from("match_assignment_status")
+      .select("id, tournament_id, match_id, assigned_at, draw_number, extended_minutes, extended_at, review_alert_at")
+      .eq("tournament_id", tournamentId);
+    if (error) throw error;
+    return (data ?? []) as MatchAssignmentStatus[];
   },
 
   /**

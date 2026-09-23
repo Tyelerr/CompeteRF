@@ -80,6 +80,15 @@ export const useManageTournament = (tournamentId?: number) => {
     refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : 30000,
   });
 
+  // Match-level assignment facts (TD time extensions + Forfeit Review stamps).
+  const assignmentStatusQuery = useQuery({
+    queryKey: ["match-assignment-status", tournamentId],
+    queryFn: () => matchCheckInService.listAssignmentStatus(tournamentId!),
+    enabled: !!tournamentId,
+    retry: false,
+    refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : 30000,
+  });
+
   const registrationsApi = useRegistrations(tournamentId);
 
   const invalidateTournament = () =>
@@ -494,6 +503,8 @@ export const useManageTournament = (tournamentId?: number) => {
     queueOrder: tournament?.live_settings?.queueOrder ?? [],
     playerStatuses: playerStatusQuery.data ?? [],
     refetchPlayerStatuses: playerStatusQuery.refetch,
+    assignmentStatuses: assignmentStatusQuery.data ?? [],
+    refetchAssignmentStatuses: assignmentStatusQuery.refetch,
     saveQueueSettings: saveQueueSettingsMutation.mutateAsync,
     drawBracket: drawBracketMutation.mutateAsync,
     isDrawing: drawBracketMutation.isPending,

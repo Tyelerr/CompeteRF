@@ -12,6 +12,7 @@ import { MatchIssueReason } from "../../models/types/match-checkin.types";
 import { matchRaceText } from "../../utils/match.utils";
 import { PlayerMatchSnapshot } from "../../utils/player-match-link";
 import { statusForAssignment } from "../../utils/match-player-status";
+import { CHECK_IN_DEFAULTS, canPlayerStart, computeCheckInTimer } from "../../utils/check-in-timer";
 import { usePlayerLiveMatch } from "./use.player.live.match";
 
 export interface PlayerMatchContext {
@@ -72,6 +73,18 @@ export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | n
     [context, statusQuery.data],
   );
 
+  /** Both sides present: their own tap OR a manager's manual mark. */
+  const bothCheckedIn = useMemo(() => {
+    if (!context?.assignedAt) return false;
+    const rows = (statusQuery.data ?? []).filter(
+      (r) => r.match_id === context.matchId && !!r.checked_in_at &&
+        Date.parse(r.assigned_at) === Date.parse(context.assignedAt!),
+    );
+    return rows.length >= 2;
+  }, [statusQuery.data, context]);
+
+  const settings = hub?.checkIn ?? CHECK_IN_DEFAULTS;
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["match-player-status", context?.tournamentId] });
 
@@ -100,6 +113,14 @@ export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | n
     [context, current],
   );
 
+  const startMatchMutation = useMutation({
+    mutationFn: () => matchCheckInService.playerStart(context!.tournamentId, context!.matchId),
+    onSettled: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["tournament", context?.tournamentId] });
+    },
+  });
+
   const checkIn = useCallback(async () => {
     if (!isAssigned) return;
     await checkInMutation.mutateAsync();
@@ -113,9 +134,36 @@ export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | n
     [context, contactMutation],
   );
 
+  /** May THIS player press Start Match right now? */
+  const startGate = canPlayerStart({
+    match: current ? { status: current.match.status, tableId: current.match.tableId } : null,
+    bothCheckedIn,
+    settings,
+  });
+
+  const startMatch = useCallback(async () => {
+    if (!context || !startGate.ok) return;
+    await startMatchMutation.mutateAsync();
+  }, [context, startGate.ok, startMatchMutation]);
+
   return {
     context,
     snapshot,
+    bothCheckedIn,
+    checkInRequired: settings.required,
+    canStart: startGate.ok,
+    startBlockedReason: startGate.reason ?? null,
+    startMatch,
+    /** Live timer for this assignment; the caller passes its own ticking `now`. */
+    timerAt: (now: number) =>
+      computeCheckInTimer({
+        match: current
+          ? { assignedAt: current.match.assignedAt, status: current.match.status, tableId: current.match.tableId }
+          : null,
+        bothCheckedIn,
+        settings,
+        now,
+      }),
     isAssigned,
     isLoading,
     checkedIn: !!myStatus?.checked_in_at,

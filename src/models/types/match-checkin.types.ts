@@ -7,6 +7,7 @@ export type MatchIssueReason =
   | "running_late"
   | "table_missing"
   | "equipment"
+  | "opponent_not_here"
   | "dispute"
   | "watch_shot"
   | "other";
@@ -15,6 +16,7 @@ export const MATCH_ISSUE_REASONS: { value: MatchIssueReason; label: string }[] =
   { value: "running_late", label: "Running late" },
   { value: "table_missing", label: "Can't find table" },
   { value: "equipment", label: "Equipment issue" },
+  { value: "opponent_not_here", label: "Opponent not here" },
   // mid-match reasons — Contact TD is available while the match is in progress too
   { value: "dispute", label: "Dispute / Need TD" },
   { value: "watch_shot", label: "Need shot watched" },
@@ -36,6 +38,22 @@ export interface MatchPlayerStatus {
   issue_message: string | null;
   issue_at: string | null;
   resolved_at: string | null;
+  // Who confirmed presence: the player themselves, or a manager (guest / no phone / verbal).
+  checked_in_by?: string | null;
+  checked_in_source?: "player" | "manager" | null;
+}
+
+/** Match-level facts for ONE assignment (table match_assignment_status). */
+export interface MatchAssignmentStatus {
+  id: number;
+  tournament_id: number;
+  match_id: string;
+  assigned_at: string;
+  draw_number: number;
+  /** TD "Extend Time" for this assignment only; tournament defaults never change. */
+  extended_minutes: number;
+  extended_at: string | null;
+  review_alert_at: string | null;
 }
 
 /**
