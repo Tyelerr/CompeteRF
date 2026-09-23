@@ -130,6 +130,42 @@ export const venueService = {
     if (error) throw error;
   },
 
+  // Creates a venue with the caller as its primary owner (plus optional directors) in
+  // one authorized server call — clients can no longer self-insert venue_owners rows.
+  // Roles of the owner and directors are re-derived server-side. Returns the venue id.
+  async createVenueWithOwner(
+    venue: {
+      venue: string;
+      address: string;
+      city: string;
+      state: string;
+      zip_code: string;
+      phone?: string | null;
+      google_place_id?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    },
+    directorIds: number[] = [],
+  ): Promise<number> {
+    const { data, error } = await supabase.rpc("create_venue", {
+      p_venue: venue,
+      p_director_ids: directorIds,
+    });
+    if (error) throw error;
+    return data as number;
+  },
+
+  // Hard-removes a co-owner or director row from a venue team (venue owner or admin
+  // only) and re-derives that user's role server-side. Returns their new role.
+  async removeTeamMember(kind: "owner" | "director", rowId: number): Promise<string | null> {
+    const { data, error } = await supabase.rpc("remove_venue_team_member", {
+      p_kind: kind,
+      p_row_id: rowId,
+    });
+    if (error) throw error;
+    return (data as string | null) ?? null;
+  },
+
   // Returns distinct table brands present in venue_tables,
   // excluding generic catch-all values.
   async getDistinctBrands(): Promise<string[]> {

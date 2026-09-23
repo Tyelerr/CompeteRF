@@ -2,6 +2,8 @@
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { roleService } from "../models/services/role.service";
+import { venueService } from "../models/services/venue.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export interface TeamMember {
@@ -19,12 +21,12 @@ export interface UserSearchResult {
   email: string;
 }
 
-const PROTECTED_ROLES = ["super_admin", "compete_admin"];
 const OWNER_ROLES = ["super_admin", "compete_admin", "bar_owner"];
 const DIRECTOR_ROLES = ["super_admin", "compete_admin", "bar_owner", "tournament_director"];
 
 export const useVenueTeam = (venueId: number | null) => {
   const { profile } = useAuthContext();
+  const myIdAuto = profile?.id_auto;
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -98,47 +100,13 @@ export const useVenueTeam = (venueId: number | null) => {
     }
   }, []);
 
-  // ── Role helpers ───────────────────────────────────────────────────────────
-  const promoteRole = async (userId: number, newRole: string) => {
-    const { data: userProfile } = await supabase
-      .from("profiles").select("role").eq("id_auto", userId).maybeSingle();
-    if (!userProfile) return;
-    if (PROTECTED_ROLES.includes(userProfile.role)) return;
-    const { error } = await supabase
-      .from("profiles").update({ role: newRole }).eq("id_auto", userId);
-    if (error) console.error("Role promote error:", error);
-  };
-
-  const downgradeRoleIfUnassigned = async (userId: number) => {
-    // Check remaining venue owner rows
-    const { count: ownerCount } = await supabase
-      .from("venue_owners")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", userId)
-      .is("archived_at", null);
-
-    // Check remaining director rows
-    const { count: directorCount } = await supabase
-      .from("venue_directors")
-      .select("id", { count: "exact", head: true })
-      .eq("director_id", userId)
-      .is("archived_at", null);
-
-    const { data: userProfile } = await supabase
-      .from("profiles").select("role").eq("id_auto", userId).maybeSingle();
-    if (!userProfile || PROTECTED_ROLES.includes(userProfile.role)) return;
-
-    if ((ownerCount || 0) === 0 && (directorCount || 0) === 0) {
-      await supabase.from("profiles").update({ role: "basic_user" }).eq("id_auto", userId);
-    } else if ((ownerCount || 0) === 0 && (directorCount || 0) > 0) {
-      await supabase.from("profiles").update({ role: "tournament_director" }).eq("id_auto", userId);
-    }
-    // If still has owner rows, keep bar_owner
-  };
+  // Roles are re-derived server-side after every team change (roleService →
+  // recompute_user_role RPC; removals via remove_venue_team_member), so a co-owner
+  // becomes bar_owner, a director tournament_director, and admins are never touched.
 
   // ── Add Co-Owner ───────────────────────────────────────────────────────────
   const addCoOwner = useCallback(async (userId: number, userName: string): Promise<boolean> => {
-    if (!venueId || !profile?.id_auto) return false;
+    if (!venueId || !myIdAuto) return false;
     const already = members.find((m) => m.userId === userId);
     if (already) {
       Alert.alert("Already a Member", `${userName} is already on this venue''s team.`);
@@ -149,10 +117,10 @@ export const useVenueTeam = (venueId: number | null) => {
       const { error } = await supabase.from("venue_owners").insert({
         venue_id: venueId,
         owner_id: userId,
-        assigned_by: profile.id_auto,
+        assigned_by: myIdAuto,
       });
       if (error) throw error;
-      await promoteRole(userId, "bar_owner");
+      await roleService.recomputeUserRole(userId);
       await loadTeam();
       return true;
     } catch (err) {
@@ -162,11 +130,11 @@ export const useVenueTeam = (venueId: number | null) => {
     } finally {
       setSaving(false);
     }
-  }, [venueId, profile?.id_auto, members, loadTeam]);
+  }, [venueId, myIdAuto, members, loadTeam]);
 
   // ── Add Director ───────────────────────────────────────────────────────────
   const addDirector = useCallback(async (userId: number, userName: string): Promise<boolean> => {
-    if (!venueId || !profile?.id_auto) return false;
+    if (!venueId || !myIdAuto) return false;
     const already = members.find((m) => m.userId === userId && m.role === "director");
     if (already) {
       Alert.alert("Already a Director", `${userName} is already a director at this venue.`);
@@ -175,11 +143,11 @@ export const useVenueTeam = (venueId: number | null) => {
     setSaving(true);
     try {
       const { error } = await supabase.from("venue_directors").upsert(
-        { venue_id: venueId, director_id: userId, assigned_by: profile.id_auto },
+        { venue_id: venueId, director_id: userId, assigned_by: myIdAuto },
         { onConflict: "venue_id,director_id" }
       );
       if (error) throw error;
-      await promoteRole(userId, "tournament_director");
+      await roleService.recomputeUserRole(userId);
       await loadTeam();
       return true;
     } catch (err) {
@@ -189,7 +157,7 @@ export const useVenueTeam = (venueId: number | null) => {
     } finally {
       setSaving(false);
     }
-  }, [venueId, profile?.id_auto, members, loadTeam]);
+  }, [venueId, myIdAuto, members, loadTeam]);
 
   // ── Remove Co-Owner ────────────────────────────────────────────────────────
   const removeCoOwner = useCallback(async (member: TeamMember): Promise<boolean> => {
@@ -200,11 +168,8 @@ export const useVenueTeam = (venueId: number | null) => {
     }
     setSaving(true);
     try {
-      console.log("Removing co-owner row id:", member.id, "userId:", member.userId);
-      const { error, data } = await supabase.from("venue_owners").delete().eq("id", member.id).select();
-      console.log("Delete result:", data, "error:", error);
-      if (error) throw error;
-      await downgradeRoleIfUnassigned(member.userId);
+      // Hard delete + role re-derivation, authorized server-side (venue owner / admin).
+      await venueService.removeTeamMember("owner", member.id);
       await loadTeam();
       return true;
     } catch (err) {
@@ -221,9 +186,7 @@ export const useVenueTeam = (venueId: number | null) => {
     if (!venueId) return false;
     setSaving(true);
     try {
-      const { error } = await supabase.from("venue_directors").delete().eq("id", member.id);
-      if (error) throw error;
-      await downgradeRoleIfUnassigned(member.userId);
+      await venueService.removeTeamMember("director", member.id);
       await loadTeam();
       return true;
     } catch (err) {

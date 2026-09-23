@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { adminUserService } from "../models/services/admin-user.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
 export type UserRole =
@@ -189,20 +190,17 @@ export const useAdminUsers = () => {
         text: "Delete", style: "destructive",
         onPress: async () => {
           try {
-            const { error } = await supabase.from("profiles").update({
-              status: "deleted", deleted_by: profile?.id_auto,
-              deleted_at: new Date().toISOString(),
-            }).eq("id", userId);
-            if (error) { Alert.alert("Error", `Failed to delete user: ${error.message}`); return; }
+            // status/deleted_* are server-authorized (admin_soft_delete_user RPC stamps deleted_by).
+            await adminUserService.softDelete(userId);
             setUsers((prev) => prev.filter((u) => u.id !== userId));
             Alert.alert("Success", "User deleted successfully");
-          } catch {
-            Alert.alert("Error", "Failed to delete user");
+          } catch (error: any) {
+            Alert.alert("Error", `Failed to delete user: ${error?.message ?? "Unknown error"}`);
           }
         },
       },
     ]);
-  }, [profile?.id_auto]);
+  }, []);
 
   const filteredUsers = useMemo(() => {
     let result = [...users];

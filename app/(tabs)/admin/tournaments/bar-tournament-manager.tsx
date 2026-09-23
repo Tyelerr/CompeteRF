@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../../../src/lib/supabase";
+import { roleService } from "../../../../src/models/services/role.service";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { isTournamentArchived, isTournamentCompleted } from "../../../../src/utils/tournament.archive";
 import { tournamentBadge } from "../../../../src/utils/tournament-phase";
@@ -354,14 +355,8 @@ export default function BarTournamentManagerScreen() {
           { onConflict: "venue_id,director_id" },
         );
 
-        const { data: newDirProfile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id_auto", newDirectorId)
-          .single();
-        if (newDirProfile && newDirProfile.role === "basic_user") {
-          await supabase.from("profiles").update({ role: "tournament_director" }).eq("id_auto", newDirectorId);
-        }
+        // New director now directs the venue — re-derive their role server-side.
+        await roleService.recomputeUserRole(newDirectorId);
 
         setReassignModalVisible(false);
         setTournamentToReassign(null);

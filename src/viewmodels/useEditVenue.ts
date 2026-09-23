@@ -255,37 +255,6 @@ export const useEditVenue = (venueId: number) => {
 
   const executeAddDirector = async (user: any) => {
     try {
-      // Promote basic_user → tournament_director
-      if (user.role === "basic_user") {
-        const { data: updatedProfile, error: roleError } = await supabase
-          .from("profiles")
-          .update({ role: "tournament_director" })
-          .eq("id_auto", user.id_auto)
-          .select("id_auto, role")
-          .single();
-
-        if (roleError) {
-          console.error("Failed to update user role:", roleError);
-          Alert.alert("Error", `Failed to promote user: ${roleError.message}`);
-          return;
-        }
-
-        if (!updatedProfile) {
-          console.error("Role update returned null — likely RLS block");
-          Alert.alert(
-            "Permission Error",
-            "The database blocked the role update. Please ensure the RLS policy has been applied.",
-          );
-          return;
-        }
-
-        if (updatedProfile.role !== "tournament_director") {
-          console.error("Role did not change:", updatedProfile.role);
-          Alert.alert("Error", "Role update did not take effect.");
-          return;
-        }
-      }
-
       // Check if an archived record exists (previously removed)
       const { data: archivedRecord } = await supabase
         .from("venue_directors")
@@ -327,6 +296,10 @@ export const useEditVenue = (venueId: number) => {
           return;
         }
       }
+
+      // The user now directs this venue — re-derive their role server-side
+      // (basic_user → tournament_director; owners/admins keep theirs).
+      await roleService.recomputeUserRole(user.id_auto);
 
       const msg =
         user.role === "basic_user"

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { adminUserService } from "../models/services/admin-user.service";
 import { useAuthContext } from "../providers/AuthProvider";
 import { buildFullName } from "../utils/name.utils";
 
@@ -186,26 +187,17 @@ export const useEditUser = (userId: string) => {
     try {
       const trimmedFirst = firstName.trim();
       const trimmedLast = lastName.trim();
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
+      // role/status are server-authorized (admin_update_user RPC).
+      try {
+        await adminUserService.updateUser(userId, {
           name: buildFullName(trimmedFirst, trimmedLast),
           first_name: trimmedFirst,
           last_name: trimmedLast,
           role,
           status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
-        .select()
-        .single();
-
-      if (error) {
-        Alert.alert("Error", `Failed to save: ${error.message}`);
-        return false;
-      }
-      if (!data) {
-        Alert.alert("Error", "Update failed — no rows were modified.");
+        });
+      } catch (error: any) {
+        Alert.alert("Error", `Failed to save: ${error?.message ?? "Unknown error"}`);
         return false;
       }
 
@@ -251,19 +243,10 @@ export const useEditUser = (userId: string) => {
         onPress: async () => {
           setTogglingDisable(true);
           try {
-            const { data, error } = await supabase
-              .from("profiles")
-              .update({ is_disabled: newDisabledState, updated_at: new Date().toISOString() })
-              .eq("id", userId)
-              .select()
-              .single();
-
-            if (error) {
-              Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user: ${error.message}`);
-              return;
-            }
-            if (!data) {
-              Alert.alert("Error", "Update failed — no rows modified.");
+            try {
+              await adminUserService.setDisabled(userId, newDisabledState);
+            } catch (error: any) {
+              Alert.alert("Error", `Failed to ${actionLabel.toLowerCase()} user: ${error?.message ?? "Unknown error"}`);
               return;
             }
             setUser((prev) => prev ? { ...prev, is_disabled: newDisabledState } : null);

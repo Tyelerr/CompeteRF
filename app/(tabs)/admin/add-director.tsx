@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { supabase } from "../../../src/lib/supabase";
+import { roleService } from "../../../src/models/services/role.service";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -181,36 +182,6 @@ export default function AddDirectorScreen() {
         return;
       }
 
-      if (selectedUser.role === "basic_user") {
-        const { data: updatedProfile, error: roleError } = await supabase
-          .from("profiles")
-          .update({ role: "tournament_director" })
-          .eq("id_auto", selectedUser.id_auto)
-          .select("id_auto, role")
-          .single();
-
-        if (roleError) {
-          console.error("Failed to update user role:", roleError);
-          Alert.alert("Error", `Failed to promote user: ${roleError.message}`);
-          setAdding(false);
-          return;
-        }
-
-        if (!updatedProfile) {
-          console.error("Role update returned null \u2013 likely RLS block");
-          Alert.alert("Permission Error", "The database blocked the role update. Please ensure the RLS policy has been applied in Supabase.");
-          setAdding(false);
-          return;
-        }
-
-        if (updatedProfile.role !== "tournament_director") {
-          console.error("Role did not change:", updatedProfile.role);
-          Alert.alert("Error", "Role update did not take effect. Please contact support.");
-          setAdding(false);
-          return;
-        }
-      }
-
       const { data: archivedRecord } = await supabase
         .from("venue_directors")
         .select("id")
@@ -231,6 +202,10 @@ export default function AddDirectorScreen() {
           .insert({ venue_id: selectedVenue, director_id: selectedUser.id_auto, assigned_by: profile!.id_auto, assigned_at: new Date().toISOString() });
         if (insertError) throw insertError;
       }
+
+      // The user now directs this venue — re-derive their role server-side
+      // (basic_user → tournament_director; owners/admins keep theirs).
+      await roleService.recomputeUserRole(selectedUser.id_auto);
 
       const msg = selectedUser.role === "basic_user"
         ? `${selectedUser.name} has been promoted to Tournament Director and assigned to the venue!`

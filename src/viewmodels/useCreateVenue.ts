@@ -1,8 +1,7 @@
 ﻿import { useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
-import { roleService } from "../models/services/role.service";
-import { useAuthContext } from "../providers/AuthProvider";
+import { venueService } from "../models/services/venue.service";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";
 
 const GOOGLE_PLACES_API_KEY = "AIzaSyC8ih2uZXpyubGDgVGJ1D32NLRS9LSs0gw";
@@ -43,8 +42,6 @@ export interface PlacePrediction {
 }
 
 export const useCreateVenue = () => {
-  const { profile } = useAuthContext();
-
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -303,48 +300,32 @@ export const useCreateVenue = () => {
 
     setLoading(true);
     try {
-      // 1. Insert venue
-      const { data: venueData, error: venueError } = await supabase
-        .from("venues")
-        .insert({
-          venue: form.venue,
-          address: form.address,
-          city: form.city,
-          state: form.state,
-          zip_code: form.zip_code,
-          phone: form.phone || null,
-          google_place_id: form.google_place_id,
-          latitude: form.latitude,
-          longitude: form.longitude,
-          status: "active",
-        })
-        .select()
-        .single();
-
-      if (venueError) {
+      // 1. Venue + creator as primary owner + directors, atomically and server-authorized
+      //    (create_venue RPC). Owner/director roles are re-derived server-side, so selected
+      //    basic users become tournament directors without a client role write.
+      let venueId: number;
+      try {
+        venueId = await venueService.createVenueWithOwner(
+          {
+            venue: form.venue,
+            address: form.address,
+            city: form.city,
+            state: form.state,
+            zip_code: form.zip_code,
+            phone: form.phone || null,
+            google_place_id: form.google_place_id,
+            latitude: form.latitude,
+            longitude: form.longitude,
+          },
+          directors.map((d) => d.id_auto),
+        );
+      } catch (venueError) {
         console.error("Error creating venue:", venueError);
         Alert.alert("Error", "Failed to create venue");
         return false;
       }
 
-      const venueId = venueData.id;
-
-      // 2. Insert venue_owner
-      const { error: ownerError } = await supabase.from("venue_owners").insert({
-        venue_id: venueId,
-        owner_id: profile!.id_auto,
-        assigned_by: profile!.id_auto,
-      });
-
-      if (ownerError) {
-        console.error("Error adding venue owner:", ownerError);
-        // Don't fail completely, venue was created
-      } else {
-        // Creator now owns this venue — make sure their role reflects it.
-        await roleService.recomputeUserRole(profile!.id_auto);
-      }
-
-      // 3. Insert venue_tables
+      // 2. Insert venue_tables
       if (tables.length > 0) {
         const tableInserts = tables.map((t) => ({
           venue_id: venueId,
@@ -359,40 +340,6 @@ export const useCreateVenue = () => {
 
         if (tablesError) {
           console.error("Error adding tables:", tablesError);
-          // Don't fail completely
-        }
-      }
-
-      // 4. Insert venue_directors and upgrade basic_users
-      if (directors.length > 0) {
-        // First, upgrade any basic_users to tournament_director
-        const basicUsers = directors.filter((d) => d.role === "basic_user");
-        if (basicUsers.length > 0) {
-          const basicUserIds = basicUsers.map((d) => d.id_auto);
-          const { error: upgradeError } = await supabase
-            .from("profiles")
-            .update({ role: "tournament_director" })
-            .in("id_auto", basicUserIds);
-
-          if (upgradeError) {
-            console.error("Error upgrading users:", upgradeError);
-            // Don't fail completely
-          }
-        }
-
-        // Then insert venue_directors
-        const directorInserts = directors.map((d) => ({
-          venue_id: venueId,
-          director_id: d.id_auto,
-          assigned_by: profile!.id_auto,
-        }));
-
-        const { error: directorsError } = await supabase
-          .from("venue_directors")
-          .insert(directorInserts);
-
-        if (directorsError) {
-          console.error("Error adding directors:", directorsError);
           // Don't fail completely
         }
       }

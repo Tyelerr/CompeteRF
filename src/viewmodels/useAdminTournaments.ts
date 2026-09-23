@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { roleService } from "../models/services/role.service";
 import { tournamentService } from "../models/services/tournament.service";
 import { useAuthContext } from "../providers/AuthProvider";
 import { isTournamentArchived, isTournamentCompleted } from "../utils/tournament.archive";
@@ -201,11 +202,8 @@ export const useAdminTournaments = () => {
           { onConflict: "venue_id,director_id" },
         );
 
-        const { data: newDirProfile } = await supabase
-          .from("profiles").select("role").eq("id_auto", newDirectorId).single();
-        if (newDirProfile?.role === "basic_user") {
-          await supabase.from("profiles").update({ role: "tournament_director" }).eq("id_auto", newDirectorId);
-        }
+        // New director now directs the venue — re-derive their role server-side.
+        await roleService.recomputeUserRole(newDirectorId);
 
         setTournaments((prev) =>
           prev.map((t) => t.id === tournamentId
