@@ -171,12 +171,42 @@ export default function CreateGiveawayScreen() {
 
         {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
         <Section title="Entry Rules">
+          {/* Entry Method — fixed at creation (it can't be switched once entries exist) */}
+          <View style={styles.fieldGroup}>
+            <Text allowFontScaling={false} style={styles.label}>
+              Entry Method <Text allowFontScaling={false} style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.endTypeRow}>
+              {([
+                { mode: "legacy_single", label: "🎁 Single Free Entry" },
+                { mode: "wallet", label: "🎟 Giveaway Entries" },
+              ] as const).map(({ mode, label }) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.endTypeButton, vm.formData.entry_mode === mode && styles.endTypeButtonActive]}
+                  onPress={() => vm.setEntryMode(mode)}
+                >
+                  <Text allowFontScaling={false} style={[styles.endTypeText, vm.formData.entry_mode === mode && styles.endTypeTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.endTypeHintBox}>
+              <Text allowFontScaling={false} style={styles.endTypeHint}>
+                {vm.formData.entry_mode === "wallet"
+                  ? "Users spend their Giveaway Entries — 1 entry = 1 chance — up to the per-user maximum."
+                  : "Each user can enter once for free using the entry form."}
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.fieldGroup}>
             <Text allowFontScaling={false} style={styles.label}>
               End Giveaway By <Text allowFontScaling={false} style={styles.required}>*</Text>
             </Text>
             <View style={styles.endTypeRow}>
-              {(["date", "entries", "both"] as const).map((type) => (
+              {(vm.formData.entry_mode === "wallet" ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
@@ -210,7 +240,8 @@ export default function CreateGiveawayScreen() {
           {(vm.formData.end_type === "entries" || vm.formData.end_type === "both") && (
             <View style={styles.fieldGroup}>
               <Text allowFontScaling={false} style={styles.label}>
-                Maximum Entries <Text allowFontScaling={false} style={styles.required}>*</Text>
+                {vm.formData.entry_mode === "wallet" ? "Total Entry Capacity" : "Maximum Entries"}{" "}
+                <Text allowFontScaling={false} style={styles.required}>*</Text>
               </Text>
               <TextInput
                 style={[styles.input, vm.formErrors.max_entries && styles.inputError]}
@@ -224,6 +255,30 @@ export default function CreateGiveawayScreen() {
               />
               {vm.formErrors.max_entries && (
                 <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.max_entries}</Text>
+              )}
+            </View>
+          )}
+
+          {/* Max Entries Per User — Giveaway Entries only, always required */}
+          {vm.formData.entry_mode === "wallet" && (
+            <View style={styles.fieldGroup}>
+              <Text allowFontScaling={false} style={styles.label}>
+                Max Entries Per User <Text allowFontScaling={false} style={styles.required}>*</Text>
+              </Text>
+              <TextInput
+                style={[styles.input, vm.formErrors.per_user_max && styles.inputError]}
+                placeholder="10"
+                placeholderTextColor={COLORS.textMuted}
+                value={vm.formData.per_user_max}
+                onChangeText={(text) => vm.updateField("per_user_max", text.replace(/[^0-9]/g, ""))}
+                keyboardType="number-pad"
+              />
+              {vm.formErrors.per_user_max ? (
+                <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.per_user_max}</Text>
+              ) : (
+                <Text allowFontScaling={false} style={styles.endTypeHint}>
+                  One person can hold at most this many of the {vm.formData.max_entries || "—"} entries.
+                </Text>
               )}
             </View>
           )}
@@ -352,7 +407,7 @@ export default function CreateGiveawayScreen() {
           {vm.isSubmitting ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text allowFontScaling={false} style={styles.createButtonText}>🚀  Launch Giveaway</Text>
+            <Text allowFontScaling={false} style={styles.createButtonText}>📝  Save as Draft</Text>
           )}
         </TouchableOpacity>
       </View>

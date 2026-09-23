@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { giveawayService } from "../models/services/giveaway.service";
 import {
   EventTypeStats,
   TIME_PERIODS,
@@ -130,7 +131,7 @@ export const useSuperAdminDashboard = () => {
 
       const { count: favoritesCount } = await favoritesQuery;
 
-      const giveawayCount = 0;
+      const giveawayCount = await giveawayService.getGiveawayCount();
 
       // Get pending bar requests count
       const { count: barRequestCount } = await supabase

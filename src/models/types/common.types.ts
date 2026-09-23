@@ -53,7 +53,7 @@ export type TableStatus =
   | "in_use"
   | "unavailable";
 export type VenueStatus = "active" | "inactive" | "archived";
-export type GiveawayStatus = "active" | "ended" | "awarded" | "archived";
+export type GiveawayStatus = "draft" | "active" | "ended" | "awarded" | "archived" | "cancelled";
 export type MessageType = "general" | "important" | "cancellation" | "system";
 export type RecurrenceType = "weekly" | "biweekly" | "monthly";
 export type Language = "en" | "es";

@@ -169,7 +169,7 @@ export default function EditGiveawayScreen() {
   const renderEndType = () => {
     const inner = (
       <View style={s.endTypeRow}>
-        {(["date", "entries", "both"] as const).map((type) => (
+        {(vm.isWallet ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
           <TouchableOpacity
             key={type}
             style={[s.endTypeButton, vm.form.end_type === type && s.endTypeButtonActive]}
@@ -219,10 +219,32 @@ export default function EditGiveawayScreen() {
       />
     );
     return vm.isFieldLocked("max_entries") ? (
-      <LockedField label="Maximum Entries *">{inner}</LockedField>
+      <LockedField label={vm.isWallet ? "Total Entry Capacity *" : "Maximum Entries *"}>{inner}</LockedField>
     ) : (
       <View style={s.fieldGroup}>
-        <Text allowFontScaling={false} style={s.label}>Maximum Entries <Text allowFontScaling={false} style={s.required}>*</Text></Text>
+        <Text allowFontScaling={false} style={s.label}>{vm.isWallet ? "Total Entry Capacity" : "Maximum Entries"} <Text allowFontScaling={false} style={s.required}>*</Text></Text>
+        {inner}
+      </View>
+    );
+  };
+
+  const renderPerUserMax = () => {
+    const inner = (
+      <TextInput
+        style={[s.input, vm.isFieldLocked("per_user_max") && s.inputLocked]}
+        placeholder="10"
+        placeholderTextColor={COLORS.textMuted}
+        value={vm.form.per_user_max}
+        onChangeText={(t) => vm.updateField("per_user_max", t.replace(/[^0-9]/g, ""))}
+        keyboardType="number-pad"
+        editable={!vm.isFieldLocked("per_user_max") && !vm.saving}
+      />
+    );
+    return vm.isFieldLocked("per_user_max") ? (
+      <LockedField label="Max Entries Per User *">{inner}</LockedField>
+    ) : (
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Max Entries Per User <Text allowFontScaling={false} style={s.required}>*</Text></Text>
         {inner}
       </View>
     );
@@ -380,10 +402,23 @@ export default function EditGiveawayScreen() {
 
         {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
         <Section title="Entry Rules">
+          {/* Entry method is fixed at creation — read-only here, always. */}
+          <View style={s.fieldGroup}>
+            <Text allowFontScaling={false} style={s.label}>Entry Method</Text>
+            <View style={s.endTypeHintBox}>
+              <Text allowFontScaling={false} style={s.endTypeHint}>
+                {vm.isWallet ? "🎟 Giveaway Entries — users spend their entries, up to the per-user max." : "🎁 Single Free Entry — one free entry per user."}
+                {"  (Can't be changed.)"}
+              </Text>
+            </View>
+          </View>
+
           {renderEndType()}
 
           {(vm.form.end_type === "entries" || vm.form.end_type === "both") &&
             renderMaxEntries()}
+
+          {vm.isWallet && renderPerUserMax()}
         </Section>
 
         {/* ── Section 3: Timing ──────────────────────────────────────────────── */}

@@ -7,7 +7,9 @@ import {
 import { Giveaway } from "../../../models/types/giveaway.types";
 import { RADIUS } from "../../../theme/spacing";
 import { moderateScale, scale } from "../../../utils/scaling";
-import { useGiveawayEntry } from "../../../viewmodels/useGiveawayEntry";
+import { WalletEntryResult } from "../../../models/types/giveaway-wallet.types";
+import { rulesForEntryMode } from "../../../utils/giveaway-rules";
+import { useGiveawayEntry, WalletEntryContext } from "../../../viewmodels/useGiveawayEntry";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -102,14 +104,66 @@ interface Props {
   giveaway: Giveaway | null;
   onClose: () => void;
   onSuccess: (giveawayId: number) => void;
+  /** Wallet giveaways only: the user's balance/holding — turns this into the entry selector. */
+  wallet?: WalletEntryContext | null;
+  onWalletSuccess?: (giveawayId: number, result: WalletEntryResult) => void;
 }
 
-export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Props) {
+// Wallet selector panel: balance, holding vs cap, stepper, balance after entry.
+function WalletQuantityPanel({ vm, wallet }: { vm: ReturnType<typeof useGiveawayEntry>; wallet: WalletEntryContext }) {
+  const cantAdd = vm.maxAddable === 0;
+  const reason =
+    wallet.balance === 0 ? "You don't have any Giveaway Entries yet."
+    : wallet.myEntries >= wallet.perUserMax ? "You've reached the maximum entries for this giveaway."
+    : wallet.capacityRemaining <= 0 ? "This giveaway is full."
+    : null;
+  return (
+    <View style={styles.walletPanel}>
+      <View style={styles.walletRow}>
+        <Text allowFontScaling={false} style={styles.walletLabel}>Available</Text>
+        <Text allowFontScaling={false} style={styles.walletValue}>{"🎟"} {wallet.balance} Giveaway {wallet.balance === 1 ? "Entry" : "Entries"}</Text>
+      </View>
+      <View style={styles.walletRow}>
+        <Text allowFontScaling={false} style={styles.walletLabel}>Your entries</Text>
+        <Text allowFontScaling={false} style={styles.walletValue}>{wallet.myEntries} / {wallet.perUserMax}</Text>
+      </View>
+      {cantAdd ? (
+        <Text allowFontScaling={false} style={styles.walletNotice}>{reason}</Text>
+      ) : (
+        <>
+          <Text allowFontScaling={false} style={styles.walletQuestion}>How many would you like to add?</Text>
+          <View style={styles.stepperRow}>
+            <Pressable style={[styles.stepperBtn, vm.quantity <= 1 && styles.stepperBtnDisabled]} onPress={vm.decrementQuantity} disabled={vm.quantity <= 1} accessibilityLabel="Fewer entries">
+              <Ionicons name="remove" size={22} color={COLORS.white} />
+            </Pressable>
+            <Text allowFontScaling={false} style={styles.stepperValue}>{vm.quantity}</Text>
+            <Pressable style={[styles.stepperBtn, vm.quantity >= vm.maxAddable && styles.stepperBtnDisabled]} onPress={vm.incrementQuantity} disabled={vm.quantity >= vm.maxAddable} accessibilityLabel="More entries">
+              <Ionicons name="add" size={22} color={COLORS.white} />
+            </Pressable>
+          </View>
+          <Text allowFontScaling={false} style={styles.walletAfter}>
+            After entry: {wallet.balance - vm.quantity} remaining · up to {vm.maxAddable} now
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess, wallet = null, onWalletSuccess }: Props) {
   const vm = useGiveawayEntry({
     giveawayId: giveaway?.id ?? null,
     minAge: giveaway?.min_age ?? 18,
     onSuccess: () => { if (giveaway) onSuccess(giveaway.id); },
+    wallet,
+    onWalletSuccess: (res) => { if (giveaway) onWalletSuccess?.(giveaway.id, res); },
   });
+  const entriesLabel = (q: number) => `${q} ${q === 1 ? "Entry" : "Entries"}`;
+  const submitLabel = vm.isSubmitting
+    ? "Submitting..."
+    : vm.isWallet
+      ? `Enter ${entriesLabel(vm.quantity)}`
+      : vm.mode === "edit" ? "Save & Enter Giveaway" : "Enter Giveaway";
 
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = React.useState(false);
@@ -125,6 +179,34 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
   const handleRulesModalClose = () => { setShowRulesModal(false); if (!vm.form.agreed_to_rules) vm.toggleCheckbox("agreed_to_rules"); };
 
   if (!visible) return null;
+
+  // Wallet top-up: the user already entered (details + consents on file) — just the selector.
+  if (vm.isWallet && vm.isTopUp && wallet) {
+    return renderShell(
+      <>
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} style={styles.closeButton}><Ionicons name="close" size={24} color={COLORS.white} /></Pressable>
+          <Text allowFontScaling={false} style={styles.headerTitle}>Add Entries</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.divider} />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <Text allowFontScaling={false} style={styles.giveawayName}>{giveaway?.name}</Text>
+          <WalletQuantityPanel vm={vm} wallet={wallet} />
+          {vm.submitError && <Text allowFontScaling={false} style={styles.errorText}>{vm.submitError}</Text>}
+        </ScrollView>
+        <View style={styles.bottomBar}>
+          <Pressable style={[styles.submitButton, (!vm.isFormComplete || vm.isSubmitting) && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={!vm.isFormComplete || vm.isSubmitting}>
+            <Text allowFontScaling={false} style={styles.submitButtonText}>{vm.isSubmitting ? "Submitting..." : `Add ${entriesLabel(vm.quantity)}`}</Text>
+          </Pressable>
+          <Pressable style={styles.cancelButton} onPress={handleClose}>
+            <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </>,
+      handleClose, isWeb
+    );
+  }
 
   if (vm.mode === "loading") {
     return renderShell(
@@ -145,14 +227,16 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
     <View style={styles.checkboxSection}>
       <CheckboxRowWithLink prefix="I agree to the " linkText="official rules" checked={vm.form.agreed_to_rules} onToggle={() => vm.toggleCheckbox("agreed_to_rules")} onLinkPress={handleRulesLinkPress} />
       <CheckboxRowWithLink prefix="I agree to the " linkText="privacy policy" checked={vm.form.agreed_to_privacy} onToggle={() => vm.toggleCheckbox("agreed_to_privacy")} onLinkPress={handlePrivacyLinkPress} />
-      <CheckboxRow label="I understand this is one entry per person" checked={vm.form.understood_one_entry} onToggle={() => vm.toggleCheckbox("understood_one_entry")} />
+      {!vm.isWallet && (
+        <CheckboxRow label="I understand this is one entry per person" checked={vm.form.understood_one_entry} onToggle={() => vm.toggleCheckbox("understood_one_entry")} />
+      )}
       <CheckboxRow label="I confirm I am 18+ years old and meet eligibility requirements" checked={vm.form.confirmed_age} onToggle={() => vm.toggleCheckbox("confirmed_age")} />
     </View>
   );
 
   const legalModals = (
     <>
-      <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={DEFAULT_RULES_SECTIONS} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
+      <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={rulesForEntryMode(DEFAULT_RULES_SECTIONS, giveaway?.entry_mode)} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
       <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" sections={PRIVACY_SECTIONS} onClose={() => setShowPrivacyModal(false)} />
     </>
   );
@@ -168,6 +252,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         <View style={styles.divider} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <Text allowFontScaling={false} style={styles.giveawayName}>{giveaway?.name}</Text>
+          {vm.isWallet && wallet && <WalletQuantityPanel vm={vm} wallet={wallet} />}
           <View style={styles.identityCard}>
             <Ionicons name="person-circle" size={36} color={COLORS.blue} />
             <View style={styles.identityInfo}>
@@ -186,7 +271,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
         </ScrollView>
         <View style={styles.bottomBar}>
           <Pressable style={[styles.submitButton, (!vm.isFormComplete || vm.isSubmitting) && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={!vm.isFormComplete || vm.isSubmitting}>
-            <Text allowFontScaling={false} style={styles.submitButtonText}>{vm.isSubmitting ? "Submitting..." : "Enter Giveaway"}</Text>
+            <Text allowFontScaling={false} style={styles.submitButtonText}>{submitLabel}</Text>
           </Pressable>
           <Pressable style={styles.cancelButton} onPress={handleClose}>
             <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
@@ -208,6 +293,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
       <View style={styles.divider} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} scrollEventThrottle={16} onScrollBeginDrag={Keyboard.dismiss}>
         <Text allowFontScaling={false} style={styles.giveawayName}>{giveaway?.name}</Text>
+        {vm.isWallet && wallet && <WalletQuantityPanel vm={vm} wallet={wallet} />}
         {vm.mode === "full-form" && (
           <View style={styles.disclosureBanner}>
             <Ionicons name="information-circle-outline" size={14} color={COLORS.gray} />
@@ -236,7 +322,7 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess }: Pr
       </ScrollView>
       <View style={styles.bottomBar}>
         <Pressable style={[styles.submitButton, (!vm.isFormComplete || vm.isSubmitting) && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={!vm.isFormComplete || vm.isSubmitting}>
-          <Text allowFontScaling={false} style={styles.submitButtonText}>{vm.isSubmitting ? "Submitting..." : vm.mode === "edit" ? "Save & Enter Giveaway" : "Enter Giveaway"}</Text>
+          <Text allowFontScaling={false} style={styles.submitButtonText}>{submitLabel}</Text>
         </Pressable>
         <Pressable style={styles.cancelButton} onPress={handleClose}>
           <Text allowFontScaling={false} style={styles.cancelButtonText}>Cancel</Text>
@@ -352,6 +438,17 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { padding: wxSc(SPACING.xl), paddingBottom: wxSc(SPACING.lg), flexGrow: 1 },
   giveawayName: { color: COLORS.blue, fontSize: wxMs(FONT_SIZES.lg), fontWeight: "600", textAlign: "center", marginBottom: wxSc(SPACING.xl) },
+  walletPanel: { backgroundColor: COLORS.card, borderRadius: wxSc(12), borderWidth: 1, borderColor: COLORS.cardBorder, padding: wxSc(SPACING.lg), marginBottom: wxSc(SPACING.lg) },
+  walletRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: wxSc(SPACING.sm) },
+  walletLabel: { color: COLORS.gray, fontSize: wxMs(FONT_SIZES.sm) },
+  walletValue: { color: COLORS.white, fontSize: wxMs(FONT_SIZES.md), fontWeight: "700" },
+  walletQuestion: { color: COLORS.lightGray, fontSize: wxMs(FONT_SIZES.sm), textAlign: "center", marginTop: wxSc(SPACING.sm) },
+  walletNotice: { color: COLORS.amber, fontSize: wxMs(FONT_SIZES.sm), textAlign: "center", marginTop: wxSc(SPACING.sm) },
+  stepperRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: wxSc(SPACING.xl), marginVertical: wxSc(SPACING.md) },
+  stepperBtn: { width: wxSc(44), height: wxSc(44), borderRadius: wxSc(22), backgroundColor: COLORS.blue, alignItems: "center", justifyContent: "center" },
+  stepperBtnDisabled: { backgroundColor: COLORS.darkGray },
+  stepperValue: { color: COLORS.white, fontSize: wxMs(28), fontWeight: "800", minWidth: wxSc(48), textAlign: "center" },
+  walletAfter: { color: COLORS.gray, fontSize: wxMs(FONT_SIZES.xs), textAlign: "center" },
   identityCard: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.card, borderRadius: wxSc(12), padding: wxSc(SPACING.lg), marginBottom: wxSc(SPACING.md), borderWidth: 1, borderColor: COLORS.cardBorder, gap: wxSc(SPACING.md) },
   identityInfo: { flex: 1 },
   identityName: { color: COLORS.white, fontSize: wxMs(FONT_SIZES.md), fontWeight: "600", marginBottom: 2 },

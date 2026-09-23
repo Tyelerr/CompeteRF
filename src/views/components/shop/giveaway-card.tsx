@@ -16,13 +16,21 @@ interface GiveawayCardProps {
   daysRemaining: string;
   onEnter: () => void;
   onView: () => void;
+  /** Wallet giveaways: draw entries the signed-in user holds (null = logged out). */
+  myEntries?: number | null;
+  /** Wallet giveaway past its end time (computed in the viewmodel). */
+  pastEndDate?: boolean;
 }
 
-export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onView }: GiveawayCardProps) {
+export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onView, myEntries = null, pastEndDate = false }: GiveawayCardProps) {
   const entryCount = giveaway.entry_count || 0;
   const maxEntries = giveaway.max_entries || 0;
   const progressPercent = maxEntries > 0 ? Math.min((entryCount / maxEntries) * 100, 100) : 0;
-  const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries);
+  const isWallet = giveaway.entry_mode === "wallet";
+  const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries) || pastEndDate;
+  const perUserMax = giveaway.per_user_max ?? 0;
+  const mine = myEntries ?? 0;
+  const atPersonalMax = isWallet && perUserMax > 0 && mine >= perUserMax;
 
   const formatValue = (value: number | null): string => {
     if (!value) return "";
@@ -48,13 +56,20 @@ export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onVi
             {giveaway.prize_value && <Text allowFontScaling={false} style={[styles.value, isClosed && styles.textMuted]}>{formatValue(giveaway.prize_value)}</Text>}
           </View>
           {giveaway.description && <Text allowFontScaling={false} style={[styles.description, isClosed && styles.textMuted]} numberOfLines={isWeb ? 3 : 1}>{giveaway.description}</Text>}
-          <Text allowFontScaling={false} style={styles.entries}>{entryCount}/{maxEntries || "∞"} Total Entries</Text>
+          {isWallet ? (
+            <Text allowFontScaling={false} style={styles.entries}>{entryCount} / {maxEntries} entries filled</Text>
+          ) : (
+            <Text allowFontScaling={false} style={styles.entries}>{entryCount}/{maxEntries || "∞"} Total Entries</Text>
+          )}
           {maxEntries > 0 && (
             <View style={styles.progressContainer}>
               <View style={styles.progressBackground}>
                 <View style={[styles.progressFill, isClosed && styles.progressFillClosed, { width: `${progressPercent}%` as any }]} />
               </View>
             </View>
+          )}
+          {isWallet && myEntries !== null && (
+            <Text allowFontScaling={false} style={styles.myEntries}>You: {mine} / {perUserMax}</Text>
           )}
           <Text allowFontScaling={false} style={[styles.daysRemaining, isClosed && styles.textMuted]}>{isClosed ? "Entry period closed" : daysRemaining}</Text>
         </View>
@@ -64,6 +79,14 @@ export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onVi
           <View style={[styles.enterButton, styles.endedButton, isWeb && styles.enterButtonWeb]}>
             <Text allowFontScaling={false} style={styles.endedButtonText}>Giveaway Ended</Text>
           </View>
+        ) : isWallet && atPersonalMax ? (
+          <View style={[styles.enterButton, styles.enteredButton, isWeb && styles.enterButtonWeb]}>
+            <Text allowFontScaling={false} style={styles.enteredButtonText}>Max Entries Reached</Text>
+          </View>
+        ) : isWallet ? (
+          <TouchableOpacity style={[styles.enterButton, isWeb && styles.enterButtonWeb]} onPress={onEnter}>
+            <Text allowFontScaling={false} style={styles.enterButtonText}>{mine > 0 ? "Add Entries" : "Enter Giveaway"}</Text>
+          </TouchableOpacity>
         ) : isEntered ? (
           <View style={[styles.enterButton, styles.enteredButton, isWeb && styles.enterButtonWeb]}>
             <Text allowFontScaling={false} style={styles.enteredButtonText}>Entered ✓</Text>
@@ -98,6 +121,7 @@ const styles = StyleSheet.create({
   value: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "600", color: COLORS.primary, flexShrink: 0 },
   description: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textSecondary, marginBottom: wxSc(SPACING.xs), lineHeight: wxMs(18) },
   entries: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.textMuted, marginBottom: 6 },
+  myEntries: { fontSize: wxMs(FONT_SIZES.sm), color: COLORS.primaryLight, fontWeight: "600", marginBottom: 6 },
   progressContainer: { marginBottom: 6 },
   progressBackground: { height: 6, backgroundColor: COLORS.surfaceLight, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", backgroundColor: COLORS.primary, borderRadius: 3 },

@@ -3,10 +3,12 @@
 // Self-contained (owns its viewmodel) so the Giveaways page and, later, Profile render the exact
 // same component. Attribution only — deliberately NO reward language.
 //
-//   Web (wide):   [👥 Refer Friends / Share Compete with friends.] [CODE · link] [Copy Link][Share]
+//   Web (wide):   [👥 Refer Friends / Share Compete with friends.] [CODE] [Copy Link][Share]
 //   Web (narrow): stacked, both buttons.
 //   Native:       compact two rows — title + code chip, then one "Share Invite" button (the native
 //                 share sheet includes Copy, so a separate Copy button would just open the same sheet).
+// The full link is never shown as text — Copy Link / Share carry it. On web, tapping the code
+// pill copies just the code.
 // Renders nothing until a code is available (logged out / still loading), so it never jumps.
 
 import React from "react";
@@ -30,7 +32,7 @@ export function ReferralShareCard() {
 
   const copyButton = isWeb ? (
     <Pressable style={[st.btn, st.btnPrimary]} onPress={vm.copyLink} accessibilityRole="button">
-      <Text allowFontScaling={false} style={st.btnPrimaryText}>{vm.copied ? "Copied ✓" : "Copy Link"}</Text>
+      <Text allowFontScaling={false} style={st.btnPrimaryText}>{vm.copied === "link" ? "Copied ✓" : "Copy Link"}</Text>
     </Pressable>
   ) : null;
 
@@ -49,21 +51,25 @@ export function ReferralShareCard() {
     </View>
   );
 
-  const codeChip = (
-    <View style={st.codeChip}>
-      <Text allowFontScaling={false} style={st.codeLabel}>CODE</Text>
-      <Text allowFontScaling={false} style={st.codeText} selectable>{vm.code}</Text>
-    </View>
+  const codeChipContent = (
+    <>
+      <Text allowFontScaling={false} style={st.codeLabel}>{vm.copied === "code" ? "COPIED" : "CODE"}</Text>
+      <Text allowFontScaling={false} style={st.codeText} selectable={!isWeb}>{vm.code}</Text>
+    </>
+  );
+  const codeChip = isWeb ? (
+    <Pressable style={st.codeChip} onPress={vm.copyCode} accessibilityRole="button" accessibilityLabel={`Copy referral code ${vm.code}`}>
+      {codeChipContent}
+    </Pressable>
+  ) : (
+    <View style={st.codeChip}>{codeChipContent}</View>
   );
 
   if (wide) {
     return (
       <View style={[st.card, st.rowWide]}>
         {heading}
-        <View style={st.middleWide}>
-          {codeChip}
-          <Text allowFontScaling={false} style={st.linkText} numberOfLines={1} selectable>{vm.displayLink}</Text>
-        </View>
+        {codeChip}
         <View style={st.buttonsWide}>
           {copyButton}
           {shareButton}
@@ -78,11 +84,6 @@ export function ReferralShareCard() {
         {heading}
         {codeChip}
       </View>
-      {isWeb && (
-        <Text allowFontScaling={false} style={[st.linkText, st.linkNarrow]} numberOfLines={1} selectable>
-          {vm.displayLink}
-        </Text>
-      )}
       <View style={st.buttonsNarrow}>
         {copyButton}
         {shareButton}
@@ -106,7 +107,6 @@ const st = StyleSheet.create({
   title: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
   subtitle: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: 2 },
 
-  middleWide: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), flexShrink: 1, minWidth: 0 },
   codeChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -120,8 +120,6 @@ const st = StyleSheet.create({
   },
   codeLabel: { fontSize: webMs(FONT_SIZES.xs - 2), fontWeight: "700", color: COLORS.textSecondary, letterSpacing: 0.8 },
   codeText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.primaryLight, letterSpacing: 1 },
-  linkText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, flexShrink: 1 },
-  linkNarrow: { marginTop: webSc(SPACING.xs + 2) },
 
   buttonsWide: { flexDirection: "row", gap: webSc(SPACING.sm) },
   buttonsNarrow: { flexDirection: "row", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.sm) },

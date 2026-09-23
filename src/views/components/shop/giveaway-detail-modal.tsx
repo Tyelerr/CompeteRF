@@ -1,6 +1,7 @@
 ﻿import React, { useState } from "react";
 import { Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Giveaway } from "../../../models/types/giveaway.types";
+import { Giveaway, GiveawayEntryMode } from "../../../models/types/giveaway.types";
+import { rulesForEntryMode } from "../../../utils/giveaway-rules";
 import { RADIUS } from "../../../theme/spacing";
 import { moderateScale, scale } from "../../../utils/scaling";
 
@@ -27,7 +28,7 @@ const DEFAULT_RULES_SECTIONS = [
   { heading: "10. Governing Law", body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates." },
 ];
 
-function FullRulesModal({ visible, customRulesText, onClose }: { visible: boolean; customRulesText: string | null; onClose: () => void }) {
+function FullRulesModal({ visible, customRulesText, entryMode, onClose }: { visible: boolean; customRulesText: string | null; entryMode: GiveawayEntryMode | undefined; onClose: () => void }) {
   if (!visible) return null;
   const content = (
     <>
@@ -38,7 +39,7 @@ function FullRulesModal({ visible, customRulesText, onClose }: { visible: boolea
       </View>
       <View style={rm.divider} />
       <ScrollView style={rm.scroll} contentContainerStyle={rm.scrollContent} showsVerticalScrollIndicator onScrollBeginDrag={Keyboard.dismiss}>
-        {DEFAULT_RULES_SECTIONS.map((section, i) => (
+        {rulesForEntryMode(DEFAULT_RULES_SECTIONS, entryMode).map((section, i) => (
           <View key={i} style={rm.section}>
             {section.heading ? <Text allowFontScaling={false} style={rm.heading}>{section.heading}</Text> : null}
             <Text allowFontScaling={false} style={rm.body}>{section.body}</Text>
@@ -119,16 +120,18 @@ interface GiveawayDetailModalProps {
   daysRemaining: string;
   onClose: () => void;
   onEnter: () => void;
+  /** Wallet giveaway past its end time (computed in the viewmodel). */
+  pastEndDate?: boolean;
 }
 
-export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemaining, onClose, onEnter }: GiveawayDetailModalProps) {
+export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemaining, onClose, onEnter, pastEndDate = false }: GiveawayDetailModalProps) {
   const [showRules, setShowRules] = useState(false);
   if (!giveaway || !visible) return null;
 
   const entryCount = giveaway.entry_count || 0;
   const maxEntries = giveaway.max_entries || 0;
   const progressPercent = maxEntries > 0 ? Math.min((entryCount / maxEntries) * 100, 100) : 0;
-  const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries);
+  const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries) || pastEndDate;
   const formatValue = (value: number | null) => value ? `$${value.toLocaleString()}` : "\u2014";
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "No end date";
@@ -198,7 +201,7 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
         )}
         <TouchableOpacity style={s.cancelButton} onPress={onClose}><Text allowFontScaling={false} style={s.cancelButtonText}>Close</Text></TouchableOpacity>
       </View>
-      <FullRulesModal visible={showRules} customRulesText={giveaway.rules_text} onClose={() => setShowRules(false)} />
+      <FullRulesModal visible={showRules} customRulesText={giveaway.rules_text} entryMode={giveaway.entry_mode} onClose={() => setShowRules(false)} />
     </>
   );
 

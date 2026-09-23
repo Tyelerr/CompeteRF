@@ -9,10 +9,16 @@ import { useAuthContext } from "../providers/AuthProvider";
 
 export type EndType = "date" | "entries" | "both";
 
+/** legacy_single = Single Free Entry (existing behavior); wallet = Giveaway Entries. */
+export type EntryMethod = "legacy_single" | "wallet";
+
 export interface CreateGiveawayFormData {
   name: string;
   description: string;
   prize_value: string;
+  entry_mode: EntryMethod;
+  /** Wallet only — required (no silent "blank = unlimited"). */
+  per_user_max: string;
   end_type: EndType;
   max_entries: string;
   end_date: { month: string; day: string; year: string };
@@ -24,6 +30,8 @@ const INITIAL_FORM: CreateGiveawayFormData = {
   name: "",
   description: "",
   prize_value: "",
+  entry_mode: "legacy_single",
+  per_user_max: "10",
   end_type: "both",
   max_entries: "500",
   end_date: { month: "", day: "", year: "" },
@@ -63,6 +71,16 @@ export const useCreateGiveaway = () => {
   );
 
   // Update end date
+  // Giveaway Entries always has a capacity, so "Date" alone isn't offered in that mode.
+  const setEntryMode = useCallback((mode: EntryMethod) => {
+    setFormData((prev) => ({
+      ...prev,
+      entry_mode: mode,
+      end_type: mode === "wallet" && prev.end_type === "date" ? "entries" : prev.end_type,
+    }));
+    setFormErrors((prev) => ({ ...prev, entry_mode: undefined, per_user_max: undefined }));
+  }, []);
+
   const updateEndDate = useCallback(
     (field: "month" | "day" | "year", value: string) => {
       setFormData((prev) => ({
@@ -144,6 +162,15 @@ export const useCreateGiveaway = () => {
     }
 
     // Validate based on end type
+    if (formData.entry_mode === "wallet") {
+      const perUser = parseInt(formData.per_user_max);
+      if (!formData.per_user_max.trim() || isNaN(perUser) || perUser <= 0) {
+        errors.per_user_max = "Max entries per user is required";
+      } else if (parseInt(formData.max_entries) > 0 && perUser > parseInt(formData.max_entries)) {
+        errors.per_user_max = "Can't exceed the total entry capacity";
+      }
+    }
+
     if (formData.end_type === "entries" || formData.end_type === "both") {
       if (!formData.max_entries.trim()) {
         errors.max_entries = "Maximum entries is required";
@@ -207,6 +234,13 @@ export const useCreateGiveaway = () => {
           description: formData.description.trim() || undefined,
           prize_value: parseFloat(formData.prize_value),
           max_entries: maxEntries,
+          ...(formData.entry_mode === "wallet"
+            ? {
+                entry_mode: "wallet" as const,
+                per_user_max: parseInt(formData.per_user_max),
+                end_type: formData.end_type === "both" ? ("both" as const) : ("entries" as const),
+              }
+            : {}),
           end_date: endDate,
           min_age: parseInt(formData.min_age) || 18,
           rules_text: formData.rules_text.trim() || undefined,
@@ -216,7 +250,7 @@ export const useCreateGiveaway = () => {
       );
 
       if (result.success) {
-        Alert.alert("Success", "Giveaway created successfully!", [
+        Alert.alert("Draft saved", "Nothing is public yet. Review it, then press Publish in Giveaway Management when it's ready.", [
           { text: "OK", onPress: () => router.back() },
         ]);
         return true;
@@ -284,6 +318,7 @@ export const useCreateGiveaway = () => {
     formData,
     formErrors,
     updateField,
+    setEntryMode,
     updateEndDate,
 
     // Image

@@ -19,6 +19,7 @@ import {
   AdminGiveaway,
   GiveawayStatusFilter,
   useAdminGiveaways,
+  WALLET_PUBLISH_HOLD_MESSAGE,
 } from "../../../src/viewmodels/useAdminGiveaways";
 import { moderateScale, scale } from "../../../src/utils/scaling";
 
@@ -63,19 +64,23 @@ const SP = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 };
 const FS = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20, xxl: 24 };
 
 const STATUS_FILTERS: { label: string; value: GiveawayStatusFilter }[] = [
+  { label: "Draft",    value: "draft"    },
   { label: "Active",   value: "active"   },
   { label: "Ended",    value: "ended"    },
   { label: "Awarded",  value: "awarded"  },
   { label: "Archived", value: "archived" },
+  { label: "Cancelled", value: "cancelled" },
   { label: "All",      value: "all"      },
 ];
 
 function statusConfig(status: string) {
   switch (status) {
+    case "draft":    return { color: C.blue,   dim: C.blueDim,   border: C.blueBorder,   label: "Draft"    };
     case "active":   return { color: C.green,  dim: C.greenDim,  border: C.greenBorder,  label: "Active"   };
     case "ended":    return { color: C.amber,  dim: C.amberDim,  border: C.amberBorder,  label: "Ended"    };
     case "awarded":  return { color: C.purple, dim: C.purpleDim, border: C.purple + "50", label: "Awarded"  };
     case "archived": return { color: C.gray,   dim: C.darkGray,  border: C.darkGray,      label: "Archived" };
+    case "cancelled": return { color: C.red,   dim: C.redDim,    border: C.redBorder,     label: "Cancelled" };
     default:         return { color: C.gray,   dim: C.darkGray,  border: C.darkGray,      label: status     };
   }
 }
@@ -141,6 +146,7 @@ export default function GiveawayManagementScreen() {
     const entryCount = item.entry_count || 0;
     const hasEntries = entryCount > 0;
     const isActive   = item.status === "active";
+    const isWallet   = item.entry_mode === "wallet";
     const isProcessing = vm.processing === item.id;
 
     const cardBorderColor = isActive ? C.greenBorder : sc.border;
@@ -188,6 +194,16 @@ export default function GiveawayManagementScreen() {
             </Text>
           </View>
 
+          {/* Entry method – wallet giveaways only (legacy cards unchanged) */}
+          {isWallet && (
+            <View style={[cS.chip, { backgroundColor: C.purpleDim, borderColor: C.purple + "50" }]}>
+              <Text allowFontScaling={false} style={cS.chipIcon}>🎟</Text>
+              <Text allowFontScaling={false} style={[cS.chipText, { color: C.purple }]}>
+                Giveaway Entries · max {item.per_user_max}/user
+              </Text>
+            </View>
+          )}
+
           {/* Time – neutral */}
           {item.end_date && (
             <View style={[cS.chip, { backgroundColor: C.cardRaised, borderColor: C.cardBorder }]}>
@@ -211,6 +227,31 @@ export default function GiveawayManagementScreen() {
 
         {/* ── Actions ──────────────────────────────────────────────────────── */}
 
+        {/* DRAFT — not public, no entries, no notifications until Publish */}
+        {item.status === "draft" && (
+          <View style={cS.actionCol}>
+            <Pressable
+              style={[cS.primaryBtn, { backgroundColor: C.blue }]}
+              onPress={() => vm.openPublishModal(item)}
+              disabled={isProcessing}
+            >
+              <Text allowFontScaling={false} style={cS.primaryBtnIcon}>📣</Text>
+              <Text allowFontScaling={false} style={cS.primaryBtnText}>Publish Giveaway</Text>
+            </Pressable>
+            <View style={cS.actionRow}>
+              <Pressable
+                style={cS.secondaryBtn}
+                onPress={() => router.push(`/(tabs)/admin/edit-giveaway/${item.id}` as any)}
+              >
+                <Text allowFontScaling={false} style={cS.secondaryBtnText}>Edit</Text>
+              </Pressable>
+              <Pressable style={cS.iconBtn} onPress={() => vm.archiveGiveaway(item.id)} disabled={isProcessing}>
+                <Text allowFontScaling={false} style={cS.iconBtnText}>🗄️  Archive</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* ACTIVE */}
         {item.status === "active" && (
           <View style={cS.actionRow}>
@@ -233,6 +274,13 @@ export default function GiveawayManagementScreen() {
                   ? "End Giveaway"
                   : "End Early"}
               </Text>
+            </Pressable>
+          </View>
+        )}
+        {item.status === "active" && isWallet && (
+          <View style={[cS.actionRow, { marginTop: scale(SP.sm) }]}>
+            <Pressable style={[cS.secondaryBtn, cS.endEarlyBtn, { flex: 1 }]} onPress={() => vm.openCancelModal(item)} disabled={isProcessing}>
+              <Text allowFontScaling={false} style={[cS.secondaryBtnText, { color: C.red }]}>Cancel & Refund</Text>
             </Pressable>
           </View>
         )}
@@ -268,14 +316,31 @@ export default function GiveawayManagementScreen() {
               >
                 <Text allowFontScaling={false} style={cS.secondaryBtnText}>Edit</Text>
               </Pressable>
-              <Pressable
-                style={cS.iconBtn}
-                onPress={() => vm.archiveGiveaway(item.id)}
-                disabled={isProcessing}
-              >
-                <Text allowFontScaling={false} style={cS.iconBtnText}>🗄️  Archive</Text>
-              </Pressable>
+              {isWallet && hasEntries ? (
+                // Spent entries must be drawn or refunded — never archived away.
+                <Pressable style={[cS.secondaryBtn, cS.endEarlyBtn]} onPress={() => vm.openCancelModal(item)} disabled={isProcessing}>
+                  <Text allowFontScaling={false} style={[cS.secondaryBtnText, { color: C.red }]}>Cancel & Refund</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={cS.iconBtn}
+                  onPress={() => vm.archiveGiveaway(item.id)}
+                  disabled={isProcessing}
+                >
+                  <Text allowFontScaling={false} style={cS.iconBtnText}>🗄️  Archive</Text>
+                </Pressable>
+              )}
             </View>
+          </View>
+        )}
+
+        {/* CANCELLED (wallet) — final; entries refunded, records kept */}
+        {item.status === "cancelled" && (
+          <View style={cS.winnerRow}>
+            <Text allowFontScaling={false} style={cS.winnerIcon}>↩</Text>
+            <Text allowFontScaling={false} style={[cS.winnerName, { color: C.lightGray }]} numberOfLines={2}>
+              Cancelled — entries refunded{item.cancel_reason ? ` · ${item.cancel_reason}` : ""}
+            </Text>
           </View>
         )}
 
@@ -430,6 +495,7 @@ export default function GiveawayManagementScreen() {
         { icon: "➕", label: "Create New Giveaway",   route: "/(tabs)/admin/create-giveaway"      },
         { icon: "👥", label: "View All Participants", route: "/(tabs)/admin/giveaway-participants" },
         { icon: "🏆", label: "Past Winners",          route: "/(tabs)/admin/giveaway-past-winners" },
+        { icon: "🎟", label: "Grant Giveaway Entries", route: "/(tabs)/admin/giveaway-grant-entries" },
       ].map((item) => (
         <Pressable key={item.label} style={s.quickBtn} onPress={() => router.push(item.route as any)}>
           <Text allowFontScaling={false} style={s.quickBtnIcon}>{item.icon}</Text>
@@ -524,6 +590,110 @@ export default function GiveawayManagementScreen() {
                   <ActivityIndicator size="small" color={C.white} />
                 ) : (
                   <Text allowFontScaling={false} style={m.confirmBtnText}>End Giveaway</Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL 0a – Publish (Draft → Active; notifies all users once)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Modal visible={!!vm.publishTarget} transparent animationType="fade" onRequestClose={vm.closePublishModal}>
+        <Pressable style={m.overlay} onPress={vm.closePublishModal}>
+          <Pressable style={m.card} onPress={(e) => e.stopPropagation()}>
+            <View style={[m.iconCircle, { backgroundColor: C.blueDim, borderColor: C.blueBorder }]}>
+              <Text allowFontScaling={false} style={{ fontSize: moderateScale(32) }}>📣</Text>
+            </View>
+            <Text allowFontScaling={false} style={[m.title, { color: C.blue }]}>Publish Giveaway?</Text>
+            <Text allowFontScaling={false} style={m.giveawayName}>{vm.publishTarget?.name}</Text>
+            {vm.publishTarget?.entry_mode === "wallet" ? (
+              <View style={[m.warnBox, { borderColor: C.amberBorder, backgroundColor: C.amberDim, marginBottom: scale(SP.md) }]}>
+                <Text allowFontScaling={false} style={[m.warnText, { color: C.amber }]}>{WALLET_PUBLISH_HOLD_MESSAGE}</Text>
+              </View>
+            ) : (
+              <Text allowFontScaling={false} style={m.bodyNote}>
+                It becomes visible on the Giveaways page, starts accepting entries, and every user
+                gets the &quot;New Giveaway!&quot; notification.
+              </Text>
+            )}
+            {vm.publishError ? (
+              <View style={[m.warnBox, { borderColor: C.redBorder, backgroundColor: C.redDim, marginBottom: scale(SP.md) }]}>
+                <Text allowFontScaling={false} style={[m.warnText, { color: C.red }]}>❌  {vm.publishError}</Text>
+              </View>
+            ) : null}
+            <View style={m.btnRow}>
+              <Pressable style={m.cancelBtn} onPress={vm.closePublishModal} disabled={vm.publishing}>
+                <Text allowFontScaling={false} style={m.cancelBtnText}>Not Yet</Text>
+              </Pressable>
+              <Pressable
+                style={[m.confirmBtn, { backgroundColor: C.blue }, (vm.publishing || vm.publishTarget?.entry_mode === "wallet") && m.btnDisabled]}
+                onPress={vm.confirmPublish}
+                disabled={vm.publishing || vm.publishTarget?.entry_mode === "wallet"}
+              >
+                {vm.publishing ? (
+                  <ActivityIndicator size="small" color={C.white} />
+                ) : (
+                  <Text allowFontScaling={false} style={m.confirmBtnText}>Publish</Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL 0b – Cancel & Refund (wallet giveaways; NOT End Early)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Modal visible={!!vm.cancelTarget} transparent animationType="fade" onRequestClose={vm.closeCancelModal}>
+        <Pressable style={m.overlay} onPress={vm.closeCancelModal}>
+          <Pressable style={m.card} onPress={(e) => e.stopPropagation()}>
+            <View style={[m.iconCircle, { backgroundColor: C.redDim, borderColor: C.redBorder }]}>
+              <Text allowFontScaling={false} style={{ fontSize: moderateScale(32) }}>↩️</Text>
+            </View>
+            <Text allowFontScaling={false} style={[m.title, { color: C.red }]}>Cancel & Refund?</Text>
+            <Text allowFontScaling={false} style={m.giveawayName}>{vm.cancelTarget?.name}</Text>
+            <Text allowFontScaling={false} style={m.bodyNote}>
+              The giveaway is cancelled with no winner and every entrant gets back exactly the
+              Giveaway Entries they spent on it. Entry records are kept.
+              {"\n\n"}
+              <Text allowFontScaling={false} style={{ color: C.red, fontWeight: "700" }}>
+                This is final and cannot be undone.
+              </Text>
+            </Text>
+            <Text allowFontScaling={false} style={m.fieldLabel}>
+              Reason <Text allowFontScaling={false} style={{ color: C.red }}>*</Text>
+            </Text>
+            <TextInput
+              style={m.reasonInput}
+              value={vm.cancelReason}
+              onChangeText={vm.setCancelReason}
+              placeholder="e.g. Prize no longer available"
+              placeholderTextColor={C.gray}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              editable={!vm.cancelling}
+            />
+            {vm.cancelError ? (
+              <View style={[m.warnBox, { borderColor: C.redBorder, backgroundColor: C.redDim, marginBottom: scale(SP.md) }]}>
+                <Text allowFontScaling={false} style={[m.warnText, { color: C.red }]}>❌  {vm.cancelError}</Text>
+              </View>
+            ) : null}
+            <View style={m.btnRow}>
+              <Pressable style={m.cancelBtn} onPress={vm.closeCancelModal} disabled={vm.cancelling}>
+                <Text allowFontScaling={false} style={m.cancelBtnText}>Keep Giveaway</Text>
+              </Pressable>
+              <Pressable
+                style={[m.confirmBtn, { backgroundColor: C.red }, (vm.cancelling || !vm.cancelReason.trim()) && m.btnDisabled]}
+                onPress={vm.confirmCancelAndRefund}
+                disabled={vm.cancelling || !vm.cancelReason.trim()}
+              >
+                {vm.cancelling ? (
+                  <ActivityIndicator size="small" color={C.white} />
+                ) : (
+                  <Text allowFontScaling={false} style={m.confirmBtnText}>Cancel & Refund</Text>
                 )}
               </Pressable>
             </View>

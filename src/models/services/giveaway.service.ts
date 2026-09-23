@@ -2,6 +2,8 @@
 import {
   Giveaway,
   GiveawayEntry,
+  GiveawayEntryMode,
+  GiveawayPublishResult,
   GiveawayEntryForm,
   GiveawaySavedInfo,
   GiveawayStats,
@@ -304,7 +306,7 @@ export const giveawayService = {
   async getAllGiveaways(): Promise<Giveaway[]> {
     const { data, error } = await supabase
       .from("giveaways")
-      .select("*, entry_count:giveaway_entries(count), winner:profiles!giveaways_winner_id_fkey(name, email)")
+      .select("*, winner:profiles!giveaways_winner_id_fkey(name, email)")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -312,12 +314,25 @@ export const giveawayService = {
       throw error;
     }
 
+    // Draw-entry totals (SUM of quantity) — a row count would under-count wallet giveaways.
+    const counts = await giveawayService.getEntryCounts((data || []).map((g: any) => g.id));
+
     return (data || []).map((g: any) => ({
       ...g,
-      entry_count: g.entry_count?.[0]?.count || 0,
+      entry_count: counts.get(g.id) ?? 0,
       winner_name: g.winner?.name || null,
       winner_email: g.winner?.email || null,
     }));
+  },
+
+  /** Total giveaways of every status (Super Admin dashboard card; admins read all rows). */
+  async getGiveawayCount(): Promise<number> {
+    const { count, error } = await supabase.from("giveaways").select("id", { count: "exact", head: true });
+    if (error) {
+      console.error("Error counting giveaways:", error);
+      return 0;
+    }
+    return count || 0;
   },
 
   async getAdminStats(): Promise<{
@@ -330,9 +345,8 @@ export const giveawayService = {
       .select("*", { count: "exact", head: true })
       .eq("status", "active");
 
-    const { count: totalEntries } = await supabase
-      .from("giveaway_entries")
-      .select("*", { count: "exact", head: true });
+    let totalEntries = 0;
+    (await giveawayService.getEntryCounts()).forEach((c) => { totalEntries += c; });
 
     const { data: activeGiveaways } = await supabase
       .from("giveaways")
@@ -355,9 +369,14 @@ export const giveawayService = {
       min_age?: number;
       rules_text?: string;
       image_url?: string;
+      /** Omitted = legacy_single (the DB default), so the legacy create payload is unchanged. */
+      entry_mode?: GiveawayEntryMode;
+      per_user_max?: number;
+      end_type?: "entries" | "both";
     },
     createdBy: number,
   ): Promise<{ success: boolean; data?: Giveaway; error?: string }> {
+    const isWallet = giveaway.entry_mode === "wallet";
     const { data, error } = await supabase
       .from("giveaways")
       .insert({
@@ -370,7 +389,11 @@ export const giveawayService = {
         rules_text: giveaway.rules_text?.trim() || null,
         image_url: giveaway.image_url || null,
         created_by: createdBy,
-        status: "active",
+        // Always a draft: nothing is public or notified until publishGiveaway().
+        status: "draft",
+        ...(isWallet
+          ? { entry_mode: "wallet", per_user_max: giveaway.per_user_max, end_type: giveaway.end_type ?? "entries" }
+          : {}),
       })
       .select()
       .single();
@@ -380,17 +403,35 @@ export const giveawayService = {
       return { success: false, error: error.message };
     }
 
-    const prizeStr = giveaway.prize_value > 0 ? ` - $${giveaway.prize_value} value!` : "";
-    notificationDispatcher
-      .sendToAllUsers(
-        "giveaway_update",
-        "New Giveaway!",
-        `${giveaway.name.trim()}${prizeStr} Enter now for a chance to win!`,
-        { giveaway_id: data.id, deep_link: "/(tabs)/shop", type: "new_giveaway" },
-      )
-      .catch((err) => console.error("Error sending new giveaway notifications:", err));
-
     return { success: true, data };
+  },
+
+  /**
+   * Draft → Active through the publish_giveaway RPC (validates config; wallet giveaways are
+   * blocked by the native launch hold). The server reports 'published' exactly once per
+   * giveaway, and only then is the "New Giveaway!" notification sent — a repeat Publish can
+   * never notify twice.
+   */
+  async publishGiveaway(id: number): Promise<GiveawayPublishResult> {
+    const { data, error } = await supabase.rpc("publish_giveaway", { p_giveaway_id: id });
+    if (error) throw error;
+    const result = data as GiveawayPublishResult;
+
+    if (result.status === "published") {
+      const { data: g } = await supabase.from("giveaways").select("name, prize_value").eq("id", id).maybeSingle();
+      if (g) {
+        const prizeStr = (g.prize_value ?? 0) > 0 ? ` - $${g.prize_value} value!` : "";
+        notificationDispatcher
+          .sendToAllUsers(
+            "giveaway_update",
+            "New Giveaway!",
+            `${String(g.name).trim()}${prizeStr} Enter now for a chance to win!`,
+            { giveaway_id: id, deep_link: "/(tabs)/shop", type: "new_giveaway" },
+          )
+          .catch((err) => console.error("Error sending new giveaway notifications:", err));
+      }
+    }
+    return result;
   },
 
   async updateGiveaway(
@@ -404,6 +445,8 @@ export const giveawayService = {
       min_age: number;
       rules_text: string;
       image_url: string;
+      per_user_max: number;
+      end_type: "date" | "entries" | "both";
     }>,
   ): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase
@@ -568,6 +611,40 @@ export const giveawayService = {
     };
   },
 
+  /**
+   * Same notifications the legacy drawWinner sends, for draws made server-side (wallet
+   * giveaways): the winner gets "You Won!"; on a first draw the other entrants get the results.
+   */
+  async notifyDrawResult(giveawayId: number, winnerUserId: number, isRedraw: boolean): Promise<void> {
+    const { data: giveaway } = await supabase.from("giveaways").select("name").eq("id", giveawayId).maybeSingle();
+    const giveawayName = giveaway?.name || "Giveaway";
+
+    notificationDispatcher
+      .send({
+        category: "giveaway_update",
+        recipientIdAutos: [winnerUserId],
+        title: "You Won!",
+        body: `Congratulations! You won ${giveawayName}!`,
+        data: { giveaway_id: giveawayId, deep_link: "/(tabs)/shop", type: "giveaway_winner" },
+      })
+      .catch((err) => console.error("Error sending winner notification:", err));
+
+    if (isRedraw) return;
+    const { data: entries } = await supabase.from("giveaway_entries").select("user_id").eq("giveaway_id", giveawayId);
+    const others = [...new Set((entries || []).map((e) => e.user_id).filter((id) => id !== winnerUserId))];
+    if (others.length > 0) {
+      notificationDispatcher
+        .send({
+          category: "giveaway_update",
+          recipientIdAutos: others,
+          title: "Giveaway Results",
+          body: `The winner of ${giveawayName} has been drawn. Stay tuned for the next one!`,
+          data: { giveaway_id: giveawayId, deep_link: "/(tabs)/shop", type: "giveaway_result" },
+        })
+        .catch((err) => console.error("Error sending entrant notifications:", err));
+    }
+  },
+
   async archiveGiveaway(id: number): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase
       .from("giveaways")
@@ -585,11 +662,12 @@ export const giveawayService = {
   async restoreGiveaway(id: number): Promise<{ success: boolean; error?: string }> {
     const { data: giveaway } = await supabase
       .from("giveaways")
-      .select("winner_id")
+      .select("winner_id, published_at")
       .eq("id", id)
       .single();
 
-    const newStatus = giveaway?.winner_id ? "awarded" : "active";
+    // A never-published (archived) draft goes back to draft — only publish_giveaway makes it live.
+    const newStatus = giveaway?.winner_id ? "awarded" : giveaway?.published_at ? "active" : "draft";
 
     const { error } = await supabase
       .from("giveaways")
@@ -606,10 +684,10 @@ export const giveawayService = {
 
   async getAllEntries(
     giveawayId?: number,
-  ): Promise<(GiveawayEntry & { giveaway_name?: string; giveaway_prize?: number })[]> {
+  ): Promise<(GiveawayEntry & { giveaway_name?: string; giveaway_prize?: number; giveaway_entry_mode?: GiveawayEntryMode })[]> {
     let query = supabase
       .from("giveaway_entries")
-      .select("*, giveaway:giveaways(name, prize_value)")
+      .select("*, giveaway:giveaways(name, prize_value, entry_mode)")
       .order("created_at", { ascending: false });
 
     if (giveawayId) query = query.eq("giveaway_id", giveawayId);
@@ -625,6 +703,7 @@ export const giveawayService = {
       ...e,
       giveaway_name: e.giveaway?.name || "Unknown",
       giveaway_prize: e.giveaway?.prize_value || 0,
+      giveaway_entry_mode: e.giveaway?.entry_mode || "legacy_single",
     }));
   },
 
@@ -649,23 +728,16 @@ export const giveawayService = {
       return [];
     }
 
-    return Promise.all(
-      (data || []).map(async (g: any) => {
-        const { count } = await supabase
-          .from("giveaway_entries")
-          .select("*", { count: "exact", head: true })
-          .eq("giveaway_id", g.id);
-        return {
-          giveaway_id: g.id,
-          giveaway_name: g.name,
-          prize_value: g.prize_value || 0,
-          winner_name: g.winner?.name || "Unknown",
-          winner_email: g.winner?.email || "",
-          drawn_at: g.winner_drawn_at,
-          entry_count: count || 0,
-        };
-      }),
-    );
+    const counts = await giveawayService.getEntryCounts((data || []).map((g: any) => g.id));
+    return (data || []).map((g: any) => ({
+      giveaway_id: g.id,
+      giveaway_name: g.name,
+      prize_value: g.prize_value || 0,
+      winner_name: g.winner?.name || "Unknown",
+      winner_email: g.winner?.email || "",
+      drawn_at: g.winner_drawn_at,
+      entry_count: counts.get(g.id) ?? 0,
+    }));
   },
 
   // ============================================
@@ -703,21 +775,22 @@ export const giveawayService = {
 
     let query = supabase
       .from("giveaway_entries")
-      .select("*", { count: "exact", head: true })
+      .select("quantity")
       .eq("giveaway_id", giveawayId);
 
     if (disqualifiedUserIds.length > 0) {
       query = query.not("user_id", "in", `(${disqualifiedUserIds.join(",")})`);
     }
 
-    const { count, error } = await query;
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching eligible entry count:", error);
       return 0;
     }
 
-    return count || 0;
+    // Draw entries (quantity is always 1 for legacy giveaways, so this equals the row count there).
+    return (data || []).reduce((sum, e: any) => sum + (e.quantity || 1), 0);
   },
 
   async getCurrentWinner(giveawayId: number): Promise<{

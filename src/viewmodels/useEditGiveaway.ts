@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
+import { GiveawayEntryMode } from "../models/types/giveaway.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Form structure intentionally mirrors useCreateGiveaway so the edit screen
@@ -24,6 +25,7 @@ export interface EditGiveawayForm {
   min_age: string;
   end_type: EndType;
   max_entries: string;       // numeric string, blank = unlimited
+  per_user_max: string;      // wallet giveaways only (required there)
   end_date: {
     month: string;           // "1"–"12"
     day: string;             // "1"–"31"
@@ -37,6 +39,7 @@ const LOCKED_AFTER_ENTRIES: (keyof EditGiveawayForm)[] = [
   "max_entries",
   "end_type",
   "end_date",
+  "per_user_max",
 ];
 
 const EMPTY_FORM: EditGiveawayForm = {
@@ -48,6 +51,7 @@ const EMPTY_FORM: EditGiveawayForm = {
   min_age: "18",
   end_type: "date",
   max_entries: "",
+  per_user_max: "",
   end_date: { month: "", day: "", year: "" },
 };
 
@@ -96,6 +100,9 @@ export function useEditGiveaway(giveawayId: number) {
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  // Entry method is fixed at creation — shown read-only, never sent on save.
+  const [entryMode, setEntryMode]     = useState<GiveawayEntryMode>("legacy_single");
+  const isWallet = entryMode === "wallet";
 
   // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -124,8 +131,10 @@ export function useEditGiveaway(giveawayId: number) {
         min_age:     g.min_age != null ? String(g.min_age) : "18",
         end_type:    deriveEndType(g.end_date, g.max_entries),
         max_entries: g.max_entries != null ? String(g.max_entries) : "",
+        per_user_max: g.per_user_max != null ? String(g.per_user_max) : "",
         end_date:    parseISODate(g.end_date),
       };
+      setEntryMode(g.entry_mode ?? "legacy_single");
 
       setForm(loaded);
       setOriginalForm(loaded);
@@ -147,7 +156,8 @@ export function useEditGiveaway(giveawayId: number) {
   );
 
   const hasChanges = JSON.stringify(form) !== JSON.stringify(originalForm);
-  const isValid    = form.name.trim().length > 0;
+  const perUserMaxValid = !isWallet || parseInt(form.per_user_max, 10) > 0;
+  const isValid    = form.name.trim().length > 0 && perUserMaxValid;
 
   // ── Update field (no-ops on locked fields) ────────────────────────────────
   const updateField = useCallback(
@@ -177,7 +187,7 @@ export function useEditGiveaway(giveawayId: number) {
   // ── Save ─────────────────────────────────────────────────────────────────
   const save = useCallback(async (): Promise<boolean> => {
     if (!isValid) {
-      setError("Giveaway name is required.");
+      setError(!perUserMaxValid ? "Max entries per user is required." : "Giveaway name is required.");
       return false;
     }
 
@@ -220,6 +230,13 @@ export function useEditGiveaway(giveawayId: number) {
         // Clear max_entries if switching to date only
         if (form.end_type === "date") updates.max_entries = null as any;
       }
+
+      // Wallet giveaways: capacity is mandatory (no date-only) and the per-user max is saved.
+      if (isWallet) {
+        const perUser = parseInt(form.per_user_max, 10);
+        if (!isNaN(perUser)) updates.per_user_max = perUser;
+        updates.end_type = form.end_type === "both" ? "both" : "entries";
+      }
     }
 
     try {
@@ -238,7 +255,7 @@ export function useEditGiveaway(giveawayId: number) {
     } finally {
       setSaving(false);
     }
-  }, [giveawayId, form, isValid, hasEntries]);
+  }, [giveawayId, form, isValid, hasEntries, isWallet, perUserMaxValid]);
 
   // ── Dropdown option builders (same as useCreateGiveaway) ─────────────────
   const monthOptions = [
@@ -276,6 +293,8 @@ export function useEditGiveaway(giveawayId: number) {
     saveSuccess,
     entryCount,
     hasEntries,
+    entryMode,
+    isWallet,
     isFieldLocked,
     updateField,
     updateEndDate,

@@ -118,6 +118,12 @@ export default function GiveawayParticipantsScreen() {
             {vm.formatBirthday(item.birthday)}
           </Text>
         </View>
+        {item.giveaway_entry_mode === "wallet" && (
+          <View style={styles.footerItem}>
+            <Text allowFontScaling={false} style={styles.footerLabel}>Entries</Text>
+            <Text allowFontScaling={false} style={styles.footerValue}>{item.quantity ?? 1}</Text>
+          </View>
+        )}
         <View style={styles.footerItem}>
           <Text allowFontScaling={false} style={styles.footerLabel}>Entered</Text>
           <Text allowFontScaling={false} style={styles.footerValue}>

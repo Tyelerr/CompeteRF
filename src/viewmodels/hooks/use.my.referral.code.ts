@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Share } from "react-native";
 import { referralService } from "../../models/services/referral.service";
-import { buildReferralLink, displayReferralLink } from "../../utils/referral";
+import { buildReferralLink } from "../../utils/referral";
 import { useAuthStore } from "../stores/auth.store";
 
 const SHARE_MESSAGE = (link: string, code: string) =>
@@ -16,7 +16,8 @@ export function useMyReferralCode() {
   const profileId = useAuthStore((s) => s.profile?.id_auto ?? null);
   // Keyed by profile so a logout / account switch never shows the previous user's code.
   const [fetched, setFetched] = useState<{ profileId: number; code: string | null } | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Which value was just copied (web only) — drives the brief "Copied" feedback.
+  const [copied, setCopied] = useState<"link" | "code" | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -38,7 +39,6 @@ export function useMyReferralCode() {
   }, []);
 
   const link = code ? buildReferralLink(code) : null;
-  const displayLink = code ? displayReferralLink(code) : null;
 
   const share = useCallback(async () => {
     if (!code || !link) return;
@@ -58,21 +58,29 @@ export function useMyReferralCode() {
     }
   }, [code, link]);
 
+  const writeClipboard = useCallback(async (value: string, what: "link" | "code"): Promise<boolean> => {
+    if (Platform.OS !== "web" || typeof navigator === "undefined" || !navigator.clipboard) return false;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(what);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(null), 2000);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const copyLink = useCallback(async () => {
     if (!link) return;
-    if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(link);
-        setCopied(true);
-        if (copiedTimer.current) clearTimeout(copiedTimer.current);
-        copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-        return;
-      } catch {
-        /* fall through to share */
-      }
-    }
-    await share();
-  }, [link, share]);
+    if (await writeClipboard(link, "link")) return;
+    await share(); // native / no Clipboard API: the share sheet offers "Copy"
+  }, [link, share, writeClipboard]);
 
-  return { code, link, displayLink, loading, copied, copyLink, share };
+  /** Web only: copy just the code (tapping the code pill). */
+  const copyCode = useCallback(async () => {
+    if (code) await writeClipboard(code, "code");
+  }, [code, writeClipboard]);
+
+  return { code, link, loading, copied, copyLink, copyCode, share };
 }

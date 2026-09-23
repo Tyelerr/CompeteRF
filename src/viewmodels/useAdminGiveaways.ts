@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
+import { giveawayWalletService } from "../models/services/giveaway-wallet.service";
 import { FraudReport } from "../models/services/fraud-detection.service";
 import { Giveaway, WinnerHistoryRecord } from "../models/types/giveaway.types";
 import { useAuthStore } from "./stores/auth.store";
 
 export type GiveawayStatusFilter =
+  | "draft"
   | "active"
   | "ended"
   | "awarded"
   | "archived"
+  | "cancelled"
   | "all";
 export type GiveawaySortOption = "date" | "name" | "entries";
 export type AdminTab = "giveaways" | "manage";
@@ -34,6 +37,45 @@ export interface CurrentWinner {
   email: string;
   phone: string;
   drawn_at: string;
+}
+
+/** Messages for publish_giveaway refusals. */
+export const WALLET_PUBLISH_HOLD_MESSAGE =
+  "Wallet giveaways require the latest mobile app version before they can be published.";
+const PUBLISH_ERRORS: Record<string, string> = {
+  wallet_publish_on_hold: WALLET_PUBLISH_HOLD_MESSAGE,
+  end_date_in_past: "The end date is in the past — edit the giveaway first.",
+  end_condition_required: "Set an end date or a maximum number of entries first.",
+  name_required: "Give the giveaway a name first.",
+  per_user_max_exceeds_capacity: "Max entries per user can't exceed the total capacity.",
+  not_draft: "Only drafts can be published.",
+  not_found: "Giveaway not found.",
+};
+
+/** Adapts the wallet draw RPC to the legacy drawWinner result shape the screen already uses. */
+async function drawWalletWinner(giveawayId: number, redrawReason?: string) {
+  const res = await giveawayWalletService.drawWinner(giveawayId, redrawReason);
+  if (!res.ok || !res.winner) {
+    const messages: Record<string, string> = {
+      not_ended: "End the giveaway before drawing a winner.",
+      not_awarded: "This giveaway has no winner to redraw.",
+      no_eligible_entries: "No eligible entries remain.",
+      reason_required: "A reason is required to redraw.",
+    };
+    return { success: false as const, error: messages[res.status] ?? "Draw failed. Please try again." };
+  }
+  giveawayService.notifyDrawResult(giveawayId, res.winner.user_id, !!redrawReason).catch(() => {});
+  return {
+    success: true as const,
+    winner: {
+      id: res.winner.entry_id,
+      user_id: res.winner.user_id,
+      name: res.winner.name,
+      email: res.winner.email,
+      phone: res.winner.phone,
+    },
+    fraudReport: undefined,
+  };
 }
 
 export const useAdminGiveaways = () => {
@@ -164,6 +206,8 @@ export const useAdminGiveaways = () => {
     ended:    giveaways.filter((g) => g.status === "ended").length,
     awarded:  giveaways.filter((g) => g.status === "awarded").length,
     archived: giveaways.filter((g) => g.status === "archived").length,
+    cancelled: giveaways.filter((g) => g.status === "cancelled").length,
+    draft:    giveaways.filter((g) => g.status === "draft").length,
     all:      giveaways.length,
   }), [giveaways]);
 
@@ -203,7 +247,11 @@ export const useAdminGiveaways = () => {
     setProcessing(giveawayId);
 
     try {
-      const result = await giveawayService.drawWinner(giveawayId, currentProfile.id_auto);
+      const target = giveaways.find((g) => g.id === giveawayId);
+      // Wallet giveaways: server-side weighted draw (quantity = tickets). Legacy: unchanged flow.
+      const result = target?.entry_mode === "wallet"
+        ? await drawWalletWinner(giveawayId)
+        : await giveawayService.drawWinner(giveawayId, currentProfile.id_auto);
 
       if (result.success && result.winner) {
         setDrawnWinner(result.winner);
@@ -241,7 +289,7 @@ export const useAdminGiveaways = () => {
     } finally {
       setProcessing(null);
     }
-  }, []);
+  }, [giveaways]);
 
   const handleArchiveGiveaway = useCallback(async (giveawayId: number): Promise<boolean> => {
     setProcessing(giveawayId);
@@ -349,11 +397,13 @@ export const useAdminGiveaways = () => {
     setRedrawing(true);
     setRedrawError(null);
     try {
-      const result = await giveawayService.redrawWinner(
-        selectedGiveaway.id,
-        currentProfile.id_auto,
-        redrawReason.trim(),
-      );
+      const result = selectedGiveaway.entry_mode === "wallet"
+        ? await drawWalletWinner(selectedGiveaway.id, redrawReason.trim())
+        : await giveawayService.redrawWinner(
+            selectedGiveaway.id,
+            currentProfile.id_auto,
+            redrawReason.trim(),
+          );
       if (result.success && result.winner) {
         setGiveaways((prev) =>
           prev.map((g) =>
@@ -411,6 +461,85 @@ export const useAdminGiveaways = () => {
     }
   }, [selectedGiveaway, redrawReason, closeRedrawModal]);
 
+  // ── Publish (Draft → Active) ────────────────────────────────────────────────
+  const [publishTarget, setPublishTarget] = useState<AdminGiveaway | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  const openPublishModal = useCallback((g: AdminGiveaway) => {
+    setPublishTarget(g);
+    setPublishError(null);
+  }, []);
+  const closePublishModal = useCallback(() => {
+    if (!publishing) setPublishTarget(null);
+  }, [publishing]);
+
+  const confirmPublish = useCallback(async (): Promise<boolean> => {
+    if (!publishTarget) return false;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const res = await giveawayService.publishGiveaway(publishTarget.id);
+      if (res.status === "published" || res.status === "already_published") {
+        setGiveaways((prev) =>
+          prev.map((g) => (g.id === publishTarget.id ? { ...g, status: "active" as const, published_at: new Date().toISOString() } : g)),
+        );
+        setStats((prev) => ({ ...prev, activeCount: prev.activeCount + (res.status === "published" ? 1 : 0) }));
+        setPublishTarget(null);
+        return true;
+      }
+      setPublishError(PUBLISH_ERRORS[res.status] ?? "Couldn't publish. Please try again.");
+      return false;
+    } catch (error: any) {
+      setPublishError(error?.message || "An unexpected error occurred.");
+      return false;
+    } finally {
+      setPublishing(false);
+    }
+  }, [publishTarget]);
+
+  // ── Cancel & Refund (wallet giveaways only; distinct from End Early) ───────
+  const [cancelTarget, setCancelTarget] = useState<AdminGiveaway | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const openCancelModal = useCallback((g: AdminGiveaway) => {
+    setCancelTarget(g);
+    setCancelReason("");
+    setCancelError(null);
+  }, []);
+  const closeCancelModal = useCallback(() => {
+    if (!cancelling) setCancelTarget(null);
+  }, [cancelling]);
+
+  const confirmCancelAndRefund = useCallback(async (): Promise<boolean> => {
+    if (!cancelTarget || !cancelReason.trim()) return false;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const res = await giveawayWalletService.cancelAndRefund(cancelTarget.id, cancelReason.trim());
+      if (!res.ok) {
+        setCancelError(
+          res.status === "not_cancellable" ? "Only active or ended wallet giveaways can be cancelled."
+          : res.status === "reason_required" ? "A reason is required."
+          : "Cancel failed. Please try again.",
+        );
+        return false;
+      }
+      setGiveaways((prev) =>
+        prev.map((g) => (g.id === cancelTarget.id ? { ...g, status: "cancelled" as const, cancel_reason: cancelReason.trim() } : g)),
+      );
+      setCancelTarget(null);
+      return true;
+    } catch (error: any) {
+      setCancelError(error?.message || "An unexpected error occurred.");
+      return false;
+    } finally {
+      setCancelling(false);
+    }
+  }, [cancelTarget, cancelReason]);
+
   const getDaysRemaining = useCallback((endDate: string | null): string => {
     if (!endDate) return "No end date";
     const now = new Date();
@@ -442,6 +571,9 @@ export const useAdminGiveaways = () => {
     drawWinner: handleDrawWinner,
     archiveGiveaway: handleArchiveGiveaway,
     restoreGiveaway: handleRestoreGiveaway,
+    publishTarget, publishing, publishError, openPublishModal, closePublishModal, confirmPublish,
+    cancelTarget, cancelReason, setCancelReason, cancelling, cancelError,
+    openCancelModal, closeCancelModal, confirmCancelAndRefund,
     getDaysRemaining,
   };
 };

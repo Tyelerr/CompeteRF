@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Giveaway } from "../../src/models/types/giveaway.types";
 import { COLORS } from "../../src/theme/colors";
@@ -28,6 +29,8 @@ import {
 } from "../../src/views/components/shop";
 import { ConfettiBurst, ConfettiBurstRef } from "../../src/views/components/common/ConfettiBurst";
 import { ReferralShareCard } from "../../src/views/components/referral/ReferralShareCard";
+import { GiveawayBalanceCard } from "../../src/views/components/giveaway/GiveawayBalanceCard";
+import { WalletEntryResult } from "../../src/models/types/giveaway-wallet.types";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -242,6 +245,8 @@ export default function ShopScreen() {
   // banner and entry gate update immediately after login/logout without
   // requiring an app restart or manual re-fetch. ──────────────────────
   const profile = useAuthStore((s) => s.profile);
+  const { width: winWidth } = useWindowDimensions();
+  const wideWeb = isWeb && winWidth >= 640;
   const authLoading = useAuthStore((s) => s.isLoading);
 
   const [selectedGiveaway, setSelectedGiveaway] = React.useState<Giveaway | null>(null);
@@ -262,19 +267,41 @@ export default function ShopScreen() {
   };
 
   const handleEntrySuccess = () => {
-    if (selectedGiveaway) giveawaysVm.markAsEntered(selectedGiveaway.id);
+    // Wallet giveaways get the server's exact numbers via handleWalletEntry instead of +1.
+    if (selectedGiveaway && selectedGiveaway.entry_mode !== "wallet") giveawaysVm.markAsEntered(selectedGiveaway.id);
     confettiRef.current?.fire(SW / 2, SH * 0.55);
   };
+
+  const handleWalletEntry = (giveawayId: number, result: WalletEntryResult) =>
+    giveawaysVm.applyWalletEntry(giveawayId, result);
+
+  // Selector context for a wallet giveaway (balance, holding, cap, space left).
+  const walletContext =
+    selectedGiveaway && selectedGiveaway.entry_mode === "wallet"
+      ? {
+          balance: giveawaysVm.balance ?? 0,
+          myEntries: giveawaysVm.getMyEntries(selectedGiveaway.id),
+          perUserMax: selectedGiveaway.per_user_max ?? 0,
+          capacityRemaining: Math.max(0, (selectedGiveaway.max_entries ?? 0) - (selectedGiveaway.entry_count ?? 0)),
+        }
+      : null;
 
   const handleEnterFromDetail = () => {
     if (selectedGiveaway) giveawaysVm.trackGiveawayView(selectedGiveaway.id);
     setShowDetailModal(false);
-    if (selectedGiveaway && !giveawaysVm.isEntered(selectedGiveaway.id)) {
+    if (selectedGiveaway && (selectedGiveaway.entry_mode === "wallet" || !giveawaysVm.isEntered(selectedGiveaway.id))) {
       setTimeout(() => setShowEntryModal(true), 300);
     }
   };
 
   if (giveawaysVm.loading) return <Loading fullScreen message="Loading..." />;
+
+  const walletEntriesFor = (g: Giveaway) => (profile ? giveawaysVm.getMyEntries(g.id) : null);
+  // Wallet cards block entry only at the personal max; legacy keeps "entered once".
+  const detailBlocked = (g: Giveaway) =>
+    g.entry_mode === "wallet"
+      ? !!profile && giveawaysVm.getMyEntries(g.id) >= (g.per_user_max ?? 0)
+      : giveawaysVm.isEntered(g.id);
 
   const hasActive = giveawaysVm.giveaways.length > 0;
   const hasEnded  = giveawaysVm.endedGiveaways.length > 0;
@@ -294,8 +321,15 @@ export default function ShopScreen() {
       )}
 
       {profile && (
-        <View style={s.referralWrapper}>
-          <ReferralShareCard />
+        <View style={[s.personalSection, wideWeb && s.personalSectionWide]}>
+          {giveawaysVm.balance !== null && (
+            <View style={wideWeb ? s.balanceColWide : undefined}>
+              <GiveawayBalanceCard balance={giveawaysVm.balance} variant={wideWeb ? "stacked" : "inline"} />
+            </View>
+          )}
+          <View style={wideWeb ? s.referralColWide : undefined}>
+            <ReferralShareCard />
+          </View>
         </View>
       )}
 
@@ -339,6 +373,8 @@ export default function ShopScreen() {
                   <GiveawayCard
                     giveaway={g}
                     isEntered={giveawaysVm.isEntered(g.id)}
+                    myEntries={walletEntriesFor(g)}
+                    pastEndDate={giveawaysVm.isWalletPastEnd(g)}
                     daysRemaining={giveawaysVm.getDaysRemaining(g.end_date)}
                     onEnter={() => handleEnterGiveaway(g)}
                     onView={() => handleViewGiveaway(g)}
@@ -353,6 +389,8 @@ export default function ShopScreen() {
                 <GiveawayCard
                   giveaway={g}
                   isEntered={giveawaysVm.isEntered(g.id)}
+                  myEntries={walletEntriesFor(g)}
+                    pastEndDate={giveawaysVm.isWalletPastEnd(g)}
                   daysRemaining={giveawaysVm.getDaysRemaining(g.end_date)}
                   onEnter={() => handleEnterGiveaway(g)}
                   onView={() => handleViewGiveaway(g)}
@@ -412,7 +450,8 @@ export default function ShopScreen() {
         <GiveawayDetailModal
           visible={showDetailModal}
           giveaway={selectedGiveaway}
-          isEntered={selectedGiveaway ? giveawaysVm.isEntered(selectedGiveaway.id) : false}
+          isEntered={selectedGiveaway ? detailBlocked(selectedGiveaway) : false}
+          pastEndDate={selectedGiveaway ? giveawaysVm.isWalletPastEnd(selectedGiveaway) : false}
           daysRemaining={selectedGiveaway ? giveawaysVm.getDaysRemaining(selectedGiveaway.end_date) : ""}
           onClose={() => setShowDetailModal(false)}
           onEnter={handleEnterFromDetail}
@@ -422,6 +461,8 @@ export default function ShopScreen() {
           giveaway={selectedGiveaway}
           onClose={() => setShowEntryModal(false)}
           onSuccess={handleEntrySuccess}
+          wallet={walletContext}
+          onWalletSuccess={handleWalletEntry}
         />
       </View>
       <ConfettiBurst ref={confettiRef} />
@@ -445,7 +486,11 @@ const s = StyleSheet.create({
   subtitleMobile: { fontSize: wxMs(FONT_SIZES.sm), color: T.gray, marginTop: wxSc(4) },
 
   statsWrapper: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.sm), marginBottom: wxSc(SPACING.xs) },
-  referralWrapper: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.xs) },
+  // Balance + Refer Friends: side by side on wide web (balance narrower), tightly stacked on mobile.
+  personalSection: { marginHorizontal: wxSc(SPACING.md), marginTop: wxSc(SPACING.xs), gap: wxSc(SPACING.xs + 2) },
+  personalSectionWide: { flexDirection: "row", alignItems: "stretch", gap: wxSc(SPACING.sm) },
+  balanceColWide: { flex: 1, minWidth: 180 },
+  referralColWide: { flex: 2.6 },
 
   webGrid: { flexDirection: "row", flexWrap: "wrap", gap: wxSc(SPACING.md), paddingHorizontal: wxSc(SPACING.md) },
   webGridItem: { flex: 1, minWidth: 300 },

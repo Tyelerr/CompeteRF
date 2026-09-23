@@ -1,3 +1,12 @@
+import { GiveawayStatus } from "./common.types";
+
+/**
+ * legacy_single — the original model: one free entry per user via the entry form (all giveaways
+ *                 created before the wallet system are grandfathered as this).
+ * wallet        — users spend Giveaway Entries (1 credit = 1 draw chance), capped per user.
+ */
+export type GiveawayEntryMode = "legacy_single" | "wallet";
+
 export interface Giveaway {
   id: number;
   name: string;
@@ -9,7 +18,15 @@ export interface Giveaway {
   min_age: number;
   end_date: string | null;
   max_entries: number | null;
-  status: "active" | "ended" | "awarded" | "archived";
+  status: GiveawayStatus;
+  entry_mode: GiveawayEntryMode;
+  /** Wallet giveaways only: max draw entries one user may hold. */
+  per_user_max: number | null;
+  end_type?: "date" | "entries" | "both" | null;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
+  /** Set when a draft is first published (null = never published). */
+  published_at?: string | null;
   winner_id: number | null;
   winner_display_name?: string | null;
   winner_drawn_at: string | null;
@@ -19,7 +36,24 @@ export interface Giveaway {
   updated_at: string;
   ended_at: string | null;
   archived_at: string | null;
+  /** Total draw entries (SUM of quantity; equals the entrant count for legacy giveaways). */
   entry_count?: number;
+}
+
+/** publish_giveaway outcome ('published' is returned exactly once per giveaway). */
+export interface GiveawayPublishResult {
+  ok: boolean;
+  status:
+    | "published"
+    | "already_published"
+    | "wallet_publish_on_hold"
+    | "not_draft"
+    | "not_found"
+    | "name_required"
+    | "end_date_in_past"
+    | "end_condition_required"
+    | "per_user_max_exceeds_capacity";
+  entry_mode?: GiveawayEntryMode;
 }
 
 export interface GiveawayEntry {
@@ -34,6 +68,8 @@ export interface GiveawayEntry {
   agreed_to_privacy: boolean;
   confirmed_age: boolean;
   opted_in_promotions: boolean;
+  /** Draw entries owned (always 1 for legacy giveaways). */
+  quantity: number;
   created_at: string;
 }
 
@@ -86,7 +122,7 @@ export const INITIAL_ENTRY_FORM: GiveawayEntryForm = {
 };
 
 // Persisted personal info reused across giveaway entries.
-// Sourced from the user most recent giveaway_entries row � no extra table needed.
+// Sourced from the user most recent giveaway_entries row � no extra table needed.
 export interface GiveawaySavedInfo {
   name_as_on_id: string;
   birthday: string; // ISO date: YYYY-MM-DD
