@@ -44,6 +44,37 @@ export interface EventStats {
   thisMonth: number;
 }
 
+// One row per (tournament, event type) from get_tournament_event_counts.
+export interface TournamentEventCount {
+  entity_id: number;
+  event_type: string;
+  event_count: number;
+}
+
+export type TopEntityCount = { entity_id: number; count: number };
+
+// Period boundaries used by every EventStats block (local midnight / week start / month start).
+function getStatsBoundaries(): { today: string; week: string; month: string } {
+  const now = new Date();
+  return {
+    today: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString(),
+    week: new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - now.getDay(),
+    ).toISOString(),
+    month: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+  };
+}
+
+function sumByType(rows: TournamentEventCount[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    totals[row.event_type] = (totals[row.event_type] || 0) + Number(row.event_count);
+  }
+  return totals;
+}
+
 // ——— Service ————————————————————————————————————————————————
 export const analyticsService = {
   /**
@@ -57,16 +88,13 @@ export const analyticsService = {
     metadata = {},
   }: TrackEventParams): Promise<void> {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const { error } = await supabase.from("app_events").insert({
-        event_type: eventType,
-        entity_type: entityType || null,
-        entity_id: entityId || null,
-        user_id: user?.id || null,
-        metadata,
+      // log_app_event derives the user from the session server-side (no client-supplied user id)
+      // and only accepts known event shapes; it returns false for anything it rejects.
+      const { error } = await supabase.rpc("log_app_event", {
+        p_event_type: eventType,
+        p_entity_type: entityType || null,
+        p_entity_id: entityId || null,
+        p_metadata: metadata ?? {},
       });
 
       if (error) {
@@ -316,6 +344,88 @@ export const analyticsService = {
     return Object.entries(counts)
       .map(([id, count]) => ({ entity_id: Number(id), count }))
       .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  },
+
+  // ——— Tournament-scoped aggregates (directors / bar owners) ————————
+  // Directors and bar owners cannot read app_events rows; these go through
+  // get_tournament_event_counts, which returns counts only and silently ignores
+  // any tournament the caller doesn't direct or own the venue of.
+
+  /** Per-(tournament, event type) counts, optionally windowed by created_at. */
+  async getTournamentEventCounts(
+    tournamentIds: number[],
+    eventTypes: string[],
+    since?: string | null,
+  ): Promise<TournamentEventCount[]> {
+    if (tournamentIds.length === 0 || eventTypes.length === 0) return [];
+    const { data, error } = await supabase.rpc("get_tournament_event_counts", {
+      p_tournament_ids: tournamentIds,
+      p_event_types: eventTypes,
+      p_since: since ?? null,
+    });
+    if (error) {
+      console.warn("[Analytics] getTournamentEventCounts error:", error.message);
+      return [];
+    }
+    return (data ?? []) as TournamentEventCount[];
+  },
+
+  /** Total count of one event type across the given tournaments. */
+  async countTournamentEvents(
+    eventType: string,
+    tournamentIds: number[],
+    since?: string | null,
+  ): Promise<number> {
+    const rows = await this.getTournamentEventCounts(tournamentIds, [eventType], since);
+    return sumByType(rows)[eventType] || 0;
+  },
+
+  /** Total counts per event type across the given tournaments. */
+  async countTournamentEventsByType(
+    eventTypes: string[],
+    tournamentIds: number[],
+    since?: string | null,
+  ): Promise<Record<string, number>> {
+    const rows = await this.getTournamentEventCounts(tournamentIds, eventTypes, since);
+    return sumByType(rows);
+  },
+
+  /** Total / today / this week / this month per event type (4 calls, all types at once). */
+  async getScopedEventStats(
+    eventTypes: string[],
+    tournamentIds: number[],
+  ): Promise<Record<string, EventStats>> {
+    const bounds = getStatsBoundaries();
+    const [total, today, thisWeek, thisMonth] = await Promise.all([
+      this.countTournamentEventsByType(eventTypes, tournamentIds),
+      this.countTournamentEventsByType(eventTypes, tournamentIds, bounds.today),
+      this.countTournamentEventsByType(eventTypes, tournamentIds, bounds.week),
+      this.countTournamentEventsByType(eventTypes, tournamentIds, bounds.month),
+    ]);
+    const result: Record<string, EventStats> = {};
+    for (const type of eventTypes) {
+      result[type] = {
+        total: total[type] || 0,
+        today: today[type] || 0,
+        thisWeek: thisWeek[type] || 0,
+        thisMonth: thisMonth[type] || 0,
+      };
+    }
+    return result;
+  },
+
+  /** Most-counted tournaments for one event type, among the given tournaments. */
+  async getScopedTopEntities(
+    eventType: string,
+    tournamentIds: number[],
+    since?: string,
+    limit: number = 10,
+  ): Promise<TopEntityCount[]> {
+    const rows = await this.getTournamentEventCounts(tournamentIds, [eventType], since);
+    return rows
+      .map((row) => ({ entity_id: row.entity_id, count: Number(row.event_count) }))
+      .sort((a, b) => b.count - a.count || a.entity_id - b.entity_id)
       .slice(0, limit);
   },
 };

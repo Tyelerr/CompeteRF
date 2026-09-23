@@ -1,12 +1,12 @@
 // src/viewmodels/useBarOwnerAnalytics.ts
 //
 // Bar-owner-scoped version of useAnalyticsDashboard.
-// Queries the same app_events table but filters by tournaments
-// that belong to the bar owner's venues.
-// Completely standalone — does NOT import from or affect
-// useAnalyticsDashboard or analyticsService.
+// Counts events on tournaments that belong to the bar owner's venues, via the
+// get_tournament_event_counts aggregate (analyticsService) — no raw app_events rows.
+// Does NOT import from or affect useAnalyticsDashboard.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { analyticsService } from "../models/services/analytics.service";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 import { getNavCache, setNavCache } from "./nav-cache";
@@ -32,7 +32,6 @@ interface BarOwnerAnalyticsState {
   venueContactClicked: EventStats;
   tournamentFavorited: EventStats;
   tournamentShared: EventStats;
-  giveawayViewed: EventStats;
 
   topViewedTournaments: TopEntity[];
   topFavoritedTournaments: TopEntity[];
@@ -53,7 +52,6 @@ const EMPTY_STATE: BarOwnerAnalyticsState = {
   venueContactClicked: EMPTY_STATS,
   tournamentFavorited: EMPTY_STATS,
   tournamentShared: EMPTY_STATS,
-  giveawayViewed: EMPTY_STATS,
   topViewedTournaments: [],
   topFavoritedTournaments: [],
   totalEvents: 0,
@@ -110,102 +108,16 @@ function statForPeriod(stats: EventStats, period: TimePeriodValue): number {
 }
 
 // ─── Scoped query helpers ────────────────────────────────────────────────────
+// Counts come from get_tournament_event_counts via analyticsService (no raw
+// app_events rows); the server only counts tournaments this user may see.
 
-/**
- * Get event stats for a specific event type, scoped to the given tournament IDs.
- */
-async function getScopedEventStats(
-  eventType: string,
-  tournamentIds: number[],
-): Promise<EventStats> {
-  if (tournamentIds.length === 0) return EMPTY_STATS;
-
-  const now = new Date();
-
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).toISOString();
-
-  const startOfWeek = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() - now.getDay(),
-  ).toISOString();
-
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-  ).toISOString();
-
-  const buildQuery = (since?: string) => {
-    let q = supabase
-      .from("app_events")
-      .select("*", { count: "exact", head: true })
-      .eq("event_type", eventType)
-      .in("entity_id", tournamentIds);
-
-    if (since) q = q.gte("created_at", since);
-    return q;
-  };
-
-  const [total, today, thisWeek, thisMonth] = await Promise.all([
-    buildQuery(),
-    buildQuery(startOfToday),
-    buildQuery(startOfWeek),
-    buildQuery(startOfMonth),
-  ]);
-
-  return {
-    total: total.count || 0,
-    today: today.count || 0,
-    thisWeek: thisWeek.count || 0,
-    thisMonth: thisMonth.count || 0,
-  };
-}
-
-/**
- * Get top entities for a specific event type, scoped to given tournament IDs.
- */
-async function getScopedTopEntities(
-  eventType: string,
-  tournamentIds: number[],
-  since?: string,
-  limit: number = 10,
-): Promise<{ entity_id: number; count: number }[]> {
-  if (tournamentIds.length === 0) return [];
-
-  let query = supabase
-    .from("app_events")
-    .select("entity_id")
-    .eq("event_type", eventType)
-    .in("entity_id", tournamentIds)
-    .not("entity_id", "is", null);
-
-  if (since) query = query.gte("created_at", since);
-
-  const { data, error } = await query;
-
-  if (error || !data) {
-    console.error("[BarOwnerAnalytics] getScopedTopEntities error:", error?.message);
-    return [];
-  }
-
-  // Count occurrences client-side
-  const counts: Record<number, number> = {};
-  for (const row of data) {
-    if (row.entity_id != null) {
-      counts[row.entity_id] = (counts[row.entity_id] || 0) + 1;
-    }
-  }
-
-  return Object.entries(counts)
-    .map(([id, count]) => ({ entity_id: Number(id), count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
-}
+const SCOPED_EVENT_TYPES = [
+  "tournament_viewed",
+  "directions_clicked",
+  "venue_contact_clicked",
+  "tournament_favorited",
+  "tournament_shared",
+];
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
@@ -295,30 +207,21 @@ export function useBarOwnerAnalytics() {
 
       const since = getSinceDate(timePeriod.value);
 
-      const [
-        tournamentViews,
-        directionsClicked,
-        venueContactClicked,
-        tournamentFavorited,
-        tournamentShared,
-        giveawayViewed,
-        topViewedRaw,
-        topFavoritedRaw,
-      ] = await Promise.all([
-        getScopedEventStats("tournament_viewed", tournamentIds),
-        getScopedEventStats("directions_clicked", tournamentIds),
-        getScopedEventStats("venue_contact_clicked", tournamentIds),
-        getScopedEventStats("tournament_favorited", tournamentIds),
-        getScopedEventStats("tournament_shared", tournamentIds),
-        getScopedEventStats("giveaway_viewed", tournamentIds),
-        getScopedTopEntities("tournament_viewed", tournamentIds, since, 10),
-        getScopedTopEntities(
+      const [stats, topViewedRaw, topFavoritedRaw] = await Promise.all([
+        analyticsService.getScopedEventStats(SCOPED_EVENT_TYPES, tournamentIds),
+        analyticsService.getScopedTopEntities("tournament_viewed", tournamentIds, since, 10),
+        analyticsService.getScopedTopEntities(
           "tournament_favorited",
           tournamentIds,
           since,
           10,
         ),
       ]);
+      const tournamentViews = stats["tournament_viewed"];
+      const directionsClicked = stats["directions_clicked"];
+      const venueContactClicked = stats["venue_contact_clicked"];
+      const tournamentFavorited = stats["tournament_favorited"];
+      const tournamentShared = stats["tournament_shared"];
 
       const [topViewedTournaments, topFavoritedTournaments] =
         await Promise.all([
@@ -332,7 +235,6 @@ export function useBarOwnerAnalytics() {
         venueContactClicked,
         tournamentFavorited,
         tournamentShared,
-        giveawayViewed,
       ];
       const totalEvents = allStats.reduce(
         (sum, s) => sum + statForPeriod(s, timePeriod.value),
@@ -345,7 +247,6 @@ export function useBarOwnerAnalytics() {
         venueContactClicked,
         tournamentFavorited,
         tournamentShared,
-        giveawayViewed,
         topViewedTournaments,
         topFavoritedTournaments,
         totalEvents,
@@ -410,11 +311,6 @@ export function useBarOwnerAnalytics() {
         value: statForPeriod(data.tournamentShared, p),
         color: "#9C27B0",
       },
-      {
-        label: "Giveaways",
-        value: statForPeriod(data.giveawayViewed, p),
-        color: "#FF5722",
-      },
     ].filter((item) => item.value > 0);
   }, [data, timePeriod.value]);
 
@@ -427,7 +323,6 @@ export function useBarOwnerAnalytics() {
       totalCalls: statForPeriod(data.venueContactClicked, p),
       totalFavorites: statForPeriod(data.tournamentFavorited, p),
       totalShares: statForPeriod(data.tournamentShared, p),
-      totalGiveawayViews: statForPeriod(data.giveawayViewed, p),
       totalEvents: data.totalEvents,
     };
   }, [data, timePeriod.value]);

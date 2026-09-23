@@ -22,7 +22,6 @@ interface AnalyticsDashboardState {
   tournamentFavorited: EventStats;
   tournamentUnfavorited: EventStats;
   tournamentShared: EventStats;
-  searchPerformed: EventStats;
   filtersChanged: EventStats;
   giveawayViewed: EventStats;
   appOpened: EventStats;
@@ -44,7 +43,6 @@ const EMPTY_STATE: AnalyticsDashboardState = {
   tournamentFavorited: EMPTY_STATS,
   tournamentUnfavorited: EMPTY_STATS,
   tournamentShared: EMPTY_STATS,
-  searchPerformed: EMPTY_STATS,
   filtersChanged: EMPTY_STATS,
   giveawayViewed: EMPTY_STATS,
   appOpened: EMPTY_STATS,
@@ -145,7 +143,6 @@ export function useAnalyticsDashboard() {
         tournamentFavorited,
         tournamentUnfavorited,
         tournamentShared,
-        searchPerformed,
         filtersChanged,
         giveawayViewed,
         appOpened,
@@ -158,7 +155,6 @@ export function useAnalyticsDashboard() {
         analyticsService.getEventStats(EVENT_TYPES.TOURNAMENT_FAVORITED),
         analyticsService.getEventStats(EVENT_TYPES.TOURNAMENT_UNFAVORITED),
         analyticsService.getEventStats(EVENT_TYPES.TOURNAMENT_SHARED),
-        analyticsService.getEventStats(EVENT_TYPES.SEARCH_PERFORMED),
         analyticsService.getEventStats(EVENT_TYPES.FILTERS_CHANGED),
         analyticsService.getEventStats(EVENT_TYPES.GIVEAWAY_VIEWED),
         analyticsService.getEventStats(EVENT_TYPES.APP_OPENED),
@@ -190,7 +186,6 @@ export function useAnalyticsDashboard() {
         tournamentFavorited,
         tournamentUnfavorited,
         tournamentShared,
-        searchPerformed,
         filtersChanged,
         giveawayViewed,
         appOpened,
@@ -207,7 +202,6 @@ export function useAnalyticsDashboard() {
         tournamentFavorited,
         tournamentUnfavorited,
         tournamentShared,
-        searchPerformed,
         filtersChanged,
         giveawayViewed,
         appOpened,
@@ -248,7 +242,6 @@ export function useAnalyticsDashboard() {
       { label: "Calls", value: statForPeriod(data.venueContactClicked, p), color: "#FF9800" },
       { label: "Favorites", value: statForPeriod(data.tournamentFavorited, p), color: "#E91E63" },
       { label: "Shares", value: statForPeriod(data.tournamentShared, p), color: "#9C27B0" },
-      { label: "Searches", value: statForPeriod(data.searchPerformed, p), color: "#00BCD4" },
       { label: "Filters", value: statForPeriod(data.filtersChanged, p), color: "#607D8B" },
       { label: "Giveaways", value: statForPeriod(data.giveawayViewed, p), color: "#FF5722" },
       { label: "App Opens", value: statForPeriod(data.appOpened, p), color: "#8BC34A" },
@@ -264,7 +257,6 @@ export function useAnalyticsDashboard() {
       totalCalls: statForPeriod(data.venueContactClicked, p),
       totalFavorites: statForPeriod(data.tournamentFavorited, p),
       totalShares: statForPeriod(data.tournamentShared, p),
-      totalSearches: statForPeriod(data.searchPerformed, p),
       totalGiveawayViews: statForPeriod(data.giveawayViewed, p),
       totalAppOpens: statForPeriod(data.appOpened, p),
       totalEvents: data.totalEvents,

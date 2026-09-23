@@ -107,7 +107,6 @@ export interface DiscoveryCounts {
   calls: number;
   favorites: number;
   shares: number;
-  giveawayViews: number;
 }
 
 export const EMPTY_DISCOVERY: DiscoveryCounts = {
@@ -116,7 +115,6 @@ export const EMPTY_DISCOVERY: DiscoveryCounts = {
   calls: 0,
   favorites: 0,
   shares: 0,
-  giveawayViews: 0,
 };
 
 export const EMPTY_VENUE_BUSINESS_STATS: VenueBusinessStats = {

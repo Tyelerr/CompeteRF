@@ -68,8 +68,7 @@ export default function BarOwnerAnalyticsScreen() {
     vm.discovery.directions +
     vm.discovery.calls +
     vm.discovery.favorites +
-    vm.discovery.shares +
-    vm.discovery.giveawayViews;
+    vm.discovery.shares;
 
   const top =
     topMetric === "revenue"

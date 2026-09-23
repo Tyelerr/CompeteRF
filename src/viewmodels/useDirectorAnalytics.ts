@@ -1,11 +1,12 @@
 // src/viewmodels/useDirectorAnalytics.ts
 //
 // Tournament-director-scoped version of analytics.
-// Queries app_events filtered by tournaments where director_id matches.
-// Completely standalone — does NOT import from or affect
-// useAnalyticsDashboard, useBarOwnerAnalytics, or analyticsService.
+// Counts events on tournaments where director_id matches, via the
+// get_tournament_event_counts aggregate (analyticsService) — no raw app_events rows.
+// Does NOT import from or affect useAnalyticsDashboard or useBarOwnerAnalytics.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { analyticsService } from "../models/services/analytics.service";
 import { supabase } from "../lib/supabase";
 import { useAuthContext } from "../providers/AuthProvider";
 
@@ -106,98 +107,16 @@ function statForPeriod(stats: EventStats, period: TimePeriodValue): number {
 }
 
 // ─── Scoped query helpers ────────────────────────────────────────────────────
+// Counts come from get_tournament_event_counts via analyticsService (no raw
+// app_events rows); the server only counts tournaments this user may see.
 
-async function getScopedEventStats(
-  eventType: string,
-  tournamentIds: number[],
-): Promise<EventStats> {
-  if (tournamentIds.length === 0) return EMPTY_STATS;
-
-  const now = new Date();
-
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).toISOString();
-
-  const startOfWeek = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() - now.getDay(),
-  ).toISOString();
-
-  const startOfMonth = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    1,
-  ).toISOString();
-
-  const buildQuery = (since?: string) => {
-    let q = supabase
-      .from("app_events")
-      .select("*", { count: "exact", head: true })
-      .eq("event_type", eventType)
-      .in("entity_id", tournamentIds);
-
-    if (since) q = q.gte("created_at", since);
-    return q;
-  };
-
-  const [total, today, thisWeek, thisMonth] = await Promise.all([
-    buildQuery(),
-    buildQuery(startOfToday),
-    buildQuery(startOfWeek),
-    buildQuery(startOfMonth),
-  ]);
-
-  return {
-    total: total.count || 0,
-    today: today.count || 0,
-    thisWeek: thisWeek.count || 0,
-    thisMonth: thisMonth.count || 0,
-  };
-}
-
-async function getScopedTopEntities(
-  eventType: string,
-  tournamentIds: number[],
-  since?: string,
-  limit: number = 10,
-): Promise<{ entity_id: number; count: number }[]> {
-  if (tournamentIds.length === 0) return [];
-
-  let query = supabase
-    .from("app_events")
-    .select("entity_id")
-    .eq("event_type", eventType)
-    .in("entity_id", tournamentIds)
-    .not("entity_id", "is", null);
-
-  if (since) query = query.gte("created_at", since);
-
-  const { data, error } = await query;
-
-  if (error || !data) {
-    console.error(
-      "[DirectorAnalytics] getScopedTopEntities error:",
-      error?.message,
-    );
-    return [];
-  }
-
-  const counts: Record<number, number> = {};
-  for (const row of data) {
-    if (row.entity_id != null) {
-      counts[row.entity_id] = (counts[row.entity_id] || 0) + 1;
-    }
-  }
-
-  return Object.entries(counts)
-    .map(([id, count]) => ({ entity_id: Number(id), count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
-}
+const SCOPED_EVENT_TYPES = [
+  "tournament_viewed",
+  "directions_clicked",
+  "venue_contact_clicked",
+  "tournament_favorited",
+  "tournament_shared",
+];
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
@@ -263,28 +182,21 @@ export function useDirectorAnalytics() {
 
       const since = getSinceDate(timePeriod.value);
 
-      const [
-        tournamentViews,
-        directionsClicked,
-        venueContactClicked,
-        tournamentFavorited,
-        tournamentShared,
-        topViewedRaw,
-        topFavoritedRaw,
-      ] = await Promise.all([
-        getScopedEventStats("tournament_viewed", tournamentIds),
-        getScopedEventStats("directions_clicked", tournamentIds),
-        getScopedEventStats("venue_contact_clicked", tournamentIds),
-        getScopedEventStats("tournament_favorited", tournamentIds),
-        getScopedEventStats("tournament_shared", tournamentIds),
-        getScopedTopEntities("tournament_viewed", tournamentIds, since, 10),
-        getScopedTopEntities(
+      const [stats, topViewedRaw, topFavoritedRaw] = await Promise.all([
+        analyticsService.getScopedEventStats(SCOPED_EVENT_TYPES, tournamentIds),
+        analyticsService.getScopedTopEntities("tournament_viewed", tournamentIds, since, 10),
+        analyticsService.getScopedTopEntities(
           "tournament_favorited",
           tournamentIds,
           since,
           10,
         ),
       ]);
+      const tournamentViews = stats["tournament_viewed"];
+      const directionsClicked = stats["directions_clicked"];
+      const venueContactClicked = stats["venue_contact_clicked"];
+      const tournamentFavorited = stats["tournament_favorited"];
+      const tournamentShared = stats["tournament_shared"];
 
       const [topViewedTournaments, topFavoritedTournaments] =
         await Promise.all([

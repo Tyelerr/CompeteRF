@@ -80,7 +80,6 @@ export default function AnalyticsScreen() {
         <MiniStatCard icon={"\uD83D\uDCDE"} value={vm.summaryStats.totalCalls} label="Venue Calls" />
         <MiniStatCard icon={"\u2764\uFE0F"} value={vm.summaryStats.totalFavorites} label="Favorites" />
         <MiniStatCard icon={"\uD83D\uDCE4"} value={vm.summaryStats.totalShares} label="Shares" />
-        <MiniStatCard icon={"\uD83D\uDD0D"} value={vm.summaryStats.totalSearches} label="Searches" />
         <MiniStatCard icon={"\uD83C\uDF81"} value={vm.summaryStats.totalGiveawayViews} label="Giveaway Views" />
         <MiniStatCard icon={"\uD83D\uDCF1"} value={vm.summaryStats.totalAppOpens} label="App Opens" />
         <MiniStatCard icon={"\uD83D\uDCC8"} value={vm.summaryStats.totalEvents} label="Total Events" highlight />

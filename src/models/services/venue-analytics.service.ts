@@ -5,6 +5,7 @@
 // venue rollups, top lists) happens in the viewmodel.
 
 import { supabase } from "../../lib/supabase";
+import { analyticsService } from "./analytics.service";
 import { entryPoolTotal } from "../../utils/prize-pool";
 import {
   AnalyticsPeriod,
@@ -179,25 +180,25 @@ export const venueAnalyticsService = {
     sinceISO: string | null,
   ): Promise<DiscoveryCounts> {
     if (!tournamentIds.length) return EMPTY_DISCOVERY;
-    const count = async (eventType: string): Promise<number> => {
-      let q = supabase
-        .from("app_events")
-        .select("*", { count: "exact", head: true })
-        .eq("event_type", eventType)
-        .in("entity_id", tournamentIds);
-      if (sinceISO) q = q.gte("created_at", sinceISO);
-      const { count: c } = await q;
-      return c || 0;
+    // Owners can't read app_events rows — counts come from the aggregate RPC,
+    // which only counts tournaments at venues this user actively owns.
+    const counts = await analyticsService.countTournamentEventsByType(
+      [
+        "tournament_viewed",
+        "directions_clicked",
+        "venue_contact_clicked",
+        "tournament_favorited",
+        "tournament_shared",
+      ],
+      tournamentIds,
+      sinceISO,
+    );
+    return {
+      views: counts["tournament_viewed"] || 0,
+      directions: counts["directions_clicked"] || 0,
+      calls: counts["venue_contact_clicked"] || 0,
+      favorites: counts["tournament_favorited"] || 0,
+      shares: counts["tournament_shared"] || 0,
     };
-    const [views, directions, calls, favorites, shares, giveawayViews] =
-      await Promise.all([
-        count("tournament_viewed"),
-        count("directions_clicked"),
-        count("venue_contact_clicked"),
-        count("tournament_favorited"),
-        count("tournament_shared"),
-        count("giveaway_viewed"),
-      ]);
-    return { views, directions, calls, favorites, shares, giveawayViews };
   },
 };

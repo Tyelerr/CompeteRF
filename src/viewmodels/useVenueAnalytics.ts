@@ -101,7 +101,6 @@ export function useVenueAnalytics() {
         { label: "Calls", value: discovery.calls, color: "#FF9800" },
         { label: "Favorites", value: discovery.favorites, color: "#E91E63" },
         { label: "Shares", value: discovery.shares, color: "#9C27B0" },
-        { label: "Giveaways", value: discovery.giveawayViews, color: "#FF5722" },
       ].filter((d) => d.value > 0),
     [discovery],
   );

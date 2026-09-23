@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { analyticsService } from "../models/services/analytics.service";
 import {
   DashboardStats,
   EventTypeStats,
@@ -100,61 +101,20 @@ export const useTDDashboard = () => {
 
     const tournamentIds = myTournaments?.map((t: any) => t.id) || [];
 
-    let viewsCount = 0;
-    let favoritesCount = 0;
-
-    if (tournamentIds.length > 0) {
-      // Get total views from app_events
-      let viewsQuery = supabase
-        .from("app_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_type", "tournament_viewed")
-        .in("entity_id", tournamentIds);
-
-      if (dateFilter) {
-        viewsQuery = viewsQuery.gte("created_at", dateFilter);
-      }
-
-      const { count: vc } = await viewsQuery;
-      viewsCount = vc || 0;
-
-      // Get total favorites from app_events
-      let favoritesQuery = supabase
-        .from("app_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_type", "tournament_favorited")
-        .in("entity_id", tournamentIds);
-
-      if (dateFilter) {
-        favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
-      }
-
-      const { count: fc } = await favoritesQuery;
-      favoritesCount = fc || 0;
-    }
-
-    // Today counts
+    // Views / favorites via the aggregate RPC — directors and owners can't read
+    // app_events rows; the server only counts tournaments this user may see.
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayIso = todayStart.toISOString();
-    let todayViews = 0;
-    let todayFavorites = 0;
-    if (tournamentIds.length > 0) {
-      const { count: tv } = await supabase
-        .from("app_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_type", "tournament_viewed")
-        .in("entity_id", tournamentIds)
-        .gte("created_at", todayIso);
-      todayViews = tv || 0;
-      const { count: tf } = await supabase
-        .from("app_events")
-        .select("id", { count: "exact", head: true })
-        .eq("event_type", "tournament_favorited")
-        .in("entity_id", tournamentIds)
-        .gte("created_at", todayIso);
-      todayFavorites = tf || 0;
-    }
+    const counted = ["tournament_viewed", "tournament_favorited"];
+    const [periodCounts, todayCounts] = await Promise.all([
+      analyticsService.countTournamentEventsByType(counted, tournamentIds, dateFilter),
+      analyticsService.countTournamentEventsByType(counted, tournamentIds, todayIso),
+    ]);
+    const viewsCount = periodCounts["tournament_viewed"] || 0;
+    const favoritesCount = periodCounts["tournament_favorited"] || 0;
+    const todayViews = todayCounts["tournament_viewed"] || 0;
+    const todayFavorites = todayCounts["tournament_favorited"] || 0;
     setStats({
       myTournaments: tournamentCount || 0,
       activeEvents: activeCount || 0,
@@ -213,15 +173,10 @@ export const useTDDashboard = () => {
         const venueTournamentIds =
           venueTournaments?.map((t: any) => t.id) || [];
 
-        let favoritesCount = 0;
-        if (venueTournamentIds.length > 0) {
-          const { count: fc } = await supabase
-            .from("app_events")
-            .select("id", { count: "exact", head: true })
-            .eq("event_type", "tournament_favorited")
-            .in("entity_id", venueTournamentIds);
-          favoritesCount = fc || 0;
-        }
+        const favoritesCount = await analyticsService.countTournamentEvents(
+          "tournament_favorited",
+          venueTournamentIds,
+        );
 
         return {
           id: venue.id,
@@ -271,22 +226,20 @@ export const useTDDashboard = () => {
       return;
     }
 
-    // Get stats for each tournament
+    // Lifetime favorites / views per tournament — one aggregate call for all rows.
+    const eventCounts = await analyticsService.getTournamentEventCounts(
+      tournamentsData.map((t: any) => t.id),
+      ["tournament_favorited", "tournament_viewed"],
+    );
+    const countFor = (id: number, eventType: string) =>
+      eventCounts
+        .filter((c) => c.entity_id === id && c.event_type === eventType)
+        .reduce((sum, c) => sum + Number(c.event_count), 0);
+
     const tournamentsWithStats: TournamentWithStats[] = await Promise.all(
       tournamentsData.map(async (t: any) => {
-        // Favorites from app_events
-        const { count: favoritesCount } = await supabase
-          .from("app_events")
-          .select("id", { count: "exact", head: true })
-          .eq("event_type", "tournament_favorited")
-          .eq("entity_id", t.id);
-
-        // Views from app_events
-        const { count: viewsCount } = await supabase
-          .from("app_events")
-          .select("id", { count: "exact", head: true })
-          .eq("event_type", "tournament_viewed")
-          .eq("entity_id", t.id);
+        const favoritesCount = countFor(t.id, "tournament_favorited");
+        const viewsCount = countFor(t.id, "tournament_viewed");
 
         return {
           id: t.id,
