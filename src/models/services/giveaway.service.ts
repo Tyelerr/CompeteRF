@@ -16,6 +16,30 @@ export const giveawayService = {
   // ============================================
 
   /**
+   * Aggregate entry counts via the get_giveaway_entry_counts RPC. Entrant rows are not
+   * publicly readable, so counts must come from here rather than COUNTing giveaway_entries.
+   * Omit ids to get every giveaway visible to the caller. Missing ids count as 0.
+   */
+  async getEntryCounts(giveawayIds?: number[]): Promise<Map<number, number>> {
+    const counts = new Map<number, number>();
+    if (giveawayIds && giveawayIds.length === 0) return counts;
+
+    const { data, error } = await supabase.rpc("get_giveaway_entry_counts", {
+      p_giveaway_ids: giveawayIds ?? null,
+    });
+
+    if (error) {
+      console.error("Error fetching giveaway entry counts:", error);
+      return counts;
+    }
+
+    for (const row of (data || []) as { giveaway_id: number; entry_count: number }[]) {
+      counts.set(row.giveaway_id, Number(row.entry_count) || 0);
+    }
+    return counts;
+  },
+
+  /**
    * Get only truly active giveaways (not expired).
    * Used for entry eligibility checks.
    */
@@ -34,17 +58,8 @@ export const giveawayService = {
       throw error;
     }
 
-    const giveawaysWithCounts = await Promise.all(
-      (data || []).map(async (g) => {
-        const { count } = await supabase
-          .from("giveaway_entries")
-          .select("*", { count: "exact", head: true })
-          .eq("giveaway_id", g.id);
-        return { ...g, entry_count: count || 0 };
-      }),
-    );
-
-    return giveawaysWithCounts;
+    const counts = await giveawayService.getEntryCounts((data || []).map((g) => g.id));
+    return (data || []).map((g) => ({ ...g, entry_count: counts.get(g.id) ?? 0 }));
   },
 
   /**
@@ -78,32 +93,25 @@ export const giveawayService = {
       ...(endedResult.data || []),
     ];
 
-    const giveawaysWithCounts = await Promise.all(
-      allData.map(async (g) => {
-        const { count } = await supabase
-          .from("giveaway_entries")
-          .select("*", { count: "exact", head: true })
-          .eq("giveaway_id", g.id);
+    const counts = await giveawayService.getEntryCounts(allData.map((g) => g.id));
 
-        // Parse "Tyler Brown" -> "Tyler B." for public display.
-        // Only ended/awarded rows carry the winner join; active rows have no winner field.
-        const rawName: string | null = (g as any).winner?.name ?? null;
-        let winner_display_name: string | null = null;
-        if (rawName) {
-          const parts = rawName.trim().split(/\s+/);
-          winner_display_name =
-            parts.length >= 2
-              ? `${parts[0]} ${parts[parts.length - 1][0]}.`
-              : parts[0];
-        }
+    return allData.map((g) => {
+      // Parse "Tyler Brown" -> "Tyler B." for public display.
+      // Only ended/awarded rows carry the winner join; active rows have no winner field.
+      const rawName: string | null = (g as any).winner?.name ?? null;
+      let winner_display_name: string | null = null;
+      if (rawName) {
+        const parts = rawName.trim().split(/\s+/);
+        winner_display_name =
+          parts.length >= 2
+            ? `${parts[0]} ${parts[parts.length - 1][0]}.`
+            : parts[0];
+      }
 
-        // Strip the raw join object before returning so the shape matches Giveaway.
-        const { winner: _winner, ...rest } = g as any;
-        return { ...rest, entry_count: count || 0, winner_display_name };
-      }),
-    );
-
-    return giveawaysWithCounts;
+      // Strip the raw join object before returning so the shape matches Giveaway.
+      const { winner: _winner, ...rest } = g as any;
+      return { ...rest, entry_count: counts.get(g.id) ?? 0, winner_display_name };
+    });
   },
 
   async getGiveawayById(id: number): Promise<Giveaway | null> {
@@ -118,12 +126,9 @@ export const giveawayService = {
       return null;
     }
 
-    const { count } = await supabase
-      .from("giveaway_entries")
-      .select("*", { count: "exact", head: true })
-      .eq("giveaway_id", id);
+    const counts = await giveawayService.getEntryCounts([id]);
 
-    return { ...data, entry_count: count || 0 };
+    return { ...data, entry_count: counts.get(id) ?? 0 };
   },
 
   async getGiveawayStats(): Promise<GiveawayStats> {
@@ -268,12 +273,9 @@ export const giveawayService = {
       .single();
 
     if (giveaway?.max_entries) {
-      const { count } = await supabase
-        .from("giveaway_entries")
-        .select("*", { count: "exact", head: true })
-        .eq("giveaway_id", giveawayId);
+      const count = (await giveawayService.getEntryCounts([giveawayId])).get(giveawayId) ?? 0;
 
-      if (count && count >= giveaway.max_entries) {
+      if (count >= giveaway.max_entries) {
         await supabase
           .from("giveaways")
           .update({ status: "ended", ended_at: new Date().toISOString() })
@@ -291,17 +293,8 @@ export const giveawayService = {
   },
 
   async getEntryCount(giveawayId: number): Promise<number> {
-    const { count, error } = await supabase
-      .from("giveaway_entries")
-      .select("*", { count: "exact", head: true })
-      .eq("giveaway_id", giveawayId);
-
-    if (error) {
-      console.error("Error fetching entry count:", error);
-      return 0;
-    }
-
-    return count || 0;
+    const counts = await giveawayService.getEntryCounts([giveawayId]);
+    return counts.get(giveawayId) ?? 0;
   },
 
   // ============================================
