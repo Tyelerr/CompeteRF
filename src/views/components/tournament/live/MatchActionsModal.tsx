@@ -26,6 +26,7 @@ import {
 } from "../../../../utils/match.utils";
 import { MatchLiveState } from "../../../../models/types/tournament-settings.types";
 import { clearTableConfirm } from "../../../../utils/clear-table";
+import { MatchActionKey, scheduledMatchActions } from "../../../../utils/match-actions";
 import { TournamentTable } from "../../../../models/types/tournament-table.types";
 import { Dropdown } from "../../common/dropdown";
 import { useMatchTimer } from "./useMatchTimer";
@@ -229,28 +230,28 @@ export const MatchActionsModal = ({
       onPress: () => apply({ status: "completed", winner: null, result: "withdraw", completedAt: now() }),
     });
   } else if (m.status === "scheduled") {
-    items.push({
-      label: "Start Match",
-      onPress: () => {
-        setTableMode("start");
-        setStep("table");
-      },
-    });
-    items.push({ label: "Assign Table", onPress: () => { setTableMode("assign"); setStep("table"); } });
-    // Clear Table: ONLY removes the table (never starts/completes/scores). Offered just for a
-    // match that currently has one; the match goes straight back to the Ready queue.
-    if (m.tableId != null && onClearTable)
-      items.push({
+    // Not started — a Ready queue row (no table) or a match parked on one. The legal set lives
+    // in src/utils/match-actions.ts; this maps each to the existing step/handler (no second
+    // implementation of Forfeit / Withdraw / table actions).
+    const byKey: Record<MatchActionKey, Item> = {
+      start: { label: "Start Match", onPress: () => { setTableMode("start"); setStep("table"); } },
+      assignTable: { label: "Assign Table", onPress: () => { setTableMode("assign"); setStep("table"); } },
+      changeTable: { label: "Change Table", onPress: () => { setTableMode("assign"); setStep("table"); } },
+      // Clear Table ONLY removes the table (never starts/completes/scores); the match returns
+      // to the Ready queue.
+      clearTable: {
         label: "Clear Table",
         onPress: () =>
           Alert.alert("Clear Table?", clearTableConfirm(tableName(m.tableId), autoAssignEnabled === true), [
             { text: "Cancel", style: "cancel" },
-            { text: "Clear Table", onPress: async () => { await onClearTable(m.id); onClose(); } },
+            { text: "Clear Table", onPress: async () => { await onClearTable!(m.id); onClose(); } },
           ]),
-      });
-    items.push({ label: "Set Time Limit", onPress: () => setStep("timer") });
-    items.push({ label: "Forfeit", danger: true, onPress: () => setStep("forfeit") });
-    items.push({ label: "Withdraw", danger: true, onPress: () => setStep("withdraw") });
+      },
+      forfeit: { label: "Forfeit", danger: true, onPress: () => setStep("forfeit") },
+      withdraw: { label: "Withdraw", danger: true, onPress: () => setStep("withdraw") },
+    };
+    for (const key of scheduledMatchActions({ tableId: m.tableId, canClearTable: !!onClearTable }))
+      items.push(byKey[key]);
   } else if (m.status === "in_progress") {
     items.push({ label: "End Match", onPress: () => setStep("winner") });
     items.push({ label: "Edit Score", onPress: () => setStep("score") });

@@ -44,6 +44,10 @@ interface ActionMenuProps {
   disabled?: boolean;
   // Compact icon-only ⋯ trigger (desktop table rows) instead of a labeled button.
   compact?: boolean;
+  // Compact trigger icon (default "ellipsis-horizontal") + its screen-reader name, so two
+  // compact menus in one row stay tellable apart (e.g. match order vs match actions).
+  compactIcon?: keyof typeof Ionicons.glyphMap;
+  accessibilityLabel?: string;
   // Optional overrides so a caller can size the labeled trigger to match a
   // neighboring button (e.g. the Queue row's Start/Manage), forming one button group.
   triggerStyle?: StyleProp<ViewStyle>;
@@ -58,6 +62,8 @@ export const ActionMenu = ({
   label = "Manage",
   disabled,
   compact,
+  compactIcon = "ellipsis-horizontal",
+  accessibilityLabel,
   triggerStyle,
   triggerTextStyle,
 }: ActionMenuProps) => {
@@ -104,9 +110,11 @@ export const ActionMenu = ({
         onPress={openMenu}
         disabled={disabled}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? (compact ? "More actions" : label)}
       >
         {compact ? (
-          <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
+          <Ionicons name={compactIcon} size={webMs(18)} color={COLORS.textSecondary} />
         ) : (
           <>
             <Text allowFontScaling={false} style={[styles.triggerText, triggerTextStyle]}>

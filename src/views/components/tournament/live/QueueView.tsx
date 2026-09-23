@@ -10,6 +10,7 @@
 // unchanged orderQueue result). Assigning a table PARKS the match on it; the TD
 // then starts it from On Tables (or uses Assign & Start to do both).
 
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -504,10 +505,13 @@ export const QueueView = ({
         {assign || null}
         {arrow("up", can.up)}
         {arrow("down", can.down)}
-        {/* Always openable so a fully-pinned row (e.g. the conditional reset) can
-            still explain itself — each disabled item shows its reason (works on native). */}
+        {/* QUEUE ORDER (⇅) — Top/Bottom beside the arrows. Always openable so a fully-pinned
+            row (e.g. the conditional reset) can still explain itself — each disabled item shows
+            its reason (works on native). Separate from the match actions below. */}
         <ActionMenu
           compact
+          compactIcon="swap-vertical"
+          accessibilityLabel="Match order"
           items={[
             { label: "Move to Top", tone: "primary", disabled: !can.top, hint: why("top"), onPress: () => move(pm.matchId, "top") },
             { label: "Move Up", tone: "primary", disabled: !can.up, hint: why("up"), onPress: () => move(pm.matchId, "up") },
@@ -518,6 +522,20 @@ export const QueueView = ({
               : []),
           ]}
         />
+        {/* MATCH ACTIONS (⋯) — the SAME lifecycle-aware modal the On Tables rows use, so a
+            queued match keeps its normal controls (Assign Table / Forfeit / Withdraw / details).
+            Never disabled by the queue-order rules above. */}
+        {onManageMatch && (
+          <TouchableOpacity
+            style={styles.rowIconBtn}
+            onPress={() => onManageMatch(pm.match, "menu")}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Match actions"
+          >
+            <Ionicons name="ellipsis-horizontal" size={webMs(18)} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
       </>
     );
     return (
@@ -1118,6 +1136,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   reorderOff: { opacity: 0.3 },
+  // ⋯ trigger for the shared Match Actions modal (same size as the reorder arrows).
+  rowIconBtn: {
+    width: webSc(28),
+    height: webSc(28),
+    borderRadius: webSc(RADIUS.sm),
+    alignItems: "center",
+    justifyContent: "center",
+  },
   reorderText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.primary, fontWeight: "700" },
   noTable: {
     fontSize: webMs(FONT_SIZES.xs),
