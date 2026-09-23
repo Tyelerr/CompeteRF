@@ -52,19 +52,40 @@ export const HomeMatchReadyCard = () => {
         {c.raceText}
       </Text>
 
+      {actions.checkedIn && !actions.bothCheckedIn && (
+        <Text allowFontScaling={false} style={styles.waiting} numberOfLines={1}>
+          ✓ Checked In · waiting for your opponent…
+        </Text>
+      )}
       <View style={styles.row}>
-        <TouchableOpacity
-          style={[styles.primary, (actions.busy || actions.checkedIn) && styles.disabled]}
-          disabled={actions.busy || actions.checkedIn}
-          onPress={() =>
-            actions.checkIn().catch((e: Error) => Alert.alert("Check In", `Could not check in (${e.message}).`))
-          }
-          activeOpacity={0.85}
-        >
-          <Text allowFontScaling={false} style={styles.primaryText}>
-            {actions.checkedIn ? "✓ Checked In" : "Check In"}
-          </Text>
-        </TouchableOpacity>
+        {/* Once both sides are present, either player may start the match. */}
+        {actions.checkedIn && actions.canStart ? (
+          <TouchableOpacity
+            style={[styles.primary, actions.busy && styles.disabled]}
+            disabled={actions.busy}
+            onPress={() =>
+              actions.startMatch().catch((e: Error) => Alert.alert("Start Match", `Could not start (${e.message}).`))
+            }
+            activeOpacity={0.85}
+          >
+            <Text allowFontScaling={false} style={styles.primaryText}>
+              Start Match
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.primary, (actions.busy || actions.checkedIn) && styles.disabled]}
+            disabled={actions.busy || actions.checkedIn}
+            onPress={() =>
+              actions.checkIn().catch((e: Error) => Alert.alert("Check In", `Could not check in (${e.message}).`))
+            }
+            activeOpacity={0.85}
+          >
+            <Text allowFontScaling={false} style={styles.primaryText}>
+              {actions.checkedIn ? "✓ Checked In" : "Check In"}
+            </Text>
+          </TouchableOpacity>
+        )}
         <ActionMenu
           label="Options"
           triggerStyle={styles.optionsTrigger}
@@ -87,8 +108,14 @@ export const HomeMatchReadyCard = () => {
         visible={open}
         context={actions.context}
         checkedIn={actions.checkedIn}
+        bothCheckedIn={actions.bothCheckedIn}
+        canStart={actions.canStart}
+        onStartMatch={() =>
+          actions.startMatch().catch((e: Error) => Alert.alert("Start Match", `Could not start (${e.message}).`))
+        }
         issueReason={actions.issueReason as MatchIssueReason | null}
         busy={actions.busy}
+        timerAt={actions.timerAt}
         onCheckIn={() =>
           actions.checkIn().catch((e: Error) => Alert.alert("Check In", `Could not check in (${e.message}).`))
         }
@@ -120,6 +147,7 @@ const styles = StyleSheet.create({
   tourney: { flex: 1, textAlign: "right", fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700" },
   table: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   meta: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  waiting: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700", marginTop: wxSc(SPACING.xs) },
   row: { flexDirection: "row", alignItems: "center", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm) },
   primary: {
     flex: 1,

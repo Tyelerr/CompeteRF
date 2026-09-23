@@ -10,11 +10,16 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 import { MATCH_ISSUE_REASONS, MatchIssueReason, issueReasonLabel } from "../../../models/types/match-checkin.types";
 import { PlayerMatchContext } from "../../../viewmodels/hooks/use.player.match.actions";
+import { useLiveNow } from "../../../viewmodels/hooks/use.live.now";
 
 export const MatchCheckInModal = ({
   visible,
   context,
   checkedIn,
+  bothCheckedIn,
+  canStart,
+  onStartMatch,
+  timerAt,
   issueReason,
   busy,
   notice,
@@ -25,6 +30,13 @@ export const MatchCheckInModal = ({
   visible: boolean;
   context: PlayerMatchContext | null;
   checkedIn: boolean;
+  // Both sides present (own tap or a TD's manual mark) → Start Match is offered.
+  bothCheckedIn?: boolean;
+  canStart?: boolean;
+  onStartMatch?: () => Promise<void> | void;
+  // Live timer for this assignment; the modal ticks it itself while open, so the screen behind it
+  // never re-renders every second.
+  timerAt?: (now: number) => { label: string };
   issueReason: MatchIssueReason | null;
   busy: boolean;
   // e.g. "This match is no longer active." after a stale notification tap.
@@ -37,6 +49,9 @@ export const MatchCheckInModal = ({
   const [reason, setReason] = useState<MatchIssueReason>("running_late");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  // One shared ticker, only while this modal is open — the screen behind it never re-renders.
+  const now = useLiveNow(visible && !!timerAt);
+  const timerLabel = timerAt ? timerAt(now).label : null;
 
   const close = () => {
     setStep("match");
@@ -74,9 +89,19 @@ export const MatchCheckInModal = ({
                   </Text>
                 </>
               )}
+              {!!timerLabel && (
+                <Text allowFontScaling={false} style={styles.timer}>
+                  {timerLabel}
+                </Text>
+              )}
               {checkedIn && (
                 <Text allowFontScaling={false} style={styles.checkedIn}>
-                  {"✓ You're checked in"}
+                  {bothCheckedIn ? "✓ Both players checked in" : "✓ You're checked in"}
+                </Text>
+              )}
+              {checkedIn && !bothCheckedIn && (
+                <Text allowFontScaling={false} style={styles.waiting}>
+                  Waiting for your opponent to check in…
                 </Text>
               )}
               {/* Independent of the ✓ above: contacting the TD never clears a check-in. */}
@@ -86,10 +111,26 @@ export const MatchCheckInModal = ({
                 </Text>
               )}
 
-              {!!context && (
+              {/* Start Match appears once both sides are present — either player may press it. */}
+              {!!context && canStart && checkedIn && (
                 <TouchableOpacity
-                  style={[styles.primary, (busy || checkedIn) && styles.disabled]}
-                  disabled={busy || checkedIn}
+                  style={[styles.primary, busy && styles.disabled]}
+                  disabled={busy}
+                  onPress={async () => {
+                    await onStartMatch?.();
+                    close();
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text allowFontScaling={false} style={styles.primaryText}>
+                    Start Match
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {!!context && !checkedIn && (
+                <TouchableOpacity
+                  style={[styles.primary, busy && styles.disabled]}
+                  disabled={busy}
                   onPress={async () => {
                     await onCheckIn();
                     close();
@@ -100,7 +141,7 @@ export const MatchCheckInModal = ({
                     <ActivityIndicator color={COLORS.white} />
                   ) : (
                     <Text allowFontScaling={false} style={styles.primaryText}>
-                      {checkedIn ? "Checked In" : "Check In"}
+                      Check In
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -204,6 +245,8 @@ const styles = StyleSheet.create({
   vs: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.text, fontWeight: "700", textAlign: "center" },
   race: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, textAlign: "center" },
   checkedIn: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.success, fontWeight: "800", textAlign: "center", marginTop: webSc(SPACING.xs) },
+  waiting: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, textAlign: "center" },
+  timer: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700", textAlign: "center" },
   issue: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.warning, fontWeight: "700", textAlign: "center" },
   primary: {
     marginTop: webSc(SPACING.sm),

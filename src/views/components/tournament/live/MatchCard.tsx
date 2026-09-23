@@ -34,6 +34,8 @@ export const MatchCard = ({
   now,
   glyphs,
   onViewMessage,
+  timer,
+  onTimerPress,
 }: {
   match: LiveMatch;
   onAction?: (m: LiveMatch, step: MatchActionStep) => void;
@@ -58,6 +60,10 @@ export const MatchCard = ({
   } | null;
   // Opens the Player Message modal for that side (only called when its issue flag is set).
   onViewMessage?: (slot: 1 | 2) => void;
+  // Check-in timer for this assignment: "3:42" · "⚠ Not Checked In · 6:12" · "🔴 Forfeit Review
+  // · 10:00", plus its phase for colour. Tapping a warn/review state opens the TD's actions.
+  timer?: { label: string; phase: "waiting" | "warn" | "review"; extendedMinutes?: number } | null;
+  onTimerPress?: () => void;
 }) => {
   const m = match;
   const running = m.status === "in_progress";
@@ -163,6 +169,29 @@ export const MatchCard = ({
           compact={compact}
         />
       </View>
+      {/* Check-in timer: one compact line, only while the match is assigned and unstarted. */}
+      {!!timer?.label && (
+        <TouchableOpacity
+          disabled={!onTimerPress || timer.phase === "waiting"}
+          onPress={onTimerPress}
+          activeOpacity={0.7}
+          accessibilityRole={onTimerPress && timer.phase !== "waiting" ? "button" : undefined}
+        >
+          <Text
+            allowFontScaling={false}
+            style={[
+              styles.checkTimer,
+              timer.phase === "warn" && styles.checkTimerWarn,
+              timer.phase === "review" && styles.checkTimerReview,
+            ]}
+            numberOfLines={1}
+          >
+            {timer.label}
+            {timer.extendedMinutes ? `  ·  Extended +${timer.extendedMinutes} min` : ""}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Body status line — descriptive only (numeric elapsed lives top-right).
           Rendered only when there's something to say: bye outcome, "Not started",
           or an abnormal (forfeit/withdraw) result. */}
@@ -405,6 +434,9 @@ const styles = StyleSheet.create({
   },
   checkGlyph: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textMuted, marginHorizontal: webSc(4) },
   checkGlyphOn: { color: COLORS.success },
+  checkTimer: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700", marginTop: webSc(2) },
+  checkTimerWarn: { color: COLORS.warning },
+  checkTimerReview: { color: COLORS.error, fontWeight: "800" },
   // Unresolved player message — red, compact, on the same line as the name.
   viewMessage: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.error, marginRight: webSc(4) },
   playerRow: {

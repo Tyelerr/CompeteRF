@@ -137,7 +137,9 @@ import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.setti
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { buildClearTableOps } from "../../../../src/utils/clear-table";
-import { byMatchId, glyphFor, openIssueFor } from "../../../../src/utils/match-player-status";
+import { byMatchId, glyphFor, openIssueFor, statusForAssignment } from "../../../../src/utils/match-player-status";
+import { CHECK_IN_DEFAULTS, CHECK_IN_LIMITS, computeCheckInTimer, readCheckInSettings, validateCheckInSettings } from "../../../../src/utils/check-in-timer";
+import { MatchReviewModal, MatchReviewView } from "../../../../src/views/components/tournament/live/MatchReviewModal";
 import { matchCheckInService } from "../../../../src/models/services/match-checkin.service";
 import { buildPlayerDmLink } from "../../../../src/utils/player-dm-link";
 import { MatchIssueModal, MatchIssueView } from "../../../../src/views/components/tournament/live/MatchIssueModal";
@@ -538,6 +540,10 @@ interface SettingsForm {
   // real race mode — the save omits raceMode entirely while it is "".
   raceMode: RaceMode | "";
   // Fixed race (numbers — driven by steppers)
+  // Match check-in settings (live_settings.checkIn).
+  checkInRequired: boolean;
+  checkInWarnMinutes: number;
+  checkInReviewMinutes: number;
   raceWinners: number; // also the single-elim "Match Race To"
   raceLosers: number;
   raceFinals: number;
@@ -644,6 +650,11 @@ const toForm = (t: Tournament): SettingsForm => {
     recurrenceType: t.recurrence_type ?? "",
     // Race is configured fresh in the hub — do NOT inherit the free-text race
     // entered on the submit page. Only a previously-saved live setting pre-fills.
+    // Match check-in (live_settings.checkIn): whether players must check in before a PLAYER may
+    // start the match, and when the amber warning / Forfeit Review states appear. No automation.
+    checkInRequired: ls.checkIn?.required === true,
+    checkInWarnMinutes: ls.checkIn?.warnAfterMinutes ?? CHECK_IN_DEFAULTS.warnAfterMinutes,
+    checkInReviewMinutes: ls.checkIn?.forfeitReviewAfterMinutes ?? CHECK_IN_DEFAULTS.forfeitReviewAfterMinutes,
     raceWinners: ls.fixedRaceWinners ?? 5,
     raceLosers: ls.fixedRaceLosers ?? 4,
     raceFinals: ls.fixedRaceFinals ?? 7,
@@ -823,6 +834,11 @@ const toPatch = (f: SettingsForm): Partial<Tournament> => {
     // JSON serialization omit undefined) — an unrelated Settings save therefore never
     // silently persists "fixed". Existing saved modes always round-trip unchanged.
     raceMode: f.raceMode || undefined,
+    checkIn: {
+      required: f.checkInRequired,
+      warnAfterMinutes: f.checkInWarnMinutes,
+      forfeitReviewAfterMinutes: Math.max(f.checkInReviewMinutes, f.checkInWarnMinutes),
+    },
     fixedRaceWinners: f.raceWinners,
     fixedRaceLosers: hasLosers ? f.raceLosers : null,
     fixedRaceFinals: f.raceFinals,
@@ -2563,7 +2579,7 @@ const TabPlaceholder = ({
 // ── Screen ───────────────────────────────────────────────────────────────────
 export default function ManageTournamentScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; name?: string; issueMatch?: string; issueReg?: string }>();
+  const params = useLocalSearchParams<{ id: string; name?: string; issueMatch?: string; issueReg?: string; reviewMatch?: string }>();
   const tournamentId = Number(params.id);
   const paramName = params.name || "";
   const insets = useSafeAreaInsets();
@@ -4180,7 +4196,7 @@ export default function ManageTournamentScreen() {
       }
     } else if (patch.status === undefined && "startedAt" in patch && prev?.status === "in_progress") {
       // Elapsed-timer correction/reset (startedAt-only patch on a live match).
-      const nowT = Date.now();
+      const nowT = nowMs();
       const prevEl = prev?.startedAt ? Math.max(0, (nowT - Date.parse(prev.startedAt)) / 1000) : 0;
       const newEl = patch.startedAt ? Math.max(0, (nowT - Date.parse(patch.startedAt)) / 1000) : 0;
       emit("match_timer_adjusted", {
@@ -4393,6 +4409,79 @@ export default function ManageTournamentScreen() {
     },
     [statusesByMatch],
   );
+  // ── Check-in timer (server timestamps only; this screen just renders them) ───────────────
+  const checkInSettings = useMemo(() => readCheckInSettings(hub.tournament?.live_settings ?? null), [hub.tournament?.live_settings]);
+  const extensionByMatch = useMemo(() => {
+    const out: Record<string, { minutes: number; assignedAt: string }> = {};
+    for (const a of hub.assignmentStatuses) out[a.match_id] = { minutes: a.extended_minutes, assignedAt: a.assigned_at };
+    return out;
+  }, [hub.assignmentStatuses]);
+  const presenceOf = useCallback(
+    (m: LiveMatch) => {
+      const rows = statusesByMatch[m.id];
+      const args = { matchId: m.id, assignedAt: m.assignedAt, status: m.status };
+      const p1 = !!statusForAssignment(rows, { ...args, registrationId: m.p1RegId })?.checked_in_at;
+      const p2 = !!statusForAssignment(rows, { ...args, registrationId: m.p2RegId })?.checked_in_at;
+      return { p1, p2, both: p1 && p2 };
+    },
+    [statusesByMatch],
+  );
+  const timerFor = useCallback(
+    (m: LiveMatch, now: number) => {
+      const ext = extensionByMatch[m.id];
+      const extendedMinutes =
+        ext && m.assignedAt && Date.parse(ext.assignedAt) === Date.parse(m.assignedAt) ? ext.minutes : 0;
+      const t = computeCheckInTimer({
+        match: { assignedAt: m.assignedAt, status: m.status, tableId: m.tableId },
+        bothCheckedIn: presenceOf(m).both,
+        settings: checkInSettings,
+        extendedMinutes,
+        now,
+      });
+      return t.phase === "inactive" ? null : { label: t.label, phase: t.phase, extendedMinutes };
+    },
+    [extensionByMatch, presenceOf, checkInSettings],
+  );
+
+  // Forfeit Review / not-started decision sheet.
+  const [reviewMatchId, setReviewMatchId] = useState<string | null>(null);
+  // Clock snapshot taken when the sheet opens (never read during render).
+  const [reviewNow, setReviewNow] = useState(0);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const openReview = (m: LiveMatch) => {
+    setReviewNow(Date.now());
+    setReviewMatchId(m.id);
+  };
+  const reviewView = useMemo<MatchReviewView | null>(() => {
+    const m = liveMatches.find((x) => x.id === (reviewMatchId ?? (typeof params.reviewMatch === "string" ? params.reviewMatch : null)));
+    if (!m) return null;
+    const t = timerFor(m, reviewNow || Date.parse(m.assignedAt ?? "") || 0);
+    const pres = presenceOf(m);
+    return {
+      matchId: m.id,
+      matchLabel: m.label,
+      tableLabel: m.tableLabel,
+      timerLabel: t?.label ?? "",
+      bothCheckedIn: pres.both,
+      extendedMinutes: t?.extendedMinutes ?? 0,
+      players: [
+        { slot: 1 as const, name: m.p1Name ?? "TBD", registrationId: m.p1RegId, checkedIn: pres.p1 },
+        { slot: 2 as const, name: m.p2Name ?? "TBD", registrationId: m.p2RegId, checkedIn: pres.p2 },
+      ],
+    };
+  }, [reviewMatchId, reviewNow, params.reviewMatch, liveMatches, timerFor, presenceOf]);
+  const runReviewAction = async (fn: () => Promise<unknown>, label: string) => {
+    setReviewBusy(true);
+    try {
+      await fn();
+      await Promise.all([hub.refetchPlayerStatuses(), hub.refetchAssignmentStatuses()]);
+    } catch (e) {
+      Alert.alert(label, `Could not complete (${(e as Error).message}).`);
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   // The Player Message modal — shared by both Active Tables views and the inbox entry.
   const [issueSheet, setIssueSheet] = useState<{ match: LiveMatch; slot: 1 | 2 } | null>(null);
   // Opened straight from a MATCH ISSUE inbox item: ?issueMatch=<id>&issueReg=<registration>.
@@ -6276,6 +6365,63 @@ export default function ManageTournamentScreen() {
           {renderSidePots()}
         </Section>
 
+
+        {/* Match check-in: an operational aid for the TD. Nothing here is automatic — the
+            thresholds only colour the Active Tables timer and alert the managers. */}
+        <Section title="Match Check-In">
+          <View style={styles.field}>
+            <FieldLabel label="Require Match Check-In" />
+            <View style={styles.checkInRow}>
+              {[false, true].map((on) => (
+                <TouchableOpacity
+                  key={on ? "on" : "off"}
+                  style={[styles.checkInSeg, form.checkInRequired === on && styles.checkInSegOn]}
+                  onPress={() => patchForm({ checkInRequired: on })}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: form.checkInRequired === on }}
+                >
+                  <Text allowFontScaling={false} style={[styles.checkInSegText, form.checkInRequired === on && styles.checkInSegTextOn]}>
+                    {on ? "On" : "Off"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text allowFontScaling={false} style={styles.checkInHint}>
+              {form.checkInRequired
+                ? "Players must check in before either of them can start the match. You can always start it yourself, or mark a player present."
+                : "Check-in stays informational: players can still check in, and you see the timer, but nothing is blocked."}
+            </Text>
+          </View>
+          <View style={styles.checkInRow}>
+            <View style={styles.checkInInput}>
+              <LabeledInput
+                label={`Warning After (min, ${CHECK_IN_LIMITS.minMinutes}–${CHECK_IN_LIMITS.maxMinutes})`}
+                value={String(form.checkInWarnMinutes)}
+                onChangeText={(v) => patchForm({ checkInWarnMinutes: Number(v.replace(/[^0-9]/g, "")) || 0 })}
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </View>
+            <View style={styles.checkInInput}>
+              <LabeledInput
+                label="Forfeit Review After (min)"
+                value={String(form.checkInReviewMinutes)}
+                onChangeText={(v) => patchForm({ checkInReviewMinutes: Number(v.replace(/[^0-9]/g, "")) || 0 })}
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </View>
+          </View>
+          {validateCheckInSettings({
+            warnAfterMinutes: form.checkInWarnMinutes,
+            forfeitReviewAfterMinutes: form.checkInReviewMinutes,
+          }).map((e) => (
+            <Text key={e} allowFontScaling={false} style={styles.checkInError}>
+              {e}
+            </Text>
+          ))}
+        </Section>
 
         <Section title="Schedule">
           <FieldAnchor anchorKey="date" error={errFor("date")} register={registerFieldAnchor} style={styles.field}>
@@ -8276,10 +8422,40 @@ export default function ManageTournamentScreen() {
           onAssignReady={handleAssignReady}
           glyphsFor={glyphsFor}
           onViewMessage={(m, slot) => setIssueSheet({ match: m, slot })}
+          timerFor={timerFor}
+          onTimerPress={openReview}
           onStartAll={handleStartAll}
           onAction={(m, step) => setDashboardSheet({ match: m, step })}
           onOpenPage={(tab) => setActiveTab(tab)}
         />
+        <MatchReviewModal
+          visible={!!reviewView && (reviewMatchId != null || typeof params.reviewMatch === "string")}
+          review={reviewView}
+          busy={reviewBusy}
+          onMarkCheckedIn={(registrationId, checkedIn) =>
+            runReviewAction(
+              () => matchCheckInService.markCheckedIn(tournamentId!, reviewView!.matchId, registrationId, checkedIn),
+              "Check In",
+            )
+          }
+          onExtend={(minutes) =>
+            runReviewAction(() => matchCheckInService.extendDeadline(tournamentId!, reviewView!.matchId, minutes), "Extend Time")
+          }
+          onStartMatch={() => {
+            const id = reviewView!.matchId;
+            setReviewMatchId(null);
+            handleQueueStart(id);
+          }}
+          onForfeitPlayer={(slot) => {
+            const m = liveMatches.find((x) => x.id === reviewView!.matchId);
+            setReviewMatchId(null);
+            // The existing, unchanged forfeit flow — this sheet never forfeits anyone itself.
+            if (m) setDashboardSheet({ match: m, step: "forfeit" });
+            void slot;
+          }}
+          onClose={() => setReviewMatchId(null)}
+        />
+
         <MatchIssueModal
           visible={!!issueView}
           issue={issueView}
@@ -8407,6 +8583,8 @@ export default function ManageTournamentScreen() {
               onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}
               glyphsFor={glyphsFor}
               onViewMessage={(m, slot) => setIssueSheet({ match: m, slot })}
+              timerFor={timerFor}
+              onTimerPress={openReview}
               playersTotal={readyPlayers.length}
               playersRemaining={readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
             />
@@ -9785,6 +9963,18 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: webSc(SPACING.sm),
   },
+  // Match Check-In settings block
+  checkInRow: { flexDirection: "row", gap: webSc(SPACING.sm), alignItems: "flex-start" },
+  checkInSeg: {
+    paddingHorizontal: webSc(SPACING.lg), paddingVertical: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.sm), borderWidth: 1, borderColor: COLORS.border,
+  },
+  checkInSegOn: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + "1A" },
+  checkInSegText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "800" },
+  checkInSegTextOn: { color: COLORS.primaryLight },
+  checkInHint: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: webSc(SPACING.xs) },
+  checkInInput: { flex: 1 },
+  checkInError: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.error, fontWeight: "700" },
   field: { marginBottom: webSc(SPACING.sm) },
   fieldLabel: {
     fontSize: webMs(FONT_SIZES.sm),

@@ -125,6 +125,8 @@ export const EliminationDashboard = ({
   onAssignReady,
   glyphsFor,
   onViewMessage,
+  timerFor,
+  onTimerPress,
   onStartAll,
   onAction,
   onOpenPage,
@@ -150,6 +152,11 @@ export const EliminationDashboard = ({
     p1Issue?: boolean;
     p2Issue?: boolean;
   } | null;
+  // Check-in timer for an assigned, unstarted match (label + phase), computed by the screen
+  // from server timestamps; the view supplies its own ticking `now`.
+  timerFor?: (m: LiveMatch, now: number) => { label: string; phase: "waiting" | "warn" | "review"; extendedMinutes?: number } | null;
+  // Tapping an amber/red timer opens the TD's Forfeit Review actions.
+  onTimerPress?: (m: LiveMatch) => void;
   // Opens the shared Player Message modal for that side.
   onViewMessage?: (m: LiveMatch, slot: 1 | 2) => void;
   onStartAll: () => void;
@@ -219,6 +226,8 @@ export const EliminationDashboard = ({
                         now={now}
                         glyphs={glyphsFor?.(m)}
                         onViewMessage={(slot) => onViewMessage?.(m, slot)}
+                        timer={now != null ? timerFor?.(m, now) : null}
+                        onTimerPress={() => onTimerPress?.(m)}
                       />
                     </View>
                   ))}

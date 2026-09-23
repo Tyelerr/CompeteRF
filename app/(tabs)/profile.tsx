@@ -712,6 +712,12 @@ export default function ProfileScreen() {
         visible={checkInOpen}
         context={matchActions.context}
         checkedIn={matchActions.checkedIn}
+        bothCheckedIn={matchActions.bothCheckedIn}
+        canStart={matchActions.canStart}
+        onStartMatch={() =>
+          matchActions.startMatch().catch((e: Error) => Alert.alert("Start Match", `Could not start (${e.message}).`))
+        }
+        timerAt={matchActions.timerAt}
         issueReason={matchActions.issueReason as MatchIssueReason | null}
         busy={matchActions.busy}
         notice={checkInNotice}
