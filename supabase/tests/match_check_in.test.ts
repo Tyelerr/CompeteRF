@@ -18,6 +18,8 @@ const M1 = read("20260922120000_elim_live_apply.sql");
 const M2 = read("20260923120000_elim_assign_notify.sql");
 const M4 = read("20260926120000_elim_clear_table.sql");
 const MIG = read("20260927120000_match_check_in.sql");
+// Mark Resolved + the two mid-match reasons.
+const MIG2 = read("20260928120000_match_issue_resolve.sql");
 const PHASE5 = readFileSync(join(ROOT, "supabase/migrations/20260805120000_phase5_pending_accounts_registration.sql"), "utf8");
 const cut = (src: string, head: string) => {
   const s = src.indexOf(head);
@@ -92,6 +94,7 @@ before(async () => {
   await db.exec(M2);
   await db.exec(M4);
   await db.exec(MIG);
+  await db.exec(MIG2);
   await db.exec(`
     insert into public.profiles (id, id_auto, role, user_name, first_name, last_name) values
       ('${U.td}', 1, 'tournament_director', 'td', 'Tina', 'Director'),
@@ -354,9 +357,76 @@ test("managers of OTHER venues, archived managers and players are never notified
     assert.equal(ids.includes(9), false, "unrelated venue manager");
     assert.equal(ids.includes(6), false, "archived owner");
     assert.equal(ids.includes(2), false, "global admin not pushed");
-    assert.equal(ids.some((i) => i >= 101), false, "no players");
+    assert.equal(ids.some((i: number) => i >= 101), false, "no players");
   } finally {
     await q("delete from public.venue_owners where venue_id = 99");
     await q("delete from public.venue_directors where venue_id = 99");
   }
+});
+
+// ── Mark Resolved + mid-match reasons (20260928120000) ──────────────────────────────────────
+test("all six Contact TD reasons are accepted, pre-match and mid-match", async () => {
+  for (const reason of ["running_late", "table_missing", "equipment", "dispute", "watch_shot", "other"]) {
+    await as(playerUuidFor(M1_REGS[0]));
+    const r = await contact("W1M1", reason, `${reason} message`);
+    assert.equal(r.status, "sent", reason);
+    assert.equal((await rows())[0].issue_reason, reason);
+  }
+  // …including while the match is IN PROGRESS
+  await setMs({ W1M1: { status: "in_progress", tableId: 71, assignedAt: A1, startedAt: A1 } });
+  assert.equal((await contact("W1M1", "dispute", "He fouled")).status, "sent");
+  await assert.rejects(contact("W1M1", "nonsense"), /invalid_reason/);
+});
+
+test("Mark Resolved clears the indicator and NEVER clears the check-in", async () => {
+  await as(playerUuidFor(M1_REGS[0]));
+  await checkIn("W1M1");
+  await contact("W1M1", "dispute", "Need a ruling");
+  let [row] = await rows();
+  assert.equal(row.checked, true);
+  assert.equal(row.issue_reason, "dispute");
+
+  await as(U.td);
+  const r = (await q("select public.match_issue_resolve($1, 'W1M1', $2) r", [T, M1_REGS[0]]))[0].r;
+  assert.equal(r.status, "resolved");
+  assert.equal(r.checkedIn, true);
+  const after = await q("select checked_in_at, issue_at, resolved_at, issue_reason from match_player_status where registration_id = $1", [M1_REGS[0]]);
+  assert.ok(after[0].checked_in_at, "check-in survives resolution");
+  assert.ok(after[0].resolved_at, "issue is resolved");
+  assert.ok(after[0].issue_at, "issue history is kept");
+  // idempotent
+  assert.equal((await q("select public.match_issue_resolve($1, 'W1M1', $2) r", [T, M1_REGS[0]]))[0].r.status, "no_open_issue");
+});
+
+test("only managers of THIS event can resolve; players and outsiders cannot", async () => {
+  await as(playerUuidFor(M1_REGS[0]));
+  await contact("W1M1", "equipment", "broken rack");
+  for (const [who, uid] of [["the player", playerUuidFor(M1_REGS[0])], ["the opponent", playerUuidFor(M1_REGS[1])]] as const) {
+    await as(uid);
+    await assert.rejects(q("select public.match_issue_resolve($1, 'W1M1', $2)", [T, M1_REGS[0]]), /Not allowed to manage/, who);
+  }
+  const stillOpen = await q("select resolved_at from match_player_status where registration_id = $1", [M1_REGS[0]]);
+  assert.equal(stillOpen[0].resolved_at, null);
+  // every active event manager can
+  for (const uid of [U.td, U.owner, U.vdir]) {
+    await q("update match_player_status set resolved_at = null where registration_id = $1", [M1_REGS[0]]);
+    await as(uid);
+    assert.equal((await q("select public.match_issue_resolve($1, 'W1M1', $2) r", [T, M1_REGS[0]]))[0].r.status, "resolved", uid);
+  }
+});
+
+test("resolving one player's issue leaves the other player untouched", async () => {
+  await as(playerUuidFor(M1_REGS[0]));
+  await checkIn("W1M1");
+  await contact("W1M1", "running_late", "10 min");
+  await as(playerUuidFor(M1_REGS[1]));
+  await contact("W1M1", "equipment", "cue broken");
+  await as(U.td);
+  await q("select public.match_issue_resolve($1, 'W1M1', $2)", [T, M1_REGS[0]]);
+  const all = await q("select registration_id, checked_in_at is not null checked, resolved_at from match_player_status order by registration_id");
+  const mine = all.find((r: any) => Number(r.registration_id) === M1_REGS[0]);
+  const theirs = all.find((r: any) => Number(r.registration_id) === M1_REGS[1]);
+  assert.ok(mine.resolved_at, "mine resolved");
+  assert.equal(mine.checked, true, "my check-in intact");
+  assert.equal(theirs.resolved_at, null, "the opponent's issue stays open");
 });

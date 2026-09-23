@@ -53,8 +53,14 @@ serve(async (req: Request) => {
       .from("profiles").select("user_name, first_name, last_name").eq("id_auto", reg.player_id).maybeSingle();
     who = [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim() || p?.user_name || who;
   }
+  // Keep in sync with match_contact_td / MATCH_ISSUE_REASONS (pre-match AND mid-match reasons).
   const label: Record<string, string> = {
-    running_late: "Running late", table_missing: "Can't find table", equipment: "Equipment issue", other: "Needs help",
+    running_late: "Running late",
+    table_missing: "Can't find table",
+    equipment: "Equipment issue",
+    dispute: "Dispute / Need TD",
+    watch_shot: "Need shot watched",
+    other: "Needs help",
   };
   const title = tourn?.name ?? "Compete";
   const text = `${who} — ${label[mine.issue_reason ?? "other"] ?? "Needs help"}${mine.issue_message ? `: ${mine.issue_message}` : ""}`;
