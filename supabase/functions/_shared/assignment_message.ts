@@ -37,3 +37,22 @@ export function buildAssignmentMessage(input: {
           .trim();
   return { title, body };
 }
+
+/**
+ * Where a "Table Assigned" / "Table Changed" notification tap must land: the player's own
+ * Tournament View in Profile, with the exact assignment identified so the app can open the
+ * Check-In modal for it (and detect a stale tap). Parsed by src/utils/player-match-link.ts.
+ */
+export function buildAssignmentDeepLink(input: {
+  tournamentId: number;
+  matchId: string;
+  assignedAt: string;
+}): string {
+  const q = new URLSearchParams({
+    liveId: String(input.tournamentId),
+    matchId: input.matchId,
+    assignedAt: input.assignedAt,
+    action: "check_in",
+  });
+  return `/(tabs)/profile?${q.toString()}`;
+}

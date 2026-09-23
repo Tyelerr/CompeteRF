@@ -12,7 +12,7 @@
 // this draw for a DIFFERENT table, the message is worded as a table change.
 import { resolveMatchSides } from "./bracket.ts";
 import { computeMatchRace } from "./race.ts";
-import { buildAssignmentMessage } from "./assignment_message.ts";
+import { buildAssignmentDeepLink, buildAssignmentMessage } from "./assignment_message.ts";
 
 // deno-lint-ignore no-explicit-any
 type Admin = any;
@@ -92,7 +92,15 @@ export async function notifyMatchAssignment(admin: Admin, tournamentId: number, 
     const { title, body: text } = buildAssignmentMessage({
       tournamentName: tourn.name, kind, tableLabel, opponentName: opp.name, raceText: race.text,
     });
-    const data = { type: "match_assigned", kind, tournament_id: tournamentId, match_id: matchId, table_id: tableId };
+    // Enough to resolve the EXACT assignment on tap (Profile → Tournament View → this match →
+    // Check-In), and to tell a stale notification from a current one. Identical for a manual
+    // assignment, Assign Ready Matches, server Auto Assign and a table change — they all come
+    // through here.
+    const data = {
+      type: "match_assigned", kind, tournament_id: tournamentId, match_id: matchId, table_id: tableId,
+      assigned_at: assignedAt, draw_number: drawNumber,
+      deep_link: buildAssignmentDeepLink({ tournamentId, matchId, assignedAt }),
+    };
 
     const { data: notif } = await admin.from("notifications").insert({
       user_id: recipientIdAuto, title, body: text, category: "tournament_update", data,

@@ -15,7 +15,8 @@ import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildBracketGraph } from "../../src/utils/bracket.double";
 import { resolveMatchSides } from "../functions/_shared/bracket";
-import { buildAssignmentMessage, FALLBACK_TITLE } from "../functions/_shared/assignment_message";
+import { buildAssignmentDeepLink, buildAssignmentMessage, FALLBACK_TITLE } from "../functions/_shared/assignment_message";
+import { parseAssignmentDeepLink, resolvePlayerMatchTarget } from "../../src/utils/player-match-link";
 // notify.ts is Deno code (".ts" import specifiers) and supabase/functions is excluded from the app
 // tsconfig, so load it at runtime (tsx resolves it) instead of pulling it into the app type-check.
 type NotifyFn = (admin: unknown, tournamentId: number, matchId: string) =>
@@ -225,4 +226,53 @@ test("not assigned / no table → nothing sent", async () => {
   const out = await notifyMatchAssignment(fakeAdmin(db) as any, TID, MATCH_A);
   assert.equal(out.skipped, "not_assigned");
   assert.equal(db.notifications.length + pushes.length, 0);
+});
+
+// ── Deep link: the payload must identify the EXACT assignment ───────────────────────────────
+test("every assignment notification carries tournament, match, assignedAt and a deep link", async () => {
+  const AT = "2026-09-22T15:00:00.000Z";
+  seed("Test 2 elim 1", { [MATCH_A]: assign(38, AT) });
+  const admin = fakeAdmin(db) as any;
+  await notifyMatchAssignment(admin, TID, MATCH_A);
+  for (const n of db.notifications) {
+    assert.equal(n.data.tournament_id, TID);
+    assert.equal(n.data.match_id, MATCH_A);
+    assert.equal(n.data.assigned_at, AT, "assignment identity, not just the match");
+    assert.equal(n.data.draw_number, 1);
+    assert.equal(typeof n.data.deep_link, "string");
+  }
+  // the SAME data goes to the device
+  assert.ok(db.notifications.length > 0);
+
+  // …and it round-trips into the exact target the app opens
+  const link = parseAssignmentDeepLink(db.notifications[0].data.deep_link);
+  assert.deepEqual(link, { tournamentId: TID, matchId: MATCH_A, assignedAt: AT, action: "check_in" });
+  const target = resolvePlayerMatchTarget(link, {
+    tournamentId: TID, matchId: MATCH_A, assignedAt: AT, tableId: 38, status: "scheduled",
+  });
+  assert.deepEqual(target, { kind: "check_in", tournamentId: TID, matchId: MATCH_A });
+});
+
+test("a table change points at the NEW assignment, so the old notification reads as stale", async () => {
+  const AT1 = "2026-09-22T15:00:00.000Z";
+  const AT2 = "2026-09-22T15:10:00.000Z";
+  seed("Test 2 elim 1", { [MATCH_A]: assign(38, AT1) });
+  const admin = fakeAdmin(db) as any;
+  await notifyMatchAssignment(admin, TID, MATCH_A);
+  const firstLink = parseAssignmentDeepLink(db.notifications[0].data.deep_link);
+  setMs({ [MATCH_A]: assign(46, AT2) });
+  await notifyMatchAssignment(admin, TID, MATCH_A);
+  const newest = db.notifications[db.notifications.length - 1];
+  assert.equal(newest.data.assigned_at, AT2);
+  const live = { tournamentId: TID, matchId: MATCH_A, assignedAt: AT2, tableId: 46, status: "scheduled" };
+  assert.equal(resolvePlayerMatchTarget(parseAssignmentDeepLink(newest.data.deep_link), live).kind, "check_in");
+  assert.equal(resolvePlayerMatchTarget(firstLink, live).kind, "current_match", "the older tap shows the current table");
+});
+
+test("the deep-link builder and the app parser agree (one format)", () => {
+  const link = buildAssignmentDeepLink({ tournamentId: 42, matchId: "GF2", assignedAt: "2026-09-22T15:00:00.000Z" });
+  assert.ok(link.startsWith("/(tabs)/profile?"), link);
+  assert.deepEqual(parseAssignmentDeepLink(link), {
+    tournamentId: 42, matchId: "GF2", assignedAt: "2026-09-22T15:00:00.000Z", action: "check_in",
+  });
 });

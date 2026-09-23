@@ -425,3 +425,8 @@ verify_jwt = true
 # == function secret AUTO_ASSIGN_SECRET). See migration 20260924120000.
 [functions.auto-assign-run]
 verify_jwt = false
+
+# notify-match-issue: push for a player's "Contact TD" on an assigned match. Caller JWT (the
+# player); recipients are the event's managers only. See migration 20260927120000.
+[functions.notify-match-issue]
+verify_jwt = true
