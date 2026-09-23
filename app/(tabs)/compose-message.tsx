@@ -4,7 +4,7 @@
 // Support messages go to ALL compete_admin users (shared inbox)
 // ═══════════════════════════════════════════════════════════
 
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   Alert,
@@ -47,13 +47,27 @@ const CATEGORIES = [
 export default function ComposeMessageScreen() {
   const router = useRouter();
   const { user } = useAuthContext();
+  // Opened from the Match Issue modal ("Message Player"): the recipient is already known, so the
+  // TD never searches for them. The normal recipient search is untouched — this is a trusted
+  // hand-off from a screen that already authorised the manager. Nothing is created until Send.
+  const params = useLocalSearchParams<{
+    toId?: string;
+    toName?: string;
+    context?: string;
+    tournamentId?: string;
+    tournamentName?: string;
+  }>();
+  const presetRecipient: RecipientOption | null =
+    typeof params.toId === "string" && params.toId
+      ? { id: params.toId, name: (params.toName as string) || "Player", role: "player", avatar_url: null }
+      : null;
 
   // ── Form state ──
-  const [recipientType, setRecipientType] = useState<string | null>(null);
+  const [recipientType, setRecipientType] = useState<string | null>(presetRecipient ? "player" : null);
   const [showRecipientDropdown, setShowRecipientDropdown] = useState(false);
 
   const [selectedRecipient, setSelectedRecipient] =
-    useState<RecipientOption | null>(null);
+    useState<RecipientOption | null>(presetRecipient);
   const [recipientSearch, setRecipientSearch] = useState("");
   const [recipientResults, setRecipientResults] = useState<RecipientOption[]>(
     [],
@@ -71,10 +85,16 @@ export default function ComposeMessageScreen() {
   const [selectedTournament, setSelectedTournament] = useState<{
     id: number;
     name: string;
-  } | null>(null);
+  } | null>(
+    params.tournamentId && params.tournamentName
+      ? { id: Number(params.tournamentId), name: String(params.tournamentName) }
+      : null,
+  );
   const [showTournamentResults, setShowTournamentResults] = useState(false);
 
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(
+    typeof params.context === "string" && params.context ? `Regarding ${params.context}` : "",
+  );
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -193,9 +213,11 @@ export default function ComposeMessageScreen() {
     }
   };
 
-  const selectedRecipientTypeLabel = RECIPIENT_TYPES.find(
-    (r) => r.value === recipientType,
-  );
+  // A preselected player is not one of the searchable recipient types; show them directly.
+  const lockedRecipient = presetRecipient && recipientType === "player" ? selectedRecipient : null;
+  const selectedRecipientTypeLabel = lockedRecipient
+    ? { icon: "🎱", label: lockedRecipient.name }
+    : RECIPIENT_TYPES.find((r) => r.value === recipientType);
 
   // Does this recipient type need a person search?
   const needsPersonSearch =
@@ -220,6 +242,7 @@ export default function ComposeMessageScreen() {
         <Text style={styles.sectionLabel}>TO</Text>
         <TouchableOpacity
           style={styles.dropdownButton}
+          disabled={!!lockedRecipient}
           onPress={() => {
             closeAllDropdowns();
             setShowRecipientDropdown(!showRecipientDropdown);
@@ -235,12 +258,14 @@ export default function ComposeMessageScreen() {
               ? `${selectedRecipientTypeLabel.icon} ${selectedRecipientTypeLabel.label}`
               : "Select recipient type"}
           </Text>
-          <Text style={styles.dropdownArrow}>
-            {showRecipientDropdown ? "▲" : "▼"}
-          </Text>
+          {!lockedRecipient && (
+            <Text style={styles.dropdownArrow}>
+              {showRecipientDropdown ? "▲" : "▼"}
+            </Text>
+          )}
         </TouchableOpacity>
 
-        {showRecipientDropdown && (
+        {showRecipientDropdown && !lockedRecipient && (
           <View style={styles.dropdown}>
             {RECIPIENT_TYPES.map((rt) => (
               <TouchableOpacity

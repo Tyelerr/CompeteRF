@@ -79,9 +79,10 @@ export const MatchCheckInModal = ({
                   {"✓ You're checked in"}
                 </Text>
               )}
-              {!!issueReason && !checkedIn && (
+              {/* Independent of the ✓ above: contacting the TD never clears a check-in. */}
+              {!!issueReason && (
                 <Text allowFontScaling={false} style={styles.issue}>
-                  ? {issueReasonLabel(issueReason)} — the tournament director has been told
+                  {`✉ TD contacted — ${issueReasonLabel(issueReason)}`}
                 </Text>
               )}
 

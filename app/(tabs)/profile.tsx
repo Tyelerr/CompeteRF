@@ -29,7 +29,7 @@ import { useProfileTournaments } from "../../src/viewmodels/hooks/use.profile.to
 import { usePlayerLiveMatch } from "../../src/viewmodels/hooks/use.player.live.match";
 import { usePlayerMatchActions } from "../../src/viewmodels/hooks/use.player.match.actions";
 import { MatchCheckInModal } from "../../src/views/components/profile/MatchCheckInModal";
-import { MatchIssueReason } from "../../src/models/types/match-checkin.types";
+import { MatchIssueReason, issueReasonLabel } from "../../src/models/types/match-checkin.types";
 import { parseAssignmentDeepLink, resolvePlayerMatchTarget } from "../../src/utils/player-match-link";
 import { usePlayerPerformance } from "../../src/viewmodels/hooks/use.player.performance";
 import { PerformanceSnapshot } from "../../src/views/components/profile/PerformanceSnapshot";
@@ -653,6 +653,7 @@ export default function ProfileScreen() {
                 onContactTd={matchActions.isAssigned ? () => setManualCheckInOpen(true) : undefined}
                 checkedIn={matchActions.checkedIn}
                 checkInBusy={matchActions.busy}
+                issueLabel={matchActions.issueReason ? issueReasonLabel(matchActions.issueReason as MatchIssueReason) : null}
               />
             ) : null
           ) : (

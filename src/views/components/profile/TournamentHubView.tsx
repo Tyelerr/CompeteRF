@@ -37,6 +37,7 @@ interface TournamentHubViewProps {
   onContactTd?: () => void;
   checkedIn?: boolean;
   checkInBusy?: boolean;
+  issueLabel?: string | null;
 }
 
 const resultNote = (r: PlayerMatchResult): string | null => {
@@ -90,6 +91,7 @@ export const TournamentHubView = ({
   onContactTd,
   checkedIn,
   checkInBusy,
+  issueLabel,
 }: TournamentHubViewProps) => {
   const open = () => onOpenTournament(hub.tournamentId);
   const current = hub.current;
@@ -107,6 +109,7 @@ export const TournamentHubView = ({
           onContactTd={onContactTd}
           checkedIn={checkedIn}
           checkInBusy={checkInBusy}
+          issueLabel={issueLabel}
         />
       ) : (
         <TouchableOpacity style={styles.idle} activeOpacity={0.85} onPress={open}>

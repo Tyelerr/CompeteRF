@@ -40,7 +40,8 @@ export const registrationService = {
   async getRegistrations(tournamentId: number): Promise<Registration[]> {
     const { data, error } = await supabase
       .from("tournament_players")
-      .select("*, profiles:player_id (id_auto, user_name, name)")
+      // profiles.id (uuid) is what the DM composer addresses a message to.
+      .select("*, profiles:player_id (id, id_auto, user_name, name)")
       .eq("tournament_id", tournamentId)
       .order("registered_at", { ascending: true });
     if (error) throw error;

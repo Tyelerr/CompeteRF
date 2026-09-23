@@ -49,7 +49,10 @@ const getBroadcastBadge = (senderRole: string) => {
   }
 };
 
-const getPushBadge = (category: string | null) => {
+// A player's "Contact TD" message is an operational MATCH ISSUE, not a generic tournament
+// update — it gets its own red tag so a manager can find it later in the inbox.
+const getPushBadge = (category: string | null, data?: Record<string, any> | null) => {
+  if (data?.type === "match_issue") return { label: "Match Issue", color: "#E74C3C", icon: "✉" };
   switch (category) {
     case "search_alert_match": return { label: "Search Alert", color: "#9B59B6", icon: "🔔" };
     case "tournament_update": return { label: "Tournament", color: "#2ECC71", icon: "🏆" };
@@ -390,7 +393,13 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
     try {
       const { data, error } = await supabase.from("notifications").select("*").eq("user_id", userIdAuto).order("created_at", { ascending: false }).limit(50);
       if (error) throw error;
-      return ((data as PushNotification[]) || []).map((notif) => ({ id: `push-${notif.id}`, source: "push" as const, title: notif.title, body: notif.body, read_at: notif.read_at, created_at: notif.created_at, badge: getPushBadge(notif.category), tournament_id: (notif.data?.tournament_id as number) || null, deep_link: (notif.data?.deep_link as string) || null, pushNotificationId: notif.id }));
+      return ((data as PushNotification[]) || []).map((notif) => ({ id: `push-${notif.id}`, source: "push" as const, title: notif.title, body: notif.body, read_at: notif.read_at, created_at: notif.created_at, badge: getPushBadge(notif.category, notif.data), tournament_id: (notif.data?.tournament_id as number) || null,
+        // A match issue opens the SAME Player Message modal on the manage screen (the issue lives
+        // in match_player_status — there is no second issue store).
+        deep_link:
+          notif.data?.type === "match_issue" && notif.data?.tournament_id
+            ? `/(tabs)/admin/manage-tournament/${notif.data.tournament_id}?issueMatch=${encodeURIComponent(String(notif.data.match_id ?? ""))}&issueReg=${encodeURIComponent(String(notif.data.registration_id ?? ""))}`
+            : (notif.data?.deep_link as string) || null, pushNotificationId: notif.id }));
     } catch { return []; }
   }, [userIdAuto]);
 

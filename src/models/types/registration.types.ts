@@ -31,6 +31,7 @@ export interface Registration {
   updated_at: string;
   // Joined data (from queries)
   profiles?: {
+    id?: string; // profile uuid — the DM recipient id
     id_auto: number;
     user_name: string;
     name: string;

@@ -28,6 +28,8 @@ interface ProfileMatchCenterProps {
   onContactTd?: () => void;
   checkedIn?: boolean;
   checkInBusy?: boolean;
+  // Unresolved "Contact TD" message — shown ALONGSIDE the check-in, never instead of it.
+  issueLabel?: string | null;
 }
 
 // "You lead 3-2" / "Carlo leads 3-2" / "Tied 2-2"
@@ -118,6 +120,7 @@ export const ProfileMatchCenter = ({
   onContactTd,
   checkedIn,
   checkInBusy,
+  issueLabel,
 }: ProfileMatchCenterProps) => {
   const { isPlaying, opponentName, myScore, oppScore, table, raceTo, oppRaceTo, roundLabel } =
     data;
@@ -200,6 +203,11 @@ export const ProfileMatchCenter = ({
 
       {/* Check In / Contact TD — the same actions as the notification modal and the Home card,
           all driven by usePlayerMatchActions. Shown only for a real table assignment. */}
+      {!!issueLabel && (
+        <Text allowFontScaling={false} style={styles.issueLine} numberOfLines={1}>
+          {`✉ TD contacted — ${issueLabel}`}
+        </Text>
+      )}
       {!!onCheckIn && (
         <View style={styles.actionsRow}>
           <TouchableOpacity
@@ -365,6 +373,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  issueLine: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.error, fontWeight: "800", marginTop: wxSc(SPACING.xs) },
   actionsRow: { flexDirection: "row", gap: wxSc(SPACING.sm), marginTop: wxSc(SPACING.sm) },
   actionPrimary: {
     flex: 1,

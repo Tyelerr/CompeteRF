@@ -137,7 +137,10 @@ import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.setti
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { buildClearTableOps } from "../../../../src/utils/clear-table";
-import { byMatchId, glyphFor } from "../../../../src/utils/match-player-status";
+import { byMatchId, glyphFor, openIssueFor } from "../../../../src/utils/match-player-status";
+import { matchCheckInService } from "../../../../src/models/services/match-checkin.service";
+import { buildPlayerDmLink } from "../../../../src/utils/player-dm-link";
+import { MatchIssueModal, MatchIssueView } from "../../../../src/views/components/tournament/live/MatchIssueModal";
 import {
   autoAssignPayload,
   keepModeMovePayload,
@@ -2560,7 +2563,7 @@ const TabPlaceholder = ({
 // ── Screen ───────────────────────────────────────────────────────────────────
 export default function ManageTournamentScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id: string; name?: string }>();
+  const params = useLocalSearchParams<{ id: string; name?: string; issueMatch?: string; issueReg?: string }>();
   const tournamentId = Number(params.id);
   const paramName = params.name || "";
   const insets = useSafeAreaInsets();
@@ -4382,10 +4385,85 @@ export default function ManageTournamentScreen() {
       const args = { matchId: m.id, assignedAt: m.assignedAt, status: m.status };
       const p1 = glyphFor(rows, { ...args, registrationId: m.p1RegId });
       const p2 = glyphFor(rows, { ...args, registrationId: m.p2RegId });
-      return p1 || p2 ? { p1, p2 } : null;
+      // Check-in (○/✓) and an unresolved message are INDEPENDENT: a player can be ✓ and still
+      // have an open message, and resolving it never clears the ✓.
+      const p1Issue = !!openIssueFor(rows, { ...args, registrationId: m.p1RegId });
+      const p2Issue = !!openIssueFor(rows, { ...args, registrationId: m.p2RegId });
+      return p1 || p2 ? { p1, p2, p1Issue, p2Issue } : null;
     },
     [statusesByMatch],
   );
+  // The Player Message modal — shared by both Active Tables views and the inbox entry.
+  const [issueSheet, setIssueSheet] = useState<{ match: LiveMatch; slot: 1 | 2 } | null>(null);
+  // Opened straight from a MATCH ISSUE inbox item: ?issueMatch=<id>&issueReg=<registration>.
+  const issueLinkTarget = useMemo(() => {
+    const matchId = typeof params.issueMatch === "string" ? params.issueMatch : null;
+    const regId = typeof params.issueReg === "string" ? Number(params.issueReg) : NaN;
+    if (!matchId || !Number.isFinite(regId)) return null;
+    const m = liveMatches.find((x) => x.id === matchId);
+    if (!m) return null;
+    const slot: 1 | 2 | null = m.p1RegId === regId ? 1 : m.p2RegId === regId ? 2 : null;
+    return slot ? { match: m, slot } : null;
+  }, [params.issueMatch, params.issueReg, liveMatches]);
+  const [issueBusy, setIssueBusy] = useState(false);
+  const [issueDismissed, setIssueDismissed] = useState(false);
+  const issueView = useMemo<MatchIssueView | null>(() => {
+    const sheet = issueSheet ?? (issueDismissed ? null : issueLinkTarget);
+    if (!sheet) return null;
+    const m = sheet.match;
+    const regId = sheet.slot === 1 ? m.p1RegId : m.p2RegId;
+    const status = openIssueFor(statusesByMatch[m.id], {
+      matchId: m.id,
+      registrationId: regId,
+      assignedAt: m.assignedAt,
+      status: m.status,
+    });
+    if (!status) return null;
+    return {
+      status,
+      playerName: (sheet.slot === 1 ? m.p1Name : m.p2Name) ?? "Player",
+      opponentName: (sheet.slot === 1 ? m.p2Name : m.p1Name) ?? null,
+      tournamentName: hub.tournament?.name ?? "Tournament",
+      tableLabel: m.tableLabel,
+      matchLabel: m.label,
+      checkedIn: !!status.checked_in_at,
+    };
+  }, [issueSheet, issueLinkTarget, issueDismissed, statusesByMatch, hub.tournament?.name]);
+  // Message Player hands off to the EXISTING Compete direct-message composer — Contact TD stays a
+  // match-scoped issue and never becomes its own chat system.
+  const openPlayerDm = (view: MatchIssueView) => {
+    const reg = hub.registrations.find((r) => r.id === view.status.registration_id);
+    const toId = reg?.profiles?.id;
+    if (!toId) {
+      Alert.alert("Message Player", "This player has no Compete account to message.");
+      return;
+    }
+    const link = buildPlayerDmLink({
+      profileId: toId,
+      playerName: view.playerName,
+      tournamentId: view.status.tournament_id,
+      tournamentName: view.tournamentName,
+      tableLabel: view.tableLabel,
+    });
+    if (!link) return;
+    setIssueSheet(null);
+    setIssueDismissed(true);
+    router.push(link as never);
+  };
+  const resolveIssue = async () => {
+    if (!issueView || !tournamentId) return;
+    setIssueBusy(true);
+    try {
+      await matchCheckInService.resolveIssue(tournamentId, issueView.status.match_id, issueView.status.registration_id);
+      await hub.refetchPlayerStatuses();
+      setIssueSheet(null);
+      setIssueDismissed(true);
+    } catch (e) {
+      Alert.alert("Player message", `Could not mark it resolved (${(e as Error).message}).`);
+    } finally {
+      setIssueBusy(false);
+    }
+  };
 
   // Clear Table (Match Actions): take the match OFF its table and back to the Ready queue —
   // table only, never a start/score/bracket change. In Manual order the same atomic call puts it
@@ -8197,9 +8275,18 @@ export default function ManageTournamentScreen() {
           onSetAutoAssignEnabled={handleSetAutoAssignEnabled}
           onAssignReady={handleAssignReady}
           glyphsFor={glyphsFor}
+          onViewMessage={(m, slot) => setIssueSheet({ match: m, slot })}
           onStartAll={handleStartAll}
           onAction={(m, step) => setDashboardSheet({ match: m, step })}
           onOpenPage={(tab) => setActiveTab(tab)}
+        />
+        <MatchIssueModal
+          visible={!!issueView}
+          issue={issueView}
+          busy={issueBusy}
+          onResolve={resolveIssue}
+          onMessagePlayer={issueView ? () => openPlayerDm(issueView) : undefined}
+          onClose={() => { setIssueSheet(null); setIssueDismissed(true); }}
         />
         {dashboardSheet && (
           <MatchActionsModal
@@ -8319,6 +8406,7 @@ export default function ManageTournamentScreen() {
               onSetQueueOrder={handleSetQueueOrder}
               onManageMatch={(m, step) => setDashboardSheet({ match: m, step })}
               glyphsFor={glyphsFor}
+              onViewMessage={(m, slot) => setIssueSheet({ match: m, slot })}
               playersTotal={readyPlayers.length}
               playersRemaining={readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
             />
