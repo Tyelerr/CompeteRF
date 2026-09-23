@@ -27,6 +27,8 @@ export function usePendingReferralClaim() {
       if (!pending) return;
       try {
         const result = await referralService.claim(pending.code, pending.source);
+        // Analytics only: connect the visit that brought them (claim_referral stays the authority).
+        if (result.ok && pending.visitId) await referralService.linkVisit(pending.visitId);
         if (!RETRYABLE.includes(result.status)) {
           await pendingReferralService.clear();
         } else {

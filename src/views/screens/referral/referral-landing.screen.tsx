@@ -1,32 +1,36 @@
 // src/views/screens/referral/referral-landing.screen.tsx
-// Landing page for thecompeteapp.com/r/<CODE>. Always shows a page first (no automatic
-// App Store bounce): who invited them, the code (for manual entry after installing the app,
-// since deferred deep linking isn't available), and Create Account / Log In / Get the App.
+// Landing page for thecompeteapp.com/r/<CODE>. Always shows a page first (never an automatic
+// redirect): who invited them and the code (kept visible for manual entry — attribution never
+// depends on deep links). Buttons by context:
+//   phone web → [Open Compete] primary · [Create Account on Web] · Log In
+//   desktop   → [Create Account on Web] primary · Log In · small App Store / Google Play links
+//   in the app (a link opened it) → [Create Account] · Log In
 
 import { useRouter } from "expo-router";
+import Head from "expo-router/head";
 import React from "react";
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { APP_STORE_URL, PLAY_STORE_URL } from "../../../models/constants/app-stores";
+import { APP_STORE_URL } from "../../../models/constants/app-stores";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { buildPlayStoreReferralUrl, smartAppBannerContent } from "../../../utils/referral";
 import { webMs, webSc } from "../../../utils/scaling";
 import { useReferralLanding } from "../../../viewmodels/useReferralLanding";
 import { Button } from "../../components/common/button";
 
 const isWeb = Platform.OS === "web";
 
-const platformFlags = () => {
-  if (!isWeb || typeof navigator === "undefined") return { isIOS: Platform.OS === "ios", isAndroid: Platform.OS === "android" };
-  const ua = navigator.userAgent || "";
-  return { isIOS: /iPhone|iPad|iPod/i.test(ua), isAndroid: /Android/i.test(ua) };
-};
+interface Props {
+  code?: string;
+  visitParam?: string;
+  campaign?: string;
+}
 
-export function ReferralLandingScreen({ code: rawCode }: { code?: string }) {
+export function ReferralLandingScreen({ code: rawCode, visitParam, campaign }: Props) {
   const router = useRouter();
-  const vm = useReferralLanding(rawCode);
-  const { isIOS, isAndroid } = platformFlags();
-  const isPhoneBrowser = isWeb && (isIOS || isAndroid);
+  const vm = useReferralLanding({ rawCode, visitParam, campaign });
+  const isPhoneBrowser = isWeb && (vm.platform === "ios" || vm.platform === "android");
 
   const goHome = () => router.replace("/(tabs)" as any);
   const openStore = (url: string) => Linking.openURL(url).catch(() => {});
@@ -53,7 +57,7 @@ export function ReferralLandingScreen({ code: rawCode }: { code?: string }) {
         {vm.inviter ? (
           <Text allowFontScaling={false} style={st.inviter}>Invited by {vm.inviter}</Text>
         ) : null}
-        <Text allowFontScaling={false} style={st.body}>Find pool tournaments near you and play in them.</Text>
+        <Text allowFontScaling={false} style={st.body}>Find pool tournaments near you.</Text>
 
         <View style={st.codeBox}>
           <Text allowFontScaling={false} style={st.codeLabel}>REFERRAL CODE</Text>
@@ -62,11 +66,26 @@ export function ReferralLandingScreen({ code: rawCode }: { code?: string }) {
         </View>
 
         <View style={st.actions}>
-          <Button title="Create Account" onPress={() => router.push("/auth/register" as any)} fullWidth />
-          <Button title="Log In" variant="outline" onPress={() => router.push("/auth/login" as any)} fullWidth />
-          {isWeb && isPhoneBrowser ? (
-            <Button title="Get the App" variant="secondary" onPress={() => openStore(isIOS ? APP_STORE_URL : PLAY_STORE_URL)} fullWidth />
-          ) : null}
+          {isPhoneBrowser ? (
+            <>
+              <Button title="Open Compete" onPress={vm.openCompete} fullWidth />
+              {vm.copiedNotice ? (
+                <Text allowFontScaling={false} style={st.notice}>{vm.copiedNotice}</Text>
+              ) : null}
+              <Button title="Create Account on Web" variant="outline" onPress={() => router.push("/auth/register" as any)} fullWidth />
+            </>
+          ) : (
+            <Button
+              title={isWeb ? "Create Account on Web" : "Create Account"}
+              onPress={() => router.push("/auth/register" as any)}
+              fullWidth
+            />
+          )}
+          <Pressable onPress={() => router.push("/auth/login" as any)} style={st.loginLink} accessibilityRole="link">
+            <Text allowFontScaling={false} style={st.loginText}>
+              Already have an account? <Text style={st.loginStrong}>Log In</Text>
+            </Text>
+          </Pressable>
         </View>
 
         {isWeb && !isPhoneBrowser ? (
@@ -76,7 +95,7 @@ export function ReferralLandingScreen({ code: rawCode }: { code?: string }) {
               <Text allowFontScaling={false} style={st.storeLink}>App Store</Text>
             </Pressable>
             <Text allowFontScaling={false} style={st.storeLead}>·</Text>
-            <Pressable onPress={() => openStore(PLAY_STORE_URL)}>
+            <Pressable onPress={() => openStore(buildPlayStoreReferralUrl(vm.code, vm.visitId))}>
               <Text allowFontScaling={false} style={st.storeLink}>Google Play</Text>
             </Pressable>
           </View>
@@ -97,6 +116,12 @@ export function ReferralLandingScreen({ code: rawCode }: { code?: string }) {
 
   return (
     <ScrollView style={st.page} contentContainerStyle={st.pageContent}>
+      {vm.showSmartBanner ? (
+        // PHASE B only (NATIVE_REFERRAL_LINKS_LIVE): Safari shows Open / Get for Compete natively.
+        <Head>
+          <meta name="apple-itunes-app" content={smartAppBannerContent(vm.code, vm.visitId)} />
+        </Head>
+      ) : null}
       <View style={st.card}>
         <Text allowFontScaling={false} style={st.brand}>{"🎱"}  Compete</Text>
         {body}
@@ -139,5 +164,9 @@ const st = StyleSheet.create({
   actions: { marginTop: webSc(SPACING.md), gap: webSc(SPACING.sm) },
   storeRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: webSc(SPACING.xs + 2), marginTop: webSc(SPACING.md) },
   storeLead: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted },
+  notice: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.success, textAlign: "center" },
+  loginLink: { alignItems: "center", paddingVertical: webSc(SPACING.xs) },
+  loginText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
+  loginStrong: { color: COLORS.primaryLight, fontWeight: "700" },
   storeLink: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", color: COLORS.primaryLight },
 });

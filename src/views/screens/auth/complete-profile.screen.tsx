@@ -157,7 +157,7 @@ export const CompleteProfileScreen = () => {
         </View>
 
         <View style={styles.fieldGroup}>
-          <ReferralCodeField code={referral.code} onChangeCode={referral.setCode} check={referral.check} inviter={referral.inviter} />
+          <ReferralCodeField code={referral.code} onChangeCode={referral.setCode} check={referral.check} inviter={referral.inviter} onPaste={referral.paste} pasteNote={referral.pasteNote} />
         </View>
 
         <Text allowFontScaling={false} style={styles.sectionTitle}>Terms & Conditions</Text>

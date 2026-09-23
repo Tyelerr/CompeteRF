@@ -34,4 +34,11 @@ export interface PendingReferral {
   code: string;
   source: ReferralSource;
   savedAt: number; // epoch ms
+  /** referral_visits id for funnel analytics (supplemental — never required for attribution). */
+  visitId?: string | null;
 }
+
+/** Funnel analytics (referral_visits). Supplemental to claim_referral, never authoritative. */
+export type ReferralVisitChannel = "web" | "app_link" | "install_referrer";
+export type ReferralVisitPlatform = "ios" | "android" | "desktop" | "unknown";
+export type ReferralVisitEvent = "app_open" | "install";

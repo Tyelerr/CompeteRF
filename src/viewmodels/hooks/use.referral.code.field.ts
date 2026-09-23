@@ -4,11 +4,12 @@
 // to the pending store so the ONE background claim path (usePendingReferralClaim) records it
 // once the profile exists. Link and manual codes therefore share the same server logic.
 
+import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pendingReferralService } from "../../models/services/pending-referral.service";
 import { referralService } from "../../models/services/referral.service";
 import { ReferralSource } from "../../models/types/referral.types";
-import { isWellFormedReferralCode, normalizeReferralCode } from "../../utils/referral";
+import { extractReferralCode, isWellFormedReferralCode, normalizeReferralCode } from "../../utils/referral";
 
 export type ReferralFieldCheck = "idle" | "checking" | "valid" | "invalid";
 
@@ -21,13 +22,18 @@ interface Resolved {
 export function useReferralCodeField() {
   const [code, setCodeState] = useState("");
   const [resolved, setResolved] = useState<Resolved | null>(null);
-  // The code that arrived via a /r link — keeps source = "link" while left unchanged.
+  // The code that arrived via a /r link — keeps source = "link" (and its visit) while unchanged.
   const linkCode = useRef<string | null>(null);
+  const linkVisitId = useRef<string | null>(null);
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
 
   useEffect(() => {
     pendingReferralService.get().then((p) => {
       if (!p) return;
-      if (p.source === "link") linkCode.current = p.code;
+      if (p.source === "link") {
+        linkCode.current = p.code;
+        linkVisitId.current = p.visitId ?? null;
+      }
       setCodeState((cur) => cur || p.code);
     });
   }, []);
@@ -62,7 +68,26 @@ export function useReferralCodeField() {
   const inviter = check === "valid" ? (current?.inviter ?? null) : null;
 
   const setCode = useCallback((value: string) => {
+    setPasteNote(null);
     setCodeState(value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 16));
+  }, []);
+
+  /**
+   * Optional convenience (e.g. the /r page copied the code before the App Store): paste a bare
+   * code or a referral link. Typing always works — clipboard access is never required.
+   */
+  const paste = useCallback(async () => {
+    try {
+      const found = extractReferralCode(await Clipboard.getStringAsync());
+      if (found) {
+        setCodeState(found);
+        setPasteNote(null);
+      } else {
+        setPasteNote("No referral code found on your clipboard — you can type it instead.");
+      }
+    } catch {
+      setPasteNote("Couldn't read the clipboard — you can type the code instead.");
+    }
   }, []);
 
   /**
@@ -75,9 +100,10 @@ export function useReferralCodeField() {
       await pendingReferralService.clear();
       return;
     }
-    const source: ReferralSource = normalized === linkCode.current ? "link" : "manual";
-    await pendingReferralService.save(normalized, source);
+    const fromLink = normalized === linkCode.current;
+    const source: ReferralSource = fromLink ? "link" : "manual";
+    await pendingReferralService.save(normalized, source, fromLink ? linkVisitId.current : null);
   }, [normalized]);
 
-  return { code, setCode, check, inviter, commit };
+  return { code, setCode, check, inviter, commit, paste, pasteNote };
 }

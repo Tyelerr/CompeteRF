@@ -7,6 +7,9 @@ import {
   ReferralClaimResult,
   ReferralCodeResolution,
   ReferralSource,
+  ReferralVisitChannel,
+  ReferralVisitEvent,
+  ReferralVisitPlatform,
 } from "../types/referral.types";
 import { normalizeReferralCode } from "../../utils/referral";
 
@@ -46,5 +49,48 @@ export const referralService = {
     });
     if (error) throw error;
     return data as ReferralClaimResult;
+  },
+
+  // ── Funnel analytics (referral_visits) ─────────────────────────────────────────────────────
+  // Supplemental only: these never throw and never affect attribution — claim() is the authority.
+
+  /** Logs a Raw Click; returns the visit id, or null if untracked (invalid code / rate limit / error). */
+  async logVisit(
+    code: string,
+    channel: ReferralVisitChannel,
+    platform: ReferralVisitPlatform,
+    campaign?: string | null,
+  ): Promise<string | null> {
+    try {
+      const { data, error } = await supabase.rpc("log_referral_visit", {
+        p_code: normalizeReferralCode(code),
+        p_channel: channel,
+        p_platform: platform,
+        p_campaign: campaign ?? null,
+      });
+      return error ? null : ((data as string | null) ?? null);
+    } catch {
+      return null;
+    }
+  },
+
+  /** Marks App Open / Install on a visit (first time only). */
+  async markVisit(visitId: string, event: ReferralVisitEvent): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.rpc("mark_referral_visit", { p_visit_id: visitId, p_event: event });
+      return !error && data === true;
+    } catch {
+      return false;
+    }
+  },
+
+  /** After a successful claim: connect the caller's referral to the visit that brought them. */
+  async linkVisit(visitId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.rpc("link_referral_visit", { p_visit_id: visitId });
+      return !error && data === true;
+    } catch {
+      return false;
+    }
   },
 };
