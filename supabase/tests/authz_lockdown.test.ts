@@ -1,7 +1,7 @@
 // supabase/tests/authz_lockdown.test.ts
 // Adversarial + regression tests for the Phase 1 authorization hardening:
 //   supabase/migrations/20260930120000_authz_rpcs.sql        (M1, additive RPCs)
-//   supabase/migrations/20260930130000_authz_write_lockdown.sql (M2, lockdown)
+//   supabase/pending/20260930130000_authz_write_lockdown.sql    (M2, lockdown — parked until approved)
 // PGlite, with the EXACT prod policies/functions replayed from the M0 capture
 // (supabase/rollback/20260930110000_authz_baseline_capture.sql), not local assumptions.
 // Every attack is first shown to SUCCEED on the baseline, then shown to FAIL after M1+M2.
@@ -13,13 +13,15 @@
 
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(__dirname, "..", "..");
 const BASELINE = readFileSync(join(ROOT, "supabase/rollback/20260930110000_authz_baseline_capture.sql"), "utf8");
 const M1 = readFileSync(join(ROOT, "supabase/migrations/20260930120000_authz_rpcs.sql"), "utf8");
-const M2 = readFileSync(join(ROOT, "supabase/migrations/20260930130000_authz_write_lockdown.sql"), "utf8");
+// M2 is parked in supabase/pending/ until approved; read it from wherever it currently lives.
+const M2_FILE = "20260930130000_authz_write_lockdown.sql";
+const M2 = readFileSync(join(ROOT, existsSync(join(ROOT, "supabase/migrations", M2_FILE)) ? "supabase/migrations" : "supabase/pending", M2_FILE), "utf8");
 const M2_ROLLBACK = readFileSync(join(ROOT, "supabase/rollback/20260930130000_authz_write_lockdown_rollback.sql"), "utf8");
 
 // ── identities (uuid, id_auto) ─────────────────────────────────────────────────────────────────
