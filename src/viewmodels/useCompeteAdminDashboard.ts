@@ -66,59 +66,56 @@ export const useCompeteAdminDashboard = () => {
     const today = new Date().toISOString().split("T")[0];
 
     try {
-      // Total users
-      const { count: userCount } = await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true });
-
-      // Total venues
-      const { count: venueCount } = await supabase
-        .from("venues")
-        .select("id", { count: "exact", head: true });
-
       // Total tournaments (with date filter if applicable)
       let tournamentsQuery = supabase
         .from("tournaments")
         .select("id", { count: "exact", head: true });
-
       if (dateFilter) {
         tournamentsQuery = tournamentsQuery.gte("created_at", dateFilter);
       }
-
-      const { count: tournamentCount } = await tournamentsQuery;
-
-      // Active tournaments (upcoming or today)
-      const { count: activeCount } = await supabase
-        .from("tournaments")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "active")
-        .gte("tournament_date", today);
-
-      // Pending approvals (venues or tournaments with pending status)
-      const { count: pendingVenueCount } = await supabase
-        .from("venues")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      const { count: pendingTournamentCount } = await supabase
-        .from("tournaments")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      const pendingApprovals =
-        (pendingVenueCount || 0) + (pendingTournamentCount || 0);
 
       // Total views (with date filter if applicable)
       let viewsQuery = supabase
         .from("tournament_analytics")
         .select("id", { count: "exact", head: true })
         .eq("event_type", "view");
-
       if (dateFilter) {
         viewsQuery = viewsQuery.gte("created_at", dateFilter);
       }
 
-      const { count: viewsCount } = await viewsQuery;
+      // Independent counts — one round trip instead of seven sequential ones.
+      const [
+        { count: userCount },
+        { count: venueCount },
+        { count: tournamentCount },
+        { count: activeCount },
+        { count: pendingVenueCount },
+        { count: pendingTournamentCount },
+        { count: viewsCount },
+      ] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("venues").select("id", { count: "exact", head: true }),
+        tournamentsQuery,
+        // Active tournaments (upcoming or today)
+        supabase
+          .from("tournaments")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active")
+          .gte("tournament_date", today),
+        // Pending approvals (venues or tournaments with pending status)
+        supabase
+          .from("venues")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        supabase
+          .from("tournaments")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        viewsQuery,
+      ]);
+
+      const pendingApprovals =
+        (pendingVenueCount || 0) + (pendingTournamentCount || 0);
 
       setStats({
         totalUsers: userCount || 0,

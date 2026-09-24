@@ -1,7 +1,8 @@
 ﻿// app/(tabs)/admin/director-analytics.tsx
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
+import { useRefreshOnRefocus } from "../../../src/viewmodels/hooks/use.refresh.on.refocus";
 import {
   RefreshControl,
   ScrollView,
@@ -26,11 +27,8 @@ export default function DirectorAnalyticsScreen() {
   const router = useRouter();
   const vm = useDirectorAnalytics();
 
-  useFocusEffect(
-    require("react").useCallback(() => {
-      vm.onRefresh();
-    }, [])
-  );
+  // Silent refresh when returning to the screen (skips the first focus; uses the current period).
+  useRefreshOnRefocus(vm.reload);
 
   if (vm.loading) {
     return (

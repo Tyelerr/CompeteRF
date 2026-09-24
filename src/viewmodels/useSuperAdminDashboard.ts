@@ -70,74 +70,69 @@ export const useSuperAdminDashboard = () => {
     const today = new Date().toISOString().split("T")[0];
 
     try {
-      const { count: userCount } = await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true });
-
-      const { count: venueCount } = await supabase
-        .from("venues")
-        .select("id", { count: "exact", head: true });
-
       let tournamentsQuery = supabase
         .from("tournaments")
         .select("id", { count: "exact", head: true });
-
       if (dateFilter) {
         tournamentsQuery = tournamentsQuery.gte("created_at", dateFilter);
       }
 
-      const { count: tournamentCount } = await tournamentsQuery;
-
-      const { count: activeCount } = await supabase
-        .from("tournaments")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "active")
-        .gte("tournament_date", today);
-
-      const { count: pendingVenueCount } = await supabase
-        .from("venues")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      const { count: pendingTournamentCount } = await supabase
-        .from("tournaments")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
-
-      const pendingApprovals =
-        (pendingVenueCount || 0) + (pendingTournamentCount || 0);
-
-      // Get total views from app_events
       let viewsQuery = supabase
         .from("app_events")
         .select("id", { count: "exact", head: true })
         .eq("event_type", "tournament_viewed");
-
       if (dateFilter) {
         viewsQuery = viewsQuery.gte("created_at", dateFilter);
       }
 
-      const { count: viewsCount } = await viewsQuery;
-
-      // Get total favorites from app_events
       let favoritesQuery = supabase
         .from("app_events")
         .select("id", { count: "exact", head: true })
         .eq("event_type", "tournament_favorited");
-
       if (dateFilter) {
         favoritesQuery = favoritesQuery.gte("created_at", dateFilter);
       }
 
-      const { count: favoritesCount } = await favoritesQuery;
+      // Independent counts — one round trip instead of ten sequential ones.
+      const [
+        { count: userCount },
+        { count: venueCount },
+        { count: tournamentCount },
+        { count: activeCount },
+        { count: pendingVenueCount },
+        { count: pendingTournamentCount },
+        { count: viewsCount },
+        { count: favoritesCount },
+        giveawayCount,
+        { count: barRequestCount },
+      ] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("venues").select("id", { count: "exact", head: true }),
+        tournamentsQuery,
+        supabase
+          .from("tournaments")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active")
+          .gte("tournament_date", today),
+        supabase
+          .from("venues")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        supabase
+          .from("tournaments")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        viewsQuery,
+        favoritesQuery,
+        giveawayService.getGiveawayCount(),
+        supabase
+          .from("bar_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+      ]);
 
-      const giveawayCount = await giveawayService.getGiveawayCount();
-
-      // Get pending bar requests count
-      const { count: barRequestCount } = await supabase
-        .from("bar_requests")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
+      const pendingApprovals =
+        (pendingVenueCount || 0) + (pendingTournamentCount || 0);
 
       setStats({
         totalUsers: userCount || 0,

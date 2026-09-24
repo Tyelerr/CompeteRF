@@ -43,6 +43,9 @@ export default function BarOwnerDirectorsScreen() {
         value={vm.filters.search}
         onChangeText={vm.updateSearch}
         placeholder="Search by name, email, venue, or ID..."
+        // Native: start right under the header like the other Admin detail pages (the shared
+        // default pushes the search down by 9% of the screen height). Web keeps the default.
+        topFraction={isWeb ? undefined : 0}
       />
 
       {vm.canAddDirectors && (

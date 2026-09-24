@@ -5,7 +5,7 @@
 // visual reference — this component is elimination-specific and does not touch Chip.
 
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
@@ -34,6 +34,13 @@ export interface DashboardKpis {
 
 // Reuse the authoritative mode list (values must match orderQueue's switch).
 const MODE_OPTIONS = AUTO_ASSIGN_MODES;
+
+// The two-column control center (tables left, assignment + schedule sidebar right) is a
+// web/desktop layout only — same breakpoint as the manage screen's other wide web pages.
+// Native (any size) and narrower web stack everything in one full-width column.
+const DASHBOARD_WIDE_MIN = 980;
+// Active Tables cards go two-up on web from tablet width; single column on phones / native.
+const ACTIVE_GRID_TWO_UP_MIN = 640;
 
 const clockTime = (iso: string): string => {
   try {
@@ -166,6 +173,10 @@ export const EliminationDashboard = ({
   // Shared per-second ticker for the live elapsed clocks on the Active Tables cards.
   const hasLive = activeMatches.some((m) => m.status === "in_progress");
   const now = useLiveNow(hasLive);
+  const { width: winWidth } = useWindowDimensions();
+  const isWebPlatform = Platform.OS === "web";
+  const wide = isWebPlatform && winWidth >= DASHBOARD_WIDE_MIN;
+  const twoUpCards = isWebPlatform && winWidth >= ACTIVE_GRID_TWO_UP_MIN;
   const kpiCells: { label: string; value: React.ReactNode }[] = [
     { label: "Players Remaining", value: kpis.playersRemaining },
     { label: "Active Matches", value: kpis.activeMatches },
@@ -192,9 +203,9 @@ export const EliminationDashboard = ({
           ))}
         </View>
 
-        <View style={styles.twoCol}>
-          {/* LEFT — active tables + Start All */}
-          <View style={styles.mainCol}>
+        <View style={wide ? styles.twoCol : styles.stack}>
+          {/* LEFT (stacked first on mobile) — active tables + Start All */}
+          <View style={wide ? styles.mainCol : undefined}>
             <Section
               title={`Active Tables (${activeMatches.length})`}
               right={
@@ -217,7 +228,7 @@ export const EliminationDashboard = ({
               ) : (
                 <View style={styles.activeGrid}>
                   {activeMatches.map((m) => (
-                    <View key={m.id} style={styles.activeCell}>
+                    <View key={m.id} style={twoUpCards ? styles.activeCell : styles.activeCellFull}>
                       <MatchCard
                         match={m}
                         onAction={onAction}
@@ -260,8 +271,8 @@ export const EliminationDashboard = ({
             </Section>
           </View>
 
-          {/* RIGHT — assignment + match schedule */}
-          <View style={styles.sideCol}>
+          {/* RIGHT sidebar on wide web (below the tables on mobile) — assignment + match schedule */}
+          <View style={wide ? styles.sideCol : undefined}>
             <View style={styles.card}>
               <Text allowFontScaling={false} style={styles.cardTitle}>Table Assignment</Text>
               <View style={styles.cardBlock}>
@@ -340,6 +351,7 @@ const styles = StyleSheet.create({
   kpiValue: { fontSize: webMs(FONT_SIZES.xl), fontWeight: "800", color: COLORS.primary },
   kpiLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, marginTop: webSc(2) },
   twoCol: { flexDirection: "row", alignItems: "flex-start", gap: webSc(SPACING.md) },
+  stack: { flexDirection: "column" },
   mainCol: { flex: 72, minWidth: 0 as any },
   sideCol: { flex: 28, minWidth: 0 as any, gap: webSc(SPACING.md) },
   card: {
@@ -362,6 +374,7 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   activeGrid: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.md) },
   activeCell: { width: "48.5%" as any },
+  activeCellFull: { width: "100%" as any },
   cardBlock: { marginTop: webSc(SPACING.sm), marginBottom: webSc(SPACING.sm) },
   fieldLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "700", marginBottom: webSc(SPACING.xs) },
   assignBtn: { borderWidth: 1, borderColor: COLORS.primary, borderRadius: webSc(RADIUS.sm), paddingVertical: webSc(SPACING.sm), alignItems: "center", marginBottom: webSc(SPACING.sm) },

@@ -10,6 +10,18 @@ import TabBarIcon from "../../src/views/components/common/tabbaricon";
 import { usePendingReferralClaim } from "../../src/viewmodels/hooks/use.pending.referral.claim";
 import { useInstallReferrerCapture } from "../../src/viewmodels/hooks/use.install.referrer.capture";
 
+// Leaving the Admin tab pops its stack back to the Admin home (otherwise a tab restores the
+// last nested page, e.g. Venue Analytics). Tournament manage pages are the exception: a TD
+// running a live event or mid-way through unsaved Setup keeps their place.
+const ADMIN_KEEP_PLACE_ROUTES = ["manage-tournament/[id]", "chip-tournament/[id]"];
+type TabRouteWithState = { state?: { index?: number; routes: { name: string }[] } };
+const adminPopToTopOnBlur = (route: unknown): boolean => {
+  const nested = (route as TabRouteWithState).state;
+  if (!nested || nested.routes.length === 0) return true;
+  const focused = nested.routes[nested.index ?? nested.routes.length - 1]?.name;
+  return !ADMIN_KEEP_PLACE_ROUTES.includes(focused ?? "");
+};
+
 function WebNavBar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -233,7 +245,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFE0"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="billiards" options={{ title: "Billiards", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFB1"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="submit" options={{ href: null }} />
-      <Tabs.Screen name="admin" options={{ title: "Admin", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />, href: hasAdminAccess ? undefined : null }} />
+      <Tabs.Screen name="admin" options={({ route }) => ({ title: "Admin", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />, href: hasAdminAccess ? undefined : null, popToTopOnBlur: adminPopToTopOnBlur(route) })} />
       <Tabs.Screen name="shop" options={{ title: "Giveaways", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDF81"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83D\uDC64"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="faq" options={{ title: "FAQ", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2753"} color={color} focused={focused} /> }} />

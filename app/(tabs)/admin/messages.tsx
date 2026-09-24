@@ -751,6 +751,19 @@ export default function AdminMessagesScreen() {
     >
       {/* Header */}
       <View style={[styles.header, isWeb && styles.headerWeb]}>
+        {/* Native back (same pattern as Venue Analytics). Absolutely positioned so the centered
+            title doesn't shift. Web keeps its top nav instead. */}
+        {!isWeb && (
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/admin" as any))}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text allowFontScaling={false} style={styles.backText}>{"←"} Back</Text>
+          </TouchableOpacity>
+        )}
         <Text allowFontScaling={false} style={styles.headerTitle}>MESSAGE CENTER</Text>
         <Text allowFontScaling={false} style={styles.headerSubtitle}>
           Manage conversations and broadcasts
@@ -1004,6 +1017,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerWeb: { paddingTop: SPACING.lg },
+  backBtn: {
+    position: "absolute",
+    left: SPACING.md,
+    top: SPACING.xl + SPACING.lg,
+    zIndex: 1,
+  },
+  backText: {
+    fontSize: wxMs(FONT_SIZES.sm),
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
   headerTitle: {
     fontSize: wxMs(FONT_SIZES.xl),
     fontWeight: "700",

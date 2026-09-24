@@ -13,7 +13,6 @@ import {
   HomeTabBar,
   NewsCard,
 } from "../../components/home";
-import { HomeMatchReadyCard } from "../../components/home/HomeMatchReadyCard";
 import { styles } from "./home.styles";
 
 const isWeb = Platform.OS === "web";
@@ -126,9 +125,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
-
-        {/* The player's live match, if any — renders nothing otherwise. */}
-        <HomeMatchReadyCard />
 
         <HomeTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 

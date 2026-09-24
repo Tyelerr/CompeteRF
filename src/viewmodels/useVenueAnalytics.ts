@@ -5,7 +5,7 @@
 // All data access goes through venueAnalyticsService; aggregation is pure
 // (utils/venue-analytics).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "../providers/AuthProvider";
 import {
   getSinceISO,
@@ -33,7 +33,13 @@ export function useVenueAnalytics() {
   const [runs, setRuns] = useState<TournamentRunStats[]>([]);
   const [discovery, setDiscovery] = useState<DiscoveryCounts>(EMPTY_DISCOVERY);
 
+  // Only the newest request may write state — a slow earlier load (e.g. before a period change)
+  // must not overwrite newer data.
+  const requestSeq = useRef(0);
+
   const fetchAll = useCallback(async () => {
+    const seq = ++requestSeq.current;
+    const isLatest = () => seq === requestSeq.current;
     if (!profile?.id_auto) {
       setRuns([]);
       setDiscovery(EMPTY_DISCOVERY);
@@ -44,6 +50,7 @@ export function useVenueAnalytics() {
       const venueIds = await venueAnalyticsService.getOwnerVenueIds(
         profile.id_auto,
       );
+      if (!isLatest()) return;
       if (venueIds.length === 0) {
         setRuns([]);
         setDiscovery(EMPTY_DISCOVERY);
@@ -57,10 +64,12 @@ export function useVenueAnalytics() {
         allTournamentIds,
         since,
       );
+      if (!isLatest()) return;
       setRuns(runsData);
       setDiscovery(disc);
     } catch (err) {
       console.error("[useVenueAnalytics] fetch error:", err);
+      if (!isLatest()) return;
       setRuns([]);
       setDiscovery(EMPTY_DISCOVERY);
     }
@@ -71,11 +80,17 @@ export function useVenueAnalytics() {
     fetchAll().finally(() => setLoading(false));
   }, [fetchAll]);
 
+  // Pull-to-refresh only: `refreshing` drives the RefreshControl spinner, which on iOS also
+  // pushes the content down while it spins.
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchAll();
     setRefreshing(false);
   }, [fetchAll]);
+
+  // Background refresh (e.g. when the screen regains focus): same fetch, no spinner, so the
+  // page never shifts.
+  const reload = useCallback(() => fetchAll(), [fetchAll]);
 
   const venueStats = useMemo(() => rollupVenue(runs), [runs]);
   const series = useMemo(() => groupIntoSeries(runs), [runs]);
@@ -109,6 +124,7 @@ export function useVenueAnalytics() {
     loading,
     refreshing,
     onRefresh,
+    reload,
 
     period,
     setPeriod,

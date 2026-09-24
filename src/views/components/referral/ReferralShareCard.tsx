@@ -101,7 +101,8 @@ const st = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm + SPACING.xs),
     paddingHorizontal: webSc(SPACING.md),
   },
-  rowWide: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
+  // flex: 1 fills the wide-web column so it matches the Giveaway Entries card's height exactly.
+  rowWide: { flex: 1, flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
   rowTop: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   headingBlock: { flex: 1, minWidth: 0 },
   title: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },

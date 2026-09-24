@@ -181,10 +181,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // ── Session hydration via RPC ─────────────────────────────────────────────
-  const hydrateAuthSession = async (userId: string) => {
+  // In-flight hydration per user. At launch both getSession() and the listener's
+  // INITIAL_SESSION event hydrate the same user; sharing the request avoids a second
+  // get_auth_session round trip that would supersede (and delay) the first.
+  const inflightHydrationRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+
+  const hydrateAuthSession = (userId: string, opts?: { force?: boolean }): Promise<void> => {
+    const inflight = inflightHydrationRef.current;
+    if (!opts?.force && inflight && inflight.userId === userId) return inflight.promise;
+    const promise = runHydration(userId).finally(() => {
+      if (inflightHydrationRef.current?.promise === promise) inflightHydrationRef.current = null;
+    });
+    inflightHydrationRef.current = { userId, promise };
+    return promise;
+  };
+
+  // One retry on a failed RPC (e.g. iOS "The network connection was lost" on a dropped
+  // keep-alive socket) before the profiles-only fallback, which has no venue ids and would
+  // leave owner/director permissions empty until the next hydration.
+  const fetchAuthSession = async () => {
+    const first = await supabase.rpc('get_auth_session');
+    if (!first.error) return first;
+    console.warn('Auth session RPC error, retrying once:', first.error);
+    return supabase.rpc('get_auth_session');
+  };
+
+  const runHydration = async (userId: string) => {
     const myGen = ++hydrationGenRef.current;
     try {
-      const { data, error } = await supabase.rpc('get_auth_session');
+      const { data, error } = await fetchAuthSession();
       if (myGen !== hydrationGenRef.current) return;
       if (error) {
         console.error('Auth session RPC error:', error);
@@ -256,9 +281,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      // A token refresh for the user we already hydrated doesn't change their profile / role,
+      // so don't re-run the session RPC once their profile is loaded (it would also supersede
+      // any in-flight hydration). If hydration had failed, the refresh still retries it.
+      if (
+        event === 'TOKEN_REFRESHED' &&
+        session?.user &&
+        useAuthStore.getState().profile?.id === session.user.id
+      ) {
+        return;
+      }
       if (session?.user) {
         hydrateAuthSession(session.user.id);
       } else {
@@ -273,14 +308,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // ── Refresh ───────────────────────────────────────────────────────────────
   const refreshSession = async (forceUserId?: string) => {
     const id = forceUserId ?? user?.id;
-    if (id) await hydrateAuthSession(id);
+    if (id) await hydrateAuthSession(id, { force: true });
   };
 
   // ── Create profile ────────────────────────────────────────────────────────
   const createProfile = async (profileData: ProfileInsert) => {
     try {
       await profileService.createProfile(profileData);
-      if (user?.id) await hydrateAuthSession(user.id);
+      if (user?.id) await hydrateAuthSession(user.id, { force: true });
     } catch (error) {
       console.error('Create profile error:', error);
       throw error;

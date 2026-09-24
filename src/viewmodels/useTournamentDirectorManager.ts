@@ -127,25 +127,13 @@ export const useTournamentDirectorManager = () => {
         return;
       }
 
-      // Get stats for each tournament
+      // No per-tournament view / favorite count queries here: this list's cards never show them,
+      // and they were 2 extra requests per tournament on every open. (TournamentCard's type
+      // still carries the fields, so they're set to 0.)
       const tournamentsWithStats: TournamentDirectorWithStats[] =
-        await Promise.all(
           tournamentData
             .filter((t: any) => !t.is_draft) // hide unsaved drafts
-            .map(async (tournament: any) => {
-            // Get view count
-            const { count: viewsCount } = await supabase
-              .from("tournament_analytics")
-              .select("id", { count: "exact", head: true })
-              .eq("tournament_id", tournament.id)
-              .eq("event_type", "view");
-
-            // Get favorites count
-            const { count: favoritesCount } = await supabase
-              .from("favorites")
-              .select("id", { count: "exact", head: true })
-              .eq("tournament_id", tournament.id);
-
+            .map((tournament: any) => {
             // Tournament directors can always edit/delete their own tournaments
             const canEdit = true;
             const canDelete = tournament.status !== "completed";
@@ -155,13 +143,12 @@ export const useTournamentDirectorManager = () => {
               venue_name: tournament.venues?.venue || "Unknown",
               director_name:
                 tournament.profiles?.user_name || profile.user_name || "You",
-              views_count: viewsCount || 0,
-              favorites_count: favoritesCount || 0,
+              views_count: 0,
+              favorites_count: 0,
               can_edit: canEdit,
               can_delete: canDelete,
             };
-          }),
-        );
+          });
 
       setTournaments(tournamentsWithStats);
       calculateStatusCounts(tournamentsWithStats);
@@ -277,7 +264,7 @@ export const useTournamentDirectorManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.archiveTournament(tournamentId, profile.id_auto);
-      await loadTournaments(); // Reload data
+      await loadTournaments({ silent: true }); // Reload data in place
       return true;
     } catch (error) {
       console.error("Error archiving tournament:", error);
@@ -300,7 +287,7 @@ export const useTournamentDirectorManager = () => {
         reason,
         profile.id_auto,
       );
-      await loadTournaments(); // Reload data
+      await loadTournaments({ silent: true }); // Reload data in place
       return true;
     } catch (error) {
       console.error("Error cancelling tournament:", error);
@@ -314,7 +301,7 @@ export const useTournamentDirectorManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.restoreTournament(tournamentId);
-      await loadTournaments(); // Reload data
+      await loadTournaments({ silent: true }); // Reload data in place
       return true;
     } catch (error) {
       console.error("Error restoring tournament:", error);
@@ -328,7 +315,7 @@ export const useTournamentDirectorManager = () => {
     try {
       setProcessing(tournamentId);
       await tournamentService.completeTournament(tournamentId);
-      await loadTournaments(); // Reload data
+      await loadTournaments({ silent: true }); // Reload data in place
       return true;
     } catch (error) {
       console.error("Error completing tournament:", error);

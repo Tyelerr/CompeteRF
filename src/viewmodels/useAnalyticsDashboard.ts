@@ -227,6 +227,9 @@ export function useAnalyticsDashboard() {
     setRefreshing(false);
   }, [fetchData]);
 
+  // Silent background refresh (screen refocus) — same fetch, no pull-to-refresh spinner.
+  const reload = useCallback(() => fetchData(), [fetchData]);
+
   // ── Time period change ────────────────────────────────────────
   const handleTimePeriodChange = useCallback((value: string) => {
     const option = TIME_PERIOD_OPTIONS.find((o) => o.value === value);
@@ -281,6 +284,7 @@ export function useAnalyticsDashboard() {
 
     // Actions
     onRefresh,
+    reload,
     handleTimePeriodChange,
   };
 }

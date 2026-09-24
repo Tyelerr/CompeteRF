@@ -115,106 +115,102 @@ export const conversationService = {
 
     if (convoError) throw convoError;
 
-    const previews: ConversationPreview[] = [];
+    type OtherParticipant = {
+      name: string | null;
+      role: string | null;
+      email: string | null;
+      idAuto: number | null;
+    };
+    const profileToOther = (p: any): OtherParticipant => ({
+      name: p.name,
+      role: p.role,
+      email: p.email || null,
+      idAuto: p.id_auto || null,
+    });
+    const noOther: OtherParticipant = { name: null, role: null, email: null, idAuto: null };
 
-    for (const convo of convos || []) {
-      // Get last message
-      const { data: lastMsg } = await supabase
-        .from("conversation_messages")
-        .select("body, created_at, sender_id")
-        .eq("conversation_id", convo.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // Get other participant (for non-support, show the other person;
-      // for support convos where current user is admin, show the creator)
-      let otherName: string | null = null;
-      let otherRole: string | null = null;
-      let otherEmail: string | null = null;
-      let otherIdAuto: number | null = null;
-
-      if (convo.is_support) {
-        if (convo.created_by !== userId) {
-          const { data: creatorProfile } = await supabase
-            .from("profiles")
-            .select("name, role, email, id_auto")
-            .eq("id", convo.created_by)
-            .maybeSingle();
-          if (creatorProfile) {
-            otherName = creatorProfile.name;
-            otherRole = creatorProfile.role;
-            otherEmail = creatorProfile.email || null;
-            otherIdAuto = creatorProfile.id_auto || null;
-          }
-        }
-      } else {
-        const { data: otherParticipants } = await supabase
-          .from("conversation_participants")
-          .select("user_id")
+    // Conversations are independent, and so are the three lookups inside each one — run them
+    // all concurrently (was a serial loop of 3–4 round trips per conversation). Promise.all
+    // keeps the updated_at order from the query above.
+    const previews: ConversationPreview[] = await Promise.all(
+      (convos || []).map(async (convo: any) => {
+        // Last message
+        const lastMsgPromise = supabase
+          .from("conversation_messages")
+          .select("body, created_at, sender_id")
           .eq("conversation_id", convo.id)
-          .neq("user_id", userId)
-          .limit(1);
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data }) => data);
 
-        if (otherParticipants && otherParticipants.length > 0) {
+        // Other participant (for non-support, show the other person;
+        // for support convos where current user is admin, show the creator)
+        const otherPromise = (async (): Promise<OtherParticipant> => {
+          if (convo.is_support) {
+            if (convo.created_by === userId) return noOther;
+            const { data: creatorProfile } = await supabase
+              .from("profiles")
+              .select("name, role, email, id_auto")
+              .eq("id", convo.created_by)
+              .maybeSingle();
+            return creatorProfile ? profileToOther(creatorProfile) : noOther;
+          }
+          const { data: otherParticipants } = await supabase
+            .from("conversation_participants")
+            .select("user_id")
+            .eq("conversation_id", convo.id)
+            .neq("user_id", userId)
+            .limit(1);
+          if (!otherParticipants || otherParticipants.length === 0) return noOther;
           const { data: otherProfile } = await supabase
             .from("profiles")
             .select("name, role, email, id_auto")
             .eq("id", otherParticipants[0].user_id)
             .maybeSingle();
+          return otherProfile ? profileToOther(otherProfile) : noOther;
+        })();
 
-          if (otherProfile) {
-            otherName = otherProfile.name;
-            otherRole = otherProfile.role;
-            otherEmail = otherProfile.email || null;
-            otherIdAuto = otherProfile.id_auto || null;
-          }
-        }
-      }
-
-      // Count unread
-      const lastReadAt = readMap.get(convo.id);
-      let unreadCount = 0;
-      if (lastReadAt) {
-        const { count } = await supabase
-          .from("conversation_messages")
-          .select("id", { count: "exact", head: true })
-          .eq("conversation_id", convo.id)
-          .neq("sender_id", userId)
-          .gt("created_at", lastReadAt);
-        unreadCount = count || 0;
-      } else {
-        const { count } = await supabase
+        // Count unread
+        const lastReadAt = readMap.get(convo.id);
+        let unreadQuery = supabase
           .from("conversation_messages")
           .select("id", { count: "exact", head: true })
           .eq("conversation_id", convo.id)
           .neq("sender_id", userId);
-        unreadCount = count || 0;
-      }
+        if (lastReadAt) unreadQuery = unreadQuery.gt("created_at", lastReadAt);
+        const unreadPromise = unreadQuery.then(({ count }) => count || 0);
 
-      previews.push({
-        id: convo.id,
-        subject: convo.subject,
-        category: convo.category,
-        tournament_id: convo.tournament_id,
-        is_support: convo.is_support,
-        created_by: convo.created_by,
-        updated_at: convo.updated_at,
-        last_message: lastMsg?.body || null,
-        last_message_at: lastMsg?.created_at || convo.created_at,
-        last_sender_id: lastMsg?.sender_id || null,
-        other_participant_name: convo.is_support
-          ? otherName || "Compete Support"
-          : otherName,
-        other_participant_role: convo.is_support
-          ? "support"
-          : otherRole,
-        other_participant_email: otherEmail,
-        other_participant_id_auto: otherIdAuto,
-        unread_count: unreadCount,
-        archived: archivedMap.get(convo.id) != null,
-      });
-    }
+        const [lastMsg, other, unreadCount] = await Promise.all([
+          lastMsgPromise,
+          otherPromise,
+          unreadPromise,
+        ]);
+
+        return {
+          id: convo.id,
+          subject: convo.subject,
+          category: convo.category,
+          tournament_id: convo.tournament_id,
+          is_support: convo.is_support,
+          created_by: convo.created_by,
+          updated_at: convo.updated_at,
+          last_message: lastMsg?.body || null,
+          last_message_at: lastMsg?.created_at || convo.created_at,
+          last_sender_id: lastMsg?.sender_id || null,
+          other_participant_name: convo.is_support
+            ? other.name || "Compete Support"
+            : other.name,
+          other_participant_role: convo.is_support
+            ? "support"
+            : other.role,
+          other_participant_email: other.email,
+          other_participant_id_auto: other.idAuto,
+          unread_count: unreadCount,
+          archived: archivedMap.get(convo.id) != null,
+        };
+      }),
+    );
 
     return previews;
   },

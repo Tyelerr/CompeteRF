@@ -4,8 +4,9 @@
 // top-tournament lists, and discovery/engagement metrics lower down.
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
-import { useRouter, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import { useRefreshOnRefocus } from "../../../src/viewmodels/hooks/use.refresh.on.refocus";
+import { useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -22,6 +23,7 @@ import { useVenueAnalytics } from "../../../src/viewmodels/useVenueAnalytics";
 import { TournamentSeriesStats } from "../../../src/models/types/venue-analytics.types";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { AnimatedBar } from "../../../src/views/components/dashboard/AnimatedBar";
+import { ShowHideSection } from "../../../src/views/components/common/show-hide-section";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -46,18 +48,16 @@ export default function BarOwnerAnalyticsScreen() {
   const router = useRouter();
   const vm = useVenueAnalytics();
 
-  // Collapsible sections: Money open by default; Top + Activity closed.
-  const [open, setOpen] = useState({ money: true, top: false, activity: false });
+  // Collapsible sections: all three start collapsed (SHOW); each opens independently.
+  const [open, setOpen] = useState({ money: false, top: false, activity: false });
   const toggle = (k: keyof typeof open) =>
     setOpen((o) => ({ ...o, [k]: !o[k] }));
   const [topMetric, setTopMetric] = useState<TopMetric>("attendance");
 
-  useFocusEffect(
-    useCallback(() => {
-      vm.onRefresh();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []),
-  );
+  // Silent refresh when returning to the screen. (Going through onRefresh set the pull-to-refresh
+  // spinner, which on iOS pushed the whole page down until the load finished.) Skips the first
+  // focus and always uses the current period.
+  useRefreshOnRefocus(vm.reload);
 
   const s = vm.venueStats;
   const f = s.feesByCategory;
@@ -169,8 +169,8 @@ export default function BarOwnerAnalyticsScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* 4. Money Overview (open by default) */}
-      <CollapsibleSection
+      {/* 4. Money Overview (collapsed by default) */}
+      <ShowHideSection
         title="Money Overview"
         expanded={open.money}
         onToggle={() => toggle("money")}
@@ -193,10 +193,10 @@ export default function BarOwnerAnalyticsScreen() {
           <MoneyRow label="Net prize pool" value={money(s.netPrizePool)} strong />
           <MoneyRow label="Prize money paid out" value={money(s.prizePaidOut)} />
         </View>
-      </CollapsibleSection>
+      </ShowHideSection>
 
       {/* 5. Top Tournaments (collapsed; segmented metric switch) */}
-      <CollapsibleSection
+      <ShowHideSection
         title="Top Tournaments"
         expanded={open.top}
         onToggle={() => toggle("top")}
@@ -255,10 +255,10 @@ export default function BarOwnerAnalyticsScreen() {
             </Text>
           </View>
         )}
-      </CollapsibleSection>
+      </ShowHideSection>
 
       {/* 6. Activity Breakdown (collapsed; horizontal bars) */}
-      <CollapsibleSection
+      <ShowHideSection
         title="Activity Breakdown"
         expanded={open.activity}
         onToggle={() => toggle("activity")}
@@ -289,7 +289,7 @@ export default function BarOwnerAnalyticsScreen() {
             </Text>
           </View>
         )}
-      </CollapsibleSection>
+      </ShowHideSection>
 
       <View style={styles.bottomSpacer} />
     </ScrollView>
@@ -355,44 +355,6 @@ const MoneyRow = ({
     >
       {value}
     </Text>
-  </View>
-);
-
-// Accordion section: a tappable header (chevron + title + collapsed teaser) that
-// shows/hides its content. No LayoutAnimation (flaky under New Arch) — clean
-// conditional render.
-const CollapsibleSection = ({
-  title,
-  expanded,
-  onToggle,
-  summary,
-  children,
-}: {
-  title: string;
-  expanded: boolean;
-  onToggle: () => void;
-  summary?: string;
-  children: React.ReactNode;
-}) => (
-  <View>
-    <TouchableOpacity
-      style={styles.collapseHeader}
-      onPress={onToggle}
-      activeOpacity={0.7}
-    >
-      <Text allowFontScaling={false} style={styles.collapseChevron}>
-        {expanded ? "▾" : "▸"}
-      </Text>
-      <Text allowFontScaling={false} style={styles.sectionTitle}>
-        {title}
-      </Text>
-      {!expanded && summary ? (
-        <Text allowFontScaling={false} style={styles.collapseSummary}>
-          {summary}
-        </Text>
-      ) : null}
-    </TouchableOpacity>
-    {expanded ? children : null}
   </View>
 );
 
@@ -464,26 +426,6 @@ const styles = StyleSheet.create({
     fontSize: wxMs(FONT_SIZES.md),
     fontWeight: "700",
     color: COLORS.text,
-  },
-  // Collapsible section header
-  collapseHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.xs,
-  },
-  collapseChevron: {
-    fontSize: wxMs(FONT_SIZES.md),
-    color: COLORS.textSecondary,
-    width: wxSc(20),
-  },
-  collapseSummary: {
-    flex: 1,
-    textAlign: "right",
-    fontSize: wxMs(FONT_SIZES.sm),
-    color: COLORS.textSecondary,
-    fontWeight: "600",
   },
   // Segmented control (Top Tournaments metric)
   segmentRow: {

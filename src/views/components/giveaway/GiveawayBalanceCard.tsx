@@ -47,7 +47,9 @@ const st = StyleSheet.create({
     borderColor: COLORS.border,
     paddingHorizontal: webSc(SPACING.md),
   },
-  stacked: { paddingVertical: webSc(SPACING.sm + SPACING.xs), justifyContent: "center" },
+  // flex: 1 fills the wide-web column so it matches the Refer Friends card's height exactly
+  // (the row stretches both columns); stacked is only used on wide web.
+  stacked: { flex: 1, paddingVertical: webSc(SPACING.sm + SPACING.xs), justifyContent: "center" },
   stackedRow: { flexDirection: "row", alignItems: "baseline", gap: webSc(SPACING.xs + 2), marginTop: 2 },
   inline: {
     flexDirection: "row",

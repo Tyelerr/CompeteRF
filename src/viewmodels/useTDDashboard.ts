@@ -50,12 +50,13 @@ export const useTDDashboard = () => {
     if (!profile?.id_auto) return;
 
     try {
-      await Promise.all([
-        loadStats(),
-        loadVenues(),
-        loadTournaments(),
-        loadEventTypeStats(),
-      ]);
+      // The TD home only renders the stats cards, so release the full-screen spinner as soon as
+      // they're in; venues / tournaments / event-type data keep loading in the background.
+      const statsDone = loadStats();
+      const restDone = Promise.all([loadVenues(), loadTournaments(), loadEventTypeStats()]);
+      await statsDone;
+      setLoading(false);
+      await restDone;
     } catch (error) {
       console.error("Error loading dashboard:", error);
     } finally {
@@ -77,27 +78,29 @@ export const useTDDashboard = () => {
       tournamentsQuery = tournamentsQuery.gte("created_at", dateFilter);
     }
 
-    const { count: tournamentCount } = await tournamentsQuery;
-
-    // Get active events count
-    const { count: activeCount } = await supabase
-      .from("tournaments")
-      .select("id", { count: "exact", head: true })
-      .eq("director_id", profile!.id_auto)
-      .eq("status", "active");
-
-    // Get venues count
-    const { count: venueCount } = await supabase
-      .from("venue_directors")
-      .select("id", { count: "exact", head: true })
-      .eq("director_id", profile!.id_auto)
-      .is("archived_at", null);
-
-    // Get tournament IDs for this director
-    const { data: myTournaments } = await supabase
-      .from("tournaments")
-      .select("id")
-      .eq("director_id", profile!.id_auto);
+    // Independent reads — one round trip instead of four sequential ones.
+    const [
+      { count: tournamentCount },
+      { count: activeCount },
+      { count: venueCount },
+      { data: myTournaments },
+    ] = await Promise.all([
+      tournamentsQuery,
+      // Active events count
+      supabase
+        .from("tournaments")
+        .select("id", { count: "exact", head: true })
+        .eq("director_id", profile!.id_auto)
+        .eq("status", "active"),
+      // Venues count
+      supabase
+        .from("venue_directors")
+        .select("id", { count: "exact", head: true })
+        .eq("director_id", profile!.id_auto)
+        .is("archived_at", null),
+      // Tournament IDs for this director (scope for the view / favorite counts)
+      supabase.from("tournaments").select("id").eq("director_id", profile!.id_auto),
+    ]);
 
     const tournamentIds = myTournaments?.map((t: any) => t.id) || [];
 
