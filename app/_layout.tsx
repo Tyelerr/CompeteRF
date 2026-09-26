@@ -10,6 +10,7 @@ import { analyticsService } from "../src/models/services/analytics.service";
 import { AuthProvider } from "../src/providers/AuthProvider";
 import { QueryProvider } from "../src/providers/QueryProvider";
 import { WebAlertHost } from "../src/views/components/common/WebAlertHost";
+import { ChipOfflineRecoveryEntry } from "../src/views/components/tournament/live/ChipOfflineRecoveryEntry";
 import { COLORS } from "../src/theme/colors";
 
 // WEB ONLY — visually hide scrollbars app-wide while KEEPING scroll (wheel / trackpad /
@@ -123,6 +124,9 @@ export default function RootLayout() {
               <Stack.Screen name="legal" />
               <Stack.Screen name="account-deletion" />
             </Stack>
+            {/* WEB ONLY: offline disaster-recovery entry to local Chip backups (renders
+                nothing unless the cloud profile can't load and backups exist). */}
+            <ChipOfflineRecoveryEntry />
           </ThemeProvider>
         </AuthProvider>
       </QueryProvider>

@@ -50,6 +50,7 @@ export interface TeamCardPlayerVM {
   removable?: boolean; // draft: show a "Change" affordance on the row
   onEdit?: () => void; // display: show an "Edit" affordance (attached PENDING members)
   pendingAccount?: boolean; // subtle tertiary: this player has no Compete account yet
+  manualPlayer?: boolean; // subtle tertiary (TD setup only): tournament-only entry, no account
   // Singles display: render identity ONLY (name + Player ID + pending/Edit). Status and
   // Fargo are shown by the card as their own dedicated rows (elimination-card style),
   // not crammed into this row's right side.
@@ -151,6 +152,9 @@ const PlayerRow = ({
           {p.idLabel ? <Text allowFontScaling={false} style={styles.identityIdSub} numberOfLines={1}>{p.idLabel}</Text> : null}
           {p.pendingAccount ? (
             <Text allowFontScaling={false} style={styles.pAccountPending} numberOfLines={1}>Pending account</Text>
+          ) : null}
+          {p.manualPlayer ? (
+            <Text allowFontScaling={false} style={styles.pAccountPending} numberOfLines={1}>MANUAL</Text>
           ) : null}
         </View>
         {p.onEdit ? (
@@ -258,6 +262,9 @@ const PlayerRow = ({
         ) : null}
         {p.pendingAccount ? (
           <Text allowFontScaling={false} style={styles.pAccountPending} numberOfLines={1}>Pending account</Text>
+        ) : null}
+        {p.manualPlayer ? (
+          <Text allowFontScaling={false} style={styles.pAccountPending} numberOfLines={1}>MANUAL</Text>
         ) : null}
       </View>
       <View style={styles.pstatusCol}>

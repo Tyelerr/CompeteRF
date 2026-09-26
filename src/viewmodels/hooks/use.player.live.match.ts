@@ -8,6 +8,8 @@
 
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Platform } from "react-native";
+import { onlineOnlyWrite } from "../../utils/connection-required";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import {
@@ -137,16 +139,19 @@ export const usePlayerLiveMatch = (
   // Only path: the row-locked submit_match_state RPC, which merges this one match
   // server-side and only lets a player score a match they are actually in. (The old
   // whole-live_settings fallback was removed — it could overwrite concurrent writes.)
+  // Player score entry is ONLINE-ONLY on web: refused up front while offline and never paused
+  // + replayed on reconnect (networkMode "always"; see src/utils/connection-required.ts).
   const matchStateMutation = useMutation({
+    ...(Platform.OS === "web" ? { networkMode: "always" as const } : {}),
     mutationFn: async (vars: {
       matchId: string;
       patch: Partial<MatchLiveState>;
     }) => {
       if (!tournamentId) throw new Error("No live tournament.");
-      await tournamentService.submitMatchState(
-        tournamentId,
-        vars.matchId,
-        vars.patch as Record<string, unknown>,
+      const isWeb = Platform.OS === "web";
+      const online = isWeb && typeof navigator !== "undefined" && typeof navigator.onLine === "boolean" ? navigator.onLine : null;
+      await onlineOnlyWrite(isWeb, online, () =>
+        tournamentService.submitMatchState(tournamentId, vars.matchId, vars.patch as Record<string, unknown>),
       );
     },
     onSuccess: () =>

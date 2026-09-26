@@ -111,9 +111,19 @@ export interface UnifiedRegisterModalProps {
   // chip_entries (players.id primary, id_auto fallback). When provided, it drives the
   // singles "Already in tournament" disabled state instead of is_registered.
   isPlayerEntered?: (player: PlayerSearchResult) => boolean;
+  // Chip Singles: add a MANUAL player — a tournament-only participant with no Compete account
+  // (name + optional Fargo; no players / profiles / pending-account row). When provided, the
+  // search footer shows "+ Add Manual Player"; the name goes through the SAME Fargo / Entry step
+  // as a searched player and lands here instead of onAddSingles.
+  onAddManual?: (
+    name: string,
+    fargo: number | null,
+    paidSidePots: string[],
+    paidEntry: boolean,
+  ) => void | Promise<void>;
 }
 
-type Step = "search" | "create" | "fargo" | "draft" | "p2search";
+type Step = "search" | "create" | "manual" | "fargo" | "draft" | "p2search";
 type Slot = 1 | 2;
 
 const initials = (name: string): string =>
@@ -163,6 +173,7 @@ export const UnifiedRegisterModal = ({
   onPersistSelections,
   readyEval,
   isPlayerEntered,
+  onAddManual,
   entryFee = null,
   sidePots = [],
   maxFargo = null,
@@ -190,6 +201,11 @@ export const UnifiedRegisterModal = ({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneDigits, setPhoneDigits] = useState("");
+
+  // Manual player (chip singles): the name being added, and whether the Fargo step's
+  // selection is a manual placeholder (no identity) rather than a searched player.
+  const [manualName, setManualName] = useState("");
+  const [isManual, setIsManual] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -228,6 +244,8 @@ export const UnifiedRegisterModal = ({
     setSelected({ 1: null, 2: null });
     setEnteredPots([]);
     setEntryPaid(false);
+    setManualName("");
+    setIsManual(false);
     if (editPlayer && tournamentId != null) {
       // Edit an existing PENDING player: jump to the form, prefill from the server.
       setEditingPlayerId(editPlayer.playerId);
@@ -356,6 +374,43 @@ export const UnifiedRegisterModal = ({
   };
 
   // --- Inline create ----------------------------------------------------------
+
+  // Manual player: name step (prefilled from the search text), then the normal Fargo / Entry
+  // step with a placeholder selection that carries no identity.
+  const openManual = () => {
+    setManualName(search.query.trim());
+    setErrorMsg(null);
+    setStep("manual");
+  };
+  const continueManual = () => {
+    const name = manualName.trim().replace(/\s+/g, " ");
+    if (!name) {
+      setErrorMsg("Enter the player's name.");
+      return;
+    }
+    const { first, last } = splitName(name);
+    setSelected({
+      1: {
+        player_id: "",
+        id_auto: null,
+        account_status: "PENDING",
+        display_name: name,
+        first_name: first || null,
+        last_name: last || null,
+        email_masked: null,
+        username: null,
+        avatar_url: null,
+        fargo: null,
+        is_registered: false,
+        on_team: false,
+        team_name: null,
+      },
+      2: null,
+    });
+    setIsManual(true);
+    setErrorMsg(null);
+    setStep("fargo");
+  };
 
   const openCreate = () => {
     const { first, last } = splitName(search.query);
@@ -504,7 +559,10 @@ export const UnifiedRegisterModal = ({
     setErrorMsg(null);
     let addedAsReady = false; // bracket path: reflected in the success flash
     try {
-      if (onAddSingles) {
+      if (isManual && onAddManual) {
+        // Manual player: tournament-only chip entry — no identity, no global records.
+        await onAddManual(selected[1].display_name, parseFargo(1), enteredPots, entryPaid);
+      } else if (onAddSingles) {
         // Chip Singles: add directly to chip_entries via the screen's callback
         // (players.id identity), NOT a tournament_players registration. Entered side
         // pots + the entry-fee-paid flag ride along (paid defaults Unpaid).
@@ -556,6 +614,8 @@ export const UnifiedRegisterModal = ({
         onRegistered?.(selected[1].player_id, regId);
       }
       setFlash(`${selected[1].display_name} added${addedAsReady ? " as Ready" : ""}.`);
+      setIsManual(false);
+      setManualName("");
       setSelected({ 1: null, 2: null });
       setFargo({ 1: "", 2: "" });
       setEnteredPots([]);
@@ -734,6 +794,12 @@ export const UnifiedRegisterModal = ({
 
         <View style={styles.searchFooter}>
           <Button title={createLinkLabel()} variant="outline" size="md" fullWidth onPress={openCreate} />
+          {onAddManual && step === "search" ? (
+            <>
+              <View style={styles.searchFooterGap} />
+              <Button title="+ Add Manual Player" variant="outline" size="md" fullWidth onPress={openManual} />
+            </>
+          ) : null}
           <View style={styles.searchFooterGap} />
           <Button title="Close" variant="primary" size="md" fullWidth onPress={onClose} />
         </View>
@@ -744,6 +810,38 @@ export const UnifiedRegisterModal = ({
   // --- Steps ------------------------------------------------------------------
 
   const renderSearch = () => renderSearchStep("Search by name, username, or email…");
+
+  const renderManual = () => (
+    <View style={styles.createContent}>
+      <Text allowFontScaling={false} style={styles.createHeading}>Add manual player</Text>
+      <Text allowFontScaling={false} style={styles.hint}>
+        Tournament-only player — no Compete account is created. Fargo is next.
+      </Text>
+      <Text allowFontScaling={false} style={styles.fieldLabel}>Display name</Text>
+      <TextInput
+        allowFontScaling={false}
+        style={styles.fieldInput}
+        value={manualName}
+        onChangeText={setManualName}
+        placeholder="e.g. John Smith"
+        placeholderTextColor={COLORS.textMuted}
+        autoCapitalize="words"
+        autoCorrect={false}
+        autoFocus
+        returnKeyType="next"
+        onSubmitEditing={continueManual}
+      />
+      {errorMsg && <Text allowFontScaling={false} style={styles.error}>{errorMsg}</Text>}
+      <View style={styles.actionsRow}>
+        <View style={styles.actionBtn}>
+          <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
+        </View>
+        <View style={styles.actionBtn}>
+          <Button title="Continue" onPress={continueManual} disabled={!manualName.trim()} />
+        </View>
+      </View>
+    </View>
+  );
 
   const renderCreate = () => (
     <KeyboardAwareScroll
@@ -894,7 +992,11 @@ export const UnifiedRegisterModal = ({
           <Text allowFontScaling={false} style={styles.selectedName} numberOfLines={1}>
             {selected[1]?.display_name}
           </Text>
-          {selected[1] ? (
+          {selected[1] && isManual ? (
+            <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
+              Manual player · no Compete account
+            </Text>
+          ) : selected[1] ? (
             <>
               <Text allowFontScaling={false} style={styles.rowSub} numberOfLines={1}>
                 {identitySecondary(selected[1])}
@@ -953,7 +1055,20 @@ export const UnifiedRegisterModal = ({
       ) : null}
       <View style={styles.actionsRow}>
         <View style={styles.actionBtn}>
-          <Button title="Back" variant="ghost" onPress={() => { setErrorMsg(null); setStep("search"); }} />
+          <Button
+            title="Back"
+            variant="ghost"
+            onPress={() => {
+              setErrorMsg(null);
+              if (isManual) {
+                setIsManual(false);
+                setSelected({ 1: null, 2: null });
+                setStep("manual");
+              } else {
+                setStep("search");
+              }
+            }}
+          />
         </View>
         <View style={styles.actionBtn}><Button title={ctaLabel} onPress={doRegisterSingles} loading={busy} /></View>
       </View>
@@ -1066,6 +1181,7 @@ export const UnifiedRegisterModal = ({
 
               {step === "search" && renderSearch()}
               {step === "create" && renderCreate()}
+              {step === "manual" && renderManual()}
               {step === "fargo" && renderFargo()}
               {step === "p2search" && renderP2Search()}
             </View>

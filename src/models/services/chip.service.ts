@@ -6,6 +6,8 @@
 // service hydrates a ChipState from the rows and writes it back (upsert + prune).
 
 import { supabase } from "../../lib/supabase";
+import { ChipPersistBackend, ChipSavePlan, executeChipSave } from "./chip.persist";
+import { entryToRow, eventToRow, matchToRow, tableToRow } from "./chip.rows";
 import {
   ChipEntry,
   ChipEvent,
@@ -63,15 +65,6 @@ const overrideFromRow = (r: any): Partial<ChipEntry> => ({
   overriddenBy: r?.overridden_by ?? null,
   overriddenAt: r?.overridden_at ?? null,
 });
-const overrideToRow = (e: ChipEntry) => ({
-  fargo_cap_override: !!e.fargoCapOverride,
-  fargo_cap_at_override: e.fargoCapAtOverride ?? null,
-  player_fargo_at_override: e.playerFargoAtOverride ?? null,
-  fargo_cap_override_reason: e.fargoCapOverrideReason ?? null,
-  fargo_cap_override_notes: e.fargoCapOverrideNotes ?? null,
-  overridden_by: e.overriddenBy ?? null,
-  overridden_at: e.overriddenAt ?? null,
-});
 
 // ── row ↔ model mappers ────────────────────────────────────────────────────────
 const rowToEntry = (r: any): ChipEntry => ({
@@ -107,41 +100,6 @@ const rowToEntry = (r: any): ChipEntry => ({
   tableId: r.table_id,
   eliminatedAt: r.eliminated_at,
   createdAt: r.created_at,
-});
-const entryToRow = (tid: number, e: ChipEntry) => ({
-  ...overrideToRow(e),
-  id: e.id,
-  tournament_id: tid,
-  p1_name: e.p1Name,
-  p1_fargo: e.p1Fargo,
-  p1_phone: e.p1Phone ?? null,
-  p1_profile_id: e.p1ProfileId ?? null,
-  p2_profile_id: e.p2ProfileId ?? null,
-  // Phase 5: always persist players.id when we have it (active AND pending). For an
-  // active player p1_profile_id + p1_player_id are the same person (from one search
-  // row) so the sync trigger stays consistent; for a pending player p1_profile_id is
-  // null and this uuid is the only identity.
-  p1_player_id: e.p1PlayerId ?? null,
-  p2_player_id: e.p2PlayerId ?? null,
-  p2_name: e.p2Name ?? null,
-  p2_fargo: e.p2Fargo ?? null,
-  team_fargo: e.teamFargo,
-  start_chips: e.startChips,
-  chips: e.chips,
-  paid: e.paid,
-  checked_in: e.checkedIn,
-  // Persist singles side-pot entries (names). Defensively coerced so a legacy
-  // undefined never writes a non-array. Column added 20260816120000.
-  paid_side_pots: e.paidSidePots ?? [],
-  status: e.status,
-  wins: e.wins,
-  losses: e.losses,
-  streak: e.streak,
-  best_streak: e.bestStreak,
-  eliminations: e.eliminations,
-  table_id: e.tableId ?? null,
-  eliminated_at: e.eliminatedAt ?? null,
-  created_at: e.createdAt,
 });
 
 // A self-service registration (tournament_players row) projected into a chip
@@ -268,22 +226,6 @@ const rowToTable = (r: any): ChipTable => ({
   lastLoserId: r.last_loser_id,
   pendingChallengerId: r.pending_challenger_id ?? null,
 });
-const tableToRow = (tid: number, t: ChipTable, sort: number) => ({
-  id: t.id,
-  tournament_id: tid,
-  label: t.label,
-  is_stream: t.isStream,
-  stream_url: t.streamUrl ?? null,
-  status: t.status,
-  inactive: !!t.inactive,
-  closing: !!t.closing,
-  locked: !!t.locked,
-  match_id: t.matchId ?? null,
-  holder_id: t.holderId ?? null,
-  last_loser_id: t.lastLoserId ?? null,
-  pending_challenger_id: t.pendingChallengerId ?? null,
-  sort,
-});
 
 const rowToMatch = (r: any): ChipMatch => ({
   id: r.id,
@@ -296,18 +238,6 @@ const rowToMatch = (r: any): ChipMatch => ({
   endedAt: r.ended_at,
   status: r.status,
 });
-const matchToRow = (tid: number, m: ChipMatch) => ({
-  id: m.id,
-  tournament_id: tid,
-  table_id: m.tableId,
-  a_id: m.aId,
-  b_id: m.bId,
-  winner_id: m.winnerId ?? null,
-  loser_id: m.loserId ?? null,
-  started_at: m.startedAt,
-  ended_at: m.endedAt ?? null,
-  status: m.status,
-});
 
 const rowToEvent = (r: any): ChipEvent => ({
   id: r.id,
@@ -319,17 +249,11 @@ const rowToEvent = (r: any): ChipEvent => ({
   txId: r.tx_id ?? undefined,
   superseded: !!r.superseded,
 });
-const eventToRow = (tid: number, ev: ChipEvent) => ({
-  id: ev.id,
-  tournament_id: tid,
-  type: ev.type,
-  text: ev.text,
-  actor_id: ev.by ?? null,
-  payload: ev.payload ?? null,
-  tx_id: ev.txId ?? null,
-  superseded: ev.superseded ?? false,
-  created_at: ev.at,
-});
+
+// Attach the HTTP status to a Supabase error so a failed save is diagnosable from the
+// save-failure log (PostgrestError itself carries only message/code/details/hint).
+const withStatus = (error: unknown, status: number | null | undefined) =>
+  Object.assign(error as object, { status: status ?? null });
 
 // Upsert the current rows for a table and delete any rows for this tournament
 // that are no longer present (entries/tables/matches removed in the UI).
@@ -340,16 +264,62 @@ const syncTable = async (
   ids: string[],
 ): Promise<void> => {
   if (rows.length) {
-    const { error } = await supabase.from(table).upsert(rows);
-    if (error) throw error;
+    const { error, status } = await supabase.from(table).upsert(rows);
+    if (error) throw withStatus(error, status);
   }
   let del = supabase.from(table).delete().eq("tournament_id", tid);
   if (ids.length) {
     del = del.not("id", "in", `(${ids.map((i) => `"${i}"`).join(",")})`);
   }
-  const { error } = await del;
-  if (error) throw error;
+  const { error, status } = await del;
+  if (error) throw withStatus(error, status);
 };
+
+// Supabase implementation of the ordered save plan (chip.persist.ts).
+const supabasePersistBackend = (tid: number): ChipPersistBackend => ({
+  async upsertConfig(patch) {
+    const { error, status } = await supabase.from("chip_config").upsert(patch);
+    if (error) throw withStatus(error, status);
+  },
+  async upsertConfigSoft(patch) {
+    await supabase.from("chip_config").upsert(patch);
+  },
+  syncRows: (table, rows, ids) => syncTable(table, tid, rows, ids),
+  async insertEvents(rows) {
+    const { error, status } = await supabase
+      .from("chip_events")
+      .upsert(rows, { onConflict: "id", ignoreDuplicates: true });
+    if (error) throw withStatus(error, status);
+  },
+  async markSuperseded(ids) {
+    const { error, status } = await supabase
+      .from("chip_events")
+      .update({ superseded: true })
+      .eq("tournament_id", tid)
+      .in("id", ids);
+    if (error) throw withStatus(error, status);
+  },
+  async bumpVersion(expected) {
+    // Phase G soft CAS: read the live version, flag a conflict if it moved away from what
+    // this client started from, then bump it. Swallowed so a missing column or transient
+    // error never fails an otherwise-persisted save.
+    try {
+      const { data: cur } = await supabase
+        .from("chip_config")
+        .select("version")
+        .eq("tournament_id", tid)
+        .maybeSingle();
+      const live = cur ? Number((cur as any).version ?? 0) : null;
+      if (live == null) return { version: 0, conflict: false };
+      const conflict = expected != null && live !== expected;
+      const version = live + 1;
+      await supabase.from("chip_config").update({ version }).eq("tournament_id", tid);
+      return { version, conflict };
+    } catch {
+      return { version: 0, conflict: false };
+    }
+  },
+});
 
 export const chipService = {
   // Append an audit row to chip_events (history timeline). Used e.g. for Fargo-cap
@@ -592,11 +562,12 @@ export const chipService = {
     return { tournament: t as Tournament, chip, version, results };
   },
 
-  // Write the whole chip state back to the tables (upsert + prune removed rows).
-  // Each section persists INDEPENDENTLY: a failure in one (e.g. a column from an
-  // unapplied migration) must not block the others — so match results/timers still
-  // save even if a newer table/config column isn't there yet. The first error is
-  // rethrown at the end so explicit callers still see a problem.
+  // Write the whole chip state back to the tables (upsert + prune removed rows) via the
+  // ordered plan in chip.persist.ts: every MAIN-STATE section (config, entries, matches,
+  // tables) is attempted independently, and activity events are written ONLY if all of them
+  // persisted — a failed snapshot never leaves history behind. Throws a ChipSaveError
+  // (stage/table/code/status) on failure. Every write is an idempotent snapshot write, so
+  // the caller may retry the SAME state safely.
   // Returns the post-save chip_config.version and whether a cross-director CONFLICT was
   // detected (the live version differed from `expectedVersion` at save time). Phase G soft
   // CAS: the save STILL applies (observability stage) and the caller logs/telemeters the
@@ -607,20 +578,15 @@ export const chipService = {
     chip: ChipState,
     opts?: { expectedVersion?: number | null },
   ): Promise<{ version: number; conflict: boolean }> {
-    const errors: any[] = [];
-    const run = async (fn: () => Promise<void>) => {
-      try {
-        await fn();
-      } catch (e) {
-        errors.push(e);
-      }
-    };
-
-    // CORE config (long-standing columns) — must always persist, especially the
-    // queue. tiers (chip_ranges) + buy-backs (live_settings) live on the Compete
-    // Settings form, not here.
-    await run(async () => {
-      const { error } = await supabase.from("chip_config").upsert({
+    // Registration-backed entries live in tournament_players and are re-projected
+    // on every load — never write (or prune against) them here, otherwise they'd
+    // be duplicated/absorbed and lose their approval lifecycle. They materialize
+    // into real chip_entries only when the tournament starts (flag cleared).
+    const ownedEntries = chip.entries.filter((e) => !e.fromRegistration);
+    const plan: ChipSavePlan = {
+      // CORE config (long-standing columns) — must always persist, especially the queue.
+      // tiers (chip_ranges) + buy-backs (live_settings) live on the Compete Settings form.
+      configCore: {
         tournament_id: id,
         format: chip.settings.format,
         queue: chip.queue,
@@ -629,13 +595,9 @@ export const chipService = {
         winner_entry_id: chip.winnerId ?? null,
         reshuffle_count: chip.reshuffleCount ?? 0,
         updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-    });
-    // EXTENDED config (newer shuffle columns) — persisted separately so an
-    // unapplied migration can't take the queue down with it. Same config row.
-    await run(async () => {
-      const { error } = await supabase.from("chip_config").upsert({
+      },
+      // EXTENDED config (newer shuffle columns) — separate write, same row.
+      configExtended: {
         tournament_id: id,
         reshuffle_pending: !!chip.reshufflePending,
         reshuffle_table_count: chip.reshuffleTableCount ?? null,
@@ -643,85 +605,22 @@ export const chipService = {
         shuffle_ready: !!chip.shuffleReady,
         shuffle_round: !!chip.shuffleRound,
         round_remaining: chip.roundRemaining ?? [],
-      });
-      if (error) throw error;
-    });
-    // Restore points (persisted history) — its own section so a large/absent
-    // column never blocks the core save. Same config row.
-    await run(async () => {
-      const { error } = await supabase.from("chip_config").upsert({
-        tournament_id: id,
-        restore_points: chip.restorePoints ?? [],
-      });
-      if (error) throw error;
-    });
-    // Shuffle-owned closing table ids — its OWN block that swallows its error so a
-    // not-yet-applied migration for this newest column never surfaces as a save
-    // failure (before the column exists it simply no-ops; Cancel Shuffle then reopens
-    // nothing after a reload, which is the safe fallback — it never touches manual
-    // closings). Once the column exists, the distinction survives reloads.
-    try {
-      await supabase.from("chip_config").upsert({
-        tournament_id: id,
-        reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [],
-      });
-    } catch {
-      /* column pending migration — non-critical */
-    }
-
-    // Registration-backed entries live in tournament_players and are re-projected
-    // on every load — never write (or prune against) them here, otherwise they'd
-    // be duplicated/absorbed and lose their approval lifecycle. They materialize
-    // into real chip_entries only when the tournament starts (flag cleared).
-    const ownedEntries = chip.entries.filter((e) => !e.fromRegistration);
-    await run(() => syncTable("chip_entries", id, ownedEntries.map((e) => entryToRow(id, e)), ownedEntries.map((e) => e.id)));
-    await run(() => syncTable("chip_matches", id, chip.matches.map((m) => matchToRow(id, m)), chip.matches.map((m) => m.id)));
-    await run(() => syncTable("chip_tables", id, chip.tables.map((t, i) => tableToRow(id, t, i)), chip.tables.map((t) => t.id)));
-
-    // Events are append-only — insert new ones, never rewrite or delete.
-    await run(async () => {
-      if (!chip.events.length) return;
-      const { error } = await supabase
-        .from("chip_events")
-        .upsert(chip.events.map((ev) => eventToRow(id, ev)), { onConflict: "id", ignoreDuplicates: true });
-      if (error) throw error;
-    });
-    // A Tournament Restore flips existing events to superseded — a one-way flag the
-    // append-only insert above (ignoreDuplicates) won't apply, so update it here.
-    await run(async () => {
-      const supersededIds = chip.events.filter((ev) => ev.superseded).map((ev) => ev.id);
-      if (!supersededIds.length) return;
-      const { error } = await supabase
-        .from("chip_events")
-        .update({ superseded: true })
-        .eq("tournament_id", id)
-        .in("id", supersededIds);
-      if (error) throw error;
-    });
-
-    // Phase G soft CAS: read the live version, flag a conflict if it moved away from what
-    // this client started from, then bump it. Isolated + swallowed so a missing `version`
-    // column (migration pending) or a transient error never blocks the save.
-    let version = 0;
-    let conflict = false;
-    try {
-      const { data: cur } = await supabase
-        .from("chip_config")
-        .select("version")
-        .eq("tournament_id", id)
-        .maybeSingle();
-      const live = cur ? Number((cur as any).version ?? 0) : null;
-      if (live != null) {
-        if (opts?.expectedVersion != null && live !== opts.expectedVersion) conflict = true;
-        version = live + 1;
-        await supabase.from("chip_config").update({ version }).eq("tournament_id", id);
-      }
-    } catch {
-      /* version column not present yet — soft no-op */
-    }
-
-    if (errors.length) throw errors[0];
-    return { version, conflict };
+      },
+      // Restore points (persisted history) — own section, same row.
+      configRestorePoints: { tournament_id: id, restore_points: chip.restorePoints ?? [] },
+      // Shuffle-owned closing table ids — best-effort, never a save failure (Cancel
+      // Shuffle then reopens nothing after a reload, the safe fallback).
+      configSoft: { tournament_id: id, reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [] },
+      entries: { rows: ownedEntries.map((e) => entryToRow(id, e)), ids: ownedEntries.map((e) => e.id) },
+      matches: { rows: chip.matches.map((m) => matchToRow(id, m)), ids: chip.matches.map((m) => m.id) },
+      tables: { rows: chip.tables.map((tb, i) => tableToRow(id, tb, i)), ids: chip.tables.map((tb) => tb.id) },
+      // Events are append-only — insert new ones, never rewrite or delete. A Tournament
+      // Restore flips existing events to superseded (one-way flag, applied separately).
+      events: chip.events.map((ev) => eventToRow(id, ev)),
+      supersededEventIds: chip.events.filter((ev) => ev.superseded).map((ev) => ev.id),
+      expectedVersion: opts?.expectedVersion,
+    };
+    return executeChipSave(supabasePersistBackend(id), plan);
   },
 
   // Targeted write of ONE singles entry's side-pot membership to chip_entries — the
@@ -897,6 +796,33 @@ export const chipService = {
     if (error) throw error;
   },
 
+  // Offline-controller reconnect precondition (chip.offline-controller step 4a): atomically
+  // bump chip_config.version from `expected` to expected+1 ONLY if it still equals `expected`
+  // (a row-level compare-and-set: UPDATE … WHERE tournament_id = id AND version = expected).
+  // "changed" = someone saved since `expected` was read → the caller must not push.
+  // "unsupported" = no chip_config row / version column (pre-migration) → caller falls back to
+  // its content re-check. Network/5xx errors THROW (the caller stays offline).
+  async claimChipVersion(id: number, expected: number): Promise<"claimed" | "changed" | "unsupported"> {
+    const { data, error } = await supabase
+      .from("chip_config")
+      .update({ version: expected + 1 })
+      .eq("tournament_id", id)
+      .eq("version", expected)
+      .select("version");
+    if (error) {
+      if ((error as { code?: string }).code === "42703") return "unsupported"; // column missing
+      throw error;
+    }
+    if ((data ?? []).length === 1) return "claimed";
+    const { data: cur, error: readErr } = await supabase
+      .from("chip_config")
+      .select("tournament_id")
+      .eq("tournament_id", id)
+      .maybeSingle();
+    if (readErr) throw readErr;
+    return cur ? "changed" : "unsupported";
+  },
+
   // ── final placements (chip_results) ─────────────────────────────────────────
   // Idempotent: one row per (tournament, entry), upserted on Finish. Rewriting
   // the same placements is a no-op-equivalent (no duplicate rows).
@@ -972,6 +898,12 @@ export const chipService = {
 
   async start(id: number, chip: ChipState): Promise<void> {
     await chipService.save(id, chip);
+    await chipService.markStarted(id);
+  },
+
+  // The setup → live status transition of start(), without the state save (the live
+  // viewmodel persists the started snapshot through its serialized save queue first).
+  async markStarted(id: number): Promise<void> {
     // Going live makes the tournament PUBLIC-DISCOVERABLE: besides live_state, it
     // must satisfy the Billiards discovery rule (status="active", is_draft=false).
     // A chip created via the TD "New Tournament" draft flow starts is_draft=true;

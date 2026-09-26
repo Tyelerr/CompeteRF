@@ -121,6 +121,7 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
           return { ...base, kind: "buyback" };
         // A table clear requeues players — spectators see the board/queue change.
         case "table_cleared":
+        case "table_player_removed": // one entry taken off a table (match voided if live)
           return { ...base, kind: "table" };
         // Untagged manual events (queue reorder, timer reset, table cleared,
         // lock/unlock, rematch-skipped, shuffle-mode toggles, shuffle cancelled)

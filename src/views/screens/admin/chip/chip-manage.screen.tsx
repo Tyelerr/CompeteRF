@@ -41,6 +41,7 @@ import { FONT_SIZES } from "../../../../theme/typography";
 import { chipStatusColor } from "../../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../../utils/formatters";
 import { webMs, webSc } from "../../../../utils/scaling";
+import { ChipOfflineBanner, ChipRecoveryBanner, ChipRecoveryPrompt } from "../../../components/tournament/live/ChipRecoveryStatus";
 import {
   PhaseNav,
   PhaseNavPhase,
@@ -133,6 +134,12 @@ const WEB_MAXW = 1240;
 // so wheel/trackpad scrolling over the sidebar bubbles to the page ScrollView as normal.
 const WEB_STICKY_SIDE: any = isWeb
   ? { position: "sticky", top: webSc(SPACING.md), alignSelf: "flex-start" }
+  : null;
+
+// Web-only sticky wrapper for the offline / conflict / local-backup status banner: pins to the
+// top of whichever scrollport contains the page (host page or the live page's own scroll).
+const WEB_STICKY_BANNER: any = isWeb
+  ? { position: "sticky", top: 0, zIndex: 50, backgroundColor: COLORS.background }
   : null;
 
 // Gap kept between the floating sheet and the top of the keyboard (px).
@@ -478,6 +485,10 @@ interface ChipManageProps {
   // SILENT reload to surface cross-client registration changes (e.g. a player who just
   // self-registered from another device) without a spinner or scroll reset.
   reloadSignal?: number;
+  // Web offline entry point (/chip-recovery/[id]): show only the local backup, read-only.
+  recoveryOnly?: boolean;
+  // recoveryOnly: the cloud is usable again — hand over to the normal Admin screen.
+  onCloudRecovered?: () => void;
 }
 
 // Compact Prize Pool summary shown on Review & Start (computed by the host).
@@ -596,10 +607,10 @@ const ShuffleBallsAnimation = memo(({ onDone }: { onDone: () => void }) => {
 });
 ShuffleBallsAnimation.displayName = "ShuffleBallsAnimation";
 
-export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, onFinished, onReopened, reloadSignal }: ChipManageProps) => {
+export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actionsOpen: actionsOpenProp, onActionsOpenChange, onNavigate, onRequestScrollTop, onOpenSettings, onOpenResults, onOpenPayouts, onOpenSetupPage, reviewPrize, onReadyCountChange, onTableCountChange, onReadinessChange, onStarted, onFinished, onReopened, reloadSignal, recoveryOnly, onCloudRecovered }: ChipManageProps) => {
   // Acting director identity (from auth) — passed into the VM so it can stamp gameplay
   // audit events, and reused by reason-gated actions. Computed BEFORE the VM call.
-  const { profile } = useAuthContext();
+  const { profile, user } = useAuthContext();
   const actorId = profile?.id_auto ?? null;
   const actorName = (() => {
     const full = profile
@@ -612,20 +623,59 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     if (!parts.length) return "Tournament Director";
     return parts.length < 2 ? parts[0] : `${parts[0]} ${parts[parts.length - 1][0]}.`;
   })();
-  const vm = useChipTournament(id, actorId, actorName);
-  // Auto-save failure notice (shared Web/iOS/Android). The VM already reloaded authoritative
-  // state; here we just tell the TD so they never keep looking at a result that only existed
-  // locally. Alert.alert renders via WebAlertHost on web and natively on iOS/Android. One
-  // alert per failure (acknowledge clears the flag).
+  const vm = useChipTournament(id, actorId, actorName, {
+    backupOwnerId: user?.id ?? null,
+    profileReady: !!profile,
+    recoveryOnly,
+    onCloudRecovered,
+  });
+  // Auto-save failure notice (shared Web/iOS/Android). Shown only after the VM's bounded
+  // retries all failed. The TD's changes are still on screen (NOT reloaded away) and are
+  // re-saved on the next action or via Retry; Reload discards them for the server's state.
+  // Alert.alert renders via WebAlertHost on web and natively on iOS/Android. One alert per
+  // failure (every button / dismiss clears the flag).
   useEffect(() => {
     if (!vm.saveError) return;
+    if (vm.recovery.status !== "none") {
+      vm.acknowledgeSaveError(); // the recovery prompt owns this decision
+      return;
+    }
     Alert.alert(
-      "Save failed",
-      "Tournament changes couldn’t be saved. The latest tournament state has been reloaded — please review and redo the action if needed.",
-      [{ text: "OK", onPress: () => vm.acknowledgeSaveError() }],
+      "Changes not saved yet",
+      "Couldn’t reach the server after several tries (check the venue Wi-Fi). Your changes are still on this screen and will be saved with your next action, or tap Retry now.\n\nReload from server shows what is saved and discards the unsaved changes on this device.",
+      [
+        { text: "Reload from server", style: "destructive", onPress: () => void vm.discardUnsavedAndReload() },
+        { text: "Keep working", style: "cancel", onPress: () => vm.acknowledgeSaveError() },
+        { text: "Retry now", onPress: () => vm.retrySave() },
+      ],
       { onDismiss: () => vm.acknowledgeSaveError() } as any,
     );
   }, [vm.saveError]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Web local-backup recovery / offline controller: a mutation was refused (read-only backup
+  // view, offline sync/conflict/local-save failure, or a cloud-only action while offline).
+  // Say why, once per attempt.
+  useEffect(() => {
+    if (!vm.recoveryBlocked) return;
+    const { action, reason } = vm.recoveryBlocked;
+    const [title, body] =
+      reason === "not_authorized"
+        ? ["Sign-in required", `This board wasn't loaded from your signed-in account, so you can't ${action} and nothing will be saved. Sign in — the tournament reloads from the cloud automatically.`]
+        : reason === "requires_cloud"
+        ? ["Connection required", `You can't ${action} while offline — it needs the cloud. Nothing was changed. The tournament keeps running on this device; this becomes available again once you're back online.`]
+        : reason === "reconnecting" || reason === "syncing"
+          ? ["Syncing offline changes", `Hold on — the cloud is being checked and your offline changes synced. Try again in a moment (you tried to ${action}). Nothing was changed.`]
+          : reason === "local_save_failed"
+            ? ["Local save failed", `This tournament is offline and this device couldn't save it, so you can't ${action} right now. Tap Retry Local Save first. Nothing was changed.`]
+            : reason === "conflict"
+              ? ["Cloud version changed", `The cloud tournament changed while this device was offline. Your offline copy is protected read-only, so you can't ${action}. Choose Use Cloud Version to continue.`]
+              : ["Read-only local backup", `You're viewing a local backup of this tournament, so you can't ${action} right now. Nothing was changed.\n\nReconnect to the cloud (Retry Cloud Connection / Use Cloud Version) to continue running the tournament.`];
+    Alert.alert(
+      title,
+      body,
+      [{ text: "OK", onPress: () => vm.acknowledgeRecoveryBlocked() }],
+      { onDismiss: () => vm.acknowledgeRecoveryBlocked() } as any,
+    );
+  }, [vm.recoveryBlocked]); // eslint-disable-line react-hooks/exhaustive-deps
   // Host bumps `reloadSignal` when its tournament-scoped registration Realtime channel
   // sees a change. Silently reload so a cross-client registration surfaces here without
   // a spinner/scroll reset. Refs keep reload stable and skip the initial mount value
@@ -890,6 +940,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Restore-chip (eliminated team) reason prompt.
   // Complete-match winner picker (Tables page).
   const [completeMatch, setCompleteMatch] = useState<{ matchId: string; aId: string; bId: string } | null>(null);
+  // Web only: compact Select Winner popover anchored at the click point (native keeps the
+  // completeMatch modal). Same vm.recordWinner call; presentation only.
+  const [winnerPop, setWinnerPop] = useState<{ matchId: string; aId: string; bId: string; x: number; y: number } | null>(null);
+  const openWinnerPicker = (sel: { matchId: string; aId: string; bId: string }, ev?: any) => {
+    if (vm.guardRecovery("select a winner")) return;
+    if (!isWeb) {
+      setCompleteMatch(sel);
+      return;
+    }
+    const ne = ev?.nativeEvent ?? {};
+    const x = typeof ne.clientX === "number" ? ne.clientX : typeof ne.pageX === "number" ? ne.pageX : 0;
+    const y = typeof ne.clientY === "number" ? ne.clientY : typeof ne.pageY === "number" ? ne.pageY : 0;
+    setWinnerPop({ ...sel, x, y });
+  };
   // Recording a winner can, in the SAME commit, seat the next winner-stays matchup (or the
   // finals) — which the "Next Match" popup (and, at the last game, the champion modal) would
   // open as a second RN <Modal> while this picker is still dismissing. Two RN Modals
@@ -1293,6 +1357,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // (the finals "frozen screen" bug). Reopen is nudged from flushAfterWinnerPicker
     // once the picker has fully dismissed.
     if (completeMatch != null || winnerPickerClosing) return;
+    if (vm.recoveryReadOnly) return; // local backup view: never invite an action
     // The "Next Match / Incoming Team" callout fires ONLY for a genuine winner-stays
     // next challenger — a pending created because a completed match freed the table
     // (isPostMatchPending: the holder has already played). An OPENING matchup merely
@@ -1315,7 +1380,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (__DEV__) console.log("[next-match] opening popup for table", pend.id, Date.now());
       setAssignPopupTableId(pend.id);
     }
-  }, [vm.chip, assignPopupTableId, completeMatch, winnerPickerClosing]);
+  }, [vm.chip, assignPopupTableId, completeMatch, winnerPickerClosing, vm.recoveryReadOnly]);
 
   // Scroll-to-top bridge. Chip LIVE pages own their ScrollView (see the embedded
   // return), so the host's onRequestScrollTop (which scrolls the shared page
@@ -1405,11 +1470,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Land on the current phase ONCE after the first load. After that the TD drives
   // the nav — starting the tournament must not yank them off Settings.
   useEffect(() => {
-    if (vm.loading || initedRef.current) return;
+    // (Wait for a real tournament: a failed load that then opens a local backup must land on
+    // the backup's phase, not the empty-state "setup".)
+    if (vm.loading || initedRef.current || !vm.tournament) return;
     initedRef.current = true;
     setSelectedPhase(vm.phase);
     setPage(DEFAULT_PAGE[vm.phase]);
-  }, [vm.loading, vm.phase]);
+  }, [vm.loading, vm.phase, vm.tournament]);
 
   // When the winner-stays queue crowns a champion (one entry left), nudge the TD
   // to finish the event — the engine sets chip.winnerId, but the tournament only
@@ -1483,15 +1550,69 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       </View>
     );
   }
+  // Web: the cloud load failed but this browser has a local backup → offer it instead of the
+  // bare error (existing error handling below is unchanged when there is no backup).
+  if (vm.error && vm.recovery.status === "available") {
+    return (
+      <ChipRecoveryPrompt
+        snapshot={vm.recovery.snapshot}
+        onOpen={vm.openLocalCopy}
+        onRetry={() => void vm.retryCloud()}
+        canResume={vm.canResumeOffline}
+        onResume={vm.resumeOfflineControl}
+      />
+    );
+  }
   if (vm.error || !vm.chip || !vm.tournament) {
     return (
       <View style={[styles.center, embedded && { paddingVertical: webSc(SPACING.xl) }]}>
         <Text style={styles.errorText}>{vm.error ?? "Tournament not found."}</Text>
+        {recoveryOnly && (
+          <TouchableOpacity onPress={() => router.replace("/" as any)} style={{ marginTop: webSc(SPACING.md) }}>
+            <Text style={styles.back}>‹ Go to Home</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
 
   const { chip, tournament } = vm;
+  // Web local-backup status strip (Online · last backup / VIEWING LOCAL BACKUP read-only /
+  // cloud conflict). Pinned above the page content on every page.
+  const recoveryStripInner = isWeb ? (
+    vm.offlineMode !== "online" ? (
+      <ChipOfflineBanner
+        mode={vm.offlineMode}
+        unsyncedCount={vm.unsyncedCount}
+        lastLocalSaveAt={vm.offlineSession?.lastLocalSaveAt ?? vm.lastLocalBackupAt}
+        conflictKept={vm.offlineConflictKept}
+        onRetryConnection={vm.retryConnection}
+        onRetryLocalSave={vm.retryLocalSave}
+        onUseCloud={() => void vm.switchToCloudVersion()}
+        onKeepOfflineCopy={vm.keepOfflineCopy}
+      />
+    ) : (
+    <ChipRecoveryBanner
+      canResume={vm.canResumeOffline}
+      onResume={vm.resumeOfflineControl}
+      unsyncedCount={vm.unsyncedCount}
+      localSaveFailed={vm.localSaveFailed}
+      canSyncRecovered={vm.canSyncRecoveredOffline}
+      onSyncRecovered={() => void vm.syncRecoveredOffline()}
+      recovery={vm.recovery}
+      lastLocalBackupAt={chip.startedAt ? vm.lastLocalBackupAt : null}
+      cloudSync={chip.startedAt ? vm.cloudSync : "synced"}
+      divergentBackup={vm.divergentBackup}
+      onRetry={() => void vm.retryCloud()}
+      onUseCloud={() => void vm.switchToCloudVersion()}
+      onKeepLocal={vm.keepLocalBackup}
+      onViewDivergent={() => void vm.viewDivergentBackup()}
+      onDismissDivergent={vm.dismissDivergentBackup}
+    />
+    )
+  ) : null;
+  // Web: pinned so an offline/conflict/recovery banner can never scroll out of view.
+  const recoveryStrip = recoveryStripInner ? <View style={WEB_STICKY_BANNER}>{recoveryStripInner}</View> : null;
   const doubles = chip.settings.format === "scotch_doubles";
   // Fargo label: only doubles/team formats show a COMBINED rating; singles is just
   // "Fargo". Display-only — the underlying teamFargo value is unchanged.
@@ -1882,6 +2003,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // goes through the reason modal — never a direct silent +/- . Blocks the immediate
   // playing→0 case up front with a clear message (the engine also refuses it).
   const openChipAdjust = (entry: ChipEntry, initialDelta: number) => {
+    if (vm.guardRecovery("adjust chips")) return;
     const inLiveMatch = chip.matches.some(
       (m) => m.status === "in_progress" && (m.aId === entry.id || m.bId === entry.id),
     );
@@ -1917,6 +2039,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // so the modal can offer Forfeit Match; a forfeit with no active match context is
   // Forfeit Tournament only.
   const openForfeit = (entryId: string) => {
+    if (vm.guardRecovery("record a forfeit")) return;
     const e = entryById(entryId);
     if (!e || e.status === "eliminated") return;
     // Never STACK the forfeit modal on top of another modal/menu. The eliminate action is
@@ -2053,6 +2176,41 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       // Only one team on the table (a lone holder, no challenger yet) → unambiguous.
       openForfeit(t.holderId);
     }
+  };
+  // Remove ONE player from a table (web table ⋮). A live match is voided first — warn, then
+  // the same Next / End of Queue choice Clear Table uses → vm.removeFromTable (engine
+  // removeFromTable: other player stays seated; no winner / loss / chip change).
+  const confirmRemoveFromTable = (t: ChipTable, entryId: string) => {
+    const removed = entryById(entryId);
+    if (!removed) return;
+    const name = teamName(removed);
+    const askDestination = () =>
+      Alert.alert(
+        `Remove ${name}`,
+        `Where should ${name} be placed?`,
+        [
+          { text: "Next in Queue", onPress: () => vm.removeFromTable(t.id, entryId, "next") },
+          { text: "End of Queue", onPress: () => vm.removeFromTable(t.id, entryId, "end") },
+          { text: "Cancel", style: "cancel" },
+        ],
+      );
+    const live = chip.matches.find(
+      (m) => m.id === t.matchId && m.status === "in_progress" && (m.aId === entryId || m.bId === entryId),
+    );
+    if (!live) {
+      askDestination();
+      return;
+    }
+    const other = entryById(live.aId === entryId ? live.bId : live.aId);
+    const otherName = other ? teamName(other) : "The other player";
+    Alert.alert(
+      "Void Active Match?",
+      `Removing ${name} will void the current match. No winner or loss will be recorded. ${otherName} will remain at the table.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Continue", onPress: askDestination },
+      ],
+    );
   };
   const confirmClearTable = (t: ChipTable) => {
     Alert.alert(
@@ -3142,6 +3300,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       // Account axis (tertiary): a PENDING player has a players.id but no linked
       // profile (id_auto). Active accounts get no badge.
       pendingAccount: isPending,
+      // MANUAL (singles): a tournament-only entry with no identity at all — neither a
+      // linked profile nor a players.id. Derived; no stored flag.
+      manualPlayer: !e.isTeam && pid == null && playerUuid == null && !!name,
     };
   };
 
@@ -4312,6 +4473,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Preview/modal table ordering (item 12): Waiting-to-Start (0) first, then Live (1),
   // then locked/available/other (2). Component-scope so the dashboard body AND the
   // root-level View All Tables modal sort identically from one source.
+  // Physical table order for web displays: the number in the table label ("Table 3" → 3),
+  // then the label, then creation order (chip.tables index) as the stable tie-break.
+  const byPhysicalTableOrder = (a: ChipTable, b: ChipTable): number => {
+    const num = (x: ChipTable) => {
+      const hit = /(\d+)/.exec(x.label ?? "");
+      return hit ? parseInt(hit[1], 10) : Number.POSITIVE_INFINITY;
+    };
+    const na = num(a);
+    const nb = num(b);
+    if (na !== nb) return na - nb;
+    const byLabel = (a.label ?? "").localeCompare(b.label ?? "");
+    if (byLabel !== 0) return byLabel;
+    return chip.tables.indexOf(a) - chip.tables.indexOf(b);
+  };
   const dashTableRank = (t: ChipTable): number => {
     const live = chip.matches.some((m) => m.id === t.matchId && m.status === "in_progress");
     if (!live && t.pendingChallengerId) return 0;
@@ -4421,12 +4596,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   {m && a && b && (
                     <TouchableOpacity
                       style={styles.atWinnerBtn}
-                      onPress={() => {
+                      onPress={(ev?: any) => {
                         const sel = { matchId: m.id, aId: m.aId, bId: m.bId };
                         // From inside View All Tables: close that modal FIRST, then open the
                         // winner picker after it has dismissed (never two modals at once).
                         if (inModal) runAfterTablesClose(() => setCompleteMatch(sel));
-                        else setCompleteMatch(sel);
+                        else openWinnerPicker(sel, ev);
                       }}
                       activeOpacity={0.85}
                     >
@@ -4596,7 +4771,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // Preview ordering (item 12): Waiting-to-Start (0) first, then Live (1), then
     // locked/available/other (2), so the director never misses a table awaiting Start
     // Match. Shared with the root-level View All Tables modal via dashTableRank.
-    const sortedActiveTables = [...activeTables].sort((a, b) => dashTableRank(a) - dashTableRank(b));
+    // Native/narrow: waiting-to-start tables first (unchanged). Web: physical table order,
+    // never re-sorted by match state, so the TD can track real tables at a glance.
+    const sortedActiveTables = isWeb
+      ? [...activeTables].sort(byPhysicalTableOrder)
+      : [...activeTables].sort((a, b) => dashTableRank(a) - dashTableRank(b));
     const waitingCount = activeTables.filter((t) => dashTableRank(t) === 0).length;
     const leaders = [...alive].sort((a, b) => b.chips - a.chips || b.wins - a.wins);
     const chipLeader = leaders[0] ?? null;
@@ -4893,6 +5072,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     ) : null}
                   </View>
                   <Text style={[styles.qChipsRight, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips} {e.chips === 1 ? "chip" : "chips"}</Text>
+                  {/* Web: ⋮ opens the SAME queue action sheet as the Queue modal / Live →
+                      Queue page (View Details, Move Up/Down/Top/Bottom, Remove From Queue —
+                      existing handlers, ends disabled). Native rows unchanged. */}
+                  {isWeb ? (
+                    <TouchableOpacity
+                      style={styles.qmMenuBtn}
+                      onPress={() => setQueueMenuId(e.id)}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Queue actions for ${shortTeam(e)}`}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={webMs(16)} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
@@ -5217,7 +5410,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 {/* Select Winner sits next to the players (live rows only); stopPropagation so
                     it never opens the table detail. Reuses the Card view's completeMatch flow. */}
                 {m && a && b && (
-                  <TouchableOpacity style={styles.tlWinPill} onPress={(ev?: any) => { ev?.stopPropagation?.(); setCompleteMatch({ matchId: m.id, aId: m.aId, bId: m.bId }); }} activeOpacity={0.8}>
+                  <TouchableOpacity style={styles.tlWinPill} onPress={(ev?: any) => { ev?.stopPropagation?.(); openWinnerPicker({ matchId: m.id, aId: m.aId, bId: m.bId }, ev); }} activeOpacity={0.8}>
                     <Text style={styles.tlWinPillText}>Select Winner</Text>
                   </TouchableOpacity>
                 )}
@@ -5623,6 +5816,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
             <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} last onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
           </View>
+          {isWeb ? (
+            // Web: the same reason-gated chip override (openChipAdjust) and forfeit decision
+            // (openForfeit) the Players tab / player menus use. Native sheet unchanged.
+            <View style={styles.qActGroup}>
+              <Row icon="swap-vertical-outline" label="Manage Chips" disabled={e.status === "eliminated"} onPress={() => { close(); setQueueModalOpen(false); openChipAdjust(e, 0); }} />
+              <Row icon="exit-outline" danger last label="Forfeit" disabled={e.status === "eliminated"} onPress={() => { close(); setQueueModalOpen(false); openForfeit(e.id); }} />
+            </View>
+          ) : null}
           <View style={styles.qActGroup}>
             <Row icon="trash-outline" danger last label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
           </View>
@@ -5802,6 +6003,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             {match && <Row icon="trophy-outline" label="Set Winner" onPress={viaModal(() => setCompleteMatch({ matchId: match.id, aId: match.aId, bId: match.bId }))} />}
             {occupied && <Row icon="exit-outline" label="Forfeit Team" onPress={direct(() => confirmForfeitTeam(t))} />}
             {occupied && <Row icon="time-outline" label="Reset Match Timer" onPress={direct(() => vm.resetTableTimer(t.id))} />}
+            {/* Web: remove ONE seated player (the other stays). Native menu unchanged. */}
+            {isWeb &&
+              (match ? [match.aId, match.bId] : [t.holderId, t.pendingChallengerId])
+                .filter((id): id is string => !!id)
+                .map((id) => {
+                  const pe = entryById(id);
+                  if (!pe) return null;
+                  return (
+                    <Row key={`rm-${id}`} icon="person-remove-outline" label={`Remove ${shortTeam(pe)}`} onPress={direct(() => confirmRemoveFromTable(t, id))} />
+                  );
+                })}
             {occupied && <Row icon="refresh-outline" label="Clear Table" onPress={direct(() => confirmClearTable(t))} />}
             {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={t.locked || (!holder && chip.queue.length < 2) || (!!holder && chip.queue.length < 1)} onPress={direct(() => vm.assignNextTeam(t.id))} />}
             {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={t.locked || chip.queue.length === 0} onPress={viaModal(() => setManualAssignId(t.id))} />}
@@ -6584,7 +6796,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // dashboard preview exactly.
   const dashTablesModal = (() => {
     const list = chip.tables.filter((t) => !t.inactive);
-    const sorted = [...list].sort((a, b) => dashTableRank(a) - dashTableRank(b));
+    // Web: physical table order (never re-sorted by state). Native: unchanged.
+    const sorted = isWeb ? [...list].sort(byPhysicalTableOrder) : [...list].sort((a, b) => dashTableRank(a) - dashTableRank(b));
     return (
       <Modal
         visible={dashTablesOpen}
@@ -6727,6 +6940,29 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                     );
                   }
                 }
+              }
+        }
+        onAddManual={
+          doubles
+            ? undefined
+            : (name, fargo, paidSidePots, paidEntry) => {
+                // Manual player: a tournament-only chip entry with NO identity (no profile,
+                // no players.id, no pending account) — the same accountless chip_entries row
+                // the engine already supports. Same Ready gate as a searched player. The
+                // Fargo is stored on this entry only (p1_fargo) — never promoted to a
+                // global/verified rating. The modal stays open so the TD can keep adding.
+                const ready =
+                  readyGate({ paid: paidEntry, entryFeeRequired, hardBlocker: fargo == null }) &&
+                  !isFargoOverCap(fargo, maxFargo);
+                vm.addEntry({
+                  p1Name: name,
+                  p1ProfileId: null,
+                  p1PlayerId: null,
+                  p1Fargo: fargo,
+                  paidSidePots,
+                  paid: paidEntry,
+                  checkedIn: ready,
+                });
               }
         }
         isPlayerEntered={doubles ? undefined : isSinglesPlayerEntered}
@@ -7309,6 +7545,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 const allTablesLocked = activeTbls.length > 0 && activeTbls.every((t) => t.locked);
                 const openSettings = () => {
                   setActionsOpen(false);
+                  if (recoveryOnly) return; // offline backup viewer: no route into Admin
                   if (onOpenSettings) onOpenSettings();
                   else if (router.canGoBack()) router.back();
                   else router.replace(`/(tabs)/admin/manage-tournament/${id}` as any);
@@ -7901,6 +8138,44 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </View>
       </Modal>
 
+
+      {/* Web Select Winner popover — compact card anchored near the clicked button; click
+          outside / Esc closes. Picking a player calls the SAME vm.recordWinner. */}
+      {isWeb && winnerPop ? (
+        <Modal visible transparent animationType="none" onRequestClose={() => setWinnerPop(null)}>
+          <Pressable style={styles.winPopOverlay} onPress={() => setWinnerPop(null)}>
+            {(() => {
+              const W = 260;
+              const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
+              const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+              const left = Math.max(8, Math.min(winnerPop.x - W / 2, vw - W - 8));
+              const below = winnerPop.y + 12;
+              const top = below + 170 > vh ? Math.max(8, winnerPop.y - 170 - 12) : below;
+              return (
+                <Pressable style={[styles.winPopCard, { left, top, width: W }]} onPress={() => {}}>
+                  <Text style={styles.winPopTitle}>Select Winner</Text>
+                  {[winnerPop.aId, winnerPop.bId].map((id) => {
+                    const e = chip.entries.find((x) => x.id === id);
+                    if (!e) return null;
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        style={styles.winPopOpt}
+                        onPress={() => { vm.recordWinner(winnerPop.matchId, id); setWinnerPop(null); }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="trophy-outline" size={webMs(15)} color={COLORS.success} />
+                        <Text style={styles.winPopName} numberOfLines={1}>{teamName(e)}</Text>
+                        <Text style={[styles.winPopChips, { color: chipStatusColor(e.chips, e.startChips) }]}>{e.chips}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </Pressable>
+              );
+            })()}
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {/* Complete Match — pick the winner. onDismiss releases the Next-Match popup so it
           only presents AFTER this picker is fully gone (no two-modal touch-wedge on iOS). */}
@@ -8607,6 +8882,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       if (embeddedPage === "live-tables") {
         return (
           <View style={styles.embeddedLiveFlex} ref={rootRef}>
+            {recoveryStrip}
             <View style={styles.embeddedLiveFlex} onTouchStart={closeOnTouch}>{content()}</View>
             {modals}
           </View>
@@ -8614,6 +8890,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       }
       return (
         <View style={styles.embeddedLiveFlex} ref={rootRef}>
+          {recoveryStrip}
           <ScrollView
             ref={liveScrollRef}
             style={styles.embeddedLiveFlex}
@@ -8630,6 +8907,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }
     return (
       <View ref={rootRef}>
+        {recoveryStrip}
         <View onTouchStart={closeOnTouch}>{content()}</View>
         {modals}
       </View>
@@ -8639,7 +8917,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   return (
     <View style={styles.container} ref={rootRef}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
-        <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => (router.canGoBack() ? router.back() : router.replace("/" as any))}><Text style={styles.back}>‹ Back</Text></TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{tournament.name || "Chip Tournament"}</Text>
           <View style={styles.phaseBadge}>
@@ -8665,6 +8943,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           // Settings lives on the Compete form — pop back to it (it's still mounted
           // below, so this is a clean back transition, not a re-mount).
           if (phaseKey === "setup" && pageKey === "Settings") {
+            if (recoveryOnly) return; // offline backup viewer: no route into Admin
             if (router.canGoBack()) router.back();
             else router.replace(`/(tabs)/admin/manage-tournament/${id}` as any);
             return;
@@ -8684,6 +8963,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           )
         }
       />
+
+      {recoveryStrip}
 
       {/* Scroll-area wrapper — measured (window rect) to get the usable band between the
           fixed header and the pinned footer for card-focused Edit Player positioning. */}
@@ -9798,6 +10079,21 @@ const styles = StyleSheet.create({
   tcHistLabel: { color: COLORS.textMuted, fontSize: 9, fontWeight: "900", letterSpacing: 0.5, marginBottom: 2 },
   tcHistRow: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), paddingVertical: 1 },
   tblSummary: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), marginBottom: webSc(SPACING.lg) },
+  // Web Select Winner popover.
+  winPopOverlay: { flex: 1 },
+  winPopCard: {
+    position: "absolute",
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: webSc(SPACING.sm),
+    ...(isWeb ? ({ boxShadow: "0 8px 24px rgba(0,0,0,0.45)" } as object) : null),
+  },
+  winPopTitle: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: webSc(SPACING.xs) },
+  winPopOpt: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm), paddingVertical: webSc(SPACING.sm), paddingHorizontal: webSc(SPACING.sm), borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, marginTop: webSc(SPACING.xs) },
+  winPopName: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  winPopChips: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   winPickBtn: { backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.md), alignItems: "center", marginTop: webSc(SPACING.sm) },
   winPickName: { color: COLORS.white, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", textAlign: "center" },
   winPickMeta: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), opacity: 0.85, marginTop: 1 },

@@ -79,18 +79,19 @@ function sumByType(rows: TournamentEventCount[]): Record<string, number> {
 export const analyticsService = {
   /**
    * Core method: track any event. All typed helpers below call this.
-   * Fire-and-forget — never throws, never blocks UI.
+   * Fire-and-forget — never throws, never blocks UI. Resolves true when the event was
+   * accepted (callers that must not lose an event, e.g. save-failure logs, can re-send).
    */
   async trackEvent({
     eventType,
     entityType,
     entityId,
     metadata = {},
-  }: TrackEventParams): Promise<void> {
+  }: TrackEventParams): Promise<boolean> {
     try {
       // log_app_event derives the user from the session server-side (no client-supplied user id)
       // and only accepts known event shapes; it returns false for anything it rejects.
-      const { error } = await supabase.rpc("log_app_event", {
+      const { data, error } = await supabase.rpc("log_app_event", {
         p_event_type: eventType,
         p_entity_type: entityType || null,
         p_entity_id: entityId || null,
@@ -100,12 +101,16 @@ export const analyticsService = {
       if (error) {
         // Use console.warn to avoid red LogBox screen in dev
         console.warn(`[Analytics] Failed to track ${eventType}:`, error.message);
+        return false;
       }
+      // log_app_event returns false when it rejects the event (shape / rate limit).
+      return data !== false;
     } catch (err: any) {
       // Silently swallow — analytics should never disrupt the user
       if (__DEV__) {
         console.warn(`[Analytics] Error tracking ${eventType}:`, err.message);
       }
+      return false;
     }
   },
 
@@ -236,6 +241,16 @@ export const analyticsService = {
   }) {
     return this.trackEvent({
       eventType: EVENT_TYPES.ERROR_LOGGED,
+      metadata,
+    });
+  },
+
+  /** A live Chip tournament save attempt failed (metadata from buildSaveFailureLog). */
+  trackChipSaveFailure(tournamentId: number, metadata: Record<string, unknown>) {
+    return this.trackEvent({
+      eventType: EVENT_TYPES.ERROR_LOGGED,
+      entityType: ENTITY_TYPES.TOURNAMENT,
+      entityId: tournamentId,
       metadata,
     });
   },

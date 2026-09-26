@@ -136,6 +136,7 @@ import { SettingsTemplates } from "../../../../src/views/components/tournament/S
 import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
+import { useChipLocalBackupExists } from "../../../../src/viewmodels/hooks/use.chip.local.backup";
 import { buildClearTableOps } from "../../../../src/utils/clear-table";
 import { byMatchId, glyphFor, openIssueFor, statusForAssignment } from "../../../../src/utils/match-player-status";
 import { CHECK_IN_DEFAULTS, CHECK_IN_LIMITS, computeCheckInTimer, readCheckInSettings, validateCheckInSettings } from "../../../../src/utils/check-in-timer";
@@ -2588,6 +2589,10 @@ export default function ManageTournamentScreen() {
   const [chipActionsOpen, setChipActionsOpen] = useState(false);
 
   const hub = useManageTournament(tournamentId);
+  // Web local Chip backup (recovery Phase 1): only consulted when the hub's own tournament
+  // fetch FAILED — without the cloud row the hub can't tell this is a Chip tournament.
+  const hubLoadFailed = !hub.isLoading && !hub.tournament && !!hub.error;
+  const chipLocalBackup = useChipLocalBackupExists(tournamentId, hubLoadFailed);
 
   // Cross-client roster freshness (B1 follow-up): while THIS director is actively on
   // this tournament's manage screen, subscribe (tournament-scoped) to registration
@@ -8634,7 +8639,13 @@ export default function ManageTournamentScreen() {
     }
   };
 
-  if (hub.isLoading) {
+  // Cloud unavailable + this browser has a local Chip backup → the standalone Chip screen,
+  // whose viewmodel shows the recovery prompt (Open Local Copy / Retry). Web only; otherwise
+  // the existing behavior below is unchanged.
+  if (hubLoadFailed && chipLocalBackup === true) {
+    return <ChipManageScreen id={tournamentId} />;
+  }
+  if (hub.isLoading || (hubLoadFailed && chipLocalBackup === "checking")) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />

@@ -2075,6 +2075,114 @@ export const clearTable = (
   return s;
 };
 
+// Remove ONE entry from a table (administrative — NOT a match result, NOT a forfeit), leaving
+// the other seated. Mirrors clearTable's conventions for the removed entry and the voided match:
+//   • Live match: the match is VOIDED the same way clearTable voids it (dropped from
+//     `matches` — never counted: no winner, no loss, no chip change, no completed result).
+//     The opponent stays on the table as its waiting holder — the same seat a winner /
+//     forfeit-match survivor takes (matchId cleared, status "open", holderId = remaining).
+//     A closing table or a pending reshuffle never parks a holder (same rule as recordWinner
+//     / forfeit): the remaining entry returns to the FRONT of the queue instead and a closing
+//     table completes its closure.
+//   • Waiting table (no live match): removing the pending challenger leaves the holder
+//     waiting; removing the holder promotes the pending challenger to holder.
+// The removed entry goes to the queue at the TD's chosen end ("next" = front, "end" = back),
+// MOVED (never duplicated). No re-seating here — the TD / Auto Assign keeps control, as with
+// clearTable. One `manual` audit event (act "table_player_removed").
+export const removeFromTable = (
+  input: ChipState,
+  tableId: string,
+  entryId: string,
+  destination: "next" | "end" = "end",
+  by?: number | null,
+): ChipState => {
+  const s = clone(input);
+  const t = s.tables.find((x) => x.id === tableId);
+  if (!t) return input;
+  const removed = entryById(s, entryId);
+  if (!removed || removed.status === "eliminated") return input;
+
+  const m = t.matchId ? s.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress") : null;
+  let remainingId: string | null = null;
+  let matchVoided = false;
+  let remainingRequeued = false;
+
+  if (m) {
+    if (m.aId !== entryId && m.bId !== entryId) return input; // not on this match
+    remainingId = m.aId === entryId ? m.bId : m.aId;
+    s.matches = s.matches.filter((mm) => mm.id !== m.id); // void — never counted
+    matchVoided = true;
+    t.matchId = null;
+    t.status = "open";
+    t.lastLoserId = null;
+    t.rematchSkipped = [];
+    const rem = entryById(s, remainingId);
+    if (rem && rem.status !== "eliminated") {
+      if (t.closing || s.reshufflePending) {
+        // Never park a holder on a closing table or during a reshuffle drain.
+        rem.status = "queued";
+        rem.tableId = null;
+        if (!s.queue.includes(rem.id)) s.queue.unshift(rem.id);
+        t.holderId = null;
+        remainingRequeued = true;
+        if (t.closing) {
+          t.closing = false;
+          t.inactive = true;
+        }
+      } else {
+        t.holderId = rem.id;
+        rem.tableId = t.id;
+      }
+    } else {
+      t.holderId = null;
+    }
+  } else if (t.pendingChallengerId === entryId) {
+    remainingId = t.holderId ?? null;
+    t.pendingChallengerId = null;
+    t.rematchSkipped = [];
+  } else if (t.holderId === entryId) {
+    remainingId = t.pendingChallengerId ?? null;
+    // The pending challenger (if any) becomes the waiting holder; the old anti-repeat
+    // context belonged to the departing holder.
+    t.holderId = remainingId;
+    t.pendingChallengerId = null;
+    t.lastLoserId = null;
+    t.rematchSkipped = [];
+    if (!remainingId) t.status = "open";
+  } else {
+    return input; // entry isn't seated at this table
+  }
+
+  // Removed entry → queue at the chosen end (move, don't duplicate).
+  removed.status = "queued";
+  removed.tableId = null;
+  s.queue = s.queue.filter((id) => id !== entryId);
+  s.queue = destination === "next" ? [entryId, ...s.queue] : [...s.queue, entryId];
+
+  const rem = remainingId ? entryById(s, remainingId) : null;
+  const destLabel = destination === "next" ? "next in queue" : "end of queue";
+  const tail = matchVoided
+    ? ` — match voided${rem ? remainingRequeued ? `; ${teamName(rem)} returned to the queue` : `; ${teamName(rem)} stays at the table` : ""}`
+    : rem ? ` — ${teamName(rem)} stays at the table` : "";
+  pushEvent(
+    s,
+    "manual",
+    `${teamName(removed)} removed from ${t.label} → ${destLabel}${tail}`,
+    by,
+    {
+      act: "table_player_removed",
+      tableId: t.id,
+      tableLabel: t.label,
+      entryId,
+      remainingId,
+      destination: destination === "next" ? "next_in_queue" : "end_of_queue",
+      matchVoided,
+      remainingRequeued,
+    },
+  );
+  return s;
+};
+
 // Explicit TD override for Shuffle Mode: return EVERY occupied active table to the queue so
 // a reshuffle can proceed without waiting. Covers BOTH kinds of occupancy — a live match
 // AND a seated-but-not-yet-started assignment (holder / pending challenger) — via the same

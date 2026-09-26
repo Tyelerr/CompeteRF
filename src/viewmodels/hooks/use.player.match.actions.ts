@@ -7,13 +7,20 @@
 // table, opponent and race stay in lock-step with the live bracket.
 import { useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Platform } from "react-native";
 import { matchCheckInService } from "../../models/services/match-checkin.service";
 import { MatchIssueReason } from "../../models/types/match-checkin.types";
 import { matchRaceText } from "../../utils/match.utils";
 import { PlayerMatchSnapshot } from "../../utils/player-match-link";
 import { statusForAssignment } from "../../utils/match-player-status";
 import { CHECK_IN_DEFAULTS, canPlayerStart, computeCheckInTimer } from "../../utils/check-in-timer";
+import { onlineOnlyWrite } from "../../utils/connection-required";
 import { usePlayerLiveMatch } from "./use.player.live.match";
+
+const isWeb = Platform.OS === "web";
+const browserOnline = (): boolean | null =>
+  isWeb && typeof navigator !== "undefined" && typeof navigator.onLine === "boolean" ? navigator.onLine : null;
+const ONLINE_ONLY_MUTATION: { networkMode?: "always" } = isWeb ? { networkMode: "always" } : {};
 
 export interface PlayerMatchContext {
   tournamentId: number;
@@ -88,14 +95,21 @@ export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | n
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["match-player-status", context?.tournamentId] });
 
+  // Player-side writes are ONLINE-ONLY (web): refused up front while offline and never queued
+  // for later (networkMode "always" stops React Query pausing + replaying them on reconnect).
+  const onlineOnly = <T,>(write: () => Promise<T>) => onlineOnlyWrite(isWeb, browserOnline(), write);
   const checkInMutation = useMutation({
-    mutationFn: () => matchCheckInService.checkIn(context!.tournamentId, context!.matchId),
+    mutationFn: () => onlineOnly(() => matchCheckInService.checkIn(context!.tournamentId, context!.matchId)),
     onSettled: invalidate,
+    ...ONLINE_ONLY_MUTATION,
   });
   const contactMutation = useMutation({
     mutationFn: (vars: { reason: MatchIssueReason; message?: string | null }) =>
-      matchCheckInService.contactTd(context!.tournamentId, context!.matchId, vars.reason, vars.message),
+      onlineOnly(() =>
+        matchCheckInService.contactTd(context!.tournamentId, context!.matchId, vars.reason, vars.message),
+      ),
     onSettled: invalidate,
+    ...ONLINE_ONLY_MUTATION,
   });
 
   /** What a tapped notification is resolved against (src/utils/player-match-link.ts). */
@@ -114,7 +128,8 @@ export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | n
   );
 
   const startMatchMutation = useMutation({
-    mutationFn: () => matchCheckInService.playerStart(context!.tournamentId, context!.matchId),
+    ...ONLINE_ONLY_MUTATION,
+    mutationFn: () => onlineOnly(() => matchCheckInService.playerStart(context!.tournamentId, context!.matchId)),
     onSettled: () => {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["tournament", context?.tournamentId] });
