@@ -69,6 +69,7 @@ import {
   teamName as fullName,
   chipDisplayName,
   canAssignNextTeam,
+  isShuffleRoundIdleTable,
 } from "../../../../models/services/chip.engine";
 import { scheduleStaleError } from "../../../../utils/schedule";
 import { computeBreakdown, entryPoolTotal, feesPerPlayer, sidePotTotal, sidePotPayoutViews, type PayoutBucketAllocation } from "../../../../utils/prize-pool";
@@ -4587,10 +4588,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             // labelled "Available" with no idea why it never fills (the "Table 2 stays
             // empty" report). Matches the List view's status wording.
             const waitShuffle = isShuffleWaitTable(t);
-            const badgeColor = m ? timerColor(elapsed) : pending ? COLORS.primary : (t.closing || t.locked) ? COLORS.warning : waitShuffle ? COLORS.primary : COLORS.textMuted;
+            // Active Shuffle round, empty table, < 2 current-round players owed a turn → idle on
+            // purpose until the next reshuffle (shared engine rule; display only).
+            const roundIdle = isShuffleRoundIdleTable(chip, t.id);
+            const badgeColor = m ? timerColor(elapsed) : pending ? COLORS.primary : (t.closing || t.locked) ? COLORS.warning : waitShuffle || roundIdle ? COLORS.primary : COLORS.textMuted;
             // Top status = CURRENT live state only (no pending suffixes — those move to a
             // note under the match so the top line stays scannable).
-            const statusLbl = m ? `Live ${fmtClock(elapsed)}` : pending ? "Waiting to Start" : t.closing ? "Removes after match" : t.locked ? "🔒 Locked" : holder ? "Waiting" : waitShuffle ? "Waiting for Shuffle" : "Available";
+            const statusLbl = m ? `Live ${fmtClock(elapsed)}` : pending ? "Waiting to Start" : t.closing ? "Removes after match" : t.locked ? "🔒 Locked" : holder ? "Waiting" : waitShuffle ? "Waiting for Shuffle" : roundIdle ? "Next Round" : "Available";
             // One active player/team on the MAIN card: centered "Name (chips)" — no Fargo,
             // no "Chips" word, no left/right columns. Chip count is the live ChipState
             // value in parentheses right after the name. Richer per-player detail (Fargo +
@@ -4659,7 +4663,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       </>
                     )
                   ) : (
-                    <Text style={styles.atMatchWaiting}>{canAssign ? "Table available" : waitShuffle ? "Waiting for Shuffle" : "No team assigned"}</Text>
+                    <Text style={styles.atMatchWaiting}>{canAssign ? "Table available" : waitShuffle ? "Waiting for Shuffle" : roundIdle ? "Waiting for Next Round" : "No team assigned"}</Text>
                   )}
                 </TouchableOpacity>
                 {/* Pending future table-state, shown BELOW the match so the top line stays

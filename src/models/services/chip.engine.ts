@@ -2497,6 +2497,19 @@ export const canAssignNextTeam = (s: ChipState, tableId: string): boolean => {
   return table.holderId ? eligible >= 1 : eligible >= 2;
 };
 
+// Read-only DISPLAY state: an EMPTY usable table during an ACTIVE Shuffle round that cannot be
+// filled because fewer than two current-round players are still owed a turn. It stays idle on
+// purpose until the round finishes and the next reshuffle redraws — the table card says
+// "Waiting for Next Round" instead of the actionable-looking "No team assigned". Outside an
+// active round (normal play, or draining for a reshuffle — "Waiting for Shuffle") it is false.
+export const isShuffleRoundIdleTable = (s: ChipState, tableId: string): boolean => {
+  if (!s.shuffleRound || s.reshufflePending || s.shuffleReady || !s.startedAt || s.finishedAt) return false;
+  const table = s.tables.find((t) => t.id === tableId);
+  if (!table || table.inactive || table.locked || table.closing) return false;
+  if (table.matchId || table.holderId || table.pendingChallengerId) return false;
+  return !canAssignNextTeam(s, tableId);
+};
+
 // TD manually assigns a SPECIFIC queued team onto a table (override). On a holder
 // table they become the challenger; on an empty table they're paired with the
 // next queued team.
