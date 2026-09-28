@@ -2667,6 +2667,23 @@ export const assignNextTeam = (
   const s = clone(input);
   const table = s.tables.find((t) => t.id === tableId);
   if (!table || table.inactive || table.locked || table.closing || table.matchId || table.pendingChallengerId) return input;
+  // One TD-only audit event per manual seat (manual/act "assign_next" — never shown to
+  // spectators). Logging it is what gives the action its own restore point / Undo step: the
+  // VM update() pipeline snapshots the pre-action state for every action that adds an event.
+  // `mode` tells the two buttons apart: "fill_opponent" (Assign Next Team — a waiting holder
+  // gets its challenger) vs "full_match" (Assign Next Match — an empty table gets a pair).
+  const logAssign = (mode: "fill_opponent" | "full_match", aId: string, bId: string) => {
+    const a = entryById(s, aId);
+    const b = entryById(s, bId);
+    const title = mode === "fill_opponent" ? "Assign Next Team" : "Assign Next Match";
+    pushEvent(s, "manual", `${title}: ${a ? teamName(a) : "Team"} vs ${b ? teamName(b) : "Team"} assigned to ${table.label}`, by, {
+      act: "assign_next",
+      mode,
+      tableId: table.id,
+      entryIds: [aId, bId],
+      matchId: table.matchId ?? null,
+    });
+  };
   if (table.holderId) {
     // Winner-stays → assign as pending (TD confirms with Start Match).
     const challenger = takeChallenger(s, table);
@@ -2675,12 +2692,14 @@ export const assignNextTeam = (
       const ce = entryById(s, challenger);
       if (ce) { ce.status = "playing"; ce.tableId = table.id; }
       roundSeat(s, challenger); // this team now has its turn this round (as seatAllTables)
+      logAssign("fill_opponent", table.holderId, challenger);
     }
   } else {
     const pair = takePair(s);
     if (pair) {
       table.lastLoserId = null;
       startMatch(s, table, pair[0], pair[1]);
+      logAssign("full_match", pair[0], pair[1]);
     }
   }
   return s;

@@ -158,6 +158,10 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
           return text ? { ...base, text, kind: "queue" } : null;
         }
         // A table clear requeues players — spectators see the board/queue change.
+        // Manual Assign Next Team / Match is a TD audit + Undo step only: the public board
+        // already shows the new pairing, so no spectator line.
+        case "assign_next":
+          return null;
         case "table_cleared":
         case "table_player_removed": // one entry taken off a table (match voided if live)
           return { ...base, kind: "table" };
