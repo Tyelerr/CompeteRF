@@ -3,6 +3,7 @@
 // holds the working ChipState locally, auto-saves changes (debounced), and exposes
 // Setup actions. Rules live in chip.engine.ts; persistence in chip.service.ts.
 
+import { trackChipSave, waitForChipSaves } from "../models/services/chip.save-tracker";
 import { chipAutoSaveNeeded, healLoadedChip, loadRepairChanged } from "../models/services/chip.load-heal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -79,10 +80,8 @@ import {
   beginShuffle as engineBeginShuffle,
   startShuffleCycle as engineStartShuffleCycle,
   startShuffle as engineStartShuffle,
-  settleShuffleDrain,
-  assignFinals,
-  reconcileShuffleRound,
-  reconcileEliminations,
+  settleChipState,
+  seatFinals as engineSeatFinals,
   withRestorePoint,
   restoreToPoint as engineRestoreToPoint,
   undoLastActions as engineUndoLastActions,
@@ -559,11 +558,11 @@ export const useChipTournament = (
         if (offlineSessionRef.current) setOfflineSession(noteSentFingerprint(offlineSessionRef.current, fp));
         if (CHIP_APPLY_ENABLED) {
           // STRICT CAS path (transactional RPC). A conflict means the write was REJECTED.
-          const res = await chipService.applyState(id, state, versionRef.current);
+          const res = await trackChipSave(id, chipService.applyState(id, state, versionRef.current));
           return { version: res.version, conflict: res.conflict, strict: true };
         }
         // SOFT stage: detect + log a cross-director conflict; the save still applies.
-        const res = await chipService.save(id, state, { expectedVersion: versionRef.current });
+        const res = await trackChipSave(id, chipService.save(id, state, { expectedVersion: versionRef.current }));
         return { ...res, strict: false };
       },
       onSaved: (res, state) => {
@@ -749,13 +748,17 @@ export const useChipTournament = (
       return;
     }
     const silent = opts?.silent ?? false;
+    // Persist any pending debounced change — and WAIT for an in-flight save — BEFORE fetching,
+    // for EVERY load (silent refetch or a full re-load, e.g. the mount effect re-running when
+    // load's identity changes on a Live-tab switch). Otherwise the fetch can read a save that is
+    // only half written (rows written, version not yet bumped) and apply that stale board and
+    // version over the TD's newer local state — the next save then "conflicts" with this
+    // device's own write. skipFlush: the strict-CAS conflict path and Reload Latest, which
+    // intentionally DISCARD the local edit rather than persisting it.
+    if (!opts?.skipFlush) await flushSave();
+    // …and any save ANOTHER instance of this screen still has in flight (a remount).
+    await waitForChipSaves(id);
     if (silent) {
-      // Persist any pending debounced change FIRST, then reconcile — otherwise a
-      // background refetch (adjacent mutation, or the admin roster Realtime signal) would
-      // overwrite `chip` with server state and drop a not-yet-saved local edit.
-      // skipFlush: used by the strict-CAS conflict path, which intentionally DISCARDS the
-      // rejected local edit rather than persisting it.
-      if (!opts?.skipFlush) await flushSave();
       setRefreshing(true);
     } else {
       setLoading(true);
@@ -1459,10 +1462,11 @@ export const useChipTournament = (
     loadGuardRef.current.markLocalChange();
     setChip((c) => {
       if (!c) return c;
-      // assignFinals runs LAST so that once a mutation leaves exactly two players
-      // alive with no active match, the final heads-up game is auto-seated here in
-      // the state transition (never from render) — no manual "Start Final Match".
-      let next = assignFinals(reconcileShuffleRound(reconcileEliminations(settleShuffleDrain(materializeLive(fn(c))))));
+      // The ONE shared post-action settle (engine settleChipState) — drain readiness,
+      // eliminations, champion, finals-over-Shuffle, owed-turn self-heal, round completion,
+      // finals seating (only when there is no table choice) — in the state transition,
+      // never from render. Load and Undo/Restore run the same settle.
+      let next = settleChipState(materializeLive(fn(c)));
       if (next === c) return c; // no-op — nothing to record
       const added = Math.max(0, next.events.length - c.events.length);
       if (added > 0) {
@@ -1750,6 +1754,12 @@ export const useChipTournament = (
   );
   const assignSpecificTeam = useCallback(
     (tableId: string, entryId: string) => update((c) => engineAssignSpecificTeam(c, tableId, entryId)),
+    [update],
+  );
+  // Finals: the TD picks the table the final two are seated on (engine seatFinals — refused
+  // unless the finals are awaiting a table and this table is finals-eligible).
+  const selectFinalsTable = useCallback(
+    (tableId: string) => update((c) => engineSeatFinals(c, tableId)),
     [update],
   );
   // Manual chip override. `meta` carries the required reason/notes + acting director
@@ -2462,6 +2472,7 @@ export const useChipTournament = (
     setAllTablesLocked,
     assignNextTeam,
     assignSpecificTeam,
+    selectFinalsTable,
     moveTable,
     adjustChips,
     forfeitEntry,

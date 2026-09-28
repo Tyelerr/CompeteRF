@@ -13,7 +13,9 @@ import {
   addTables,
   emptyChipState,
   newId,
+  chipFinalsState,
   recordWinner,
+  seatFinals,
   setTableLocked,
   startAllMatches,
   startPendingMatch,
@@ -91,15 +93,26 @@ for (const format of ["singles", "scotch_doubles"] as ChipFormat[]) {
     assert.equal(finalsTable(again)!.id, ft!.id);
   });
 
-  test(`${format}: UNLOCKED old table — the staying winner keeps its table for the finals`, () => {
+  test(`${format}: UNLOCKED old table + a free table — the TD picks; either choice seats once`, () => {
     let s = live(format, 3, 2);
     const t1 = tableOfMatch(s);
     const m = matchOn(s, t1.id);
     s = pipeline(recordWinner(s, m.id, m.aId));
     assertOneTablePerEntry(s, "after the deciding match");
-    const ft = finalsTable(s)!;
-    assert.equal(ft.id, t1.id, "winner-stays: finals on the winner's table");
-    assert.equal(ft.holderId, m.aId, "the winner is the holder");
+    assert.equal(finalsTable(s), undefined, "two usable tables → no silent choice");
+    const st = chipFinalsState(s);
+    assert.equal(st.kind, "select");
+    // Keep the winner's own table: the winner stays holder there.
+    const onOwn = pipeline(seatFinals(s, t1.id));
+    assert.equal(finalsTable(onOwn)!.id, t1.id);
+    assert.equal(finalsTable(onOwn)!.holderId, m.aId, "the winner is the holder");
+    assertOneTablePerEntry(onOwn, "finals on the winner's table");
+    // Or the other table: the winner leaves Table 1 (never on two tables).
+    const other = s.tables.find((t) => t.id !== t1.id)!;
+    const moved = pipeline(seatFinals(s, other.id));
+    assert.equal(finalsTable(moved)!.id, other.id);
+    assert.equal(moved.tables.find((t) => t.id === t1.id)!.holderId ?? null, null);
+    assertOneTablePerEntry(moved, "finals moved to the other table");
   });
 
   test(`${format}: ONE table, locked — finals wait for a table, no duplicate seat`, () => {
@@ -129,9 +142,16 @@ for (const format of ["singles", "scotch_doubles"] as ChipFormat[]) {
     s = pipeline(recordWinner(s, mb.id, mb.aId));
     assert.equal(alive(s).length, 2);
     assertOneTablePerEntry(s, "finals, multi-table");
+    const st = chipFinalsState(s);
+    assert.equal(st.kind, "select", "two usable tables remain → the TD picks");
+    assert.ok(st.kind === "select" && !st.tableIds.includes(tb.id), "the locked table is never offered");
+    const pick = st.kind === "select" ? st.tableIds.find((id) => id !== ta.id)! : "";
+    s = pipeline(seatFinals(s, pick));
+    assertOneTablePerEntry(s, "finals seated, multi-table");
     const ft = finalsTable(s)!;
-    assert.ok(ft && ft.id !== tb.id, "finals not on the locked table");
-    assert.equal(s.tables.find((t) => t.id === tb.id)!.holderId ?? null, null);
+    assert.ok(ft && ft.id === pick, "finals on the chosen table");
+    assert.equal(s.tables.find((t) => t.id === tb.id)!.holderId ?? null, null, "locked table vacated");
+    assert.equal(s.tables.find((t) => t.id === ta.id)!.holderId ?? null, null, "other table holds neither finalist");
   });
 
   test(`${format}: the finals match plays out on one table and crowns a champion`, () => {
@@ -160,6 +180,11 @@ test("general sweep: no entry is ever on two tables through full 1-chip events (
         let s = live(format, n, tables);
         for (let step = 0; step < 40 && alive(s).length > 1; step++) {
           assertOneTablePerEntry(s, `${where} step=${step}`);
+          const fin = chipFinalsState(s);
+          if (fin.kind === "select") {
+            s = pipeline(seatFinals(s, fin.tableIds[step % fin.tableIds.length]));
+            assertOneTablePerEntry(s, `${where} step=${step} finals seated`);
+          }
           if (!s.tables.some((t) => t.matchId)) {
             // Nothing playing: unlock every table (a lock can hold the only seatable table) and start.
             s = pipeline(s.tables.reduce((acc, t) => (t.locked ? setTableLocked(acc, t.id, false) : acc), s));

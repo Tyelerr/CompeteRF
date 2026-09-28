@@ -14,22 +14,16 @@
 //     some repair steps return an equal-content copy).
 //   • chipAutoSaveNeeded — the auto-save skips exactly the unchanged loaded board.
 
-import {
-  assignFinals,
-  reconcileEliminations,
-  reconcileMatches,
-  reconcileQueue,
-  reconcileShuffleRound,
-  settleShuffleDrain,
-} from "./chip.engine";
+import { reconcileMatches, reconcileQueue, settleChipState } from "./chip.engine";
 import { chipRecoveryFingerprint } from "./chip.local-recovery";
 import { ChipState } from "../types/chip.types";
 
-// Active (not completed) board repair, in order: void ghost matches, settle a stuck shuffle
-// drain, eliminate 0-chip entries, re-attach alive entries that fell out of the queue,
-// re-derive a Shuffle round's owed-a-turn list, auto-seat the finals at two-alive-no-match.
+// Active (not completed) board repair: void ghost matches, re-attach alive entries that fell
+// out of the queue, then the SAME post-action settle every live action runs (settleChipState:
+// drain readiness, 0-chip eliminations, champion, finals-over-Shuffle, owed-turn self-heal,
+// round completion, finals seating when there is no table choice to make).
 export const healLoadedChip = (chip: ChipState): ChipState =>
-  assignFinals(reconcileShuffleRound(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(chip))))));
+  settleChipState(reconcileQueue(reconcileMatches(chip)));
 
 // True when the healed board differs from what was loaded in anything that gets persisted.
 export const loadRepairChanged = (loaded: ChipState, healed: ChipState): boolean =>

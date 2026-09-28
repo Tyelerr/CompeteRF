@@ -69,6 +69,8 @@ import {
   teamName as fullName,
   chipDisplayName,
   canAssignNextTeam,
+  chipFinalsState,
+  manualAssignCandidates,
   isShuffleRoundIdleTable,
 } from "../../../../models/services/chip.engine";
 import { scheduleStaleError } from "../../../../utils/schedule";
@@ -1024,6 +1026,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const [tableDetailId, setTableDetailId] = useState<string | null>(null);
   const [moveFromId, setMoveFromId] = useState<string | null>(null);
   const [manualAssignId, setManualAssignId] = useState<string | null>(null);
+  // Finals table picker (Select Finals Table): open flag + the table currently chosen.
+  const [finalsPickerOpen, setFinalsPickerOpen] = useState(false);
+  // The eligible tables captured when the picker opened (so the closing fade doesn't re-render
+  // an empty list once the finals are seated).
+  const [finalsPickerIds, setFinalsPickerIds] = useState<string[]>([]);
+  const [finalsPickId, setFinalsPickId] = useState<string | null>(null);
   const [tableHistoryId, setTableHistoryId] = useState<string | null>(null);
   // Player ⋮ actions: an anchored dropdown that drops from the tapped button and
   // opens leftward. We measure the button in the window, then place the menu.
@@ -4347,9 +4355,73 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   //   available → "Normal Play — Shuffle Mode Available" + Begin Shuffle
   //   draining  → "Waiting for Current Matches to Finish" + Cancel
   //   ready     → "Ready to Shuffle" + Manage Tables / Start Shuffle / Cancel
+  // ── Finals: exactly two left ──────────────────────────────────────────────────
+  // Replaces the Shuffle UX at two remaining (and shows without Shuffle Mode too — the TD may
+  // need to pick the finals table). State comes from the engine (chipFinalsState):
+  //   select   → several usable tables: the TD picks one (Select Finals Table → seatFinals)
+  //   no_table → no usable table: say so (unlock / reactivate / add one); nothing is seated
+  //   seated   → Final Match Ready on the chosen table → Start Match (startPendingMatch)
+  //   live     → Final Match in Progress
+  // Web ≥ 700px: compact single row, action on the right. Narrow / native: stacks.
+  const renderFinalsBanner = () => {
+    const fin = chipFinalsState(chip);
+    if (fin.kind === "none") return null;
+    const pair = chip.entries.filter((e) => e.status !== "eliminated" && isChipFieldMember(chip, e));
+    const matchup = pair.length === 2 ? `${shortTeam(pair[0])} vs ${shortTeam(pair[1])}` : "Final two";
+    const liveMatch = chip.matches.find((m) => m.status === "in_progress");
+    const tableLabel = (id?: string | null) => chip.tables.find((t) => t.id === id)?.label ?? null;
+    const where =
+      fin.kind === "seated" ? tableLabel(fin.tableId) : fin.kind === "live" ? tableLabel(liveMatch?.tableId) : null;
+    const stateLbl =
+      fin.kind === "live" ? "Final Match in Progress" : fin.kind === "no_table" ? "Final Two" : "Final Match Ready";
+    const sub =
+      fin.kind === "select"
+        ? `${matchup} · choose the finals table`
+        : fin.kind === "no_table"
+          ? `${matchup} · No table is available for the finals — unlock, reactivate, or add a table.`
+          : `${matchup}${where ? ` · ${where}` : ""}`;
+    const action =
+      fin.kind === "seated" ? { label: "Start Match", onPress: () => vm.startPendingMatch(fin.tableId) }
+      : fin.kind === "select" ? { label: "Select Finals Table", onPress: () => setFinalsPickId(null) }
+      : null;
+    const inline = isWeb && winW >= 700;
+    return (
+      <View style={[styles.shufBanner, styles.finalsCard, { borderColor: COLORS.primary }]}>
+        <View style={[styles.finalsRow, inline && styles.finalsRowInline]}>
+          <View style={styles.finalsInfo}>
+            <View style={styles.shufTitleWrap}>
+              <Ionicons name="trophy-outline" size={webMs(16)} color={COLORS.primary} />
+              <Text style={styles.shufTitle}>Finals</Text>
+              <Text style={[styles.finalsState, { color: fin.kind === "no_table" ? COLORS.warning : COLORS.primary }]}>
+                · {stateLbl}
+              </Text>
+            </View>
+            <Text style={styles.finalsSub}>{sub}</Text>
+          </View>
+          {action && (
+            <TouchableOpacity
+              style={[styles.finalsBtn, !inline && styles.finalsBtnStacked]}
+              onPress={() => {
+                if (fin.kind === "select") {
+                  setFinalsPickId(fin.tableIds.length === 1 ? fin.tableIds[0] : null);
+                  setFinalsPickerIds(fin.tableIds);
+                  setFinalsPickerOpen(true);
+                } else action.onPress();
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.shufPrimaryText}>{action.label}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   const renderShuffleBanner = () => {
+    const finals = renderFinalsBanner();
+    if (finals) return finals;
     if (!chip.shuffleMode) return null;
-    const live = chip.matches.filter((m) => m.status === "in_progress").length;
     const ready = !!chip.shuffleReady;
     const draining = !!chip.reshufflePending && !ready;
     // The Ready state rests until the TD taps Start Shuffle (never auto-advances now).
@@ -4383,58 +4455,6 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       ? "Finishing the Round"
       : "Normal Play — Shuffle Mode Available";
     const accent = (roundComplete || readyInitial) ? COLORS.primary : round ? COLORS.success : draining ? COLORS.warning : COLORS.textSecondary;
-
-    // ── Finals: exactly two players left ────────────────────────────────────────
-    // At 2 remaining we replace the Shuffle Mode round UX with a Finals banner. The
-    // two are AUTO-ASSIGNED to a table (assignFinals, in the VM settle path) as a
-    // reserved holder + pending challenger — but NOT started. The TD taps Start
-    // Match to go live. The match then uses the SAME chip / winner-stays /
-    // elimination rules; its winner drops the loser to 0 chips → alive === 1 →
-    // recordWinner sets finishedAt and the existing results flow takes over.
-    const isFinals = totalCount === 2 && !chip.finishedAt;
-    if (isFinals) {
-      const finalLive = live > 0; // the two are already playing
-      // Assigned-but-not-started final: a table reserved with holder + pending, no match.
-      const finalsTable = chip.tables.find(
-        (t) => t.holderId && t.pendingChallengerId && !t.matchId,
-      );
-      const hA = finalsTable ? entryById(finalsTable.holderId) : null;
-      const hB = finalsTable ? entryById(finalsTable.pendingChallengerId) : null;
-      const hasSeatableTable = chip.tables.some((t) => !t.inactive);
-      const stateLbl = finalLive
-        ? "Final Match in Progress"
-        : finalsTable
-          ? "Final Match Ready"
-          : "Final Two";
-      const subText = finalLive
-        ? "The last two face off — record the winner. The loser drops a chip; the finals continue until someone runs out."
-        : finalsTable && hA && hB
-          ? `${shortTeam(hA)} vs ${shortTeam(hB)} · ${finalsTable.label} — tap Start Match when ready.`
-          : hasSeatableTable
-            ? "Assigning the final match…"
-            : "Finals ready — waiting for an available table.";
-      return (
-        <View style={[styles.shufBanner, { borderColor: COLORS.primary }]}>
-          <View style={styles.shufHead}>
-            <View style={styles.shufTitleWrap}>
-              <Ionicons name="trophy-outline" size={webMs(16)} color={COLORS.primary} />
-              <Text style={styles.shufTitle}>Finals</Text>
-            </View>
-          </View>
-          <Text style={[styles.shufState, { color: COLORS.primary }]}>{stateLbl}</Text>
-          <Text style={styles.shufSub}>{subText}</Text>
-          {!finalLive && finalsTable && (
-            <TouchableOpacity
-              style={[styles.shufPrimary, isWeb && styles.shufPrimaryWeb]}
-              onPress={() => vm.startPendingMatch(finalsTable.id)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.shufPrimaryText}>Start Match</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-    }
 
     // WEB: ALL non-finals shuffle UI (available / active / ready + Manage/Start/Cancel) now
     // lives in the single persistent Shuffle section (see shuffleSection in renderLiveDashboard),
@@ -6213,8 +6233,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             {/* Native: one "Remove Player" row → pick the player → the SAME web flow
                 (confirmRemoveFromTable). Native Alerts, like Forfeit Team / Clear Table. */}
             {!isWeb && occupied && <Row icon="person-remove-outline" label="Remove Player" onPress={direct(() => choosePlayerToRemove(t))} />}
-            {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={t.locked || (!holder && chip.queue.length < 2) || (!!holder && chip.queue.length < 1)} onPress={direct(() => vm.assignNextTeam(t.id))} />}
-            {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={t.locked || chip.queue.length === 0} onPress={viaModal(() => setManualAssignId(t.id))} />}
+            {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={!canAssignNextTeam(chip, t.id)} onPress={direct(() => vm.assignNextTeam(t.id))} />}
+            {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={manualAssignCandidates(chip, t.id).length === 0} onPress={viaModal(() => setManualAssignId(t.id))} />}
             {occupied && <Row icon="swap-horizontal-outline" label="Move Team" disabled={!canMove} onPress={viaModal(() => setMoveFromId(t.id))} />}
             <Row icon="create-outline" label="Rename Table" onPress={viaModal(() => openRename(t))} />
             <Row icon={t.locked ? "lock-open-outline" : "lock-closed-outline"} label={t.locked ? "Unlock Table" : "Lock Table"} onPress={direct(() => toggleTableLock(t))} />
@@ -8732,8 +8752,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   <Text style={styles.actSheetTitle}>{t.label} Actions</Text>
                   <View style={styles.actSheetGroup}>
                     {occupied && <Row icon="refresh-outline" label="Clear Table" onPress={() => { close(); confirmClearTable(t); }} />}
-                    {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={t.locked || (!holder && chip.queue.length < 2) || (!!holder && chip.queue.length < 1)} onPress={() => { close(); vm.assignNextTeam(t.id); }} />}
-                    {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={t.locked || chip.queue.length === 0} onPress={() => leaveTo(() => setManualAssignId(t.id))} />}
+                    {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={!canAssignNextTeam(chip, t.id)} onPress={() => { close(); vm.assignNextTeam(t.id); }} />}
+                    {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={manualAssignCandidates(chip, t.id).length === 0} onPress={() => leaveTo(() => setManualAssignId(t.id))} />}
                     {occupied && canMove && <Row icon="swap-horizontal-outline" label="Move Team" onPress={() => leaveTo(() => setMoveFromId(t.id))} />}
                     <Row icon="create-outline" label="Rename Table" onPress={() => leaveTo(() => openRename(t))} />
                     <Row icon={t.locked ? "lock-open-outline" : "lock-closed-outline"} label={t.locked ? "Unlock Table" : "Lock Table"} onPress={() => { close(); toggleTableLock(t); }} />
@@ -9063,16 +9083,66 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
         </Pressable>
       </Modal>
 
+      {/* Finals → pick the table (only finals-eligible tables are listed) */}
+      <Modal visible={finalsPickerOpen} transparent animationType="fade" onRequestClose={() => setFinalsPickerOpen(false)}>
+        <Pressable style={styles.centerBackdrop} onPress={() => setFinalsPickerOpen(false)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            {(() => {
+              const ids = finalsPickerIds;
+              const chosen = finalsPickId && ids.includes(finalsPickId) ? finalsPickId : null;
+              return (
+                <>
+                  <Text style={styles.renameTitle}>Select Finals Table</Text>
+                  <Text style={styles.reduceHint}>Both finalists will be seated there, ready for Start Match.</Text>
+                  {ids.length === 0 && <Text style={styles.hint}>No table is available for the finals right now.</Text>}
+                  {ids.map((id) => {
+                    const t = chip.tables.find((x) => x.id === id);
+                    if (!t) return null;
+                    const here = t.holderId ? entryById(t.holderId) : null;
+                    const on = chosen === id;
+                    return (
+                      <TouchableOpacity key={id} style={[styles.moveDestRow, styles.finalsPickRow, on && styles.finalsPickRowOn]} onPress={() => setFinalsPickId(id)} activeOpacity={0.85}>
+                        <Ionicons name={on ? "radio-button-on" : "radio-button-off"} size={webMs(18)} color={on ? COLORS.primary : COLORS.textMuted} />
+                        <Text style={styles.moveDestText}>{t.label}</Text>
+                        {here && <Text style={styles.tCardFargo}>{shortTeam(here)} is here</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    style={[styles.shufPrimary, !chosen && styles.finalsBtnDisabled]}
+                    disabled={!chosen}
+                    onPress={() => { if (chosen) vm.selectFinalsTable(chosen); setFinalsPickerOpen(false); }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.shufPrimaryText}>
+                      {chosen ? `Seat Finals on ${chip.tables.find((x) => x.id === chosen)?.label ?? "Table"}` : "Choose a table"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.renameCancel, { alignSelf: "stretch", alignItems: "center", marginTop: webSc(SPACING.sm) }]} onPress={() => setFinalsPickerOpen(false)}>
+                    <Text style={styles.renameCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Manually assign a team from the queue to a table */}
       <Modal visible={manualAssignId != null} transparent animationType="fade" onRequestClose={() => setManualAssignId(null)}>
         <View style={styles.centerRoot}>
           <Pressable style={styles.centerDim} onPress={() => setManualAssignId(null)} />
           <View style={styles.centerCard}>
             <Text style={styles.renameTitle}>Assign which team?</Text>
-            <Text style={styles.reduceHint}>Pick a team from the queue to seat on this table.</Text>
+            <Text style={styles.reduceHint}>
+              {chip.shuffleRound ? "Pick a team still owed a turn this round." : "Pick a team from the queue to seat on this table."}
+            </Text>
             <ScrollView style={{ maxHeight: webSc(360) }} keyboardShouldPersistTaps="handled">
-              {chip.queue.length === 0 && <Text style={styles.hint}>The queue is empty.</Text>}
+              {(manualAssignId ? manualAssignCandidates(chip, manualAssignId) : []).length === 0 && (
+                <Text style={styles.hint}>{chip.queue.length === 0 ? "The queue is empty." : "No eligible team can be seated here right now."}</Text>
+              )}
               {chip.queue.map((qid, i) => {
+                if (!manualAssignId || !manualAssignCandidates(chip, manualAssignId).includes(qid)) return null;
                 const e = entryById(qid);
                 if (!e) return null;
                 return (
@@ -10126,6 +10196,17 @@ const styles = StyleSheet.create({
   shufPrimary: { marginTop: webSc(SPACING.sm), minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center" },
   shufPrimaryWeb: { alignSelf: "center", width: 260, marginTop: SPACING.xs, ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
   shufPrimarySm: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm), ...(isWeb ? { minHeight: webSc(36) } : null) },
+  finalsCard: { paddingVertical: webSc(SPACING.sm) },
+  finalsRow: { gap: webSc(SPACING.sm) },
+  finalsRowInline: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: webSc(SPACING.md) },
+  finalsInfo: { flexGrow: 1, flexShrink: 1 },
+  finalsState: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
+  finalsSub: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), marginTop: webSc(SPACING.xs) / 2 },
+  finalsBtn: { minHeight: webSc(40), paddingHorizontal: webSc(SPACING.lg), borderRadius: RADIUS.md, backgroundColor: COLORS.primary, alignItems: "center", justifyContent: "center", ...(isWeb ? ({ cursor: "pointer" } as object) : null) },
+  finalsBtnStacked: { alignSelf: "stretch", minHeight: webSc(44) },
+  finalsBtnDisabled: { opacity: 0.5 },
+  finalsPickRow: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
+  finalsPickRowOn: { borderColor: COLORS.primary },
   shufPrimaryText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   shufBtnRow: { flexDirection: "row", alignItems: "stretch", gap: webSc(SPACING.sm), marginTop: webSc(SPACING.sm) },
   shufGhost: { flex: 1, minHeight: webSc(44), borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", paddingHorizontal: webSc(SPACING.sm), ...(isWeb ? { minHeight: webSc(36) } : null) },
