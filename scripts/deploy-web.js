@@ -111,19 +111,54 @@ function copyWellKnown(distDir) {
 }
 copyWellKnown(distPath);
 
-// SPA fallback: Expo's web export is a single-page app, so a direct hit or
-// refresh on a client route (e.g. /billiards) would 404 on Vercel. Rewrite
-// unknown paths to index.html. Real files (assets, *.html) match the filesystem
-// first and are served as-is, so only app routes fall through to the shell.
+// Routing for Expo's STATIC web export (app.json web.output "static"): every route is
+// pre-rendered to its own HTML file (faq.html, auth/login.html, chip-live/[id].html, …) and
+// React HYDRATES that exact markup. Serving the wrong file (e.g. index.html for /faq) makes the
+// first client render disagree with the HTML → React #418 hydration mismatch. So:
+//   1. cleanUrls — /faq serves faq.html (a real file matches before any rewrite).
+//   2. one rewrite per DYNAMIC route template found in the export, e.g. /chip-live/:id →
+//      /chip-live/[id].html (route-group copies like (tabs)/… are skipped — URLs never include
+//      them).
+//   3. a final fallback to the pre-rendered +not-found page for anything not exported.
+function dynamicRouteRewrites(distDir) {
+  const out = [];
+  const walk = (dir, segs) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith("(") || entry.name.startsWith("_") || entry.name === "assets" || entry.name.startsWith(".")) continue;
+        walk(path.join(dir, entry.name), [...segs, entry.name]);
+      } else if (/^\[[^\]]+\]\.html$/.test(entry.name) || (entry.name.endsWith(".html") && segs.some((sg) => /^\[[^\]]+\]$/.test(sg)))) {
+        const file = [...segs, entry.name];
+        const routeSegs = [...segs, entry.name.replace(/\.html$/, "")].filter((sg) => sg !== "index");
+        const source = "/" + routeSegs.map((sg) => {
+          const m = /^\[(?:\.\.\.)?([^\]]+)\]$/.exec(sg);
+          return m ? `:${m[1]}` : sg;
+        }).join("/");
+        // cleanUrls → extensionless destination; brackets literal (the template's real file name).
+        const destination = "/" + file.join("/").replace(/\.html$/, "");
+        out.push({ source, destination });
+      }
+    }
+  };
+  walk(distDir, []);
+  // More specific (more static segments) first; stable by path.
+  return out.sort((a, b) => b.source.split("/").length - a.source.split("/").length || a.source.localeCompare(b.source));
+}
+
 function writeSpaConfig(distDir) {
+  const dynamic = dynamicRouteRewrites(distDir);
   const cfg = {
+    cleanUrls: true,
     // Universal/App Link association files must be served as real JSON and must
     // NOT fall through to the SPA shell. Vercel matches the filesystem before
     // rewrites, but the extensionless AASA needs an explicit JSON content-type.
     rewrites: [
       { source: "/.well-known/apple-app-site-association", destination: "/.well-known/apple-app-site-association" },
       { source: "/.well-known/assetlinks.json", destination: "/.well-known/assetlinks.json" },
-      { source: "/(.*)", destination: "/index.html" },
+      ...dynamic,
+      // Anything not exported → the pre-rendered not-found page (cleanUrls: extensionless). It
+      // hydrates cleanly and shows the app's own "not found" screen inside the normal shell.
+      { source: "/(.*)", destination: "/+not-found" },
     ],
     // Force the HTML shell to always revalidate so a new deploy (with a new
     // entry-<hash>.js) shows up without a manual hard-refresh. The hashed JS/CSS
@@ -161,7 +196,7 @@ function writeSpaConfig(distDir) {
     path.join(distDir, "vercel.json"),
     JSON.stringify(cfg, null, 2),
   );
-  console.log("[web:publish] Wrote SPA rewrite + cache headers (vercel.json).");
+  console.log(`[web:publish] Wrote static-route config (cleanUrls + ${dynamic.length} dynamic-route rewrites + not-found fallback) and cache headers (vercel.json).`);
 }
 writeSpaConfig(distPath);
 
@@ -170,7 +205,10 @@ console.log(
 );
 
 try {
-  execSync("vercel deploy dist --prod --yes", {
+  // WEB_PUBLISH_PREVIEW=1 → a Vercel PREVIEW deployment (private URL, production untouched)
+  // for verifying routing/hydration before promoting; default is production as before.
+  const preview = process.env.WEB_PUBLISH_PREVIEW === "1";
+  execSync(preview ? "vercel deploy dist --yes" : "vercel deploy dist --prod --yes", {
     stdio: "inherit",
     cwd: root,
     env: {
