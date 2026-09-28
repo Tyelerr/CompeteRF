@@ -9,6 +9,7 @@
 // fargo / paid-ticks are TD-only and live in the TD methods below. Do not
 // expose the TD methods to the player UI.
 
+import type { ChipResultRow } from "../../utils/profile-chip-results";
 import { supabase } from "../../lib/supabase";
 import {
   PlayerTournament,
@@ -101,6 +102,15 @@ export const registrationService = {
     const { data, error } = await supabase.rpc("get_my_live_tournament");
     if (error) throw error;
     return (Array.isArray(data) ? data : []) as unknown as PlayerTournament[];
+  },
+
+  // A player's completed Chip results (one chip_results row per entry — both Scotch teammates
+  // read the same team result). SECURITY DEFINER RPC; returns [] if it isn't deployed yet so the
+  // profile never breaks on it.
+  async getPlayerChipResults(playerId: number): Promise<ChipResultRow[]> {
+    const { data, error } = await supabase.rpc("get_player_chip_results", { p_player_id: playerId });
+    if (error) return [];
+    return (Array.isArray(data) ? data : []) as unknown as ChipResultRow[];
   },
 
   // A player's full tournament history (with bracket + match state) for the

@@ -4,6 +4,7 @@
 // (chip.local-recovery chipRecoveryFingerprint) is built from EXACTLY what a sync writes —
 // if a sync can overwrite a field, the fingerprint sees it. Moved verbatim from chip.service.
 
+import { safePaidSidePots } from "../../utils/side-pots";
 import { ChipEntry, ChipEvent, ChipMatch, ChipState, ChipTable } from "../types/chip.types";
 
 export const overrideToRow = (e: ChipEntry) => ({
@@ -112,3 +113,53 @@ export const chipConfigPayload = (chip: ChipState) => ({
   restore_points: chip.restorePoints ?? [],
   reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [],
 });
+
+// ── Row → model (the read side of entryToRow; pure) ─────────────────────────────
+// Fargo-cap override columns are identical on chip_entries / tournament_players /
+// tournament_teams (migration 20260817120000), so one pair of mappers serves all three.
+export const overrideFromRow = (r: any): Partial<ChipEntry> => ({
+  fargoCapOverride: !!r?.fargo_cap_override,
+  fargoCapAtOverride: r?.fargo_cap_at_override ?? null,
+  playerFargoAtOverride: r?.player_fargo_at_override ?? null,
+  fargoCapOverrideReason: r?.fargo_cap_override_reason ?? null,
+  fargoCapOverrideNotes: r?.fargo_cap_override_notes ?? null,
+  overriddenBy: r?.overridden_by ?? null,
+  overriddenAt: r?.overridden_at ?? null,
+});
+
+// ── row ↔ model mappers ────────────────────────────────────────────────────────
+export const rowToEntry = (r: any): ChipEntry => ({
+  ...overrideFromRow(r),
+  id: r.id,
+  p1Name: r.p1_name ?? "",
+  p1Fargo: r.p1_fargo,
+  p1Phone: r.p1_phone,
+  p1ProfileId: r.p1_profile_id ?? null,
+  p2ProfileId: r.p2_profile_id ?? null,
+  // Phase 5: stable players.id identity (present for active rows via the Phase-4A
+  // sync trigger, and for PENDING players who have no id_auto). Read alongside the
+  // legacy id_auto so round-trips preserve it.
+  p1PlayerId: r.p1_player_id ?? null,
+  p2PlayerId: r.p2_player_id ?? null,
+  p2Name: r.p2_name,
+  p2Fargo: r.p2_fargo,
+  teamFargo: r.team_fargo,
+  startChips: r.start_chips ?? 0,
+  chips: r.chips ?? 0,
+  paid: !!r.paid,
+  checkedIn: !!r.checked_in,
+  // Side pots this entry is ENTERED in (names). Singles now record them on
+  // chip_entries.paid_side_pots, mirroring tournament_teams (doubles). Membership,
+  // not collection — see src/utils/side-pots.ts.
+  paidSidePots: safePaidSidePots(r.paid_side_pots),
+  status: r.status,
+  wins: r.wins ?? 0,
+  losses: r.losses ?? 0,
+  streak: r.streak ?? 0,
+  bestStreak: r.best_streak ?? 0,
+  eliminations: r.eliminations ?? 0,
+  tableId: r.table_id,
+  eliminatedAt: r.eliminated_at,
+  createdAt: r.created_at,
+});
+

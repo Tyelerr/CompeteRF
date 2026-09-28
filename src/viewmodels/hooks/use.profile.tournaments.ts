@@ -3,6 +3,7 @@
 // bucketed into Live / Registered / Completed. Favorites + Following are sourced
 // separately (favorites hook; following is not built yet).
 
+import { mergeChipResults } from "../../utils/profile-chip-results";
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { registrationService } from "../../models/services/registration.service";
@@ -61,6 +62,15 @@ export const useProfileTournaments = (
   // The player's TEAM registrations (captain / accepted partner), shaped like the
   // individual ones. An invited teammate only has a team-member row, so this is
   // how they appear on their profile at all.
+  // Completed Chip results (basic history credit: placement / W-L / partner). Attached to the
+  // matching tournament below, or added as a Completed item when no registration exists.
+  const chipResultsQuery = useQuery({
+    queryKey: ["profile-chip-results", playerId],
+    queryFn: () => registrationService.getPlayerChipResults(playerId!),
+    enabled: !!playerId,
+    refetchOnWindowFocus: true,
+  });
+
   const teamsQuery = useQuery({
     queryKey: ["profile-team-tournaments", playerId],
     queryFn: () => teamService.getMyTeamRegistrations(playerId!),
@@ -82,7 +92,8 @@ export const useProfileTournaments = (
     // live/registered. It stays reachable via direct navigation (Tournament Details shows the
     // "deleted" banner). This is the source filter; the RPC live list is filtered too below.
     const players = (data ?? []).filter((t) => t.tournament != null && !isTournamentDeleted(t));
-    if (!teamsQuery.isSuccess) return players;
+    const chipRows = chipResultsQuery.data ?? [];
+    if (!teamsQuery.isSuccess) return mergeChipResults(players, chipRows);
     const teamEntries = (teamsQuery.data ?? []).filter((t) => t.tournament != null && !isTournamentDeleted(t));
     const byTournament = new Map<number, PlayerTournament>();
     for (const t of players) {
@@ -90,8 +101,8 @@ export const useProfileTournaments = (
       byTournament.set(t.tournament!.id, t);
     }
     for (const t of teamEntries) byTournament.set(t.tournament!.id, t);
-    return Array.from(byTournament.values());
-  }, [data, teamsQuery.isSuccess, teamsQuery.data]);
+    return mergeChipResults(Array.from(byTournament.values()), chipRows);
+  }, [data, teamsQuery.isSuccess, teamsQuery.data, chipResultsQuery.data]);
 
   // Cheap candidate signals from the already-fetched client data (no extra query):
   //  • hasUpcoming → registered-but-not-live event that could transition to live.

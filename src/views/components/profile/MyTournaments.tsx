@@ -5,6 +5,7 @@
 // registrations (joined to tournaments); Favorites from the favorites list;
 // Following is a placeholder for now.
 
+import { chipResultLine } from "../../../utils/profile-chip-results";
 import { useMemo, useState } from "react";
 import {
   Modal,
@@ -70,6 +71,7 @@ interface Row {
   date: string;
   venueLine: string;
   chip?: { label: string; color: string };
+  result?: string; // Chip placement line (completed Chip tournaments)
 }
 
 const prettyGame = (g: string) =>
@@ -93,6 +95,7 @@ const rowFromPlayerTournament = (t: PlayerTournament, chip?: Row["chip"]): Row =
   date: t.tournament!.tournament_date,
   venueLine: venueLineOf(t.tournament!.venues),
   chip,
+  result: t.chipResult ? chipResultLine(t.chipResult) : undefined,
 });
 
 // One tournament row card (reused inline and in the "View more" modal).
@@ -129,6 +132,11 @@ const RowCard = ({
       <Text allowFontScaling={false} style={styles.cardMeta}>
         {fmtDate(row.date)}
       </Text>
+      {!!row.result && (
+        <Text allowFontScaling={false} style={styles.cardResult} numberOfLines={1}>
+          {row.result}
+        </Text>
+      )}
     </View>
     <View style={styles.cardRight}>
       {row.chip && (
@@ -484,6 +492,7 @@ const styles = StyleSheet.create({
   gameBadgeText: { fontSize: 10, fontWeight: "800", color: COLORS.primary },
   cardName: { fontSize: wxMs(FONT_SIZES.md), fontWeight: "800", color: COLORS.text },
   cardMeta: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.textSecondary },
+  cardResult: { fontSize: wxMs(FONT_SIZES.xs), color: COLORS.success, fontWeight: "700", marginTop: wxSc(SPACING.xs) / 2 },
   cardRight: { alignItems: "flex-end", gap: wxSc(SPACING.xs) },
   chip: {
     borderRadius: wxSc(RADIUS.sm),

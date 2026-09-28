@@ -6,6 +6,7 @@
 // timers), Queue, Players (chips/records + buy-back). Results = Standings.
 // Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
+import { teamMemberRemovalKind } from "../../../../models/services/chip.team-identity";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -2005,15 +2006,44 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       ],
     );
   };
-  // Player-level remove (the red X in a card's edit mode) — always confirms first, and
-  // only ever removes THAT player/member (never the whole team). Format-aware wording:
-  // Singles → "from this tournament"; Doubles member → "from this team".
+  // Player-level remove (the red X in a card's edit mode) — always confirms first, and the
+  // wording always matches what the server does:
+  //   • Singles → "from this tournament".
+  //   • Team partner → "from this team" (the team then needs a partner).
+  //   • Team CAPTAIN with an accepted partner → the partner becomes captain (the team stays).
+  //   • Team CAPTAIN alone → that is removing the TEAM: a separate, explicit "Remove Team".
   const removePlayerWithConfirm = (
     e: ChipEntry,
     which: 1 | 2,
     memberId: number | null | undefined,
     name: string,
   ) => {
+    const kind = teamMemberRemovalKind(e, which);
+    if (kind !== "remove_player" && memberId != null) {
+      const partner = e.p2Name ?? "The partner";
+      if (kind === "promote_partner") {
+        Alert.alert(
+          "Remove Captain?",
+          `Remove ${name || "the captain"} from this team?
+
+${partner} will become the team captain. The team stays registered and will need a new partner.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove Captain", style: "destructive", onPress: () => void vm.removeTeamMember(memberId) },
+          ],
+        );
+      } else {
+        Alert.alert(
+          "Remove Team?",
+          `${name || "The captain"} is the only player on this team, so removing them removes the whole team from this tournament.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove Team", style: "destructive", onPress: () => void vm.removeTeam(e.teamId!) },
+          ],
+        );
+      }
+      return;
+    }
     Alert.alert(
       "Remove Player?",
       `Remove ${name || "this player"} from this ${doubles ? "team" : "tournament"}?`,
@@ -2033,14 +2063,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     );
   };
 
-  // Entry-level removal, source-aware: teams remove the captain (cascades to the team),
+  // Entry-level removal, source-aware: teams are removed explicitly as a TEAM (td_remove_team),
   // self-reg cancels the registration (stops re-projecting), TD-added singles delete the
   // chip_entries row. ONE function so the card Actions menu and the over-cap modal can't
   // behave differently.
   const removeEntryNow = (e: ChipEntry) => {
     if (e.isTeam && e.teamId != null) {
-      if (e.p1MemberId != null) void vm.removeTeamMember(e.p1MemberId);
-      else vm.removeEntry(e.id);
+      void vm.removeTeam(e.teamId);
     } else if (e.fromRegistration && e.regId != null) {
       void vm.cancelRegistration(e.regId);
     } else {

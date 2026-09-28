@@ -308,8 +308,17 @@ export const teamService = {
 
   // TD removes one player from a team (partner → team needs a new partner;
   // captain → the whole team is removed).
+  // TD removes ONE member. Removing the partner leaves the team needing a partner; removing the
+  // CAPTAIN of a two-person team promotes the accepted partner to captain (the team stays). A
+  // captain with no accepted partner is refused — that is "Remove Team" (removeTeam below).
   async removeTeamMember(memberId: number): Promise<void> {
     const { error } = await supabase.rpc("td_remove_team_member", { p_member_id: memberId });
+    if (error) throw error;
+  },
+
+  // TD removes the WHOLE team (explicit, separately confirmed "Remove Team").
+  async removeTeam(teamId: number): Promise<void> {
+    const { error } = await supabase.rpc("td_remove_team", { p_team_id: teamId });
     if (error) throw error;
   },
 

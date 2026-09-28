@@ -2225,11 +2225,20 @@ export const useChipTournament = (
     [id, requiresCloud],
   );
 
-  // TD removes one player from a team.
+  // TD removes one player from a team (captain → the accepted partner becomes captain).
   const removeTeamMember = useCallback(
     async (memberId: number) => {
       if (rosterLocked()) return;
       await teamService.removeTeamMember(memberId);
+      await load({ silent: true });
+    },
+    [load, rosterLocked],
+  );
+  // TD removes the WHOLE team (explicit "Remove Team").
+  const removeTeam = useCallback(
+    async (teamId: number) => {
+      if (rosterLocked()) return;
+      await teamService.removeTeam(teamId);
       await load({ silent: true });
     },
     [load, rosterLocked],
@@ -2503,6 +2512,7 @@ export const useChipTournament = (
     checkInRegistration,
     setTeamPaid,
     removeTeamMember,
+    removeTeam,
     tdCreateTeam,
     addTeamMember,
     getInviteToken,

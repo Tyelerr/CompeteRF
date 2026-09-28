@@ -60,6 +60,11 @@ export interface PlayerTournament {
   // Set only on a Live entry built solely from get_my_live_tournament (no registration row
   // loaded yet). Such an entry has no registration id; see src/utils/live-entries.ts.
   liveRpcOnly?: boolean;
+  // Set on a Completed entry built solely from get_player_chip_results (a Chip entry with no
+  // registration / team row — then `id` is the tournament id). See utils/profile-chip-results.
+  chipResultOnly?: boolean;
+  // Basic Chip history credit (placement / W-L / partner) when this player has a Chip result.
+  chipResult?: import("../../utils/profile-chip-results").ChipResultCredit;
   status: RegistrationStatus;
   registered_at: string;
   // Authoritative per-player elimination (elimination-format), set by the bracket engine via

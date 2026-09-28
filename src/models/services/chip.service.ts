@@ -5,9 +5,10 @@
 // 20260624120000_chip_tournament_tables.sql. Rules stay in chip.engine.ts; this
 // service hydrates a ChipState from the rows and writes it back (upsert + prune).
 
+import { entryRegInactive, teamIdFromEntryId, withTeamIdentity } from "./chip.team-identity";
 import { supabase } from "../../lib/supabase";
 import { ChipPersistBackend, ChipSavePlan, ChipSaveResult, executeChipSave } from "./chip.persist";
-import { entryToRow, eventToRow, matchToRow, tableToRow } from "./chip.rows";
+import { entryToRow, eventToRow, matchToRow, overrideFromRow, rowToEntry, tableToRow } from "./chip.rows";
 import {
   ChipEntry,
   ChipEvent,
@@ -53,54 +54,6 @@ export interface ChipResultRow {
   p1PlayerId?: string | null;
   p2PlayerId?: string | null;
 }
-
-// Fargo-cap override columns are identical on chip_entries / tournament_players /
-// tournament_teams (migration 20260817120000), so one pair of mappers serves all three.
-const overrideFromRow = (r: any): Partial<ChipEntry> => ({
-  fargoCapOverride: !!r?.fargo_cap_override,
-  fargoCapAtOverride: r?.fargo_cap_at_override ?? null,
-  playerFargoAtOverride: r?.player_fargo_at_override ?? null,
-  fargoCapOverrideReason: r?.fargo_cap_override_reason ?? null,
-  fargoCapOverrideNotes: r?.fargo_cap_override_notes ?? null,
-  overriddenBy: r?.overridden_by ?? null,
-  overriddenAt: r?.overridden_at ?? null,
-});
-
-// ── row ↔ model mappers ────────────────────────────────────────────────────────
-const rowToEntry = (r: any): ChipEntry => ({
-  ...overrideFromRow(r),
-  id: r.id,
-  p1Name: r.p1_name ?? "",
-  p1Fargo: r.p1_fargo,
-  p1Phone: r.p1_phone,
-  p1ProfileId: r.p1_profile_id ?? null,
-  p2ProfileId: r.p2_profile_id ?? null,
-  // Phase 5: stable players.id identity (present for active rows via the Phase-4A
-  // sync trigger, and for PENDING players who have no id_auto). Read alongside the
-  // legacy id_auto so round-trips preserve it.
-  p1PlayerId: r.p1_player_id ?? null,
-  p2PlayerId: r.p2_player_id ?? null,
-  p2Name: r.p2_name,
-  p2Fargo: r.p2_fargo,
-  teamFargo: r.team_fargo,
-  startChips: r.start_chips ?? 0,
-  chips: r.chips ?? 0,
-  paid: !!r.paid,
-  checkedIn: !!r.checked_in,
-  // Side pots this entry is ENTERED in (names). Singles now record them on
-  // chip_entries.paid_side_pots, mirroring tournament_teams (doubles). Membership,
-  // not collection — see src/utils/side-pots.ts.
-  paidSidePots: safePaidSidePots(r.paid_side_pots),
-  status: r.status,
-  wins: r.wins ?? 0,
-  losses: r.losses ?? 0,
-  streak: r.streak ?? 0,
-  bestStreak: r.best_streak ?? 0,
-  eliminations: r.eliminations ?? 0,
-  tableId: r.table_id,
-  eliminatedAt: r.eliminated_at,
-  createdAt: r.created_at,
-});
 
 // A self-service registration (tournament_players row) projected into a chip
 // entry so players who registered themselves show up in the chip Players list
@@ -428,7 +381,27 @@ export const chipService = {
     // Chip entries the TD has already created/linked, plus any self-service
     // registrations (tournament_players) not yet represented as a chip entry —
     // deduped by linked player id so a player is never listed twice.
-    const rawChipEntries = (entries.data ?? []).map(rowToEntry);
+    // Doubles: the team roster (SECURITY DEFINER RPC — member rows are RLS-restricted) is read
+    // FIRST, because it serves two purposes: projecting not-yet-started teams (below) AND
+    // restoring the TEAM identity of already-persisted team entries (teamId / member ids /
+    // name are not chip_entries columns — see chip.team-identity).
+    const rosterRows: any[] =
+      derivedFormat === "scotch_doubles"
+        ? ((await supabase.rpc("get_tournament_team_roster", { p_tid: id })).data as any[] | null) ?? []
+        : [];
+    const byTeam = new Map<number, RosterTeam>();
+    for (const r of rosterRows) {
+      let tm = byTeam.get(r.team_id);
+      if (!tm) {
+        tm = { id: r.team_id, status: r.team_status, locked: r.team_locked, approved: r.team_approved, checkedIn: !!r.team_checked_in, paid: !!r.team_paid, name: r.team_name ?? null, chipOverride: r.team_chip_override ?? null, paidSidePots: (r.team_paid_side_pots ?? []) as string[], members: [] };
+        byTeam.set(r.team_id, tm);
+      }
+      tm.members.push(r);
+    }
+    const rawChipEntries = (entries.data ?? []).map(rowToEntry).map((e) => {
+      const teamId = teamIdFromEntryId(e.id);
+      return withTeamIdentity(e, teamId != null ? byTeam.get(teamId) ?? null : null);
+    });
     // ── Participant integrity (shared, all platforms) ──────────────────────────────
     // A registration is only an ACTIVE participant per the shared isActiveRegistrationStatus
     // rule. Build the set of players who have an INACTIVE registration (cancelled / no_show)
@@ -462,12 +435,9 @@ export const chipService = {
     // Singles: inactive if the one player is unregistered. Doubles: inactive only if BOTH
     // linked players are unregistered (a single partner's cancellation shouldn't flag a team
     // that may still be valid via tournament_teams).
-    const chipEntries = rawChipEntries.map((e) => {
-      const p1Out = isUnregisteredPlayer(e.p1ProfileId ?? null, e.p1PlayerId ?? null);
-      const p2Out = isUnregisteredPlayer(e.p2ProfileId ?? null, e.p2PlayerId ?? null);
-      const regInactive = e.teamId != null ? p1Out && p2Out : p1Out;
-      return regInactive ? { ...e, regInactive: true } : e;
-    });
+    const chipEntries = rawChipEntries.map((e) =>
+      entryRegInactive(e, isUnregisteredPlayer) ? { ...e, regInactive: true } : e,
+    );
     // Dedupe by BOTH identities: players.id (uuid) is primary — it covers PENDING
     // players (no id_auto) and is the stable identity — with id_auto as the
     // compatibility fallback for old rows that only carry p1_profile_id.
@@ -485,9 +455,8 @@ export const chipService = {
     // Deduped by linked player id so nobody the TD already added is doubled up.
     let importedEntries: ChipEntry[] = [];
     if (derivedFormat === "scotch_doubles") {
-      // Roster comes from a SECURITY DEFINER RPC (member rows are RLS-restricted,
-      // so a direct embed returns empty members[] and the team would drop).
-      const { data: roster } = await supabase.rpc("get_tournament_team_roster", { p_tid: id });
+      // Roster rows were read above (byTeam).
+      const persistedTeamIds = new Set(chipEntries.map((e) => e.teamId).filter((x): x is number => x != null));
       // Fargo-cap override lives on tournament_teams (the roster RPC predates it and
       // doesn't return it). The TEAM row is directly selectable, so read it separately
       // and merge by team id below.
@@ -499,17 +468,10 @@ export const chipService = {
         .eq("tournament_id", id);
       const overrideByTeam = new Map<number, Partial<ChipEntry>>();
       for (const to of (teamOverrides ?? []) as any[]) overrideByTeam.set(to.id, overrideFromRow(to));
-      const byTeam = new Map<number, RosterTeam>();
-      for (const r of (roster ?? []) as any[]) {
-        let t = byTeam.get(r.team_id);
-        if (!t) {
-          t = { id: r.team_id, status: r.team_status, locked: r.team_locked, approved: r.team_approved, checkedIn: !!r.team_checked_in, paid: !!r.team_paid, name: r.team_name ?? null, chipOverride: r.team_chip_override ?? null, paidSidePots: (r.team_paid_side_pots ?? []) as string[], members: [] };
-          byTeam.set(r.team_id, t);
-        }
-        t.members.push(r);
-      }
       importedEntries = [...byTeam.values()]
         .filter((tm) => {
+          // Already materialized (started) as its own `team_<id>` entry → never projected twice.
+          if (persistedTeamIds.has(tm.id)) return false;
           const cap = tm.members.find((m) => m.role === "captain");
           // Include the team unless its captain is already listed as a chip_entry.
           // Match on uuid first (covers PENDING captains, who have no id_auto), then
