@@ -191,6 +191,7 @@ import {
   useManageTournament,
 } from "../../../../src/viewmodels/hooks/use.manage.tournament";
 import { useProjectedSchedule } from "../../../../src/viewmodels/hooks/use.projected.schedule";
+import { useHydrated } from "../../../../src/viewmodels/hooks/use.hydrated";
 
 const isWeb = Platform.OS === "web";
 // Web desktop shell: the centered content column width shared by every tournament-admin
@@ -2592,6 +2593,9 @@ export default function ManageTournamentScreen() {
   // Web local Chip backup (recovery Phase 1): only consulted when the hub's own tournament
   // fetch FAILED — without the cloud row the hub can't tell this is a Chip tournament.
   const hubLoadFailed = !hub.isLoading && !hub.tournament && !!hub.error;
+  // Web static export: the [id] template is pre-rendered with no id/data — match it (Loading)
+  // on the browser's first render instead of hydrating an empty manager shell.
+  const hydrated = useHydrated();
   const chipLocalBackup = useChipLocalBackupExists(tournamentId, hubLoadFailed);
 
   // Cross-client roster freshness (B1 follow-up): while THIS director is actively on
@@ -8645,7 +8649,7 @@ export default function ManageTournamentScreen() {
   if (hubLoadFailed && chipLocalBackup === true) {
     return <ChipManageScreen id={tournamentId} />;
   }
-  if (hub.isLoading || (hubLoadFailed && chipLocalBackup === "checking")) {
+  if (!hydrated || hub.isLoading || (hubLoadFailed && chipLocalBackup === "checking")) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />

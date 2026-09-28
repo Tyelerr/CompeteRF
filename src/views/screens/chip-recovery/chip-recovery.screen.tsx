@@ -13,10 +13,15 @@ import { Redirect, useRouter } from "expo-router";
 import { Platform } from "react-native";
 import { useAuthContext } from "../../../providers/AuthProvider";
 import { ChipManageScreen } from "../admin/chip/chip-manage.screen";
+import { useHydrated } from "../../../viewmodels/hooks/use.hydrated";
 
 export const ChipRecoveryScreen = ({ id }: { id: number }) => {
   const router = useRouter();
   const { profile, refreshProfile } = useAuthContext();
+  // Web static export: the [id] template is pre-rendered with no real id (→ the Redirect below,
+  // which renders nothing). Render nothing on the first client render too, so hydration matches.
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
   if (Platform.OS !== "web" || !Number.isFinite(id)) return <Redirect href="/" />;
   return (
     <ChipManageScreen

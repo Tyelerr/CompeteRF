@@ -1,5 +1,5 @@
 ﻿import { Tabs, usePathname, useRouter } from "expo-router";
-import { Image, Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState } from "react";
 import { useAuthContext } from "../../src/providers/AuthProvider";
@@ -22,13 +22,27 @@ const adminPopToTopOnBlur = (route: unknown): boolean => {
   return !ADMIN_KEEP_PLACE_ROUTES.includes(focused ?? "");
 };
 
+// The web export is STATIC (app.json web.output "static"): every route's HTML is pre-rendered at
+// build time, where there is no window (width 0), and the browser must hydrate that exact markup.
+// Choosing hamburger vs. desktop links with useWindowDimensions() made the pre-rendered HTML
+// always the hamburger while a desktop browser's first render produced the links → React #418
+// hydration mismatch on every tab route. Instead BOTH variants are always rendered and CSS
+// media queries (same 768px breakpoint) show the right one: identical markup on the server and
+// the first client render, no post-hydration swap, and no pre-JS hamburger flash on desktop.
+const WEB_NAV_BREAKPOINT_CSS = `
+@media (max-width: 767px) { [data-webnav="desktop"] { display: none !important; } }
+@media (min-width: 768px) { [data-webnav="mobile"] { display: none !important; } }
+`;
+// react-native-web renders `dataSet` as data-* attributes (not in React Native's View types).
+const webData = (data: Record<string, string>): object => ({ dataSet: data });
+const NAV_DESKTOP = webData({ webnav: "desktop" });
+const NAV_MOBILE = webData({ webnav: "mobile" });
+
 function WebNavBar() {
   const router = useRouter();
   const pathname = usePathname();
   const { profile } = useAuthContext();
   const hasAdminAccess = profile?.role && profile.role !== "basic_user";
-  const { width } = useWindowDimensions();
-  const isMobileWeb = width < 768;
   const [menuOpen, setMenuOpen] = useState(false);
 
   const tabs = [
@@ -47,6 +61,7 @@ function WebNavBar() {
 
   return (
     <View>
+      <style href="compete-webnav-breakpoint" precedence="default">{WEB_NAV_BREAKPOINT_CSS}</style>
       <View style={styles.navbar}>
         <View style={styles.navInner}>
           <TouchableOpacity style={styles.logoRow} onPress={() => router.push("/")}>
@@ -58,12 +73,14 @@ function WebNavBar() {
             <Text style={styles.logo}>Compete</Text>
           </TouchableOpacity>
 
-          {isMobileWeb ? (
+          {/* Narrow web: hamburger (shown < 768px by CSS). */}
+          <View {...NAV_MOBILE}>
             <TouchableOpacity style={styles.hamburger} onPress={() => setMenuOpen(!menuOpen)}>
               <Text style={styles.hamburgerText}>{menuOpen ? "\u2715" : "\u2630"}</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.navLinks}>
+          </View>
+          {/* Wide web: inline links (shown ≥ 768px by CSS). */}
+          <View {...NAV_DESKTOP} style={styles.navLinks}>
               {tabs.map((tab) => {
                 const isActive = pathname === tab.path || (tab.path !== "/" && pathname.startsWith(tab.path));
                 return (
@@ -78,13 +95,12 @@ function WebNavBar() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          )}
+          </View>
         </View>
       </View>
 
-      {isMobileWeb && menuOpen && (
-        <View style={styles.mobileMenu}>
+      {menuOpen && (
+        <View {...NAV_MOBILE} style={styles.mobileMenu}>
           {tabs.map((tab) => {
             const isActive = pathname === tab.path || (tab.path !== "/" && pathname.startsWith(tab.path));
             return (

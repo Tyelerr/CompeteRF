@@ -43,6 +43,7 @@ import {
 import { Loading } from "../../components/common/loading";
 import { ChipPerformancePanel } from "../../components/tournament/ChipPerformancePanel";
 import { useAuthStore } from "../../../viewmodels/stores/auth.store";
+import { useHydrated } from "../../../viewmodels/hooks/use.hydrated";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => (isWeb ? v : moderateScale(v));
@@ -321,6 +322,8 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
     }
   }, [refetch]);
 
+  // Web static export: match the pre-rendered [id] template (Loading) on the first render.
+  const hydrated = useHydrated();
   const [tab, setTab] = useState<Tab>("overview");
   const [now, setNow] = useState(() => 0);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -473,7 +476,7 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
           ))}
         </View>
 
-        {isLoading && !view ? (
+        {!hydrated || (isLoading && !view) ? (
           <View style={styles.center}><Loading message="Loading tournament..." /></View>
         ) : !view ? (
           <View style={styles.center}>

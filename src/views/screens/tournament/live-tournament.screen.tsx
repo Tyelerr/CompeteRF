@@ -21,6 +21,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { useTournamentSpectator } from "../../../viewmodels/useTournamentSpectator";
+import { useHydrated } from "../../../viewmodels/hooks/use.hydrated";
 import { Loading } from "../../components/common/loading";
 import { MatchesView } from "../../components/tournament/live/MatchesView";
 import { PayoutSummary } from "../../components/tournament/live/PayoutSummary";
@@ -91,6 +92,8 @@ export const LiveTournamentScreen = ({
     ? (requestedTab as Tab)
     : "overview";
   const [tab, setTab] = useState<Tab>(validTab);
+  // Web static export: match the pre-rendered [id] template (Loading) on the first render.
+  const hydrated = useHydrated();
   const matchesInitialMode = initialView === "bracket" ? "bracket" : "cards";
 
   // This screen stays mounted (it's a tab route), so re-opening it from "View
@@ -153,7 +156,7 @@ export const LiveTournamentScreen = ({
         ))}
       </View>
 
-      {sp.isLoading && !t ? (
+      {!hydrated || (sp.isLoading && !t) ? (
         <View style={styles.center}>
           <Loading message="Loading tournament..." />
         </View>
