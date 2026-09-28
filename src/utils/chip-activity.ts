@@ -181,7 +181,12 @@ export const toPublicActivityFeed = (
   events: ChipEvent[],
   limit = 40,
   numbering?: ChipMatchNumbering,
+  // Is the tournament finished RIGHT NOW? When false, a "Tournament finished" line (left in the
+  // log by a finish that was later reopened / undone) is not current truth and is hidden. When
+  // finished, only the NEWEST finish line is shown. Omitted → legacy behaviour (all shown).
+  opts?: { finished?: boolean },
 ): PublicActivity[] => {
+  let finishedShown = false;
   // Item 7A: collapse the redundant "lost a chip → 0 remaining" line when that loss caused an
   // elimination. recordWinner emits a chip_loss (payload.resulting === 0) immediately followed
   // by an elimination for the SAME player, so the feed would tell the story twice. Drop the
@@ -203,6 +208,10 @@ export const toPublicActivityFeed = (
     )
       continue; // redundant with the player's elimination line
     const a = toPublicActivity(ev);
+    if (a && ev.type === "manual" && ev.payload?.act === "tournament_finished" && opts?.finished !== undefined) {
+      if (!opts.finished || finishedShown) continue;
+      finishedShown = true;
+    }
     if (a) {
       const num = numbering ? chipEventMatchNumber(numbering, ev) : null;
       out.push(num ? { ...a, matchNumber: num.number } : a);

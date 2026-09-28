@@ -145,14 +145,20 @@ export const numberChipMatches = (chip: { events: ChipEvent[]; matches: ChipMatc
 };
 
 // Completed matches for a history surface, newest first: every numbered match, plus any
-// finished record with no result event at all (legacy data — shown unnumbered, never hidden);
-// reverted results are excluded. Completion time = the numbered result time, else endedAt.
+// finished record WITH A WINNER but no result event (legacy data — shown unnumbered); reverted
+// results and winner-less rows (the old Remove Table void, "finished" with no result) are
+// excluded — they were never played to a result. Completion time = the numbered result time,
+// else endedAt.
 export const chipHistoryMatches = <M extends ChipMatch>(
   numbering: ChipMatchNumbering,
   matches: M[],
 ): { m: M; n: ChipNumberedMatch | null; completedAt: string | null }[] =>
   matches
-    .filter((m) => m.status !== "in_progress" && (numbering.byMatchId.has(m.id) || (!!m.endedAt && !numbering.revertedMatchIds.has(m.id))))
+    .filter(
+      (m) =>
+        m.status !== "in_progress" &&
+        (numbering.byMatchId.has(m.id) || (!!m.endedAt && !!m.winnerId && !numbering.revertedMatchIds.has(m.id))),
+    )
     .map((m) => {
       const n = numbering.byMatchId.get(m.id) ?? null;
       return { m, n, completedAt: n?.completedAt ?? m.endedAt ?? null };

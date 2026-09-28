@@ -304,9 +304,12 @@ export interface ChipDashboard {
   eliminated: number;
   queueCount: number;
   activeTables: number;
-  matchesPlayed: number;
+  matchesPlayed: number; // VALID finished matches (utils/chip-valid-matches)
   avgMatchMs: number | null;
   longestMatchMs: number | null;
+  fastestMatchMs: number | null;
+  tablesUsed: number; // distinct tables that hosted a valid finished match
+  forfeits: number; // valid results decided by a forfeit
   chipLeaderId: string | null;
   hotStreakId: string | null;
   eliminationLeaderId: string | null;

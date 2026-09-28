@@ -6,6 +6,8 @@
 // timers), Queue, Players (chips/records + buy-back). Results = Standings.
 // Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
+import { chipEntryValidMatches, chipValidMatches } from "../../../../utils/chip-valid-matches";
+import { naturalCompare } from "../../../../utils/natural-sort";
 import { teamMemberRemovalKind } from "../../../../models/services/chip.team-identity";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
@@ -2863,11 +2865,11 @@ ${partner} will become the team captain. The team stays registered and will need
 
   // Full tournament profile for one team/player, derived from the chip state.
   const buildTeamProfile = (e: ChipEntry) => {
-    const finished = chip.matches
-      .filter((m) => m.status !== "in_progress" && m.endedAt && (m.aId === e.id || m.bId === e.id))
-      .sort((a, b) => new Date(b.endedAt as string).getTime() - new Date(a.endedAt as string).getTime());
+    // VALID finished matches only (utils/chip-valid-matches) feed this team's rating / opponent
+    // Fargo — undone, voided and no-winner rows never count.
+    const finished = chipEntryValidMatches(chipValidMatches(chip, matchNumbering), e.id);
     // Match history rows: valid results only (reverted ones hidden), newest completion first,
-    // each with its tournament-wide Match # + completion time. Stats below keep `finished`.
+    // each with its tournament-wide Match # + completion time.
     const history = chipHistoryMatches(matchNumbering, chip.matches.filter((m) => m.aId === e.id || m.bId === e.id)).map(({ m, n, completedAt }) => {
       const oppId = m.aId === e.id ? m.bId : m.aId;
       const opp = chip.entries.find((x) => x.id === oppId);
@@ -2895,9 +2897,8 @@ ${partner} will become the team captain. The team stays registered and will need
     // Performance Rating (expected-vs-actual, Fargo-anchored) via the shared helper
     // (utils/performance.ts). Chip has no rack scores → one finished match = one game.
     const pGamesRows: PerfGame[] = finished.map((m) => {
-      const oppId = m.aId === e.id ? m.bId : m.aId;
-      const opp = chip.entries.find((x) => x.id === oppId);
-      const won = m.winnerId === e.id;
+      const opp = chip.entries.find((x) => x.id === m.opponentId);
+      const won = m.won;
       return {
         opponentFargo: opp?.teamFargo ?? null,
         gamesWon: won ? 1 : 0,
@@ -4627,7 +4628,7 @@ ${partner} will become the team captain. The team stays registered and will need
     const na = num(a);
     const nb = num(b);
     if (na !== nb) return na - nb;
-    const byLabel = (a.label ?? "").localeCompare(b.label ?? "");
+    const byLabel = naturalCompare(a.label, b.label); // Table 2 before Table 10
     if (byLabel !== 0) return byLabel;
     return chip.tables.indexOf(a) - chip.tables.indexOf(b);
   };
@@ -4943,8 +4944,7 @@ ${partner} will become the team captain. The team stays registered and will need
     const chipLeader = leaders[0] ?? null;
     const tablesAdded = chip.events.filter((e) => e.type === "table_added").length;
     const tablesRemoved = chip.events.filter((e) => e.type === "table_removed").length;
-    const durs = chip.matches.filter((m) => m.status !== "in_progress" && m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
-    const fastest = durs.length ? Math.min(...durs) : null;
+    const fastest = d.fastestMatchMs; // VALID finished matches only
 
     // Alerts derivation lives at component scope (computeVisibleAlerts) so the same list
     // feeds this preview AND the root-level View All Alerts modal — behaviour unchanged.
@@ -6764,8 +6764,7 @@ ${partner} will become the team captain. The team stays registered and will need
     const out = chip.entries.filter((e) => e.status === "eliminated" && isChipFieldMember(chip, e));
     const winner = chip.winnerId ? entryById(chip.winnerId) : alive.length === 1 ? alive[0] : null;
     const d = dashboard(chip);
-    const durs = chip.matches.filter((m) => m.endedAt).map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime()).filter((x) => x > 0);
-    const fastest = durs.length ? Math.min(...durs) : null;
+    const fastest = d.fastestMatchMs; // VALID finished matches only
     const checkedIn = chip.entries.filter((e) => e.checkedIn).length;
     // Field-entrant basis for the recap's entry-fee math (see renderPayouts) — matches the
     // Review/setup pool; excludes paid-but-not-Ready entries that never entered the field.
@@ -7803,7 +7802,7 @@ ${partner} will become the team captain. The team stays registered and will need
             {/* Scrollable action content — keyed so each open starts at the top */}
             <ScrollView key={actionsOpen ? "act-open" : "act-closed"} style={styles.actScroll} contentContainerStyle={styles.actScrollInner} showsVerticalScrollIndicator={false}>
               {(() => {
-                const printDisabled = !chip.matches.some((m) => m.status !== "in_progress" && m.endedAt);
+                const printDisabled = dashboard(chip).matchesPlayed === 0;
                 // Lock All / Unlock All toggle over the ACTIVE (non-inactive) tables.
                 const activeTbls = chip.tables.filter((t) => !t.inactive);
                 const allTablesLocked = activeTbls.length > 0 && activeTbls.every((t) => t.locked);

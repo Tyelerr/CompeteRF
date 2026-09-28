@@ -6,6 +6,7 @@
 // leaderboard, recent history and live matches. For scotch doubles everything is
 // team-level (one entry = the team; combined Fargo; team record).
 
+import { naturalCompare } from "../../utils/natural-sort";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService } from "../../models/services/chip.service";
@@ -19,6 +20,7 @@ import {
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { computePerformance, PerfGame } from "../../utils/performance";
 import { chipHistoryMatches, numberChipMatches } from "../../utils/chip-match-numbers";
+import { chipCurrentStreak, chipEntryValidMatches, chipValidMatches } from "../../utils/chip-valid-matches";
 import { chipRoundPlayedIds, chipRoundStatusFor } from "../../utils/chip-round-participation";
 
 export type ChipStatus = "waiting" | "next" | "playing" | "eliminated";
@@ -200,23 +202,16 @@ const buildChipHub = (
         : "waiting";
   const queuePosition = status === "waiting" || status === "next" ? qi + 1 : null;
 
-  // The player's finished matches (most recent first) → history + streak + avg.
-  const myFinished = s.matches
-    .filter(
-      (m) =>
-        m.status !== "in_progress" &&
-        m.endedAt &&
-        (m.aId === me.id || m.bId === me.id),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.endedAt as string).getTime() -
-        new Date(a.endedAt as string).getTime(),
-    );
+  // VALID finished matches (utils/chip-valid-matches) — the only source for this player's stats
+  // (streak / avg time / rating / opponent Fargo) and the tournament-wide wait estimate.
+  const numbering = numberChipMatches(s);
+  const validAll = chipValidMatches(s, numbering);
+  const myValid = chipEntryValidMatches(validAll, me.id); // newest first
   // Recent results: valid only (reverted hidden), newest completion first, with the same
-  // tournament-wide Match # the admin + spectator views show.
+  // tournament-wide Match # the admin + spectator views show. Display is capped at 8 rows;
+  // the streak below is computed from the FULL valid history (never capped).
   const recentMatches: ChipRecent[] = chipHistoryMatches(
-    numberChipMatches(s),
+    numbering,
     s.matches.filter((m) => m.aId === me.id || m.bId === me.id),
   ).slice(0, 8).map(({ m, n, completedAt }) => {
     const oppId = m.aId === me.id ? m.bId : m.aId;
@@ -236,23 +231,11 @@ const buildChipHub = (
       completedAt,
     };
   });
-  // Current streak from the most recent results (win OR loss streak).
-  let streak = 0;
-  let streakType: ChipStreakType = "none";
-  if (recentMatches.length) {
-    streakType = recentMatches[0].won ? "win" : "loss";
-    for (const r of recentMatches) {
-      if ((r.won ? "win" : "loss") === streakType) streak++;
-      else break;
-    }
-  }
-  const myDurations = myFinished
-    .map((m) =>
-      m.endedAt && m.startedAt
-        ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()
-        : 0,
-    )
-    .filter((d) => d > 0);
+  // Current streak (win OR loss) from ALL valid results — no display cap.
+  const cur = chipCurrentStreak(myValid);
+  const streak = cur.count;
+  const streakType: ChipStreakType = cur.type;
+  const myDurations = myValid.map((m) => m.durationMs).filter((d): d is number => d != null && d > 0);
   const avgMatchMs = myDurations.length
     ? Math.round(myDurations.reduce((a, b) => a + b, 0) / myDurations.length)
     : null;
@@ -261,10 +244,7 @@ const buildChipHub = (
   // Match). Derived from ALL completed tournament matches' durations (same startedAt/endedAt
   // source dashboard() uses), smoothed by median/trimmed-mean so a rare 1-min break-and-run or
   // one marathon match doesn't distort the wait. Does NOT touch dashboard().avgMatchMs.
-  const tournamentDurations = s.matches
-    .filter((m) => m.status !== "in_progress" && m.endedAt)
-    .map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime())
-    .filter((d) => d > 0);
+  const tournamentDurations = validAll.map((m) => m.durationMs).filter((d): d is number => d != null && d > 0);
   const robustMatchMs = robustMatchDurationMs(tournamentDurations);
 
   // ── ONE shared Estimated Wait for every platform (web / iOS / Android) ──────────
@@ -291,10 +271,9 @@ const buildChipHub = (
   // Performance Rating (expected-vs-actual, Fargo-anchored) via the shared helper
   // (utils/performance.ts). Chip has no rack scores → one finished match = one game
   // (1/0 or 0/1) vs that opponent's team Fargo.
-  const chipGamesRows: PerfGame[] = myFinished.map((m) => {
-    const oppId = m.aId === me.id ? m.bId : m.aId;
-    const opp = s.entries.find((x) => x.id === oppId);
-    const won = m.winnerId === me.id;
+  const chipGamesRows: PerfGame[] = myValid.map((m) => {
+    const opp = s.entries.find((x) => x.id === m.opponentId);
+    const won = m.won;
     return {
       opponentFargo: opp?.teamFargo ?? null,
       gamesWon: won ? 1 : 0,
@@ -373,7 +352,7 @@ const buildChipHub = (
     id ? s.entries.find((e) => e.id === id) ?? null : null;
   const activeTables = s.tables
     .filter((t) => !t.inactive)
-    .sort((a, b) => (a.label > b.label ? 1 : a.label < b.label ? -1 : 0));
+    .sort((a, b) => naturalCompare(a.label, b.label)); // Table 2 before Table 10
   // Between-rounds (draining or ready for redraw): an empty active table is awaiting
   // the next redraw → "Waiting for Shuffle" (derived; no new state).
   const shuffleTransitioning = !!s.reshufflePending || !!s.shuffleReady;

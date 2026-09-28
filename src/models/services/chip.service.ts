@@ -343,12 +343,34 @@ export const chipService = {
       }
       return supabase.from("chip_entries").select("*").eq("tournament_id", id);
     })();
+    // Same pattern for config + events: public reads use the privacy projections
+    // chip_config_public (no restore snapshots / version) and chip_events_public (no actor,
+    // no private reasons, no TD-only event types) — migration 20261009120000. Falls back to the
+    // base tables while the views don't exist yet.
+    const configQuery = (async () => {
+      if (opts?.publicRead) {
+        const r = await supabase.from("chip_config_public").select("*").eq("tournament_id", id).maybeSingle();
+        if (!r.error) return r;
+      }
+      return supabase.from("chip_config").select("*").eq("tournament_id", id).maybeSingle();
+    })();
+    const eventsQuery = (async () => {
+      if (opts?.publicRead) {
+        const r = await supabase
+          .from("chip_events_public")
+          .select("*")
+          .eq("tournament_id", id)
+          .order("created_at", { ascending: false });
+        if (!r.error) return r;
+      }
+      return supabase.from("chip_events").select("*").eq("tournament_id", id).order("created_at", { ascending: false });
+    })();
     const [cfg, entries, tables, matches, events, resultsRes, regs] = await Promise.all([
-      supabase.from("chip_config").select("*").eq("tournament_id", id).maybeSingle(),
+      configQuery,
       entriesQuery,
       supabase.from("chip_tables").select("*").eq("tournament_id", id).order("sort", { ascending: true }),
       supabase.from("chip_matches").select("*").eq("tournament_id", id),
-      supabase.from("chip_events").select("*").eq("tournament_id", id).order("created_at", { ascending: false }),
+      eventsQuery,
       supabase.from("chip_results").select("*").eq("tournament_id", id).order("place", { ascending: true }),
       // Load ALL registration rows (every status) so we can BOTH import active ones AND
       // detect INACTIVE ones (cancelled / no_show) to reconcile stale chip_entries below.

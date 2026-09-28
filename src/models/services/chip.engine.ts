@@ -24,6 +24,8 @@ import {
   ChipTable,
   ChipTier,
 } from "../types/chip.types";
+import { ChipMatchNumbering, numberChipMatches } from "../../utils/chip-match-numbers";
+import { chipMatchSummary, chipValidMatches } from "../../utils/chip-valid-matches";
 import { chipRoundPlayedIds, currentShuffleRoundStart } from "../../utils/chip-round-participation";
 
 // ── ids / clone ──────────────────────────────────────────────────────────────
@@ -262,15 +264,22 @@ const restoreRoundTurn = (s: ChipState, ids: string[]): void => {
 // across ALL tables (so a match elsewhere correctly updates eligibility). Derived
 // from match history — no stored field, correct across reloads/restores. Returns
 // null if the entry has no completed match yet (fresh entrant → never blocked).
-export const mostRecentOpponent = (s: ChipState, entryId: string): string | null => {
-  let best: ChipMatch | null = null;
-  for (const m of s.matches) {
-    if (m.status === "in_progress" || !m.endedAt) continue;
-    if (m.aId !== entryId && m.bId !== entryId) continue;
-    if (!best || new Date(m.endedAt).getTime() > new Date(best.endedAt as string).getTime())
-      best = m;
+// Uses VALID finished matches only (utils/chip-valid-matches): an undone / restored-away result,
+// a voided match or a no-winner legacy row never blocks a rematch. Ordered by the result's time
+// (never the match's endedAt, which "Reset Waiting Timer" rewrites). Pass a precomputed
+// numbering when calling in a loop.
+export const mostRecentOpponent = (
+  s: ChipState,
+  entryId: string,
+  numbering: ChipMatchNumbering = numberChipMatches(s),
+): string | null => {
+  const valid = chipValidMatches(s, numbering);
+  for (let i = valid.length - 1; i >= 0; i--) {
+    const v = valid[i];
+    if (v.aId === entryId) return v.bId;
+    if (v.bId === entryId) return v.aId;
   }
-  return best ? (best.aId === entryId ? best.bId : best.aId) : null;
+  return null;
 };
 
 // The queue "Rematch skipped" chip reflects an ACTUAL skip that is STILL in effect —
@@ -289,10 +298,11 @@ export const mostRecentOpponent = (s: ChipState, entryId: string): string | null
 // on a table whose pending was released without clearing it.
 export const rematchSkippedLabel = (s: ChipState, entryId: string): string | null => {
   if (s.shuffleRound) return null; // anti-repeat is off during a shuffle round — never label
+  const numbering = numberChipMatches(s);
   for (const t of s.tables) {
     if (t.matchId || !t.pendingChallengerId) continue; // no live pending selection
     if (!(t.rematchSkipped ?? []).includes(entryId)) continue; // not actually skipped here
-    if (mostRecentOpponent(s, entryId) !== (t.holderId ?? null)) continue; // no longer blocked
+    if (mostRecentOpponent(s, entryId, numbering) !== (t.holderId ?? null)) continue; // no longer blocked
     return t.label;
   }
   return null;
@@ -307,8 +317,9 @@ export const rematchSkippedLabel = (s: ChipState, entryId: string): string | nul
 // table.rematchSkipped (transient) for the Next Match modal + queue chip.
 const takeChallenger = (s: ChipState, table: ChipTable, by?: number | null): string | null => {
   const holder = table.holderId ?? null;
+  let numbering: ChipMatchNumbering | null = null;
   const isBlocked = (id: string): boolean =>
-    holder != null && mostRecentOpponent(s, id) === holder;
+    holder != null && mostRecentOpponent(s, id, (numbering ??= numberChipMatches(s))) === holder;
   const firstIdx = s.queue.findIndex((id) => roundSeatable(s, id));
   if (firstIdx === -1) {
     table.rematchSkipped = [];
@@ -696,12 +707,9 @@ export const finalsAwaitingSeat = (s: ChipState): boolean =>
 export const finalsUnderway = (s: ChipState): boolean => {
   const ids = new Set(aliveEntries(s).map((e) => e.id));
   if (ids.size !== 2) return false;
-  let last: ChipMatch | null = null;
-  for (const m of s.matches) {
-    if (m.status !== "finished" || !m.winnerId || !m.endedAt) continue;
-    if (!last || Date.parse(m.endedAt) > Date.parse(last.endedAt as string)) last = m;
-  }
-  return !!last && ids.has(last.aId) && ids.has(last.bId);
+  const valid = chipValidMatches(s);
+  const last = valid[valid.length - 1];
+  return !!last && !!last.aId && !!last.bId && ids.has(last.aId) && ids.has(last.bId);
 };
 // Finals need the TD to pick (or be given) a table before anything is seated.
 const finalsNeedTableChoice = (s: ChipState): boolean => finalsAwaitingSeat(s) && !finalsUnderway(s);
@@ -2886,10 +2894,8 @@ export const finishTournament = (input: ChipState, by?: number | null): ChipStat
 export const dashboard = (s: ChipState): ChipDashboard => {
   const alive = aliveEntries(s);
   const eliminated = s.entries.filter((e) => e.status === "eliminated");
-  const finished = s.matches.filter((m) => m.status !== "in_progress" && m.endedAt);
-  const durations = finished
-    .map((m) => (m.endedAt ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime() : 0))
-    .filter((d) => d > 0);
+  // Match stats count VALID finished matches only (utils/chip-valid-matches).
+  const summary = chipMatchSummary(chipValidMatches(s));
   const byChips = [...alive].sort((a, b) => b.chips - a.chips);
   const byStreak = [...alive].sort((a, b) => b.streak - a.streak);
   const byElim = [...s.entries].sort((a, b) => b.eliminations - a.eliminations);
@@ -2898,9 +2904,12 @@ export const dashboard = (s: ChipState): ChipDashboard => {
     eliminated: eliminated.length,
     queueCount: s.queue.length,
     activeTables: s.tables.filter((t) => t.matchId).length,
-    matchesPlayed: finished.length,
-    avgMatchMs: durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null,
-    longestMatchMs: durations.length ? Math.max(...durations) : null,
+    matchesPlayed: summary.completed,
+    avgMatchMs: summary.avgMatchMs,
+    longestMatchMs: summary.longestMatchMs,
+    fastestMatchMs: summary.fastestMatchMs,
+    tablesUsed: summary.tablesUsed,
+    forfeits: summary.forfeits,
     chipLeaderId: byChips[0]?.chips ? byChips[0].id : null,
     hotStreakId: byStreak[0]?.streak ? byStreak[0].id : null,
     eliminationLeaderId: byElim[0]?.eliminations ? byElim[0].id : null,

@@ -7,6 +7,7 @@
 // profiles, and payouts. Kept fresh by polling (no realtime channel exists yet),
 // so no manual refresh is required. For scotch doubles everything is team-level.
 
+import { naturalCompare } from "../../utils/natural-sort";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { chipService, ChipResultRow } from "../../models/services/chip.service";
@@ -31,6 +32,7 @@ import {
 } from "../../utils/chip-activity";
 import { computePerformance, PerfGame } from "../../utils/performance";
 import { ChipMatchNumbering, chipHistoryMatches, numberChipMatches } from "../../utils/chip-match-numbers";
+import { chipCurrentStreak, chipEntryValidMatches, chipValidMatches } from "../../utils/chip-valid-matches";
 import { chipRoundPlayedIds, chipRoundStatusFor } from "../../utils/chip-round-participation";
 
 // Display names follow the shared chip rule (singles full, doubles "First L. / First L.").
@@ -306,18 +308,9 @@ const buildProfile = (
     return t ? t.label : null;
   };
 
-  const finishedMatches = s.matches
-    .filter(
-      (m) =>
-        m.status !== "in_progress" &&
-        m.endedAt &&
-        (m.aId === e.id || m.bId === e.id),
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.endedAt as string).getTime() -
-        new Date(a.endedAt as string).getTime(),
-    );
+  // This entry's VALID finished matches (newest first) — the only source for its stats
+  // (rating / opponent Fargo / streak). Undone, voided and no-winner rows never count.
+  const myValid = chipEntryValidMatches(chipValidMatches(s, numbering), e.id);
 
   // History rows: valid results only (reverted ones hidden), newest completion first, each
   // with its tournament-wide Match # — identical to the admin view. Stats keep finishedMatches.
@@ -344,23 +337,19 @@ const buildProfile = (
     };
   });
 
-  // Current WIN streak only — consecutive wins from the most recent match; 0 if
-  // the last result was a loss or the team is out. Celebrate momentum, not slumps.
-  let streak = 0;
-  for (const r of history) {
-    if (r.won) streak++;
-    else break;
-  }
+  // Current WIN streak only — consecutive wins from the most recent VALID result; 0 if the last
+  // result was a loss or the team is out. Celebrate momentum, not slumps.
+  const cur = chipCurrentStreak(myValid);
+  const streak = cur.type === "win" ? cur.count : 0;
 
   const matchesPlayed = e.wins + e.losses;
   const winPct = matchesPlayed ? e.wins / matchesPlayed : 0;
 
   // Performance Rating (expected-vs-actual, Fargo-anchored) via the shared helper
   // (utils/performance.ts). Chip has no rack scores → one finished match = one game.
-  const specGamesRows: PerfGame[] = finishedMatches.map((m) => {
-    const oppId = m.aId === e.id ? m.bId : m.aId;
-    const opp = s.entries.find((x) => x.id === oppId);
-    const won = m.winnerId === e.id;
+  const specGamesRows: PerfGame[] = myValid.map((m) => {
+    const opp = s.entries.find((x) => x.id === m.opponentId);
+    const won = m.won;
     return {
       opponentFargo: opp?.teamFargo ?? null,
       gamesWon: won ? 1 : 0,
@@ -466,7 +455,7 @@ const buildSpectatorView = (
   // Active tables (non-inactive), in board order.
   const activeTables = s.tables
     .filter((t) => !t.inactive)
-    .sort((a, b) => (a.label > b.label ? 1 : a.label < b.label ? -1 : 0));
+    .sort((a, b) => naturalCompare(a.label, b.label)); // Table 2 before Table 10
   // Board is between rounds (draining or ready for the redraw): an empty active table
   // is intentionally empty awaiting the next redraw → "Waiting for Shuffle" (derived
   // from authoritative chip state; no new state).
@@ -612,7 +601,7 @@ const buildSpectatorView = (
   // Activity feed — one centralized event→public mapper (utils/chip-activity),
   // newest first, TD-only noise + reverted events dropped, wording humanized. The
   // FULL feed backs the "View Full Log" modal + its count; the preview shows 5.
-  const activity: SpecActivity[] = toPublicActivityFeed(s.events, Number.POSITIVE_INFINITY, numbering);
+  const activity: SpecActivity[] = toPublicActivityFeed(s.events, Number.POSITIVE_INFINITY, numbering, { finished: !!s.finishedAt });
   const activityPreview = activity.slice(0, 5);
 
   // Players list — sorted by current chip standings (most chips first), with
@@ -788,22 +777,15 @@ const buildSpectatorView = (
     // Tables Used: distinct tables that actually hosted a completed match (historical
     // usage, not the configured table count). tableId is stamped at match start and
     // retained on the finished match.
-    const tablesUsed = new Set(
-      s.matches.filter((m) => m.status === "finished" && m.tableId).map((m) => m.tableId),
-    ).size;
+    const tablesUsed = d.tablesUsed; // tables that hosted a VALID finished match
     // Average Match Time: mean of ACTUAL completed-match durations (endedAt − startedAt),
     // NOT tournament-duration ÷ matches (tables run in parallel). Only matches with valid
     // timing count; "—" when none are timed.
-    const matchDurations = s.matches
-      .filter((m) => m.status === "finished" && m.startedAt && m.endedAt)
-      .map((m) => new Date(m.endedAt as string).getTime() - new Date(m.startedAt).getTime())
-      .filter((ms) => Number.isFinite(ms) && ms > 0);
+    // VALID finished matches only (start → result time), via the engine dashboard.
     const avgMatchLabel =
-      matchDurations.length > 0
+      d.avgMatchMs != null && d.avgMatchMs > 0
         ? (() => {
-            const avgSec = Math.round(
-              matchDurations.reduce((a, b) => a + b, 0) / matchDurations.length / 1000,
-            );
+            const avgSec = Math.round(d.avgMatchMs / 1000);
             const h = Math.floor(avgSec / 3600);
             const m = Math.floor((avgSec % 3600) / 60);
             const sec = avgSec % 60;
