@@ -4595,10 +4595,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             // no "Chips" word, no left/right columns. Chip count is the live ChipState
             // value in parentheses right after the name. Richer per-player detail (Fargo +
             // chips) lives in the tapped table-detail view.
-            // NATIVE: turn the passive idle states into the next useful action. Only when the
-            // SAME authoritative assignNextTeam would actually seat someone (round-eligible
+            // Web + native: turn the passive idle states into the next useful action. Only when
+            // the SAME authoritative assignNextTeam would actually seat someone (round-eligible
             // queue, usable table, not draining for a reshuffle) — never a no-op button.
-            const canAssign = !isWeb && !m && !pending && canAssignNextTeam(chip, t.id);
+            const canAssign = !m && !pending && canAssignNextTeam(chip, t.id);
             const renderActivePlayer = (e: ChipEntry) => (
               <Text style={styles.atMatchTeam} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                 {shortTeam(e)}{" "}
@@ -4678,8 +4678,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <Text style={styles.atStartBtnText}>Start Match</Text>
                     </TouchableOpacity>
                   )}
-                  {/* Native: one seated → fill the missing opponent; empty → fill the table.
-                      Both run the existing vm.assignNextTeam (engine assignNextTeam). */}
+                  {/* One seated → fill the missing opponent; empty → fill the table. Both run the
+                      existing vm.assignNextTeam (engine assignNextTeam) on web and native. */}
                   {canAssign && (
                     <TouchableOpacity style={styles.atStartBtn} onPress={() => vm.assignNextTeam(t.id)} activeOpacity={0.85}>
                       <Text style={styles.atStartBtnText}>{holder ? "Assign Next Team" : "Assign Next Match"}</Text>
