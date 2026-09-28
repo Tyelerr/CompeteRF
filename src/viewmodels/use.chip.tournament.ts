@@ -3,6 +3,7 @@
 // holds the working ChipState locally, auto-saves changes (debounced), and exposes
 // Setup actions. Rules live in chip.engine.ts; persistence in chip.service.ts.
 
+import { chipAutoSaveNeeded, healLoadedChip, loadRepairChanged } from "../models/services/chip.load-heal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { chipService, ChipResultRow, ChipTournamentBundle, CHIP_APPLY_ENABLED } from "../models/services/chip.service";
@@ -80,10 +81,8 @@ import {
   startShuffle as engineStartShuffle,
   settleShuffleDrain,
   assignFinals,
-  reconcileQueue,
   reconcileShuffleRound,
   reconcileEliminations,
-  reconcileMatches,
   withRestorePoint,
   restoreToPoint as engineRestoreToPoint,
   undoLastActions as engineUndoLastActions,
@@ -106,7 +105,9 @@ import { readyGate } from "../utils/registration-lifecycle";
 import { scheduleStaleError } from "../utils/schedule";
 
 // Outcome of one whole-state save (strict = the chip_apply RPC path, CHIP_APPLY_ENABLED).
-type ChipSaveOutcome = { version: number; conflict: boolean; strict: boolean };
+const CLOUD_CHANGED_MESSAGE =
+  "This tournament was changed on another device. Reload the latest version before making changes — nothing was saved.";
+type ChipSaveOutcome = { version: number; conflict: boolean; strict: boolean; aborted?: boolean };
 
 // The "parent" (cause) of a transaction is the FIRST event the action logged —
 // its automatic side-effects were pushed after it. Events are stored newest-first
@@ -204,8 +205,7 @@ const reconcileOverrides = (
 const healedCloudChip = (b: ChipTournamentBundle): ChipState => {
   const finished = b.tournament.live_state === "finished" || b.tournament.status === "completed";
   if (finished) return reconcileCompleted(b.chip);
-  const healed = assignFinals(reconcileShuffleRound(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip))))));
-  return reconcileOverrides(healed, b.tournament?.max_fargo ?? null).chip;
+  return reconcileOverrides(healLoadedChip(b.chip), b.tournament?.max_fargo ?? null).chip;
 };
 
 const blankEntry = (): ChipEntry => ({
@@ -309,6 +309,14 @@ export const useChipTournament = (
   // write was REJECTED because another director changed the tournament first. The screen
   // surfaces it; the action was NOT applied and authoritative state has been reloaded.
   const [casConflict, setCasConflict] = useState(false);
+  // Soft-CAS conflict (CHIP_APPLY_ENABLED off): a save found the cloud already at a NEWER
+  // version (another director/device saved). Saves are paused (nothing more is written) and
+  // every mutation is refused until the TD reloads the latest cloud state.
+  const [cloudChanged, setCloudChanged] = useState(false);
+  const cloudChangedRef = useRef(false);
+  // The board a load just applied when that load needed NO repair: the auto-save skips
+  // exactly this state (a plain load / refresh / registration reload never writes it back).
+  const cleanLoadedChipRef = useRef<ChipState | null>(null);
   // Auto-save failure notice: set true when the newest snapshot could not be saved after
   // every bounded retry (see saveQueue). The local state is KEPT (not overwritten by a
   // reload) and is re-saved on the next action or via retrySave(); the TD may instead
@@ -387,6 +395,13 @@ export const useChipTournament = (
     }
     return false;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A newer cloud version was detected (soft-CAS conflict): refuse every change until the TD
+  // reloads — a change made on this stale board could never be saved safely.
+  const cloudChangedBlocks = useCallback((action: string): boolean => {
+    if (!cloudChangedRef.current) return false;
+    setRecoveryBlocked({ action, reason: "cloud_changed" });
+    return true;
+  }, []);
   // Local tournament mutations are only allowed on an authoritative board (they persist later).
   const notAuthorized = useCallback((action: string): boolean => {
     if (
@@ -405,6 +420,14 @@ export const useChipTournament = (
   const attemptReconnectRef = useRef<(() => Promise<void>) | null>(null);
   // The chip state object the save queue last confirmed persisted (→ snapshot cloudConfirmed).
   const lastCloudSavedRef = useRef<ChipState | null>(null);
+  // A load that needed no repair applied exactly what the cloud holds: it is cloud-confirmed
+  // without a save (the status strip shows Synced; the offline base / backup confirmation use
+  // it) — what the removed save-on-load used to establish.
+  const markCleanLoadConfirmed = (clean: ChipState | null) => {
+    if (!clean) return;
+    lastCloudSavedRef.current = clean;
+    setCloudSavedChip(clean);
+  };
   // The chip state object last written to the local backup (→ checkpoint skips duplicates).
   const lastBackedUpRef = useRef<ChipState | null>(null);
   const backupWriterRef = useRef<ChipBackupWriter | null>(null);
@@ -553,9 +576,17 @@ export const useChipTournament = (
           return;
         }
         if (res.conflict) {
+          // Another device saved since this board was loaded. Stop writing (hold anything
+          // newer, never auto-overwrite again) and make it visible: the TD must reload.
           console.warn(
-            `[chip CAS] version conflict on tournament ${id} (expected ${versionRef.current}); save applied under soft CAS`,
+            `[chip CAS] version conflict on tournament ${id} (expected ${versionRef.current}, cloud ${res.version}); ${
+              res.aborted ? "save ABORTED — nothing written" : "save applied (raced the pre-check)"
+            } — saves paused until reload`,
           );
+          void queue.pause();
+          cloudChangedRef.current = true;
+          setCloudChanged(true);
+          if (res.aborted) return; // nothing persisted: keep it unconfirmed, keep the old baseline
         }
         versionRef.current = res.version;
         lastCloudSavedRef.current = state;
@@ -637,10 +668,15 @@ export const useChipTournament = (
   const saveExplicit = useCallback(
     async (state: ChipState) => {
       if (!cloudWriteOk()) throw new ChipPersistBlockedError();
+      if (cloudChangedRef.current) throw new Error(CLOUD_CHANGED_MESSAGE);
       const queue = getSaveQueue();
       explicitSavesRef.current.add(state);
       try {
-        return await queue.saveNow(state);
+        const res = await queue.saveNow(state);
+        // Soft-CAS pre-check found a newer cloud version: NOTHING was written — never report
+        // an explicit save (finish / reopen / start) as done.
+        if (res.aborted) throw new Error(CLOUD_CHANGED_MESSAGE);
+        return res;
       } catch (e) {
         queue.dropUnsaved();
         if (chipRef.current && chipRef.current !== state) queue.enqueue(chipRef.current);
@@ -701,6 +737,11 @@ export const useChipTournament = (
       if (st.status === "viewing" && st.cloud === "unavailable") void checkCloudRef.current?.();
       return;
     }
+    // Another device saved a newer version (soft-CAS conflict): saves are paused and the TD
+    // was asked to reload. Background reloads (Realtime / registration refetch) must NOT take
+    // the paused-queue recovery path below (it could resume the queue and push the stale
+    // snapshot) — only Reload Latest (reloadLatestCloud clears the flag first) reloads.
+    if (cloudChangedRef.current) return;
     // Cloud writes are suppressed (a backup was offered after an outage): nothing may reload
     // or save until the cloud has been compared first — route to that check instead.
     if (getSaveQueue().isPaused() && !opts?.exitRecovery) {
@@ -773,8 +814,10 @@ export const useChipTournament = (
         // saved state is actually cleared, not just hidden.
         const cleaned = reconcileCompleted(b.chip);
         lastLoadedChipRef.current = cleaned;
+        cleanLoadedChipRef.current = loadRepairChanged(b.chip, cleaned) ? null : cleaned;
+        markCleanLoadConfirmed(cleanLoadedChipRef.current);
         setChip(cleaned);
-        if (cleaned !== b.chip && authoritative && cloudWriteOk()) getSaveQueue().enqueue(cleaned);
+        if (!cleanLoadedChipRef.current && authoritative && cloudWriteOk()) getSaveQueue().enqueue(cleaned);
       } else {
         // Self-heal on load: (1) void ghost matches whose teams are gone, (2) settle
         // a stuck shuffle drain, (3) re-attach any alive team that fell out of the
@@ -787,11 +830,13 @@ export const useChipTournament = (
         // never stranded waiting for a manual restart.
         // …and (6) re-derive a Shuffle round's owed-a-turn list from the valid results this
         // round (reconcileShuffleRound) — repairs turns used up by a voided seat.
-        const healed = assignFinals(
-          reconcileShuffleRound(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip))))),
-        );
+        const healed = healLoadedChip(b.chip);
         const { chip: reconciled, cleared } = reconcileOverrides(healed, b.tournament?.max_fargo ?? null);
         lastLoadedChipRef.current = reconciled;
+        // Unchanged by the repair → this exact board is NOT auto-saved (a load never writes
+        // back an unchanged snapshot). A genuinely repaired board saves once, as before.
+        cleanLoadedChipRef.current = loadRepairChanged(b.chip, reconciled) ? null : reconciled;
+        markCleanLoadConfirmed(cleanLoadedChipRef.current);
         setChip(reconciled);
         for (const e of authoritative ? cleared : []) {
           if (e.teamId != null) teamService.setTeamFargoOverride(e.teamId, false, { cap: null, rating: null, reason: null, notes: null }).catch(() => {});
@@ -903,6 +948,11 @@ export const useChipTournament = (
   useEffect(() => {
     if (!loadedRef.current || !chip || recoveryLockRef.current.isActive()) return;
     if (!cloudWriteOk()) return; // persistence gate: never schedule a save for this board
+    if (cloudChangedRef.current) return; // stale vs the cloud: nothing is written until reload
+    // A load / refresh / registration-triggered reload applied this board unchanged: nothing
+    // to persist. Writing it back would re-save a possibly stale snapshot from every open
+    // director screen (and widen the multi-device overwrite window).
+    if (!chipAutoSaveNeeded(chip, cleanLoadedChipRef.current)) return;
     pendingSaveRef.current = chip;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -1398,6 +1448,7 @@ export const useChipTournament = (
   const update = useCallback((fn: (c: ChipState) => ChipState) => {
     // Viewing a local backup (web recovery): read-only, every live mutation is refused.
     if (recoveryLockRef.current.blocks("change the tournament")) return;
+    if (cloudChangedBlocks("change the tournament")) return;
     if (notAuthorized("change the tournament")) return;
     // Global completed-tournament lock: a finished/completed tournament is
     // read-only. Every live mutation (record winner, chips, tables, queue,
@@ -1443,7 +1494,7 @@ export const useChipTournament = (
       }
       return next;
     });
-  }, [notAuthorized]);
+  }, [notAuthorized, cloudChangedBlocks]);
 
   // Restore points on the current state (oldest first). Every one is a point the
   // Audit Log can roll back to.
@@ -1465,7 +1516,7 @@ export const useChipTournament = (
   // and everything after it). Preserves history; logs a Tournament Restored event.
   const restoreToEvent = useCallback(
     (eventId: string, meta: { reason: string; actorId?: number | null; actorName?: string | null }) => {
-      if (recoveryLockRef.current.blocks("restore the tournament") || notAuthorized("restore the tournament")) return false;
+      if (recoveryLockRef.current.blocks("restore the tournament") || cloudChangedBlocks("restore the tournament") || notAuthorized("restore the tournament")) return false;
       const c = chipRef.current;
       if (!c) return false;
       const restored = engineRestoreToPoint(c, eventId, meta);
@@ -1474,12 +1525,12 @@ export const useChipTournament = (
       setChip(restored);
       return true;
     },
-    [notAuthorized],
+    [notAuthorized, cloudChangedBlocks],
   );
   // Quick shortcut: revert the last `n` logged actions (no reason required).
   const undoLast = useCallback(
     (n: number, meta: { reason: string; actorId?: number | null; actorName?: string | null }) => {
-      if (recoveryLockRef.current.blocks("undo") || notAuthorized("undo")) return false;
+      if (recoveryLockRef.current.blocks("undo") || cloudChangedBlocks("undo") || notAuthorized("undo")) return false;
       const c = chipRef.current;
       if (!c || !(c.restorePoints ?? []).length) return false;
       const restored = engineUndoLastActions(c, n, meta);
@@ -1488,7 +1539,7 @@ export const useChipTournament = (
       setChip(restored);
       return true;
     },
-    [notAuthorized],
+    [notAuthorized, cloudChangedBlocks],
   );
 
   // ── Settings ────────────────────────────────────────────────────────────────
@@ -1752,7 +1803,7 @@ export const useChipTournament = (
   // caller can immediately sync host UI (header badge / phase). False = nothing was
   // finalized this call (in-flight, no champion, or completion threw).
   const endTournament = useCallback(async (): Promise<boolean> => {
-    if (recoveryLockRef.current.blocks("finish the tournament") || requiresCloud("finish the tournament")) return false;
+    if (recoveryLockRef.current.blocks("finish the tournament") || cloudChangedBlocks("finish the tournament") || requiresCloud("finish the tournament")) return false;
     if (finishingRef.current) return false; // already in flight — no double completion
     const c = chipRef.current ?? chip;
     if (!c?.winnerId) return false; // guard: no champion yet
@@ -1826,7 +1877,7 @@ export const useChipTournament = (
       setFinishing(false);
     }
     return completed;
-  }, [chip, id, load, discardDebouncedSave, saveExplicit, requiresCloud]);
+  }, [chip, id, load, discardDebouncedSave, saveExplicit, requiresCloud, cloudChangedBlocks]);
 
   // Fix 1 — retry the forward participant sync for an already-COMPLETED tournament whose
   // sync failed at finish (participantSyncError set). Does NOT touch completion/results —
@@ -1855,7 +1906,7 @@ export const useChipTournament = (
   // Returns true when the tournament was reopened to Live so the caller can immediately
   // sync host UI (header badge / phase) back to Running. False = reopen threw.
   const reopen = useCallback(async (): Promise<boolean> => {
-    if (recoveryLockRef.current.blocks("reopen the tournament") || requiresCloud("reopen the tournament")) return false;
+    if (recoveryLockRef.current.blocks("reopen the tournament") || cloudChangedBlocks("reopen the tournament") || requiresCloud("reopen the tournament")) return false;
     if (chip) {
       const next = { ...chip, winnerId: null, finishedAt: null };
       discardDebouncedSave();
@@ -1877,7 +1928,7 @@ export const useChipTournament = (
     }
     await load({ silent: true });
     return true;
-  }, [chip, id, load, discardDebouncedSave, saveExplicit, requiresCloud]);
+  }, [chip, id, load, discardDebouncedSave, saveExplicit, requiresCloud, cloudChangedBlocks]);
 
   // ── Approve a self-service registration (TD confirms Fargo) ────────────────────
   // Writes the confirmed Fargo to the player's profile (verified), snapshots it on
@@ -2206,7 +2257,7 @@ export const useChipTournament = (
   // Returns true only when the engine start AND the persisted start both succeed, so
   // the caller can navigate to Live ONLY after a confirmed start (never optimistically).
   const start = useCallback(async (): Promise<boolean> => {
-    if (recoveryLockRef.current.blocks("start the tournament") || requiresCloud("start the tournament")) return false;
+    if (recoveryLockRef.current.blocks("start the tournament") || cloudChangedBlocks("start the tournament") || requiresCloud("start the tournament")) return false;
     if (!chip) return false;
     // Stale-schedule gate (shared helper — same rule as every other start path): a
     // not-yet-started tournament whose saved date/time is already in the past is never
@@ -2273,7 +2324,7 @@ export const useChipTournament = (
     } finally {
       setStarting(false);
     }
-  }, [chip, id, load, tournament, discardDebouncedSave, saveExplicit, requiresCloud]);
+  }, [chip, id, load, tournament, discardDebouncedSave, saveExplicit, requiresCloud, cloudChangedBlocks]);
 
   const liveState = tournament?.live_state ?? "not_started";
   const isLive = liveState === "in_progress";
@@ -2296,6 +2347,20 @@ export const useChipTournament = (
     // this action; authoritative state was reloaded and the action was NOT applied.
     casConflict,
     acknowledgeCasConflict: () => setCasConflict(false),
+    // Soft-CAS conflict: another device saved a newer version. Saves are paused and changes
+    // refused until reloadLatestCloud() (discards this device's unsaved stale changes).
+    cloudChanged,
+    reloadLatestCloud: () => {
+      const queue = getSaveQueue();
+      queue.dropUnsaved();
+      queue.resume();
+      pendingSaveRef.current = null;
+      cloudChangedRef.current = false;
+      setCloudChanged(false);
+      unconfirmedRef.current = 0;
+      setUnsyncedCount(0);
+      void loadRef.current?.({ silent: true, skipFlush: true, forceFresh: true });
+    },
     // Auto-save failure notice (shared): true when the newest snapshot couldn't be saved
     // after every retry. Local state is kept; the screen offers Retry / Reload from server.
     saveError,
@@ -2315,7 +2380,7 @@ export const useChipTournament = (
     recoveryBlocked,
     acknowledgeRecoveryBlocked: () => setRecoveryBlocked(null),
     // true (and the read-only notice shown) when a mutating UI flow must not open.
-    guardRecovery: (action: string) => recoveryLockRef.current.blocks(action),
+    guardRecovery: (action: string) => recoveryLockRef.current.blocks(action) || cloudChangedBlocks(action),
     // Web offline controller (Phase 2).
     offlineMode,
     offlineSession,

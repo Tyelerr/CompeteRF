@@ -82,6 +82,17 @@ export interface ChipPersistBackend {
   markSuperseded(ids: string[]): Promise<void>;
   // Soft CAS: read the live version, report a conflict vs `expected`, bump it. Never throws.
   bumpVersion(expected: number | null | undefined): Promise<{ version: number; conflict: boolean }>;
+  // Read the live chip_config.version WITHOUT writing (pre-write stale check). null = unknown
+  // (no row / no column / transient error) → the save proceeds as before. Never throws.
+  readVersion?(): Promise<number | null>;
+}
+
+// Result of a legacy (soft-CAS) save. `aborted` = the pre-write check found the cloud already
+// at a NEWER version than this device loaded: NOTHING was written (another device saved first).
+export interface ChipSaveResult {
+  version: number;
+  conflict: boolean;
+  aborted?: boolean;
 }
 
 export interface ChipSavePlan {
@@ -100,7 +111,20 @@ export interface ChipSavePlan {
 export const executeChipSave = async (
   backend: ChipPersistBackend,
   plan: ChipSavePlan,
-): Promise<{ version: number; conflict: boolean }> => {
+): Promise<ChipSaveResult> => {
+  // 0. PRE-WRITE STALE CHECK (soft CAS, CHIP_APPLY_ENABLED off). If the cloud version already
+  // moved past what this device loaded, another director saved since: write NOTHING (a whole
+  // snapshot from this device would overwrite/prune their rows) and report the conflict so
+  // the TD reloads. Not atomic — a save racing in between this read and the writes is still
+  // only caught afterwards by bumpVersion — but a stale device can no longer knowingly
+  // overwrite a newer cloud state.
+  if (plan.expectedVersion != null && backend.readVersion) {
+    const live = await backend.readVersion();
+    if (live != null && live !== plan.expectedVersion) {
+      return { version: live, conflict: true, aborted: true };
+    }
+  }
+
   const failures: { stage: ChipSaveStage; table: string; error: unknown }[] = [];
   const run = async (stage: ChipSaveStage, table: string, fn: () => Promise<void>) => {
     try {

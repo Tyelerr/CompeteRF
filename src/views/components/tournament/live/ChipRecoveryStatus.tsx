@@ -4,6 +4,8 @@
 //                         browser holds a local backup (Open Local Copy / Retry).
 //   ChipRecoveryBanner  — compact persistent strip: Online + last local backup, or
 //                         VIEWING LOCAL BACKUP (read-only), or the cloud-vs-local conflict choice.
+//   ChipCloudChangedBanner — web AND native: another device saved a newer version while this
+//                         one was running (soft-CAS conflict). Saves are paused; Reload Latest.
 // Presentation only; all behavior lives in the useChipTournament viewmodel.
 
 import { Ionicons } from "@expo/vector-icons";
@@ -86,6 +88,29 @@ export const ChipRecoveryPrompt = ({
 };
 
 // Phase 2 — the live OFFLINE CONTROLLER strip (takes priority over the Phase 1 states).
+export const ChipCloudChangedBanner = ({
+  unsyncedCount,
+  onReload,
+}: {
+  unsyncedCount: number;
+  onReload: () => void;
+}) => (
+  <View style={[styles.strip, styles.stripDanger]}>
+    <View style={styles.stripText}>
+      <View style={styles.row}>
+        <Ionicons name="git-compare-outline" size={webMs(14)} color={COLORS.error} />
+        <Text style={[styles.stripTitle, styles.dangerText]}>CHANGED ON ANOTHER DEVICE</Text>
+      </View>
+      <Text style={styles.stripSub}>
+        A newer version of this tournament was saved from another device. Saving is paused so nothing is overwritten
+        {unsyncedCount > 0 ? ` — this device's last ${plural(unsyncedCount, "change")} was NOT saved` : ""}. Reload the
+        latest version to continue.
+      </Text>
+    </View>
+    <ActionButton primary label="Reload Latest" onPress={onReload} />
+  </View>
+);
+
 export const ChipOfflineBanner = ({
   mode,
   unsyncedCount,

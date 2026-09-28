@@ -44,7 +44,7 @@ import { chipEventMatchNumber, chipHistoryMatches, chipMatchLabel, formatChipRes
 import { useCompactMatchLabel } from "../../../../viewmodels/hooks/use.compact.match.label";
 import { chipRoundPlayedIds, chipRoundStatusFor } from "../../../../utils/chip-round-participation";
 import { webMs, webSc } from "../../../../utils/scaling";
-import { ChipOfflineBanner, ChipRecoveryBanner, ChipRecoveryPrompt } from "../../../components/tournament/live/ChipRecoveryStatus";
+import { ChipCloudChangedBanner, ChipOfflineBanner, ChipRecoveryBanner, ChipRecoveryPrompt } from "../../../components/tournament/live/ChipRecoveryStatus";
 import {
   PhaseNav,
   PhaseNavPhase,
@@ -680,6 +680,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           ? ["Syncing offline changes", `Hold on — the cloud is being checked and your offline changes synced. Try again in a moment (you tried to ${action}). Nothing was changed.`]
           : reason === "local_save_failed"
             ? ["Local save failed", `This tournament is offline and this device couldn't save it, so you can't ${action} right now. Tap Retry Local Save first. Nothing was changed.`]
+            : reason === "cloud_changed"
+              ? ["Changed on another device", `A newer version of this tournament was saved from another device, so you can't ${action} on this copy. Nothing was changed or saved. Tap Reload Latest to load the newest version.`]
             : reason === "conflict"
               ? ["Cloud version changed", `The cloud tournament changed while this device was offline. Your offline copy is protected read-only, so you can't ${action}. Choose Use Cloud Version to continue.`]
               : ["Read-only local backup", `You're viewing a local backup of this tournament, so you can't ${action} right now. Nothing was changed.\n\nReconnect to the cloud (Retry Cloud Connection / Use Cloud Version) to continue running the tournament.`];
@@ -1642,7 +1644,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const { chip, tournament } = vm;
   // Web local-backup status strip (Online · last backup / VIEWING LOCAL BACKUP read-only /
   // cloud conflict). Pinned above the page content on every page.
-  const recoveryStripInner = isWeb ? (
+  // A newer cloud version was detected (another device saved): shown on web AND native, above
+  // everything else — saving is paused and changes are refused until Reload Latest.
+  const recoveryStripInner = vm.cloudChanged ? (
+    <ChipCloudChangedBanner unsyncedCount={vm.unsyncedCount} onReload={vm.reloadLatestCloud} />
+  ) : isWeb ? (
     vm.offlineMode !== "online" ? (
       <ChipOfflineBanner
         mode={vm.offlineMode}

@@ -6,7 +6,7 @@
 // service hydrates a ChipState from the rows and writes it back (upsert + prune).
 
 import { supabase } from "../../lib/supabase";
-import { ChipPersistBackend, ChipSavePlan, executeChipSave } from "./chip.persist";
+import { ChipPersistBackend, ChipSavePlan, ChipSaveResult, executeChipSave } from "./chip.persist";
 import { entryToRow, eventToRow, matchToRow, tableToRow } from "./chip.rows";
 import {
   ChipEntry,
@@ -299,6 +299,20 @@ const supabasePersistBackend = (tid: number): ChipPersistBackend => ({
       .in("id", ids);
     if (error) throw withStatus(error, status);
   },
+  async readVersion() {
+    try {
+      const { data, error } = await supabase
+        .from("chip_config")
+        .select("version")
+        .eq("tournament_id", tid)
+        .maybeSingle();
+      if (error || !data) return null;
+      const v = Number((data as any).version);
+      return Number.isFinite(v) ? v : null;
+    } catch {
+      return null;
+    }
+  },
   async bumpVersion(expected) {
     // Phase G soft CAS: read the live version, flag a conflict if it moved away from what
     // this client started from, then bump it. Swallowed so a missing column or transient
@@ -577,7 +591,7 @@ export const chipService = {
     id: number,
     chip: ChipState,
     opts?: { expectedVersion?: number | null },
-  ): Promise<{ version: number; conflict: boolean }> {
+  ): Promise<ChipSaveResult> {
     // Registration-backed entries live in tournament_players and are re-projected
     // on every load — never write (or prune against) them here, otherwise they'd
     // be duplicated/absorbed and lose their approval lifecycle. They materialize

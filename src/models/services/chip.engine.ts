@@ -1766,6 +1766,35 @@ export const assignFinals = (input: ChipState): ChipState => {
       ? tbl.holderId
       : alive[0].id;
   const challengerId = holderId === alive[0].id ? alive[1].id : alive[0].id;
+  // ONE ENTRY → AT MOST ONE TABLE. A finalist can still hold a seat on a table the finals
+  // can't use (a winner staying on a LOCKED / inactive / closing table): vacate every other
+  // seat either finalist holds before seating them here, or the same entry would sit on two
+  // tables at once (the finals double-seat bug). No match is live at this point (checked
+  // above), so only holder / pending-challenger seats can remain.
+  for (const other of s.tables) {
+    if (other.id === tbl.id) continue;
+    let vacated = false;
+    if (other.holderId === holderId || other.holderId === challengerId) {
+      other.holderId = null;
+      other.lastLoserId = null;
+      vacated = true;
+    }
+    if (other.pendingChallengerId === holderId || other.pendingChallengerId === challengerId) {
+      other.pendingChallengerId = null;
+      vacated = true;
+    }
+    if (vacated) {
+      other.rematchSkipped = [];
+      if (!other.holderId && !other.pendingChallengerId && !other.matchId) {
+        other.status = "open";
+        // A table pending closure completes its closure once emptied (clearTable's rule).
+        if (other.closing) {
+          other.closing = false;
+          other.inactive = true;
+        }
+      }
+    }
+  }
   tbl.holderId = holderId;
   tbl.pendingChallengerId = challengerId;
   tbl.matchId = null;
