@@ -1,4 +1,4 @@
--- supabase/migrations/20261009120000_chip_public_read_privacy.sql   (PENDING — not applied)
+-- supabase/pending/20261009120000_chip_public_read_privacy.sql   (HELD — NOT safe until the public iOS build no longer reads chip_config / chip_events directly; move into migrations/ only then)
 --
 -- Chip public-read privacy. chip_config and chip_events were readable in full by anyone
 -- (RLS read policy `true`), exposing restore snapshots (chip_config.restore_points), restore /
