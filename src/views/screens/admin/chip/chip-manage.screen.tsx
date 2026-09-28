@@ -2226,6 +2226,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       { text: "Remove", style: "destructive", onPress: () => vm.closeTables([t.id]) },
     ]);
   };
+  // Setup › Tables ✕: before the start it simply removes the table; once LIVE it goes through
+  // the same confirmed, state-aware flow as the live table menu (never a silent removal of a
+  // table that has a match or players on it).
+  const removeTableFromSetup = (t: ChipTable) => {
+    if (vm.isLive) confirmRemoveTableSmart(t);
+    else vm.removeTable(t.id);
+  };
   const confirmForfeitTeam = (t: ChipTable) => {
     const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
     if (m) {
@@ -3708,7 +3715,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                         <Text style={styles.webTMuted} numberOfLines={1}>{t.isStream && t.streamUrl ? t.streamUrl : "—"}</Text>
                       </View>
                       <View style={[styles.webCellActions, { width: webSc(72) }]}>
-                        <TouchableOpacity style={styles.webIconBtn} onPress={() => vm.removeTable(t.id)} hitSlop={6} activeOpacity={0.7}>
+                        <TouchableOpacity style={styles.webIconBtn} onPress={() => removeTableFromSetup(t)} hitSlop={6} activeOpacity={0.7}>
                           <Ionicons name="close" size={webMs(15)} color={COLORS.error} />
                         </TouchableOpacity>
                       </View>
@@ -3745,7 +3752,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <Text style={styles.addStreamText}>+ Add Stream</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity onPress={() => vm.removeTable(t.id)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => removeTableFromSetup(t)}><Text style={styles.delX}>✕</Text></TouchableOpacity>
                 </View>
                 {streamEditId === t.id && streamEditor(t)}
               </View>

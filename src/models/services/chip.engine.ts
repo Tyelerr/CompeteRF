@@ -2137,36 +2137,37 @@ export const addTables = (
   return s;
 };
 
+// Remove a table from the tournament (Setup › Tables ✕ / "use recommended"). Every entry on it
+// ends in a valid state immediately — the SAME cleanup as the live table actions, never a
+// second implementation:
+//   • Live match → NEVER interrupted, voided or turned into a result by a table disappearing.
+//     The table is scheduled to close after the match — exactly the live menu's "Remove After
+//     Match" (closeTables → closing; recordWinner / forfeit completes the closure).
+//   • Waiting holder and/or pending challenger (announced matchup, finals seat) → Clear Table
+//     semantics (clearTable, "next in queue"): both return to the FRONT of the queue, no W/L,
+//     no chip change, no result, and an owed Shuffle turn is given back; then the row is deleted.
+//   • Empty (open / locked / closing without a match) → deleted.
+// Round completion, finals re-selection etc. are left to the shared post-action settle
+// (settleChipState) like every other action. Logs one `table_removed` event (undoable: restore
+// points snapshot the full table list).
 export const removeTable = (
   input: ChipState,
   tableId: string,
   by?: number | null,
 ): ChipState => {
-  const s = clone(input);
-  const table = s.tables.find((t) => t.id === tableId);
+  const table = input.tables.find((t) => t.id === tableId);
   if (!table) return input;
-  // Requeue anyone seated/holding at this table (their match, if any, is voided).
-  const m = s.matches.find((mm) => mm.id === table.matchId && mm.status === "in_progress");
-  const ids = new Set<string>();
-  if (table.holderId) ids.add(table.holderId);
-  if (m) {
-    m.status = "finished";
-    m.endedAt = new Date().toISOString();
-    ids.add(m.aId);
-    ids.add(m.bId);
+  const live = !!table.matchId && input.matches.some((m) => m.id === table.matchId && m.status === "in_progress");
+  if (live) {
+    if (table.closing) return input; // already scheduled to close after its match
+    return closeTables(input, [tableId], by);
   }
-  for (const id of ids) {
-    const e = entryById(s, id);
-    if (e && e.status !== "eliminated") {
-      e.status = "queued";
-      e.tableId = null;
-      if (!s.queue.includes(id)) s.queue.unshift(id);
-    }
-  }
+  const occupied = !!table.holderId || !!table.pendingChallengerId;
+  const s = occupied ? clearTable(input, tableId, "next", by) : clone(input);
   s.tables = s.tables.filter((t) => t.id !== tableId);
+  // No entry may keep pointing at a table that no longer exists.
+  for (const e of s.entries) if (e.tableId === tableId) e.tableId = null;
   pushEvent(s, "table_removed", `Removed ${table.label}`, by);
-  // Table removal never auto-seats/starts a match (table-management only). Requeued
-  // players (above) are seated by the normal flow, not here.
   return s;
 };
 
