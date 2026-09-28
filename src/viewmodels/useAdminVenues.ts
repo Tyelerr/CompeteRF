@@ -194,6 +194,8 @@ export const useAdminVenues = () => {
   return {
     loading, refreshing,
     venues: paginatedVenues,
+    // Every loaded venue, name-sorted — the web Venue Management workspace's venue picker.
+    allVenues: [...venues].sort((a, b) => a.venue.localeCompare(b.venue)),
     totalCount: filteredAndSortedVenues.length,
     searchQuery, sortOption,
     currentPage, totalPages, displayStart, displayEnd,

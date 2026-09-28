@@ -14,6 +14,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { useRouter } from "expo-router";
 import { chipStatusColor } from "../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../utils/formatters";
+import { chipMatchLabel, formatChipResultTime } from "../../../utils/chip-match-numbers";
+import { useCompactMatchLabel } from "../../../viewmodels/hooks/use.compact.match.label";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipHubTable,
@@ -192,6 +194,8 @@ export const ChipTournamentHubView = ({
   onOpenTournament: (tournamentId: number) => void;
 }) => {
   const [now, setNow] = useState(Date.now());
+  // Match # label: "M17" on phone-width native (this row also carries Won/Lost), else "Match 17".
+  const compactMatchLabel = useCompactMatchLabel();
   const [queueOpen, setQueueOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [lbCount, setLbCount] = useState(LB_PAGE);
@@ -620,9 +624,13 @@ export const ChipTournamentHubView = ({
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text allowFontScaling={false} style={styles.histOpp} numberOfLines={1}>
+                      {r.matchNumber != null && (
+                        <Text style={styles.histMatchNo}>{chipMatchLabel(r.matchNumber, compactMatchLabel)} · </Text>
+                      )}
                       vs {r.opponentName}
                     </Text>
                     <Text allowFontScaling={false} style={styles.histMeta}>
+                      {r.completedAt ? `${formatChipResultTime(r.completedAt)}  ·  ` : ""}
                       {r.tableLabel ?? "Table"}{r.durationMs ? `  ·  ${fmtDur(r.durationMs)}` : ""}
                     </Text>
                   </View>
@@ -748,6 +756,7 @@ const styles = StyleSheet.create({
   wlLoss: { backgroundColor: COLORS.error + "22" },
   wlText: { fontSize: wxMs(FONT_SIZES.sm), fontWeight: "900", color: COLORS.text },
   histOpp: { color: COLORS.text, fontSize: wxMs(FONT_SIZES.sm), fontWeight: "700" },
+  histMatchNo: { color: COLORS.textSecondary, fontWeight: "800" },
   histMeta: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: 1 },
   histResult: { fontSize: wxMs(FONT_SIZES.xs), fontWeight: "800" },
   wlWinText: { color: COLORS.success },

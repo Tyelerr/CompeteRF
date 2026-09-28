@@ -180,7 +180,7 @@ export const RegisterScreen = () => {
   }
 
   return (
-    <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.scrollContent} enableOnAndroid keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" enableResetScrollToCoords={false} extraScrollHeight={20}>
+    <KeyboardAwareScrollView style={styles.container} contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb]} enableOnAndroid keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" enableResetScrollToCoords={false} extraScrollHeight={20}>
       <TouchableOpacity onPress={() => router.back()} style={styles.back}>
         <Text allowFontScaling={false} style={styles.backText}>Back</Text>
       </TouchableOpacity>
@@ -286,9 +286,20 @@ export const RegisterScreen = () => {
   );
 };
 
+const isWeb = Platform.OS === "web";
+// Web: the scroller spans the viewport (see WebContainer); the form is capped to a centered
+// column like the other auth screens (Forgot / Reset Password use 480).
+const WEB_FORM_WIDTH = 480;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { paddingHorizontal: scale(SPACING.lg), paddingTop: scale(SPACING.md), paddingBottom: scale(SPACING.xl * 2) },
+  scrollContentWeb: {
+    width: "100%" as any,
+    maxWidth: WEB_FORM_WIDTH + SPACING.lg * 2,
+    alignSelf: "center" as any,
+    paddingHorizontal: SPACING.lg,
+  },
   loadingContainer: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center", padding: scale(SPACING.xl) },
   loadingTitle: { fontSize: moderateScale(FONT_SIZES.xl), fontWeight: "700", color: COLORS.text, marginBottom: scale(SPACING.sm), textAlign: "center" },
   loadingSubtitle: { fontSize: moderateScale(FONT_SIZES.md), color: COLORS.textSecondary, marginBottom: scale(SPACING.xl), textAlign: "center" },

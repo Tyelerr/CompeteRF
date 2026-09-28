@@ -29,6 +29,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { formatElapsedClock } from "../../../utils/formatters";
 import { chipStatusColor } from "../../../utils/chip-colors";
+import { chipMatchLabel } from "../../../utils/chip-match-numbers";
 import { moderateScale, scale } from "../../../utils/scaling";
 import {
   ChipSpectatorView,
@@ -331,6 +332,14 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
   const [standingsFilter, setStandingsFilter] = useState<StandingsFilter>("all");
   const [standingsSort, setStandingsSort] = useState<StandingsSort>("standings");
   const bodyRef = useRef<ScrollView>(null);
+  // Overview / Stats / Players / Payouts (and Tables while live) all render inside ONE shared
+  // body ScrollView — switching tabs only swaps its content, so the new tab would open at the
+  // previous tab's offset (e.g. Players partway down). NATIVE: leaving a tab resets the shared
+  // scroll to the top, so every tab you (re)open starts at its top. Web keeps its behavior.
+  const selectTab = (next: Tab) => {
+    if (next !== tab && !isWeb) bodyRef.current?.scrollTo({ y: 0, animated: false });
+    setTab(next);
+  };
 
   // Tick every second for the live match timers (cheap; only affects timers).
   useEffect(() => {
@@ -455,7 +464,7 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
               key={tb.key}
               activeOpacity={0.8}
               style={[styles.tab, tab === tb.key && styles.tabActive]}
-              onPress={() => setTab(tb.key)}
+              onPress={() => selectTab(tb.key)}
             >
               <Text allowFontScaling={false} style={[styles.tabText, tab === tb.key && styles.tabTextActive]}>
                 {tb.label}
@@ -738,7 +747,7 @@ const activityColor = (kind: string): string =>
     ? COLORS.error
     : kind === "result" || kind === "champion" || kind === "buyback"
       ? COLORS.success
-      : kind === "shuffle" || kind === "match_start" || kind === "tournament" || kind === "table"
+      : kind === "shuffle" || kind === "match_start" || kind === "tournament" || kind === "table" || kind === "queue"
         ? COLORS.primary
         : COLORS.textSecondary; // chip_loss
 
@@ -759,6 +768,7 @@ const ActivityRow = ({ a }: { a: SpecActivity }) => (
     <View style={styles.actBody}>
       <Text allowFontScaling={false} style={styles.actText} numberOfLines={2}>{a.text}</Text>
       <Text allowFontScaling={false} style={styles.actMeta} numberOfLines={1}>
+        {a.matchNumber != null && <Text style={styles.actMatchNo}>{chipMatchLabel(a.matchNumber)} · </Text>}
         {fmtActTime(a.at)}{a.actor ? ` · ${a.actor}` : ""}
       </Text>
       {a.reason ? (
@@ -1161,7 +1171,7 @@ const ProfileModal = ({
           bestStreak={profile.bestStreak}
           isTeam={profile.isTeam}
           perf={profile.perf ? { rating: profile.perf.rating, delta: profile.perf.delta, avgOpponentFargo: profile.perf.avgOpponentFargo } : null}
-          history={profile.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opponentName, opponentFargo: h.opponentFargo, tableLabel: h.tableLabel, durationMs: h.durationMs }))}
+          history={profile.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opponentName, opponentFargo: h.opponentFargo, tableLabel: h.tableLabel, durationMs: h.durationMs, matchNumber: h.matchNumber, completedAt: h.completedAt }))}
         />
       </>
     )}
@@ -1386,6 +1396,7 @@ const styles = StyleSheet.create({
   actDot: { width: 8, height: 8, borderRadius: 4, marginTop: wxSc(6) },
   actBody: { flex: 1 },
   actText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.sm) },
+  actMatchNo: { color: COLORS.textSecondary, fontWeight: "800" },
   actMeta: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2) },
   actReason: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2), fontStyle: "italic" },
   actNotes: { color: COLORS.textMuted, fontSize: wxMs(FONT_SIZES.xs), marginTop: wxSc(2) },

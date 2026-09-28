@@ -2,7 +2,7 @@
 // Tabs: Venues | Audit Log | Billing
 
 import { moderateScale, scale } from "../../../src/utils/scaling";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,6 +31,8 @@ import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { Pagination } from "../../../src/views/components/common/pagination";
 import { EmptyState } from "../../../src/views/components/dashboard";
 import { BarOwnerVenueCard } from "../../../src/views/components/venues";
+import { VenueManagementRow } from "../../../src/views/components/venues/VenueManagementRow";
+import { VenueSection, VenueWorkspace } from "../../../src/views/components/venues/VenueWorkspace";
 
 const isWeb = Platform.OS === "web";
 
@@ -357,6 +359,8 @@ const BillingTab = () => (
 // ── Main Screen ───────────────────────────────────────────────────────
 export default function VenueManagementScreen() {
   const router = useRouter();
+  // Web workspace selection (venue + section) lives in the URL.
+  const params = useLocalSearchParams<{ venue?: string; section?: string }>();
   const vm = useAdminVenues();
   const { profile } = useAuthContext();
   const auditVM = useVenueAudit();
@@ -481,7 +485,7 @@ export default function VenueManagementScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isWeb && activeTab === "venues" && styles.containerWorkspaceWeb]}>
       <ReassignOwnerModal
         visible={reassignVis}
         venueName={venueToReassign?.venue || venueToReassign?.name || ""}
@@ -513,7 +517,7 @@ export default function VenueManagementScreen() {
         {(["venues", "audit", "billing"] as AdminVenueTab[]).map((tab) => (
           <TouchableOpacity
             key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            style={[styles.tab, isWeb && styles.tabWeb, activeTab === tab && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
           >
             <Text
@@ -530,8 +534,40 @@ export default function VenueManagementScreen() {
         ))}
       </View>
 
-      {/* ── Venues Tab ────────────────────────────────────── */}
-      {activeTab === "venues" && (
+      {/* ── Venues Tab (web): venue control panel — picker + identity + Details / Tables /
+          Directors in a sidebar, selected section on the right. Selection lives in the URL
+          (?venue=&section=) so reloads / deep links / back-forward stay sane. ────────────── */}
+      {activeTab === "venues" && isWeb && (() => {
+        const all = vm.allVenues;
+        if (all.length === 0) {
+          return (
+            <EmptyState message="No venues found" submessage="Add a new venue to get started" />
+          );
+        }
+        const wantId = Number(params.venue);
+        const selected = all.find((v) => v.id === wantId) ?? all[0];
+        const section: VenueSection =
+          params.section === "tables" || params.section === "directors" ? params.section : "details";
+        const canReassign = profile?.role === "super_admin" || profile?.role === "compete_admin";
+        return (
+          <VenueWorkspace
+            venues={all}
+            selected={selected}
+            onSelectVenue={(id) => router.setParams({ venue: String(id), section })}
+            section={section}
+            onSelectSection={(s) => router.setParams({ venue: String(selected.id), section: s })}
+            topAction={{ label: "+ Add Venue", onPress: handleCreateVenue }}
+            actions={
+              canReassign
+                ? [{ label: "Reassign Owner", icon: "swap-horizontal-outline", tone: "warning", onPress: () => openReassignModal(selected) }]
+                : []
+            }
+          />
+        );
+      })()}
+
+      {/* ── Venues Tab (native — unchanged) ─────────────────── */}
+      {activeTab === "venues" && !isWeb && (
         <>
           <View style={styles.searchRow}>
             <View style={styles.searchContainer}>
@@ -586,7 +622,22 @@ export default function VenueManagementScreen() {
                 />
               )
             }
-            renderItem={({ item }) => (
+            renderItem={({ item }) =>
+              isWeb ? (
+                // Web: wide, short row (info · stats · Manage ▾ / Reassign Owner). Same
+                // handlers/routes as the mobile card below — presentation only.
+                <VenueManagementRow
+                  venue={item}
+                  onOpenDetails={() => handleVenuePress(item.id)}
+                  onManageTables={() => handleManageTables(item.id)}
+                  onManageDirectors={() => handleManageDirectors(item.id)}
+                  onReassignOwner={
+                    profile?.role === "super_admin" || profile?.role === "compete_admin"
+                      ? () => openReassignModal(item)
+                      : undefined
+                  }
+                />
+              ) : (
               <View>
                 <View style={styles.idBadgeRow}>
                   <View style={styles.idBadge}>
@@ -610,7 +661,8 @@ export default function VenueManagementScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-            )}
+              )
+            }
             ListEmptyComponent={
               <EmptyState
                 message="No venues found"
@@ -633,7 +685,8 @@ export default function VenueManagementScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContentWeb: { alignItems: "center", paddingBottom: SPACING.xl },
+  scrollContentWeb: { paddingBottom: SPACING.xl },
+  containerWorkspaceWeb: { maxWidth: 1240 },
   container: {
     ...Platform.select({
       web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any },
@@ -661,7 +714,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerWeb: { paddingTop: SPACING.lg },
+  // Web: compact page chrome so the venue workspace starts higher (Audit Log / Billing share it).
+  headerWeb: { paddingTop: SPACING.sm, paddingBottom: SPACING.xs },
+  tabWeb: { paddingVertical: SPACING.sm },
   backButton: { padding: SPACING.xs },
   backText: {
     fontSize: moderateScale(FONT_SIZES.sm),

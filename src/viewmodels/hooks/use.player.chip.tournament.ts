@@ -18,6 +18,8 @@ import {
 } from "../../models/types/chip.types";
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { computePerformance, PerfGame } from "../../utils/performance";
+import { chipHistoryMatches, numberChipMatches } from "../../utils/chip-match-numbers";
+import { chipRoundPlayedIds, chipRoundStatusFor } from "../../utils/chip-round-participation";
 
 export type ChipStatus = "waiting" | "next" | "playing" | "eliminated";
 export type ChipStreakType = "win" | "loss" | "none";
@@ -46,6 +48,8 @@ export interface ChipRecent {
   tableLabel: string | null;
   durationMs: number | null;
   endedAt: string | null;
+  matchNumber: number | null; // tournament-wide Match # (utils/chip-match-numbers)
+  completedAt: string | null; // the result's completion time
 }
 export interface ChipLeaderRow {
   id: string;
@@ -209,10 +213,16 @@ const buildChipHub = (
         new Date(b.endedAt as string).getTime() -
         new Date(a.endedAt as string).getTime(),
     );
-  const recentMatches: ChipRecent[] = myFinished.slice(0, 8).map((m) => {
+  // Recent results: valid only (reverted hidden), newest completion first, with the same
+  // tournament-wide Match # the admin + spectator views show.
+  const recentMatches: ChipRecent[] = chipHistoryMatches(
+    numberChipMatches(s),
+    s.matches.filter((m) => m.aId === me.id || m.bId === me.id),
+  ).slice(0, 8).map(({ m, n, completedAt }) => {
     const oppId = m.aId === me.id ? m.bId : m.aId;
-    const dur =
-      m.endedAt && m.startedAt
+    const dur = n
+      ? n.durationMs
+      : m.endedAt && m.startedAt
         ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()
         : null;
     return {
@@ -222,6 +232,8 @@ const buildChipHub = (
       tableLabel: tableLabelOf(m.tableId),
       durationMs: dur != null && dur > 0 ? dur : null,
       endedAt: m.endedAt ?? null,
+      matchNumber: n?.number ?? null,
+      completedAt,
     };
   });
   // Current streak from the most recent results (win OR loss streak).
@@ -306,22 +318,10 @@ const buildChipHub = (
   // derivation (no new state): "waiting" = still in roundRemaining; seated/live
   // (holder/pending of an active table OR an in-progress match participant) = null
   // (at-table, NOT played); "played" = otherwise. NOT derived from !roundRemaining alone.
-  const roundRemainingSet = new Set(s.roundRemaining ?? []);
-  const onTableIds = new Set<string>();
-  for (const t of s.tables) {
-    if (t.inactive) continue;
-    if (t.holderId) onTableIds.add(t.holderId);
-    if (t.pendingChallengerId) onTableIds.add(t.pendingChallengerId);
-  }
-  for (const mm of s.matches) {
-    if (mm.status === "in_progress") { onTableIds.add(mm.aId); onTableIds.add(mm.bId); }
-  }
-  const roundStatusFor = (id: string): "waiting" | "played" | null => {
-    if (!s.shuffleRound) return null;
-    if (roundRemainingSet.has(id)) return "waiting";
-    if (onTableIds.has(id)) return null;
-    return "played";
-  };
+  // Shared rule (utils/chip-round-participation): "played" = a VALID completed result this
+  // round — never just seated / assigned / a voided match.
+  const roundPlayedIds = chipRoundPlayedIds(s);
+  const roundStatusFor = (id: string): "waiting" | "played" | null => chipRoundStatusFor(s, roundPlayedIds, id);
   const fullQueue: ChipQueueSlot[] = s.queue
     .map((id) => s.entries.find((e) => e.id === id))
     .filter((e): e is ChipEntry => !!e)

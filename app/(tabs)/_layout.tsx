@@ -245,7 +245,17 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFE0"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="billiards" options={{ title: "Billiards", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDFB1"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="submit" options={{ href: null }} />
-      <Tabs.Screen name="admin" options={({ route }) => ({ title: "Admin", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />, href: hasAdminAccess ? undefined : null, popToTopOnBlur: adminPopToTopOnBlur(route) })} />
+      {/* expo-router ignores the `href` shortcut when options is a function (needed here for
+          popToTopOnBlur), so hide the tab explicitly the same way `href: null` would. */}
+      <Tabs.Screen
+        name="admin"
+        options={({ route }) => ({
+          title: "Admin",
+          tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2699\uFE0F"} color={color} focused={focused} />,
+          popToTopOnBlur: adminPopToTopOnBlur(route),
+          ...(hasAdminAccess ? {} : { tabBarItemStyle: { display: "none" as const }, tabBarButton: () => null }),
+        })}
+      />
       <Tabs.Screen name="shop" options={{ title: "Giveaways", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83C\uDF81"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\uD83D\uDC64"} color={color} focused={focused} /> }} />
       <Tabs.Screen name="faq" options={{ title: "FAQ", tabBarIcon: ({ color, focused }) => <TabBarIcon emoji={"\u2753"} color={color} focused={focused} /> }} />

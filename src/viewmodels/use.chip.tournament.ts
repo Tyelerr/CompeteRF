@@ -49,6 +49,7 @@ import {
   adjustChips as engineAdjustChips,
   type ChipAdjustMeta,
   reorderQueue as engineReorderQueue,
+  moveQueueEntry as engineMoveQueueEntry,
   forfeitEntry as engineForfeitEntry,
   forfeitMatch as engineForfeitMatch,
   type ForfeitMeta,
@@ -80,6 +81,7 @@ import {
   settleShuffleDrain,
   assignFinals,
   reconcileQueue,
+  reconcileShuffleRound,
   reconcileEliminations,
   reconcileMatches,
   withRestorePoint,
@@ -202,7 +204,7 @@ const reconcileOverrides = (
 const healedCloudChip = (b: ChipTournamentBundle): ChipState => {
   const finished = b.tournament.live_state === "finished" || b.tournament.status === "completed";
   if (finished) return reconcileCompleted(b.chip);
-  const healed = assignFinals(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip)))));
+  const healed = assignFinals(reconcileShuffleRound(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip))))));
   return reconcileOverrides(healed, b.tournament?.max_fargo ?? null).chip;
 };
 
@@ -783,8 +785,10 @@ export const useChipTournament = (
         // …and (5) auto-seat the finals if the board was left at two-alive-no-match
         // (e.g. the app was reopened mid-finals between games) so the final two are
         // never stranded waiting for a manual restart.
+        // …and (6) re-derive a Shuffle round's owed-a-turn list from the valid results this
+        // round (reconcileShuffleRound) — repairs turns used up by a voided seat.
         const healed = assignFinals(
-          reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip)))),
+          reconcileShuffleRound(reconcileQueue(reconcileEliminations(settleShuffleDrain(reconcileMatches(b.chip))))),
         );
         const { chip: reconciled, cleared } = reconcileOverrides(healed, b.tournament?.max_fargo ?? null);
         lastLoadedChipRef.current = reconciled;
@@ -1407,7 +1411,7 @@ export const useChipTournament = (
       // assignFinals runs LAST so that once a mutation leaves exactly two players
       // alive with no active match, the final heads-up game is auto-seated here in
       // the state transition (never from render) — no manual "Start Final Match".
-      let next = assignFinals(reconcileEliminations(settleShuffleDrain(materializeLive(fn(c)))));
+      let next = assignFinals(reconcileShuffleRound(reconcileEliminations(settleShuffleDrain(materializeLive(fn(c))))));
       if (next === c) return c; // no-op — nothing to record
       const added = Math.max(0, next.events.length - c.events.length);
       if (added > 0) {
@@ -1721,6 +1725,12 @@ export const useChipTournament = (
   const reorderQueue = useCallback(
     (entryId: string, to: "up" | "down" | "top" | "bottom") =>
       update((c) => engineReorderQueue(c, entryId, to)),
+    [update],
+  );
+  // Drag-to-position (native queue handle): the same engine primitive + the same update()
+  // path (restore point, persistence gate, save queue / offline controller) as Move Up/Down.
+  const moveQueueTo = useCallback(
+    (entryId: string, toIndex: number) => update((c) => engineMoveQueueEntry(c, entryId, toIndex)),
     [update],
   );
   const buyBack = useCallback(
@@ -2392,6 +2402,7 @@ export const useChipTournament = (
     forfeitEntry,
     forfeitMatch,
     reorderQueue,
+    moveQueueTo,
     buyBack,
     restoreEntry,
     endTournament,

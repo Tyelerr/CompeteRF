@@ -12,6 +12,7 @@
 // event TYPE. Anything not matched here stays TD-only.
 
 import { ChipEvent } from "../models/types/chip.types";
+import { ChipMatchNumbering, chipEventMatchNumber } from "./chip-match-numbers";
 
 // Semantic categories for the spectator feed (drive icon/dot colour, not wording).
 export type PublicActivityKind =
@@ -22,6 +23,7 @@ export type PublicActivityKind =
   | "forfeit" // a forfeit
   | "buyback" // an eliminated team bought back in
   | "table" // table opened for its next match / moved / closed
+  | "queue" // the TD manually changed someone's place in the queue (menu move or drag)
   | "shuffle" // the board was reshuffled
   | "tournament" // tournament lifecycle (started / finals / finished)
   | "champion"; // the champion was crowned
@@ -37,6 +39,9 @@ export interface PublicActivity {
   actor?: string | null; // display name of who performed the action
   reason?: string | null; // PUBLIC reason (spectator-visible audit note)
   notes?: string | null; // PUBLIC free-text note (spectator-visible)
+  // Tournament-wide Match # (utils/chip-match-numbers) — set only on the line that records a
+  // valid completed result; every other activity line leaves it null.
+  matchNumber?: number | null;
 }
 
 // Light, spectator-friendly wording tweaks over the engine's audit text (which is
@@ -53,6 +58,34 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const readAct = (ev: ChipEvent): string | null =>
   (ev.payload?.act as string | undefined) ?? null;
+
+// Legacy (pre-tag) manual queue reorders, recognised by their exact engine wording:
+//   "<name> moved from #2 to #5 in the queue"  (drag)
+//   "<name> moved up|down|top|bottom in the queue"  (⋮ menu)
+const LEGACY_QUEUE_POS_RE = /^(.+) moved from #(\d+) to #(\d+) in the queue$/;
+const LEGACY_QUEUE_DIR_RE = /^(.+) moved (up|down|top|bottom) in the queue$/;
+
+// ONE public line for a manual queue reorder — menu moves and drag render identically:
+// "<name> moved from #2 to #5 in the queue". Built only from the public team name and the
+// 1-based positions (no ids / actor / metadata). null for a no-op (same position).
+const queueMoveText = (ev: ChipEvent): string | null => {
+  const p = ev.payload ?? {};
+  if (readAct(ev) === "queue_moved") {
+    const from = typeof p.fromIndex === "number" ? p.fromIndex : null;
+    const to = typeof p.toIndex === "number" ? p.toIndex : null;
+    const name =
+      (typeof p.teamName === "string" && p.teamName.trim()) ||
+      ev.text.replace(/ moved .*$/, "").trim() ||
+      "Team";
+    if (from == null || to == null) return ev.text;
+    if (from === to) return null;
+    return `${name} moved from #${from + 1} to #${to + 1} in the queue`;
+  }
+  const pos = LEGACY_QUEUE_POS_RE.exec(ev.text);
+  if (pos) return pos[2] === pos[3] ? null : ev.text;
+  if (LEGACY_QUEUE_DIR_RE.test(ev.text)) return ev.text;
+  return null;
+};
 
 // Map ONE event → a public activity line, or null to hide it from spectators.
 export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
@@ -119,15 +152,22 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
           return { ...base, kind: "champion" };
         case "buyback":
           return { ...base, kind: "buyback" };
+        // A manual queue reorder (⋮ Move Up/Down/Top/Bottom or ☰ drag) — one shared event.
+        case "queue_moved": {
+          const text = queueMoveText(ev);
+          return text ? { ...base, text, kind: "queue" } : null;
+        }
         // A table clear requeues players — spectators see the board/queue change.
         case "table_cleared":
         case "table_player_removed": // one entry taken off a table (match voided if live)
           return { ...base, kind: "table" };
-        // Untagged manual events (queue reorder, timer reset, table cleared,
-        // lock/unlock, rematch-skipped, shuffle-mode toggles, shuffle cancelled)
-        // are TD-only.
-        default:
-          return null;
+        // Untagged manual events (timer reset, table cleared, lock/unlock,
+        // rematch-skipped, shuffle-mode toggles, shuffle cancelled) are TD-only —
+        // except a legacy (pre-tag) queue reorder, recognised by its exact wording.
+        default: {
+          const text = queueMoveText(ev);
+          return text ? { ...base, text, kind: "queue" } : null;
+        }
       }
 
     // ── TD-only types: table_added, chip_adjust, player_added, undo/redo/restore.
@@ -140,6 +180,7 @@ export const toPublicActivity = (ev: ChipEvent): PublicActivity | null => {
 export const toPublicActivityFeed = (
   events: ChipEvent[],
   limit = 40,
+  numbering?: ChipMatchNumbering,
 ): PublicActivity[] => {
   // Item 7A: collapse the redundant "lost a chip → 0 remaining" line when that loss caused an
   // elimination. recordWinner emits a chip_loss (payload.resulting === 0) immediately followed
@@ -162,7 +203,10 @@ export const toPublicActivityFeed = (
     )
       continue; // redundant with the player's elimination line
     const a = toPublicActivity(ev);
-    if (a) out.push(a);
+    if (a) {
+      const num = numbering ? chipEventMatchNumber(numbering, ev) : null;
+      out.push(num ? { ...a, matchNumber: num.number } : a);
+    }
     if (out.length >= limit) break;
   }
   return out;

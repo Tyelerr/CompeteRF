@@ -15,6 +15,8 @@ import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 import { chipStatusColor } from "../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../utils/formatters";
+import { chipMatchLabel, formatChipResultTime } from "../../../utils/chip-match-numbers";
+import { useCompactMatchLabel } from "../../../viewmodels/hooks/use.compact.match.label";
 
 export interface ChipHistoryRow {
   id: string;
@@ -23,6 +25,9 @@ export interface ChipHistoryRow {
   opponentFargo: number | null;
   tableLabel: string | null;
   durationMs: number | null;
+  // Tournament-wide Match # (utils/chip-match-numbers) + the result's completion time.
+  matchNumber?: number | null;
+  completedAt?: string | null;
 }
 
 export interface ChipPerformancePanelProps {
@@ -65,6 +70,7 @@ export const ChipPerformancePanel = ({
   perf,
   history,
 }: ChipPerformancePanelProps) => {
+  const compactLabel = useCompactMatchLabel();
   const d = perf?.delta ?? 0;
   const dColor = d > 0 ? COLORS.success : d < 0 ? COLORS.error : COLORS.textSecondary;
   return (
@@ -124,9 +130,15 @@ export const ChipPerformancePanel = ({
               <Text allowFontScaling={false} style={[styles.histResultText, { color: h.won ? COLORS.success : COLORS.error }]}>{h.won ? "W" : "L"}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text allowFontScaling={false} style={styles.histOpp} numberOfLines={1}>vs {h.opponentName}</Text>
+              <Text allowFontScaling={false} style={styles.histOpp} numberOfLines={1}>
+                {h.matchNumber != null && (
+                  <Text style={styles.histMatchNo}>{chipMatchLabel(h.matchNumber, compactLabel)} · </Text>
+                )}
+                vs {h.opponentName}
+              </Text>
               <Text allowFontScaling={false} style={styles.histMeta} numberOfLines={1}>
                 {[
+                  h.completedAt ? formatChipResultTime(h.completedAt) : null,
                   h.opponentFargo != null ? `Fargo ${h.opponentFargo}` : null,
                   h.tableLabel,
                   h.durationMs != null ? formatElapsedClock(h.durationMs) : null,
@@ -162,5 +174,6 @@ const styles = StyleSheet.create({
   histResult: { width: webSc(28), height: webSc(28), borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
   histResultText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "900" },
   histOpp: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
+  histMatchNo: { color: COLORS.textSecondary, fontWeight: "800" },
   histMeta: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), marginTop: 1 },
 });

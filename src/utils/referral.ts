@@ -18,6 +18,14 @@ export const REFERRAL_LINK_BASE = "https://thecompeteapp.com/r/";
  */
 export const NATIVE_REFERRAL_LINKS_LIVE = false;
 
+/**
+ * REFERRAL REWARDS SWITCH. Shows the "+1 Giveaway Entry" note on the Refer Friends card. Leave
+ * false until the referral-signup-rewards migration (20261006120000) is applied in production —
+ * the reward itself is granted server-side inside claim_referral; this only controls the copy.
+ */
+export const REFERRAL_REWARDS_LIVE = false;
+export const REFERRAL_REWARD_NOTE = "Earn +1 Giveaway Entry when a friend signs up with your referral.";
+
 const ANDROID_PACKAGE = "com.thecompeteapp.competerf";
 const IOS_APP_ID = "6759150538";
 

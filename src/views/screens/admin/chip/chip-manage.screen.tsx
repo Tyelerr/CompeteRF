@@ -40,6 +40,9 @@ import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { chipStatusColor } from "../../../../utils/chip-colors";
 import { formatElapsedClock } from "../../../../utils/formatters";
+import { chipEventMatchNumber, chipHistoryMatches, chipMatchLabel, formatChipResultTime, numberChipMatches } from "../../../../utils/chip-match-numbers";
+import { useCompactMatchLabel } from "../../../../viewmodels/hooks/use.compact.match.label";
+import { chipRoundPlayedIds, chipRoundStatusFor } from "../../../../utils/chip-round-participation";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { ChipOfflineBanner, ChipRecoveryBanner, ChipRecoveryPrompt } from "../../../components/tournament/live/ChipRecoveryStatus";
 import {
@@ -65,6 +68,7 @@ import {
   teamFargoOf,
   teamName as fullName,
   chipDisplayName,
+  canAssignNextTeam,
 } from "../../../../models/services/chip.engine";
 import { scheduleStaleError } from "../../../../utils/schedule";
 import { computeBreakdown, entryPoolTotal, feesPerPlayer, sidePotTotal, sidePotPayoutViews, type PayoutBucketAllocation } from "../../../../utils/prize-pool";
@@ -74,6 +78,10 @@ import { ChipEntry, ChipEvent, ChipTable } from "../../../../models/types/chip.t
 import { usePlayerSearch } from "../../../../viewmodels/hooks/use.player.search";
 import { UnifiedRegisterModal } from "../../../components/tournament/UnifiedRegisterModal";
 import { ChipPerformancePanel } from "../../../components/tournament/ChipPerformancePanel";
+import { QueueDragList } from "../../../components/tournament/live/QueueDragList";
+import { NativeQueueReorderList } from "../../../components/tournament/live/NativeQueueReorderList";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ScrollViewContainer } from "react-native-reorderable-list";
 import {
   LifecyclePhase,
   LifecycleStatus,
@@ -132,6 +140,11 @@ const WEB_MAXW = 1240;
 // with no drift/jump, aligned with Live Overview. `alignSelf:"flex-start"` keeps the card
 // at natural content height (never stretched to the row / 100vh). No overflow is set here,
 // so wheel/trackpad scrolling over the sidebar bubbles to the page ScrollView as normal.
+// Native: RN Modals render in their own native window, so gesture-handler needs a root INSIDE
+// the modal (the queue popup's reorderable list). Web: plain passthrough (no extra wrapper).
+const ModalGestureRoot = ({ children }: { children: React.ReactNode }) =>
+  isWeb ? <>{children}</> : <GestureHandlerRootView style={{ flex: 1 }}>{children}</GestureHandlerRootView>;
+
 const WEB_STICKY_SIDE: any = isWeb
   ? { position: "sticky", top: webSc(SPACING.md), alignSelf: "flex-start" }
   : null;
@@ -733,6 +746,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     }
     return map;
   }, [vm.chip?.entries]);
+  // Tournament-wide Match # (shared derivation — utils/chip-match-numbers): one chronological
+  // sequence of valid results; the same match shows the same number on every surface.
+  const chipEvents = vm.chip?.events;
+  const chipMatches = vm.chip?.matches;
+  const matchNumbering = useMemo(
+    () => numberChipMatches({ events: chipEvents ?? [], matches: chipMatches ?? [] }),
+    [chipEvents, chipMatches],
+  );
+  // Presentation only: "M17" on phone-width native, "Match 17" everywhere else.
+  const compactMatchLabel = useCompactMatchLabel();
   const [selectedPhase, setSelectedPhase] = useState<"setup" | "live" | "results">("setup");
   const [page, setPage] = useState<string>("Players");
   const initedRef = useRef(false);
@@ -744,6 +767,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Web: Tournament Activity + Chip Leaders sit side by side under Active Tables at wide
   // widths; below this they stack (the dashMain column gets too narrow for both).
   const dashActRow = isWeb && winW >= 1180;
+  // Web Live DASHBOARD only — use wide screens better: the page shell grows beyond the shared
+  // WEB_MAXW and ALL the extra width goes to the right column (Alerts + Queue), so the main
+  // column stays exactly its current width (shell − 2·16 padding − 320 side − 16 gap = 872).
+  // The shell stays centered, so the composition shifts left by half the extra width while the
+  // sidebar grows right. Below 1320px nothing changes (1240 shell / 320 side); below 980 the
+  // dashboard stacks as before.
+  const dashSideW = winW >= 1440 ? 400 : winW >= 1320 ? 360 : 320;
+  const dashShellMaxW = WEB_MAXW + (dashSideW - 320);
+  // Sticky desktop sidebar: cap the Queue preview's row area to the viewport (it scrolls
+  // internally past that) so the sidebar never grows taller than the screen.
+  const queuePreviewMaxH = Math.max(webSc(280), winH - webSc(300));
   // Active Tables responsive grid (web only): 3 cols ≥1200px, 2 cols ≥800px, else 1.
   // Card widths are percentage-based so columns fill evenly (gap-based spacing); native
   // is unaffected (atCols is 1 and the grid/width styles are isWeb-gated).
@@ -1009,6 +1043,31 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Full-screen queue manager + the per-team action sheet inside it.
   const [queueModalOpen, setQueueModalOpen] = useState(false);
   const [queueMenuId, setQueueMenuId] = useState<string | null>(null);
+  // NATIVE queue drag (☰ handle) in progress → the host ScrollView stops scrolling so the
+  // handle keeps the touch (see QueueDragList for why this is required on iOS).
+  const [queueDragging, setQueueDragging] = useState(false);
+  // Actions launched FROM the queue ⋮ sheet that open their OWN modal (Manage Chips, Forfeit):
+  // close the sheet / Queue popup first and run the action only after that Modal has fully
+  // dismissed — onDismiss (iOS) or the next frame (Android/web). Same sequencing as View All
+  // Tables (runAfterTablesClose): two RN Modals are never presented at once on iOS.
+  const [pendingAfterQueue, setPendingAfterQueue] = useState<(() => void) | null>(null);
+  const flushAfterQueueClose = () => {
+    if (pendingAfterQueue) {
+      const fn = pendingAfterQueue;
+      setPendingAfterQueue(null);
+      fn();
+    }
+  };
+  const runAfterQueueClose = (fn: () => void) => {
+    setPendingAfterQueue(() => fn); // updater form stores the fn (never invokes it)
+    setQueueMenuId(null);
+    setQueueModalOpen(false);
+    if (Platform.OS !== "ios")
+      requestAnimationFrame(() => {
+        setPendingAfterQueue(null);
+        fn();
+      });
+  };
   // Admin dashboard "Active Tables" preview → full-list modal (dashboard only; the
   // Live → Tables management tab is unchanged). This Modal is rendered at the screen
   // ROOT (in `modals`, a sibling of the ScrollView) — NOT nested inside the scrollable
@@ -1328,11 +1387,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // otherwise re-renders the entire chip screen (and re-commits it on Fabric) every second
   // mid-animation, which is what produced the ~1s hitch. Nothing behind the opaque overlay
   // needs a ticking clock; the interval resumes (and now = Date.now()) as soon as it dismisses.
+  // Same reason it pauses while a queue row is being DRAGGED: the drag follow runs on the JS
+  // thread, and a whole-screen re-render every second made the held row stall and then jump
+  // to the finger (the "snapping"). Resumes the instant the row lands.
   useEffect(() => {
-    if (vm.phase !== "live" || shuffleAnimating) return;
+    if (vm.phase !== "live" || shuffleAnimating || queueDragging) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [vm.phase, shuffleAnimating]);
+  }, [vm.phase, shuffleAnimating, queueDragging]);
 
   // Surface the "Next Match" popup once per new winner-stays assignment (a table
   // that has a holder + a pending challenger, awaiting Start Match).
@@ -2212,6 +2274,26 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       ],
     );
   };
+  // NATIVE table ⋮ "Remove Player": pick WHICH seated player first (native Alert, same pattern
+  // as Forfeit Team), then hand off to the web's confirmRemoveFromTable — Void Active Match? (live
+  // match only) → Next in Queue / End of Queue → vm.removeFromTable. No logic of its own.
+  // Seated = the live match's two sides, else the holder + pending challenger (waiting table).
+  const choosePlayerToRemove = (t: ChipTable) => {
+    const m = chip.matches.find((mm) => mm.id === t.matchId && mm.status === "in_progress");
+    const seated = (m ? [m.aId, m.bId] : [t.holderId, t.pendingChallengerId]).filter(
+      (id): id is string => !!id && !!entryById(id),
+    );
+    if (seated.length === 0) return;
+    if (seated.length === 1) {
+      // A lone holder is unambiguous; the next step's "Remove <name>" prompt still confirms.
+      confirmRemoveFromTable(t, seated[0]);
+      return;
+    }
+    Alert.alert("Remove Player", "Which player do you want to remove?", [
+      ...seated.map((id) => ({ text: teamName(entryById(id) as ChipEntry), onPress: () => confirmRemoveFromTable(t, id) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
   const confirmClearTable = (t: ChipTable) => {
     Alert.alert(
       `Clear ${t.label}`,
@@ -2489,15 +2571,20 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const m = mid ? chip.matches.find((x) => x.id === mid) : null;
     if (!m) return null;
     const table = chip.tables.find((t) => t.id === m.tableId);
-    const dur =
-      m.endedAt && m.startedAt
-        ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()
+    // Only a VALID result carries a Match # (undone / restored-away results don't).
+    const num = chipEventMatchNumber(matchNumbering, ev);
+    const dur = num
+      ? num.durationMs
+      : m.startedAt
+        ? new Date(ev.at).getTime() - new Date(m.startedAt).getTime()
         : null;
     return {
       winner: entryById(m.winnerId),
       loser: entryById(m.loserId),
       tableLabel: table?.label ?? null,
       dur: dur && dur > 0 ? dur : null,
+      matchNumber: num?.number ?? null,
+      completedAt: ev.at,
     };
   };
   // The events shown for the current filter + search (events are newest-first).
@@ -2659,6 +2746,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     fields.push({ label: "Performed By", value: typeof p.actorName === "string" && p.actorName ? p.actorName : "Tournament Director" });
     if (ev.type === "match_result") {
       const info = auditMatchInfo(ev);
+      if (info?.matchNumber) fields.push({ label: "Match", value: chipMatchLabel(info.matchNumber) });
       if (info?.winner) fields.push({ label: "Winner", value: shortTeam(info.winner) });
       if (info?.loser) fields.push({ label: "Loser", value: shortTeam(info.loser) });
       if (info?.tableLabel) fields.push({ label: "Related Match", value: info.tableLabel });
@@ -2727,11 +2815,15 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     const finished = chip.matches
       .filter((m) => m.status !== "in_progress" && m.endedAt && (m.aId === e.id || m.bId === e.id))
       .sort((a, b) => new Date(b.endedAt as string).getTime() - new Date(a.endedAt as string).getTime());
-    const history = finished.map((m) => {
+    // Match history rows: valid results only (reverted ones hidden), newest completion first,
+    // each with its tournament-wide Match # + completion time. Stats below keep `finished`.
+    const history = chipHistoryMatches(matchNumbering, chip.matches.filter((m) => m.aId === e.id || m.bId === e.id)).map(({ m, n, completedAt }) => {
       const oppId = m.aId === e.id ? m.bId : m.aId;
       const opp = chip.entries.find((x) => x.id === oppId);
-      const dur = m.endedAt ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime() : null;
+      const dur = n ? n.durationMs : m.endedAt ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime() : null;
       return {
+        matchNumber: n?.number ?? null,
+        completedAt,
         id: m.id,
         opp: opp ? teamName(opp) : "—",
         oppFargo: opp?.teamFargo ?? null,
@@ -4120,27 +4212,16 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const shuffleTransitioning = !!chip.reshufflePending || !!chip.shuffleReady;
   const isShuffleWaitTable = (t: ChipTable) =>
     shuffleTransitioning && !t.inactive && !t.locked && !t.closing && !t.matchId && !t.holderId && !t.pendingChallengerId;
-  // Queue round-status badge (Shuffle rounds only, TEAM-level). Authoritative 3-state
-  // derivation (no new state): "waiting" = still in roundRemaining (not yet seated);
-  // seated/live (holder/pending of an active table OR an in-progress match participant)
-  // → null (at-table, NOT played — never mislabel a seated/live entry as played, even
-  // though such entries aren't in the queue); "played" = otherwise (turn completed,
-  // back in the queue). NOT derived from !roundRemaining alone.
-  const roundRemainingIds = new Set(chip.roundRemaining ?? []);
-  const onTableIds = new Set<string>();
-  for (const t of chip.tables) {
-    if (t.inactive) continue;
-    if (t.holderId) onTableIds.add(t.holderId);
-    if (t.pendingChallengerId) onTableIds.add(t.pendingChallengerId);
-  }
-  for (const mm of chip.matches) {
-    if (mm.status === "in_progress") { onTableIds.add(mm.aId); onTableIds.add(mm.bId); }
-  }
+  // Queue round-status badge (Shuffle rounds only, TEAM-level) — the shared rule
+  // (utils/chip-round-participation): "Waiting for turn" = still owed a turn (roundRemaining);
+  // "✓ Played this round" = a VALID completed result this round (never just seated/assigned,
+  // never a voided match; Undo/Restore drop it); otherwise no badge.
+  const roundPlayedIds = chipRoundPlayedIds(chip);
   const queueRoundStatus = (id: string): { label: string; color: string } | null => {
-    if (!chip.shuffleRound) return null;
-    if (roundRemainingIds.has(id)) return { label: "Waiting for turn", color: COLORS.primary };
-    if (onTableIds.has(id)) return null; // seated / live — at table, not yet completed
-    return { label: "✓ Played this round", color: COLORS.textMuted };
+    const st = chipRoundStatusFor(chip, roundPlayedIds, id);
+    if (st === "waiting") return { label: "Waiting for turn", color: COLORS.primary };
+    if (st === "played") return { label: "✓ Played this round", color: COLORS.textMuted };
+    return null;
   };
   // Shared confirm for the Shuffle Mode "Return active match(es) to queue" override —
   // used by BOTH the web shuffle section and the native shuffle banner so the flow is
@@ -4514,6 +4595,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             // no "Chips" word, no left/right columns. Chip count is the live ChipState
             // value in parentheses right after the name. Richer per-player detail (Fargo +
             // chips) lives in the tapped table-detail view.
+            // NATIVE: turn the passive idle states into the next useful action. Only when the
+            // SAME authoritative assignNextTeam would actually seat someone (round-eligible
+            // queue, usable table, not draining for a reshuffle) — never a no-op button.
+            const canAssign = !isWeb && !m && !pending && canAssignNextTeam(chip, t.id);
             const renderActivePlayer = (e: ChipEntry) => (
               <Text style={styles.atMatchTeam} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
                 {shortTeam(e)}{" "}
@@ -4564,13 +4649,17 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       {renderActivePlayer(pending)}
                     </>
                   ) : holder ? (
-                    <>
-                      {renderActivePlayer(holder)}
-                      <Text style={styles.atVs}>VS</Text>
-                      <Text style={styles.atMatchWaiting}>Waiting for Opponent</Text>
-                    </>
+                    canAssign ? (
+                      renderActivePlayer(holder)
+                    ) : (
+                      <>
+                        {renderActivePlayer(holder)}
+                        <Text style={styles.atVs}>VS</Text>
+                        <Text style={styles.atMatchWaiting}>Waiting for Opponent</Text>
+                      </>
+                    )
                   ) : (
-                    <Text style={styles.atMatchWaiting}>{waitShuffle ? "Waiting for Shuffle" : "No team assigned"}</Text>
+                    <Text style={styles.atMatchWaiting}>{canAssign ? "Table available" : waitShuffle ? "Waiting for Shuffle" : "No team assigned"}</Text>
                   )}
                 </TouchableOpacity>
                 {/* Pending future table-state, shown BELOW the match so the top line stays
@@ -4587,6 +4676,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   {pending && (
                     <TouchableOpacity style={styles.atStartBtn} onPress={() => vm.startPendingMatch(t.id)} activeOpacity={0.85}>
                       <Text style={styles.atStartBtnText}>Start Match</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* Native: one seated → fill the missing opponent; empty → fill the table.
+                      Both run the existing vm.assignNextTeam (engine assignNextTeam). */}
+                  {canAssign && (
+                    <TouchableOpacity style={styles.atStartBtn} onPress={() => vm.assignNextTeam(t.id)} activeOpacity={0.85}>
+                      <Text style={styles.atStartBtnText}>{holder ? "Assign Next Team" : "Assign Next Match"}</Text>
                     </TouchableOpacity>
                   )}
                   {/* Item 12: recording the winner is the most common table action — surface a
@@ -4788,7 +4884,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // feeds this preview AND the root-level View All Alerts modal — behaviour unchanged.
     const visibleAlerts = computeVisibleAlerts();
 
-    const queueIds = chip.queue.slice(0, 5);
+    // Dashboard queue preview: web shows up to 15 before "View Full Queue"; native keeps 5.
+    const queuePreviewMax = isWeb ? 15 : 5;
+    const queueIds = chip.queue.slice(0, queuePreviewMax);
     const leaderList = showFullStandings ? leaders : leaders.slice(0, 5);
 
     type SumCard = { val: number | string; lbl: string; nav: "players" | "tables" | "queue" | null };
@@ -4852,7 +4950,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     // 5 separate stat/shuffle cards. Same data + handlers; ready-to-shuffle/finals keep
     // their action banner below (renderShuffleBanner).
     const shufAliveN = alive.length;
-    const shufRemaining = alive.filter((e) => (chip.roundRemaining ?? []).includes(e.id)).length;
+    // "N of M played" = alive entries with a VALID completed result this round (shared rule).
+    const shufPlayed = alive.filter((e) => roundPlayedIds.has(e.id)).length;
     // Occupied active tables — a live match OR a seated-but-not-yet-started assignment
     // (holder / pending challenger) — that must be resolved before a reshuffle can redraw.
     // The engine enforces this (finalizeReshuffle refuses while hasOpenTableAssignment); the
@@ -4861,7 +4960,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       (t) => !t.inactive && (!!t.matchId || !!t.holderId || !!t.pendingChallengerId),
     ).length;
     const shuffleRowLabel = shRound
-      ? `Round ${shRoundNum} in Progress · ${shufAliveN - shufRemaining} of ${shufAliveN} played`
+      ? `Round ${shRoundNum} in Progress · ${shufPlayed} of ${shufAliveN} played`
       : shDraining
       ? assignedTableCount > 0
         ? `${assignedTableCount} table assignment${assignedTableCount === 1 ? "" : "s"} must be resolved before reshuffling`
@@ -5057,11 +5156,27 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           </View>
         ) : (
           <>
-            {queueIds.map((qid, i) => {
+            {(() => {
+            const previewRow = (qid: string, i: number, dragHandle: React.ReactNode | null, lifted = false) => {
               const e = entryById(qid);
               if (!e) return null;
               return (
-                <TouchableOpacity key={qid} style={[styles.qRow2, isWeb && styles.qRow2Web, i === 0 && styles.noBorderTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
+                <TouchableOpacity
+                  key={qid}
+                  style={[
+                    styles.qRow2,
+                    isWeb && styles.qRow2Web,
+                    // Native dashboard drag: a small side inset so the rank / ☰ sit comfortably
+                    // inside the lifted card (the row has no horizontal padding of its own).
+                    nativeDashQueueDrag && styles.qRow2DragInset,
+                    i === 0 && styles.noBorderTop,
+                    // The held row doesn't carry its separator along (transparent, not 0-width,
+                    // so its measured height never changes mid-drag).
+                    lifted && styles.qRow2Lifted,
+                  ]}
+                  onPress={() => setProfileId(e.id)}
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.qPos2} numberOfLines={1}>{i + 1}</Text>
                   <View style={styles.qNameCol}>
                     <Text style={styles.qName2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{shortTeam(e)}</Text>
@@ -5086,19 +5201,53 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <Ionicons name="ellipsis-vertical" size={webMs(16)} color={COLORS.textSecondary} />
                     </TouchableOpacity>
                   ) : null}
+                  {dragHandle}
                 </TouchableOpacity>
               );
-            })}
+            };
+            // Native preview: unchanged static rows. Web: the same drag list as the full
+            // queue (ids = the first 15, a prefix of chip.queue, so indices are real queue
+            // positions). In the sticky two-column sidebar the rows scroll inside a capped
+            // area so a long preview can never push the sidebar past the viewport.
+            if (!isWeb) {
+              if (!nativeDashQueueDrag) return queueIds.map((qid, i) => previewRow(qid, i, null));
+              // queueIds is a PREFIX of chip.queue (first N), so the library's from/to are the
+              // player's real queue positions → vm.moveQueueTo reorders the FULL queue.
+              return (
+                <NativeQueueReorderList
+                  nested
+                  ids={queueIds}
+                  enabled={canDragQueue}
+                  onMove={onQueueDrop}
+                  renderRow={previewRow}
+                />
+              );
+            }
+            const list = (
+              <QueueDragList
+                ids={queueIds}
+                enabled={canDragQueue}
+                onDragActiveChange={setQueueDragging}
+                onMove={onQueueDrop}
+                renderRow={previewRow}
+              />
+            );
+            return dashTwoCol ? (
+              <ScrollView style={{ maxHeight: queuePreviewMaxH }} scrollEnabled={!queueDragging} showsVerticalScrollIndicator>
+                {list}
+              </ScrollView>
+            ) : list;
+            })()}
             {/* Web already has a Manage Queue button in the header, so drop the redundant
-                bottom link unless there are more than 5 (then it's a useful "View Full
+                bottom link unless the preview is truncated (then it's a useful "View Full
                 Queue"). Mobile keeps the bottom link as-is. */}
-            {(!isWeb || chip.queue.length > 5) && (
+            {(!isWeb || chip.queue.length > queuePreviewMax) && (
               <Pressable
                 style={({ pressed }) => [styles.qViewAll, pressed && styles.qViewAllPressed]}
                 onPress={() => { setQueueMenuId(null); setQueueModalOpen(true); }}
               >
                 <Text style={styles.qViewAllText}>
-                  {chip.queue.length > 5 ? `View Full Queue (${chip.queue.length})` : `Manage Queue (${chip.queue.length})`}
+                  {chip.queue.length > queuePreviewMax ? `View Full Queue (${chip.queue.length})` : `Manage Queue (${chip.queue.length})`}
                 </Text>
                 <Ionicons name="chevron-forward" size={webMs(16)} color={COLORS.primary} />
               </Pressable>
@@ -5266,7 +5415,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                 </>
               )}
             </View>
-            <View style={[styles.dashSide, WEB_STICKY_SIDE]}>
+            <View style={[styles.dashSide, { width: dashSideW }, WEB_STICKY_SIDE]}>
               {/* Chip Leader card removed on desktop — Standings / Chip Leaders below is the
                   source. chipLeaderEl stays defined for the native single-column layout. */}
               {championEl}
@@ -5756,7 +5905,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // the left; name + chips on the top line; "Fargo · W · L" beneath; the round status
   // ("Waiting for turn") in blue; the ⋮ menu on the right. (The rematch-skipped note renders
   // only in the rare transient case where it applies.)
-  const renderQueueRow = (qid: string, i: number) => {
+  const renderQueueRow = (qid: string, i: number, dragHandle: React.ReactNode | null = null) => {
     const e = entryById(qid);
     if (!e) return null;
     const rs = queueRoundStatus(qid);
@@ -5770,22 +5919,51 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           </View>
           <Text style={styles.qmMeta} numberOfLines={1}>
             <Text style={styles.qmMetaFargo}>Fargo {e.teamFargo != null ? e.teamFargo : "—"}</Text>
-            <Text style={styles.qmMetaDot}>  •  </Text>
-            <Text style={styles.qmWin}>W{e.wins}</Text>
-            <Text style={styles.qmMetaDot}>  •  </Text>
-            <Text style={styles.qmLoss}>L{e.losses}</Text>
+            {/* Web keeps W/L; native drops it for row width (the record is on the player detail). */}
+            {isWeb ? (
+              <>
+                <Text style={styles.qmMetaDot}>  •  </Text>
+                <Text style={styles.qmWin}>W{e.wins}</Text>
+                <Text style={styles.qmMetaDot}>  •  </Text>
+                <Text style={styles.qmLoss}>L{e.losses}</Text>
+              </>
+            ) : null}
           </Text>
           {rs ? <Text style={[styles.qRoundStatus, { color: rs.color }]} numberOfLines={1}>{rs.label}</Text> : null}
           {rematchSkippedLabel(chip, qid) ? (
             <Text style={styles.qRematchSkip} numberOfLines={1}>⚠ Rematch skipped</Text>
           ) : null}
         </View>
-        <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity style={styles.qmMenuBtn} onPress={() => setQueueMenuId(e.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: dragHandle ? 0 : 8 }}>
           <Ionicons name="ellipsis-vertical" size={webMs(18)} color={COLORS.textSecondary} />
         </TouchableOpacity>
+        {/* ☰ drag handle — native only, far right, the ONLY drag start. */}
+        {dragHandle}
       </View>
     );
   };
+
+  // Queue list with the ☰ drag handle (native + web; QueueDragList owns the per-platform
+  // interaction). EVERY queue surface drops through this one handler → vm.moveQueueTo →
+  // engine moveQueueEntry — the same primitive and update() path as the ⋮ Move
+  // Up/Down/Top/Bottom (restore point, persistence gate, save queue / offline controller).
+  // `ids` may be a PREFIX of chip.queue (the dashboard preview), so a row's list index is its
+  // real queue index. No handle when the queue can't be reordered (finished / read-only).
+  const canDragQueue = !readOnly && !recoveryOnly;
+  // NATIVE mobile Live dashboard: the Queue card rows get the same library drag as the Queue
+  // popup (nested inside the page ScrollView → that ScrollView is the library's
+  // ScrollViewContainer, see the embedded-live render below). Standalone mode keeps static rows.
+  const nativeDashQueueDrag = !isWeb && !!embedded && embeddedPage === "live-dashboard";
+  const onQueueDrop = (id: string, toIndex: number) => vm.moveQueueTo(id, toIndex);
+  const renderQueueRows = () => (
+    <QueueDragList
+      ids={chip.queue}
+      enabled={canDragQueue}
+      onDragActiveChange={setQueueDragging}
+      onMove={onQueueDrop}
+      renderRow={(id, i, handle) => renderQueueRow(id, i, handle)}
+    />
+  );
 
   // The per-team queue ⋮ action sheet — shared so both surfaces get the identical menu.
   // Renders inline inside the pop-out modal (no nested RN modal) and, for the full page, as
@@ -5816,14 +5994,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
             <Row icon="arrow-up-circle-outline" label="Move to Top" disabled={isFirst} onPress={() => { close(); vm.reorderQueue(e.id, "top"); }} />
             <Row icon="arrow-down-circle-outline" label="Move to Bottom" disabled={isLast} last onPress={() => { close(); vm.reorderQueue(e.id, "bottom"); }} />
           </View>
-          {isWeb ? (
-            // Web: the same reason-gated chip override (openChipAdjust) and forfeit decision
-            // (openForfeit) the Players tab / player menus use. Native sheet unchanged.
-            <View style={styles.qActGroup}>
-              <Row icon="swap-vertical-outline" label="Manage Chips" disabled={e.status === "eliminated"} onPress={() => { close(); setQueueModalOpen(false); openChipAdjust(e, 0); }} />
-              <Row icon="exit-outline" danger last label="Forfeit" disabled={e.status === "eliminated"} onPress={() => { close(); setQueueModalOpen(false); openForfeit(e.id); }} />
-            </View>
-          ) : null}
+          {/* Web + native: the SAME reason-gated chip override (openChipAdjust) and forfeit
+              decision (openForfeit) the Players tab / player menus use — no second system.
+              Each opens only after this sheet / the Queue popup has fully dismissed. */}
+          <View style={styles.qActGroup}>
+            <Row icon="swap-vertical-outline" label="Manage Chips" disabled={e.status === "eliminated"} onPress={() => runAfterQueueClose(() => openChipAdjust(e, 0))} />
+            <Row icon="exit-outline" danger last label="Forfeit" disabled={e.status === "eliminated"} onPress={() => runAfterQueueClose(() => openForfeit(e.id))} />
+          </View>
           <View style={styles.qActGroup}>
             <Row icon="trash-outline" danger last label="Remove From Queue" onPress={() => { close(); confirmRemoveFromQueue(e); }} />
           </View>
@@ -5845,7 +6022,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           {chip.queue.length === 0 ? (
             <Text style={styles.hint}>Queue is empty.</Text>
           ) : (
-            chip.queue.map((qid, i) => renderQueueRow(qid, i))
+            renderQueueRows()
           )}
         </Section>
       );
@@ -5869,8 +6046,14 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={[styles.webTH, { width: webSc(56), textAlign: "right" }]}>RECORD</Text>
               <Text style={[styles.webTH, { width: webSc(72), textAlign: "right" }]}>CHIPS</Text>
               <Text style={[styles.webTH, { width: webSc(96), textAlign: "right" }]} numberOfLines={1}>ACTIONS</Text>
+              {canDragQueue && chip.queue.length > 1 ? <View style={styles.qDragHeadSpacer} /> : null}
             </View>
-            {chip.queue.map((qid, i) => {
+            <QueueDragList
+              ids={chip.queue}
+              enabled={canDragQueue}
+              onDragActiveChange={setQueueDragging}
+              onMove={onQueueDrop}
+              renderRow={(qid, i, dragHandle) => {
               const e = entryById(qid);
               if (!e) return null;
               const rs = queueRoundStatus(qid);
@@ -5891,9 +6074,11 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <Ionicons name="ellipsis-vertical" size={webMs(13)} color={COLORS.textSecondary} />
                     </TouchableOpacity>
                   </View>
+                  {dragHandle}
                 </View>
               );
-            })}
+              }}
+            />
           </View>
         )}
       </View>
@@ -6015,6 +6200,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   );
                 })}
             {occupied && <Row icon="refresh-outline" label="Clear Table" onPress={direct(() => confirmClearTable(t))} />}
+            {/* Native: one "Remove Player" row → pick the player → the SAME web flow
+                (confirmRemoveFromTable). Native Alerts, like Forfeit Team / Clear Table. */}
+            {!isWeb && occupied && <Row icon="person-remove-outline" label="Remove Player" onPress={direct(() => choosePlayerToRemove(t))} />}
             {!match && <Row icon="play-forward-outline" label="Assign Next Team" disabled={t.locked || (!holder && chip.queue.length < 2) || (!!holder && chip.queue.length < 1)} onPress={direct(() => vm.assignNextTeam(t.id))} />}
             {!match && <Row icon="hand-left-outline" label="Manually Assign" disabled={t.locked || chip.queue.length === 0} onPress={viaModal(() => setManualAssignId(t.id))} />}
             {occupied && <Row icon="swap-horizontal-outline" label="Move Team" disabled={!canMove} onPress={viaModal(() => setMoveFromId(t.id))} />}
@@ -6337,11 +6525,21 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   const renderHistory = () => (
     <Section title="History">
       {chip.events.length === 0 && <Text style={styles.hint}>No events yet.</Text>}
-      {chip.events.map((ev) => (
-        <View key={ev.id} style={styles.histRow}>
-          <Text style={styles.histText} numberOfLines={2}>{ev.text}</Text>
-        </View>
-      ))}
+      {chip.events.map((ev) => {
+        const numbered = chipEventMatchNumber(matchNumbering, ev);
+        return (
+          <View key={ev.id} style={styles.histRow}>
+            <Text style={styles.histText} numberOfLines={2}>
+              {numbered && (
+                <Text style={styles.histMatchNo}>
+                  {chipMatchLabel(numbered.number, compactMatchLabel)} · {formatChipResultTime(numbered.completedAt)} ·{" "}
+                </Text>
+              )}
+              {ev.text}
+            </Text>
+          </View>
+        );
+      })}
     </Section>
   );
 
@@ -6873,7 +7071,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           menu is opened from the pop-out Queue modal instead, that modal renders the sheet
           inline (renderQueueActionSheet); !queueModalOpen keeps exactly one path mounted so
           two RN modals never stack. */}
-      <Modal visible={queueMenuId != null && !queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueMenuId(null)}>
+      <Modal visible={queueMenuId != null && !queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueMenuId(null)} onDismiss={flushAfterQueueClose}>
         {renderQueueActionSheet()}
       </Modal>
       {dashAlertsModal}
@@ -7717,6 +7915,9 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   const ev = g.rep;
                   const meta = auditMeta(ev);
                   const matchInfo = ev.type === "match_result" ? auditMatchInfo(ev) : null;
+                  // Match # only on valid completed results (and the forfeit that completed a
+                  // live match) — never on chip adjusts / table / queue / shuffle rows.
+                  const numbered = chipEventMatchNumber(matchNumbering, ev);
                   const detail = auditDetailLines(ev);
                   const isUndoRedo = ev.type === "undo" || ev.type === "redo";
                   const isRestore = ev.type === "restore";
@@ -7734,7 +7935,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       <View style={styles.auditBody}>
                         <View style={styles.auditBodyTop}>
                           <Text style={[styles.auditType, { color: meta.color }]} numberOfLines={1}>
-                            {meta.title}{g.count > 1 ? ` (${g.count})` : ""}
+                            {numbered
+                              ? `${chipMatchLabel(numbered.number)} · ${ev.type === "match_result" ? "Result" : meta.title}`
+                              : meta.title}
+                            {g.count > 1 ? ` (${g.count})` : ""}
                           </Text>
                           <Text style={styles.auditStampText}>{auditStamp(ev.at)}</Text>
                           <TouchableOpacity
@@ -7761,11 +7965,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                             <Text style={styles.auditDetailTeam} numberOfLines={1}>{shortTeam(matchInfo.winner)}</Text>
                             <Text style={styles.auditDef}>def.</Text>
                             <Text style={styles.auditLoser} numberOfLines={1}>{shortTeam(matchInfo.loser)}</Text>
-                            {matchInfo.tableLabel && (
-                              <Text style={styles.auditDetailLine}>
-                                {matchInfo.tableLabel}{matchInfo.dur ? ` • ${fmtDur(matchInfo.dur)}` : ""}
-                              </Text>
-                            )}
+                            <Text style={styles.auditDetailLine}>
+                              {[
+                                formatChipResultTime(matchInfo.completedAt),
+                                matchInfo.tableLabel,
+                                matchInfo.dur ? formatElapsedClock(matchInfo.dur) : null,
+                              ].filter(Boolean).join(" · ")}
+                            </Text>
                           </View>
                         ) : detail ? (
                           <View style={styles.auditDetail}>
@@ -8053,7 +8259,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                       bestStreak={entry.bestStreak ?? 0}
                       isTeam={doubles}
                       perf={p.performanceRating != null ? { rating: p.performanceRating, delta: p.performanceDelta, avgOpponentFargo: p.avgOpp } : null}
-                      history={p.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opp, opponentFargo: h.oppFargo, tableLabel: h.table, durationMs: h.dur }))}
+                      history={p.history.map((h) => ({ id: h.id, won: h.won, opponentName: h.opp, opponentFargo: h.oppFargo, tableLabel: h.table, durationMs: h.dur, matchNumber: h.matchNumber, completedAt: h.completedAt }))}
                     />
                   </ScrollView>
 
@@ -8366,7 +8572,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                   : null;
                 const waitMs = holderWin?.endedAt ? now - new Date(holderWin.endedAt).getTime() : null;
                 const matchMs = match ? matchElapsedMs(match, now) : null;
-                const allHist = chip.matches.filter((m) => m.tableId === t.id && m.status !== "in_progress" && m.winnerId).slice().reverse();
+                // Valid results on this table, newest first, with their tournament-wide Match #.
+                const allHist = chipHistoryMatches(matchNumbering, chip.matches.filter((m) => m.tableId === t.id && m.winnerId));
                 const hist = allHist.slice(0, 3);
                 // Per-player mini-card for the detail matchup: name (anchor) + tournament
                 // Fargo snapshot (teamFargo = combined for doubles / p1 for singles, never
@@ -8447,11 +8654,12 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
                       <Text style={styles.tdSubhead}>{t.label} Match History</Text>
                       {hist.length === 0 && <Text style={styles.tdEmpty}>No matches on this table yet.</Text>}
-                      {hist.map((m) => {
+                      {hist.map(({ m, n }) => {
                         const w = entryById(m.winnerId);
                         const l = entryById(m.loserId);
                         return (
                           <Text key={m.id} style={styles.tdRecent}>
+                            {n && <Text style={styles.tdRecentNo}>{chipMatchLabel(n.number, compactMatchLabel)} · </Text>}
                             <Text style={styles.tdRecentWin}>{w ? shortTeam(w) : "?"}</Text>
                             <Text style={styles.tdRecentLose}> def. {l ? shortTeam(l) : "?"}</Text>
                           </Text>
@@ -8623,7 +8831,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       <ConfettiBurst ref={confettiRef} />
 
       {/* Queue manager — centered floating modal */}
-      <Modal visible={queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueModalOpen(false)}>
+      <Modal visible={queueModalOpen} transparent animationType="fade" onRequestClose={() => setQueueModalOpen(false)} onDismiss={flushAfterQueueClose}>
+        <ModalGestureRoot>
         <View style={styles.centerRoot}>
           <Pressable style={styles.centerDim} onPress={() => { setQueueMenuId(null); setQueueModalOpen(false); }} />
           <View style={styles.qFloatCard}>
@@ -8661,9 +8870,22 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
               <Text style={styles.qEmptySub}>Teams will appear here when they are waiting for a table.</Text>
             </View>
           ) : (
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator>
-              {chip.queue.map((qid, i) => renderQueueRow(qid, i))}
-            </ScrollView>
+            isWeb ? (
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }} showsVerticalScrollIndicator scrollEnabled={!queueDragging}>
+                {renderQueueRows()}
+              </ScrollView>
+            ) : (
+              // NATIVE TRIAL: react-native-reorderable-list owns the visual drag; the drop still
+              // goes through onQueueDrop → vm.moveQueueTo → engine moveQueueEntry.
+              <NativeQueueReorderList
+                ids={chip.queue}
+                enabled={canDragQueue}
+                onMove={onQueueDrop}
+                renderRow={(id, i, handle) => renderQueueRow(id, i, handle)}
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: webSc(SPACING.md) }}
+              />
+            )
           )}
 
           {/* Per-team action sheet (layered inside this modal — no nesting). Shared helper so
@@ -8671,6 +8893,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           {renderQueueActionSheet()}
           </View>
         </View>
+        </ModalGestureRoot>
       </Modal>
 
       {/* Player / team actions (⋮) — anchored dropdown */}
@@ -8751,10 +8974,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           <View style={styles.centerCard}>
             {(() => {
               const t = chip.tables.find((x) => x.id === tableHistoryId);
-              const all = t ? chip.matches.filter((m) => m.tableId === t.id && m.status !== "in_progress" && m.winnerId).slice().reverse() : [];
-              const durs = all
-                .map((m) => (m.endedAt ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime() : 0))
-                .filter((x) => x > 0);
+              const all = t ? chipHistoryMatches(matchNumbering, chip.matches.filter((m) => m.tableId === t.id && m.winnerId)) : [];
+              const durOf = (h: (typeof all)[number]) =>
+                h.n ? h.n.durationMs : h.m.endedAt ? new Date(h.m.endedAt).getTime() - new Date(h.m.startedAt).getTime() : null;
+              const durs = all.map((h) => durOf(h) ?? 0).filter((x) => x > 0);
               const avgMs = durs.length ? durs.reduce((s, x) => s + x, 0) / durs.length : null;
               return (
                 <>
@@ -8767,16 +8990,18 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
 
                   <ScrollView style={{ maxHeight: webSc(430), marginTop: webSc(SPACING.sm) }} showsVerticalScrollIndicator={false}>
                     {all.length === 0 && <Text style={styles.mhEmpty}>No completed matches on this table yet.</Text>}
-                    {all.map((m, i) => {
+                    {all.map((h, i) => {
+                      const m = h.m;
                       const w = entryById(m.winnerId);
                       const l = entryById(m.loserId);
-                      const dur = m.endedAt ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime() : null;
+                      const dur = durOf(h);
                       const open = histOpenIds.includes(m.id);
                       const toggle = () => setHistOpenIds((prev) => (prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]));
                       return (
                         <View key={m.id} style={[styles.mhEntry, i > 0 && styles.mhEntryDivider]}>
                           <TouchableOpacity style={styles.mhSnippet} onPress={toggle} activeOpacity={0.7}>
                             <View style={styles.mhTeams}>
+                              {h.n && <Text style={styles.mhMatchNo}>{chipMatchLabel(h.n.number)}</Text>}
                               <Text style={styles.mhWinner}>{w ? shortTeam(w) : "?"}</Text>
                               <Text style={styles.mhDef}>def.</Text>
                               <Text style={styles.mhLoser}>{l ? shortTeam(l) : "?"}</Text>
@@ -8788,8 +9013,8 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
                               {dur != null && (
                                 <View style={styles.mhDetailRow}><Text style={styles.mhDetailLbl}>Duration</Text><Text style={styles.mhDetailVal}>{fmtDur(dur)}</Text></View>
                               )}
-                              {m.endedAt && (
-                                <View style={styles.mhDetailRow}><Text style={styles.mhDetailLbl}>Completed</Text><Text style={styles.mhDetailVal}>{fmtEventTime(m.endedAt)}</Text></View>
+                              {h.completedAt && (
+                                <View style={styles.mhDetailRow}><Text style={styles.mhDetailLbl}>Completed</Text><Text style={styles.mhDetailVal}>{fmtEventTime(h.completedAt)}</Text></View>
                               )}
                             </View>
                           )}
@@ -8888,19 +9113,33 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           </View>
         );
       }
+      const liveScrollProps = {
+        ref: liveScrollRef,
+        style: styles.embeddedLiveFlex,
+        // Web desktop dashboard: wider shell on wide screens (see dashSideW); other live pages
+        // and native keep the shared shell.
+        contentContainerStyle:
+          isWeb && dashTwoCol && embeddedPage === "live-dashboard"
+            ? [styles.embeddedLiveScrollInner, { maxWidth: dashShellMaxW }]
+            : styles.embeddedLiveScrollInner,
+        showsVerticalScrollIndicator: false,
+        scrollEnabled: !queueDragging,
+        onTouchStart: closeOnTouch,
+        refreshControl: liveRefreshControl,
+      };
       return (
         <View style={styles.embeddedLiveFlex} ref={rootRef}>
           {recoveryStrip}
-          <ScrollView
-            ref={liveScrollRef}
-            style={styles.embeddedLiveFlex}
-            contentContainerStyle={styles.embeddedLiveScrollInner}
-            showsVerticalScrollIndicator={false}
-            onTouchStart={closeOnTouch}
-            refreshControl={liveRefreshControl}
-          >
-            {content()}
-          </ScrollView>
+          {nativeDashQueueDrag ? (
+            // Native dashboard: the library's ScrollViewContainer (a drop-in ScrollView that
+            // shares its scroll offset with the nested Queue drag list and pauses page scrolling
+            // during a drag), under a LOCAL gesture root — no app-wide restructuring.
+            <GestureHandlerRootView style={styles.embeddedLiveFlex}>
+              <ScrollViewContainer {...liveScrollProps}>{content()}</ScrollViewContainer>
+            </GestureHandlerRootView>
+          ) : (
+            <ScrollView {...liveScrollProps}>{content()}</ScrollView>
+          )}
           {modals}
         </View>
       );
@@ -8982,6 +9221,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!queueDragging}
           enableOnAndroid
           // ONE source of truth = positionEditingCard (absolute content target). Neuter
           // ALL of the library's keyboard scrolling so nothing competes:
@@ -9343,6 +9583,8 @@ const styles = StyleSheet.create({
   qRow2: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm), borderTopWidth: 1, borderTopColor: COLORS.border },
   // Web-only: tighter queue rows for denser scanning (mobile row unchanged).
   qRow2Web: { paddingVertical: SPACING.xs },
+  qRow2DragInset: { paddingHorizontal: webSc(SPACING.sm) },
+  qRow2Lifted: { borderTopColor: COLORS.transparent },
   qPos2: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.md), fontWeight: "700", minWidth: webSc(28), flexShrink: 0 },
   qNameCol: { flex: 1 },
   qName2: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600" },
@@ -9384,6 +9626,7 @@ const styles = StyleSheet.create({
   qmMetaDot: { color: COLORS.textMuted },
   qmWin: { color: COLORS.success, fontWeight: "800" },
   qmLoss: { color: COLORS.error, fontWeight: "800" },
+  qDragHeadSpacer: { width: 32 + SPACING.sm },
   qmMenuBtn: { width: webSc(30), alignItems: "center", justifyContent: "center", alignSelf: "stretch" },
   // Active table rows.
   atCard: { paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.md), borderBottomWidth: 1, borderBottomColor: COLORS.border },
@@ -9936,6 +10179,7 @@ const styles = StyleSheet.create({
   tdRecent: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm), paddingVertical: 3, lineHeight: webMs(FONT_SIZES.sm) * 1.35 },
   tdRecentWin: { color: COLORS.text, fontWeight: "700" },
   tdRecentLose: { color: COLORS.error },
+  tdRecentNo: { color: COLORS.textMuted, fontWeight: "800" },
   tdViewFull: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700" },
   tdViewFullBtn: { paddingTop: webSc(SPACING.sm), paddingBottom: webSc(SPACING.xs) },
   tdCompleteBtn: { backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.md), alignItems: "center", marginTop: webSc(SPACING.md) },
@@ -9961,6 +10205,7 @@ const styles = StyleSheet.create({
   mhTeams: { flex: 1 },
   mhWinner: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "800", lineHeight: webMs(FONT_SIZES.md) * 1.3 },
   mhDef: { color: COLORS.error, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", marginVertical: 1 },
+  mhMatchNo: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", marginBottom: 1 },
   mhLoser: { color: COLORS.error, fontSize: webMs(FONT_SIZES.md), fontWeight: "600", lineHeight: webMs(FONT_SIZES.md) * 1.3 },
   mhDetail: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.surface, borderRadius: RADIUS.md, paddingHorizontal: webSc(SPACING.md), paddingVertical: webSc(SPACING.sm) },
   mhDetailRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
@@ -10128,6 +10373,7 @@ const styles = StyleSheet.create({
 
   histRow: { paddingVertical: webSc(SPACING.xs), borderBottomWidth: 1, borderBottomColor: COLORS.border },
   histText: { color: COLORS.textSecondary, fontSize: webMs(FONT_SIZES.sm) },
+  histMatchNo: { color: COLORS.text, fontWeight: "800" },
 
   linkedTag: { color: COLORS.success, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", marginTop: 2 },
 

@@ -1,7 +1,8 @@
 // src/views/components/referral/ReferralShareCard.tsx
 // "Refer Friends" card: the signed-in user's referral code + link with Copy / Share.
 // Self-contained (owns its viewmodel) so the Giveaways page and, later, Profile render the exact
-// same component. Attribution only — deliberately NO reward language.
+// same component. The reward note (+1 Giveaway Entry per friend who signs up) renders only while
+// REFERRAL_REWARDS_LIVE is on — the reward itself is granted server-side in claim_referral.
 //
 //   Web (wide):   [👥 Refer Friends / Share Compete with friends.] [CODE] [Copy Link][Share]
 //   Web (narrow): stacked, both buttons.
@@ -18,6 +19,7 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 import { useMyReferralCode } from "../../../viewmodels/hooks/use.my.referral.code";
+import { REFERRAL_REWARDS_LIVE, REFERRAL_REWARD_NOTE } from "../../../utils/referral";
 
 const isWeb = Platform.OS === "web";
 const WIDE_BREAKPOINT = 640;
@@ -44,6 +46,12 @@ export function ReferralShareCard() {
     </Pressable>
   );
 
+  const rewardNote = REFERRAL_REWARDS_LIVE ? (
+    <Text allowFontScaling={false} style={st.rewardNote}>
+      {REFERRAL_REWARD_NOTE}
+    </Text>
+  ) : null;
+
   const heading = (
     <View style={st.headingBlock}>
       <Text allowFontScaling={false} style={st.title}>{"👥"}  Refer Friends</Text>
@@ -67,13 +75,16 @@ export function ReferralShareCard() {
 
   if (wide) {
     return (
-      <View style={[st.card, st.rowWide]}>
-        {heading}
-        {codeChip}
-        <View style={st.buttonsWide}>
-          {copyButton}
-          {shareButton}
+      <View style={[st.card, st.cardWide]}>
+        <View style={st.rowWide}>
+          {heading}
+          {codeChip}
+          <View style={st.buttonsWide}>
+            {copyButton}
+            {shareButton}
+          </View>
         </View>
+        {rewardNote}
       </View>
     );
   }
@@ -88,6 +99,7 @@ export function ReferralShareCard() {
         {copyButton}
         {shareButton}
       </View>
+      {rewardNote}
     </View>
   );
 }
@@ -101,8 +113,16 @@ const st = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm + SPACING.xs),
     paddingHorizontal: webSc(SPACING.md),
   },
-  // flex: 1 fills the wide-web column so it matches the Giveaway Entries card's height exactly.
-  rowWide: { flex: 1, flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
+  // flex: 1 fills the wide-web column so it matches the Giveaway Entries card's height exactly;
+  // the row (and the optional reward note under it) stay vertically centered inside.
+  cardWide: { flex: 1, justifyContent: "center" },
+  rowWide: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
+  rewardNote: {
+    fontSize: webMs(FONT_SIZES.xs),
+    color: COLORS.warning,
+    textAlign: "center",
+    marginTop: webSc(SPACING.xs + 2),
+  },
   rowTop: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   headingBlock: { flex: 1, minWidth: 0 },
   title: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },

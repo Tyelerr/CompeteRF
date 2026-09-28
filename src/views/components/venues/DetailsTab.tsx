@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,9 +16,62 @@ interface DetailsTabProps {
   onChange: (venue: VenueDetails) => void;
   onSave: () => void;
   saving: boolean;
+  // "desktop" (web Venue workspace): grouped fields at sensible widths + a compact
+  // right-aligned Save. Same fields / onChange / onSave. Default "stacked" = unchanged.
+  layout?: "stacked" | "desktop";
 }
 
-export const DetailsTab = ({
+export const DetailsTab = (props: DetailsTabProps) =>
+  props.layout === "desktop" ? <DesktopDetails {...props} /> : <StackedDetails {...props} />;
+
+const DesktopDetails = ({ venue, onChange, onSave, saving }: DetailsTabProps) => {
+  const field = (
+    label: string,
+    value: string,
+    set: (v: string) => void,
+    extra?: Partial<ComponentProps<typeof TextInput>>,
+  ) => (
+    <View style={d.group}>
+      <Text style={d.label}>{label}</Text>
+      <TextInput
+        style={d.input}
+        value={value}
+        onChangeText={set}
+        placeholderTextColor={COLORS.textMuted}
+        {...extra}
+      />
+    </View>
+  );
+  return (
+    <View style={d.container}>
+      <View style={d.form}>
+        {field("Venue Name", venue.venue, (v) => onChange({ ...venue, venue: v }), { placeholder: "Venue name" })}
+        {field("Address", venue.address, (v) => onChange({ ...venue, address: v }), { placeholder: "Street address" })}
+        <View style={d.row}>
+          <View style={d.city}>
+            {field("City", venue.city, (v) => onChange({ ...venue, city: v }), { placeholder: "City" })}
+          </View>
+          <View style={d.state}>
+            {field("State", venue.state, (v) => onChange({ ...venue, state: v }), { placeholder: "ST", maxLength: 2, autoCapitalize: "characters" })}
+          </View>
+          <View style={d.zip}>
+            {field("ZIP Code", venue.zip_code, (v) => onChange({ ...venue, zip_code: v }), { placeholder: "12345", keyboardType: "numeric", maxLength: 10 })}
+          </View>
+        </View>
+        <View style={d.phone}>
+          {field("Phone", venue.phone || "", (v) => onChange({ ...venue, phone: v }), { placeholder: "(555) 555-5555", keyboardType: "phone-pad" })}
+        </View>
+      </View>
+      <View style={d.footer}>
+        <TouchableOpacity style={[d.save, saving && styles.saveButtonDisabled]} onPress={onSave} disabled={saving} activeOpacity={0.85}>
+          <Text style={d.saveText}>{saving ? "Saving..." : "Save Changes"}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const StackedDetails = ({
   venue,
   onChange,
   onSave,
@@ -108,6 +162,31 @@ export const DetailsTab = ({
     </TouchableOpacity>
   </View>
 );
+
+const d = StyleSheet.create({
+  container: { paddingHorizontal: SPACING.sm, paddingTop: SPACING.sm },
+  form: { maxWidth: 680 },
+  group: { marginBottom: SPACING.md },
+  label: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginBottom: 5, fontWeight: "600" },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  row: { flexDirection: "row", gap: SPACING.sm },
+  city: { flex: 1 },
+  state: { width: 90 },
+  zip: { width: 140 },
+  phone: { width: 260 },
+  footer: { flexDirection: "row", justifyContent: "flex-end", borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: SPACING.md, marginTop: SPACING.xs },
+  save: { backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg, alignItems: "center" },
+  saveText: { color: COLORS.white, fontSize: FONT_SIZES.sm, fontWeight: "700" },
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -24,6 +24,7 @@ import {
   ChipTable,
   ChipTier,
 } from "../types/chip.types";
+import { chipRoundPlayedIds, currentShuffleRoundStart } from "../../utils/chip-round-participation";
 
 // ── ids / clone ──────────────────────────────────────────────────────────────
 let idSeq = 0;
@@ -174,6 +175,80 @@ const roundSeatable = (s: ChipState, id: string): boolean =>
   !s.shuffleRound || (s.roundRemaining?.includes(id) ?? false);
 const roundSeat = (s: ChipState, id: string): void => {
   if (s.roundRemaining) s.roundRemaining = s.roundRemaining.filter((x) => x !== id);
+};
+// A seat that ended WITHOUT a valid result (Clear Table / Remove Player / Return active
+// matches void the match or the not-started assignment) must not use up the entry's turn:
+// "played this round" means a valid completed result (utils/chip-round-participation), not
+// having been seated. Put such entries back on roundRemaining so they are still owed their
+// turn (seatable again this round, and the round can't complete without them). Only while a
+// round is actively seating — during a pre-shuffle drain the round is over and the next
+// reshuffle redraws everyone anyway. Entries that already have a valid result this round
+// (e.g. a winner-stays holder) are never re-added.
+// SELF-HEAL for an active Shuffle round (load + every state transition): the owed-a-turn list
+// (roundRemaining — a SCHEDULING list) is re-derived against the authoritative participation
+// (a valid completed result this round — utils/chip-round-participation). Any round
+// participant who
+//   • is alive and in the field,
+//   • has NO valid result this round,
+//   • is NOT seated (holder / pending challenger / live match — they are receiving their turn),
+//   • is NOT already on roundRemaining,
+//   • was NOT eliminated during this round (Buy Back / chip Restore bring such players back
+//     mid-round and deliberately leave them for the next reshuffle),
+//   • and (when the reshuffle recorded its line-up) started this round,
+// is still owed a turn → appended to roundRemaining (in queue order). The QUEUE is never
+// touched (no reorder, no duplicate), and nobody is ever removed. Also de-duplicates
+// roundRemaining. Only while a round is actively seating (not in a pre-shuffle drain).
+// Repairs historical rounds where Remove Player / Clear Table used up a turn with no result.
+// Idempotent; returns input unchanged when nothing needs repair.
+export const reconcileShuffleRound = (input: ChipState): ChipState => {
+  if (!input.shuffleRound || input.reshufflePending || input.shuffleReady) return input;
+  const start = currentShuffleRoundStart(input.events);
+  if (!start) return input;
+  const rr = input.roundRemaining ?? [];
+  const deduped = [...new Set(rr)];
+  const owed = new Set(deduped);
+  const lineup = Array.isArray(start.payload?.roundIds) ? new Set(start.payload.roundIds as string[]) : null;
+  const played = chipRoundPlayedIds(input);
+  const seated = new Set<string>();
+  for (const t of input.tables) {
+    if (t.holderId) seated.add(t.holderId);
+    if (t.pendingChallengerId) seated.add(t.pendingChallengerId);
+  }
+  for (const m of input.matches) {
+    if (m.status === "in_progress") { seated.add(m.aId); seated.add(m.bId); }
+  }
+  // Eliminated at any point during this round (non-reverted elimination event after start).
+  const startAt = Date.parse(start.at) || 0;
+  const outThisRound = new Set<string>();
+  for (const ev of input.events) {
+    if (ev.superseded || ev.type !== "elimination") continue;
+    const at = Date.parse(ev.at) || 0;
+    if (at < startAt || (at === startAt && ev.id <= start.id)) continue;
+    const id = ev.payload?.entryId;
+    if (typeof id === "string") outThisRound.add(id);
+  }
+  const add: string[] = [];
+  for (const id of input.queue) {
+    if (owed.has(id) || played.has(id) || seated.has(id) || outThisRound.has(id)) continue;
+    if (lineup && !lineup.has(id)) continue;
+    const e = entryById(input, id);
+    if (!e || e.status === "eliminated" || !isChipFieldMember(input, e)) continue;
+    add.push(id);
+    owed.add(id);
+  }
+  if (add.length === 0 && deduped.length === rr.length) return input;
+  return { ...input, roundRemaining: [...deduped, ...add] };
+};
+
+const restoreRoundTurn = (s: ChipState, ids: string[]): void => {
+  if (!s.shuffleRound || s.reshufflePending || s.shuffleReady || !s.roundRemaining) return;
+  const played = chipRoundPlayedIds(s);
+  for (const id of ids) {
+    const e = entryById(s, id);
+    if (!e || e.status === "eliminated") continue;
+    if (played.has(id) || s.roundRemaining.includes(id)) continue;
+    s.roundRemaining = [...s.roundRemaining, id];
+  }
 };
 
 // ── Anti-repeat: prevent an IMMEDIATE rematch (most-recent-opponent) ────────────
@@ -1254,7 +1329,8 @@ export const forfeitEntry = (
         }
       }
     }
-    pushEvent(s, "forfeit", `${teamName(e)} forfeited vs ${opp ? teamName(opp) : "opponent"}`, by, { entryId, oppId, reason: meta?.reason ?? null, notes: meta?.notes ?? null, actorName: meta?.actorName ?? null });
+    // matchId: the live match this forfeit completed (tournament-wide Match # numbering).
+    pushEvent(s, "forfeit", `${teamName(e)} forfeited vs ${opp ? teamName(opp) : "opponent"}`, by, { entryId, oppId, matchId: liveMatch.id, reason: meta?.reason ?? null, notes: meta?.notes ?? null, actorName: meta?.actorName ?? null });
   }
 
   // Force elimination regardless of remaining chips.
@@ -1329,6 +1405,14 @@ export const forfeitMatch = (
 };
 
 // ── queue reordering ──────────────────────────────────────────────────────────
+// ONE queue-order primitive: take the entry out and re-insert it at index j of the
+// remaining line. Move Up/Down/Top/Bottom and the native drag handle all use it, so a
+// drag of N rows yields exactly the order N single-step moves would.
+const spliceQueueEntry = (s: ChipState, i: number, j: number): void => {
+  const [id] = s.queue.splice(i, 1);
+  s.queue.splice(Math.max(0, Math.min(s.queue.length, j)), 0, id);
+};
+
 // TD moves a queued team up/down one spot, or to the top/bottom of the line.
 export const reorderQueue = (
   input: ChipState,
@@ -1339,15 +1423,50 @@ export const reorderQueue = (
   const s = clone(input);
   const i = s.queue.indexOf(entryId);
   if (i < 0) return input;
-  s.queue.splice(i, 1);
+  const rest = s.queue.length - 1;
   const j =
     to === "up" ? Math.max(0, i - 1)
-    : to === "down" ? Math.min(s.queue.length, i + 1)
+    : to === "down" ? Math.min(rest, i + 1)
     : to === "top" ? 0
-    : s.queue.length;
-  s.queue.splice(j, 0, entryId);
+    : rest;
+  spliceQueueEntry(s, i, j);
   const e = entryById(s, entryId);
-  pushEvent(s, "manual", `${e ? teamName(e) : "Team"} moved ${to} in the queue`, by);
+  // act "queue_moved" = the ONE public queue-reorder event (menu moves + drag share it); the
+  // spectator feed renders it from the positions (utils/chip-activity).
+  pushEvent(s, "manual", `${e ? teamName(e) : "Team"} moved ${to} in the queue`, by, {
+    act: "queue_moved",
+    entryId,
+    teamName: e ? teamName(e) : null,
+    fromIndex: i,
+    toIndex: j,
+  });
+  return s;
+};
+
+// TD drags a queued team to an exact queue position (0-based, clamped). Same primitive
+// and same restrictions as reorderQueue — only an entry already IN the queue can move
+// (playing / seated / eliminated never are). Dropping in place changes nothing: no save,
+// no audit event, no restore point.
+export const moveQueueEntry = (
+  input: ChipState,
+  entryId: string,
+  toIndex: number,
+  by?: number | null,
+): ChipState => {
+  const i = input.queue.indexOf(entryId);
+  if (i < 0 || !Number.isFinite(toIndex)) return input;
+  const j = Math.max(0, Math.min(input.queue.length - 1, Math.round(toIndex)));
+  if (j === i) return input;
+  const s = clone(input);
+  spliceQueueEntry(s, i, j);
+  const e = entryById(s, entryId);
+  pushEvent(s, "manual", `${e ? teamName(e) : "Team"} moved from #${i + 1} to #${j + 1} in the queue`, by, {
+    act: "queue_moved",
+    entryId,
+    teamName: e ? teamName(e) : null,
+    fromIndex: i,
+    toIndex: j,
+  });
   return s;
 };
 
@@ -1569,7 +1688,12 @@ export const finalizeReshuffle = (
   // A new round begins: every shuffled survivor is round-remaining until seated.
   s.shuffleRound = !!s.shuffleMode;
   s.roundRemaining = s.shuffleMode ? [...s.queue] : [];
-  pushEvent(s, "shuffle", `Reshuffle #${s.reshuffleCount} · ${seed.length} entries`, by, { act: "reshuffled" });
+  // roundIds: the round's starting line-up (the entries owed a turn this round) — lets the
+  // round self-heal (reconcileShuffleRound) know round membership exactly. Payload only.
+  pushEvent(s, "shuffle", `Reshuffle #${s.reshuffleCount} · ${seed.length} entries`, by, {
+    act: "reshuffled",
+    roundIds: [...s.queue],
+  });
   // ANNOUNCE the new round's opening matchups (holder + pending challenger, NO timer)
   // — exactly like the tournament's opening. The TD starts them via Start All / Start
   // Remaining / individual Start Match; nothing auto-starts. We seat the pairs here
@@ -2042,6 +2166,7 @@ export const clearTable = (
   }
   s.queue = s.queue.filter((id) => !alive.includes(id));
   s.queue = destination === "next" ? [...alive, ...s.queue] : [...s.queue, ...alive];
+  restoreRoundTurn(s, alive); // no result was recorded for this seat → turn not used
 
   t.matchId = null;
   t.holderId = null;
@@ -2158,6 +2283,9 @@ export const removeFromTable = (
   removed.tableId = null;
   s.queue = s.queue.filter((id) => id !== entryId);
   s.queue = destination === "next" ? [entryId, ...s.queue] : [...s.queue, entryId];
+  // No result was recorded for the removed seat → its round turn isn't used up. A remaining
+  // entry that stays seated keeps its seat; one that was requeued gets its turn back too.
+  restoreRoundTurn(s, remainingRequeued && remainingId ? [entryId, remainingId] : [entryId]);
 
   const rem = remainingId ? entryById(s, remainingId) : null;
   const destLabel = destination === "next" ? "next in queue" : "end of queue";
@@ -2325,7 +2453,10 @@ export const moveTable = (
 };
 
 // TD manually seats the next eligible team(s) onto one idle table (a holder gets
-// the front challenger; an empty table gets two). Respects the table anti-repeat.
+// the front challenger; an empty table gets two). Respects the table anti-repeat AND the
+// Shuffle round exactly like automatic seating (seatAllTables): the challenger comes from
+// takeChallenger (round-aware) and is marked seated for the round; an empty table takes the
+// round-aware pair (takePair — outside a Shuffle round that is simply the first two queued).
 export const assignNextTeam = (
   input: ChipState,
   tableId: string,
@@ -2341,14 +2472,29 @@ export const assignNextTeam = (
       table.pendingChallengerId = challenger;
       const ce = entryById(s, challenger);
       if (ce) { ce.status = "playing"; ce.tableId = table.id; }
+      roundSeat(s, challenger); // this team now has its turn this round (as seatAllTables)
     }
-  } else if (s.queue.length >= 2) {
-    const a = takeAny(s) as string;
-    const b = takeAny(s) as string;
-    table.lastLoserId = null;
-    startMatch(s, table, a, b);
+  } else {
+    const pair = takePair(s);
+    if (pair) {
+      table.lastLoserId = null;
+      startMatch(s, table, pair[0], pair[1]);
+    }
   }
   return s;
+};
+
+// Read-only: would assignNextTeam actually seat someone on this table right now? Drives the
+// native table-card "Assign Next Team" / "Assign Next Match" buttons so they never render as
+// a no-op. Same gates as assignNextTeam + automatic seating: a live (not finished) event, not
+// draining for a reshuffle, an idle usable table, and enough ROUND-ELIGIBLE queued entries
+// (one for a waiting holder, two for an empty table).
+export const canAssignNextTeam = (s: ChipState, tableId: string): boolean => {
+  if (!s.startedAt || s.finishedAt || s.reshufflePending || s.shuffleReady) return false;
+  const table = s.tables.find((t) => t.id === tableId);
+  if (!table || table.inactive || table.locked || table.closing || table.matchId || table.pendingChallengerId) return false;
+  const eligible = s.queue.filter((id) => roundSeatable(s, id)).length;
+  return table.holderId ? eligible >= 1 : eligible >= 2;
 };
 
 // TD manually assigns a SPECIFIC queued team onto a table (override). On a holder

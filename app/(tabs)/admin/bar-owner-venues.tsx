@@ -1,4 +1,4 @@
-﻿import { useRouter } from "expo-router";
+﻿import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   FlatList,
@@ -18,6 +18,7 @@ import { AdminHeader, AdminSearchBar } from "../../../src/views/components/admin
 import { EmptyState } from "../../../src/views/components/dashboard";
 import { BarOwnerVenueCard } from "../../../src/views/components/venues";
 import { VenueTeamModal } from "../../../src/views/components/venues/VenueTeamModal";
+import { VenueSection, VenueWorkspace } from "../../../src/views/components/venues/VenueWorkspace";
 
 const isWeb = Platform.OS === "web";
 
@@ -25,6 +26,8 @@ export default function BarOwnerVenuesScreen() {
   const router = useRouter();
   const vm = useBarOwnerVenues();
   const { profile } = useAuthContext();
+  // Web workspace selection (venue + section) lives in the URL.
+  const params = useLocalSearchParams<{ venue?: string; section?: string }>();
 
   const [teamModalVenueId, setTeamModalVenueId] = useState<number | null>(null);
   const [teamModalVenueName, setTeamModalVenueName] = useState("");
@@ -50,6 +53,40 @@ export default function BarOwnerVenuesScreen() {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.loadingText}>Loading venues...</Text>
+      </View>
+    );
+  }
+
+  // Web: the venue control panel. One venue → straight into its workspace (no search /
+  // list / pagination); several → the same workspace with a venue picker in the sidebar.
+  // Details / Tables / Directors are the existing components + viewmodels (edit-venue).
+  if (isWeb && vm.venues.length > 0 && !vm.searchQuery) {
+    const wantId = Number(params.venue);
+    const selected = vm.venues.find((v) => v.id === wantId) ?? vm.venues[0];
+    const section: VenueSection =
+      params.section === "tables" || params.section === "directors" ? params.section : "details";
+    return (
+      <View style={[styles.container, styles.containerWorkspaceWeb]}>
+        <VenueTeamModal
+          visible={teamModalVenueId !== null}
+          venueId={teamModalVenueId}
+          venueName={teamModalVenueName}
+          currentUserId={profile?.id_auto ?? 0}
+          onClose={() => { setTeamModalVenueId(null); vm.onRefresh(); }}
+        />
+        <VenueWorkspace
+          venues={vm.venues}
+          selected={selected}
+          onSelectVenue={(vid) => router.setParams({ venue: String(vid), section })}
+          section={section}
+          onSelectSection={(s) => router.setParams({ venue: String(selected.id), section: s })}
+          backLabel="Back"
+          onBack={() => router.back()}
+          topAction={{ label: "+ Add Venue", onPress: handleCreateVenue }}
+          actions={[
+            { label: "Manage Team", icon: "people-circle-outline", tone: "primary", onPress: () => handleManageTeam(selected.id, selected.venue) },
+          ]}
+        />
       </View>
     );
   }
@@ -111,6 +148,7 @@ export default function BarOwnerVenuesScreen() {
 
 const styles = StyleSheet.create({
   scrollContentWeb: { paddingBottom: SPACING.xl },
+  containerWorkspaceWeb: { maxWidth: 1240 },
   container: {
     ...Platform.select({ web: { maxWidth: 860, width: "100%" as any, alignSelf: "center" as any } }),
     flex: 1,

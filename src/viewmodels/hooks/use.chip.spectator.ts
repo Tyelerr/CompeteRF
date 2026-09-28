@@ -30,6 +30,8 @@ import {
   toPublicActivityFeed,
 } from "../../utils/chip-activity";
 import { computePerformance, PerfGame } from "../../utils/performance";
+import { ChipMatchNumbering, chipHistoryMatches, numberChipMatches } from "../../utils/chip-match-numbers";
+import { chipRoundPlayedIds, chipRoundStatusFor } from "../../utils/chip-round-participation";
 
 // Display names follow the shared chip rule (singles full, doubles "First L. / First L.").
 // `fullName` (engine teamName) is kept only for stable sort tie-breaks, never for display.
@@ -137,6 +139,8 @@ export interface SpecHistoryRow {
   tableLabel: string | null;
   durationMs: number | null;
   endedAt: string | null;
+  matchNumber: number | null; // tournament-wide Match # (utils/chip-match-numbers)
+  completedAt: string | null; // the result's completion time
 }
 export interface SpecPlayerProfile {
   id: string;
@@ -291,6 +295,7 @@ const buildProfile = (
   s: ChipState,
   e: ChipEntry,
   finished: boolean,
+  numbering: ChipMatchNumbering,
 ): SpecPlayerProfile => {
   const nameOf = (id: string | null | undefined): string => {
     const x = id ? s.entries.find((y) => y.id === id) : null;
@@ -314,10 +319,16 @@ const buildProfile = (
         new Date(a.endedAt as string).getTime(),
     );
 
-  const history: SpecHistoryRow[] = finishedMatches.map((m) => {
+  // History rows: valid results only (reverted ones hidden), newest completion first, each
+  // with its tournament-wide Match # — identical to the admin view. Stats keep finishedMatches.
+  const history: SpecHistoryRow[] = chipHistoryMatches(
+    numbering,
+    s.matches.filter((m) => m.aId === e.id || m.bId === e.id),
+  ).map(({ m, n, completedAt }) => {
     const oppId = m.aId === e.id ? m.bId : m.aId;
-    const dur =
-      m.endedAt && m.startedAt
+    const dur = n
+      ? n.durationMs
+      : m.endedAt && m.startedAt
         ? new Date(m.endedAt).getTime() - new Date(m.startedAt).getTime()
         : null;
     return {
@@ -328,6 +339,8 @@ const buildProfile = (
       tableLabel: tableLabelOf(m.tableId),
       durationMs: dur != null && dur > 0 ? dur : null,
       endedAt: m.endedAt ?? null,
+      matchNumber: n?.number ?? null,
+      completedAt,
     };
   });
 
@@ -391,6 +404,8 @@ const buildSpectatorView = (
   durableResults?: ChipResultRow[] | null,
 ): ChipSpectatorView => {
   const d = dashboard(s);
+  // Tournament-wide Match # — the same shared derivation the admin screens use.
+  const numbering = numberChipMatches(s);
   // "(You)" — the viewing user's OWN entry (team-level for doubles: either partner's
   // profile id matches → the one team row is theirs). null for spectators/admins who
   // aren't entered. Matches the player hub's own p1/p2ProfileId test.
@@ -547,22 +562,10 @@ const buildSpectatorView = (
   // = null (at-table, NOT played — these aren't in the queue anyway, but the derivation
   // must never call a seated/live entry "played"); "played" = otherwise (had its turn
   // and returned). NOT derived from !roundRemaining alone.
-  const roundRemainingSet = new Set(s.roundRemaining ?? []);
-  const onTableIds = new Set<string>();
-  for (const t of s.tables) {
-    if (t.inactive) continue;
-    if (t.holderId) onTableIds.add(t.holderId);
-    if (t.pendingChallengerId) onTableIds.add(t.pendingChallengerId);
-  }
-  for (const mm of s.matches) {
-    if (mm.status === "in_progress") { onTableIds.add(mm.aId); onTableIds.add(mm.bId); }
-  }
-  const roundStatusFor = (id: string): "waiting" | "played" | null => {
-    if (!s.shuffleRound) return null;
-    if (roundRemainingSet.has(id)) return "waiting";
-    if (onTableIds.has(id)) return null; // seated / live — at table, not yet completed
-    return "played";
-  };
+  // Shared rule (utils/chip-round-participation): "played" = a VALID completed result this
+  // round — never just seated / assigned / a voided match.
+  const roundPlayedIds = chipRoundPlayedIds(s);
+  const roundStatusFor = (id: string): "waiting" | "played" | null => chipRoundStatusFor(s, roundPlayedIds, id);
   const fullQueue: SpecQueueRow[] = s.queue
     .map((id, i) => {
       const e = entryById(id);
@@ -609,7 +612,7 @@ const buildSpectatorView = (
   // Activity feed — one centralized event→public mapper (utils/chip-activity),
   // newest first, TD-only noise + reverted events dropped, wording humanized. The
   // FULL feed backs the "View Full Log" modal + its count; the preview shows 5.
-  const activity: SpecActivity[] = toPublicActivityFeed(s.events, Number.POSITIVE_INFINITY);
+  const activity: SpecActivity[] = toPublicActivityFeed(s.events, Number.POSITIVE_INFINITY, numbering);
   const activityPreview = activity.slice(0, 5);
 
   // Players list — sorted by current chip standings (most chips first), with
@@ -768,7 +771,7 @@ const buildSpectatorView = (
   // Completed-recap stats (items 13/14) — derived from actual results; null while live.
   let stats: SpecStats | null = null;
   if (finished) {
-    const fieldProfiles = s.entries.filter((e) => isChipFieldMember(s, e)).map((e) => buildProfile(s, e, finished));
+    const fieldProfiles = s.entries.filter((e) => isChipFieldMember(s, e)).map((e) => buildProfile(s, e, finished, numbering));
     const lead = (
       arr: typeof fieldProfiles,
       cmp: (a: (typeof fieldProfiles)[number], b: (typeof fieldProfiles)[number]) => number,
@@ -861,7 +864,7 @@ const buildSpectatorView = (
     stats,
     profileFor: (entryId: string) => {
       const e = entryById(entryId);
-      return e ? buildProfile(s, e, finished) : null;
+      return e ? buildProfile(s, e, finished, numbering) : null;
     },
   };
 };
