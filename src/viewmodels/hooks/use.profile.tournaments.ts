@@ -161,13 +161,13 @@ export const useProfileTournaments = (
   // carries its real registration row (and leaves the Registered bucket) promptly.
   const resyncKey = useRef("");
   useEffect(() => {
-    if (!liveListNeedsResync(clientLive, rpcLive)) return;
+    if (!playerId || !liveListNeedsResync(clientLive, rpcLive)) return;
     const key = rpcLive.map((t) => t.tournament?.id).sort().join(",");
     if (key === resyncKey.current) return;
     resyncKey.current = key;
     refetch();
     teamsQuery.refetch();
-  }, [clientLive, rpcLive, refetch, teamsQuery]);
+  }, [playerId, clientLive, rpcLive, refetch, teamsQuery]);
 
   const completed = useMemo(() => all.filter(isCompleted), [all]);
   // "Registered" = signed up but gameplay has NOT begun (and not completed). Once a
@@ -180,9 +180,15 @@ export const useProfileTournaments = (
     [all],
   );
 
+  // A manual refetch() bypasses `enabled` (React Query v5), so honour the same guard here:
+  // Profile focus can fire before the profile hydrates, and an id-less refetch would query
+  // player_id=eq.undefined (400). Once the id arrives the enabled queries load on their own.
   const refetchAll = useMemo(
-    () => () => Promise.all([refetch(), teamsQuery.refetch(), liveQuery.refetch()]),
-    [refetch, teamsQuery, liveQuery],
+    () => () =>
+      playerId
+        ? Promise.all([refetch(), teamsQuery.refetch(), liveQuery.refetch()])
+        : Promise.resolve([]),
+    [playerId, refetch, teamsQuery, liveQuery],
   );
 
   // First-load flag for the whole live check (individual + team). Used by Profile to

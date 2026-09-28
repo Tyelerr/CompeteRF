@@ -323,7 +323,7 @@ test("O: public (spectator / player hub) loads read the privacy views, managers 
 });
 
 test("P: migration — views omit restore_points / version / actor_id, strip actorName + private reasons, hide TD-only types", () => {
-  const sql = readFileSync(join(root, "supabase/migrations/20261009120000_chip_public_read_privacy.sql"), "utf8");
+  const sql = readFileSync(join(root, "supabase/pending/20261009120000_chip_public_read_privacy.sql"), "utf8");
   const cfgView = sql.slice(sql.indexOf("create or replace view public.chip_config_public"), sql.indexOf("create or replace view public.chip_events_public"));
   assert.ok(!/restore_points|\bversion\b/.test(cfgView.replace(/--.*$/gm, "")));
   const evView = sql.slice(sql.indexOf("create or replace view public.chip_events_public"), sql.indexOf("revoke all"));
