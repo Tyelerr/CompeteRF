@@ -19,6 +19,7 @@ const TD = new Set<string>([ROLES.TOURNAMENT_DIRECTOR, ...OWNER]);
 // default to "td" (the admin stack is staff-only).
 const ROUTE_ACCESS: Record<string, Access> = {
   "": "signed_in", // /admin — the role router (shows "No Dashboard Access" to basic users)
+  index: "signed_in", // the same screen by its route name (screen-level gate uses route names)
   "notification-preferences": "signed_in",
 
   "bulk-import": "super",

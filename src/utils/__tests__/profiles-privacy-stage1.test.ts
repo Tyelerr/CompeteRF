@@ -83,6 +83,20 @@ test("admin routes: bar owner = owner + TD tools; admins everything except super
   assert.ok(canAccessAdminPath("/admin/bulk-import", SA));
 });
 
+test("admin routes: screen-level gate uses ROUTE NAMES (index, edit-user/[id], tournaments/…)", () => {
+  // AdminScreenGate calls canAccessAdminPath(`/admin/${route.name}`) for the screen actually
+  // rendered — independent of the URL (static-web redirects can change the URL first).
+  assert.ok(canAccessAdminPath("/admin/index", B), "admin index stays reachable (No Dashboard Access)");
+  assert.equal(canAccessAdminPath("/admin/user-management", B), false);
+  assert.equal(canAccessAdminPath("/admin/edit-user/[id]", B), false);
+  assert.equal(canAccessAdminPath("/admin/edit-user/[id]", TD), false);
+  assert.ok(canAccessAdminPath("/admin/edit-user/[id]", CA));
+  assert.ok(canAccessAdminPath("/admin/manage-tournament/[id]", TD));
+  assert.equal(canAccessAdminPath("/admin/manage-tournament/[id]", B), false);
+  assert.ok(canAccessAdminPath("/admin/tournament-analytics/index", TD));
+  assert.equal(canAccessAdminPath("/admin/tournaments/admin-tournament-manager", BO), false);
+});
+
 test("admin routes: path parsing — groups, trailing slash, query, nested ids; unknown routes default to staff-only", () => {
   assert.equal(adminRouteAccess("/(tabs)/admin/user-management/"), "admin");
   assert.equal(adminRouteAccess("/admin/edit-user/abc?x=1"), "admin");

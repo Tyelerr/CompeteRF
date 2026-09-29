@@ -64,9 +64,12 @@ export const useEditUser = (userId: string) => {
   const [status, setStatus] = useState<UserStatus>("active");
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Another user's email / status / activity: load ONLY for Compete admins (defense in depth
+  // under the route gates).
+  const isAdminViewer = currentUserRole === "compete_admin" || currentUserRole === "super_admin";
   useEffect(() => {
-    if (userId) loadUser();
-  }, [userId]);
+    if (userId && isAdminViewer) loadUser();
+  }, [userId, isAdminViewer]);
 
   useEffect(() => {
     if (user) {
@@ -80,6 +83,7 @@ export const useEditUser = (userId: string) => {
   }, [firstName, lastName, role, status, user]);
 
   const loadUser = async () => {
+    if (!isAdminViewer) { setLoading(false); return; }
     try {
       // last_active_at lives on profiles and is updated by AuthProvider
       // on every app foreground — no auth.admin or RPC needed.

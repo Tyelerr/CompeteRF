@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { adminUserService } from "../models/services/admin-user.service";
 import { useAuthContext } from "../providers/AuthProvider";
+import { useAuthStore } from "./stores/auth.store";
 
 export type UserRole =
   | "basic_user"
@@ -69,9 +70,18 @@ export const useAdminUsers = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
   const [sortOption, setSortOption] = useState<SortOption>("date_newest");
 
+  // Every user's email + activity: load ONLY for Compete admins (defense in depth under the
+  // route gates — this hook must never fetch the user list for anyone else).
+  // (The admin screen gate mounts this only after auth has loaded, so the role is known here.)
   useEffect(() => { loadUsers(); }, []);
 
   const loadUsers = async () => {
+    const viewerRole = useAuthStore.getState().profile?.role;
+    if (viewerRole !== "compete_admin" && viewerRole !== "super_admin") {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       // ── Step 1: all profiles in one query ─────────────────────────────────
       const { data: profilesData, error: profilesError } = await supabase

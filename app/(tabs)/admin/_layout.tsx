@@ -156,7 +156,23 @@ export default function AdminLayout() {
           headerShown: false,
           contentStyle: { backgroundColor: COLORS.background },
         }}
+        // Screen-level gate keyed to the route ACTUALLY being rendered (not the URL): on the
+        // static web build a deep link can be redirected (e.g. to /admin for a role whose
+        // Admin tab is hidden) while the stack still mounts the requested screen, so a
+        // pathname-only check could let a protected screen's data hooks run.
+        screenLayout={({ route, children }) => (
+          <AdminScreenGate routeName={route.name}>{children}</AdminScreenGate>
+        )}
       />
     </>
   );
+}
+
+function AdminScreenGate({ routeName, children }: { routeName: string; children: React.ReactNode }) {
+  const { profile, loading } = useAuthContext();
+  if (loading) return <AccessChecking />;
+  if (!canAccessAdminPath(`/admin/${routeName}`, profile?.role)) {
+    return <AccessDenied message="This page is only available to authorized Compete staff for your role." />;
+  }
+  return <>{children}</>;
 }
