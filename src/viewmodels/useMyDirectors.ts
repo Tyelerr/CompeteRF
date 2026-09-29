@@ -67,10 +67,10 @@ export const useMyDirectors = () => {
           director_id,
           venue_id,
           assigned_at,
-          profiles:director_id (
+          profiles:profiles_public!director_id (
             id_auto,
             name,
-            email
+            user_name
           ),
           venues:venue_id (
             id,
@@ -102,7 +102,8 @@ export const useMyDirectors = () => {
             director_id: vd.director_id,
             venue_id: vd.venue_id,
             name: vd.profiles?.name || "Unknown",
-            email: vd.profiles?.email || "",
+            // Another user's email is not readable (M3 privacy) — show their @username.
+            email: vd.profiles?.user_name ? `@${vd.profiles.user_name}` : "",
             venue_name: vd.venues?.venue || "Unknown Venue",
             assigned_at: vd.assigned_at || new Date().toISOString(),
             tournament_count: count || 0,

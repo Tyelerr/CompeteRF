@@ -285,7 +285,7 @@ export const useVenueAudit = () => {
 
       const [{ data: venues }, { data: owners }] = await Promise.all([
         supabase.from("venues").select("id, venue").in("id", venueIds),
-        supabase.from("profiles").select("id_auto, name").in("id_auto", ownerIds),
+        supabase.from("profiles_public").select("id_auto, name").in("id_auto", ownerIds),
       ]);
 
       const venueMap: Record<number, string> = {};

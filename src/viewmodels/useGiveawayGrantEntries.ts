@@ -7,15 +7,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { giveawayWalletService } from "../models/services/giveaway-wallet.service";
 import { profileService } from "../models/services/profile.service";
-import { Profile } from "../models/types/profile.types";
+import { PublicProfile } from "../models/types/profile.types";
 
 export type GrantMode = "grant" | "remove";
 
 export function useGiveawayGrantEntries() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Profile[]>([]);
+  const [results, setResults] = useState<PublicProfile[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selected, setSelected] = useState<Profile | null>(null);
+  const [selected, setSelected] = useState<PublicProfile | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [mode, setMode] = useState<GrantMode>("grant");
   const [amount, setAmount] = useState("");
@@ -47,7 +47,7 @@ export function useGiveawayGrantEntries() {
     };
   }, [query, selected]);
 
-  const selectUser = useCallback(async (p: Profile) => {
+  const selectUser = useCallback(async (p: PublicProfile) => {
     setSelected(p);
     setResults([]);
     setMessage(null);

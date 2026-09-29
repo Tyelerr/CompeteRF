@@ -19,6 +19,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../../../src/lib/supabase";
 import { roleService } from "../../../../src/models/services/role.service";
+import { staffSearchService } from "../../../../src/models/services/staff-search.service";
 import { useAuthContext } from "../../../../src/providers/AuthProvider";
 import { isTournamentArchived, isTournamentCompleted } from "../../../../src/utils/tournament.archive";
 import { tournamentBadge } from "../../../../src/utils/tournament-phase";
@@ -311,14 +312,10 @@ export default function BarTournamentManagerScreen() {
     if (query.length < 2) { setDirectorResults([]); return; }
     setSearchingDirectors(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email")
-        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(10);
-      if (error) { setDirectorResults([]); return; }
+      // Role-checked staff search (M3 privacy): masked email; full email typed = exact match.
+      const found = await staffSearchService.searchUsers(query, 10);
       setDirectorResults(
-        (data || []).map((u: any) => ({ id: u.id_auto, name: u.name || u.email, email: u.email })),
+        found.map((u) => ({ id: u.id_auto, name: u.name || u.user_name, email: u.email_display ?? `@${u.user_name}` })),
       );
     } catch {
       setDirectorResults([]);

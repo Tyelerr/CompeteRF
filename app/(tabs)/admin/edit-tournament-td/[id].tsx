@@ -17,10 +17,21 @@ import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
+import { TournamentManageGuard } from "../../../../src/views/components/common/AccessGate";
 
 const isWeb = Platform.OS === "web";
 
-export default function EditTournamentTDScreen() {
+// Mounts only once the server confirms this user manages the tournament.
+export default function EditTournamentTDRoute() {
+  const { id } = useLocalSearchParams();
+  return (
+    <TournamentManageGuard tournamentId={Number(id)}>
+      <EditTournamentTDScreen />
+    </TournamentManageGuard>
+  );
+}
+
+function EditTournamentTDScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { profile } = useAuthContext();

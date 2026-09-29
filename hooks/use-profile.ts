@@ -20,7 +20,7 @@ export const useCheckUsername = (username: string) => {
       setError(null);
 
       try {
-        const available = await profileService.checkUsernameAvailable(username.toLowerCase());
+        const available = await profileService.checkUsernameAvailable(username.trim());
         setIsAvailable(available);
       } catch (err: any) {
         console.error('Username check error:', err);

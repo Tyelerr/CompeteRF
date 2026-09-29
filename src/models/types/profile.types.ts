@@ -89,3 +89,24 @@ export interface ProfileUpdate {
   notify_promotions?: boolean;
   notify_app_updates?: boolean;
 }
+
+// Another user's profile as exposed to non-admins (M3 privacy): the public.profiles_public view
+// / search_players RPC fields only — never email, phone, activity, notification settings or
+// winnings. Use this (not Profile) for any read of ANOTHER user's profile.
+export const PUBLIC_PROFILE_COLUMNS =
+  "id, id_auto, user_name, name, first_name, last_name, avatar_url, home_state, role, status, fargo, fargo_status";
+
+export interface PublicProfile {
+  id: string;
+  id_auto: number;
+  user_name: string;
+  name: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
+  home_state?: string | null;
+  role?: string | null;
+  status?: string | null;
+  fargo?: number | null;
+  fargo_status?: string | null;
+}

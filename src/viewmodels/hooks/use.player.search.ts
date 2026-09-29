@@ -1,19 +1,19 @@
 // src/viewmodels/hooks/use.player.search.ts
-// Debounced profile search for the TD "Add Player" flow. Wraps
-// profileService.searchProfiles so screens never touch the service/Supabase
-// layer directly. Results carry id_auto + name + user_name so the TD can
-// disambiguate same-named players by their player ID.
+// Debounced player search (TD "Add Player", Scotch partner search, chip picker). Wraps
+// profileService.searchProfiles (search_players RPC — safe public fields only, never email or
+// phone) so screens never touch the service/Supabase layer directly. Results carry id_auto +
+// name + user_name so the TD can disambiguate same-named players by their player ID.
 
 import { useEffect, useRef, useState } from "react";
 import { profileService } from "../../models/services/profile.service";
-import { Profile } from "../../models/types/profile.types";
+import { PublicProfile } from "../../models/types/profile.types";
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 300;
 
 export const usePlayerSearch = (limit: number = 20) => {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Profile[]>([]);
+  const [results, setResults] = useState<PublicProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // Guards against a slow earlier request overwriting a newer one.

@@ -138,7 +138,7 @@ export const useBarOwnerTournaments = (): UseBarOwnerTournamentsReturn => {
           venue_id,
           director_id,
           venues (venue),
-          profiles:director_id (name)
+          profiles:profiles_public!director_id (name)
         `,
         )
         .in("venue_id", venueIds)

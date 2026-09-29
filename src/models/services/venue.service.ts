@@ -1,5 +1,6 @@
 ﻿import { supabase } from "../../lib/supabase";
 import { Venue, VenueDirector, VenueOwner } from "../types/venue.types";
+import { PUBLIC_PROFILE_COLUMNS } from "../types/profile.types";
 
 export const venueService = {
   async getVenues(state?: string, city?: string): Promise<Venue[]> {
@@ -79,7 +80,7 @@ export const venueService = {
   async getVenueOwners(venueId: number): Promise<VenueOwner[]> {
     const { data, error } = await supabase
       .from("venue_owners")
-      .select("*, profiles:owner_id(*)")
+      .select(`*, profiles:profiles_public!owner_id(${PUBLIC_PROFILE_COLUMNS})`)
       .eq("venue_id", venueId)
       .is("archived_at", null);
     if (error) throw error;
@@ -89,7 +90,7 @@ export const venueService = {
   async getVenueDirectors(venueId: number): Promise<VenueDirector[]> {
     const { data, error } = await supabase
       .from("venue_directors")
-      .select("*, profiles:director_id(*)")
+      .select(`*, profiles:profiles_public!director_id(${PUBLIC_PROFILE_COLUMNS})`)
       .eq("venue_id", venueId)
       .is("archived_at", null);
     if (error) throw error;

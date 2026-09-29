@@ -12,6 +12,11 @@ import {
   TournamentLiveSettings,
 } from "../types/tournament-settings.types";
 import { searchAlertService } from "./search-alert.service";
+import { PUBLIC_PROFILE_COLUMNS } from "../types/profile.types";
+
+// The director embedded on public tournament reads (browse, detail, join, spectator): safe
+// public fields only via profiles_public — never the full profile row (M3 privacy).
+const DIRECTOR_PUBLIC_COLUMNS = PUBLIC_PROFILE_COLUMNS;
 
 function normalizeTournament<T extends { game_type?: any }>(t: T): T {
   return { ...t, game_type: normalizeGameType(t.game_type) };
@@ -69,7 +74,7 @@ export const tournamentService = {
     let query = applyPublicDiscovery(
       supabase
         .from("tournaments")
-        .select("*, venues(*), profiles!director_id(*)", { count: "exact" }),
+        .select(`*, venues(*), profiles:profiles_public!director_id(${DIRECTOR_PUBLIC_COLUMNS})`, { count: "exact" }),
       completedMode ? "completed" : "default",
     )
       // Completed browse shows most-recently-finished first; default browse shows the
@@ -96,7 +101,7 @@ export const tournamentService = {
   async getTournament(id: number): Promise<Tournament | null> {
     const { data, error } = await supabase
       .from("tournaments")
-      .select("*, venues(*), profiles!director_id(*)")
+      .select(`*, venues(*), profiles:profiles_public!director_id(${DIRECTOR_PUBLIC_COLUMNS})`)
       .eq("id", id)
       .single();
     if (error) throw error;

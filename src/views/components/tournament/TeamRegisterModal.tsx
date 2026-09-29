@@ -27,7 +27,7 @@ import { moderateScale, scale } from "../../../utils/scaling";
 import { useTeamRegistration } from "../../../viewmodels/hooks/use.team.registration";
 import { usePlayerSearch } from "../../../viewmodels/hooks/use.player.search";
 import { Tournament } from "../../../models/types/tournament.types";
-import { Profile } from "../../../models/types/profile.types";
+import { PublicProfile } from "../../../models/types/profile.types";
 import { teamInviteLink, teamInviteMessage } from "../../../utils/team.invite";
 
 interface Props {
@@ -120,7 +120,7 @@ export function TeamRegisterModal({ visible, tournament, playerId, onClose }: Pr
 
   // "Add Partner Now" → invite a specific existing account by username (they accept
   // in-app). Create-New-Player (a pending account) is added here after Phase 5.
-  const handleAddExisting = async (p: Profile) => {
+  const handleAddExisting = async (p: PublicProfile) => {
     setError(null);
     try {
       await vm.invitePartner({ method: "username", value: p.user_name });

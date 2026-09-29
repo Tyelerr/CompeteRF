@@ -81,7 +81,7 @@ export const useBarTournamentManager = () => {
       const venueIds = venueOwnerships.map((vo) => vo.venue_id);
       const { data: tournamentData } = await supabase
         .from("tournaments")
-        .select(`*, venues (id, venue), profiles!director_id (user_name)`)
+        .select(`*, venues (id, venue), profiles:profiles_public!director_id (user_name)`)
         .in("venue_id", venueIds)
         .order("tournament_date", { ascending: false });
 

@@ -1,5 +1,11 @@
 import { supabase } from "../../lib/supabase";
-import { Profile, ProfileInsert, ProfileUpdate } from "../types/profile.types";
+import {
+  Profile,
+  ProfileInsert,
+  ProfileUpdate,
+  PUBLIC_PROFILE_COLUMNS,
+  PublicProfile,
+} from "../types/profile.types";
 
 export const profileService = {
   async getProfile(userId: string): Promise<Profile | null> {
@@ -12,24 +18,25 @@ export const profileService = {
     return data;
   },
 
-  async getProfileByIdAuto(idAuto: number): Promise<Profile | null> {
+  // Another user's profile: safe public fields only (profiles_public view).
+  async getProfileByIdAuto(idAuto: number): Promise<PublicProfile | null> {
     const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
+      .from("profiles_public")
+      .select(PUBLIC_PROFILE_COLUMNS)
       .eq("id_auto", idAuto)
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    return data;
+    return (data as PublicProfile | null) ?? null;
   },
 
-  async getProfileByUsername(username: string): Promise<Profile | null> {
+  async getProfileByUsername(username: string): Promise<PublicProfile | null> {
     const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
+      .from("profiles_public")
+      .select(PUBLIC_PROFILE_COLUMNS)
       .eq("user_name", username)
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    return data;
+    return (data as PublicProfile | null) ?? null;
   },
 
   async createProfile(profile: ProfileInsert): Promise<Profile> {
@@ -56,25 +63,18 @@ export const profileService = {
     return data;
   },
 
+  // Case-insensitive, server-side (is_username_available RPC) — callable signed out.
   async checkUsernameAvailable(username: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("user_name", username)
-      .single();
-    if (error && error.code === "PGRST116") return true;
+    const { data, error } = await supabase.rpc("is_username_available", { p_username: username });
     if (error) throw error;
-    return !data;
+    return data === true;
   },
 
-  async searchProfiles(query: string, limit: number = 20): Promise<Profile[]> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .or(`name.ilike.%${query}%,user_name.ilike.%${query}%`)
-      .eq("status", "active")
-      .limit(limit);
+  // Player / partner search (signed-in): safe public fields only (search_players RPC). Matches
+  // username, display name and first/last name — never email or phone.
+  async searchProfiles(query: string, limit: number = 20): Promise<PublicProfile[]> {
+    const { data, error } = await supabase.rpc("search_players", { p_query: query, p_limit: limit });
     if (error) throw error;
-    return data || [];
+    return ((data ?? []) as PublicProfile[]).map((p) => ({ ...p, status: "active" }));
   },
 };

@@ -59,6 +59,7 @@ import { GAME_TYPE_MAP } from "../../../../src/utils/game-type.utils";
 import { formatDate, formatTime } from "../../../../src/utils/formatters";
 import { usePagination } from "../../../../src/viewmodels/usePagination";
 import { Pagination } from "../../../../src/views/components/common/pagination";
+import { TournamentManageGuard } from "../../../../src/views/components/common/AccessGate";
 import {
   GameType,
   RegistrationStatus,
@@ -67,7 +68,7 @@ import {
   TournamentFormat,
   TournamentLiveState,
 } from "../../../../src/models/types/common.types";
-import { Profile } from "../../../../src/models/types/profile.types";
+import { PublicProfile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
 import { Tournament } from "../../../../src/models/types/tournament.types";
 import {
@@ -1259,7 +1260,7 @@ const AddPlayerModal = ({
 }: {
   visible: boolean;
   onClose: () => void;
-  onAddPlayer: (profile: Profile) => void;
+  onAddPlayer: (profile: PublicProfile) => void;
   onAddGuest: (guestName: string) => void;
   isAdding: boolean;
   addedPlayerIds: Set<number>;
@@ -2579,7 +2580,18 @@ const TabPlaceholder = ({
 );
 
 // ── Screen ───────────────────────────────────────────────────────────────────
-export default function ManageTournamentScreen() {
+// Route entry: the management UI (and every hook/query it runs) mounts only once the server
+// confirms this user manages the tournament (TournamentManageGuard / can_manage_tournament).
+export default function ManageTournamentRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return (
+    <TournamentManageGuard tournamentId={Number(id)}>
+      <ManageTournamentScreen />
+    </TournamentManageGuard>
+  );
+}
+
+function ManageTournamentScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string; name?: string; issueMatch?: string; issueReg?: string; reviewMatch?: string }>();
   const tournamentId = Number(params.id);
@@ -5097,7 +5109,7 @@ export default function ManageTournamentScreen() {
     patchForm({ chipTiers: defaultChipTiers(form?.gameType ?? "") });
 
   // ---- Players handlers ---------------------------------------------------
-  const handleAddPlayer = async (profile: Profile) => {
+  const handleAddPlayer = async (profile: PublicProfile) => {
     const existing = hub.registrations.find(
       (r) => r.player_id === profile.id_auto && r.status !== "cancelled",
     );

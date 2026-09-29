@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { staffSearchService } from "../models/services/staff-search.service";
 import { venueService } from "../models/services/venue.service";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";
 
@@ -218,17 +219,10 @@ export const useCreateVenue = () => {
 
     setSearchingDirectors(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email, role")
-        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
-        .eq("status", "active")
-        .limit(10);
-
-      if (error) {
-        console.error("Error searching directors:", error);
-        return;
-      }
+      // Role-checked staff search: masked email for owners (full for admins); an email only
+      // matches when typed in full.
+      const found = await staffSearchService.searchUsers(query, 10);
+      const data = found.map((u) => ({ id_auto: u.id_auto, name: u.name ?? u.user_name, email: u.email_display ?? `@${u.user_name}`, role: u.role ?? "" }));
 
       // Filter out already added directors
       const addedIds = directors.map((d) => d.id_auto);

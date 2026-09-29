@@ -42,7 +42,7 @@ export const registrationService = {
     const { data, error } = await supabase
       .from("tournament_players")
       // profiles.id (uuid) is what the DM composer addresses a message to.
-      .select("*, profiles:player_id (id, id_auto, user_name, name)")
+      .select("*, profiles:profiles_public!player_id (id, id_auto, user_name, name)")
       .eq("tournament_id", tournamentId)
       .order("registered_at", { ascending: true });
     if (error) throw error;
@@ -143,7 +143,7 @@ export const registrationService = {
   async getRegistration(id: number): Promise<Registration | null> {
     const { data, error } = await supabase
       .from("tournament_players")
-      .select("*, profiles:player_id (id_auto, user_name, name)")
+      .select("*, profiles:profiles_public!player_id (id_auto, user_name, name)")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;

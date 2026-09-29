@@ -27,7 +27,6 @@ export interface TDVenue {
   assigned_by_profile?: {
     name: string;
     user_name: string;
-    email: string;
   };
 
   // Computed stats
@@ -117,10 +116,9 @@ export const useTournamentDirectorVenues = () => {
             zip_code,
             status
           ),
-          assigned_by_profile:profiles!venue_directors_assigned_by_fkey (
+          assigned_by_profile:profiles_public!assigned_by (
             name,
-            user_name,
-            email
+            user_name
           )
         `,
         )

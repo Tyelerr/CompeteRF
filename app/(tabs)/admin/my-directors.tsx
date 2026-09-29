@@ -132,7 +132,7 @@ export default function MyDirectorsScreen() {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, email, venue, or ID..."
+          placeholder="Search by name, username, venue, or ID..."
           placeholderTextColor={COLORS.textSecondary}
           value={vm.searchQuery}
           onChangeText={vm.setSearchQuery}

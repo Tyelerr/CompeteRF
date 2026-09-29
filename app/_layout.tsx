@@ -11,6 +11,7 @@ import { AuthProvider } from "../src/providers/AuthProvider";
 import { QueryProvider } from "../src/providers/QueryProvider";
 import { WebAlertHost } from "../src/views/components/common/WebAlertHost";
 import { ChipOfflineRecoveryEntry } from "../src/views/components/tournament/live/ChipOfflineRecoveryEntry";
+import { VersionGate } from "../src/views/components/common/VersionGate";
 import { COLORS } from "../src/theme/colors";
 
 // WEB ONLY — visually hide scrollbars app-wide while KEEPING scroll (wheel / trackpad /
@@ -127,6 +128,9 @@ export default function RootLayout() {
             {/* WEB ONLY: offline disaster-recovery entry to local Chip backups (renders
                 nothing unless the cloud profile can't load and backups exist). */}
             <ChipOfflineRecoveryEntry />
+            {/* NATIVE ONLY: blocking "Update required" screen when app_config's minimum
+                build is above this binary's build number (renders nothing otherwise). */}
+            <VersionGate />
           </ThemeProvider>
         </AuthProvider>
       </QueryProvider>

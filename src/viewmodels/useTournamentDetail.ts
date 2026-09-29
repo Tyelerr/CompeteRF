@@ -118,7 +118,7 @@ export const useTournamentDetail = (
             zip_code,
             phone
           ),
-          profiles!director_id (
+          profiles:profiles_public!director_id (
             id_auto,
             first_name,
             last_name,

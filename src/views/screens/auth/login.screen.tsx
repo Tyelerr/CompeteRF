@@ -6,6 +6,7 @@ import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { parseLoginIdentifier } from "../../../utils/login-identifier";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { Button } from "../../components/common/button";
 import { Input } from "../../components/common/input";
@@ -29,16 +30,19 @@ export const LoginScreen = () => {
     if (!password) { setError("Please enter your password"); return; }
     setLoading(true);
     try {
-      const isEmail = identifier.includes("@");
-      let resolvedEmail = identifier.trim();
-      if (!isEmail) {
-        const found = await authService.resolveEmailFromUsername(identifier.trim());
-        if (!found) { setError("Incorrect credentials. Please try again."); return; }
-        resolvedEmail = found;
+      const { kind, value } = parseLoginIdentifier(identifier);
+      let userId: string | null = null;
+      if (kind === "email") {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: value, password });
+        if (signInError) { setError("Incorrect credentials. Please try again."); return; }
+        userId = data.user?.id ?? null;
+      } else {
+        // Username: resolved + signed in server-side; the email never reaches this device.
+        const res = await authService.signInWithUsername(value, password);
+        if (res.error || !res.userId) { setError("Incorrect credentials. Please try again."); return; }
+        userId = res.userId;
       }
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
-      if (signInError) { setError("Incorrect credentials. Please try again."); return; }
-      const { data: profile } = await supabase.from("profiles").select("id").eq("id", data.user?.id).maybeSingle();
+      const { data: profile } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
       if (profile) { router.replace("/(tabs)"); } else { router.replace("/auth/register"); }
     } catch {
       setError("Incorrect credentials. Please try again.");

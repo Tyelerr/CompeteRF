@@ -114,7 +114,7 @@ export const useTournamentDirectorManager = () => {
             id,
             venue
           ),
-          profiles!director_id (
+          profiles:profiles_public!director_id (
             user_name
           )
         `,

@@ -1,4 +1,6 @@
-﻿import { Stack } from "expo-router";
+﻿import { Stack, usePathname } from "expo-router";
+import { canAccessAdminPath } from "../../../src/utils/admin-route-access";
+import { AccessChecking, AccessDenied } from "../../../src/views/components/common/AccessGate";
 import { useEffect, useRef, useState } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View, Platform } from "react-native";
 import { COLORS } from "../../../src/theme/colors";
@@ -137,6 +139,15 @@ const cs = StyleSheet.create({
 });
 
 export default function AdminLayout() {
+  // Client-side role gate for the whole /admin stack (defense in depth — RLS / RPCs stay
+  // authoritative). A deep link to a route this role can't use renders Access Denied instead
+  // of mounting the screen (so its data hooks never run). Neutral spinner while auth hydrates.
+  const pathname = usePathname();
+  const { profile, loading } = useAuthContext();
+  if (loading) return <AccessChecking />;
+  if (!canAccessAdminPath(pathname, profile?.role)) {
+    return <AccessDenied message="This page is only available to authorized Compete staff for your role." />;
+  }
   return (
     <>
       <BarOwnerAuditGate />

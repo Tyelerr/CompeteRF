@@ -459,7 +459,7 @@ export function useMessageCenter(): UseMessageCenterReturn {
       if (idAutos.length === 0) return [];
 
       const { data: profileRows } = await supabase
-        .from("profiles")
+        .from("profiles_public")
         .select("id, id_auto")
         .in("id_auto", idAutos);
 

@@ -111,13 +111,27 @@ export const authService = {
     return data.session;
   },
 
-  async resolveEmailFromUsername(username: string): Promise<string | null> {
-    const { data } = await supabase
-      .from("profiles")
-      .select("email")
-      .ilike("user_name", username.trim())
-      .maybeSingle();
-    return data?.email ?? null;
+  // Username + password sign-in WITHOUT the client ever seeing the account email (M3 privacy):
+  // the login-with-username Edge Function resolves the email server-side, signs in, and returns
+  // only the session tokens, which we install with setSession. Every failure is the same
+  // generic error. There is deliberately NO fallback to reading profiles.email.
+  async signInWithUsername(
+    username: string,
+    password: string,
+  ): Promise<{ userId: string | null; error: string | null }> {
+    const { data, error } = await supabase.functions.invoke("login-with-username", {
+      body: { username: username.trim(), password },
+    });
+    const session = (data as { session?: { access_token?: string; refresh_token?: string } } | null)?.session;
+    if (error || !session?.access_token || !session?.refresh_token) {
+      return { userId: null, error: "invalid_credentials" };
+    }
+    const { data: set, error: setErr } = await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+    if (setErr || !set.session) return { userId: null, error: "invalid_credentials" };
+    return { userId: set.session.user.id, error: null };
   },
 
   async getUser() {

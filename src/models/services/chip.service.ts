@@ -378,7 +378,7 @@ export const chipService = {
       supabase
         .from("tournament_players")
         .select(
-          "*, profiles:player_id (id_auto, user_name, name, first_name, last_name, fargo, fargo_status)",
+          "*, profiles:profiles_public!player_id (id_auto, user_name, name, first_name, last_name, fargo, fargo_status)",
         )
         .eq("tournament_id", id),
     ]);

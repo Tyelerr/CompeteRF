@@ -163,9 +163,11 @@ export const conversationService = {
             .neq("user_id", userId)
             .limit(1);
           if (!otherParticipants || otherParticipants.length === 0) return noOther;
+          // Another user in a DM: safe public fields only (no email — M3 privacy). Only the
+          // support-thread branch above (viewer is an admin) still carries the requester's email.
           const { data: otherProfile } = await supabase
-            .from("profiles")
-            .select("name, role, email, id_auto")
+            .from("profiles_public")
+            .select("name, role, id_auto")
             .eq("id", otherParticipants[0].user_id)
             .maybeSingle();
           return otherProfile ? profileToOther(otherProfile) : noOther;
@@ -235,7 +237,7 @@ export const conversationService = {
     for (const msg of messages || []) {
       if (!profileCache.has(msg.sender_id)) {
         const { data: profile } = await supabase
-          .from("profiles")
+          .from("profiles_public")
           .select("name, role, avatar_url")
           .eq("id", msg.sender_id)
           .maybeSingle();
@@ -325,7 +327,7 @@ export const conversationService = {
     const allowedRoles = roles || ["tournament_director", "bar_owner"];
 
     const { data, error } = await supabase
-      .from("profiles")
+      .from("profiles_public")
       .select("id, name, role, avatar_url")
       .ilike("name", `%${query}%`)
       .in("role", allowedRoles)

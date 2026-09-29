@@ -2,6 +2,7 @@
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
+import { staffSearchService } from "../models/services/staff-search.service";
 import { roleService } from "../models/services/role.service";
 import { venueService } from "../models/services/venue.service";
 import { useAuthContext } from "../providers/AuthProvider";
@@ -39,22 +40,22 @@ export const useVenueTeam = (venueId: number | null) => {
     try {
       const { data: owners } = await supabase
         .from("venue_owners")
-        .select("id, owner_id, profiles!venue_owners_owner_id_fkey(id_auto, name, email)")
+        .select("id, owner_id, profiles:profiles_public!owner_id(id_auto, name, user_name)")
         .eq("venue_id", venueId)
         .is("archived_at", null)
         .order("id", { ascending: true });
 
       const { data: directors } = await supabase
         .from("venue_directors")
-        .select("id, director_id, profiles!venue_directors_director_id_fkey(id_auto, name, email)")
+        .select("id, director_id, profiles:profiles_public!director_id(id_auto, name, user_name)")
         .eq("venue_id", venueId)
         .is("archived_at", null);
 
       const ownerMembers: TeamMember[] = (owners || []).map((o: any, index: number) => ({
         id: o.id,
         userId: o.owner_id,
-        name: o.profiles?.name || o.profiles?.email || "Unknown",
-        email: o.profiles?.email || "",
+        name: o.profiles?.name || o.profiles?.user_name || "Unknown",
+        email: o.profiles?.user_name ? `@${o.profiles.user_name}` : "",
         role: index === 0 ? "owner" : "co_owner",
         isPrimary: index === 0,
       }));
@@ -62,8 +63,8 @@ export const useVenueTeam = (venueId: number | null) => {
       const directorMembers: TeamMember[] = (directors || []).map((d: any) => ({
         id: d.id,
         userId: d.director_id,
-        name: d.profiles?.name || d.profiles?.email || "Unknown",
-        email: d.profiles?.email || "",
+        name: d.profiles?.name || d.profiles?.user_name || "Unknown",
+        email: d.profiles?.user_name ? `@${d.profiles.user_name}` : "",
         role: "director" as const,
         isPrimary: false,
       }));
@@ -80,19 +81,9 @@ export const useVenueTeam = (venueId: number | null) => {
     if (query.length < 2) { setSearchResults([]); return; }
     setSearching(true);
     try {
-      const { data: nameData } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email")
-        .ilike("name", `%${query}%`)
-        .limit(10);
-      const { data: emailData } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email")
-        .ilike("email", `%${query}%`)
-        .limit(10);
-      const combined = [...(nameData || []), ...(emailData || [])];
-      const unique = combined.filter((v, i, a) => a.findIndex((t) => t.id_auto === v.id_auto) === i);
-      setSearchResults(unique.map((u: any) => ({ id: u.id_auto, name: u.name || u.email, email: u.email })));
+      // Role-checked staff search (masked email for owners; exact-email match only).
+      const found = await staffSearchService.searchUsers(query, 10);
+      setSearchResults(found.map((u) => ({ id: u.id_auto, name: u.name || u.user_name, email: u.email_display ?? `@${u.user_name}` })));
     } catch {
       setSearchResults([]);
     } finally {

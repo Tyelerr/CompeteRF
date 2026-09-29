@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { supabase } from "../../../src/lib/supabase";
 import { roleService } from "../../../src/models/services/role.service";
+import { staffSearchService } from "../../../src/models/services/staff-search.service";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
@@ -76,15 +77,14 @@ export default function AddDirectorScreen() {
       if (!query.trim() || query.trim().length < 2) { setSearchResults([]); return; }
       setSearching(true);
       try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("id_auto, name, email, user_name, role")
-          .or(`email.ilike.%${query}%,name.ilike.%${query}%,user_name.ilike.%${query}%`)
-          .neq("id_auto", profile!.id_auto)
-          .eq("status", "active")
-          .limit(20);
-        if (error) throw error;
-        setSearchResults(data || []);
+        // Role-checked staff search (M3 privacy): owners see a masked email and can match an
+        // email only by typing it in full; admins keep full-email search.
+        const found = await staffSearchService.searchUsers(query, 20);
+        setSearchResults(
+          found
+            .filter((u) => u.id_auto !== profile!.id_auto)
+            .map((u) => ({ id_auto: u.id_auto, name: u.name ?? u.user_name, email: u.email_display ?? "", user_name: u.user_name, role: u.role ?? "" })),
+        );
       } catch (error) {
         console.error("Error searching users:", error);
       } finally {
@@ -296,7 +296,7 @@ export default function AddDirectorScreen() {
             <>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Start typing a name or email..."
+                placeholder="Name, @username, or full email..."
                 placeholderTextColor={COLORS.textSecondary}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
@@ -394,7 +394,7 @@ export default function AddDirectorScreen() {
           <View style={styles.section}>
             <Text allowFontScaling={false} style={styles.instructionsTitle}>How it works:</Text>
             <Text allowFontScaling={false} style={styles.instructionsText}>
-              {"1. Start typing a name or email to find users\n2. Tap a user to select them as director\n3. Choose which venue to assign them to\n4. Basic users will be promoted to Tournament Director\n5. Tap Save to confirm the assignment"}
+              {"1. Search by name, username, or a full email address\n2. Tap a user to select them as director\n3. Choose which venue to assign them to\n4. Basic users will be promoted to Tournament Director\n5. Tap Save to confirm the assignment"}
             </Text>
           </View>
         )}

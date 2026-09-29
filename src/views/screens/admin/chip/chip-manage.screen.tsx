@@ -110,11 +110,11 @@ import { PlayerSearchResult } from "../../../../models/types/player.registration
 import { playerRegistrationService } from "../../../../models/services/player.registration.service";
 import { TeamCard, TeamCardPlayerVM, TeamCardProps, ActionsAnchor } from "../../../components/tournament/TeamCard";
 import { useAuthContext } from "../../../../providers/AuthProvider";
-import { Profile } from "../../../../models/types/profile.types";
+import { PublicProfile } from "../../../../models/types/profile.types";
 import { ConfettiBurst, ConfettiBurstRef } from "../../../components/common/ConfettiBurst";
 import { Dropdown } from "../../../components/common/dropdown";
 
-const profileName = (p: Profile): string =>
+const profileName = (p: PublicProfile): string =>
   [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.name || p.user_name;
 
 // Screen-wide DISPLAY name = the shared chip rule (singles full, doubles "First L. / First
@@ -825,10 +825,10 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // After picking a player we ask for their Fargo, then create a REAL member
   // (so it's verifiable + persists — no more local-only "No Fargo" rows).
   const [addFargo, setAddFargo] = useState<
-    { mode: "new"; player: Profile } | { mode: "partner"; entryId: string; player: Profile } | null
+    { mode: "new"; player: PublicProfile } | { mode: "partner"; entryId: string; player: PublicProfile } | null
   >(null);
   const [addFargoVal, setAddFargoVal] = useState("");
-  const onPickProfile = (p: Profile) => {
+  const onPickProfile = (p: PublicProfile) => {
     if (!picker) return;
     setAddFargo(
       picker.mode === "new"

@@ -27,7 +27,7 @@ class DirectorService {
         .from("venue_directors")
         .select(`
           id, director_id, venue_id, assigned_at, archived_at,
-          profiles!venue_directors_director_id_fkey (id_auto, name, user_name, email, role),
+          profiles:profiles_public!director_id (id_auto, name, user_name, role),
           venues!venue_directors_venue_id_fkey (id, venue, city, state)
         `)
         .in("venue_id", venueIds)
@@ -180,7 +180,7 @@ class DirectorService {
         .from("venue_directors")
         .select(`
           *,
-          profiles!venue_directors_director_id_fkey (id_auto, name, user_name, email, role),
+          profiles:profiles_public!director_id (id_auto, name, user_name, role),
           venues!venue_directors_venue_id_fkey (id, venue, address, city, state)
         `)
         .order("assigned_at", { ascending: false });
@@ -211,7 +211,6 @@ class DirectorService {
           (d: any) =>
             d.profiles?.name?.toLowerCase().includes(q) ||
             d.profiles?.user_name?.toLowerCase().includes(q) ||
-            d.profiles?.email?.toLowerCase().includes(q) ||
             d.venues?.venue?.toLowerCase().includes(q) ||
             d.profiles?.id_auto?.toString().includes(q)
         );
@@ -315,7 +314,7 @@ class DirectorService {
       const { data: assignedDirectors } = await supabase
         .from("venue_directors").select("director_id").eq("venue_id", venueId).is("archived_at", null);
       const assignedIds = assignedDirectors?.map((d) => d.director_id) || [];
-      let query = supabase.from("profiles").select("id_auto, name, user_name, email, role")
+      let query = supabase.from("profiles_public").select("id_auto, name, user_name, role")
         .in("role", ["tournament_director", "super_admin", "compete_admin"]).order("name");
       if (assignedIds.length > 0) query = query.not("id_auto", "in", `(${assignedIds.join(",")})`);
       const { data, error } = await query;

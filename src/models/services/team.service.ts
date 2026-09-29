@@ -17,7 +17,7 @@ import { reconcileSidePotMembership, safePaidSidePots } from "../../utils/side-p
 
 // Team + its member slots, each with the linked profile (when an account).
 const TEAM_SELECT =
-  "*, members:tournament_team_members(*, profiles:player_id (id_auto, user_name, name, first_name, last_name, fargo, fargo_status))";
+  "*, members:tournament_team_members(*, profiles:profiles_public!player_id (id_auto, user_name, name, first_name, last_name, fargo, fargo_status))";
 
 export const teamService = {
   // ---- Reads -------------------------------------------------------------
@@ -89,7 +89,7 @@ export const teamService = {
     const { data, error } = await supabase
       .from("tournament_team_members")
       .select(
-        "id, team_id, tournament_id, invite_status, created_at, team:team_id (id, captain_id, status, profiles:captain_id (id_auto, user_name, name)), tournament:tournament_id (id, name, game_type, tournament_date)",
+        "id, team_id, tournament_id, invite_status, created_at, team:team_id (id, captain_id, status, profiles:profiles_public!captain_id (id_auto, user_name, name)), tournament:tournament_id (id, name, game_type, tournament_date)",
       )
       .eq("player_id", playerId)
       .eq("invite_status", "pending")

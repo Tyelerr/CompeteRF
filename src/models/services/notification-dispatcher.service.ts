@@ -51,7 +51,7 @@ export const notificationDispatcher = {
     try {
       if (recipientIdAutos.length === 0) return result;
       const { data: profiles, error: profileError } = await supabase
-        .from('profiles').select('id, id_auto').in('id_auto', recipientIdAutos);
+        .from('profiles_public').select('id, id_auto').in('id_auto', recipientIdAutos);
       if (profileError || !profiles || profiles.length === 0) {
         console.error('[Dispatcher] Profile lookup error:', profileError);
         return result;
@@ -106,7 +106,7 @@ export const notificationDispatcher = {
 
   async sendToUuids(category: NotificationCategory, recipientUuids: string[], title: string, body: string, data?: Record<string, unknown>): Promise<SendNotificationResult> {
     if (recipientUuids.length === 0) return { ...EMPTY_RESULT };
-    const { data: profiles, error } = await supabase.from('profiles').select('id_auto').in('id', recipientUuids);
+    const { data: profiles, error } = await supabase.from('profiles_public').select('id_auto').in('id', recipientUuids);
     if (error || !profiles) { console.error('[Dispatcher] UUID lookup error:', error); return { ...EMPTY_RESULT }; }
     return this.send({ category, recipientIdAutos: profiles.map((p: { id_auto: number }) => p.id_auto), title, body, data });
   },

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { roleService } from "../models/services/role.service";
+import { staffSearchService } from "../models/services/staff-search.service";
 import { venueService } from "../models/services/venue.service";
 import { useAuthContext } from "../providers/AuthProvider";
 
@@ -88,10 +89,10 @@ export const useEditVenue = (venueId: number) => {
         `
         id,
         director_id,
-        profiles:director_id (
+        profiles:profiles_public!director_id (
           id_auto,
           name,
-          email
+          user_name
         )
       `,
       )
@@ -103,10 +104,13 @@ export const useEditVenue = (venueId: number) => {
       return;
     }
 
+    // Another user's email is not readable (M3 privacy) — the email slot shows their @username.
     const formattedDirectors = (data || []).map((d: any) => ({
       id: d.id,
       director_id: d.director_id,
-      profile: d.profiles,
+      profile: d.profiles
+        ? { id_auto: d.profiles.id_auto, name: d.profiles.name, email: d.profiles.user_name ? `@${d.profiles.user_name}` : "" }
+        : d.profiles,
     }));
 
     setDirectors(formattedDirectors);
@@ -190,19 +194,10 @@ export const useEditVenue = (venueId: number) => {
 
     setSearching(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email, user_name, role")
-        .or(
-          `name.ilike.%${query}%,email.ilike.%${query}%,user_name.ilike.%${query}%`,
-        )
-        .eq("status", "active")
-        .limit(20);
-
-      if (error) {
-        console.error("Error searching directors:", error);
-        return;
-      }
+      // Role-checked staff search: masked email for owners (full for admins); an email only
+      // matches when typed in full.
+      const found = await staffSearchService.searchUsers(query, 20);
+      const data = found.map((u) => ({ ...u, email: u.email_display ?? `@${u.user_name}` }));
 
       // Filter out already assigned directors and self
       const assignedIds = directors.map((d) => d.director_id);

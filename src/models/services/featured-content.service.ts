@@ -102,10 +102,9 @@ class FeaturedContentService {
       .select(
         `
         *,
-        profiles!featured_players_user_id_fkey (
+        profiles:profiles_public!user_id (
           user_name,
-          name,
-          email
+          name
         )
       `,
       )

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
 import {
   FlatList,
@@ -27,10 +27,21 @@ import { Button } from "../../../../src/views/components/common/button";
 import { DatePicker } from "../../../../src/views/components/common/date-picker";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { ToggleSwitch } from "../../../../src/views/components/common/toggle-switch";
+import { TournamentManageGuard } from "../../../../src/views/components/common/AccessGate";
 
 const isWeb = Platform.OS === "web";
 
-export default function EditTournamentScreen() {
+// Mounts only once the server confirms this user manages the tournament.
+export default function EditTournamentRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return (
+    <TournamentManageGuard tournamentId={Number(id)}>
+      <EditTournamentScreen />
+    </TournamentManageGuard>
+  );
+}
+
+function EditTournamentScreen() {
   const router = useRouter();
   const vm = useEditTournament();
 

@@ -79,7 +79,7 @@ export const giveawayService = {
         .order("end_date", { ascending: true }),
       supabase
         .from("giveaways")
-        .select("*, winner:profiles!giveaways_winner_id_fkey(name)")
+        .select("*, winner:profiles_public!winner_id(name)")
         .in("status", ["ended", "awarded"])
         .order("ended_at", { ascending: false })
         .limit(10),

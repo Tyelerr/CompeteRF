@@ -106,7 +106,7 @@ export const reviewService = {
     let directorName: string | null = null;
     if (t.director_id != null) {
       const { data: dp } = await supabase
-        .from("profiles")
+        .from("profiles_public")
         .select("first_name, last_name, name, user_name")
         .eq("id_auto", t.director_id)
         .maybeSingle();
@@ -169,7 +169,7 @@ export const reviewService = {
       // Resolve players whose name/username matches, so the one global box also searches
       // the reviewer (their identity isn't a column on the review row).
       const { data: ppl } = await supabase
-        .from("profiles")
+        .from("profiles_public")
         .select("id_auto")
         .or(
           `user_name.ilike.%${term}%,first_name.ilike.%${term}%,last_name.ilike.%${term}%,name.ilike.%${term}%`,
@@ -254,7 +254,7 @@ export const reviewService = {
     );
     if (idAutos.length) {
       const { data: ppl } = await supabase
-        .from("profiles")
+        .from("profiles_public")
         .select("id_auto, user_name, first_name, last_name, name")
         .in("id_auto", idAutos);
       const byId = new Map<number, any>();
