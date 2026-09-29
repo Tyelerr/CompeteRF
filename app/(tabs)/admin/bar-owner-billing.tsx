@@ -17,8 +17,11 @@ import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useBilling } from "../../../src/viewmodels/useBilling";
 import { Invoice } from "../../../src/features/billing/billing.types";
+import { canTransactInApp, invoiceLinkFor } from "../../../src/features/billing/billing-platform";
 
 const isWeb = Platform.OS === "web";
+// Android: no in-app way to pay for / restart the Stripe-billed plan (Google Play policy).
+const canTransact = canTransactInApp(Platform.OS);
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
 
@@ -265,14 +268,14 @@ const StandardBillingView = ({ vm }: { vm: ReturnType<typeof import("../../../sr
       {vm.subscription?.status === "past_due" && (
         <View style={[styles.warningBanner, { backgroundColor: "#3D2A00" }]}>
           <Text allowFontScaling={false} style={[styles.warningText, { color: "#F59E0B" }]}>
-            {"\u26A0\uFE0F"} Your last payment failed. Please update your payment method to avoid losing access.
+            {"\u26A0\uFE0F"} {canTransact ? "Your last payment failed. Please update your payment method to avoid losing access." : "Your last payment failed. Please contact support@thecompeteapp.com about your account."}
           </Text>
         </View>
       )}
       {vm.subscription?.status === "unpaid" && (
         <View style={[styles.warningBanner, { backgroundColor: "#5F1E1E" }]}>
           <Text allowFontScaling={false} style={[styles.warningText, { color: "#FF6B6B" }]}>
-            {"\uD83D\uDEA8"} Your account has an unpaid balance. Update your payment method immediately to restore full access.
+            {"\uD83D\uDEA8"} {canTransact ? "Your account has an unpaid balance. Update your payment method immediately to restore full access." : "Your account has an unpaid balance. Please contact support@thecompeteapp.com about your account."}
           </Text>
         </View>
       )}
@@ -310,7 +313,7 @@ const StandardBillingView = ({ vm }: { vm: ReturnType<typeof import("../../../sr
             onPress={() => Linking.openURL("mailto:support@thecompeteapp.com?subject=Update Payment Method")}
           >
             <Text allowFontScaling={false} style={styles.secondaryButtonText}>
-              Update Payment Method
+              {canTransact ? "Update Payment Method" : "Contact Support"}
             </Text>
           </TouchableOpacity>
         </>
@@ -328,7 +331,11 @@ const StandardBillingView = ({ vm }: { vm: ReturnType<typeof import("../../../sr
       <>
         <SectionHeader title="Manage Subscription" />
         <View style={styles.card}>
-          {vm.isCanceled || vm.isCancelAtPeriodEnd ? (
+          {(vm.isCanceled || vm.isCancelAtPeriodEnd) && !canTransact ? (
+            <Text allowFontScaling={false} style={styles.actionNote}>
+              To reactivate your plan, contact support@thecompeteapp.com.
+            </Text>
+          ) : vm.isCanceled || vm.isCancelAtPeriodEnd ? (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: "#1E4D2B" }]}
               onPress={vm.handleReactivateSubscription}
@@ -349,11 +356,13 @@ const StandardBillingView = ({ vm }: { vm: ReturnType<typeof import("../../../sr
               </Text>
             </TouchableOpacity>
           )}
-          <Text allowFontScaling={false} style={styles.actionNote}>
-            {vm.isCancelAtPeriodEnd
-              ? "Reactivating will resume billing at the next renewal date."
-              : "Canceling keeps your access active through the current billing period."}
-          </Text>
+          {!(vm.isCancelAtPeriodEnd && !canTransact) && (
+            <Text allowFontScaling={false} style={styles.actionNote}>
+              {vm.isCancelAtPeriodEnd
+                ? "Reactivating will resume billing at the next renewal date."
+                : "Canceling keeps your access active through the current billing period."}
+            </Text>
+          )}
         </View>
       </>
     )}
@@ -420,13 +429,14 @@ interface InvoiceRowProps {
 }
 
 const InvoiceRow = ({ invoice, amount, date, isLast }: InvoiceRowProps) => {
-  const hasLink = !!(invoice.hosted_invoice_url || invoice.receipt_url);
+  // Android: receipts of paid invoices only — never a hosted (payable) invoice page.
+  const link = invoiceLinkFor(invoice, Platform.OS);
+  const hasLink = !!link;
   return (
     <TouchableOpacity
       style={[styles.invoiceRow, !isLast && styles.invoiceRowBorder]}
       onPress={() => {
-        const url = invoice.hosted_invoice_url ?? invoice.receipt_url;
-        if (url) Linking.openURL(url);
+        if (link) Linking.openURL(link);
       }}
       disabled={!hasLink}
       activeOpacity={hasLink ? 0.7 : 1}

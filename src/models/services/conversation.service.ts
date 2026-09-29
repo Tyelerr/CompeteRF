@@ -76,6 +76,17 @@ export const conversationService = {
     return data as string;
   },
 
+  // ── Conversation meta (support threads are exempt from user blocking) ──
+  async getConversationMeta(conversationId: string): Promise<{ isSupport: boolean; category: string | null } | null> {
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("is_support, category")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return { isSupport: !!data.is_support, category: data.category ?? null };
+  },
+
   // ── Get conversations for a user ──
   async getConversations(userId: string): Promise<ConversationPreview[]> {
     // Get all conversation IDs the user participates in

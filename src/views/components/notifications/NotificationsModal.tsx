@@ -7,6 +7,7 @@ import { ConversationPreview, RecipientOption, conversationService } from "../..
 import { reviewService } from "../../../models/services/review.service";
 import { ConversationThread } from "./ConversationThread";
 import { COLORS } from "../../../theme/colors";
+import { BLOCKED_MESSAGING_TEXT, isBlockedMessagingError } from "../../../models/services/block.service";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
@@ -139,7 +140,7 @@ const ComposeView = ({ userId, onBack, onSent }: { userId: string; onBack: () =>
     try {
       await conversationService.createConversation({ createdBy: userId, recipientId: recipientType === "support" ? null : selectedRecipient!.id, subject: subject.trim() || undefined, category: category || "general", tournamentId: selectedTournament?.id, isSupport: recipientType === "support", firstMessage: message.trim() });
       Alert.alert("Message Sent!", "Your message has been delivered.", [{ text: "OK", onPress: onSent }]);
-    } catch (err) { console.error("Send error:", err); Alert.alert("Error", "Failed to send message. Please try again."); }
+    } catch (err) { console.error("Send error:", err); Alert.alert("Error", isBlockedMessagingError(err) ? BLOCKED_MESSAGING_TEXT : "Failed to send message. Please try again."); }
     finally { setIsSending(false); }
   };
 

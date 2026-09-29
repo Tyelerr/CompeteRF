@@ -22,6 +22,7 @@ import {
   RecipientOption,
 } from "../../src/models/services/conversation.service";
 import { useAuthContext } from "../../src/providers/AuthProvider";
+import { BLOCKED_MESSAGING_TEXT, isBlockedMessagingError } from "../../src/models/services/block.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -196,7 +197,7 @@ export default function ComposeMessageScreen() {
       ]);
     } catch (err) {
       console.error("Send error:", err);
-      Alert.alert("Error", "Failed to send message. Please try again.");
+      Alert.alert("Error", isBlockedMessagingError(err) ? BLOCKED_MESSAGING_TEXT : "Failed to send message. Please try again.");
     } finally {
       setIsSending(false);
     }

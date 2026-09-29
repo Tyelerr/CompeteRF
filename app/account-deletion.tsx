@@ -13,7 +13,7 @@ const STEPS = [
   { step: "3", title: "Tap Edit Profile", body: "Tap the Edit Profile button on your profile page to open the profile editor." },
   { step: "4", title: "Scroll to Danger Zone", body: "Scroll to the bottom of the Edit Profile screen until you see the Danger Zone section with a red divider." },
   { step: "5", title: "Tap Delete Account", body: "Tap the Delete Account button. A confirmation dialog will appear asking you to confirm your decision." },
-  { step: "6", title: "Confirm deletion", body: "Type the confirmation text as prompted and tap the final confirm button. Your account and all associated data will be permanently deleted. This action cannot be undone." },
+  { step: "6", title: "Confirm deletion", body: "Type the confirmation text as prompted and tap the final confirm button. Your account and personal data will be permanently deleted as described below. This action cannot be undone." },
 ];
 
 export default function AccountDeletionPage() {
@@ -35,13 +35,13 @@ export default function AccountDeletionPage() {
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, isWeb && styles.scrollContentWeb]} showsVerticalScrollIndicator={false}>
           <View style={isWeb ? styles.webInner : styles.mobileInner}>
             <Text style={styles.pageTitle}>Delete Your Account</Text>
-            <Text style={styles.pageSubtitle}>How to permanently delete your Compete account and all associated data</Text>
+            <Text style={styles.pageSubtitle}>How to permanently delete your Compete account and personal data</Text>
 
             <View style={styles.warningCard}>
               <Text style={styles.warningIcon}>{"\u26A0\uFE0F"}</Text>
               <View style={styles.warningText}>
                 <Text style={styles.warningTitle}>This action is permanent</Text>
-                <Text style={styles.warningBody}>Deleting your account will permanently remove all your data including your profile, favorites, giveaway entries, and tournament submissions. This cannot be undone.</Text>
+                <Text style={styles.warningBody}>Deleting your account permanently removes your account and personal data, including your profile, email address, phone number, messages, favorites and giveaway entries. Past tournament results stay on the events you played in under your player name only. This cannot be undone.</Text>
               </View>
             </View>
 
@@ -71,15 +71,32 @@ export default function AccountDeletionPage() {
             <View style={styles.dataCard}>
               <Text style={styles.dataTitle}>What data gets deleted</Text>
               {[
-                "Your profile information (name, photo, date of birth)",
-                "Your email address and login credentials",
-                "Your saved favorites and search alerts",
-                "Your giveaway entries and history",
-                "Your tournament submissions and listings",
-                "Your support ticket history",
+                "Your account and login credentials (email address and password)",
+                "Your profile information (name, username, photo, date of birth, home city, phone number)",
+                "Your email address and phone number on your player record and tournament entries",
+                "Your messages, conversations and tournament reviews",
+                "Your saved favorites, search alerts and notification settings",
+                "Your giveaway entries, wallet and history",
+                "Your support ticket history and profile photo",
+                "Tournament listings you submitted that have no other players' registrations or results",
               ].map((item, i) => (
                 <View key={i} style={styles.dataItem}>
                   <Text style={styles.dataCheck}>{"\u2713"}</Text>
+                  <Text style={styles.dataItemText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.dataCard}>
+              <Text style={styles.dataTitle}>What may be kept</Text>
+              {[
+                "Past tournament results, brackets, standings and team entries you played in, so other players' event history stays accurate. These show your player name only and are no longer linked to any account, email address or phone number.",
+                "Venue suggestions you submitted, without any link to you.",
+                "De-identified usage statistics and administrative audit records that no longer identify you, and limited records we must keep for security, fraud prevention or legal reasons.",
+                "Tournament directors and venue owners: tournaments that include other players' registrations or results are transferred by our support team before your account is deleted. The app will ask you to email support@thecompeteapp.com, and we complete the deletion within 30 days.",
+              ].map((item, i) => (
+                <View key={i} style={styles.dataItem}>
+                  <Text style={styles.dataCheck}>{"\u2022"}</Text>
                   <Text style={styles.dataItemText}>{item}</Text>
                 </View>
               ))}

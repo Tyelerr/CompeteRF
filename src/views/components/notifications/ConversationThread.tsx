@@ -6,7 +6,7 @@
 // menu, archived-state gating, and role-aware recipient-archived reply blocking. Navigation is
 // delegated to the parent via onBack (Inbox → list, or route → router.back).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -26,7 +26,12 @@ import {
   ConversationMessage,
 } from "../../../models/services/conversation.service";
 import { reviewService } from "../../../models/services/review.service";
+import { BLOCKED_MESSAGING_TEXT, isBlockedMessagingError } from "../../../models/services/block.service";
 import { TournamentReview } from "../../../models/types/review.types";
+import { useReport } from "../../../viewmodels/hooks/useReport";
+import { SafetyTarget, useUserSafety } from "../../../viewmodels/hooks/use.user.safety";
+import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
+import ReportModal from "../common/ReportModal";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -58,7 +63,30 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
   const [sending, setSending] = useState(false);
   const [reviewCtx, setReviewCtx] = useState<TournamentReview | null>(null);
   const [archived, setArchived] = useState(false);
+  // null until loaded; support threads (users ↔ Compete staff) are exempt from blocking.
+  const [isSupport, setIsSupport] = useState<boolean | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const report = useReport({ userId: user?.id });
+  const safety = useUserSafety(user?.id);
+
+  useEffect(() => {
+    if (!id) return;
+    conversationService.getConversationMeta(id).then((m) => setIsSupport(m?.isSupport ?? null)).catch(() => {});
+  }, [id]);
+
+  // The other people who have written in this thread (report / block targets). Only senders
+  // are listed: someone who never messaged you here can't be reported from this thread.
+  const others = useMemo<SafetyTarget[]>(() => {
+    const seen = new Map<string, SafetyTarget>();
+    for (const m of messages) {
+      if (m.sender_id && m.sender_id !== user?.id && !seen.has(m.sender_id)) {
+        seen.set(m.sender_id, { id: m.sender_id, name: m.sender_name || "this user" });
+      }
+    }
+    return Array.from(seen.values());
+  }, [messages, user?.id]);
+  const canBlock = isSupport === false;
+  const blockedOther = canBlock ? others.find((o) => safety.isBlocked(o.id)) ?? null : null;
 
   const loadMessages = useCallback(async () => {
     if (!id || !user?.id) return;
@@ -135,10 +163,51 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
           ? `${reviewCtx.venueName} has archived this conversation. Replies are currently unavailable.`
           : "The venue has archived this conversation. Replies are currently unavailable."
         : "This conversation has been archived by the recipient. Replies are currently unavailable.";
-      Alert.alert("Couldn't send", msg.includes("recipient_archived") ? blocked : "Please try again.");
+      Alert.alert(
+        "Couldn't send",
+        msg.includes("recipient_archived") ? blocked : isBlockedMessagingError(err) ? BLOCKED_MESSAGING_TEXT : "Please try again.",
+      );
     } finally {
       setSending(false);
     }
+  };
+
+  // Header ⋯ menu: report / block each other participant (+ review Archive).
+  const menuItems: ActionMenuItem[] = [];
+  for (const o of others.slice(0, 3)) {
+    menuItems.push({ label: `Report ${o.name}`, onPress: () => { report.openReportModal("user", o.id); } });
+    if (canBlock) {
+      menuItems.push(
+        safety.isBlocked(o.id)
+          ? { label: `Unblock ${o.name}`, onPress: () => safety.confirmUnblock(o) }
+          : { label: `Block ${o.name}`, destructive: true, onPress: () => safety.confirmBlock(o) },
+      );
+    }
+  }
+  if (others.length > 0) {
+    menuItems.push({
+      label: "Report a message",
+      onPress: () => Alert.alert("Report a message", "Press and hold any message you received to report it."),
+    });
+  }
+  if (isReview) menuItems.push({ label: archived ? "Unarchive conversation" : "Archive conversation", onPress: toggleArchive });
+
+  // Press-and-hold a received message: report it (or block its sender).
+  const onMessageLongPress = (item: ConversationMessage) => {
+    if (!item.sender_id || item.sender_id === user?.id) return;
+    const sender: SafetyTarget = { id: item.sender_id, name: item.sender_name || "this user" };
+    const buttons: { text: string; style?: "cancel" | "destructive"; onPress?: () => void }[] = [
+      { text: "Cancel", style: "cancel" },
+      { text: "Report message", onPress: () => { report.openReportModal("message", item.id); } },
+    ];
+    if (canBlock) {
+      buttons.push(
+        safety.isBlocked(sender.id)
+          ? { text: `Unblock ${sender.name}`, onPress: () => safety.confirmUnblock(sender) }
+          : { text: `Block ${sender.name}`, style: "destructive", onPress: () => safety.confirmBlock(sender) },
+      );
+    }
+    Alert.alert(`Message from ${sender.name}`, undefined, buttons);
   };
 
   const getTimeDisplay = (dateString: string): string => {
@@ -178,9 +247,16 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
             <Text style={[styles.senderName, { color: getRoleColor(item.sender_role || "") }]}>{item.sender_name}</Text>
           </View>
         )}
-        <View style={[styles.messageBox, isMe ? styles.messageBoxMe : styles.messageBoxThem]}>
+        <TouchableOpacity
+          activeOpacity={isMe ? 1 : 0.8}
+          disabled={isMe}
+          onLongPress={() => onMessageLongPress(item)}
+          delayLongPress={350}
+          accessibilityHint={isMe ? undefined : "Press and hold to report this message"}
+          style={[styles.messageBox, isMe ? styles.messageBoxMe : styles.messageBoxThem]}
+        >
           <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>{item.body}</Text>
-        </View>
+        </TouchableOpacity>
         <Text style={[styles.timeText, isMe ? styles.timeTextMe : styles.timeTextThem]}>{getTimeDisplay(item.created_at)}</Text>
       </View>
     );
@@ -204,12 +280,8 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>{title || "Conversation"}</Text>
         </View>
-        <View style={styles.backButton}>
-          {isReview && (
-            <TouchableOpacity onPress={toggleArchive} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.headerDots}>•••</Text>
-            </TouchableOpacity>
-          )}
+        <View style={[styles.backButton, styles.headerRight]}>
+          <ActionMenu compact items={menuItems} accessibilityLabel="Conversation options" />
         </View>
       </View>
 
@@ -245,8 +317,14 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
       />
 
-      {/* Reply bar — hidden while the player has archived this review thread (Unarchive to reply). */}
-      {isReview && archived ? (
+      {/* Reply bar — hidden while the player has archived this review thread (Unarchive to reply)
+          or has blocked the other participant (Unblock to reply). */}
+      {blockedOther ? (
+        <View style={[styles.archivedBar, embedded && styles.barEmbedded]}>
+          <Text allowFontScaling={false} style={styles.archivedBarText}>You blocked {blockedOther.name}. Unblock to send messages.</Text>
+          <TouchableOpacity onPress={() => safety.confirmUnblock(blockedOther)}><Text allowFontScaling={false} style={styles.archivedBarAction}>Unblock</Text></TouchableOpacity>
+        </View>
+      ) : isReview && archived ? (
         <View style={[styles.archivedBar, embedded && styles.barEmbedded]}>
           <Text allowFontScaling={false} style={styles.archivedBarText}>You archived this conversation. Unarchive to reply.</Text>
           <TouchableOpacity onPress={toggleArchive}><Text allowFontScaling={false} style={styles.archivedBarAction}>Unarchive</Text></TouchableOpacity>
@@ -271,6 +349,18 @@ export function ConversationThread({ conversationId: id, title, isReview, tourna
           </TouchableOpacity>
         </View>
       )}
+
+      <ReportModal
+        visible={report.isModalVisible}
+        onClose={report.closeReportModal}
+        contentType={report.contentType}
+        reason={report.reason}
+        onReasonChange={report.setReason}
+        details={report.details}
+        onDetailsChange={report.setDetails}
+        onSubmit={report.handleSubmit}
+        isSubmitting={report.isSubmitting}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -284,7 +374,7 @@ const styles = StyleSheet.create({
   backButtonText: { fontSize: FONT_SIZES.md, color: COLORS.primary, fontWeight: "600" },
   headerCenter: { flex: 1, alignItems: "center" },
   headerTitle: { fontSize: FONT_SIZES.md, fontWeight: "700", color: COLORS.text },
-  headerDots: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary, fontWeight: "800", textAlign: "right" },
+  headerRight: { alignItems: "flex-end" },
   reviewHeader: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md, marginBottom: SPACING.md },
   reviewHeaderWho: { fontSize: FONT_SIZES.sm, fontWeight: "700", color: COLORS.text },
   reviewHeaderName: { fontSize: FONT_SIZES.md, fontWeight: "800", color: COLORS.text, marginTop: 2 },

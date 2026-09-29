@@ -29,6 +29,7 @@ import {
 import { tournamentService } from "../../../src/models/services/tournament.service";
 import {
   CONTENT_TYPE_LABELS,
+  isRpcReportType,
   Report,
   REPORT_REASON_LABELS,
   ReportStatus,
@@ -198,6 +199,40 @@ export default function ReportManagementScreen() {
       case "giveaway":
         router.push("/(tabs)/admin/giveaway-management" as any);
         break;
+      case "user":
+      case "message":
+      case "review":
+        // Moderation action for user-safety reports = the reported account (disable / role).
+        if (report.reported_user_id) {
+          router.push(`/(tabs)/admin/edit-user/${report.reported_user_id}` as any);
+        } else {
+          Alert.alert("Account removed", "The reported account no longer exists.");
+        }
+        break;
+    }
+  };
+
+  // Server-captured context for private content (DMs / TD-only reviews) — admins can't
+  // otherwise read those rows. Never includes the reporter.
+  const snapshotLines = (report: Report): string[] => {
+    const s = report.content_snapshot;
+    if (!s) return [];
+    switch (report.content_type) {
+      case "user":
+        return [`Reported user: @${s.user_name ?? "unknown"}${s.name ? ` (${s.name})` : ""}${s.role ? ` · ${s.role}` : ""}`];
+      case "message":
+        return [
+          `From @${s.sender_user_name ?? "unknown"}${s.sender_name ? ` (${s.sender_name})` : ""}${s.is_support ? " · support thread" : ""}${s.sent_at ? ` · ${formatDate(s.sent_at)}` : ""}`,
+          `“${s.body ?? ""}”`,
+        ];
+      case "review":
+        return [
+          `${s.rating != null ? `${s.rating}★ · ` : ""}${s.tournament_name ?? "Tournament"}${s.tournament_id ? ` (ID ${s.tournament_id})` : ""}`,
+          ...(s.reasons?.length ? [s.reasons.join(", ")] : []),
+          ...(s.comment ? [`“${s.comment}”`] : []),
+        ];
+      default:
+        return [];
     }
   };
 
@@ -334,6 +369,16 @@ export default function ReportManagementScreen() {
                   </View>
                 )}
 
+                {/* Reported content (user / message / review) */}
+                {snapshotLines(report).length > 0 && (
+                  <View style={styles.detailsContainer}>
+                    <Text allowFontScaling={false} style={styles.detailsLabel}>Reported content:</Text>
+                    {snapshotLines(report).map((line, i) => (
+                      <Text key={i} allowFontScaling={false} style={styles.detailsText}>{line}</Text>
+                    ))}
+                  </View>
+                )}
+
                 {/* Meta Info */}
                 <View style={styles.metaRow}>
                   <Text allowFontScaling={false} style={styles.metaText}>
@@ -369,7 +414,9 @@ export default function ReportManagementScreen() {
                       size={scale(14)}
                       color={COLORS.primary}
                     />
-                    <Text allowFontScaling={false} style={styles.viewButtonText}>View Content</Text>
+                    <Text allowFontScaling={false} style={styles.viewButtonText}>
+                      {isRpcReportType(report.content_type) ? "Manage User" : "View Content"}
+                    </Text>
                   </TouchableOpacity>
 
                   {/* ═══ NEW: Hide Tournament button ═══ */}

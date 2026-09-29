@@ -39,6 +39,11 @@ import {
   REVIEW_SORT_SHORT,
   TournamentReview,
 } from "../../../models/types/review.types";
+import { BLOCKED_MESSAGING_TEXT, isBlockedMessagingError } from "../../../models/services/block.service";
+import { useReport } from "../../../viewmodels/hooks/useReport";
+import { useUserSafety } from "../../../viewmodels/hooks/use.user.safety";
+import { ActionMenu, ActionMenuItem } from "../admin/ActionMenu";
+import ReportModal from "../common/ReportModal";
 
 // Canonical option lists (drop the placeholder first entry). Reused, not re-declared.
 const GAME_OPTS = GAME_TYPES.filter((g) => g.value);
@@ -509,6 +514,9 @@ const ReviewDetail = ({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  const report = useReport({ userId: senderAuthUuid });
+  const safety = useUserSafety(senderAuthUuid);
+  const player = { id: review.reviewerId, name: review.reviewerUsername ? `@${review.reviewerUsername}` : review.reviewerName ?? "this player" };
 
   const loadMessages = async (id: string | null) => {
     if (!id) return;
@@ -539,7 +547,7 @@ const ReviewDetail = ({
         : "This player has archived this conversation. Replies are currently unavailable.";
       Alert.alert(
         "Couldn't send reply",
-        msg.includes("recipient_archived") ? blocked : msg || "Please try again.",
+        msg.includes("recipient_archived") ? blocked : isBlockedMessagingError(e) ? BLOCKED_MESSAGING_TEXT : msg || "Please try again.",
       );
     } finally {
       setSending(false);
@@ -559,6 +567,24 @@ const ReviewDetail = ({
     );
   };
 
+  // ⋯ menu: report the review / the player, block the player, archive the thread.
+  const menuItems: ActionMenuItem[] = [
+    { label: "Report review", onPress: () => { report.openReportModal("review", review.id); } },
+    { label: `Report ${player.name}`, onPress: () => { report.openReportModal("user", player.id); } },
+    safety.isBlocked(player.id)
+      ? { label: `Unblock ${player.name}`, onPress: () => safety.confirmUnblock(player) }
+      : { label: `Block ${player.name}`, destructive: true, onPress: () => safety.confirmBlock(player) },
+    { label: archived ? "Unarchive thread" : "Archive thread", onPress: toggleArchive },
+  ];
+
+  const onMessageLongPress = (m: ConversationMessage) => {
+    if (m.sender_id === senderAuthUuid) return;
+    Alert.alert(`Message from ${m.sender_name ?? "player"}`, undefined, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Report message", onPress: () => { report.openReportModal("message", m.id); } },
+    ]);
+  };
+
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView
@@ -569,9 +595,7 @@ const ReviewDetail = ({
           <View style={styles.popHead}>
             <Text allowFontScaling={false} style={styles.popTitle}>Review</Text>
             <View style={styles.headActions}>
-              <TouchableOpacity onPress={toggleArchive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text allowFontScaling={false} style={styles.headDots}>•••</Text>
-              </TouchableOpacity>
+              <ActionMenu compact items={menuItems} accessibilityLabel="Review options" />
               <TouchableOpacity onPress={onClose}><Text allowFontScaling={false} style={styles.closeText}>✕</Text></TouchableOpacity>
             </View>
           </View>
@@ -603,10 +627,17 @@ const ReviewDetail = ({
               {messages.map((m) => {
                 const mine = m.sender_id === senderAuthUuid;
                 return (
-                  <View key={m.id} style={[styles.msgBubble, mine ? styles.msgMine : styles.msgTheirs]}>
+                  <TouchableOpacity
+                    key={m.id}
+                    activeOpacity={mine ? 1 : 0.8}
+                    disabled={mine}
+                    onLongPress={() => onMessageLongPress(m)}
+                    delayLongPress={350}
+                    style={[styles.msgBubble, mine ? styles.msgMine : styles.msgTheirs]}
+                  >
                     {!mine && <Text allowFontScaling={false} style={styles.msgSender}>{m.sender_name ?? "Player"}</Text>}
                     <Text allowFontScaling={false} style={styles.msgBody}>{m.body}</Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
               {!loadingMsgs && !convId && (
@@ -633,6 +664,17 @@ const ReviewDetail = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+      <ReportModal
+        visible={report.isModalVisible}
+        onClose={report.closeReportModal}
+        contentType={report.contentType}
+        reason={report.reason}
+        onReasonChange={report.setReason}
+        details={report.details}
+        onDetailsChange={report.setDetails}
+        onSubmit={report.handleSubmit}
+        isSubmitting={report.isSubmitting}
+      />
     </Modal>
   );
 };
@@ -646,7 +688,6 @@ const styles = StyleSheet.create({
   segmentText: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary, fontWeight: "700" },
   segmentTextOn: { color: "#fff" },
   headActions: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
-  headDots: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, fontWeight: "800" },
   searchBox: { flexDirection: "row", alignItems: "center", backgroundColor: COLORS.surface, borderRadius: webSc(RADIUS.md), borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: webSc(SPACING.sm) },
   searchIcon: { fontSize: webMs(FONT_SIZES.sm), marginRight: webSc(SPACING.xs) },
   searchInput: { flex: 1, color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), paddingVertical: webSc(SPACING.sm) },

@@ -5,32 +5,53 @@ import { supabase } from '@/src/lib/supabase';
 import { notificationDispatcher } from '@/src/models/services/notification-dispatcher.service';
 import {
   CreateReportPayload,
+  isRpcReportType,
   Report,
   ReportContentType,
   ReportStatus,
   UpdateReportPayload,
 } from '@/src/models/types/report.types';
+import { reportErrorMessage } from '@/src/utils/user-safety';
 
 /**
  * Submit a new report from an authenticated user.
  * RLS ensures reporter_id must match auth.uid().
  */
-export async function submitReport(payload: CreateReportPayload): Promise<Report> {
-  const { data, error } = await supabase
-    .from('reports')
-    .insert({
-      reporter_id: payload.reporter_id,
-      content_type: payload.content_type,
-      content_id: payload.content_id,
-      reason: payload.reason,
-      details: payload.details ?? null,
-    })
-    .select()
-    .single();
+export async function submitReport(payload: CreateReportPayload): Promise<Pick<Report, 'id'>> {
+  let data: Pick<Report, 'id'>;
 
-  if (error) {
-    console.error('[ReportService] submitReport error:', error);
-    throw new Error(error.message);
+  if (isRpcReportType(payload.content_type)) {
+    // User / message / review: server verifies the reporter can see the content and
+    // snapshots it for moderators (private DMs and TD-only reviews aren't admin-readable).
+    const { data: reportId, error } = await supabase.rpc('submit_content_report', {
+      p_content_type: payload.content_type,
+      p_content_id: payload.content_id,
+      p_reason: payload.reason,
+      p_details: payload.details ?? null,
+    });
+    if (error || !reportId) {
+      console.error('[ReportService] submit_content_report error:', error);
+      throw new Error(reportErrorMessage(error?.message));
+    }
+    data = { id: reportId as string };
+  } else {
+    const { data: row, error } = await supabase
+      .from('reports')
+      .insert({
+        reporter_id: payload.reporter_id,
+        content_type: payload.content_type,
+        content_id: payload.content_id,
+        reason: payload.reason,
+        details: payload.details ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('[ReportService] submitReport error:', error);
+      throw new Error(error.message);
+    }
+    data = row as Pick<Report, 'id'>;
   }
 
   // ══════════════════════════════════════════════════════════
@@ -53,7 +74,7 @@ export async function submitReport(payload: CreateReportPayload): Promise<Report
       console.error('⚠️ Error sending report notification to admins:', err),
     );
 
-  return data as Report;
+  return data;
 }
 
 /**

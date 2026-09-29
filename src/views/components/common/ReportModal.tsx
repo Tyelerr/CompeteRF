@@ -35,7 +35,7 @@ interface ReportModalProps {
   isSubmitting: boolean;
 }
 
-const REASON_OPTIONS: ReportReason[] = ["inappropriate", "spam", "misleading", "other"];
+const REASON_OPTIONS: ReportReason[] = ["inappropriate", "harassment", "spam", "misleading", "other"];
 
 export default function ReportModal({ visible, onClose, contentType, reason, onReasonChange, details, onDetailsChange, onSubmit, isSubmitting }: ReportModalProps) {
   const title = contentType ? `Report ${CONTENT_TYPE_LABELS[contentType]}` : "Report Content";
