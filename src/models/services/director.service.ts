@@ -314,8 +314,10 @@ class DirectorService {
       const { data: assignedDirectors } = await supabase
         .from("venue_directors").select("director_id").eq("venue_id", venueId).is("archived_at", null);
       const assignedIds = assignedDirectors?.map((d) => d.director_id) || [];
+      // Real TDs only — admin accounts are not default director candidates (they administer by
+      // role; an admin explicitly assigned to a venue still shows in that venue's team).
       let query = supabase.from("profiles_public").select("id_auto, name, user_name, role")
-        .in("role", ["tournament_director", "super_admin", "compete_admin"]).order("name");
+        .in("role", ["tournament_director"]).order("name");
       if (assignedIds.length > 0) query = query.not("id_auto", "in", `(${assignedIds.join(",")})`);
       const { data, error } = await query;
       if (error) throw error;

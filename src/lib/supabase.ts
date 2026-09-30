@@ -2,6 +2,7 @@ import "react-native-url-polyfill/auto";
 import { createClient } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState, Platform } from "react-native";
+import { authFlowType } from "../utils/google-auth";
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -52,6 +53,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: canPersist,
     persistSession: canPersist,
     detectSessionInUrl: false,
+    // PKCE only on web and only once web Google sign-in is enabled (src/utils/google-auth.ts);
+    // with the flag off this is exactly the previous default ("implicit").
+    flowType: authFlowType(!isNative),
   },
 });
 

@@ -22,6 +22,13 @@ import {
   initialFormData,
   suggestedSchedule,
 } from "../utils/tournament-form-data";
+import {
+  DirectorCandidate,
+  buildDirectorCandidates,
+  defaultDirectorFor,
+  resolveNewTournamentDirectorId,
+} from "../utils/venue-scope";
+import { useVenueScope } from "./hooks/use.venue.scope";
 
 // -- Web-safe alert helper ---------------------------------------------------
 const showAlert = (title: string, message: string, onOk?: () => void) => {
@@ -108,6 +115,9 @@ export const useSubmitTournament = () => {
     loading: authLoading,
     canSubmitTournaments,
   } = useAuthContext();
+  // Shared admin-aware scope: admins pick any venue by ROLE; others only venues they run.
+  const venueScope = useVenueScope();
+  const isAdmin = venueScope.isAdmin;
 
   // -- Data state -------------------------------------------------------------
   const [dataLoading, setDataLoading] = useState(true);
@@ -190,14 +200,10 @@ export const useSubmitTournament = () => {
 
   const loadFormData = async () => {
     try {
-      // Only compete_admin / super_admin can submit for any venue. Everyone
-      // else (tournament_director, bar_owner — including those tied to multiple
-      // venues) sees ONLY the venues they own or direct.
-      const role = (profile as any)?.role;
-      const isAdminRole = role === "compete_admin" || role === "super_admin";
-      const venuesData = isAdminRole
-        ? await venueService.getVenues()
-        : await venueService.getVenuesForUser(profile!.id_auto);
+      // Admins (compete_admin / super_admin) can submit for any venue. Everyone else
+      // (tournament_director, bar_owner — including those tied to multiple venues) sees
+      // ONLY the venues they own or direct. One shared rule: src/utils/venue-scope.ts.
+      const venuesData = await venueScope.loadVenues();
 
       setVenues(venuesData);
 
@@ -214,6 +220,61 @@ export const useSubmitTournament = () => {
       setDataLoading(false);
     }
   };
+
+  // -- Tournament Director (admins) -------------------------------------------
+  // Admins do not direct tournaments by default: they must choose a REAL director for the venue
+  // (its active TDs / owners). Exactly one legitimate choice pre-selects; otherwise an explicit
+  // choice is required. Being the director themself is only via assignMyselfAsDirector().
+  // Both are keyed by venue, so switching venue never shows / submits a stale director.
+  const [loadedDirectors, setLoadedDirectors] = useState<{ venueId: number | null; candidates: DirectorCandidate[] }>({
+    venueId: null,
+    candidates: [],
+  });
+  const [directorChoice, setDirectorChoice] = useState<{ venueId: number | null; directorId: number | null }>({
+    venueId: null,
+    directorId: null,
+  });
+  const currentVenueId = formData.venueId ?? null;
+  const directorCandidates = loadedDirectors.venueId === currentVenueId ? loadedDirectors.candidates : [];
+  const loadingDirectors = isAdmin && currentVenueId != null && loadedDirectors.venueId !== currentVenueId;
+  const selectedDirectorId = directorChoice.venueId === currentVenueId ? directorChoice.directorId : null;
+
+  useEffect(() => {
+    if (!isAdmin || currentVenueId == null) return;
+    let alive = true;
+    const toRow = (r: any) => ({
+      idAuto: r.profiles?.id_auto ?? null,
+      name: r.profiles?.name ?? null,
+      userName: r.profiles?.user_name ?? null,
+    });
+    Promise.all([venueService.getVenueDirectors(currentVenueId), venueService.getVenueOwners(currentVenueId)])
+      .then(([directors, owners]) => buildDirectorCandidates(directors.map(toRow), owners.map(toRow)))
+      .catch(() => [] as DirectorCandidate[])
+      .then((candidates) => {
+        if (!alive) return;
+        setLoadedDirectors({ venueId: currentVenueId, candidates });
+        setDirectorChoice((prev) =>
+          prev.venueId === currentVenueId
+            ? prev // an explicit choice already made for this venue wins
+            : { venueId: currentVenueId, directorId: defaultDirectorFor(candidates, profile?.id_auto) },
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, currentVenueId, profile?.id_auto]);
+
+  const directorOptions: DropdownOption[] = directorCandidates.map((c) => ({
+    label: `${c.name} (${c.relation === "director" ? "TD" : "Owner"})`,
+    value: String(c.idAuto),
+  }));
+  const selectDirector = (value: string) =>
+    setDirectorChoice({ venueId: currentVenueId, directorId: value ? Number(value) : null });
+  const assignMyselfAsDirector = () =>
+    setDirectorChoice({ venueId: currentVenueId, directorId: profile?.id_auto ?? null });
+  const directorIsSelf = selectedDirectorId != null && selectedDirectorId === profile?.id_auto;
+  const newTournamentDirectorId = () =>
+    resolveNewTournamentDirectorId({ role: profile?.role, myIdAuto: profile?.id_auto, selectedDirectorId });
 
   // -- Venue tables loading ---------------------------------------------------
 
@@ -555,7 +616,7 @@ export const useSubmitTournament = () => {
     const validSidePots = sidePots.filter((pot) => pot.name.trim() && pot.amount.trim());
     const date = dateOverride || formData.tournamentDate!;
     return {
-      director_id: profile!.id_auto,
+      director_id: newTournamentDirectorId(),
       venue_id: formData.venueId,
       template_id: templateId || formData.templateId,
       parent_template_id: templateId,
@@ -609,7 +670,7 @@ export const useSubmitTournament = () => {
         : null;
 
     const templateData = {
-      director_id: profile!.id_auto,
+      director_id: newTournamentDirectorId(),
       venue_id: formData.venueId,
       name: formData.name.trim(),
       description: formData.description.trim() || null,
@@ -681,6 +742,10 @@ export const useSubmitTournament = () => {
     }
     if (!formData.startTime) { showAlert("Error", "Please select a start time."); return false; }
     if (!formData.venueId) { showAlert("Error", "Please select a venue."); return false; }
+    if (isAdmin && newTournamentDirectorId() == null) {
+      showAlert("Tournament Director", "Choose the Tournament Director for this venue (or use \"Assign myself\").");
+      return false;
+    }
     if (!venueHasTables) { showAlert("No Tables Configured", "This venue does not have any tables set up yet. Please contact the venue owner."); return false; }
     if (!formData.tableSize) { showAlert("Error", "Please select a table size."); return false; }
     if (!formData.tournamentDate) { showAlert("Error", formData.isRecurring ? "Please select when your series begins." : "Please select a tournament date."); return false; }
@@ -693,6 +758,7 @@ export const useSubmitTournament = () => {
     setFormData({ ...initialFormData, ...suggestedSchedule() });
     setSidePots([]);
     setSelectedVenue(null);
+    setDirectorChoice({ venueId: null, directorId: null });
     setCustomImageUri(null);
     setHasManualSelection(false);
     setVenueTables([]);
@@ -788,6 +854,14 @@ export const useSubmitTournament = () => {
     chipEditValues,
     venueOptions,
     templateOptions,
+    isAdmin,
+    directorOptions,
+    directorCandidates,
+    selectedDirectorId,
+    directorIsSelf,
+    loadingDirectors,
+    selectDirector,
+    assignMyselfAsDirector,
     hasTemplates: templates.length > 0,
     refs,
     updateFormData,

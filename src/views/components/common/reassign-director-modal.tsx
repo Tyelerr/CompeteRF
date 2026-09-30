@@ -27,6 +27,7 @@ export const ReassignDirectorModal = ({
   onSearch,
   onCancel,
   onConfirm,
+  selfOption,
 }: {
   visible: boolean;
   tournamentName: string;
@@ -36,6 +37,8 @@ export const ReassignDirectorModal = ({
   onSearch: (query: string) => void;
   onCancel: () => void;
   onConfirm: (directorId: number, directorName: string, reason: string) => void;
+  /** Admin screens only: an explicit "Assign myself" action (admins are never search results). */
+  selfOption?: DirectorSearchResult | null;
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selected, setSelected] = useState<DirectorSearchResult | null>(null);
@@ -132,6 +135,12 @@ export const ReassignDirectorModal = ({
                   </TouchableOpacity>
                 ))}
               </View>
+            )}
+
+            {selfOption && selected?.id !== selfOption.id && (
+              <TouchableOpacity onPress={() => setSelected(selfOption)} accessibilityRole="button">
+                <Text style={s.hint}>Assign myself as director</Text>
+              </TouchableOpacity>
             )}
 
             {loadingDirectors && <Text style={s.hint}>Searching...</Text>}

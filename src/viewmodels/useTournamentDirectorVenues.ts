@@ -27,6 +27,7 @@ export interface TDVenue {
   assigned_by_profile?: {
     name: string;
     user_name: string;
+    role?: string | null;
   };
 
   // Computed stats
@@ -118,7 +119,8 @@ export const useTournamentDirectorVenues = () => {
           ),
           assigned_by_profile:profiles_public!assigned_by (
             name,
-            user_name
+            user_name,
+            role
           )
         `,
         )

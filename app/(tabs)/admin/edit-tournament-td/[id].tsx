@@ -1,4 +1,4 @@
-﻿import { useLocalSearchParams, useRouter } from "expo-router";
+﻿import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -18,12 +18,17 @@ import { FONT_SIZES } from "../../../../src/theme/typography";
 import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { TournamentManageGuard } from "../../../../src/views/components/common/AccessGate";
+import { useVenueScope } from "../../../../src/viewmodels/hooks/use.venue.scope";
 
 const isWeb = Platform.OS === "web";
 
 // Mounts only once the server confirms this user manages the tournament.
 export default function EditTournamentTDRoute() {
   const { id } = useLocalSearchParams();
+  // This screen is the director-only editor (it loads/saves WHERE director_id = me). Admins edit
+  // any tournament by role, without being its director → the full editor.
+  const { isAdmin } = useVenueScope();
+  if (isAdmin) return <Redirect href={`/(tabs)/admin/edit-tournament/${id}` as any} />;
   return (
     <TournamentManageGuard tournamentId={Number(id)}>
       <EditTournamentTDScreen />

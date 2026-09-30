@@ -1,13 +1,13 @@
 ﻿import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { supabase } from "../../../lib/supabase";
-import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { parseLoginIdentifier } from "../../../utils/login-identifier";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { useLogin } from "../../../viewmodels/useLogin";
+import { useSocialSignIn } from "../../../viewmodels/hooks/use.social.sign.in";
+import { GoogleSignInButton } from "../../components/auth/GoogleSignInButton";
 import { Button } from "../../components/common/button";
 import { Input } from "../../components/common/input";
 
@@ -17,39 +17,12 @@ const wxSc = (v: number) => isWeb ? v : scale(v);
 
 export const LoginScreen = () => {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  // Sign-in + post-auth routing (ready → app, no profile → complete-profile) live in useLogin.
+  const { identifier, setIdentifier, password, setPassword, error, loading, handleLogin } = useLogin();
+  // "Continue with Google" — rendered only when available (flags off → nothing).
+  const google = useSocialSignIn();
   // Web only: lets Enter in the username field jump to the password field.
   const passwordRef = useRef<TextInput>(null);
-
-  const handleLogin = async () => {
-    setError("");
-    if (!identifier.trim()) { setError("Please enter your email or username"); return; }
-    if (!password) { setError("Please enter your password"); return; }
-    setLoading(true);
-    try {
-      const { kind, value } = parseLoginIdentifier(identifier);
-      let userId: string | null = null;
-      if (kind === "email") {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: value, password });
-        if (signInError) { setError("Incorrect credentials. Please try again."); return; }
-        userId = data.user?.id ?? null;
-      } else {
-        // Username: resolved + signed in server-side; the email never reaches this device.
-        const res = await authService.signInWithUsername(value, password);
-        if (res.error || !res.userId) { setError("Incorrect credentials. Please try again."); return; }
-        userId = res.userId;
-      }
-      const { data: profile } = await supabase.from("profiles").select("id").eq("id", userId).maybeSingle();
-      if (profile) { router.replace("/(tabs)"); } else { router.replace("/auth/register"); }
-    } catch {
-      setError("Incorrect credentials. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -70,6 +43,9 @@ export const LoginScreen = () => {
             </TouchableOpacity>
             {error ? <Text allowFontScaling={false} style={styles.error}>{error}</Text> : null}
             <Button title="Log In" onPress={handleLogin} loading={loading} fullWidth />
+            {google.googleAvailable ? <View style={styles.googleGap} /> : null}
+            <GoogleSignInButton available={google.googleAvailable} loading={google.googleLoading} onPress={google.signInWithGoogle} />
+            {google.error ? <Text allowFontScaling={false} style={styles.error}>{google.error}</Text> : null}
             <View style={styles.footer}>
               <Text allowFontScaling={false} style={styles.footerText}>{"Don't have an account? "}</Text>
               <TouchableOpacity onPress={() => router.push("/auth/register" as any)}>
@@ -89,6 +65,9 @@ export const LoginScreen = () => {
           </TouchableOpacity>
           {error ? <Text allowFontScaling={false} style={styles.error}>{error}</Text> : null}
           <Button title="Log In" onPress={handleLogin} loading={loading} fullWidth />
+          {google.googleAvailable ? <View style={styles.googleGap} /> : null}
+          <GoogleSignInButton available={google.googleAvailable} loading={google.googleLoading} onPress={google.signInWithGoogle} />
+          {google.error ? <Text allowFontScaling={false} style={styles.error}>{google.error}</Text> : null}
           <View style={styles.footer}>
             <Text allowFontScaling={false} style={styles.footerText}>{"Don't have an account? "}</Text>
             <TouchableOpacity onPress={() => router.push("/auth/register" as any)}>
@@ -103,6 +82,7 @@ export const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  googleGap: { height: wxSc(SPACING.md) },
   container: { flex: 1, backgroundColor: COLORS.background, padding: wxSc(SPACING.lg) },
   back: { marginTop: wxSc(SPACING.xl), marginBottom: wxSc(SPACING.lg) },
   backText: { color: COLORS.textSecondary, fontSize: wxMs(FONT_SIZES.md) },

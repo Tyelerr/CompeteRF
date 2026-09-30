@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
+import { displayAssignerName } from "../../../utils/venue-scope";
 import { TDVenue } from "../../../viewmodels/useTournamentDirectorVenues";
 
 interface TDVenueCardProps {
@@ -114,8 +115,11 @@ export const TDVenueCard: React.FC<TDVenueCardProps> = ({
           <View style={styles.assignmentRow}>
             <Text style={styles.assignmentLabel}>By:</Text>
             <Text style={styles.assignmentValue}>
-              {venue.assigned_by_profile.name ||
-                venue.assigned_by_profile.user_name}
+              {/* An admin assigner shows as "Compete Admin", never by personal name. */}
+              {displayAssignerName(
+                venue.assigned_by_profile.name || venue.assigned_by_profile.user_name,
+                venue.assigned_by_profile.role,
+              )}
             </Text>
           </View>
         )}

@@ -1,6 +1,7 @@
 ﻿import { supabase } from "../../lib/supabase";
 import { Venue, VenueDirector, VenueOwner } from "../types/venue.types";
 import { PUBLIC_PROFILE_COLUMNS } from "../types/profile.types";
+import type { VenueScope } from "../../utils/venue-scope";
 
 export const venueService = {
   async getVenues(state?: string, city?: string): Promise<Venue[]> {
@@ -57,6 +58,21 @@ export const venueService = {
       .is("archived_at", null);
     if (error) throw error;
     return data?.map((d) => d.venues as unknown as Venue) || [];
+  },
+
+  // Venues a user may administer, from the shared scope (src/utils/venue-scope.ts): every active
+  // venue for an admin, otherwise only the venues they own or direct.
+  async getVenuesInScope(scope: VenueScope): Promise<Venue[]> {
+    if (scope.kind === "all") return this.getVenues();
+    if (scope.ids.length === 0) return [];
+    const { data, error } = await supabase
+      .from("venues")
+      .select("*")
+      .in("id", scope.ids)
+      .eq("status", "active")
+      .order("venue", { ascending: true });
+    if (error) throw error;
+    return data || [];
   },
 
   // Venues a user is tied to as EITHER an owner or a director (deduped, active
@@ -131,8 +147,10 @@ export const venueService = {
     if (error) throw error;
   },
 
-  // Creates a venue with the caller as its primary owner (plus optional directors) in
-  // one authorized server call — clients can no longer self-insert venue_owners rows.
+  // Creates a venue (plus optional directors) in one authorized server call (create_venue RPC) —
+  // clients never self-insert venue_owners rows. A bar-owner caller becomes the primary owner.
+  // An ADMIN caller does not: the venue gets the explicitly chosen ownerId, or no owner at all.
+  // p_owner_id is only sent when chosen, so the call is also valid against the older RPC.
   // Roles of the owner and directors are re-derived server-side. Returns the venue id.
   async createVenueWithOwner(
     venue: {
@@ -147,10 +165,12 @@ export const venueService = {
       longitude?: number | null;
     },
     directorIds: number[] = [],
+    ownerId: number | null = null,
   ): Promise<number> {
     const { data, error } = await supabase.rpc("create_venue", {
       p_venue: venue,
       p_director_ids: directorIds,
+      ...(ownerId != null ? { p_owner_id: ownerId } : {}),
     });
     if (error) throw error;
     return data as number;

@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, TextInput } from "react-native";
-import { supabase } from "../lib/supabase";
 import { GAME_TYPE_MAP } from "../utils/game-type.utils";
 import { notificationDispatcher } from "../models/services/notification-dispatcher.service";
 import { tournamentService } from "../models/services/tournament.service";
 import { Tournament } from "../models/types/tournament.types";
 import { useAuthContext } from "../providers/AuthProvider";
+import { canEditTournament } from "../utils/venue-scope";
+import { useVenueScope } from "./hooks/use.venue.scope";
 
 interface EditTournamentForm {
   name: string;
@@ -62,6 +63,9 @@ export const useEditTournament = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { profile } = useAuthContext();
+  // Shared admin-aware scope: admins edit any tournament / pick any venue by ROLE, without being
+  // the director or an owner; everyone else stays scoped to venues they own or direct.
+  const venueScope = useVenueScope();
 
   // States
   const [isLoading, setIsLoading] = useState(true);
@@ -128,25 +132,15 @@ export const useEditTournament = () => {
         return;
       }
 
-      // Check permissions - user can only edit tournaments at their owned venues or tournaments they created
-      let canEdit = false;
-
-      if (tournamentData.director_id === profile.id_auto) {
-        canEdit = true; // Tournament director can edit their own tournaments
-      } else {
-        // Check if user owns the venue
-        const { data: venueOwnership } = await supabase
-          .from("venue_owners")
-          .select("id")
-          .eq("venue_id", tournamentData.venue_id)
-          .eq("owner_id", profile.id_auto)
-          .is("archived_at", null)
-          .single();
-
-        if (venueOwnership) {
-          canEdit = true; // Venue owner can edit tournaments at their venues
-        }
-      }
+      // Admin (by role), the tournament's director, or an active owner of its venue. Editing never
+      // changes director_id (it is not part of the saved fields below).
+      const canEdit = canEditTournament({
+        role: profile.role,
+        myIdAuto: profile.id_auto,
+        directorId: tournamentData.director_id,
+        venueId: tournamentData.venue_id,
+        ownedVenueIds: venueScope.ownedVenueIds,
+      });
 
       if (!canEdit) {
         Alert.alert(
@@ -204,53 +198,9 @@ export const useEditTournament = () => {
 
   const loadVenues = async () => {
     if (!profile?.id_auto) return;
-
     try {
-      // Get venue IDs owned by this user
-      const { data: ownedVenueIds } = await supabase
-        .from("venue_owners")
-        .select("venue_id")
-        .eq("owner_id", profile.id_auto)
-        .is("archived_at", null);
-
-      // Get venue IDs where they're a director
-      const { data: directorVenueIds } = await supabase
-        .from("venue_directors")
-        .select("venue_id")
-        .eq("director_id", profile.id_auto)
-        .is("archived_at", null);
-
-      // Combine all venue IDs
-      const allVenueIds = [
-        ...(ownedVenueIds?.map((o) => o.venue_id) || []),
-        ...(directorVenueIds?.map((d) => d.venue_id) || []),
-      ];
-
-      // Remove duplicate venue IDs
-      const uniqueVenueIds = [...new Set(allVenueIds)];
-
-      if (uniqueVenueIds.length === 0) {
-        setVenues([]);
-        return;
-      }
-
-      // Get the actual venue data
-      const { data: venueData } = await supabase
-        .from("venues")
-        .select(
-          `
-          id,
-          venue,
-          address,
-          city,
-          state,
-          zip_code
-        `,
-        )
-        .in("id", uniqueVenueIds)
-        .eq("status", "active");
-
-      setVenues(venueData || []);
+      // Admins: every active venue. Everyone else: venues they own or direct.
+      setVenues(await venueScope.loadVenues());
     } catch (error) {
       console.error("Error loading venues:", error);
     }

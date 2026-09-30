@@ -40,3 +40,15 @@ export const COLORS = {
 
   transparent: "transparent",
 };
+
+// "Sign in with Google" button — Google-mandated light-theme values from Google's official button
+// generator (developers.google.com/identity/branding-guidelines → Render HTML Button Element).
+// Brand requirements, not Compete theme colours: do not restyle.
+export const GOOGLE_BUTTON = {
+  fill: "#FFFFFF",
+  stroke: "#747775",
+  text: "#1F1F1F",
+  // State layers: #303030 at 8% (hover) / 12% (pressed), as in Google's CSS.
+  hoverOverlay: "rgba(48, 48, 48, 0.08)",
+  pressedOverlay: "rgba(48, 48, 48, 0.12)",
+};

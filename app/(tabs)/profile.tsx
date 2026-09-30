@@ -19,7 +19,6 @@ import { Alert,
 } from "react-native";
 import { supabase } from "../../src/lib/supabase";
 import { useAuthContext } from "../../src/providers/AuthProvider";
-import { authService } from "../../src/models/services/auth.service";
 import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
@@ -36,6 +35,9 @@ import { PerformanceSnapshot } from "../../src/views/components/profile/Performa
 import { RecentActivity } from "../../src/views/components/profile/RecentActivity";
 import { useScrollToTopOnFocus } from "../../src/viewmodels/hooks/use.scroll.to.top";
 import { useAuthStore } from "../../src/viewmodels/stores/auth.store";
+import { useSocialSignIn } from "../../src/viewmodels/hooks/use.social.sign.in";
+import { GoogleSignInButton } from "../../src/views/components/auth/GoogleSignInButton";
+import { AUTH_LOAD_ERROR_MESSAGE } from "../../src/utils/auth-routing";
 import { Button } from "../../src/views/components/common/button";
 import { Loading } from "../../src/views/components/common/loading";
 import { NotificationsModal } from "../../src/views/components/notifications/NotificationsModal";
@@ -79,9 +81,21 @@ const formatGameName = (game: string): string => {
 };
 
 // ── Animated logged-out view ─────────────────────────────────────────────────
-const LoggedOutView = ({ router }: { router: any }) => {
-  const [appleLoading, setAppleLoading] = useState(false);
-  const [error, setError] = useState("");
+// `status` covers a signed-in account the app can't show yet: no profile row (needsProfile →
+// finish setup) or a failed account load (error → retry; never treated as "no profile").
+const LoggedOutView = ({
+  router,
+  status,
+  onRetry,
+  onSignOut,
+}: {
+  router: any;
+  status?: "needsProfile" | "error";
+  onRetry?: () => void;
+  onSignOut?: () => void;
+}) => {
+  // Provider sign-in + shared post-auth routing (ready → app, no profile → complete-profile).
+  const { signInWithApple, appleLoading, signInWithGoogle, googleLoading, googleAvailable, error } = useSocialSignIn();
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
   const messageFade = useRef(new Animated.Value(0)).current;
@@ -102,26 +116,6 @@ const LoggedOutView = ({ router }: { router: any }) => {
     ]).start();
   }, []);
 
-  const handleAppleSignIn = async () => {
-    setError("");
-    setAppleLoading(true);
-    try {
-      const result = await authService.signInWithApple();
-      if (!result.user) { setError("Sign in failed. Please try again."); return; }
-      const { data: profile } = await supabase.from("profiles").select("id").eq("id", result.user.id).maybeSingle();
-      if (profile) {
-        router.replace("/(tabs)");
-      } else {
-        router.replace({ pathname: "/auth/complete-profile", params: { firstName: result.fullName?.givenName || "", lastName: result.fullName?.familyName || "" } } as any);
-      }
-    } catch (err: any) {
-      if (err.code === "ERR_REQUEST_CANCELED") return;
-      setError("Apple Sign In failed. Please try again.");
-    } finally {
-      setAppleLoading(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={[styles.header, isWeb && styles.headerWeb]}>
@@ -133,9 +127,26 @@ const LoggedOutView = ({ router }: { router: any }) => {
           Welcome!
         </Animated.Text>
         <Animated.Text allowFontScaling={false} style={[styles.message, { opacity: messageFade }]}>
-          Log in to see your profile
+          {status === "needsProfile"
+            ? "Finish setting up your account to see your profile"
+            : status === "error"
+              ? AUTH_LOAD_ERROR_MESSAGE
+              : "Log in to see your profile"}
         </Animated.Text>
+        {status ? (
+          <View style={[styles.buttonGroup, isWeb && styles.buttonGroupWeb]}>
+            {status === "needsProfile" ? (
+              <Button title="Finish Setup" onPress={() => router.push("/auth/complete-profile" as any)} fullWidth />
+            ) : (
+              <Button title="Try Again" onPress={() => onRetry?.()} fullWidth />
+            )}
+            <View style={styles.spacerSm} />
+            <Button title="Sign Out" onPress={() => onSignOut?.()} variant="outline" fullWidth />
+          </View>
+        ) : (
         <Animated.View style={[styles.buttonGroup, isWeb && styles.buttonGroupWeb, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
+          {/* Sign in with Google (web today; hidden while unavailable) → or → Log In → Create Account. */}
+          <GoogleSignInButton available={googleAvailable} loading={googleLoading} onPress={signInWithGoogle} withDivider={Platform.OS !== "ios"} />
           {Platform.OS === "ios" && (
             <>
               <View style={styles.appleButtonWrapper}>
@@ -144,7 +155,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
                   buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
                   cornerRadius={8}
                   style={styles.appleButton}
-                  onPress={handleAppleSignIn}
+                  onPress={signInWithApple}
                 />
                 {appleLoading && <Text allowFontScaling={false} style={styles.loadingHint}>Signing in...</Text>}
               </View>
@@ -160,6 +171,7 @@ const LoggedOutView = ({ router }: { router: any }) => {
           <Button title="Create Account" onPress={() => router.push("/auth/register" as any)} variant="outline" fullWidth />
           {error ? <Text allowFontScaling={false} style={styles.errorText}>{error}</Text> : null}
         </Animated.View>
+        )}
       </View>
     </View>
   );
@@ -296,7 +308,8 @@ export default function ProfileScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { signOut: authSignOut } = useAuthContext();
+  const { signOut: authSignOut, refreshSession } = useAuthContext();
+  const authStatus = useAuthStore((s) => s.authStatus);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(storeProfile ?? null);
   // Favorites come from the shared useFavorites React Query cache (single source
@@ -462,6 +475,16 @@ export default function ProfileScreen() {
 
   if (loading && !profile) return <Loading fullScreen message="Loading..." />;
   if (!user) return <LoggedOutView router={router} />;
+  // Signed in but no profile to show: finish setup, or retry a failed load (shared auth status).
+  if (!profile && (authStatus === "needsProfile" || authStatus === "error"))
+    return (
+      <LoggedOutView
+        router={router}
+        status={authStatus}
+        onRetry={() => { void refreshSession(user.id); }}
+        onSignOut={() => { void authSignOut(); }}
+      />
+    );
   // Resolve the live-tournament check before the first paint so we render the correct
   // view once (normal Profile vs Tournament View) instead of flashing Profile then
   // swapping in Tournament View. `liveCheckLoading` is true ONLY on the initial fetch

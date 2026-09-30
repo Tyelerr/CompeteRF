@@ -20,7 +20,9 @@ import { Alert, AppState, AppStateStatus, Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { profileService } from '../models/services/profile.service';
 import { playerRegistrationService } from '../models/services/player.registration.service';
+import { AuthStatus } from '../models/types/auth.types';
 import { Profile, ProfileInsert } from '../models/types/profile.types';
+import { deriveAuthStatus } from '../utils/auth-routing';
 import { useNotifications } from '../viewmodels/hooks/use.notifications';
 import { useOnboarding } from '../viewmodels/hooks/useOnboarding';
 import { useAuthStore } from '../viewmodels/stores/auth.store';
@@ -37,6 +39,7 @@ interface AuthContextType {
   isAdmin: boolean;
   pushToken: string | null;
   refreshSession: (forceUserId?: string) => Promise<void>;
+  resolveAuthStatus: (userId: string, opts?: { force?: boolean }) => Promise<AuthStatus>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   createProfile: (profileData: ProfileInsert) => Promise<void>;
@@ -62,6 +65,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   pushToken: null,
   refreshSession: async () => {},
+  resolveAuthStatus: async () => 'signedOut',
   refreshProfile: async () => {},
   signOut: async () => {},
   createProfile: async () => {},
@@ -102,7 +106,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // Zustand store — single source of truth
-  const { profile, hydrateSession, reset: resetStore } = useAuthStore();
+  const { profile, hydrateSession, setAuthStatus, reset: resetStore } = useAuthStore();
 
   // ── Generation counter ─────────────────────────────────────────────────────
   const hydrationGenRef = useRef(0);
@@ -184,9 +188,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // In-flight hydration per user. At launch both getSession() and the listener's
   // INITIAL_SESSION event hydrate the same user; sharing the request avoids a second
   // get_auth_session round trip that would supersede (and delay) the first.
-  const inflightHydrationRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+  const inflightHydrationRef = useRef<{ userId: string; promise: Promise<AuthStatus> } | null>(null);
 
-  const hydrateAuthSession = (userId: string, opts?: { force?: boolean }): Promise<void> => {
+  // Resolves to the account's post-auth status (src/utils/auth-routing.ts) once hydration
+  // settles — the single input to post-sign-in routing for every sign-in method.
+  const hydrateAuthSession = (userId: string, opts?: { force?: boolean }): Promise<AuthStatus> => {
     const inflight = inflightHydrationRef.current;
     if (!opts?.force && inflight && inflight.userId === userId) return inflight.promise;
     const promise = runHydration(userId).finally(() => {
@@ -206,28 +212,54 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return supabase.rpc('get_auth_session');
   };
 
-  const runHydration = async (userId: string) => {
+  // A newer hydration superseded this one: report whatever that newer run settles on.
+  const supersededStatus = (): Promise<AuthStatus> =>
+    inflightHydrationRef.current?.promise ?? Promise.resolve(useAuthStore.getState().authStatus);
+
+  // Applies a SUCCESSFUL load (RPC or fallback): no row → needsProfile, disabled → eject,
+  // otherwise the profile is hydrated. Returns the resulting status.
+  const applyLoadedProfile = async (
+    profileData: Profile | null,
+    ownedVenueIds: number[],
+    directedVenueIds: number[],
+  ): Promise<AuthStatus> => {
+    const status = deriveAuthStatus({ kind: 'loaded', profile: profileData });
+    if (status === 'needsProfile') {
+      hydrateSession(null, [], []);
+    } else if (status === 'disabled') {
+      await checkDisabledAndEject(profileData);
+    } else {
+      hydrateSession(profileData, ownedVenueIds, directedVenueIds);
+    }
+    setAuthStatus(status);
+    return status;
+  };
+
+  // Both the RPC and the fallback failed. The profile may well exist, so this is 'error' —
+  // never 'needsProfile' (which would send an existing account to complete-profile).
+  const applyLoadFailure = (): AuthStatus => {
+    const status = deriveAuthStatus({ kind: 'failed' });
+    hydrateSession(null, [], []);
+    setAuthStatus(status);
+    return status;
+  };
+
+  const runHydration = async (userId: string): Promise<AuthStatus> => {
     const myGen = ++hydrationGenRef.current;
     try {
       const { data, error } = await fetchAuthSession();
-      if (myGen !== hydrationGenRef.current) return;
+      if (myGen !== hydrationGenRef.current) return supersededStatus();
       if (error) {
         console.error('Auth session RPC error:', error);
-        await fallbackFetchProfile(userId, myGen);
-        return;
+        return await fallbackFetchProfile(userId, myGen);
       }
-      if (!data || !data.profile) {
-        hydrateSession(null, [], []);
-        return;
-      }
-      const wasDisabled = await checkDisabledAndEject(data.profile);
-      if (wasDisabled) return;
-      if (myGen !== hydrationGenRef.current) return;
-      hydrateSession(
-        data.profile as Profile,
+      if (!data) return applyLoadFailure();
+      const status = await applyLoadedProfile(
+        (data.profile as Profile | null) ?? null,
         data.owned_venue_ids || [],
         data.directed_venue_ids || [],
       );
+      if (status !== 'ready') return status;
       pingLastActive();
       // Phase 5: best-effort self-heal — link any PENDING player owned by this
       // account's verified email to the profile (idempotent; no-op if already
@@ -235,32 +267,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // breaks hydration. This is the fallback repair path complementing the
       // auth.users email-confirmation trigger.
       playerRegistrationService.claimPendingPlayer().catch(() => {});
+      return status;
     } catch (error) {
       console.error('Auth session hydration error:', error);
-      if (myGen !== hydrationGenRef.current) return;
-      await fallbackFetchProfile(userId, myGen);
+      if (myGen !== hydrationGenRef.current) return supersededStatus();
+      return await fallbackFetchProfile(userId, myGen);
     } finally {
       if (myGen === hydrationGenRef.current) setLoading(false);
     }
   };
 
-  const fallbackFetchProfile = async (userId: string, gen: number) => {
+  const fallbackFetchProfile = async (userId: string, gen: number): Promise<AuthStatus> => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
-      if (gen !== hydrationGenRef.current) return;
+      if (gen !== hydrationGenRef.current) return supersededStatus();
       if (error) throw error;
-      const wasDisabled = await checkDisabledAndEject(data);
-      if (wasDisabled) return;
-      if (gen !== hydrationGenRef.current) return;
-      hydrateSession(data as Profile | null, [], []);
+      // The query succeeded, so a missing row really means no profile yet.
+      return await applyLoadedProfile((data as Profile | null) ?? null, [], []);
     } catch (error) {
       console.error('Fallback profile fetch error:', error);
-      if (gen !== hydrationGenRef.current) return;
-      hydrateSession(null, [], []);
+      if (gen !== hydrationGenRef.current) return supersededStatus();
+      return applyLoadFailure();
     } finally {
       if (gen === hydrationGenRef.current) setLoading(false);
     }
@@ -275,6 +306,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         hydrateAuthSession(session.user.id);
       } else {
         hydrateSession(null, [], []);
+        setAuthStatus(deriveAuthStatus({ kind: 'noSession' }));
         setLoading(false);
       }
     });
@@ -310,6 +342,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const id = forceUserId ?? user?.id;
     if (id) await hydrateAuthSession(id, { force: true });
   };
+
+  // Post-sign-in: the settled status for this user. Shares the in-flight hydration that the
+  // SIGNED_IN event already started (no second RPC) unless `force` (e.g. right after the
+  // profile row was just created).
+  const resolveAuthStatus = (userId: string, opts?: { force?: boolean }) =>
+    hydrateAuthSession(userId, { force: opts?.force });
 
   // ── Create profile ────────────────────────────────────────────────────────
   const createProfile = async (profileData: ProfileInsert) => {
@@ -356,6 +394,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAdmin: profile ? ADMIN_ROLES.includes(profile.role) : false,
     pushToken,
     refreshSession,
+    resolveAuthStatus,
     refreshProfile: refreshSession,
     signOut,
     createProfile,

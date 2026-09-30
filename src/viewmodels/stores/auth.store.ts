@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { create } from "zustand";
+import { AuthStatus } from "../../models/types/auth.types";
 import { Profile } from "../../models/types/profile.types";
 
 interface AuthState {
@@ -15,6 +16,8 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   sessionHydrated: boolean;    // NEW: true once RPC has completed
+  /** Post-auth account status, shared by every sign-in method (see src/utils/auth-routing.ts). */
+  authStatus: AuthStatus;
 
   // ── Actions ────────────────────────────────────────────
   /**
@@ -34,6 +37,7 @@ interface AuthState {
   setVenueIds: (owned: number[], directed: number[]) => void;
 
   setIsLoading: (value: boolean) => void;
+  setAuthStatus: (status: AuthStatus) => void;
   reset: () => void;
 }
 
@@ -45,6 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   sessionHydrated: false,
+  authStatus: "loading",
 
   // ── Actions ────────────────────────────────────────────
   hydrateSession: (profile, ownedVenueIds = [], directedVenueIds = []) =>
@@ -65,6 +70,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setIsLoading: (value) => set({ isLoading: value }),
 
+  setAuthStatus: (authStatus) => set({ authStatus }),
+
   reset: () =>
     set({
       profile: null,
@@ -73,5 +80,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAuthenticated: false,
       isLoading: false,
       sessionHydrated: false,
+      authStatus: "signedOut",
     }),
 }));

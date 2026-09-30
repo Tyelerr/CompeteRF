@@ -299,10 +299,16 @@ export const SubmitScreen = () => {
         return (
           <View style={styles.section}>
             <Text allowFontScaling={false} style={styles.sectionTitle}>Tournament Director</Text>
-            <View style={styles.readOnlyCard}>
-              <Text allowFontScaling={false} style={styles.directorName}>{vm.profile?.name}</Text>
-              <Text allowFontScaling={false} style={styles.directorId}>ID: {vm.profile?.id_auto}</Text>
-            </View>
+            {vm.isAdmin ? (
+              <View style={styles.readOnlyCard}>
+                <Text allowFontScaling={false} style={styles.directorId}>Chosen per venue in the Venue section (the venue&apos;s real Tournament Director).</Text>
+              </View>
+            ) : (
+              <View style={styles.readOnlyCard}>
+                <Text allowFontScaling={false} style={styles.directorName}>{vm.profile?.name}</Text>
+                <Text allowFontScaling={false} style={styles.directorId}>ID: {vm.profile?.id_auto}</Text>
+              </View>
+            )}
           </View>
         );
 
@@ -577,6 +583,32 @@ export const SubmitScreen = () => {
                 <Text allowFontScaling={false} style={styles.venueAddress}>{vm.selectedVenue.address}</Text>
                 <Text allowFontScaling={false} style={styles.venueAddress}>{vm.selectedVenue.city}, {vm.selectedVenue.state} {vm.selectedVenue.zip_code}</Text>
               </View>
+            )}
+            {/* Admins do not direct tournaments by default: pick the venue's real Tournament Director.
+                Being the director yourself is an explicit choice ("Assign myself"). */}
+            {vm.isAdmin && vm.selectedVenue && (
+              <Field label="Tournament Director *">
+                {vm.loadingDirectors ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <>
+                    {vm.directorOptions.length > 0 ? (
+                      <View style={[styles.dropdownContainer, isWeb && { maxWidth: 380 }]}>
+                        <Dropdown placeholder="Choose the Tournament Director" options={vm.directorOptions} value={vm.selectedDirectorId != null && !vm.directorIsSelf ? String(vm.selectedDirectorId) : ""} onSelect={vm.selectDirector} />
+                      </View>
+                    ) : (
+                      <Text allowFontScaling={false} style={styles.noTablesSubtext}>This venue has no Tournament Director or owner yet. Add one to the venue team first, or assign yourself.</Text>
+                    )}
+                    {vm.directorIsSelf ? (
+                      <Text allowFontScaling={false} style={styles.venueTablesLabel}>You will be this tournament&apos;s director.</Text>
+                    ) : (
+                      <TouchableOpacity onPress={vm.assignMyselfAsDirector} accessibilityRole="button">
+                        <Text allowFontScaling={false} style={styles.venueTablesLabel}>Assign myself as director</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </Field>
             )}
             {vm.selectedVenue && !vm.loadingVenueTables && !vm.venueHasTables && (
               <View style={styles.noTablesWarning}>

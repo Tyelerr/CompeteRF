@@ -4,18 +4,13 @@ import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useCheckUsername } from "../../../../hooks/use-profile";
-import { supabase } from "../../../lib/supabase";
-import { profileService } from "../../../models/services/profile.service";
-import { useAuthContext } from "../../../providers/AuthProvider";
-import { sendWelcomeEmail } from "../../../services/email/sendWelcomeEmail";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { US_STATES } from "../../../utils/constants";
-import { toTitleCase } from "../../../utils/helpers";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { containsBadWord, isValidUsername } from "../../../utils/validation";
-import { useAuthStore } from "../../../viewmodels/stores/auth.store";
+import { useEmailSignup } from "../../../viewmodels/useEmailSignup";
 import { Button } from "../../components/common/button";
 import { Dropdown } from "../../components/common/dropdown";
 import { Input } from "../../components/common/input";
@@ -73,7 +68,7 @@ const pwStyles = StyleSheet.create({
 
 export const RegisterScreen = () => {
   const router = useRouter();
-  const { refreshSession } = useAuthContext();
+  const { submit } = useEmailSignup();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -116,44 +111,28 @@ export const RegisterScreen = () => {
   const handleRegister = async () => {
     if (!validateForm()) return;
     // Hand any referral code to the pending store; it is claimed server-side once the
-    // profile exists (usePendingReferralClaim). Optional — never blocks signup.
+    // profile exists (usePendingReferralClaim). Optional — never blocks signup. The same code
+    // also rides in signup metadata, for a confirmation finished on another device.
     await referral.commit();
     setLoading(true);
     try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) { setError(signUpError.message); return; }
-      if (!authData.user) { setError("Account creation failed"); return; }
-      const trimmedFirst = toTitleCase(firstName.trim());
-      const trimmedLast = toTitleCase(lastName.trim());
-      await profileService.createProfile({ id: authData.user.id, email: authData.user.email!, name: `${trimmedFirst} ${trimmedLast}`, first_name: trimmedFirst, last_name: trimmedLast, user_name: username, home_state: homeState, preferred_game: preferredGame || undefined, favorite_player: favoritePlayer || undefined, status: "active" });
-
-      // Fire-and-forget welcome email — never awaited, never blocks registration
-      sendWelcomeEmail(authData.user.email!, trimmedFirst).catch((err) =>
-        console.warn("[RegisterScreen] Welcome email failed silently:", err)
-      );
-
-      let attempts = 0;
-      let profileFound = false;
-      while (attempts < 10 && !profileFound) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        try {
-          const session = await supabase.auth.getSession();
-          if (session.data.session?.user) {
-            const profile = await profileService.getProfile(session.data.session.user.id);
-            if (profile) { profileFound = true; break; }
-          }
-        } catch (profileError) { console.log(`Profile check attempt ${attempts + 1} failed:`, profileError); }
-        attempts++;
-      }
-      try { await refreshSession(authData.user.id); } catch (refreshErr) { console.warn("refreshSession after register failed:", refreshErr); }
-      await new Promise<void>((resolve) => {
-        if (useAuthStore.getState().profile) { resolve(); return; }
-        const timeout = setTimeout(resolve, 5000);
-        const unsub = useAuthStore.subscribe((state) => { if (state.profile) { clearTimeout(timeout); unsub(); resolve(); } });
+      // Confirm email OFF: session now → profile → welcome email → app (shared post-auth step).
+      // Confirm email ON : no session → Check Your Email; the profile is created only after the
+      // email is confirmed (Complete Profile, pre-filled from this form). Never an RLS error.
+      const result = await submit({
+        email,
+        password,
+        firstName,
+        lastName,
+        username,
+        homeState,
+        preferredGame,
+        favoritePlayer,
+        referral: referral.snapshot(),
       });
-      router.replace("/(tabs)");
-    } catch (err: any) {
-      setError(err.message || "Registration failed");
+      if (result.kind === "error") setError(result.message);
+    } catch {
+      setError("Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }

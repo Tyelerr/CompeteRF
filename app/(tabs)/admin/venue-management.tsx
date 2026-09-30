@@ -424,7 +424,8 @@ export default function VenueManagementScreen() {
 
         const previousOwnerNames =
           currentOwners?.map((o: any) => o.profiles?.name || "Unknown").join(", ") || "None";
-        const previousOwnerId = currentOwners?.[0]?.owner_id || profile.id_auto;
+        // An ownerless venue has no previous owner — never record the acting admin as one.
+        const previousOwnerId = currentOwners?.[0]?.owner_id ?? null;
 
         await supabase.from("venue_owners").delete().eq("venue_id", venueToReassign.id);
 

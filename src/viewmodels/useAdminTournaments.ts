@@ -2,6 +2,7 @@
 // UPDATED: Batch queries replace per-tournament N+1 fetches
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { staffSearchService } from "../models/services/staff-search.service";
 import { supabase } from "../lib/supabase";
 import { roleService } from "../models/services/role.service";
 import { tournamentService } from "../models/services/tournament.service";
@@ -158,22 +159,23 @@ export const useAdminTournaments = () => {
   };
 
   // ── Director search (reassign modal) ─────────────────────────────────────
+  // Shared role-checked staff search: admin accounts are NOT offered as director candidates
+  // (self-assignment is the explicit selfDirectorOption below).
   const searchDirectors = useCallback(async (query: string) => {
     if (query.length < 2) { setDirectorResults([]); return; }
     setSearchingDirectors(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id_auto, name, email")
-        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
-        .limit(10);
-      if (error) { setDirectorResults([]); return; }
+      const found = await staffSearchService.searchUsers(query, 10);
       setDirectorResults(
-        (data || []).map((u: any) => ({ id: u.id_auto, name: u.name || u.email, email: u.email })),
+        found.map((u) => ({ id: u.id_auto, name: u.name || u.user_name, email: u.email_display ?? `@${u.user_name}` })),
       );
     } catch { setDirectorResults([]); }
     finally { setSearchingDirectors(false); }
   }, []);
+
+  const selfDirectorOption: DirectorSearchResult | null = profile?.id_auto
+    ? { id: profile.id_auto, name: profile.name || "Me", email: "Assign myself" }
+    : null;
 
   const clearDirectorResults = useCallback(() => setDirectorResults([]), []);
 
@@ -317,7 +319,7 @@ export const useAdminTournaments = () => {
     loading, refreshing, tournaments, filteredTournaments,
     totalCount: tournaments.length, processing,
     statusFilter, sortOption, searchQuery, statusCounts,
-    directorResults, searchingDirectors, searchDirectors, clearDirectorResults,
+    directorResults, searchingDirectors, searchDirectors, clearDirectorResults, selfDirectorOption,
     onRefresh, setStatusFilter, setSortOption, setSearchQuery,
     archiveTournament: handleArchiveTournament,
     cancelTournament: handleCancelTournament,

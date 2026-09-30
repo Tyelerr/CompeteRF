@@ -18,13 +18,18 @@ export const ResetPasswordScreen = () => {
     confirmPassword,
     setConfirmPassword,
     loading,
+    resolving,
+    awaitingContinue,
     sessionReady,
     verifying,
+    verifyErrorTitle,
     verifyError,
-    verifyDebugUrl,
+    verifyDebugInfo,
     success,
     error,
     handleUpdatePassword,
+    handleContinue,
+    successCopy,
   } = useResetPassword();
 
   if (success) {
@@ -32,37 +37,54 @@ export const ResetPasswordScreen = () => {
       <View style={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
           <Text allowFontScaling={false} style={styles.icon}>{"\u2705"}</Text>
-          <Text allowFontScaling={false} style={styles.title}>PASSWORD UPDATED</Text>
-          <Text allowFontScaling={false} style={styles.message}>Your password has been changed successfully.</Text>
+          <Text allowFontScaling={false} style={styles.title}>{successCopy.title}</Text>
+          <Text allowFontScaling={false} style={styles.message}>{successCopy.body}</Text>
         </View>
-        <Button title="Go to App" onPress={() => router.replace("/(tabs)")} fullWidth />
+        <Button title={successCopy.actionLabel} onPress={() => router.replace(successCopy.actionRoute as any)} fullWidth />
       </View>
     );
   }
 
-  // Error branch - shown when we could not verify the reset link.
-  // Includes a collapsible debug block so the user can share the failing
-  // URL with support without needing device logs.
+  // Error branch: expired / already used / missing / malformed link. Users see only the title,
+  // the friendly message and the two actions; the debug block (which pieces arrived, never
+  // values) renders in development builds only.
   if (verifyError) {
     return (
       <ScrollView contentContainerStyle={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
           <Text allowFontScaling={false} style={styles.icon}>{"\u26A0\uFE0F"}</Text>
-          <Text allowFontScaling={false} style={styles.title}>RESET LINK PROBLEM</Text>
+          <Text allowFontScaling={false} style={styles.title}>{verifyErrorTitle}</Text>
           <Text allowFontScaling={false} style={styles.message}>{verifyError}</Text>
-          {verifyDebugUrl ? (
+          {__DEV__ && verifyDebugInfo ? (
             <View style={styles.debugBox}>
               <Text allowFontScaling={false} style={styles.debugLabel}>Debug info:</Text>
-              <Text allowFontScaling={false} style={styles.debugText} selectable>{verifyDebugUrl}</Text>
+              <Text allowFontScaling={false} style={styles.debugText} selectable>{verifyDebugInfo}</Text>
             </View>
           ) : null}
         </View>
-        <Button title="Back to Login" onPress={() => router.replace("/auth/login")} fullWidth />
+        <Button title="Request a New Link" onPress={() => router.replace("/auth/forgot-password" as any)} fullWidth />
+        <View style={styles.spacer} />
+        <Button title="Back to Login" onPress={() => router.replace("/auth/login")} variant="outline" fullWidth />
       </ScrollView>
     );
   }
 
-  if (verifying || !sessionReady) {
+  // A valid link has arrived, but nothing is verified until the user taps Continue (so a link
+  // scanner or preview that merely opens the page consumes nothing).
+  if (awaitingContinue) {
+    return (
+      <View style={[styles.container, isWeb && styles.containerWeb]}>
+        <View style={styles.content}>
+          <Text allowFontScaling={false} style={styles.icon}>{"\u2139\uFE0F"}</Text>
+          <Text allowFontScaling={false} style={styles.title}>RESET YOUR PASSWORD</Text>
+          <Text allowFontScaling={false} style={styles.message}>Tap Continue to verify your reset link and choose a new password.</Text>
+        </View>
+        <Button title="Continue" onPress={handleContinue} fullWidth />
+      </View>
+    );
+  }
+
+  if (resolving || verifying || !sessionReady) {
     return (
       <View style={[styles.container, isWeb && styles.containerWeb]}>
         <View style={styles.content}>
@@ -79,8 +101,10 @@ export const ResetPasswordScreen = () => {
       <Text allowFontScaling={false} style={styles.title}>NEW PASSWORD</Text>
       <Text allowFontScaling={false} style={styles.description}>Choose a strong password for your account.</Text>
       <View style={styles.form}>
-        <Input label="New Password" value={password} onChangeText={setPassword} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" secureTextEntry />
-        <Input label="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" secureTextEntry />
+        {/* Plain-text placeholders: a JSX attribute string does not process escape sequences (the
+            old bullet-escape placeholder rendered literally on web). Masking is secureTextEntry. */}
+        <Input label="New Password" value={password} onChangeText={setPassword} placeholder="At least 6 characters" secureTextEntry showPasswordToggle autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" />
+        <Input label="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Re-enter your new password" secureTextEntry showPasswordToggle autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" />
         {error ? <Text allowFontScaling={false} style={styles.error}>{error}</Text> : null}
         <Button title="Update Password" onPress={handleUpdatePassword} loading={loading} fullWidth />
       </View>
@@ -101,5 +125,6 @@ const styles = StyleSheet.create({
   message: { fontSize: webMs(FONT_SIZES.md), color: COLORS.textSecondary, textAlign: "center", marginBottom: webSc(SPACING.md), paddingHorizontal: webSc(SPACING.md) },
   debugBox: { marginTop: webSc(SPACING.lg), padding: webSc(SPACING.md), backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, width: "100%" },
   debugLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginBottom: webSc(SPACING.xs), fontWeight: "600", textTransform: "uppercase" },
+  spacer: { height: webSc(SPACING.sm) },
   debugText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
 });

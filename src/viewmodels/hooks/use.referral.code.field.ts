@@ -105,5 +105,31 @@ export function useReferralCodeField() {
     await pendingReferralService.save(normalized, source, fromLink ? linkVisitId.current : null);
   }, [normalized]);
 
-  return { code, setCode, check, inviter, commit, paste, pasteNote };
+  /**
+   * The referral as it would be committed right now (or null), for signup metadata — so a
+   * confirmation finished on ANOTHER device (no device-local pending referral) can restore it.
+   */
+  const snapshot = useCallback((): { code: string; source: ReferralSource; visitId: string | null } | null => {
+    if (!normalized || !isWellFormedReferralCode(normalized)) return null;
+    const fromLink = normalized === linkCode.current;
+    return { code: normalized, source: fromLink ? "link" : "manual", visitId: fromLink ? linkVisitId.current : null };
+  }, [normalized]);
+
+  /**
+   * Restore a referral carried in signup metadata. A device-local pending referral always wins;
+   * otherwise the code pre-fills the field (keeping its link source) and commit() saves it.
+   */
+  const adopt = useCallback(async (from: { code: string; source: ReferralSource; visitId: string | null } | null) => {
+    if (!from) return;
+    const adopted = normalizeReferralCode(from.code);
+    if (!isWellFormedReferralCode(adopted)) return;
+    if (await pendingReferralService.get()) return;
+    if (from.source === "link") {
+      linkCode.current = adopted;
+      linkVisitId.current = from.visitId ?? null;
+    }
+    setCodeState((cur) => cur || adopted);
+  }, []);
+
+  return { code, setCode, check, inviter, commit, snapshot, adopt, paste, pasteNote };
 }

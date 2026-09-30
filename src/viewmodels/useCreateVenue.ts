@@ -2,6 +2,7 @@
 import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 import { staffSearchService } from "../models/services/staff-search.service";
+import { useVenueScope } from "./hooks/use.venue.scope";
 import { venueService } from "../models/services/venue.service";
 import { TABLE_BRANDS, TABLE_SIZES } from "../utils/constants";
 
@@ -77,6 +78,14 @@ export const useCreateVenue = () => {
     SelectedDirector[]
   >([]);
   const [searchingDirectors, setSearchingDirectors] = useState(false);
+
+  // Admins do NOT become the owner of a venue they create (create_venue RPC). They may pick a
+  // real owner explicitly; otherwise the venue is created without an owner.
+  const { isAdmin } = useVenueScope();
+  const [owner, setOwner] = useState<SelectedDirector | null>(null);
+  const [ownerSearchQuery, setOwnerSearchQuery] = useState("");
+  const [ownerSearchResults, setOwnerSearchResults] = useState<SelectedDirector[]>([]);
+  const [searchingOwners, setSearchingOwners] = useState(false);
 
   // Options
   const tableSizeOptions = TABLE_SIZES;
@@ -207,6 +216,36 @@ export const useCreateVenue = () => {
     setTables(tables.filter((_, i) => i !== index));
   };
 
+  // ==================== OWNER (admins only) ====================
+
+  const searchOwners = async (query: string) => {
+    setOwnerSearchQuery(query);
+    if (!isAdmin || query.length < 2) {
+      setOwnerSearchResults([]);
+      return;
+    }
+    setSearchingOwners(true);
+    try {
+      // Same role-checked staff search (admin accounts are not offered as candidates).
+      const found = await staffSearchService.searchUsers(query, 10);
+      setOwnerSearchResults(found.map((u) => ({
+        id_auto: u.id_auto, name: u.name ?? u.user_name, email: u.email_display ?? `@${u.user_name}`, role: u.role ?? "",
+      })));
+    } catch (error) {
+      console.error("Error searching owners:", error);
+    } finally {
+      setSearchingOwners(false);
+    }
+  };
+
+  const selectOwner = (candidate: SelectedDirector) => {
+    setOwner(candidate);
+    setOwnerSearchQuery("");
+    setOwnerSearchResults([]);
+  };
+
+  const clearOwner = () => setOwner(null);
+
   // ==================== DIRECTORS ====================
 
   const searchDirectors = async (query: string) => {
@@ -294,8 +333,9 @@ export const useCreateVenue = () => {
 
     setLoading(true);
     try {
-      // 1. Venue + creator as primary owner + directors, atomically and server-authorized
-      //    (create_venue RPC). Owner/director roles are re-derived server-side, so selected
+      // 1. Venue + owner + directors, atomically and server-authorized (create_venue RPC).
+      //    A bar owner becomes the primary owner; an admin does NOT — only the explicitly
+      //    chosen owner (if any). Owner/director roles are re-derived server-side, so selected
       //    basic users become tournament directors without a client role write.
       let venueId: number;
       try {
@@ -312,6 +352,7 @@ export const useCreateVenue = () => {
             longitude: form.longitude,
           },
           directors.map((d) => d.id_auto),
+          isAdmin ? owner?.id_auto ?? null : null,
         );
       } catch (venueError) {
         console.error("Error creating venue:", venueError);
@@ -364,6 +405,11 @@ export const useCreateVenue = () => {
     directorSearchQuery,
     directorSearchResults,
     searchingDirectors,
+    isAdmin,
+    owner,
+    ownerSearchQuery,
+    ownerSearchResults,
+    searchingOwners,
 
     // Options
     tableSizeOptions,
@@ -381,6 +427,11 @@ export const useCreateVenue = () => {
     updateNewTable,
     addTable,
     removeTable,
+
+    // Actions - Owner (admins)
+    searchOwners,
+    selectOwner,
+    clearOwner,
 
     // Actions - Directors
     searchDirectors,

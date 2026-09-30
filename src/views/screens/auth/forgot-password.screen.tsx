@@ -22,7 +22,10 @@ export const ForgotPasswordScreen = () => {
           <Text allowFontScaling={false} style={styles.title}>CHECK YOUR EMAIL</Text>
           <Text allowFontScaling={false} style={styles.message}>{"We've sent a password reset link to:"}</Text>
           <Text allowFontScaling={false} style={styles.email}>{email}</Text>
-          <Text allowFontScaling={false} style={styles.message}>Tap the link in the email to reset your password. It will open the app directly.</Text>
+          {/* The reset link opens a web page (on phones too), so never promise it opens the app. */}
+          <Text allowFontScaling={false} style={styles.message}>
+            Open the link in the email to choose a new password. The link expires in 1 hour. Can&apos;t find it? Check your spam folder.
+          </Text>
         </View>
         <Button title="Back to Log In" onPress={() => router.back()} fullWidth />
       </View>

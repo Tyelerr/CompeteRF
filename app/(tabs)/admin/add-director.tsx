@@ -15,6 +15,7 @@ import { supabase } from "../../../src/lib/supabase";
 import { roleService } from "../../../src/models/services/role.service";
 import { staffSearchService } from "../../../src/models/services/staff-search.service";
 import { useAuthContext } from "../../../src/providers/AuthProvider";
+import { useVenueScope } from "../../../src/viewmodels/hooks/use.venue.scope";
 import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
@@ -49,6 +50,10 @@ export default function AddDirectorScreen() {
   const [selectedVenue, setSelectedVenue] = useState<number | null>(null);
   const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null);
   const [adding, setAdding] = useState(false);
+  // Admins manage staff at ANY venue by role (shared scope) without being its owner/staff;
+  // owners keep seeing only the venues they own.
+  const { isAdmin, loadVenues: loadScopedVenues } = useVenueScope();
+  const [venueFilter, setVenueFilter] = useState("");
 
   useEffect(() => {
     loadVenues();
@@ -57,6 +62,11 @@ export default function AddDirectorScreen() {
   const loadVenues = async () => {
     if (!profile?.id_auto) return;
     try {
+      if (isAdmin) {
+        const all = await loadScopedVenues();
+        setVenues(all.map((v) => ({ id: v.id, venue: v.venue, city: v.city, state: v.state })) as UserVenue[]);
+        return;
+      }
       const { data, error } = await supabase
         .from("venue_owners")
         .select(`venues (id, venue, city, state)`)
@@ -338,7 +348,21 @@ export default function AddDirectorScreen() {
               <Text allowFontScaling={false} style={styles.noVenuesText}>No venues found. Make sure you have venues assigned to your account.</Text>
             ) : (
               <View style={styles.venueList}>
-                {venues.map((venue) => {
+                {isAdmin && (
+                  <TextInput
+                    style={styles.searchInput}
+                    value={venueFilter}
+                    onChangeText={setVenueFilter}
+                    placeholder="Filter venues by name or city..."
+                    placeholderTextColor={COLORS.textSecondary}
+                  />
+                )}
+                {venues
+                  .filter((v) => {
+                    const f = venueFilter.trim().toLowerCase();
+                    return !f || `${v.venue} ${v.city} ${v.state}`.toLowerCase().includes(f);
+                  })
+                  .map((venue) => {
                   const isSelected = selectedVenue === venue.id;
                   return (
                     <TouchableOpacity

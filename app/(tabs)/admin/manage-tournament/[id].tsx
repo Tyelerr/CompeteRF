@@ -178,10 +178,7 @@ import { missingSettingsItems, settingsComplete, isSettingsFieldRequired, Settin
 import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
 import { LifecyclePhase, deriveLifecycle, paymentSatisfied, isFargoVerified } from "../../../../src/utils/registration-lifecycle";
 import { useQuery } from "@tanstack/react-query";
-import {
-  useVenuesByDirector,
-  useVenuesByOwner,
-} from "../../../../src/viewmodels/hooks/use.venues";
+import { useVenuesInScope } from "../../../../src/viewmodels/hooks/use.venues";
 import { venueTableService } from "../../../../src/models/services/venue-table.service";
 import { normalizeTableLabel, tableIdentityKey } from "../../../../src/models/services/tournament-table.service";
 import { TournamentSettingsPreview } from "../../../../src/views/components/tournament/TournamentSettingsPreview";
@@ -3935,20 +3932,19 @@ function ManageTournamentScreen() {
   // ---- Bracket / Draw state ----------------------------------------------
   const { profile: tdProfile } = useAuthContext();
 
-  // The current user's venues (as director and/or owner) for the "My Venues"
-  // picker, plus the table sizes configured at the selected venue.
-  const dirVenues = useVenuesByDirector(tdProfile?.id_auto);
-  const ownerVenues = useVenuesByOwner(tdProfile?.id_auto);
+  // Venues for the "My Venues" picker from the shared scope — admins: every venue (by role);
+  // everyone else: venues they own or direct — plus the table sizes at the selected venue.
+  const scopedVenues = useVenuesInScope();
   const myVenueOptions = useMemo(() => {
     const map = new Map<number, string>();
-    [...dirVenues.venues, ...ownerVenues.venues].forEach((v) => {
+    scopedVenues.venues.forEach((v) => {
       if (v?.id != null) map.set(v.id, v.venue);
     });
     return Array.from(map.entries()).map(([id, name]) => ({
       label: name,
       value: String(id),
     }));
-  }, [dirVenues.venues, ownerVenues.venues]);
+  }, [scopedVenues.venues]);
   const [venueTableSizes, setVenueTableSizes] = useState<
     { label: string; value: string }[]
   >([]);

@@ -312,6 +312,50 @@ export default function CreateVenueScreen() {
               )}
             </View>
 
+            {/* Owner Section — admins only. An admin creating a venue does not become its owner;
+                choose the real owner here, or leave it empty. */}
+            {vm.isAdmin && (
+              <View style={styles.section}>
+                <Text allowFontScaling={false} style={styles.sectionTitle}>Venue Owner (optional)</Text>
+                {vm.owner ? (
+                  <View style={styles.directorItem}>
+                    <View style={styles.directorInfo}>
+                      <Text allowFontScaling={false} style={styles.directorName}>{vm.owner.name}</Text>
+                      <Text allowFontScaling={false} style={styles.directorEmail}>{vm.owner.email}</Text>
+                    </View>
+                    <TouchableOpacity onPress={vm.clearOwner}>
+                      <Text allowFontScaling={false} style={styles.removeText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      value={vm.ownerSearchQuery}
+                      onChangeText={vm.searchOwners}
+                      placeholder="Search the venue owner by name or email..."
+                      placeholderTextColor={COLORS.textSecondary}
+                    />
+                    {vm.searchingOwners && <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.sm }} />}
+                    {vm.ownerSearchResults.length > 0 && (
+                      <View style={styles.searchResults}>
+                        {vm.ownerSearchResults.map((result) => (
+                          <TouchableOpacity key={result.id_auto} style={styles.searchResult} onPress={() => vm.selectOwner(result)}>
+                            <View>
+                              <Text allowFontScaling={false} style={styles.resultName}>{result.name}</Text>
+                              <Text allowFontScaling={false} style={styles.resultEmail}>{result.email}</Text>
+                            </View>
+                            <Text allowFontScaling={false} style={styles.addText}>Select</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    <Text allowFontScaling={false} style={styles.emptyText}>No owner — the venue will be created without one (you will not become its owner).</Text>
+                  </>
+                )}
+              </View>
+            )}
+
             {/* Directors Section */}
             <View style={styles.section}>
               <Text allowFontScaling={false} style={styles.sectionTitle}>Directors</Text>

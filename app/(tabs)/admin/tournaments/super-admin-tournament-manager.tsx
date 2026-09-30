@@ -430,6 +430,7 @@ export default function SuperAdminTournamentManager() {
         directors={vm.directorResults}
         loadingDirectors={vm.searchingDirectors}
         onSearch={vm.searchDirectors}
+        selfOption={vm.selfDirectorOption}
         onCancel={() => {
           setReassignVis(false);
           setReassignTarget(null);

@@ -1,19 +1,19 @@
 ﻿import * as AppleAuthentication from "expo-apple-authentication";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
-import { supabase } from "../../../lib/supabase";
-import { authService } from "../../../models/services/auth.service";
 import { COLORS } from "../../../theme/colors";
 import { SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { useSocialSignIn } from "../../../viewmodels/hooks/use.social.sign.in";
+import { GoogleSignInButton } from "../../components/auth/GoogleSignInButton";
 import { Button } from "../../components/common/button";
 
 export const WelcomeScreen = () => {
   const router = useRouter();
-  const [appleLoading, setAppleLoading] = useState(false);
-  const [error, setError] = useState("");
+  // Provider sign-in + shared post-auth routing (ready → app, no profile → complete-profile).
+  const { signInWithApple, appleLoading, signInWithGoogle, googleLoading, googleAvailable, error } = useSocialSignIn();
 
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeSlide = useRef(new Animated.Value(-30)).current;
@@ -55,28 +55,6 @@ export const WelcomeScreen = () => {
     ).start();
   }, []);
 
-  const handleAppleSignIn = async () => {
-    setError("");
-    setAppleLoading(true);
-    try {
-      const result = await authService.signInWithApple();
-      if (!result.user) { setError("Sign in failed. Please try again."); return; }
-      const { data: profile } = await supabase.from("profiles").select("id").eq("id", result.user.id).maybeSingle();
-      if (profile) {
-        router.replace("/(tabs)");
-      } else {
-        const firstName = result.fullName?.givenName || "";
-        const lastName = result.fullName?.familyName || "";
-        router.replace({ pathname: "/auth/complete-profile", params: { firstName, lastName } } as any);
-      }
-    } catch (err: any) {
-      if (err.code === "ERR_REQUEST_CANCELED") return;
-      setError("Apple Sign In failed. Please try again.");
-    } finally {
-      setAppleLoading(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -99,6 +77,9 @@ export const WelcomeScreen = () => {
       </View>
 
       <Animated.View style={[styles.buttons, { opacity: buttonsFade, transform: [{ translateY: buttonsSlide }] }]}>
+        {/* Order (matches the Profile tab welcome): Sign in with Google → (Apple on iOS) → or →
+            Log In → Create Account. Google is hidden while unavailable (src/utils/google-auth.ts). */}
+        <GoogleSignInButton available={googleAvailable} loading={googleLoading} onPress={signInWithGoogle} />
         {Platform.OS === "ios" && (
           <View style={styles.appleButtonWrapper}>
             <AppleAuthentication.AppleAuthenticationButton
@@ -106,21 +87,21 @@ export const WelcomeScreen = () => {
               buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
               cornerRadius={8}
               style={styles.appleButton}
-              onPress={handleAppleSignIn}
+              onPress={signInWithApple}
             />
             {appleLoading && <Text allowFontScaling={false} style={styles.loadingHint}>Signing in...</Text>}
           </View>
         )}
-        {Platform.OS === "ios" && (
+        {(Platform.OS === "ios" || googleAvailable) && (
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text allowFontScaling={false} style={styles.dividerText}>or</Text>
             <View style={styles.dividerLine} />
           </View>
         )}
-        <Button title="Create Account" onPress={() => router.push("/auth/register")} fullWidth />
+        <Button title="Log In" onPress={() => router.push("/auth/login")} fullWidth />
         <View style={styles.spacer} />
-        <Button title="Log In" onPress={() => router.push("/auth/login")} variant="outline" fullWidth />
+        <Button title="Create Account" onPress={() => router.push("/auth/register")} variant="outline" fullWidth />
         {error ? <Text allowFontScaling={false} style={styles.error}>{error}</Text> : null}
       </Animated.View>
     </View>
