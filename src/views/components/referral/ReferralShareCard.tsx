@@ -1,8 +1,10 @@
 // src/views/components/referral/ReferralShareCard.tsx
 // "Refer Friends" card: the signed-in user's referral code + link with Copy / Share.
 // Self-contained (owns its viewmodel) so the Giveaways page and, later, Profile render the exact
-// same component. The reward note (+1 Giveaway Entry per friend who signs up) renders only while
-// REFERRAL_REWARDS_LIVE is on — the reward itself is granted server-side in claim_referral.
+// same component. The reward note + "Referral terms" link render only while REFERRAL_REWARDS_LIVE
+// is on (currently OFF). The note is built from the same live public terms as the Official
+// Giveaway Rules (usePublicReferralTerms → referralCardNote), so it never goes stale; the reward
+// itself is granted server-side in claim_referral.
 //
 //   Web (wide):   [👥 Refer Friends / Share Compete with friends.] [CODE] [Copy Link][Share]
 //   Web (narrow): stacked, both buttons.
@@ -12,6 +14,7 @@
 // pill copies just the code.
 // Renders nothing until a code is available (logged out / still loading), so it never jumps.
 
+import { useRouter } from "expo-router";
 import React from "react";
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { COLORS } from "../../../theme/colors";
@@ -19,14 +22,19 @@ import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { webMs, webSc } from "../../../utils/scaling";
 import { useMyReferralCode } from "../../../viewmodels/hooks/use.my.referral.code";
-import { REFERRAL_REWARDS_LIVE, REFERRAL_REWARD_NOTE } from "../../../utils/referral";
+import { usePublicReferralTerms } from "../../../viewmodels/hooks/use.public.referral.terms";
+import { GIVEAWAY_RULES_PATH, referralCardNote } from "../../../models/constants/giveaway-rules";
+import { REFERRAL_REWARDS_LIVE } from "../../../utils/referral";
 
 const isWeb = Platform.OS === "web";
 const WIDE_BREAKPOINT = 640;
 
 export function ReferralShareCard() {
   const vm = useMyReferralCode();
+  const router = useRouter();
   const { width } = useWindowDimensions();
+  const { terms } = usePublicReferralTerms(REFERRAL_REWARDS_LIVE);
+  const note = REFERRAL_REWARDS_LIVE ? referralCardNote(terms) : null;
 
   if (!vm.code) return null;
 
@@ -46,9 +54,17 @@ export function ReferralShareCard() {
     </Pressable>
   );
 
-  const rewardNote = REFERRAL_REWARDS_LIVE ? (
+  const rewardNote = note ? (
     <Text allowFontScaling={false} style={st.rewardNote}>
-      {REFERRAL_REWARD_NOTE}
+      {note}{" "}
+      <Text
+        allowFontScaling={false}
+        style={st.termsLink}
+        onPress={() => router.push(`${GIVEAWAY_RULES_PATH}?section=referrals` as any)}
+        accessibilityRole="link"
+      >
+        Referral terms
+      </Text>
     </Text>
   ) : null;
 
@@ -117,6 +133,10 @@ const st = StyleSheet.create({
   // the row (and the optional reward note under it) stay vertically centered inside.
   cardWide: { flex: 1, justifyContent: "center" },
   rowWide: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.md) },
+  termsLink: {
+    color: COLORS.primary,
+    textDecorationLine: "underline",
+  },
   rewardNote: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.warning,

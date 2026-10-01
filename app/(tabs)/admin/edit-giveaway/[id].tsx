@@ -419,7 +419,7 @@ export default function EditGiveawayScreen() {
         </Text>
         <TextInput
           style={[s.input, s.textAreaLarge]}
-          placeholder="Enter full legal rules text here..."
+          placeholder="Optional — shown as Additional Rules below Compete's Official Giveaway Rules"
           placeholderTextColor={COLORS.textMuted}
           value={vm.form.rules_text}
           onChangeText={(t) => vm.updateField("rules_text", t)}

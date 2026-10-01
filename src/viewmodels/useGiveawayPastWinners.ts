@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
+import { GiveawayEntryMode } from "../models/types/giveaway.types";
 
 interface PastWinner {
   giveaway_id: number;
@@ -9,6 +10,7 @@ interface PastWinner {
   winner_email: string;
   drawn_at: string;
   entry_count: number;
+  entry_mode: GiveawayEntryMode;
 }
 
 export function useGiveawayPastWinners() {

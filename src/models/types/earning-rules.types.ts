@@ -24,6 +24,21 @@ export interface GiveawayEarningRules {
   updated_by_name: string | null;
 }
 
+/**
+ * The PUBLIC subset of the earning rules — get_public_referral_terms() (anon + authenticated),
+ * migration 20261016120000. Shown in the Official Giveaway Rules and the Refer Friends disclosure.
+ * No review/fraud thresholds, audit fields or raw flags (milestones is [] when disabled).
+ */
+export interface PublicReferralTerms {
+  referral_rewards_enabled: boolean;
+  referrer_reward: number;
+  referred_reward: number;
+  attribution_window_days: number;
+  monthly_referrer_cap: number;
+  /** Milestones actually paid (bonus > 0), ascending; [] when milestone bonuses are off. */
+  milestones: ReferralMilestone[];
+}
+
 /** Fields the RPC accepts (partial update). */
 export type EarningRulesPatch = Partial<Omit<GiveawayEarningRules, "updated_at" | "updated_by_name">>;
 

@@ -40,12 +40,14 @@ export const INVITE_SHARE_TEXT = "Join me on Compete 🎱\nFind tournaments. Com
 export const NATIVE_REFERRAL_LINKS_LIVE = false;
 
 /**
- * REFERRAL REWARDS SWITCH. Shows the "+1 Giveaway Entry" note on the Refer Friends card. Leave
- * false until the referral-signup-rewards migration (20261006120000) is applied in production —
- * the reward itself is granted server-side inside claim_referral; this only controls the copy.
+ * REFERRAL REWARDS SWITCH — client-side promotional visibility only. Shows the reward note +
+ * "Referral terms" link on the Refer Friends card. Keep OFF until the referral reward flow has been
+ * tested and is intentionally activated. It does not change the server (claim_referral grants
+ * rewards per the Earning Rules regardless), and the Official Giveaway Rules always publish the
+ * Referral Rewards terms. When on, the note comes from the same live public terms as the rules
+ * (referralCardNote in src/models/constants/giveaway-rules.ts).
  */
 export const REFERRAL_REWARDS_LIVE = false;
-export const REFERRAL_REWARD_NOTE = "Earn +1 Giveaway Entry when a friend signs up with your referral.";
 
 const ANDROID_PACKAGE = "com.thecompeteapp.competerf";
 const IOS_APP_ID = "6759150538";

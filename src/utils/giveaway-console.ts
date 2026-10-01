@@ -7,6 +7,7 @@
 // presentation differs (one primary action + a ⋯ menu instead of stacked buttons).
 
 import type { Giveaway } from "../models/types/giveaway.types";
+import { toArizonaWallClock } from "./arizona-time";
 
 export type ConsoleGiveaway = Pick<
   Giveaway,
@@ -212,6 +213,13 @@ const fmtDate = (iso: string) =>
 
 export const formatConsoleDate = (iso: string | null | undefined): string => (iso ? fmtDate(iso) : "—");
 
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** A giveaway end_date as its Arizona calendar date ("Oct 5, 2026") — never the browser time zone. */
+const fmtArizonaDate = (iso: string) => {
+  const az = toArizonaWallClock(iso);
+  return az ? `${SHORT_MONTHS[az.month - 1]} ${az.day}, ${az.year}` : fmtDate(iso);
+};
+
 /** Ends column: a real date when date-based, "At N entries" when capacity-based, else a label. */
 export function getEndsLabel(
   g: Pick<ConsoleGiveaway, "end_date" | "max_entries" | "ended_at" | "status">,
@@ -220,7 +228,7 @@ export function getEndsLabel(
     ? `${g.max_entries.toLocaleString()} ${g.max_entries === 1 ? "entry" : "entries"}`
     : null;
   let primary: string;
-  if (g.end_date) primary = fmtDate(g.end_date);
+  if (g.end_date) primary = fmtArizonaDate(g.end_date);
   else if (cap) primary = `At ${cap}`;
   else primary = "No end set";
 

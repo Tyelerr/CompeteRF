@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useGiveawayPastWinners } from "../../../src/viewmodels/useGiveawayPastWinners";
 import { moderateScale, scale } from "../../../src/utils/scaling";
+import { drawOddsLabel } from "../../../src/utils/giveaway-rules";
 import { WinnersConsoleScreen } from "../../../src/views/screens/admin/giveaway-console/winners-console.screen";
 
 const isWeb = Platform.OS === "web";
@@ -118,7 +119,7 @@ function NativeGiveawayPastWinnersScreen() {
         </View>
         <View style={styles.footerStat}>
           <Ionicons name="trophy-outline" size={14} color={COLORS.gray} />
-          <Text allowFontScaling={false} style={styles.footerText}>1 in {item.entry_count} odds</Text>
+          <Text allowFontScaling={false} style={styles.footerText}>{drawOddsLabel(item.entry_mode, item.entry_count)}</Text>
         </View>
       </View>
     </View>

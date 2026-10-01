@@ -7,6 +7,7 @@ import {
   EarningRulesPatch,
   EarningRulesSnapshot,
   FlaggedReferral,
+  PublicReferralTerms,
   SaveEarningRulesResult,
 } from "../types/earning-rules.types";
 
@@ -22,6 +23,17 @@ export const earningRulesService = {
     const { data, error } = await supabase.rpc("set_giveaway_earning_rules", { p_rules: patch });
     if (error) throw error;
     return data as SaveEarningRulesResult;
+  },
+
+  /**
+   * Public referral terms (anon-callable, read-only). Throws on failure (e.g. before migration
+   * 20261016120000 is applied) so React Query keeps the last good value on a failed refetch; with no
+   * value at all the rules fall back to their generic wording without numbers.
+   */
+  async getPublicTerms(): Promise<PublicReferralTerms | null> {
+    const { data, error } = await supabase.rpc("get_public_referral_terms");
+    if (error) throw error;
+    return (data as PublicReferralTerms) ?? null;
   },
 
   async listFlagged(): Promise<FlaggedReferral[]> {

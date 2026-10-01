@@ -6,6 +6,7 @@ import { imageUploadService } from "../models/services/image-upload.services";
 import { moderateStoredImage, MODERATION_UNAVAILABLE_MESSAGE } from "../models/services/image-moderation.service";
 import { normalizeImageForUpload } from "../utils/image-normalize";
 import { useAuthContext } from "../providers/AuthProvider";
+import { arizonaEndOfDayISO } from "../utils/arizona-time";
 
 export type EndType = "date" | "entries" | "both";
 
@@ -186,6 +187,8 @@ export const useCreateGiveaway = () => {
       const { month, day, year } = formData.end_date;
       if (!month || !day || !year) {
         errors.end_date = "End date is required";
+      } else if (!arizonaEndOfDayISO(formData.end_date)) {
+        errors.end_date = "Choose a valid date";
       }
     }
 
@@ -205,21 +208,11 @@ export const useCreateGiveaway = () => {
     setIsSubmitting(true);
 
     try {
-      // Format end date if provided and end_type includes date.
-      // Append end-of-day in Arizona time (UTC-7, no DST) so that
-      // "April 13" means April 13 at 11:59:59 PM Phoenix time,
-      // not midnight UTC (which is the previous evening in AZ).
+      // A date-based giveaway ends at 11:59:59 PM Arizona time on the selected date — the same
+      // conversion Edit uses (src/utils/arizona-time.ts).
       let endDate: string | undefined;
-      if (
-        (formData.end_type === "date" || formData.end_type === "both") &&
-        formData.end_date.month &&
-        formData.end_date.day &&
-        formData.end_date.year
-      ) {
-        const yyyy = formData.end_date.year;
-        const mm = formData.end_date.month.padStart(2, "0");
-        const dd = formData.end_date.day.padStart(2, "0");
-        endDate = `${yyyy}-${mm}-${dd}T23:59:59-07:00`;
+      if (formData.end_type === "date" || formData.end_type === "both") {
+        endDate = arizonaEndOfDayISO(formData.end_date) ?? undefined;
       }
 
       // Only include max_entries if end_type includes entries

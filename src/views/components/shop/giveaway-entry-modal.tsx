@@ -8,7 +8,8 @@ import { Giveaway } from "../../../models/types/giveaway.types";
 import { RADIUS } from "../../../theme/spacing";
 import { moderateScale, scale } from "../../../utils/scaling";
 import { WalletEntryResult } from "../../../models/types/giveaway-wallet.types";
-import { rulesForEntryMode } from "../../../utils/giveaway-rules";
+import { GIVEAWAY_RULES_TITLE } from "../../../models/constants/giveaway-rules";
+import { GiveawayRulesContent } from "../giveaway/GiveawayRulesContent";
 import { useGiveawayEntry, WalletEntryContext } from "../../../viewmodels/useGiveawayEntry";
 
 const isWeb = Platform.OS === "web";
@@ -19,21 +20,6 @@ const COLORS = { background: "#000000", card: "#1C1C1E", cardBorder: "#2C2C2E", 
 const SPACING = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
 const FONT_SIZES = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
-const DEFAULT_RULES_SECTIONS = [
-  { heading: "", body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law." },
-  { heading: "Platform Disclaimer", body: "This promotion is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. By entering, participants agree to release Apple and Google from any responsibility related to this promotion." },
-  { heading: "1. Eligibility", body: "Giveaways hosted on the Compete app are open to legal residents of the United States who are 18 years of age or older at the time of entry. Employees, officers, and directors of Compete and its affiliates, and their immediate family members, are not eligible to participate. Void where prohibited or restricted by law." },
-  { heading: "2. How to Enter", body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name (as it appears on your government-issued ID), date of birth, email address, and phone number. All information must be accurate and truthful. Limit one (1) entry per person per giveaway. Multiple entries, duplicate accounts, or fraudulent information will result in disqualification." },
-  { heading: "3. Entry Period", body: "Each giveaway has a specific start and end date displayed on the giveaway listing. Entries must be received before the posted end date and time. Late entries will not be accepted." },
-  { heading: "4. Winner Selection", body: "Winners are selected at random from all eligible entries received during the entry period. The random drawing is conducted by Compete administrators. The odds of winning depend on the number of eligible entries received." },
-  { heading: "5. Winner Notification", body: "The winner will be notified via the email address and/or phone number provided at the time of entry. The winner must respond within seven (7) days of notification to claim their prize. If the winner does not respond within the specified timeframe, the prize may be forfeited and an alternate winner may be selected." },
-  { heading: "6. Prizes", body: "The prize for each giveaway is described on the giveaway listing page. Prize values are approximate. Prizes are non-transferable and cannot be exchanged for cash or other items. Compete reserves the right to substitute a prize of equal or greater value. Winners are solely responsible for any applicable taxes, fees, or other costs associated with the prize." },
-  { heading: "7. Identity Verification", body: "Winners may be required to present a valid government-issued photo ID to verify their identity and age before receiving their prize. The name on the ID must match the name provided at the time of entry. Failure to verify identity may result in forfeiture of the prize." },
-  { heading: "8. General Conditions", body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason." },
-  { heading: "9. Privacy", body: "Information collected during giveaway entry is subject to the Compete Privacy Policy. Your information will be used for giveaway administration, winner notification, and prize fulfillment. Your information will not be sold to third parties." },
-  { heading: "10. Governing Law", body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates, without regard to conflict of law provisions." },
-];
-
 const PRIVACY_SECTIONS = [
   { heading: "What We Collect", body: "When you enter a giveaway on Compete, we collect the personal information you provide in the entry form: your full legal name, date of birth, email address, and phone number." },
   { heading: "How We Use Your Information", body: "Your giveaway entry information is used solely for: verifying your eligibility, administering the giveaway drawing, contacting the winner, and fulfilling the prize." },
@@ -43,7 +29,7 @@ const PRIVACY_SECTIONS = [
   { heading: "Security", body: "We implement reasonable technical and organizational measures to protect your personal information from unauthorized access, alteration, or destruction." },
 ];
 
-function LegalViewerModal({ visible, title, sections, customRulesText, onClose }: { visible: boolean; title: string; sections: { heading: string; body: string }[]; customRulesText?: string | null; onClose: () => void }) {
+function LegalViewerModal({ visible, title, children, onClose }: { visible: boolean; title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={legalStyles.mobileModalOuter}>
@@ -56,18 +42,7 @@ function LegalViewerModal({ visible, title, sections, customRulesText, onClose }
           </View>
           <View style={legalStyles.divider} />
           <ScrollView style={legalStyles.scrollView} contentContainerStyle={legalStyles.scrollContent} showsVerticalScrollIndicator onScrollBeginDrag={Keyboard.dismiss}>
-            {sections.map((section, index) => (
-              <View key={index} style={legalStyles.section}>
-                {section.heading ? <Text allowFontScaling={false} style={legalStyles.heading}>{section.heading}</Text> : null}
-                <Text allowFontScaling={false} style={legalStyles.body}>{section.body}</Text>
-              </View>
-            ))}
-            {customRulesText ? (
-              <View style={legalStyles.customSection}>
-                <Text allowFontScaling={false} style={legalStyles.customHeading}>Additional Rules</Text>
-                <Text allowFontScaling={false} style={legalStyles.body}>{customRulesText}</Text>
-              </View>
-            ) : null}
+            {children}
           </ScrollView>
           <View style={legalStyles.bottomBar}>
             <Pressable style={legalStyles.acceptButton} onPress={onClose}>
@@ -92,8 +67,6 @@ const legalStyles = StyleSheet.create({
   section: { marginBottom: wxSc(20) },
   heading: { color: COLORS.blue, fontSize: wxMs(16), fontWeight: "600", marginBottom: wxSc(8) },
   body: { color: "#D1D5DB", fontSize: wxMs(14), lineHeight: wxMs(22) },
-  customSection: { marginTop: wxSc(8), marginBottom: wxSc(20), paddingTop: wxSc(16), borderTopWidth: 1, borderTopColor: COLORS.cardBorder },
-  customHeading: { color: COLORS.amber, fontSize: wxMs(16), fontWeight: "600", marginBottom: wxSc(8) },
   bottomBar: { padding: wxSc(SPACING.lg), paddingBottom: Platform.OS === "ios" ? 34 : wxSc(SPACING.lg), borderTopWidth: 1, borderTopColor: COLORS.cardBorder },
   acceptButton: { paddingVertical: wxSc(14), borderRadius: wxSc(10), backgroundColor: COLORS.blue, alignItems: "center", justifyContent: "center" },
   acceptButtonText: { color: COLORS.white, fontSize: wxMs(16), fontWeight: "600" },
@@ -236,8 +209,17 @@ export function GiveawayEntryModal({ visible, giveaway, onClose, onSuccess, wall
 
   const legalModals = (
     <>
-      <LegalViewerModal visible={showRulesModal} title="Official Giveaway Rules" sections={rulesForEntryMode(DEFAULT_RULES_SECTIONS, giveaway?.entry_mode)} customRulesText={giveaway?.rules_text} onClose={handleRulesModalClose} />
-      <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" sections={PRIVACY_SECTIONS} onClose={() => setShowPrivacyModal(false)} />
+      <LegalViewerModal visible={showRulesModal} title={GIVEAWAY_RULES_TITLE} onClose={handleRulesModalClose}>
+        <GiveawayRulesContent giveaway={giveaway} customRulesText={giveaway?.rules_text} />
+      </LegalViewerModal>
+      <LegalViewerModal visible={showPrivacyModal} title="Giveaway Privacy Policy" onClose={() => setShowPrivacyModal(false)}>
+        {PRIVACY_SECTIONS.map((section, index) => (
+          <View key={index} style={legalStyles.section}>
+            <Text allowFontScaling={false} style={legalStyles.heading}>{section.heading}</Text>
+            <Text allowFontScaling={false} style={legalStyles.body}>{section.body}</Text>
+          </View>
+        ))}
+      </LegalViewerModal>
     </>
   );
 

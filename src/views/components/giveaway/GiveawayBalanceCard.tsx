@@ -1,12 +1,14 @@
 // src/views/components/giveaway/GiveawayBalanceCard.tsx
 // "🎟 GIVEAWAY ENTRIES · N Available" — the signed-in user's Giveaway Entries balance, shown even
-// at 0. Presentation only (balance comes from useGiveaways). No earning buttons yet: Daily Entry
-// and referral rewards don't exist, so nothing here promises them.
+// at 0. Presentation only (balance comes from useGiveaways). "How it works" opens the Giveaway
+// Entries section of the Official Giveaway Rules (/legal/giveaway-rules?section=entries).
 //   stacked (web / wide):  label on top, big number below — sits beside the Refer Friends card.
 //   inline  (mobile):      one slim row, so Active Now isn't pushed down.
 
+import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { GIVEAWAY_RULES_PATH } from "../../../models/constants/giveaway-rules";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
@@ -18,10 +20,24 @@ interface Props {
 }
 
 export function GiveawayBalanceCard({ balance, variant }: Props) {
+  const router = useRouter();
+  const label = (
+    <Text allowFontScaling={false} style={st.label}>
+      {"🎟"}  GIVEAWAY ENTRIES{"  "}
+      <Text
+        allowFontScaling={false}
+        style={st.howLink}
+        onPress={() => router.push(`${GIVEAWAY_RULES_PATH}?section=entries` as any)}
+        accessibilityRole="link"
+      >
+        How it works
+      </Text>
+    </Text>
+  );
   if (variant === "inline") {
     return (
       <View style={[st.card, st.inline]}>
-        <Text allowFontScaling={false} style={st.label}>{"🎟"}  GIVEAWAY ENTRIES</Text>
+        {label}
         <Text allowFontScaling={false} style={st.inlineValue}>
           <Text style={st.inlineNumber}>{balance}</Text> Available
         </Text>
@@ -30,7 +46,7 @@ export function GiveawayBalanceCard({ balance, variant }: Props) {
   }
   return (
     <View style={[st.card, st.stacked]}>
-      <Text allowFontScaling={false} style={st.label}>{"🎟"}  GIVEAWAY ENTRIES</Text>
+      {label}
       <View style={st.stackedRow}>
         <Text allowFontScaling={false} style={st.number}>{balance}</Text>
         <Text allowFontScaling={false} style={st.available}>Available</Text>
@@ -58,6 +74,7 @@ const st = StyleSheet.create({
     paddingVertical: webSc(SPACING.sm + 2),
   },
   label: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700", color: COLORS.textSecondary, letterSpacing: 0.8 },
+  howLink: { fontWeight: "500", letterSpacing: 0, color: COLORS.primary, textDecorationLine: "underline" },
   number: { fontSize: webMs(FONT_SIZES.xxl), fontWeight: "800", color: COLORS.text },
   available: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },
   inlineValue: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textSecondary },

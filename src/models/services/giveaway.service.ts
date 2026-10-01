@@ -750,10 +750,11 @@ export const giveawayService = {
     winner_email: string;
     drawn_at: string;
     entry_count: number;
+    entry_mode: GiveawayEntryMode;
   }[]> {
     const { data, error } = await supabase
       .from("giveaways")
-      .select("id, name, prize_value, winner_drawn_at, winner:profiles!giveaways_winner_id_fkey(name, email)")
+      .select("id, name, prize_value, entry_mode, winner_drawn_at, winner:profiles!giveaways_winner_id_fkey(name, email)")
       .eq("status", "awarded")
       .not("winner_id", "is", null)
       .order("winner_drawn_at", { ascending: false });
@@ -772,6 +773,7 @@ export const giveawayService = {
       winner_email: g.winner?.email || "",
       drawn_at: g.winner_drawn_at,
       entry_count: counts.get(g.id) ?? 0,
+      entry_mode: (g.entry_mode ?? "legacy_single") as GiveawayEntryMode,
     }));
   },
 

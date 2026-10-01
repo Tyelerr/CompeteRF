@@ -337,9 +337,10 @@ export default function CreateGiveawayScreen() {
             Default Official Rules apply automatically
           </Text>
           <Text allowFontScaling={false} style={styles.defaultRulesBody}>
-            Every giveaway includes Compete's built-in legal rules covering
-            eligibility, entry, winner selection, prizes, and Apple disclaimer.
-            You do not need to enter anything here for standard giveaways.
+            Every giveaway includes Compete's Official Giveaway Rules covering
+            eligibility, the entry method, Giveaway Entries, how it ends, winner selection,
+            odds, prizes, and the Apple/Google disclaimer. You do not need to enter anything
+            here for standard giveaways.
           </Text>
         </View>
       </View>

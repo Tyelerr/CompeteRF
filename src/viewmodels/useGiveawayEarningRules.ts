@@ -3,6 +3,7 @@
 // referrals, keeps an editable draft, validates it locally (server re-validates), and saves only
 // the changed fields through set_giveaway_earning_rules (audit_log'd server-side).
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { earningRulesService } from "../models/services/earning-rules.service";
 import { EarningRulesStats, FlaggedReferral, GiveawayEarningRules } from "../models/types/earning-rules.types";
@@ -14,6 +15,7 @@ import {
   newMilestoneKey,
   validateRulesDraft,
 } from "../utils/earning-rules";
+import { invalidatePublicReferralTerms } from "./hooks/public-referral-terms.query";
 import { useAuthStore } from "./stores/auth.store";
 
 const SAVE_ERRORS: Record<string, string> = {
@@ -24,6 +26,7 @@ const SAVE_ERRORS: Record<string, string> = {
 
 export function useGiveawayEarningRules() {
   const canManage = useAuthStore((st) => st.profile?.role === "super_admin");
+  const queryClient = useQueryClient();
 
   const [saved, setSaved] = useState<GiveawayEarningRules | null>(null);
   const [stats, setStats] = useState<EarningRulesStats | null>(null);
@@ -123,13 +126,16 @@ export function useGiveawayEarningRules() {
       setSaved(res.rules);
       setDraft(draftFromRules(res.rules));
       setSavedNotice("Earning rules saved. They apply to new referral claims from now on.");
+      // The public Referral Rewards terms (Official Giveaway Rules + Refer Friends) show these values:
+      // refresh them now instead of waiting for the 30 s staleTime.
+      invalidatePublicReferralTerms(queryClient).catch(() => {});
       earningRulesService.get().then((s) => setStats(s.stats)).catch(() => {});
     } catch (e: any) {
       setSaveError(e?.message?.includes("not authorized") ? "Only a Super Admin can change earning rules." : "Network problem — please try again.");
     } finally {
       setSaving(false);
     }
-  }, [canSave, patch]);
+  }, [canSave, patch, queryClient]);
 
   const reviewFlag = useCallback(async (id: number) => {
     setReviewing(id);

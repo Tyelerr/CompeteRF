@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { formatConsoleDate, formatMoney } from "../../../../utils/giveaway-console";
+import { drawOddsLabel } from "../../../../utils/giveaway-rules";
 import { useAuthStore } from "../../../../viewmodels/stores/auth.store";
 import { useAdminGiveaways } from "../../../../viewmodels/useAdminGiveaways";
 import { GiveawayAdminModals } from "../../../components/giveaway/GiveawayAdminModals";
@@ -20,7 +21,7 @@ import { ConsoleButton, StatusPill } from "./giveaway-console.parts";
 import { consoleSt } from "./giveaway-console.styles";
 import { WinnerDetailModal } from "./WinnerDetailModal";
 
-const WCOLS = { giveaway: 260, status: 100, prize: 80, drawn: 164, entries: 72, odds: 84, actions: 108 };
+const WCOLS = { giveaway: 260, status: 100, prize: 80, drawn: 164, entries: 72, odds: 132, actions: 108 };
 
 const fmtDateTime = (iso: string | null | undefined) =>
   iso
@@ -159,7 +160,7 @@ export function WinnersConsoleScreen() {
                           <Text allowFontScaling={false} style={consoleSt.cellText}>{entries.toLocaleString()}</Text>
                         </View>
                         <View style={[consoleSt.cell, { width: WCOLS.odds }]}>
-                          <Text allowFontScaling={false} style={consoleSt.cellText}>{entries > 0 ? `1 in ${entries.toLocaleString()}` : "—"}</Text>
+                          <Text allowFontScaling={false} style={consoleSt.cellText}>{drawOddsLabel(g.entry_mode, entries)}</Text>
                         </View>
                         <View style={[consoleSt.cell, { width: WCOLS.actions, paddingRight: 0 }]}>
                           <ConsoleButton label="Contact" icon="person-circle-outline" onPress={() => setContactFor(g)} accessibilityLabel={`Contact ${name}`} />

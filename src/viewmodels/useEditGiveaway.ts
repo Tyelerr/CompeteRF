@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
 import { GiveawayEntryMode } from "../models/types/giveaway.types";
+import { arizonaDatePartsFromISO } from "../utils/arizona-time";
+import { endDateForSave } from "../utils/giveaway-end-rule";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Form structure intentionally mirrors useCreateGiveaway so the edit screen
@@ -68,26 +70,6 @@ function deriveEndType(endDate: string | null, maxEntries: number | null): EndTy
   return "date"; // default
 }
 
-/** Parse ISO date string into { month, day, year } */
-function parseISODate(iso: string | null): { month: string; day: string; year: string } {
-  if (!iso) return { month: "", day: "", year: "" };
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return { month: "", day: "", year: "" };
-  return {
-    month: String(d.getUTCMonth() + 1),
-    day:   String(d.getUTCDate()),
-    year:  String(d.getUTCFullYear()),
-  };
-}
-
-/** Build ISO date from { month, day, year }. Returns "" if incomplete. */
-function buildISO(d: { month: string; day: string; year: string }): string {
-  if (!d.month || !d.day || !d.year) return "";
-  const m = d.month.padStart(2, "0");
-  const day = d.day.padStart(2, "0");
-  // End of day in UTC
-  return `${d.year}-${m}-${day}T23:59:00.000Z`;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook
@@ -132,7 +114,7 @@ export function useEditGiveaway(giveawayId: number) {
         end_type:    deriveEndType(g.end_date, g.max_entries),
         max_entries: g.max_entries != null ? String(g.max_entries) : "",
         per_user_max: g.per_user_max != null ? String(g.per_user_max) : "",
-        end_date:    parseISODate(g.end_date),
+        end_date:    arizonaDatePartsFromISO(g.end_date),
       };
       setEntryMode(g.entry_mode ?? "legacy_single");
 
@@ -225,8 +207,13 @@ export function useEditGiveaway(giveawayId: number) {
       }
 
       if (form.end_type === "date" || form.end_type === "both") {
-        const iso = buildISO(form.end_date);
-        if (iso) updates.end_date = iso;
+        const endDate = endDateForSave(form, originalForm);
+        if (endDate === "invalid") {
+          setSaving(false);
+          setError("Choose a valid end date.");
+          return false;
+        }
+        if (endDate) updates.end_date = endDate;
         // Clear max_entries if switching to date only
         if (form.end_type === "date") updates.max_entries = null as any;
       }
@@ -255,7 +242,7 @@ export function useEditGiveaway(giveawayId: number) {
     } finally {
       setSaving(false);
     }
-  }, [giveawayId, form, isValid, hasEntries, isWallet, perUserMaxValid]);
+  }, [giveawayId, form, originalForm, isValid, hasEntries, isWallet, perUserMaxValid]);
 
   // ── Dropdown option builders (same as useCreateGiveaway) ─────────────────
   const monthOptions = [

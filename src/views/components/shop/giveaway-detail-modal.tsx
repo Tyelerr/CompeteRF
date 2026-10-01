@@ -1,7 +1,9 @@
 ﻿import React, { useState } from "react";
 import { Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Giveaway, GiveawayEntryMode } from "../../../models/types/giveaway.types";
-import { rulesForEntryMode } from "../../../utils/giveaway-rules";
+import { Giveaway } from "../../../models/types/giveaway.types";
+import { GIVEAWAY_RULES_TITLE } from "../../../models/constants/giveaway-rules";
+import { endsLabel, entryLimitLabel } from "../../../utils/giveaway-rules";
+import { GiveawayRulesContent } from "../giveaway/GiveawayRulesContent";
 import { RADIUS } from "../../../theme/spacing";
 import { moderateScale, scale } from "../../../utils/scaling";
 
@@ -13,44 +15,18 @@ const C = { bg: "#000000", card: "#1C1C1E", border: "#2C2C2E", blue: "#007AFF", 
 const SP = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20 };
 const FS = { xs: 11, sm: 13, md: 15, lg: 17, xl: 20 };
 
-const DEFAULT_RULES_SECTIONS = [
-  { heading: "", body: "NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase or payment of any kind will not increase your chances of winning. Void where prohibited by law." },
-  { heading: "Platform Disclaimer", body: "This promotion is in no way sponsored, endorsed, administered by, or associated with Apple Inc. or Google LLC. By entering, participants agree to release Apple and Google from any responsibility related to this promotion." },
-  { heading: "1. Eligibility", body: "Giveaways hosted on the Compete app are open to legal residents of the United States who are 18 years of age or older at the time of entry. Employees, officers, and directors of Compete and its affiliates, and their immediate family members, are not eligible to participate. Void where prohibited or restricted by law." },
-  { heading: "2. How to Enter", body: "No purchase necessary. To enter a giveaway, you must have a registered Compete account in good standing. Complete the entry form with your full legal name, date of birth, email address, and phone number. Limit one (1) entry per person per giveaway." },
-  { heading: "3. Entry Period", body: "Each giveaway has a specific start and end date displayed on the giveaway listing. Entries must be received before the posted end date and time. Late entries will not be accepted." },
-  { heading: "4. Winner Selection", body: "Winners are selected at random from all eligible entries received during the entry period. The odds of winning depend on the number of eligible entries received." },
-  { heading: "5. Winner Notification", body: "The winner will be notified via the email address and/or phone number provided at the time of entry. The winner must respond within seven (7) days of notification to claim their prize. If the winner does not respond, the prize may be forfeited." },
-  { heading: "6. Prizes", body: "The prize for each giveaway is described on the giveaway listing page. Prizes are non-transferable and cannot be exchanged for cash. Compete reserves the right to substitute a prize of equal or greater value. Winners are solely responsible for any applicable taxes." },
-  { heading: "7. Identity Verification", body: "Winners may be required to present a valid government-issued photo ID to verify their identity and age before receiving their prize." },
-  { heading: "8. General Conditions", body: "By entering a giveaway, you agree to be bound by these Official Rules and the decisions of Compete, which are final and binding. Compete reserves the right to cancel, suspend, or modify any giveaway at any time for any reason." },
-  { heading: "9. Privacy", body: "Information collected during giveaway entry is subject to the Compete Privacy Policy. Your information will be used for giveaway administration, winner notification, and prize fulfillment." },
-  { heading: "10. Governing Law", body: "These Official Rules are governed by the laws of the United States and the state in which Compete operates." },
-];
-
-function FullRulesModal({ visible, customRulesText, entryMode, onClose }: { visible: boolean; customRulesText: string | null; entryMode: GiveawayEntryMode | undefined; onClose: () => void }) {
+function FullRulesModal({ visible, giveaway, onClose }: { visible: boolean; giveaway: Giveaway; onClose: () => void }) {
   if (!visible) return null;
   const content = (
     <>
       <View style={rm.header}>
         <TouchableOpacity onPress={onClose} style={rm.closeBtn}><Text allowFontScaling={false} style={rm.closeBtnText}>{"\u2715"}</Text></TouchableOpacity>
-        <Text allowFontScaling={false} style={rm.headerTitle}>Official Rules</Text>
+        <Text allowFontScaling={false} style={rm.headerTitle}>{GIVEAWAY_RULES_TITLE}</Text>
         <View style={{ width: 40 }} />
       </View>
       <View style={rm.divider} />
       <ScrollView style={rm.scroll} contentContainerStyle={rm.scrollContent} showsVerticalScrollIndicator onScrollBeginDrag={Keyboard.dismiss}>
-        {rulesForEntryMode(DEFAULT_RULES_SECTIONS, entryMode).map((section, i) => (
-          <View key={i} style={rm.section}>
-            {section.heading ? <Text allowFontScaling={false} style={rm.heading}>{section.heading}</Text> : null}
-            <Text allowFontScaling={false} style={rm.body}>{section.body}</Text>
-          </View>
-        ))}
-        {customRulesText ? (
-          <View style={rm.customSection}>
-            <Text allowFontScaling={false} style={rm.customHeading}>Additional Rules</Text>
-            <Text allowFontScaling={false} style={rm.body}>{customRulesText}</Text>
-          </View>
-        ) : null}
+        <GiveawayRulesContent giveaway={giveaway} customRulesText={giveaway.rules_text} />
       </ScrollView>
       <View style={rm.footer}>
         <TouchableOpacity style={rm.acceptBtn} onPress={onClose}>
@@ -89,11 +65,6 @@ const rm = StyleSheet.create({
   divider: { height: 1, backgroundColor: C.border },
   scroll: { flex: 1 },
   scrollContent: { padding: wxSc(SP.xl), paddingBottom: wxSc(SP.lg) },
-  section: { marginBottom: wxSc(20) },
-  heading: { color: C.blue, fontSize: wxMs(16), fontWeight: "600", marginBottom: wxSc(8) },
-  body: { color: "#D1D5DB", fontSize: wxMs(14), lineHeight: wxMs(22) },
-  customSection: { marginTop: wxSc(8), marginBottom: wxSc(20), paddingTop: wxSc(16), borderTopWidth: 1, borderTopColor: C.border },
-  customHeading: { color: C.amber, fontSize: wxMs(16), fontWeight: "600", marginBottom: wxSc(8) },
   footer: { padding: wxSc(SP.lg), paddingBottom: Platform.OS === "ios" ? 34 : wxSc(SP.lg), borderTopWidth: 1, borderTopColor: C.border },
   acceptBtn: { paddingVertical: wxSc(14), borderRadius: wxSc(10), backgroundColor: C.blue, alignItems: "center", justifyContent: "center" },
   acceptBtnText: { color: C.white, fontSize: wxMs(16), fontWeight: "600" },
@@ -133,10 +104,6 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
   const progressPercent = maxEntries > 0 ? Math.min((entryCount / maxEntries) * 100, 100) : 0;
   const isClosed = giveaway.status === "ended" || giveaway.status === "awarded" || (maxEntries > 0 && entryCount >= maxEntries) || pastEndDate;
   const formatValue = (value: number | null) => value ? `$${value.toLocaleString()}` : "\u2014";
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "No end date";
-    return new Date(dateString).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  };
 
   const innerContent = (
     <>
@@ -167,9 +134,10 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
         <View style={s.detailsCard}>
           <Text allowFontScaling={false} style={s.detailsTitle}>Giveaway Info</Text>
           <DetailRow label="Approximate Value" value={formatValue(giveaway.prize_value)} />
-          <DetailRow label="Entry Limit" value={maxEntries > 0 ? "1 per person" : "Unlimited"} />
+          <DetailRow label="Entry Method" value={giveaway.entry_mode === "wallet" ? "Giveaway Entries" : "Single Free Entry"} />
+          <DetailRow label="Entry Limit" value={entryLimitLabel(giveaway)} />
           <DetailRow label="Entries So Far" value={`${entryCount}`} />
-          {giveaway.end_date ? <DetailRow label="End Date" value={formatDate(giveaway.end_date)} /> : maxEntries > 0 ? <DetailRow label="Entry Cap" value={`${maxEntries} entries`} /> : <DetailRow label="End Date" value="Ongoing" />}
+          <DetailRow label="Ends" value={endsLabel(giveaway) ?? "Ongoing"} />
           <DetailRow label="Number of Winners" value="1" />
           <DetailRow label="Min Age" value={`${giveaway.min_age}+`} />
           {maxEntries > 0 && (
@@ -201,7 +169,7 @@ export function GiveawayDetailModal({ visible, giveaway, isEntered, daysRemainin
         )}
         <TouchableOpacity style={s.cancelButton} onPress={onClose}><Text allowFontScaling={false} style={s.cancelButtonText}>Close</Text></TouchableOpacity>
       </View>
-      <FullRulesModal visible={showRules} customRulesText={giveaway.rules_text} entryMode={giveaway.entry_mode} onClose={() => setShowRules(false)} />
+      <FullRulesModal visible={showRules} giveaway={giveaway} onClose={() => setShowRules(false)} />
     </>
   );
 
