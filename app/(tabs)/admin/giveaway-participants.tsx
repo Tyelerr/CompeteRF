@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useGiveawayParticipants } from "../../../src/viewmodels/useGiveawayParticipants";
 import { moderateScale, scale } from "../../../src/utils/scaling";
+import { ParticipantsConsoleScreen } from "../../../src/views/screens/admin/giveaway-console/participants-console.screen";
 
 const isWeb = Platform.OS === "web";
 
@@ -50,7 +51,12 @@ const FONT_SIZES = {
   xxl: 24,
 };
 
+// Web / desktop gets the Giveaway Management console page; native keeps this screen unchanged.
 export default function GiveawayParticipantsScreen() {
+  return Platform.OS === "web" ? <ParticipantsConsoleScreen /> : <NativeGiveawayParticipantsScreen />;
+}
+
+function NativeGiveawayParticipantsScreen() {
   const router = useRouter();
   // Optional ?giveaway=<id> (web console "View Participants") pre-selects that giveaway's filter.
   const { giveaway } = useLocalSearchParams<{ giveaway?: string }>();

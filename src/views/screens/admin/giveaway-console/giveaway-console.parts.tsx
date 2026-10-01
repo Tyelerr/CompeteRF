@@ -1,8 +1,8 @@
 // src/views/screens/admin/giveaway-console/giveaway-console.parts.tsx
-// Small presentational pieces shared by the web Giveaway Management console and its drawer.
+// Small presentational pieces shared by the web Giveaway Management pages and their modals.
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { STATUS_TONE, consoleSt, tint } from "./giveaway-console.styles";
 
@@ -24,6 +24,89 @@ export function StatusPill({ status }: { status: string }) {
         {STATUS_LABEL[status] ?? status}
       </Text>
     </View>
+  );
+}
+
+/** Toolbar dropdown (sort / filter): a ConsoleButton that opens a small popover menu below it. */
+export function ConsoleSelect<T extends string | number>({
+  label,
+  icon,
+  value,
+  options,
+  onChange,
+  align = "right",
+  menuWidth = 220,
+  accessibilityLabel,
+}: {
+  label: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  align?: "left" | "right";
+  menuWidth?: number;
+  accessibilityLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ zIndex: open ? 50 : 1 }}>
+      <ConsoleButton label={label} icon={icon} onPress={() => setOpen((o) => !o)} accessibilityLabel={accessibilityLabel ?? label} />
+      {open ? (
+        <>
+          <Pressable style={consoleSt.menuLayer} onPress={() => setOpen(false)} accessibilityLabel="Close menu" />
+          <ScrollView
+            style={[consoleSt.menuBox, { top: 40, width: menuWidth, maxHeight: 360, zIndex: 901 }, align === "right" ? { right: 0 } : { left: 0 }]}
+            accessibilityRole={"menu" as any}
+          >
+            {options.map((o) => {
+              const selected = o.value === value;
+              return (
+                <Pressable
+                  key={String(o.value)}
+                  onPress={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  accessibilityRole={"menuitem" as any}
+                  style={({ hovered }: any) => [consoleSt.menuItem, hovered && consoleSt.menuItemHover]}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    numberOfLines={1}
+                    style={[consoleSt.menuItemText, selected && { color: COLORS.primaryLight, fontWeight: "700" }]}
+                  >
+                    {selected ? "✓  " : "    "}
+                    {o.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+/** Small icon-only button for row actions (email / call). Stops the row click. */
+export function ConsoleIconButton({
+  icon,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  accessibilityLabel: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={({ hovered }: any) => [consoleSt.menuBtn, hovered && consoleSt.menuBtnHover]}
+    >
+      <Ionicons name={icon} size={16} color={COLORS.textSecondary} />
+    </Pressable>
   );
 }
 

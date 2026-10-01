@@ -65,6 +65,11 @@ export interface GiveawayAdminModalsProps {
   endingEarly: boolean;
   closeEndEarlyModal: () => void;
   confirmEndEarly: () => void;
+  /**
+   * Render the built-in Winner Details modal (default). The web desktop console passes false and
+   * shows its own centered Winner Details modal bound to the same vm state (same Redraw flow).
+   */
+  renderWinnerDetails?: boolean;
 }
 
 export function GiveawayAdminModals({
@@ -73,6 +78,7 @@ export function GiveawayAdminModals({
   endingEarly,
   closeEndEarlyModal,
   confirmEndEarly,
+  renderWinnerDetails = true,
 }: GiveawayAdminModalsProps) {
   return (
     <>
@@ -381,6 +387,7 @@ export function GiveawayAdminModals({
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL 3 – Winner details (awarded giveaways)
       ══════════════════════════════════════════════════════════════════════ */}
+      {renderWinnerDetails ? (
       <Modal visible={vm.winnerDetailsModalVisible} transparent animationType="fade" onRequestClose={vm.closeWinnerDetailsModal}>
         <Pressable style={modalSt.overlay} onPress={vm.closeWinnerDetailsModal}>
           <Pressable style={[modalSt.card, { maxHeight: "80%" as any }]} onPress={(e) => e.stopPropagation()}>
@@ -447,6 +454,7 @@ export function GiveawayAdminModals({
           </Pressable>
         </Pressable>
       </Modal>
+      ) : null}
 
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL 4 – Redraw confirm

@@ -20,6 +20,8 @@ import { FONT_SIZES } from "../../../../src/theme/typography";
 import { EditGiveawayForm, useEditGiveaway } from "../../../../src/viewmodels/useEditGiveaway";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { moderateScale, scale } from "../../../../src/utils/scaling";
+import { GiveawayFormShell } from "../../../../src/views/screens/admin/giveaway-console/GiveawayFormShell";
+import { consoleSt, tint } from "../../../../src/views/screens/admin/giveaway-console/giveaway-console.styles";
 
 const isWeb = Platform.OS === "web";
 
@@ -89,7 +91,9 @@ const lf = StyleSheet.create({
     borderColor: "#FF9F0A45",
   },
   badgeText: { color: "#FF9F0A", fontSize: moderateScale(10), fontWeight: "700" },
-  fieldWrap: { opacity: 0.45 },
+  // Web: values stay readable (the 0.45 dim made them look empty); still clearly locked via the
+  // badge, hint, not-allowed cursor and non-editable inputs. Native unchanged.
+  fieldWrap: { opacity: 0.45, ...Platform.select({ web: { opacity: 0.85, cursor: "not-allowed" as any } }) },
   hintRow: { flexDirection: "row", alignItems: "center", gap: scale(4), marginTop: scale(SPACING.xs) },
   hint: { color: "#FF9F0A", fontSize: moderateScale(FONT_SIZES.xs), fontWeight: "500" },
 });
@@ -292,7 +296,182 @@ export default function EditGiveawayScreen() {
     );
   };
 
+  // Form sections as values so web (desktop columns) and native (single column, same order)
+  // render the exact same JSX. Content and logic unchanged.
+  {/* ── Section 1: Prize Info ──────────────────────────────────────────── */}
+  const prizeSection = (
+    <>
+    <Section title="Prize Info">
+      {/* Image */}
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Prize Image</Text>
+        {vm.form.image_url ? (
+          <View style={s.imagePreviewContainer}>
+            <Image source={{ uri: vm.form.image_url }} style={s.imagePreview} />
+          </View>
+        ) : (
+          <View style={s.uploadButton}>
+            <View style={s.uploadIconCircle}>
+              <Text allowFontScaling={false} style={s.uploadIcon}>🖼️</Text>
+            </View>
+            <Text allowFontScaling={false} style={s.uploadHint}>No image set</Text>
+          </View>
+        )}
+        <TextInput
+          style={[s.input, { marginTop: scale(SPACING.sm) }]}
+          placeholder="Image URL (https://...)"
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.form.image_url}
+          onChangeText={(t) => vm.updateField("image_url", t)}
+          autoCapitalize="none"
+          keyboardType="url"
+          editable={!vm.saving}
+        />
+      </View>
+
+      {/* Name */}
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Prize Name <Text allowFontScaling={false} style={s.required}>*</Text></Text>
+        <TextInput
+          style={s.input}
+          placeholder="e.g. iPad Pro, $500 Cash, HOW Glove"
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.form.name}
+          onChangeText={(t) => vm.updateField("name", t)}
+          autoCapitalize="words"
+          editable={!vm.saving}
+        />
+      </View>
+
+      {/* Prize value – may be locked */}
+      {renderPrizeValue()}
+
+      {/* Description */}
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Description</Text>
+        <TextInput
+          style={[s.input, s.textArea]}
+          placeholder="Describe the prize and what makes it special..."
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.form.description}
+          onChangeText={(t) => vm.updateField("description", t)}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          editable={!vm.saving}
+        />
+      </View>
+    </Section>
+    </>
+  );
+
+  {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
+  const entrySection = (
+    <>
+    <Section title="Entry Rules">
+      {/* Entry method is fixed at creation — read-only here, always. */}
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Entry Method</Text>
+        <View style={s.endTypeHintBox}>
+          <Text allowFontScaling={false} style={s.endTypeHint}>
+            {vm.isWallet ? "🎟 Giveaway Entries — users spend their entries, up to the per-user max." : "🎁 Single Free Entry — one free entry per user."}
+            {"  (Can't be changed.)"}
+          </Text>
+        </View>
+      </View>
+
+      {renderEndType()}
+
+      {(vm.form.end_type === "entries" || vm.form.end_type === "both") &&
+        renderMaxEntries()}
+
+      {vm.isWallet && renderPerUserMax()}
+    </Section>
+    </>
+  );
+
+  {/* ── Section 3: Timing ──────────────────────────────────────────────── */}
+  const timingSection = (
+    <>
+    {(vm.form.end_type === "date" || vm.form.end_type === "both") && (
+      <Section title="Timing">
+        {renderEndDate()}
+      </Section>
+    )}
+    </>
+  );
+
+  {/* ── Section 4: Legal / Rules ───────────────────────────────────────── */}
+  const legalSection = (
+    <>
+    <Section title="Legal / Rules">
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Age Requirement</Text>
+        <View style={s.ageRequirementContainer}>
+          <Text allowFontScaling={false} style={s.ageRequirementText}>🔒  18+ years old</Text>
+          <Text allowFontScaling={false} style={s.ageRequirementSubtext}>Required by law</Text>
+        </View>
+      </View>
+
+      <View style={s.fieldGroup}>
+        <Text allowFontScaling={false} style={s.label}>Custom Rules Text</Text>
+        <Text allowFontScaling={false} style={s.fieldHint}>
+          Leave blank to use Compete's built-in Official Rules
+        </Text>
+        <TextInput
+          style={[s.input, s.textAreaLarge]}
+          placeholder="Enter full legal rules text here..."
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.form.rules_text}
+          onChangeText={(t) => vm.updateField("rules_text", t)}
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+          editable={!vm.saving}
+        />
+      </View>
+    </Section>
+    </>
+  );
+
   // ── Main render ────────────────────────────────────────────────────────────
+  // Web / desktop: same sections and handlers in the shared Giveaway Management form frame.
+  if (isWeb) {
+    return (
+      <GiveawayFormShell
+        title="Edit Giveaway"
+        subtitle={`#${giveawayId}`}
+        onBack={handleBack}
+        notices={
+          <>
+            {vm.hasEntries ? (
+              <View style={[consoleSt.notice, { borderColor: COLORS.warning, backgroundColor: tint(COLORS.warning) }]}>
+                <Ionicons name="lock-closed" size={14} color={COLORS.warning} />
+                <Text allowFontScaling={false} style={[consoleSt.noticeText, { color: COLORS.warning }]}>
+                  {vm.entryCount} {vm.entryCount === 1 ? "entry" : "entries"} received – prize value, entry limits, and end conditions are locked
+                </Text>
+              </View>
+            ) : null}
+            {vm.error ? (
+              <View style={[consoleSt.notice, { borderColor: COLORS.error, backgroundColor: tint(COLORS.error) }]}>
+                <Text allowFontScaling={false} style={[consoleSt.noticeText, { color: COLORS.error }]}>{vm.error}</Text>
+              </View>
+            ) : null}
+          </>
+        }
+        left={prizeSection}
+        right={<>{entrySection}{timingSection}</>}
+        bottom={legalSection}
+        footerNote={vm.hasChanges ? "Unsaved changes" : "No changes yet"}
+        onCancel={handleBack}
+        cancelDisabled={vm.saving}
+        primaryLabel="Save Changes"
+        onPrimary={handleSave}
+        primaryDisabled={!vm.isValid || !vm.hasChanges || vm.saving}
+        primaryBusy={vm.saving}
+      />
+    );
+  }
   return (
     <KeyboardAvoidingView
       style={s.container}
@@ -337,125 +516,10 @@ export default function EditGiveawayScreen() {
           </View>
         ) : null}
 
-        {/* ── Section 1: Prize Info ──────────────────────────────────────────── */}
-        <Section title="Prize Info">
-          {/* Image */}
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Prize Image</Text>
-            {vm.form.image_url ? (
-              <View style={s.imagePreviewContainer}>
-                <Image source={{ uri: vm.form.image_url }} style={s.imagePreview} />
-              </View>
-            ) : (
-              <View style={s.uploadButton}>
-                <View style={s.uploadIconCircle}>
-                  <Text allowFontScaling={false} style={s.uploadIcon}>🖼️</Text>
-                </View>
-                <Text allowFontScaling={false} style={s.uploadHint}>No image set</Text>
-              </View>
-            )}
-            <TextInput
-              style={[s.input, { marginTop: scale(SPACING.sm) }]}
-              placeholder="Image URL (https://...)"
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.form.image_url}
-              onChangeText={(t) => vm.updateField("image_url", t)}
-              autoCapitalize="none"
-              keyboardType="url"
-              editable={!vm.saving}
-            />
-          </View>
-
-          {/* Name */}
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Prize Name <Text allowFontScaling={false} style={s.required}>*</Text></Text>
-            <TextInput
-              style={s.input}
-              placeholder="e.g. iPad Pro, $500 Cash, HOW Glove"
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.form.name}
-              onChangeText={(t) => vm.updateField("name", t)}
-              autoCapitalize="words"
-              editable={!vm.saving}
-            />
-          </View>
-
-          {/* Prize value – may be locked */}
-          {renderPrizeValue()}
-
-          {/* Description */}
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Description</Text>
-            <TextInput
-              style={[s.input, s.textArea]}
-              placeholder="Describe the prize and what makes it special..."
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.form.description}
-              onChangeText={(t) => vm.updateField("description", t)}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              editable={!vm.saving}
-            />
-          </View>
-        </Section>
-
-        {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
-        <Section title="Entry Rules">
-          {/* Entry method is fixed at creation — read-only here, always. */}
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Entry Method</Text>
-            <View style={s.endTypeHintBox}>
-              <Text allowFontScaling={false} style={s.endTypeHint}>
-                {vm.isWallet ? "🎟 Giveaway Entries — users spend their entries, up to the per-user max." : "🎁 Single Free Entry — one free entry per user."}
-                {"  (Can't be changed.)"}
-              </Text>
-            </View>
-          </View>
-
-          {renderEndType()}
-
-          {(vm.form.end_type === "entries" || vm.form.end_type === "both") &&
-            renderMaxEntries()}
-
-          {vm.isWallet && renderPerUserMax()}
-        </Section>
-
-        {/* ── Section 3: Timing ──────────────────────────────────────────────── */}
-        {(vm.form.end_type === "date" || vm.form.end_type === "both") && (
-          <Section title="Timing">
-            {renderEndDate()}
-          </Section>
-        )}
-
-        {/* ── Section 4: Legal / Rules ───────────────────────────────────────── */}
-        <Section title="Legal / Rules">
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Age Requirement</Text>
-            <View style={s.ageRequirementContainer}>
-              <Text allowFontScaling={false} style={s.ageRequirementText}>🔒  18+ years old</Text>
-              <Text allowFontScaling={false} style={s.ageRequirementSubtext}>Required by law</Text>
-            </View>
-          </View>
-
-          <View style={s.fieldGroup}>
-            <Text allowFontScaling={false} style={s.label}>Custom Rules Text</Text>
-            <Text allowFontScaling={false} style={s.fieldHint}>
-              Leave blank to use Compete's built-in Official Rules
-            </Text>
-            <TextInput
-              style={[s.input, s.textAreaLarge]}
-              placeholder="Enter full legal rules text here..."
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.form.rules_text}
-              onChangeText={(t) => vm.updateField("rules_text", t)}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              editable={!vm.saving}
-            />
-          </View>
-        </Section>
+        {prizeSection}
+        {entrySection}
+        {timingSection}
+        {legalSection}
 
         <View style={{ height: scale(100) }} />
       </ScrollView>
@@ -611,6 +675,7 @@ const s = StyleSheet.create({
   inputLocked: {
     opacity: 0.5,
     color: COLORS.textMuted,
+    ...Platform.select({ web: { opacity: 1, color: COLORS.text, fontWeight: "600" as const, cursor: "not-allowed" as any } }),
   },
   textArea: { minHeight: scale(100), textAlignVertical: "top" },
   textAreaLarge: { minHeight: scale(150), textAlignVertical: "top" },

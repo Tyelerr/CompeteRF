@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { giveawayService } from "../models/services/giveaway.service";
 import { GiveawayEntry } from "../models/types/giveaway.types";
 
-type ParticipantEntry = GiveawayEntry & {
+export type ParticipantEntry = GiveawayEntry & {
   giveaway_name?: string;
   giveaway_prize?: number;
 };
 
-type SortOption = "newest" | "oldest" | "name";
+export type ParticipantSortOption = "newest" | "oldest" | "name";
+type SortOption = ParticipantSortOption;
 type FilterGiveaway = { id: number; name: string };
 
 export function useGiveawayParticipants(initialGiveawayId: number | null = null) {
@@ -132,6 +133,8 @@ export function useGiveawayParticipants(initialGiveawayId: number | null = null)
   return {
     // Data
     entries: filteredEntries,
+    /** Every loaded entry, unfiltered (web console: per-person participation history). */
+    allEntries: entries,
     totalCount: entries.length,
     filteredCount: filteredEntries.length,
     giveaways,
@@ -150,6 +153,8 @@ export function useGiveawayParticipants(initialGiveawayId: number | null = null)
     setSearchQuery,
     selectGiveaway,
     cycleSortBy,
+    /** Direct sort selection (web console sort menu); native keeps cycleSortBy. */
+    setSortBy,
 
     // Helpers
     formatDate,

@@ -1,4 +1,5 @@
-﻿import { useRouter } from "expo-router";
+﻿import { GiveawayFormShell } from "../../../src/views/screens/admin/giveaway-console/GiveawayFormShell";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -52,6 +53,355 @@ export default function CreateGiveawayScreen() {
   // Custom rules section is hidden by default – most giveaways don't need it
   const [showCustomRules, setShowCustomRules] = useState(false);
 
+  // Form sections as values so web (desktop columns) and native (single column, same order)
+  // render the exact same JSX. Content and logic unchanged.
+  {/* ── Section 1: Prize Info ──────────────────────────────────────────── */}
+  const prizeSection = (
+    <>
+    <Section title="Prize Info">
+      {/* Image upload */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>Prize Image</Text>
+        {vm.imageUri ? (
+          <View style={styles.imagePreviewContainer}>
+            <Image source={{ uri: vm.imageUri }} style={styles.imagePreview} />
+            {vm.isUploadingImage ? (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator color={COLORS.primary} size="large" />
+                <Text allowFontScaling={false} style={styles.uploadingText}>Uploading...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.removeImageButton} onPress={vm.removeImage}>
+                <Text allowFontScaling={false} style={styles.removeImageText}>✕</Text>
+              </TouchableOpacity>
+            )}
+            {!vm.isUploadingImage && (
+              <TouchableOpacity style={styles.changeImageButton} onPress={vm.pickImage}>
+                <Text allowFontScaling={false} style={styles.changeImageText}>Change Photo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={vm.pickImage}
+            disabled={vm.isUploadingImage}
+            activeOpacity={0.7}
+          >
+            <View style={styles.uploadIconCircle}>
+              <Text allowFontScaling={false} style={styles.uploadIcon}>📷</Text>
+            </View>
+            <Text allowFontScaling={false} style={styles.uploadText}>Upload Prize Photo</Text>
+            <Text allowFontScaling={false} style={styles.uploadHint}>Tap to select from library</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Prize Name */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>
+          Prize Name <Text allowFontScaling={false} style={styles.required}>*</Text>
+        </Text>
+        <TextInput
+          style={[styles.input, vm.formErrors.name && styles.inputError]}
+          placeholder="e.g. iPad Pro, $500 Cash, HOW Glove"
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.formData.name}
+          onChangeText={(text) => vm.updateField("name", text)}
+        />
+        {vm.formErrors.name && (
+          <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.name}</Text>
+        )}
+      </View>
+
+      {/* Prize Value */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>
+          ARV (Approximate Retail Value) <Text allowFontScaling={false} style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.currencyInputWrapper}>
+          <Text allowFontScaling={false} style={styles.currencySymbol}>$</Text>
+          <TextInput
+            style={[styles.currencyInput, vm.formErrors.prize_value && styles.inputError]}
+            placeholder="500"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.formData.prize_value}
+            onChangeText={(text) =>
+              vm.updateField("prize_value", text.replace(/[^0-9.]/g, ""))
+            }
+            keyboardType="decimal-pad"
+          />
+        </View>
+        {vm.formErrors.prize_value && (
+          <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.prize_value}</Text>
+        )}
+      </View>
+
+      {/* Description */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>Description</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Describe the prize and what makes it special..."
+          placeholderTextColor={COLORS.textMuted}
+          value={vm.formData.description}
+          onChangeText={(text) => vm.updateField("description", text)}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+        />
+      </View>
+    </Section>
+    </>
+  );
+
+  {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
+  const entrySection = (
+    <>
+    <Section title="Entry Rules">
+      {/* Entry Method — fixed at creation (it can't be switched once entries exist) */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>
+          Entry Method <Text allowFontScaling={false} style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.endTypeRow}>
+          {([
+            { mode: "legacy_single", label: "🎁 Single Free Entry" },
+            { mode: "wallet", label: "🎟 Giveaway Entries" },
+          ] as const).map(({ mode, label }) => (
+            <TouchableOpacity
+              key={mode}
+              style={[styles.endTypeButton, vm.formData.entry_mode === mode && styles.endTypeButtonActive]}
+              onPress={() => vm.setEntryMode(mode)}
+            >
+              <Text allowFontScaling={false} style={[styles.endTypeText, vm.formData.entry_mode === mode && styles.endTypeTextActive]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.endTypeHintBox}>
+          <Text allowFontScaling={false} style={styles.endTypeHint}>
+            {vm.formData.entry_mode === "wallet"
+              ? "Users spend their Giveaway Entries — 1 entry = 1 chance — up to the per-user maximum."
+              : "Each user can enter once for free using the entry form."}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>
+          End Giveaway By <Text allowFontScaling={false} style={styles.required}>*</Text>
+        </Text>
+        <View style={styles.endTypeRow}>
+          {(vm.formData.entry_mode === "wallet" ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
+            <TouchableOpacity
+              key={type}
+              style={[
+                styles.endTypeButton,
+                vm.formData.end_type === type && styles.endTypeButtonActive,
+              ]}
+              onPress={() => vm.updateField("end_type", type)}
+            >
+              <Text allowFontScaling={false} style={[
+                styles.endTypeText,
+                vm.formData.end_type === type && styles.endTypeTextActive,
+              ]}>
+                {type === "date" ? "📅 Date" : type === "entries" ? "👥 Entries" : "⚡ Both"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.endTypeHintBox}>
+          <Text allowFontScaling={false} style={styles.endTypeHint}>
+            {vm.formData.end_type === "date" &&
+              "The giveaway closes on the date you set, regardless of entries received."}
+            {vm.formData.end_type === "entries" &&
+              "The giveaway closes automatically when maximum entries is reached."}
+            {vm.formData.end_type === "both" &&
+              "Closes when either condition is met first – whichever comes first."}
+          </Text>
+        </View>
+      </View>
+
+      {/* Max Entries */}
+      {(vm.formData.end_type === "entries" || vm.formData.end_type === "both") && (
+        <View style={styles.fieldGroup}>
+          <Text allowFontScaling={false} style={styles.label}>
+            {vm.formData.entry_mode === "wallet" ? "Total Entry Capacity" : "Maximum Entries"}{" "}
+            <Text allowFontScaling={false} style={styles.required}>*</Text>
+          </Text>
+          <TextInput
+            style={[styles.input, vm.formErrors.max_entries && styles.inputError]}
+            placeholder="500"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.formData.max_entries}
+            onChangeText={(text) =>
+              vm.updateField("max_entries", text.replace(/[^0-9]/g, ""))
+            }
+            keyboardType="number-pad"
+          />
+          {vm.formErrors.max_entries && (
+            <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.max_entries}</Text>
+          )}
+        </View>
+      )}
+
+      {/* Max Entries Per User — Giveaway Entries only, always required */}
+      {vm.formData.entry_mode === "wallet" && (
+        <View style={styles.fieldGroup}>
+          <Text allowFontScaling={false} style={styles.label}>
+            Max Entries Per User <Text allowFontScaling={false} style={styles.required}>*</Text>
+          </Text>
+          <TextInput
+            style={[styles.input, vm.formErrors.per_user_max && styles.inputError]}
+            placeholder="10"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.formData.per_user_max}
+            onChangeText={(text) => vm.updateField("per_user_max", text.replace(/[^0-9]/g, ""))}
+            keyboardType="number-pad"
+          />
+          {vm.formErrors.per_user_max ? (
+            <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.per_user_max}</Text>
+          ) : (
+            <Text allowFontScaling={false} style={styles.endTypeHint}>
+              One person can hold at most this many of the {vm.formData.max_entries || "—"} entries.
+            </Text>
+          )}
+        </View>
+      )}
+    </Section>
+    </>
+  );
+
+  {/* ── Section 3: Timing ──────────────────────────────────────────────── */}
+  const timingSection = (
+    <>
+    {(vm.formData.end_type === "date" || vm.formData.end_type === "both") && (
+      <Section title="Timing">
+        <View style={styles.fieldGroup}>
+          <Text allowFontScaling={false} style={styles.label}>
+            End Date <Text allowFontScaling={false} style={styles.required}>*</Text>
+          </Text>
+          <View style={styles.dateRow}>
+            <View style={styles.dateDropdown}>
+              <Dropdown
+                options={vm.monthOptions}
+                value={vm.formData.end_date.month}
+                onSelect={(value) => vm.updateEndDate("month", value)}
+                placeholder="Month"
+              />
+            </View>
+            <View style={styles.dateDropdownSmall}>
+              <Dropdown
+                options={vm.dayOptions}
+                value={vm.formData.end_date.day}
+                onSelect={(value) => vm.updateEndDate("day", value)}
+                placeholder="Day"
+              />
+            </View>
+            <View style={styles.dateDropdownSmall}>
+              <Dropdown
+                options={vm.yearOptions}
+                value={vm.formData.end_date.year}
+                onSelect={(value) => vm.updateEndDate("year", value)}
+                placeholder="Year"
+              />
+            </View>
+          </View>
+          {vm.formErrors.end_date && (
+            <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.end_date}</Text>
+          )}
+        </View>
+      </Section>
+    )}
+    </>
+  );
+
+  {/* ── Section 4: Legal / Rules ───────────────────────────────────────── */}
+  const legalSection = (
+    <>
+    <Section title="Legal / Rules">
+      {/* Age – read only */}
+      <View style={styles.fieldGroup}>
+        <Text allowFontScaling={false} style={styles.label}>Age Requirement</Text>
+        <View style={styles.ageRequirementContainer}>
+          <Text allowFontScaling={false} style={styles.ageRequirementText}>🔒  18+ years old</Text>
+          <Text allowFontScaling={false} style={styles.ageRequirementSubtext}>Required by law</Text>
+        </View>
+      </View>
+
+      {/* Default rules notice */}
+      <View style={styles.defaultRulesBox}>
+        <Text allowFontScaling={false} style={styles.defaultRulesIcon}>✅</Text>
+        <View style={{ flex: 1 }}>
+          <Text allowFontScaling={false} style={styles.defaultRulesTitle}>
+            Default Official Rules apply automatically
+          </Text>
+          <Text allowFontScaling={false} style={styles.defaultRulesBody}>
+            Every giveaway includes Compete's built-in legal rules covering
+            eligibility, entry, winner selection, prizes, and Apple disclaimer.
+            You do not need to enter anything here for standard giveaways.
+          </Text>
+        </View>
+      </View>
+
+      {/* Custom rules toggle */}
+      <TouchableOpacity
+        style={styles.customRulesToggle}
+        onPress={() => setShowCustomRules((v) => !v)}
+        activeOpacity={0.7}
+      >
+        <Text allowFontScaling={false} style={styles.customRulesToggleText}>
+          {showCustomRules ? "▾  Hide custom rules" : "▸  Add custom / sponsor rules (optional)"}
+        </Text>
+      </TouchableOpacity>
+
+      {showCustomRules && (
+        <View style={styles.fieldGroup}>
+          <Text allowFontScaling={false} style={styles.fieldHint}>
+            Optional additional rules – added below Compete's official rules
+          </Text>
+          <TextInput
+            style={[styles.input, styles.textAreaLarge]}
+            placeholder="Add any additional or special rules for this giveaway (optional)"
+            placeholderTextColor={COLORS.textMuted}
+            value={vm.formData.rules_text}
+            onChangeText={(text) => vm.updateField("rules_text", text)}
+            multiline
+            numberOfLines={6}
+            textAlignVertical="top"
+          />
+          <Text allowFontScaling={false} style={styles.defaultRulesNote}>
+            Default rules are automatically applied to every giveaway.
+          </Text>
+        </View>
+      )}
+    </Section>
+    </>
+  );
+
+  // Web / desktop: same sections and handlers in the shared Giveaway Management form frame.
+  if (isWeb) {
+    return (
+      <GiveawayFormShell
+        title="New Giveaway"
+        subtitle="Saved as a draft. Nothing is public until you publish it from Giveaway Management."
+        onBack={vm.cancel}
+        left={prizeSection}
+        right={<>{entrySection}{timingSection}</>}
+        bottom={legalSection}
+        footerNote="Drafts are private. Review the giveaway, then press Publish in Giveaway Management."
+        onCancel={vm.cancel}
+        cancelDisabled={vm.isSubmitting}
+        primaryLabel="Save as Draft"
+        onPrimary={vm.submit}
+        primaryDisabled={vm.isSubmitting || vm.isUploadingImage}
+        primaryBusy={vm.isSubmitting}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -73,315 +423,10 @@ export default function CreateGiveawayScreen() {
         keyboardShouldPersistTaps="handled"
       >
 
-        {/* ── Section 1: Prize Info ──────────────────────────────────────────── */}
-        <Section title="Prize Info">
-          {/* Image upload */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>Prize Image</Text>
-            {vm.imageUri ? (
-              <View style={styles.imagePreviewContainer}>
-                <Image source={{ uri: vm.imageUri }} style={styles.imagePreview} />
-                {vm.isUploadingImage ? (
-                  <View style={styles.uploadingOverlay}>
-                    <ActivityIndicator color={COLORS.primary} size="large" />
-                    <Text allowFontScaling={false} style={styles.uploadingText}>Uploading...</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.removeImageButton} onPress={vm.removeImage}>
-                    <Text allowFontScaling={false} style={styles.removeImageText}>✕</Text>
-                  </TouchableOpacity>
-                )}
-                {!vm.isUploadingImage && (
-                  <TouchableOpacity style={styles.changeImageButton} onPress={vm.pickImage}>
-                    <Text allowFontScaling={false} style={styles.changeImageText}>Change Photo</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.uploadButton}
-                onPress={vm.pickImage}
-                disabled={vm.isUploadingImage}
-                activeOpacity={0.7}
-              >
-                <View style={styles.uploadIconCircle}>
-                  <Text allowFontScaling={false} style={styles.uploadIcon}>📷</Text>
-                </View>
-                <Text allowFontScaling={false} style={styles.uploadText}>Upload Prize Photo</Text>
-                <Text allowFontScaling={false} style={styles.uploadHint}>Tap to select from library</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Prize Name */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>
-              Prize Name <Text allowFontScaling={false} style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={[styles.input, vm.formErrors.name && styles.inputError]}
-              placeholder="e.g. iPad Pro, $500 Cash, HOW Glove"
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.formData.name}
-              onChangeText={(text) => vm.updateField("name", text)}
-            />
-            {vm.formErrors.name && (
-              <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.name}</Text>
-            )}
-          </View>
-
-          {/* Prize Value */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>
-              ARV (Approximate Retail Value) <Text allowFontScaling={false} style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.currencyInputWrapper}>
-              <Text allowFontScaling={false} style={styles.currencySymbol}>$</Text>
-              <TextInput
-                style={[styles.currencyInput, vm.formErrors.prize_value && styles.inputError]}
-                placeholder="500"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.formData.prize_value}
-                onChangeText={(text) =>
-                  vm.updateField("prize_value", text.replace(/[^0-9.]/g, ""))
-                }
-                keyboardType="decimal-pad"
-              />
-            </View>
-            {vm.formErrors.prize_value && (
-              <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.prize_value}</Text>
-            )}
-          </View>
-
-          {/* Description */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Describe the prize and what makes it special..."
-              placeholderTextColor={COLORS.textMuted}
-              value={vm.formData.description}
-              onChangeText={(text) => vm.updateField("description", text)}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-        </Section>
-
-        {/* ── Section 2: Entry Rules ─────────────────────────────────────────── */}
-        <Section title="Entry Rules">
-          {/* Entry Method — fixed at creation (it can't be switched once entries exist) */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>
-              Entry Method <Text allowFontScaling={false} style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.endTypeRow}>
-              {([
-                { mode: "legacy_single", label: "🎁 Single Free Entry" },
-                { mode: "wallet", label: "🎟 Giveaway Entries" },
-              ] as const).map(({ mode, label }) => (
-                <TouchableOpacity
-                  key={mode}
-                  style={[styles.endTypeButton, vm.formData.entry_mode === mode && styles.endTypeButtonActive]}
-                  onPress={() => vm.setEntryMode(mode)}
-                >
-                  <Text allowFontScaling={false} style={[styles.endTypeText, vm.formData.entry_mode === mode && styles.endTypeTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.endTypeHintBox}>
-              <Text allowFontScaling={false} style={styles.endTypeHint}>
-                {vm.formData.entry_mode === "wallet"
-                  ? "Users spend their Giveaway Entries — 1 entry = 1 chance — up to the per-user maximum."
-                  : "Each user can enter once for free using the entry form."}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>
-              End Giveaway By <Text allowFontScaling={false} style={styles.required}>*</Text>
-            </Text>
-            <View style={styles.endTypeRow}>
-              {(vm.formData.entry_mode === "wallet" ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.endTypeButton,
-                    vm.formData.end_type === type && styles.endTypeButtonActive,
-                  ]}
-                  onPress={() => vm.updateField("end_type", type)}
-                >
-                  <Text allowFontScaling={false} style={[
-                    styles.endTypeText,
-                    vm.formData.end_type === type && styles.endTypeTextActive,
-                  ]}>
-                    {type === "date" ? "📅 Date" : type === "entries" ? "👥 Entries" : "⚡ Both"}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.endTypeHintBox}>
-              <Text allowFontScaling={false} style={styles.endTypeHint}>
-                {vm.formData.end_type === "date" &&
-                  "The giveaway closes on the date you set, regardless of entries received."}
-                {vm.formData.end_type === "entries" &&
-                  "The giveaway closes automatically when maximum entries is reached."}
-                {vm.formData.end_type === "both" &&
-                  "Closes when either condition is met first – whichever comes first."}
-              </Text>
-            </View>
-          </View>
-
-          {/* Max Entries */}
-          {(vm.formData.end_type === "entries" || vm.formData.end_type === "both") && (
-            <View style={styles.fieldGroup}>
-              <Text allowFontScaling={false} style={styles.label}>
-                {vm.formData.entry_mode === "wallet" ? "Total Entry Capacity" : "Maximum Entries"}{" "}
-                <Text allowFontScaling={false} style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, vm.formErrors.max_entries && styles.inputError]}
-                placeholder="500"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.formData.max_entries}
-                onChangeText={(text) =>
-                  vm.updateField("max_entries", text.replace(/[^0-9]/g, ""))
-                }
-                keyboardType="number-pad"
-              />
-              {vm.formErrors.max_entries && (
-                <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.max_entries}</Text>
-              )}
-            </View>
-          )}
-
-          {/* Max Entries Per User — Giveaway Entries only, always required */}
-          {vm.formData.entry_mode === "wallet" && (
-            <View style={styles.fieldGroup}>
-              <Text allowFontScaling={false} style={styles.label}>
-                Max Entries Per User <Text allowFontScaling={false} style={styles.required}>*</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, vm.formErrors.per_user_max && styles.inputError]}
-                placeholder="10"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.formData.per_user_max}
-                onChangeText={(text) => vm.updateField("per_user_max", text.replace(/[^0-9]/g, ""))}
-                keyboardType="number-pad"
-              />
-              {vm.formErrors.per_user_max ? (
-                <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.per_user_max}</Text>
-              ) : (
-                <Text allowFontScaling={false} style={styles.endTypeHint}>
-                  One person can hold at most this many of the {vm.formData.max_entries || "—"} entries.
-                </Text>
-              )}
-            </View>
-          )}
-        </Section>
-
-        {/* ── Section 3: Timing ──────────────────────────────────────────────── */}
-        {(vm.formData.end_type === "date" || vm.formData.end_type === "both") && (
-          <Section title="Timing">
-            <View style={styles.fieldGroup}>
-              <Text allowFontScaling={false} style={styles.label}>
-                End Date <Text allowFontScaling={false} style={styles.required}>*</Text>
-              </Text>
-              <View style={styles.dateRow}>
-                <View style={styles.dateDropdown}>
-                  <Dropdown
-                    options={vm.monthOptions}
-                    value={vm.formData.end_date.month}
-                    onSelect={(value) => vm.updateEndDate("month", value)}
-                    placeholder="Month"
-                  />
-                </View>
-                <View style={styles.dateDropdownSmall}>
-                  <Dropdown
-                    options={vm.dayOptions}
-                    value={vm.formData.end_date.day}
-                    onSelect={(value) => vm.updateEndDate("day", value)}
-                    placeholder="Day"
-                  />
-                </View>
-                <View style={styles.dateDropdownSmall}>
-                  <Dropdown
-                    options={vm.yearOptions}
-                    value={vm.formData.end_date.year}
-                    onSelect={(value) => vm.updateEndDate("year", value)}
-                    placeholder="Year"
-                  />
-                </View>
-              </View>
-              {vm.formErrors.end_date && (
-                <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.end_date}</Text>
-              )}
-            </View>
-          </Section>
-        )}
-
-        {/* ── Section 4: Legal / Rules ───────────────────────────────────────── */}
-        <Section title="Legal / Rules">
-          {/* Age – read only */}
-          <View style={styles.fieldGroup}>
-            <Text allowFontScaling={false} style={styles.label}>Age Requirement</Text>
-            <View style={styles.ageRequirementContainer}>
-              <Text allowFontScaling={false} style={styles.ageRequirementText}>🔒  18+ years old</Text>
-              <Text allowFontScaling={false} style={styles.ageRequirementSubtext}>Required by law</Text>
-            </View>
-          </View>
-
-          {/* Default rules notice */}
-          <View style={styles.defaultRulesBox}>
-            <Text allowFontScaling={false} style={styles.defaultRulesIcon}>✅</Text>
-            <View style={{ flex: 1 }}>
-              <Text allowFontScaling={false} style={styles.defaultRulesTitle}>
-                Default Official Rules apply automatically
-              </Text>
-              <Text allowFontScaling={false} style={styles.defaultRulesBody}>
-                Every giveaway includes Compete's built-in legal rules covering
-                eligibility, entry, winner selection, prizes, and Apple disclaimer.
-                You do not need to enter anything here for standard giveaways.
-              </Text>
-            </View>
-          </View>
-
-          {/* Custom rules toggle */}
-          <TouchableOpacity
-            style={styles.customRulesToggle}
-            onPress={() => setShowCustomRules((v) => !v)}
-            activeOpacity={0.7}
-          >
-            <Text allowFontScaling={false} style={styles.customRulesToggleText}>
-              {showCustomRules ? "▾  Hide custom rules" : "▸  Add custom / sponsor rules (optional)"}
-            </Text>
-          </TouchableOpacity>
-
-          {showCustomRules && (
-            <View style={styles.fieldGroup}>
-              <Text allowFontScaling={false} style={styles.fieldHint}>
-                Optional additional rules – added below Compete's official rules
-              </Text>
-              <TextInput
-                style={[styles.input, styles.textAreaLarge]}
-                placeholder="Add any additional or special rules for this giveaway (optional)"
-                placeholderTextColor={COLORS.textMuted}
-                value={vm.formData.rules_text}
-                onChangeText={(text) => vm.updateField("rules_text", text)}
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-              />
-              <Text allowFontScaling={false} style={styles.defaultRulesNote}>
-                Default rules are automatically applied to every giveaway.
-              </Text>
-            </View>
-          )}
-        </Section>
+        {prizeSection}
+        {entrySection}
+        {timingSection}
+        {legalSection}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>

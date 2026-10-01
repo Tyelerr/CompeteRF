@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useGiveawayPastWinners } from "../../../src/viewmodels/useGiveawayPastWinners";
 import { moderateScale, scale } from "../../../src/utils/scaling";
+import { WinnersConsoleScreen } from "../../../src/views/screens/admin/giveaway-console/winners-console.screen";
 
 const isWeb = Platform.OS === "web";
 
@@ -48,7 +49,12 @@ const FONT_SIZES = {
   xxl: 24,
 };
 
+// Web / desktop gets the Giveaway Management console page; native keeps this screen unchanged.
 export default function GiveawayPastWinnersScreen() {
+  return Platform.OS === "web" ? <WinnersConsoleScreen /> : <NativeGiveawayPastWinnersScreen />;
+}
+
+function NativeGiveawayPastWinnersScreen() {
   const router = useRouter();
   const vm = useGiveawayPastWinners();
 

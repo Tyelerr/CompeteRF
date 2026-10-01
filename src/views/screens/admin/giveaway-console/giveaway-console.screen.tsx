@@ -1,7 +1,8 @@
 // src/views/screens/admin/giveaway-console/giveaway-console.screen.tsx
 // WEB / DESKTOP Super Admin → Giveaway Management console (one page, no Giveaways/Manage tabs):
-//   header (New Giveaway · Participants · Winners · Entry Wallet) → stat strip → toolbar
-//   (search · status · sort) → table (one primary action per row + ⋯ menu) → detail drawer.
+//   shared section header (Giveaways · Participants · Winners · Entry Wallet, + New Giveaway) →
+//   stat strip → toolbar (search · status · sort) → table (one primary action per row + ⋯ menu)
+//   → centered Giveaway / Winner detail modals.
 // Rendered only on web by app/(tabs)/admin/giveaway-management.tsx; native keeps its screen.
 // Every write reuses useAdminGiveaways and the shared GiveawayAdminModals.
 import { Ionicons } from "@expo/vector-icons";
@@ -12,7 +13,6 @@ import {
   Image,
   Modal,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -31,7 +31,9 @@ import {
 import { AdminGiveaway } from "../../../../viewmodels/useAdminGiveaways";
 import { useGiveawayConsole } from "../../../../viewmodels/useGiveawayConsole";
 import { GiveawayAdminModals } from "../../../components/giveaway/GiveawayAdminModals";
-import { GiveawayDetailDrawer } from "./GiveawayDetailDrawer";
+import { GiveawayDetailModal } from "./GiveawayDetailModal";
+import { GiveawayAdminHeader, GiveawayAdminPage } from "./giveaway-admin-shell";
+import { WinnerDetailModal } from "./WinnerDetailModal";
 import { ConsoleButton, StatusPill } from "./giveaway-console.parts";
 import { COLS, consoleSt } from "./giveaway-console.styles";
 
@@ -41,58 +43,40 @@ const RESTORE_LABEL = { awarded: "Awarded", active: "Active", draft: "Draft" } a
 
 export function GiveawayConsoleScreen() {
   const vm = useGiveawayConsole();
-  const walletInUse = vm.vm.allGiveaways.some((g) => g.entry_mode === "wallet" && g.status === "active");
 
   return (
-    <View style={consoleSt.page}>
-      <ScrollView contentContainerStyle={consoleSt.scroll}>
-        <View style={consoleSt.inner}>
-          <Pressable onPress={vm.goBack} style={consoleSt.backLink} accessibilityRole="link">
-            <Text allowFontScaling={false} style={consoleSt.backText}>‹ Admin</Text>
-          </Pressable>
+    <>
+      <GiveawayAdminPage>
+        <GiveawayAdminHeader
+          title="Giveaway Management"
+          section="giveaways"
+          backLabel="Admin"
+          onBack={vm.goBack}
+          actions={vm.canManage ? <ConsoleButton label="New Giveaway" icon="add" variant="primary" onPress={vm.goCreate} /> : null}
+        />
 
-          <View style={consoleSt.headerRow}>
-            <Text allowFontScaling={false} style={consoleSt.title} accessibilityRole="header">
-              Giveaway Management
+        {!vm.canManage ? (
+          <View style={consoleSt.readOnlyBanner}>
+            <Text allowFontScaling={false} style={consoleSt.readOnlyText}>
+              Read-only. Creating, publishing, ending, drawing and archiving giveaways requires a Super Admin account.
             </Text>
-            <View style={consoleSt.headerActions}>
-              <ConsoleButton label="Participants" icon="people-outline" onPress={() => vm.goParticipants()} />
-              <ConsoleButton label="Winners" icon="trophy-outline" onPress={vm.goWinners} />
-              {vm.canManage ? (
-                <ConsoleButton
-                  label="Entry Wallet"
-                  icon="ticket-outline"
-                  tag={walletInUse ? null : "Admin · not in use"}
-                  onPress={vm.goEntryWallet}
-                />
-              ) : null}
-              {vm.canManage ? <ConsoleButton label="New Giveaway" icon="add" variant="primary" onPress={vm.goCreate} /> : null}
-            </View>
           </View>
+        ) : null}
 
-          {!vm.canManage ? (
-            <View style={consoleSt.readOnlyBanner}>
-              <Text allowFontScaling={false} style={consoleSt.readOnlyText}>
-                Read-only. Creating, publishing, ending, drawing and archiving giveaways requires a Super Admin account.
-              </Text>
-            </View>
-          ) : null}
+        <StatStrip vm={vm} />
+        <Toolbar vm={vm} />
 
-          <StatStrip vm={vm} />
-          <Toolbar vm={vm} />
-
-          {vm.loading ? (
-            <View style={consoleSt.empty}>
-              <ActivityIndicator color={COLORS.primary} />
-            </View>
-          ) : (
-            <GiveawayTable vm={vm} />
-          )}
-        </View>
-      </ScrollView>
+        {vm.loading ? (
+          <View style={consoleSt.empty}>
+            <ActivityIndicator color={COLORS.primary} />
+          </View>
+        ) : (
+          <GiveawayTable vm={vm} />
+        )}
+      </GiveawayAdminPage>
 
       {vm.detail ? (
-        <GiveawayDetailDrawer
+        <GiveawayDetailModal
           giveaway={vm.detail}
           uniqueEntrants={vm.uniqueEntrantsOf(vm.detail.id)}
           canManage={vm.canManage}
@@ -101,6 +85,8 @@ export function GiveawayConsoleScreen() {
           onMenu={vm.runMenu}
         />
       ) : null}
+
+      <WinnerDetailModal vm={vm.vm} canManage={vm.canManage} />
 
       {vm.menu ? <RowMenu vm={vm} /> : null}
 
@@ -112,8 +98,9 @@ export function GiveawayConsoleScreen() {
         endingEarly={vm.endingEarly}
         closeEndEarlyModal={vm.closeEndEarlyModal}
         confirmEndEarly={vm.confirmEndEarly}
+        renderWinnerDetails={false}
       />
-    </View>
+    </>
   );
 }
 
