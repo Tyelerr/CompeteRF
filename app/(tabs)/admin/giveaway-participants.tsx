@@ -1,5 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -52,7 +52,10 @@ const FONT_SIZES = {
 
 export default function GiveawayParticipantsScreen() {
   const router = useRouter();
-  const vm = useGiveawayParticipants();
+  // Optional ?giveaway=<id> (web console "View Participants") pre-selects that giveaway's filter.
+  const { giveaway } = useLocalSearchParams<{ giveaway?: string }>();
+  const initialGiveawayId = giveaway && /^\d+$/.test(giveaway) ? Number(giveaway) : null;
+  const vm = useGiveawayParticipants(initialGiveawayId);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   const handleCall = (phone: string) => {

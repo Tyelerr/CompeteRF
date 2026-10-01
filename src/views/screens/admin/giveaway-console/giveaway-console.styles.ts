@@ -1,0 +1,271 @@
+// src/views/screens/admin/giveaway-console/giveaway-console.styles.ts
+// WEB desktop Giveaway Management console styles. Theme tokens only (COLORS / SPACING / RADIUS /
+// FONT_SIZES / WEB_MAXW). No glow, no tinted giant cards — a flat admin table.
+import { StyleSheet } from "react-native";
+import { COLORS } from "../../../../theme/colors";
+import { RADIUS, SPACING, WEB_MAXW } from "../../../../theme/spacing";
+import { FONT_SIZES } from "../../../../theme/typography";
+
+/** Status → pill colour (text + 13% tint). */
+export const STATUS_TONE: Record<string, string> = {
+  draft: COLORS.textSecondary,
+  active: COLORS.success,
+  ended: COLORS.warning,
+  awarded: COLORS.primaryLight,
+  archived: COLORS.textMuted,
+  cancelled: COLORS.error,
+};
+export const tint = (hex: string) => `${hex}22`;
+
+// Column widths (px). The Giveaway column flexes; the table scrolls sideways below TABLE_MIN.
+export const COLS = {
+  thumb: 52,
+  status: 100,
+  method: 112,
+  prize: 80,
+  entries: 132,
+  unique: 88,
+  ends: 136,
+  winner: 130,
+  action: 124,
+  menu: 40,
+};
+export const TABLE_MIN = 1150;
+export const DRAWER_W = 480;
+
+export const consoleSt = StyleSheet.create({
+  page: { flex: 1, backgroundColor: COLORS.background },
+  scroll: { flexGrow: 1, paddingVertical: SPACING.lg, paddingHorizontal: SPACING.md },
+  inner: { width: "100%", maxWidth: WEB_MAXW, alignSelf: "center" },
+
+  // Header
+  backLink: { alignSelf: "flex-start", marginBottom: SPACING.sm },
+  backText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
+  headerRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: SPACING.md, marginBottom: SPACING.lg },
+  title: { color: COLORS.text, fontSize: FONT_SIZES.xxl, fontWeight: "700", flex: 1, minWidth: 260 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, flexWrap: "wrap" },
+  readOnlyBanner: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm + SPACING.xs,
+    marginBottom: SPACING.md,
+  },
+  readOnlyText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
+
+  // Buttons
+  btn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.xs + 2,
+    paddingHorizontal: SPACING.md - 2,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.backgroundCard,
+  },
+  btnHover: { borderColor: COLORS.borderLight, backgroundColor: COLORS.surface },
+  btnPrimary: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  btnPrimaryHover: { backgroundColor: COLORS.primaryDark, borderColor: COLORS.primaryDark },
+  btnDanger: { borderColor: COLORS.error },
+  btnDisabled: { opacity: 0.45 },
+  btnText: { color: COLORS.text, fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  btnTextPrimary: { color: COLORS.white },
+  btnTextDanger: { color: COLORS.error },
+  btnTag: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs - 1,
+    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xs,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: 1,
+  },
+
+  // Stat strip
+  statStrip: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.backgroundLight,
+    marginBottom: SPACING.lg,
+  },
+  stat: { flexGrow: 1, flexBasis: 160, paddingVertical: SPACING.sm + SPACING.xs, paddingHorizontal: SPACING.md },
+  statDivider: { borderLeftWidth: 1, borderLeftColor: COLORS.border },
+  statValue: { color: COLORS.text, fontSize: FONT_SIZES.xl, fontWeight: "700" },
+  statLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
+
+  // Toolbar
+  toolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: SPACING.sm, marginBottom: SPACING.sm + SPACING.xs },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs + 2,
+    height: 36,
+    width: 280,
+    paddingHorizontal: SPACING.sm + 2,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.backgroundCard,
+  },
+  searchInput: { flex: 1, color: COLORS.text, fontSize: FONT_SIZES.sm, outlineStyle: "none" as any, height: "100%" },
+  segment: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
+    overflow: "hidden",
+    backgroundColor: COLORS.backgroundCard,
+  },
+  segmentItem: { paddingHorizontal: SPACING.sm + 4, height: 34, justifyContent: "center", borderLeftWidth: 1, borderLeftColor: COLORS.border },
+  segmentItemFirst: { borderLeftWidth: 0 },
+  segmentItemHover: { backgroundColor: COLORS.surface },
+  segmentItemActive: { backgroundColor: COLORS.primary },
+  segmentText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: "500" },
+  segmentTextActive: { color: COLORS.white, fontWeight: "700" },
+  segmentCount: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+  segmentCountActive: { color: COLORS.white },
+  toolbarSpacer: { flex: 1 },
+  resultCount: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+
+  // Table
+  tableWrap: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, overflow: "hidden", backgroundColor: COLORS.backgroundLight },
+  tableScroll: { overflowX: "auto" as any, width: "100%" },
+  table: { minWidth: TABLE_MIN, width: "100%" },
+  headRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 38,
+    paddingHorizontal: SPACING.sm + SPACING.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.backgroundCard,
+  },
+  headCell: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 60,
+    paddingHorizontal: SPACING.sm + SPACING.xs,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    cursor: "pointer" as any,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowHover: { backgroundColor: COLORS.backgroundCard },
+  rowSelected: { backgroundColor: COLORS.surface },
+  cell: { paddingRight: SPACING.sm + SPACING.xs },
+  cellName: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 180 },
+  cellText: { color: COLORS.text, fontSize: FONT_SIZES.sm },
+  cellSub: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  cellMuted: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
+  nameText: { color: COLORS.text, fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  thumb: { width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: COLORS.surface },
+  thumbEmpty: { alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border },
+  bar: { height: 4, borderRadius: 2, backgroundColor: COLORS.surfaceLight, marginTop: SPACING.xs + 1, overflow: "hidden", width: 110 },
+  barFill: { height: "100%", borderRadius: 2, backgroundColor: COLORS.primary },
+  barFull: { backgroundColor: COLORS.warning },
+  menuBtn: { width: 32, height: 32, borderRadius: RADIUS.sm, alignItems: "center", justifyContent: "center" },
+  menuBtnHover: { backgroundColor: COLORS.surfaceLight },
+  empty: { alignItems: "center", paddingVertical: SPACING.xxl, gap: SPACING.sm },
+  emptyTitle: { color: COLORS.text, fontSize: FONT_SIZES.md, fontWeight: "600" },
+  emptySub: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
+
+  // Status pill
+  pill: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: 999 },
+  pillDot: { width: 6, height: 6, borderRadius: 3 },
+  pillText: { fontSize: FONT_SIZES.xs, fontWeight: "600" },
+
+  // ⋯ menu
+  menuLayer: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 900 },
+  menuBox: {
+    position: "absolute",
+    width: 210,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.backgroundCard,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.5)" as any,
+  },
+  menuItem: { paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.sm },
+  menuItemHover: { backgroundColor: COLORS.surface },
+  menuItemText: { color: COLORS.text, fontSize: FONT_SIZES.sm },
+  menuItemDanger: { color: COLORS.error },
+  menuSep: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.xs },
+
+  // Detail drawer
+  drawerLayer: { position: "fixed" as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 800, flexDirection: "row" },
+  drawerBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
+  drawer: {
+    width: DRAWER_W,
+    maxWidth: "100%",
+    height: "100%",
+    backgroundColor: COLORS.backgroundLight,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.border,
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  drawerHeaderTitle: { flex: 1, color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: "600" },
+  drawerBody: { padding: SPACING.md, gap: SPACING.md },
+  drawerImage: { width: "100%", aspectRatio: 16 / 9, borderRadius: RADIUS.md, backgroundColor: COLORS.surface },
+  drawerName: { color: COLORS.text, fontSize: FONT_SIZES.xl, fontWeight: "700" },
+  drawerId: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
+  drawerActions: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
+  section: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, overflow: "hidden" },
+  sectionTitle: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    paddingHorizontal: SPACING.sm + SPACING.xs,
+    paddingTop: SPACING.sm + 2,
+    paddingBottom: SPACING.xs,
+  },
+  kv: { flexDirection: "row", paddingHorizontal: SPACING.sm + SPACING.xs, paddingVertical: SPACING.xs + 3, gap: SPACING.md },
+  kvKey: { width: 130, color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
+  kvVal: { flex: 1, color: COLORS.text, fontSize: FONT_SIZES.sm },
+  prose: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, lineHeight: 20, paddingHorizontal: SPACING.sm + SPACING.xs, paddingBottom: SPACING.sm + 2 },
+
+  // Confirm dialog
+  dialogOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: SPACING.md },
+  dialog: {
+    width: "100%",
+    maxWidth: 440,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.lg,
+    gap: SPACING.sm + SPACING.xs,
+  },
+  dialogTitle: { color: COLORS.text, fontSize: FONT_SIZES.lg, fontWeight: "700" },
+  dialogBody: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, lineHeight: 20 },
+  dialogWarn: {
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    backgroundColor: tint(COLORS.warning),
+    borderRadius: RADIUS.sm,
+    padding: SPACING.sm + 2,
+  },
+  dialogWarnText: { color: COLORS.warning, fontSize: FONT_SIZES.sm, fontWeight: "600", lineHeight: 20 },
+  dialogError: { color: COLORS.error, fontSize: FONT_SIZES.sm },
+  dialogBtns: { flexDirection: "row", justifyContent: "flex-end", gap: SPACING.sm, marginTop: SPACING.xs },
+});

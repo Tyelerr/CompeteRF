@@ -10,12 +10,12 @@ type ParticipantEntry = GiveawayEntry & {
 type SortOption = "newest" | "oldest" | "name";
 type FilterGiveaway = { id: number; name: string };
 
-export function useGiveawayParticipants() {
+export function useGiveawayParticipants(initialGiveawayId: number | null = null) {
   const [entries, setEntries] = useState<ParticipantEntry[]>([]);
   const [filteredEntries, setFilteredEntries] = useState<ParticipantEntry[]>([]);
   const [giveaways, setGiveaways] = useState<FilterGiveaway[]>([]);
   const [selectedGiveawayId, setSelectedGiveawayId] = useState<number | null>(
-    null,
+    initialGiveawayId,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");

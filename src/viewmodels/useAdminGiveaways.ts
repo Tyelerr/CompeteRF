@@ -554,6 +554,8 @@ export const useAdminGiveaways = () => {
   return {
     activeTab, setActiveTab,
     giveaways: filteredGiveaways, stats, statusCounts,
+    /** Every loaded giveaway, unfiltered (web console does its own filter/sort/stats). */
+    allGiveaways: giveaways,
     loading, refreshing, processing,
     statusFilter, sortOption, searchQuery,
     setStatusFilter, setSortOption, setSearchQuery,

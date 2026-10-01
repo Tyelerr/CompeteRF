@@ -707,6 +707,41 @@ export const giveawayService = {
     }));
   },
 
+  /**
+   * Distinct entrants per giveaway and overall (Super Admin console). Reads only the two id
+   * columns — no entrant PII. Admin-read RLS on giveaway_entries; anyone else gets nothing.
+   * Returns null on error so the console shows "—" instead of a wrong number.
+   */
+  async getEntrantSummary(): Promise<{ perGiveaway: Map<number, number>; total: number } | null> {
+    // Paged: PostgREST caps a single response at 1000 rows.
+    const PAGE = 1000;
+    const rows: { giveaway_id: number; user_id: number }[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("giveaway_entries")
+        .select("giveaway_id, user_id")
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) {
+        console.error("Error fetching entrant summary:", error);
+        return null;
+      }
+      rows.push(...((data || []) as { giveaway_id: number; user_id: number }[]));
+      if (!data || data.length < PAGE) break;
+    }
+    const perGiveaway = new Map<number, Set<number>>();
+    const everyone = new Set<number>();
+    for (const row of rows) {
+      everyone.add(row.user_id);
+      if (!perGiveaway.has(row.giveaway_id)) perGiveaway.set(row.giveaway_id, new Set());
+      perGiveaway.get(row.giveaway_id)!.add(row.user_id);
+    }
+    return {
+      perGiveaway: new Map(Array.from(perGiveaway, ([id, users]) => [id, users.size])),
+      total: everyone.size,
+    };
+  },
+
   async getPastWinners(): Promise<{
     giveaway_id: number;
     giveaway_name: string;
