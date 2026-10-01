@@ -7,7 +7,28 @@ import { Platform } from "react-native";
 import { APP_STORE_URL, PLAY_STORE_URL } from "../models/constants/app-stores";
 import { ReferralVisitPlatform } from "../models/types/referral.types";
 
-export const REFERRAL_LINK_BASE = "https://thecompeteapp.com/r/";
+/** Preferred, user-facing invite link: https://thecompeteapp.com/invite/<CODE>. */
+export const REFERRAL_LINK_BASE = "https://thecompeteapp.com/invite/";
+/** Original link form. /r/<CODE> keeps working permanently (same landing, same attribution). */
+export const LEGACY_REFERRAL_LINK_BASE = "https://thecompeteapp.com/r/";
+
+/**
+ * Normal share copy (no "Referral code: …" dump — the code is still shown/copyable in the app).
+ * The link carries a branded Open Graph preview (public/og/invite.jpg).
+ */
+export const INVITE_SHARE_TITLE = "Join me on Compete";
+export const INVITE_SHARE_TEXT = "Join me on Compete 🎱\nFind tournaments. Compete. Win prizes.";
+
+/**
+ * NATIVE RELEASE CHECKLIST for /invite (not live yet — needs store builds containing
+ * app/invite/[code].tsx):
+ *   • Android: app.json intentFilters include pathPrefix "/invite/" (added) → ships with the next
+ *     build; until then /invite opens the website, whose "Get Compete" button keeps the Play
+ *     install referrer.
+ *   • iOS: add "/invite/*" (and "/r/*") to public/.well-known/apple-app-site-association ONLY after
+ *     an iOS build with the /invite route is live — earlier, installed apps would open the link
+ *     to a not-found screen.
+ */
 
 /**
  * PHASE B SWITCH. Leave false until Android + iOS builds containing the /r route are LIVE in the
@@ -39,7 +60,7 @@ export const isWellFormedReferralCode = (raw: string): boolean =>
 export const buildReferralLink = (code: string, visitId?: string | null): string =>
   `${REFERRAL_LINK_BASE}${encodeURIComponent(normalizeReferralCode(code))}${visitId ? `?v=${encodeURIComponent(visitId)}` : ""}`;
 
-/** Display form of the link without the scheme, e.g. "thecompeteapp.com/r/TYELERR". */
+/** Display form of the link without the scheme, e.g. "thecompeteapp.com/invite/TYELERR". */
 export const displayReferralLink = (code: string): string =>
   buildReferralLink(code).replace(/^https?:\/\//, "");
 
@@ -91,11 +112,12 @@ export const parseInstallReferrer = (raw: string | null | undefined): { code: st
 
 /**
  * A referral code from pasted text: a bare code ("tyelerr"), a referral link
- * ("thecompeteapp.com/r/TYELERR…"), or the landing page's copied message. Null if none found.
+ * ("thecompeteapp.com/invite/TYELERR…" or the older /r/ form), or the landing page's copied
+ * message. Null if none found.
  */
 export const extractReferralCode = (text: string | null | undefined): string | null => {
   if (!text) return null;
-  const fromLink = text.match(/\/r\/([A-Za-z0-9]{3,16})/);
+  const fromLink = text.match(/\/(?:r|invite)\/([A-Za-z0-9]{3,16})/);
   if (fromLink) return normalizeReferralCode(fromLink[1]);
   const trimmed = text.trim();
   if (/^[A-Za-z0-9]{3,16}$/.test(trimmed)) return normalizeReferralCode(trimmed);

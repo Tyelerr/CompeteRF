@@ -57,7 +57,9 @@ export function GiveawayCard({ giveaway, isEntered, daysRemaining, onEnter, onVi
           </View>
           {giveaway.description && <Text allowFontScaling={false} style={[styles.description, isClosed && styles.textMuted]} numberOfLines={isWeb ? 3 : 1}>{giveaway.description}</Text>}
           {isWallet ? (
-            <Text allowFontScaling={false} style={styles.entries}>{entryCount} / {maxEntries} entries filled</Text>
+            <Text allowFontScaling={false} style={styles.entries}>
+              {maxEntries > 0 ? `${entryCount} / ${maxEntries} entries filled` : `${entryCount} entries`}
+            </Text>
           ) : (
             <Text allowFontScaling={false} style={styles.entries}>{entryCount}/{maxEntries || "∞"} Total Entries</Text>
           )}

@@ -372,7 +372,7 @@ export const giveawayService = {
       /** Omitted = legacy_single (the DB default), so the legacy create payload is unchanged. */
       entry_mode?: GiveawayEntryMode;
       per_user_max?: number;
-      end_type?: "entries" | "both";
+      end_type?: "date" | "entries" | "both";
     },
     createdBy: number,
   ): Promise<{ success: boolean; data?: Giveaway; error?: string }> {

@@ -16,12 +16,13 @@ import {
 } from "../../../../viewmodels/useGiveawayParticipants";
 import { AdminModal, DetailRow, DetailSection } from "./AdminModal";
 import { GiveawayAdminHeader, GiveawayAdminPage, useGiveawayAdminNav } from "./giveaway-admin-shell";
-import { ConsoleButton, ConsoleIconButton, ConsoleSelect } from "./giveaway-console.parts";
+import { ContactModal } from "./ContactModal";
+import { ConsoleButton, ConsoleSelect } from "./giveaway-console.parts";
 import { consoleSt } from "./giveaway-console.styles";
 
 type Entry = ParticipantEntry & { giveaway_entry_mode?: string };
 
-const PCOLS = { giveaway: 190, email: 210, phone: 128, birthday: 118, entries: 70, entered: 108, prize: 80, actions: 76 };
+const PCOLS = { giveaway: 180, email: 196, phone: 124, birthday: 112, entries: 66, entered: 104, prize: 74, actions: 108 };
 const SORTS: { value: ParticipantSortOption; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -45,6 +46,7 @@ export function ParticipantsConsoleScreen() {
   const paramId = giveawayParam && /^\d+$/.test(giveawayParam) ? Number(giveawayParam) : null;
   const vm = useGiveawayParticipants(paramId);
   const [selected, setSelected] = useState<Entry | null>(null);
+  const [contactFor, setContactFor] = useState<Entry | null>(null);
 
   // Keep the filter in sync when the same screen is re-used with a different ?giveaway= link.
   const { selectGiveaway } = vm;
@@ -173,6 +175,7 @@ export function ParticipantsConsoleScreen() {
                       last={i === vm.entries.length - 1}
                       selected={selected?.id === e.id}
                       onOpen={() => setSelected(e as Entry)}
+                      onContact={() => setContactFor(e as Entry)}
                       formatDate={vm.formatDate}
                     />
                   ))
@@ -182,6 +185,23 @@ export function ParticipantsConsoleScreen() {
           </View>
         )}
       </GiveawayAdminPage>
+
+      {contactFor ? (
+        <ContactModal
+          contact={{
+            name: contactFor.name_as_on_id || "Unknown",
+            subtitle: `Profile #${contactFor.user_id} · ${contactFor.giveaway_name ?? `Giveaway #${contactFor.giveaway_id}`}`,
+            email: contactFor.email,
+            phone: contactFor.phone,
+          }}
+          viewLabel="View participant"
+          onView={() => {
+            setSelected(contactFor);
+            setContactFor(null);
+          }}
+          onClose={() => setContactFor(null)}
+        />
+      ) : null}
 
       {selected ? (
         <ParticipantDetailModal
@@ -206,16 +226,18 @@ function ParticipantRow({
   last,
   selected,
   onOpen,
+  onContact,
   formatDate,
 }: {
   e: Entry;
   last: boolean;
   selected: boolean;
   onOpen: () => void;
+  onContact: () => void;
   formatDate: (d: string | null) => string;
 }) {
   return (
-    // Not role="button": the row contains real buttons (email / call); the name link below is
+    // Not role="button": the row contains a real button (Contact); the name link below is
     // the keyboard / screen-reader way to open the details modal.
     <Pressable
       onPress={onOpen}
@@ -257,12 +279,7 @@ function ParticipantRow({
         <Text allowFontScaling={false} style={consoleSt.cellText}>{e.giveaway_prize ? formatMoney(e.giveaway_prize) : "—"}</Text>
       </View>
       <View style={[consoleSt.cell, { width: PCOLS.actions, flexDirection: "row", gap: 4, paddingRight: 0 }]}>
-        {e.email ? (
-          <ConsoleIconButton icon="mail-outline" accessibilityLabel={`Email ${e.name_as_on_id}`} onPress={() => Linking.openURL(`mailto:${e.email}`).catch(() => {})} />
-        ) : null}
-        {e.phone ? (
-          <ConsoleIconButton icon="call-outline" accessibilityLabel={`Call ${e.name_as_on_id}`} onPress={() => Linking.openURL(`tel:${e.phone}`).catch(() => {})} />
-        ) : null}
+        <ConsoleButton label="Contact" icon="person-circle-outline" onPress={onContact} accessibilityLabel={`Contact ${e.name_as_on_id || "participant"}`} />
       </View>
     </Pressable>
   );

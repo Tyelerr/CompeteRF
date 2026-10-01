@@ -36,6 +36,8 @@ const ROUTE_ACCESS: Record<string, Access> = {
   "giveaway-participants": "admin",
   "giveaway-past-winners": "admin",
   "giveaway-grant-entries": "admin",
+  // Server RPCs are super_admin-only; the page is too (no read-only view for other admins).
+  "giveaway-earning-rules": "super",
   "create-giveaway": "admin",
   "edit-giveaway": "admin",
   "tournament-management": "admin",

@@ -18,6 +18,7 @@ import { COLORS } from "../../../../src/theme/colors";
 import { SPACING } from "../../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../../src/theme/typography";
 import { EditGiveawayForm, useEditGiveaway } from "../../../../src/viewmodels/useEditGiveaway";
+import { END_TYPE_OPTIONS, describeEndRule, formatEndDateParts } from "../../../../src/utils/giveaway-end-rule";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { GiveawayFormShell } from "../../../../src/views/screens/admin/giveaway-console/GiveawayFormShell";
@@ -173,7 +174,7 @@ export default function EditGiveawayScreen() {
   const renderEndType = () => {
     const inner = (
       <View style={s.endTypeRow}>
-        {(vm.isWallet ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
+        {END_TYPE_OPTIONS.map(({ value: type, label }) => (
           <TouchableOpacity
             key={type}
             style={[s.endTypeButton, vm.form.end_type === type && s.endTypeButtonActive]}
@@ -181,7 +182,7 @@ export default function EditGiveawayScreen() {
             disabled={vm.isFieldLocked("end_type")}
           >
             <Text allowFontScaling={false} style={[s.endTypeText, vm.form.end_type === type && s.endTypeTextActive]}>
-              {type === "date" ? "📅 Date" : type === "entries" ? "👥 Entries" : "⚡ Both"}
+              {label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -190,9 +191,7 @@ export default function EditGiveawayScreen() {
     const hint = (
       <View style={s.endTypeHintBox}>
         <Text allowFontScaling={false} style={s.endTypeHint}>
-          {vm.form.end_type === "date"    && "Closes on the specified date, regardless of entries."}
-          {vm.form.end_type === "entries" && "Closes automatically when max entries is reached."}
-          {vm.form.end_type === "both"    && "Closes when either condition is met first – whichever comes first."}
+          {describeEndRule(vm.form.end_type, vm.form.max_entries, formatEndDateParts(vm.form.end_date))}
         </Text>
       </View>
     );

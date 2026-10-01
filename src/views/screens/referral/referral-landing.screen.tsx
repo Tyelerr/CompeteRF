@@ -1,8 +1,8 @@
 // src/views/screens/referral/referral-landing.screen.tsx
-// Landing page for thecompeteapp.com/r/<CODE>. Always shows a page first (never an automatic
-// redirect): who invited them and the code (kept visible for manual entry — attribution never
-// depends on deep links). Buttons by context:
-//   phone web → [Open Compete] primary · [Create Account on Web] · Log In
+// Landing page for thecompeteapp.com/invite/<CODE> (and the original /r/<CODE>, which keeps
+// working). Always shows a branded page first (never an automatic redirect): who invited them and
+// the code (kept visible for manual entry — attribution never depends on deep links). Buttons:
+//   phone web → [Get Compete on the App Store | Google Play] primary · [Create Account on Web] · Log In
 //   desktop   → [Create Account on Web] primary · Log In · small App Store / Google Play links
 //   in the app (a link opened it) → [Create Account] · Log In
 
@@ -14,12 +14,38 @@ import { APP_STORE_URL } from "../../../models/constants/app-stores";
 import { COLORS } from "../../../theme/colors";
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
-import { buildPlayStoreReferralUrl, smartAppBannerContent } from "../../../utils/referral";
+import { INVITE_SHARE_TITLE, buildPlayStoreReferralUrl, smartAppBannerContent } from "../../../utils/referral";
 import { webMs, webSc } from "../../../utils/scaling";
 import { useReferralLanding } from "../../../viewmodels/useReferralLanding";
 import { Button } from "../../components/common/button";
 
 const isWeb = Platform.OS === "web";
+
+// Branded link preview (iMessage / Messages / Slack / Discord / Facebook / X). Crawlers read the
+// static HTML only, so these tags are rendered on every web render (also the pre-rendered
+// /invite/[code] and /r/[code] templates), independent of the invite's resolution state.
+const OG_IMAGE = "https://thecompeteapp.com/og/invite.jpg";
+const OG_DESCRIPTION = "Find tournaments. Compete. Win prizes.";
+function InviteOpenGraph() {
+  return (
+    <Head>
+      <title>{INVITE_SHARE_TITLE}</title>
+      <meta name="description" content={OG_DESCRIPTION} />
+      <meta property="og:type" content="website" />
+      <meta property="og:site_name" content="Compete" />
+      <meta property="og:title" content={INVITE_SHARE_TITLE} />
+      <meta property="og:description" content={OG_DESCRIPTION} />
+      <meta property="og:image" content={OG_IMAGE} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content="Compete — Find tournaments. Compete. Win prizes." />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={INVITE_SHARE_TITLE} />
+      <meta name="twitter:description" content={OG_DESCRIPTION} />
+      <meta name="twitter:image" content={OG_IMAGE} />
+    </Head>
+  );
+}
 
 interface Props {
   code?: string;
@@ -53,11 +79,11 @@ export function ReferralLandingScreen({ code: rawCode, visitParam, campaign }: P
     body = (
       <>
         <Text allowFontScaling={false} style={st.eyebrow}>{"YOU'RE INVITED"}</Text>
-        <Text allowFontScaling={false} style={st.title}>Join Compete</Text>
+        <Text allowFontScaling={false} style={st.title}>Join me on Compete</Text>
         {vm.inviter ? (
           <Text allowFontScaling={false} style={st.inviter}>Invited by {vm.inviter}</Text>
         ) : null}
-        <Text allowFontScaling={false} style={st.body}>Find pool tournaments near you.</Text>
+        <Text allowFontScaling={false} style={st.body}>Find tournaments. Compete. Win prizes.</Text>
 
         <View style={st.codeBox}>
           <Text allowFontScaling={false} style={st.codeLabel}>REFERRAL CODE</Text>
@@ -68,7 +94,11 @@ export function ReferralLandingScreen({ code: rawCode, visitParam, campaign }: P
         <View style={st.actions}>
           {isPhoneBrowser ? (
             <>
-              <Button title="Open Compete" onPress={vm.openCompete} fullWidth />
+              <Button
+                title={vm.platform === "ios" ? "Get Compete on the App Store" : "Get Compete on Google Play"}
+                onPress={vm.openCompete}
+                fullWidth
+              />
               {vm.copiedNotice ? (
                 <Text allowFontScaling={false} style={st.notice}>{vm.copiedNotice}</Text>
               ) : null}
@@ -116,6 +146,7 @@ export function ReferralLandingScreen({ code: rawCode, visitParam, campaign }: P
 
   return (
     <ScrollView style={st.page} contentContainerStyle={st.pageContent}>
+      {isWeb ? <InviteOpenGraph /> : null}
       {vm.showSmartBanner ? (
         // PHASE B only (NATIVE_REFERRAL_LINKS_LIVE): Safari shows Open / Get for Compete natively.
         <Head>

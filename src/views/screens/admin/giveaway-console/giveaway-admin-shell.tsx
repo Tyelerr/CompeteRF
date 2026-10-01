@@ -1,19 +1,21 @@
 // src/views/screens/admin/giveaway-console/giveaway-admin-shell.tsx
 // WEB desktop Giveaway Management section chrome, shared by every giveaway admin page
-// (Giveaways, Participants, Winners, Entry Wallet, New / Edit Giveaway) so they read as one
+// (Giveaways, Participants, Winners, Entry Wallet, Earning Rules, New / Edit Giveaway) so they read as one
 // admin area: same back link, title row, section nav, 1240px column and spacing.
 import { useRouter } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { useAuthStore } from "../../../../viewmodels/stores/auth.store";
 import { consoleSt } from "./giveaway-console.styles";
 
-export type GiveawayAdminSection = "giveaways" | "participants" | "winners" | "wallet";
+export type GiveawayAdminSection = "giveaways" | "participants" | "winners" | "wallet" | "rules";
 
-const SECTIONS: { key: GiveawayAdminSection; label: string; route: string }[] = [
+const SECTIONS: { key: GiveawayAdminSection; label: string; route: string; superOnly?: boolean }[] = [
   { key: "giveaways", label: "Giveaways", route: "/(tabs)/admin/giveaway-management" },
   { key: "participants", label: "Participants", route: "/(tabs)/admin/giveaway-participants" },
   { key: "winners", label: "Winners", route: "/(tabs)/admin/giveaway-past-winners" },
   { key: "wallet", label: "Entry Wallet", route: "/(tabs)/admin/giveaway-grant-entries" },
+  { key: "rules", label: "Earning Rules", route: "/(tabs)/admin/giveaway-earning-rules", superOnly: true },
 ];
 
 export const GIVEAWAY_MANAGEMENT_ROUTE = "/(tabs)/admin/giveaway-management";
@@ -41,6 +43,8 @@ interface HeaderProps {
 
 export function GiveawayAdminHeader({ title, subtitle, section, backLabel, onBack, actions }: HeaderProps) {
   const nav = useGiveawayAdminNav();
+  const isSuper = useAuthStore((st) => st.profile?.role === "super_admin");
+  const sections = SECTIONS.filter((s) => !s.superOnly || isSuper);
   return (
     <View>
       <Pressable onPress={onBack} style={consoleSt.backLink} accessibilityRole="link">
@@ -55,7 +59,7 @@ export function GiveawayAdminHeader({ title, subtitle, section, backLabel, onBac
       </View>
       {section ? (
         <View style={consoleSt.sectionNav} accessibilityRole={"tablist" as any}>
-          {SECTIONS.map((s) => {
+          {sections.map((s) => {
             const active = s.key === section;
             return (
               <Pressable

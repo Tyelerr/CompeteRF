@@ -17,6 +17,7 @@ import { COLORS } from "../../../src/theme/colors";
 import { SPACING } from "../../../src/theme/spacing";
 import { FONT_SIZES } from "../../../src/theme/typography";
 import { useCreateGiveaway } from "../../../src/viewmodels/useCreateGiveaway";
+import { END_TYPE_OPTIONS, describeEndRule, formatEndDateParts } from "../../../src/utils/giveaway-end-rule";
 import { Dropdown } from "../../../src/views/components/common/dropdown";
 import { moderateScale, scale } from "../../../src/utils/scaling";
 
@@ -194,7 +195,7 @@ export default function CreateGiveawayScreen() {
           End Giveaway By <Text allowFontScaling={false} style={styles.required}>*</Text>
         </Text>
         <View style={styles.endTypeRow}>
-          {(vm.formData.entry_mode === "wallet" ? (["entries", "both"] as const) : (["date", "entries", "both"] as const)).map((type) => (
+          {END_TYPE_OPTIONS.map(({ value: type, label }) => (
             <TouchableOpacity
               key={type}
               style={[
@@ -207,19 +208,14 @@ export default function CreateGiveawayScreen() {
                 styles.endTypeText,
                 vm.formData.end_type === type && styles.endTypeTextActive,
               ]}>
-                {type === "date" ? "📅 Date" : type === "entries" ? "👥 Entries" : "⚡ Both"}
+                {label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
         <View style={styles.endTypeHintBox}>
           <Text allowFontScaling={false} style={styles.endTypeHint}>
-            {vm.formData.end_type === "date" &&
-              "The giveaway closes on the date you set, regardless of entries received."}
-            {vm.formData.end_type === "entries" &&
-              "The giveaway closes automatically when maximum entries is reached."}
-            {vm.formData.end_type === "both" &&
-              "Closes when either condition is met first – whichever comes first."}
+            {describeEndRule(vm.formData.end_type, vm.formData.max_entries, formatEndDateParts(vm.formData.end_date))}
           </Text>
         </View>
       </View>
@@ -265,7 +261,9 @@ export default function CreateGiveawayScreen() {
             <Text allowFontScaling={false} style={styles.errorText}>{vm.formErrors.per_user_max}</Text>
           ) : (
             <Text allowFontScaling={false} style={styles.endTypeHint}>
-              One person can hold at most this many of the {vm.formData.max_entries || "—"} entries.
+              {vm.formData.end_type === "date"
+                ? "One person can hold at most this many entries (no total cap — ends on the date)."
+                : `One person can hold at most this many of the ${vm.formData.max_entries || "—"} entries.`}
             </Text>
           )}
         </View>

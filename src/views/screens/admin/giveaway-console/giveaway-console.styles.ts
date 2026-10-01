@@ -179,6 +179,10 @@ export const consoleSt = StyleSheet.create({
   cell: { paddingRight: SPACING.sm + SPACING.xs },
   cellName: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 180 },
   cellText: { color: COLORS.text, fontSize: FONT_SIZES.sm },
+  // Entries / entrants cell → filtered Participants
+  countLink: { flexDirection: "row", alignItems: "center", gap: SPACING.sm + SPACING.xs, borderRadius: RADIUS.sm, cursor: "pointer" as any, marginVertical: -4, paddingVertical: 4 },
+  countLinkHover: { backgroundColor: COLORS.surfaceLight },
+  countLinkText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.sm, fontWeight: "600" },
   cellSub: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
   cellMuted: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
   nameText: { color: COLORS.text, fontSize: FONT_SIZES.sm, fontWeight: "600" },

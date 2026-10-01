@@ -55,6 +55,7 @@ export function GiveawayDetailModal({ giveaway: g, uniqueEntrants, canManage, on
           onPress={() => onPrimary(primary.kind, g)}
         />
       ) : null}
+      <ConsoleButton label="Close" onPress={onClose} />
     </>
   );
 

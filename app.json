@@ -58,6 +58,16 @@
                                                                             "scheme":  "https",
                                                                             "host":  "thecompeteapp.com",
                                                                             "pathPrefix":  "/r/"
+                                                                        },
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "www.thecompeteapp.com",
+                                                                            "pathPrefix":  "/invite/"
+                                                                        },
+                                                                        {
+                                                                            "scheme":  "https",
+                                                                            "host":  "thecompeteapp.com",
+                                                                            "pathPrefix":  "/invite/"
                                                                         }
                                                                     ],
                                                            "category":  [

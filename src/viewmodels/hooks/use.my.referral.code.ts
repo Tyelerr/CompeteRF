@@ -1,16 +1,17 @@
 // src/viewmodels/hooks/use.my.referral.code.ts
-// Share-card state: the signed-in user's referral code + link, and Copy / Share actions.
+// Share-card state: the signed-in user's referral code + invite link, and Copy / Share actions.
+// Share = short branded copy + the smart invite link (thecompeteapp.com/invite/<CODE>); the link's
+// Open Graph tags give Messages / iMessage / Slack / Discord / Facebook a branded preview card, so
+// no image is attached (attaching one turns it into an image share and drops the link preview).
+// The code is no longer in the share text — it stays visible / copyable on the card.
 // Copy is dependency-free (same approach as TeamRegisterModal): web uses the Clipboard API;
 // native falls back to the share sheet, which offers "Copy".
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, Share } from "react-native";
 import { referralService } from "../../models/services/referral.service";
-import { buildReferralLink } from "../../utils/referral";
+import { INVITE_SHARE_TEXT, INVITE_SHARE_TITLE, buildReferralLink } from "../../utils/referral";
 import { useAuthStore } from "../stores/auth.store";
-
-const SHARE_MESSAGE = (link: string, code: string) =>
-  `Join me on Compete — find pool tournaments near you.\n${link}\n\nReferral code: ${code}`;
 
 export function useMyReferralCode() {
   const profileId = useAuthStore((s) => s.profile?.id_auto ?? null);
@@ -42,17 +43,23 @@ export function useMyReferralCode() {
 
   const share = useCallback(async () => {
     if (!code || !link) return;
-    const message = SHARE_MESSAGE(link, code);
     if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) {
       try {
-        await (navigator as any).share({ title: "Compete", text: message, url: link });
+        await (navigator as any).share({ title: INVITE_SHARE_TITLE, text: INVITE_SHARE_TEXT, url: link });
         return;
       } catch {
         return; // dismissed
       }
     }
     try {
-      await Share.share({ message });
+      // iOS shares `url` as a real link (rich preview from the page's Open Graph tags) next to the
+      // text. Android ignores `url`, so there the link ends the message.
+      await Share.share(
+        Platform.OS === "ios"
+          ? { message: INVITE_SHARE_TEXT, url: link }
+          : { message: `${INVITE_SHARE_TEXT}\n${link}`, title: INVITE_SHARE_TITLE },
+        { subject: INVITE_SHARE_TITLE, dialogTitle: "Share Compete" },
+      );
     } catch {
       /* dismissed */
     }

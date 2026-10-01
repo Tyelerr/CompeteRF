@@ -71,13 +71,9 @@ export const useCreateGiveaway = () => {
   );
 
   // Update end date
-  // Giveaway Entries always has a capacity, so "Date" alone isn't offered in that mode.
+  // Both entry methods support every end rule (capacity / date / both — whichever first).
   const setEntryMode = useCallback((mode: EntryMethod) => {
-    setFormData((prev) => ({
-      ...prev,
-      entry_mode: mode,
-      end_type: mode === "wallet" && prev.end_type === "date" ? "entries" : prev.end_type,
-    }));
+    setFormData((prev) => ({ ...prev, entry_mode: mode }));
     setFormErrors((prev) => ({ ...prev, entry_mode: undefined, per_user_max: undefined }));
   }, []);
 
@@ -166,7 +162,11 @@ export const useCreateGiveaway = () => {
       const perUser = parseInt(formData.per_user_max);
       if (!formData.per_user_max.trim() || isNaN(perUser) || perUser <= 0) {
         errors.per_user_max = "Max entries per user is required";
-      } else if (parseInt(formData.max_entries) > 0 && perUser > parseInt(formData.max_entries)) {
+      } else if (
+        (formData.end_type === "entries" || formData.end_type === "both") &&
+        parseInt(formData.max_entries) > 0 &&
+        perUser > parseInt(formData.max_entries)
+      ) {
         errors.per_user_max = "Can't exceed the total entry capacity";
       }
     }
@@ -238,7 +238,7 @@ export const useCreateGiveaway = () => {
             ? {
                 entry_mode: "wallet" as const,
                 per_user_max: parseInt(formData.per_user_max),
-                end_type: formData.end_type === "both" ? ("both" as const) : ("entries" as const),
+                end_type: formData.end_type,
               }
             : {}),
           end_date: endDate,

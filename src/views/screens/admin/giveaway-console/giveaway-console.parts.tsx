@@ -15,13 +15,14 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-export function StatusPill({ status }: { status: string }) {
+/** Status pill. `status` picks the tone; `label` overrides the text (e.g. referral credit states). */
+export function StatusPill({ status, label }: { status: string; label?: string }) {
   const tone = STATUS_TONE[status] ?? COLORS.textMuted;
   return (
     <View style={[consoleSt.pill, { backgroundColor: tint(tone) }]}>
       <View style={[consoleSt.pillDot, { backgroundColor: tone }]} />
       <Text allowFontScaling={false} style={[consoleSt.pillText, { color: tone }]}>
-        {STATUS_LABEL[status] ?? status}
+        {label ?? STATUS_LABEL[status] ?? status}
       </Text>
     </View>
   );

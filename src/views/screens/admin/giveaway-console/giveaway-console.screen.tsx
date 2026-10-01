@@ -320,21 +320,35 @@ function GiveawayRow({ vm, g, last }: { vm: ConsoleVm; g: AdminGiveaway; last: b
         <Text allowFontScaling={false} style={consoleSt.cellText}>{formatMoney(g.prize_value)}</Text>
       </View>
 
-      <View style={[consoleSt.cell, { width: COLS.entries }]}>
-        <Text allowFontScaling={false} style={entries > 0 ? consoleSt.cellText : consoleSt.cellMuted}>
-          {entries.toLocaleString()}
-          {g.max_entries ? <Text style={consoleSt.cellMuted}> / {g.max_entries.toLocaleString()}</Text> : null}
+      {/* Entries + entrants open Participants filtered to this giveaway (own press target, so the
+          row's detail modal doesn't open). */}
+      <Pressable
+        onPress={entries > 0 ? () => vm.goParticipants(g.id) : undefined}
+        disabled={entries === 0}
+        accessibilityRole={entries > 0 ? "link" : undefined}
+        accessibilityLabel={entries > 0 ? `View ${entries} entries for ${g.name}` : undefined}
+        style={({ hovered }: any) => [
+          consoleSt.cell,
+          consoleSt.countLink,
+          { width: COLS.entries + COLS.unique },
+          entries > 0 && hovered && consoleSt.countLinkHover,
+        ]}
+      >
+        <View style={{ width: COLS.entries - 12 }}>
+          <Text allowFontScaling={false} style={entries > 0 ? consoleSt.countLinkText : consoleSt.cellMuted}>
+            {entries.toLocaleString()}
+            {g.max_entries ? <Text style={consoleSt.cellMuted}> / {g.max_entries.toLocaleString()}</Text> : null}
+          </Text>
+          {ratio != null ? (
+            <View style={consoleSt.bar}>
+              <View style={[consoleSt.barFill, ratio >= 1 && consoleSt.barFull, { width: `${ratio * 100}%` }]} />
+            </View>
+          ) : null}
+        </View>
+        <Text allowFontScaling={false} style={entries > 0 ? consoleSt.countLinkText : consoleSt.cellMuted}>
+          {unique == null ? "—" : unique.toLocaleString()}
         </Text>
-        {ratio != null ? (
-          <View style={consoleSt.bar}>
-            <View style={[consoleSt.barFill, ratio >= 1 && consoleSt.barFull, { width: `${ratio * 100}%` }]} />
-          </View>
-        ) : null}
-      </View>
-
-      <View style={[consoleSt.cell, { width: COLS.unique }]}>
-        <Text allowFontScaling={false} style={consoleSt.cellText}>{unique == null ? "—" : unique.toLocaleString()}</Text>
-      </View>
+      </Pressable>
 
       <View style={[consoleSt.cell, { width: COLS.ends }]}>
         <Text allowFontScaling={false} style={consoleSt.cellText} numberOfLines={1}>{ends.primary}</Text>

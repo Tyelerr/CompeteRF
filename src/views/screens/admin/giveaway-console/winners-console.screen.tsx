@@ -7,19 +7,20 @@
 // disqualifications); Redraw stays on the existing flow and is offered for Awarded giveaways only,
 // matching the Giveaway Management ⋯ menu.
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef } from "react";
-import { ActivityIndicator, Linking, Pressable, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { COLORS } from "../../../../theme/colors";
 import { formatConsoleDate, formatMoney } from "../../../../utils/giveaway-console";
 import { useAuthStore } from "../../../../viewmodels/stores/auth.store";
 import { useAdminGiveaways } from "../../../../viewmodels/useAdminGiveaways";
 import { GiveawayAdminModals } from "../../../components/giveaway/GiveawayAdminModals";
 import { GiveawayAdminHeader, GiveawayAdminPage, useGiveawayAdminNav } from "./giveaway-admin-shell";
-import { ConsoleIconButton, StatusPill } from "./giveaway-console.parts";
+import { ContactModal } from "./ContactModal";
+import { ConsoleButton, StatusPill } from "./giveaway-console.parts";
 import { consoleSt } from "./giveaway-console.styles";
 import { WinnerDetailModal } from "./WinnerDetailModal";
 
-const WCOLS = { giveaway: 280, status: 104, prize: 84, drawn: 170, entries: 76, odds: 90, actions: 48 };
+const WCOLS = { giveaway: 260, status: 100, prize: 80, drawn: 164, entries: 72, odds: 84, actions: 108 };
 
 const fmtDateTime = (iso: string | null | undefined) =>
   iso
@@ -58,6 +59,8 @@ export function WinnersConsoleScreen() {
     if (wasRedrawOpen.current && !redrawModalVisible) onRefresh();
     wasRedrawOpen.current = redrawModalVisible;
   }, [redrawModalVisible, onRefresh]);
+
+  const [contactFor, setContactFor] = useState<(typeof winners)[number] | null>(null);
 
   const openWinner = (giveawayId: number) => {
     const g = allGiveaways.find((x) => x.id === giveawayId);
@@ -159,13 +162,7 @@ export function WinnersConsoleScreen() {
                           <Text allowFontScaling={false} style={consoleSt.cellText}>{entries > 0 ? `1 in ${entries.toLocaleString()}` : "—"}</Text>
                         </View>
                         <View style={[consoleSt.cell, { width: WCOLS.actions, paddingRight: 0 }]}>
-                          {g.winner_email ? (
-                            <ConsoleIconButton
-                              icon="mail-outline"
-                              accessibilityLabel={`Email ${name}`}
-                              onPress={() => Linking.openURL(`mailto:${g.winner_email}`).catch(() => {})}
-                            />
-                          ) : null}
+                          <ConsoleButton label="Contact" icon="person-circle-outline" onPress={() => setContactFor(g)} accessibilityLabel={`Contact ${name}`} />
                         </View>
                       </Pressable>
                     );
@@ -176,6 +173,24 @@ export function WinnersConsoleScreen() {
           </View>
         )}
       </GiveawayAdminPage>
+
+      {contactFor ? (
+        <ContactModal
+          contact={{
+            name: contactFor.winner_name || `Profile #${contactFor.winner_id}`,
+            subtitle: `Winner · ${contactFor.name} (#${contactFor.id})`,
+            email: contactFor.winner_email,
+            phone: null,
+          }}
+          note="The phone number from the winning entry is in Winner details."
+          viewLabel="Winner details"
+          onView={() => {
+            openWinner(contactFor.id);
+            setContactFor(null);
+          }}
+          onClose={() => setContactFor(null)}
+        />
+      ) : null}
 
       <WinnerDetailModal vm={adminVm} canManage={canManage} />
       <GiveawayAdminModals

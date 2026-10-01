@@ -282,7 +282,11 @@ export default function ShopScreen() {
           balance: giveawaysVm.balance ?? 0,
           myEntries: giveawaysVm.getMyEntries(selectedGiveaway.id),
           perUserMax: selectedGiveaway.per_user_max ?? 0,
-          capacityRemaining: Math.max(0, (selectedGiveaway.max_entries ?? 0) - (selectedGiveaway.entry_count ?? 0)),
+          // No capacity (date-only wallet giveaway) = unlimited until the end date.
+          capacityRemaining:
+            selectedGiveaway.max_entries == null || selectedGiveaway.max_entries <= 0
+              ? Number.POSITIVE_INFINITY
+              : Math.max(0, selectedGiveaway.max_entries - (selectedGiveaway.entry_count ?? 0)),
         }
       : null;
 

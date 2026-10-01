@@ -231,11 +231,11 @@ export function useEditGiveaway(giveawayId: number) {
         if (form.end_type === "date") updates.max_entries = null as any;
       }
 
-      // Wallet giveaways: capacity is mandatory (no date-only) and the per-user max is saved.
+      // Wallet giveaways: the per-user max is saved; any end rule (capacity / date / both).
       if (isWallet) {
         const perUser = parseInt(form.per_user_max, 10);
         if (!isNaN(perUser)) updates.per_user_max = perUser;
-        updates.end_type = form.end_type === "both" ? "both" : "entries";
+        updates.end_type = form.end_type;
       }
     }
 
