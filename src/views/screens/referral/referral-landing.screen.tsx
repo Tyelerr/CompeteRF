@@ -24,7 +24,8 @@ const isWeb = Platform.OS === "web";
 // Branded link preview (iMessage / Messages / Slack / Discord / Facebook / X). Crawlers read the
 // static HTML only, so these tags are rendered on every web render (also the pre-rendered
 // /invite/[code] and /r/[code] templates), independent of the invite's resolution state.
-const OG_IMAGE = "https://thecompeteapp.com/og/invite.jpg";
+// www host: the apex redirects (307), and some link previewers do not follow redirects.
+const OG_IMAGE = "https://www.thecompeteapp.com/og/invite.jpg";
 const OG_DESCRIPTION = "Find tournaments. Compete. Win prizes.";
 function InviteOpenGraph() {
   return (
