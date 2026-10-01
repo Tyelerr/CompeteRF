@@ -320,35 +320,63 @@ function GiveawayRow({ vm, g, last }: { vm: ConsoleVm; g: AdminGiveaway; last: b
         <Text allowFontScaling={false} style={consoleSt.cellText}>{formatMoney(g.prize_value)}</Text>
       </View>
 
-      {/* Entries + entrants open Participants filtered to this giveaway (own press target, so the
-          row's detail modal doesn't open). */}
-      <Pressable
-        onPress={entries > 0 ? () => vm.goParticipants(g.id) : undefined}
-        disabled={entries === 0}
-        accessibilityRole={entries > 0 ? "link" : undefined}
-        accessibilityLabel={entries > 0 ? `View ${entries} entries for ${g.name}` : undefined}
-        style={({ hovered }: any) => [
-          consoleSt.cell,
-          consoleSt.countLink,
-          { width: COLS.entries + COLS.unique },
-          entries > 0 && hovered && consoleSt.countLinkHover,
-        ]}
-      >
-        <View style={{ width: COLS.entries - 12 }}>
-          <Text allowFontScaling={false} style={entries > 0 ? consoleSt.countLinkText : consoleSt.cellMuted}>
-            {entries.toLocaleString()}
-            {g.max_entries ? <Text style={consoleSt.cellMuted}> / {g.max_entries.toLocaleString()}</Text> : null}
-          </Text>
-          {ratio != null ? (
-            <View style={consoleSt.bar}>
-              <View style={[consoleSt.barFill, ratio >= 1 && consoleSt.barFull, { width: `${ratio * 100}%` }]} />
-            </View>
-          ) : null}
-        </View>
-        <Text allowFontScaling={false} style={entries > 0 ? consoleSt.countLinkText : consoleSt.cellMuted}>
-          {unique == null ? "—" : unique.toLocaleString()}
-        </Text>
-      </Pressable>
+      {/* Entries / cap and Entrants are two independent links to Participants filtered to this
+          giveaway. Each Pressable wraps only its own content (no shared hitbox), and as the inner
+          press target it keeps the row's detail modal from opening. */}
+      <View style={[consoleSt.cell, { width: COLS.entries }]}>
+        {entries > 0 ? (
+          <Pressable
+            onPress={() => vm.goParticipants(g.id)}
+            accessibilityRole="link"
+            accessibilityLabel={`View ${entries} entries for ${g.name}`}
+            style={({ hovered, focused }: any) => [consoleSt.countTarget, (hovered || focused) && consoleSt.countTargetHover]}
+          >
+            {({ hovered }: any) => (
+              <>
+                <Text allowFontScaling={false} style={[consoleSt.countLinkText, hovered && consoleSt.countLinkTextHover]}>
+                  {entries.toLocaleString()}
+                  {g.max_entries ? <Text style={consoleSt.cellMuted}> / {g.max_entries.toLocaleString()}</Text> : null}
+                </Text>
+                {ratio != null ? (
+                  <View style={consoleSt.bar}>
+                    <View style={[consoleSt.barFill, ratio >= 1 && consoleSt.barFull, { width: `${ratio * 100}%` }]} />
+                  </View>
+                ) : null}
+              </>
+            )}
+          </Pressable>
+        ) : (
+          <>
+            <Text allowFontScaling={false} style={consoleSt.cellMuted}>
+              0{g.max_entries ? ` / ${g.max_entries.toLocaleString()}` : ""}
+            </Text>
+            {ratio != null ? (
+              <View style={consoleSt.bar}>
+                <View style={[consoleSt.barFill, { width: "0%" }]} />
+              </View>
+            ) : null}
+          </>
+        )}
+      </View>
+
+      <View style={[consoleSt.cell, { width: COLS.unique }]}>
+        {entries > 0 && unique != null ? (
+          <Pressable
+            onPress={() => vm.goParticipants(g.id)}
+            accessibilityRole="link"
+            accessibilityLabel={`View ${unique} entrants for ${g.name}`}
+            style={({ hovered, focused }: any) => [consoleSt.countTarget, (hovered || focused) && consoleSt.countTargetHover]}
+          >
+            {({ hovered }: any) => (
+              <Text allowFontScaling={false} style={[consoleSt.countLinkText, hovered && consoleSt.countLinkTextHover]}>
+                {unique.toLocaleString()}
+              </Text>
+            )}
+          </Pressable>
+        ) : (
+          <Text allowFontScaling={false} style={consoleSt.cellMuted}>{unique == null ? "—" : unique.toLocaleString()}</Text>
+        )}
+      </View>
 
       <View style={[consoleSt.cell, { width: COLS.ends }]}>
         <Text allowFontScaling={false} style={consoleSt.cellText} numberOfLines={1}>{ends.primary}</Text>
