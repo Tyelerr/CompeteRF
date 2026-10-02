@@ -2389,6 +2389,19 @@ ${partner} will become the team captain. The team stays registered and will need
     openForfeit(e.id);
   };
 
+  // Revive an eliminated team — confirm first on every platform (native already did).
+  const confirmRevive = (entry: ChipEntry, kind: "restore" | "reenter") => {
+    const chips = kind === "restore" ? 1 : Math.max(1, entry.startChips || 1);
+    Alert.alert(
+      kind === "restore" ? "Restore Chip?" : "Re-enter Tournament?",
+      `Bring ${teamName(entry)} back into the tournament with ${chips} chip${chips === 1 ? "" : "s"}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: kind === "restore" ? "Restore" : "Re-enter", onPress: () => (kind === "restore" ? vm.restoreEntry(entry.id) : vm.buyBack(entry.id)) },
+      ],
+    );
+  };
+
   // ── Shared player-action menu — single source of truth (WEB) ─────────────────────
   // The Player Profile ⋮ AND the Players-row ⋮ both render from this one ordered,
   // state-gated list on web, so the two menus can never drift. Each surface passes its
@@ -2418,8 +2431,9 @@ ${partner} will become the team captain. The team stays registered and will need
     const eliminated = entry.status === "eliminated";
     const acts: PlayerMenuAction[] = [];
     if (eliminated) {
-      acts.push({ key: "restoreChip", icon: "refresh-outline", label: "Restore Chip", run: () => vm.restoreEntry(entry.id) });
-      acts.push({ key: "reenter", icon: "return-up-back-outline", label: "Re-enter Tournament", run: () => vm.buyBack(entry.id) });
+      // Same confirm-first behavior as the native menu (a one-tap revive was web-only).
+      acts.push({ key: "restoreChip", icon: "refresh-outline", label: "Restore Chip", run: () => confirmRevive(entry, "restore") });
+      acts.push({ key: "reenter", icon: "return-up-back-outline", label: "Re-enter Tournament", run: () => confirmRevive(entry, "reenter") });
     } else {
       if (liveMatch) acts.push({ key: "endMatch", icon: "flag-outline", label: "End Match", opensModal: true, run: () => setCompleteMatch({ matchId: liveMatch.id, aId: liveMatch.aId, bId: liveMatch.bId }) });
       acts.push({ key: "addChip", icon: "add-circle-outline", label: "Add Chip", opensModal: true, run: () => openChipAdjust(entry, 1) });
@@ -8409,8 +8423,8 @@ ${partner} will become the team captain. The team stays registered and will need
                               )}
                               {p.status === "eliminated" && (
                                 <>
-                                  <Item icon="refresh-outline" label="Restore Chip" onPress={() => { close(); vm.restoreEntry(entry.id); }} />
-                                  <Item icon="return-up-back-outline" label="Re-enter Tournament" onPress={() => { close(); vm.buyBack(entry.id); }} />
+                                  <Item icon="refresh-outline" label="Restore Chip" onPress={() => { close(); confirmRevive(entry, "restore"); }} />
+                                  <Item icon="return-up-back-outline" label="Re-enter Tournament" onPress={() => { close(); confirmRevive(entry, "reenter"); }} />
                                 </>
                               )}
                               <Item icon="document-text-outline" label="View History" onPress={viewHistory} />
