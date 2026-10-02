@@ -12,10 +12,16 @@
 //   2. If ANY main-state section failed → throw; NO events are written for this snapshot.
 //   3. Activity events (append-only, idempotent by id) → superseded flags.
 //   4. Soft-CAS version bump — only after the whole snapshot persisted.
+// Multi-director safety (2026-10 hardening): when the backend supports it, step 0 is an ATOMIC
+// version CLAIM (UPDATE chip_config SET version = v+1 WHERE tournament_id = X AND version = v).
+// Exactly one of two devices that loaded the same version can win it; the other writes NOTHING
+// and gets a conflict. The old read-then-bump let both pass the pre-check and interleave their
+// writes (one match result lost in 200/200 overlapping trials). With a claim, step 4 is skipped.
 // Every step is an idempotent snapshot write, so retrying the SAME plan is safe: it never
 // replays a tournament action.
 
 export type ChipSaveStage =
+  | "version_claim"
   | "config_core"
   | "config_extended"
   | "config_restore_points"
@@ -85,7 +91,19 @@ export interface ChipPersistBackend {
   // Read the live chip_config.version WITHOUT writing (pre-write stale check). null = unknown
   // (no row / no column / transient error) → the save proceeds as before. Never throws.
   readVersion?(): Promise<number | null>;
+  // ATOMIC compare-and-set: bump version expected -> expected+1 only if it still equals
+  // expected. "changed" = another device saved first; "unsupported" = no config row / column
+  // (first save, pre-migration) -> legacy pre-check. Network/server errors THROW.
+  claimVersion?(expected: number): Promise<"claimed" | "changed" | "unsupported">;
 }
+
+// A version THIS device claimed whose snapshot did not finish persisting (a write failed after
+// the claim). The retry of that snapshot is rebuilt with the SAME expectedVersion (the VM only
+// advances its baseline on success), so without this it would lose its own claim and report a
+// false "changed on another device". Keyed by tournament; cleared on success. If another device
+// claimed in between, the retry's claim fails and the conflict is real.
+const ownClaims = new Map<number, { from: number; to: number }>();
+export const resetOwnChipClaimsForTests = () => ownClaims.clear();
 
 // Result of a legacy (soft-CAS) save. `aborted` = the pre-write check found the cloud already
 // at a NEWER version than this device loaded: NOTHING was written (another device saved first).
@@ -106,6 +124,8 @@ export interface ChipSavePlan {
   events: Record<string, unknown>[];
   supersededEventIds: string[];
   expectedVersion?: number | null;
+  // Tournament id — keys the own-claim memory across retries of one snapshot.
+  claimKey?: number;
 }
 
 export const executeChipSave = async (
@@ -118,7 +138,26 @@ export const executeChipSave = async (
   // the TD reloads. Not atomic — a save racing in between this read and the writes is still
   // only caught afterwards by bumpVersion — but a stale device can no longer knowingly
   // overwrite a newer cloud state.
-  if (plan.expectedVersion != null && backend.readVersion) {
+  let claimed: number | null = null;
+  if (plan.expectedVersion != null && backend.claimVersion) {
+    const own = plan.claimKey != null ? ownClaims.get(plan.claimKey) : undefined;
+    const base = own && own.from === plan.expectedVersion ? own.to : plan.expectedVersion;
+    let claim: "claimed" | "changed" | "unsupported";
+    try {
+      claim = await backend.claimVersion(base);
+    } catch (e) {
+      throw new ChipSaveError("version_claim", "chip_config", e); // retried; nothing written
+    }
+    if (claim === "changed") {
+      const live = backend.readVersion ? await backend.readVersion() : null;
+      return { version: live ?? base, conflict: true, aborted: true };
+    }
+    if (claim === "claimed") {
+      claimed = base + 1;
+      if (plan.claimKey != null) ownClaims.set(plan.claimKey, { from: plan.expectedVersion, to: claimed });
+    }
+  }
+  if (claimed == null && plan.expectedVersion != null && backend.readVersion) {
     const live = await backend.readVersion();
     if (live != null && live !== plan.expectedVersion) {
       return { version: live, conflict: true, aborted: true };
@@ -178,8 +217,12 @@ export const executeChipSave = async (
     }
   }
 
-  // 4. Soft CAS bump — after the whole snapshot persisted, so a failed attempt that is then
-  // retried doesn't report a false cross-director conflict.
+  // 4. Version: already advanced atomically by the claim (any other device's claim failed, so
+  // nothing else wrote in between). Legacy path: soft-CAS bump after the snapshot.
+  if (claimed != null) {
+    if (plan.claimKey != null) ownClaims.delete(plan.claimKey);
+    return { version: claimed, conflict: false };
+  }
   return backend.bumpVersion(plan.expectedVersion);
 };
 

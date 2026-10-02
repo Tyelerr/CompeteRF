@@ -228,6 +228,32 @@ const syncTable = async (
   if (error) throw withStatus(error, status);
 };
 
+// Atomic version compare-and-set on chip_config (row-level: UPDATE … WHERE version = expected).
+// Shared by every save (claim-first, chip.persist.ts) and the offline reconnect precondition.
+const claimChipVersionRow = async (
+  id: number,
+  expected: number,
+): Promise<"claimed" | "changed" | "unsupported"> => {
+  const { data, error } = await supabase
+    .from("chip_config")
+    .update({ version: expected + 1 })
+    .eq("tournament_id", id)
+    .eq("version", expected)
+    .select("version");
+  if (error) {
+    if ((error as { code?: string }).code === "42703") return "unsupported"; // column missing
+    throw error;
+  }
+  if ((data ?? []).length === 1) return "claimed";
+  const { data: cur, error: readErr } = await supabase
+    .from("chip_config")
+    .select("tournament_id")
+    .eq("tournament_id", id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  return cur ? "changed" : "unsupported";
+};
+
 // Supabase implementation of the ordered save plan (chip.persist.ts).
 const supabasePersistBackend = (tid: number): ChipPersistBackend => ({
   async upsertConfig(patch) {
@@ -252,6 +278,7 @@ const supabasePersistBackend = (tid: number): ChipPersistBackend => ({
       .in("id", ids);
     if (error) throw withStatus(error, status);
   },
+  claimVersion: (expected) => claimChipVersionRow(tid, expected),
   async readVersion() {
     try {
       const { data, error } = await supabase
@@ -617,6 +644,7 @@ export const chipService = {
       events: chip.events.map((ev) => eventToRow(id, ev)),
       supersededEventIds: chip.events.filter((ev) => ev.superseded).map((ev) => ev.id),
       expectedVersion: opts?.expectedVersion,
+      claimKey: id,
     };
     return executeChipSave(supabasePersistBackend(id), plan);
   },
@@ -800,25 +828,25 @@ export const chipService = {
   // "changed" = someone saved since `expected` was read → the caller must not push.
   // "unsupported" = no chip_config row / version column (pre-migration) → caller falls back to
   // its content re-check. Network/5xx errors THROW (the caller stays offline).
-  async claimChipVersion(id: number, expected: number): Promise<"claimed" | "changed" | "unsupported"> {
-    const { data, error } = await supabase
-      .from("chip_config")
-      .update({ version: expected + 1 })
-      .eq("tournament_id", id)
-      .eq("version", expected)
-      .select("version");
-    if (error) {
-      if ((error as { code?: string }).code === "42703") return "unsupported"; // column missing
-      throw error;
+  claimChipVersion(id: number, expected: number): Promise<"claimed" | "changed" | "unsupported"> {
+    return claimChipVersionRow(id, expected);
+  },
+
+  // Cheap multi-TD freshness probe: the live chip_config.version only (one tiny row read).
+  // null = unknown (no row / transient error) — callers simply skip that probe.
+  async readChipVersion(id: number): Promise<number | null> {
+    try {
+      const { data, error } = await supabase
+        .from("chip_config")
+        .select("version")
+        .eq("tournament_id", id)
+        .maybeSingle();
+      if (error || !data) return null;
+      const v = Number((data as { version?: unknown }).version);
+      return Number.isFinite(v) ? v : null;
+    } catch {
+      return null;
     }
-    if ((data ?? []).length === 1) return "claimed";
-    const { data: cur, error: readErr } = await supabase
-      .from("chip_config")
-      .select("tournament_id")
-      .eq("tournament_id", id)
-      .maybeSingle();
-    if (readErr) throw readErr;
-    return cur ? "changed" : "unsupported";
   },
 
   // ── final placements (chip_results) ─────────────────────────────────────────
