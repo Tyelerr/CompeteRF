@@ -25,6 +25,7 @@ import { DrawPlayer, effectiveBracketSize, RaceConfig, recommendedBracketSize, s
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch } from "../match.utils";
 import { planAutoAssignFromState } from "../auto-assign";
 import { computeStandings } from "../tournament.stats";
+import { assertElimInvariants } from "./invariants";
 
 const CFG: RaceConfig = { mode: "fixed", fixedWinners: 5, groups: [], diffMin: 0, diffPerGame: 0, diffMax: null } as any;
 const MODES: AutoAssignMode[] = ["balanced", "winnersFirst", "losersFirst", "longestWait", "manual"];
@@ -142,6 +143,7 @@ const runTournament = (o: RunOpts): RunResult => {
       }
     }
     maxConcurrent = Math.max(maxConcurrent, concurrent);
+    assertElimInvariants(matches, ctx(), { field: new Set(players.map((p) => p.registrationId)), tables: new Set(tables.map((t: any) => t.id)) });
     // DE: nobody is eliminated after only ONE legitimate loss.
     if (o.dbl) for (const r of elim) assert.ok((losses.get(r) ?? 0) >= 2 || withdrawn.has(r), `player ${r} eliminated with ${losses.get(r) ?? 0} loss(es) ${ctx()}`);
 

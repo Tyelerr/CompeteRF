@@ -47,6 +47,7 @@ import {
   withRestorePoint,
 } from "../../models/services/chip.engine";
 import { ChipEntry, ChipFormat, ChipState } from "../../models/types/chip.types";
+import { assertChipInvariants, chipSeatedIds } from "./invariants";
 
 // ── deterministic Math.random (the engine shuffles + mints ids with it) ─────────────────────
 const realRandom = Math.random;
@@ -87,53 +88,18 @@ interface Opts {
   shuffle?: boolean;
 }
 
-const seatedIds = (s: ChipState): string[] => {
-  const out: string[] = [];
-  for (const t of s.tables) {
-    if (t.holderId) out.push(t.holderId);
-    if (t.pendingChallengerId) out.push(t.pendingChallengerId);
-    const m = t.matchId ? s.matches.find((x) => x.id === t.matchId) : null;
-    if (m) for (const id of [m.aId, m.bId]) if (id !== t.holderId && id !== t.pendingChallengerId) out.push(id);
-  }
-  return out;
-};
-
 const check = (s: ChipState, o: Opts, step: number, chipsConserved: boolean) => {
   const ctx = `${o.format} n=${o.n} tables=${o.tables} chips=${o.chips} seed=${o.seed} step=${step}`;
-  const field = s.entries.filter((e) => e.checkedIn);
-  for (const e of field) {
-    assert.ok(Number.isInteger(e.chips) && e.chips >= 0, `bad chips ${e.chips} ${ctx}`);
-    if (e.status === "eliminated") assert.equal(e.chips, 0, `eliminated with ${e.chips} chips ${ctx}`);
-    else if (!s.winnerId) assert.ok(e.chips > 0 || s.matches.some((m) => m.status === "in_progress" && (m.aId === e.id || m.bId === e.id)), `alive with 0 chips and not playing ${e.id} ${ctx}`);
-  }
-  assert.equal(new Set(s.queue).size, s.queue.length, `duplicate queue entry ${ctx}`);
-  const seated = seatedIds(s);
-  assert.equal(new Set(seated).size, seated.length, `entry seated twice ${JSON.stringify(seated)} ${ctx}`);
-  for (const id of s.queue) assert.ok(!seated.includes(id), `entry both queued and seated ${id} ${ctx}`);
-  const live = s.matches.filter((m) => m.status === "in_progress");
-  const perTable = new Map<string, number>();
-  for (const m of live) {
-    perTable.set(m.tableId, (perTable.get(m.tableId) ?? 0) + 1);
-    const t = s.tables.find((x) => x.id === m.tableId);
-    assert.ok(t && t.matchId === m.id, `live match ${m.id} not on its table ${ctx}`);
-  }
-  for (const [tid, c] of perTable) assert.equal(c, 1, `table ${tid} has ${c} live matches ${ctx}`);
-  const byId = new Map(s.entries.map((e) => [e.id, e]));
-  for (const id of [...s.queue, ...seated]) assert.notEqual(byId.get(id)?.status, "eliminated", `eliminated ${id} still in play ${ctx}`);
+  assertChipInvariants(s, ctx, { chipsConserved });
   if (!s.winnerId) {
-    const where = new Set([...s.queue, ...seated]);
-    for (const e of field) if (e.status !== "eliminated") assert.ok(where.has(e.id), `alive entry ${e.id} lost (not queued, not seated) ${ctx}`);
     // Dashboard counts reconcile with the records ("9 Remaining · 2 Active Tables · 7 Waiting").
+    const field = s.entries.filter((e) => e.checkedIn);
+    const where = new Set([...s.queue, ...chipSeatedIds(s)]);
     const d = dashboard(s);
     assert.equal(d.playersRemaining, where.size, `Remaining ${d.playersRemaining} != queued+seated ${where.size} ${ctx}`);
     assert.equal(d.playersRemaining + d.eliminated, field.length, `Remaining+Eliminated != field ${ctx}`);
     assert.equal(d.queueCount, s.queue.length);
-    assert.equal(d.activeTables, live.length, `Active Tables ${d.activeTables} != live matches ${live.length} ${ctx}`);
-  }
-  if (chipsConserved) {
-    const lost = field.reduce((a, e) => a + (e.startChips - e.chips), 0);
-    const finished = s.matches.filter((m) => m.status === "finished").length;
-    assert.equal(lost, finished, `chips lost ${lost} != finished matches ${finished} ${ctx}`);
+    assert.equal(d.activeTables, s.matches.filter((m) => m.status === "in_progress").length, `Active Tables ${ctx}`);
   }
 };
 
