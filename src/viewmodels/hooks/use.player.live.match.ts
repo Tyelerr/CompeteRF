@@ -21,6 +21,7 @@ import { CheckInSettings, readCheckInSettings } from "../../utils/check-in-timer
 import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { registrationIdOf } from "../../utils/live-entries";
+import { buildPlayerScorePatch } from "../../utils/player-score";
 
 export interface PlayerLiveMatch {
   tournamentId: number;
@@ -271,29 +272,10 @@ export const usePlayerLiveMatch = (
     const m = hub?.current?.match;
     if (!m) return Promise.resolve(undefined);
 
-    const r1 = m.p1Race ?? m.raceTo ?? null;
-    const r2 = m.p2Race ?? m.raceTo ?? null;
-    const cap = (n: number, race: number | null) =>
-      Math.max(0, Math.min(n, race ?? 999));
-
-    const p1 = m.p1Score ?? 0;
-    const p2 = m.p2Score ?? 0;
-    const newP1 = slot === 1 ? cap(p1 + delta, r1) : p1;
-    const newP2 = slot === 2 ? cap(p2 + delta, r2) : p2;
-    if (newP1 === p1 && newP2 === p2) return Promise.resolve(undefined); // no-op (at cap)
-
-    const reach1 = r1 != null && newP1 >= r1;
-    const reach2 = r2 != null && newP2 >= r2;
-    const done = reach1 || reach2;
-
-    const patch: Partial<MatchLiveState> = {
-      p1Score: newP1,
-      p2Score: newP2,
-      status: done ? "completed" : "in_progress",
-      winner: done ? (reach1 ? 1 : 2) : null,
-      completedAt: done ? new Date().toISOString() : null,
-      result: done ? "normal" : m.result ?? null,
-    };
+    // Scores only — the server rejects participant patches carrying status/startedAt/completedAt
+    // (20260929 submit_match_state); the TD finalizes the match. See src/utils/player-score.ts.
+    const patch = buildPlayerScorePatch(m, slot, delta);
+    if (!patch) return Promise.resolve(undefined); // no-op (at cap)
     return matchStateMutation.mutateAsync({ matchId, patch });
   };
 

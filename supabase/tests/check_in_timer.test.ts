@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildBracketGraph } from "../../src/utils/bracket.double";
+import { buildPlayerScorePatch } from "../../src/utils/player-score";
 
 const ROOT = join(__dirname, "..", "..");
 const read = (f: string) => readFileSync(join(ROOT, "supabase/migrations", f), "utf8");
@@ -160,6 +161,25 @@ test("a participant can still score, and a manager keeps the lifecycle fields", 
   await q("select public.submit_match_state($1, 'W1M1', '{\"status\":\"in_progress\"}'::jsonb)", [T]);
   ms = await matchState();
   assert.equal(ms.status, "in_progress", "managers are unaffected");
+});
+
+test("the Profile +/- score patch (client builder) is accepted for a participant mid-match", async () => {
+  // Regression: the client used to send status/completedAt with every tap, which this RPC
+  // rejects for participants (42501) — every player score tap failed.
+  await setState({ W1M1: { ...assigned(await agoIso(1)), status: "in_progress", startedAt: await agoIso(1) } }, { required: false });
+  await as(uuidFor(M1_REGS[0]));
+  let m: Record<string, number | null> = { p1Score: 0, p2Score: 0, raceTo: 2 };
+  for (const [slot, delta] of [[1, 1], [2, 1], [1, 1], [1, 1]] as [1 | 2, number][]) {
+    const patch = buildPlayerScorePatch(m, slot, delta);
+    if (!patch) continue; // at the race cap: nothing is sent
+    assert.deepEqual(Object.keys(patch).sort(), ["p1Score", "p2Score"]);
+    await q("select public.submit_match_state($1, 'W1M1', $2::jsonb)", [T, JSON.stringify(patch)]);
+    m = { ...m, ...patch };
+  }
+  const ms = await matchState();
+  assert.equal(ms.p1Score, 2);
+  assert.equal(ms.p2Score, 1);
+  assert.equal(ms.status, "in_progress", "a participant never completes the match; the TD finalizes it");
 });
 
 // ── Player Start Match ─────────────────────────────────────────────────────────────────────
