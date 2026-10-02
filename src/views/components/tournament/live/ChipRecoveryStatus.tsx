@@ -9,7 +9,7 @@
 // Presentation only; all behavior lives in the useChipTournament viewmodel.
 
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from "react-native";
 import type { ChipRecoverySnapshot } from "../../../../models/services/chip.local-recovery";
 import type { ChipOfflineMode } from "../../../../models/services/chip.offline-controller";
 import type { ChipRecoveryView } from "../../../../viewmodels/use.chip.tournament";
@@ -206,7 +206,11 @@ export const ChipRecoveryBanner = ({
   localSaveFailed,
   canSyncRecovered,
   onSyncRecovered,
+  statusRowStyle,
 }: {
+  // Web: extra style for the plain "Saved locally · Synced to cloud" status line only
+  // (lets the host align it with its content column). Banners are unaffected.
+  statusRowStyle?: StyleProp<ViewStyle>;
   canResume?: boolean;
   onResume?: () => void;
   unsyncedCount?: number;
@@ -322,7 +326,7 @@ export const ChipRecoveryBanner = ({
   }
   if (cloudSync === "view_only") {
     return (
-      <View style={styles.onlineRow}>
+      <View style={[styles.onlineRow, statusRowStyle]}>
         <Ionicons name="lock-closed-outline" size={webMs(12)} color={COLORS.warning} />
         <Text style={[styles.onlineText, styles.notSyncedText]}>View only — not loaded from your signed-in account · nothing is saved</Text>
       </View>
@@ -337,7 +341,7 @@ export const ChipRecoveryBanner = ({
   const pending = unsyncedCount && cloudSync !== "synced" ? ` (${plural(unsyncedCount, "change")})` : "";
   if (cloudSync === "not_synced" || localSaveFailed) {
     return (
-      <View style={styles.onlineRow}>
+      <View style={[styles.onlineRow, statusRowStyle]}>
         <Ionicons name="alert-circle" size={webMs(12)} color={COLORS.warning} />
         <Text style={[styles.onlineText, styles.notSyncedText]}>
           {local} · {cloudSync === "synced" ? "Synced to cloud" : `NOT synced to cloud yet${pending}`}
@@ -346,7 +350,7 @@ export const ChipRecoveryBanner = ({
     );
   }
   return (
-    <View style={styles.onlineRow}>
+    <View style={[styles.onlineRow, statusRowStyle]}>
       <View style={[styles.onlineDot, cloudSync === "syncing" && styles.syncingDot]} />
       <Text style={styles.onlineText}>
         {local} · {cloudSync === "synced" ? "Synced to cloud" : `Syncing to cloud…${pending}`}

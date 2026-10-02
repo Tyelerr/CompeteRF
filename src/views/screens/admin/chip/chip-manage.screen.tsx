@@ -1655,6 +1655,19 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   }
 
   const { chip, tournament } = vm;
+  // Web embedded live pages: the save/sync status line spans the full-width sticky strip, so
+  // give it the same centered shell + 16px inset as the page content below (the wider
+  // dashboard shell on the two-column Live dashboard) — its right edge then lands on the
+  // content's right edge (Alerts / Queue). Banners and native are unaffected.
+  const statusRowWeb = isWeb && embedded
+    ? {
+        width: "100%" as any,
+        maxWidth: dashTwoCol && embeddedPage === "live-dashboard" ? dashShellMaxW : WEB_MAXW,
+        alignSelf: "center" as const,
+        justifyContent: "flex-end" as const,
+        paddingHorizontal: webSc(SPACING.md),
+      }
+    : undefined;
   // Web local-backup status strip (Online · last backup / VIEWING LOCAL BACKUP read-only /
   // cloud conflict). Pinned above the page content on every page.
   // A newer cloud version was detected (another device saved): shown on web AND native, above
@@ -1690,6 +1703,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
       onKeepLocal={vm.keepLocalBackup}
       onViewDivergent={() => void vm.viewDivergentBackup()}
       onDismissDivergent={vm.dismissDivergentBackup}
+      statusRowStyle={statusRowWeb}
     />
     )
   ) : null;
