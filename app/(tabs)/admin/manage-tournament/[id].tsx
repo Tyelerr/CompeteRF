@@ -3831,22 +3831,20 @@ function ManageTournamentScreen() {
   // that matches the PhaseNav design language. Same onActionsPress handler as native. On
   // wide web it sits at the right end of the Setup / Live / Results row (inNav).
   const actionsInNavRow = isWeb && isChip && !isExternal && winW >= 768;
-  // Chip Live dashboard: end Actions on the MAIN dashboard column's right edge (above the
-  // stats row's Avg Match card), derived from the dashboard's own layout constants — shell
-  // width, 16px padding, side column (320/360/400 at 980/1320/1440px) + 16px gap. The
-  // dashboard sits in the live slot ("matches": wider shell) or, when reached via
-  // onNavigate("dashboard"), inside the page scroll (header shell + 16px padding).
+  // Chip Live dashboard: end Actions on the right edge of the dashboard's right column
+  // (Alerts / Queue), derived from the dashboard's own layout constants — its shell grows
+  // past WEB_MAXW by the side column's extra width (320/360/400 at 980/1320/1440px) and has
+  // 16px padding. The dashboard sits in the live slot ("matches": wider shell) or, when
+  // reached via onNavigate("dashboard"), inside the page scroll (header shell + 16px padding).
   const actionsNavMarginRight = (() => {
     const onDash = isChip && selectedPhase === "live" && (activeTab === "matches" || activeTab === "dashboard");
     if (!actionsInNavRow || !onDash) return SPACING.md;
-    const twoCol = winW >= 980;
-    const sideW = !twoCol ? 0 : winW >= 1440 ? 400 : winW >= 1320 ? 360 : 320;
-    const sideGap = twoCol ? SPACING.md : 0;
+    const sideW = winW >= 1440 ? 400 : winW >= 1320 ? 360 : 320; // = chip-manage dashSideW
     const shellHalf = Math.min(winW, WEB_MAXW) / 2;
     const boxHalf = activeTab === "matches"
-      ? Math.min(winW, twoCol ? WEB_MAXW + (sideW - 320) : WEB_MAXW) / 2
+      ? Math.min(winW, WEB_MAXW + (sideW - 320)) / 2
       : shellHalf - SPACING.md;
-    return shellHalf - (boxHalf - SPACING.md - sideW - sideGap);
+    return shellHalf - (boxHalf - SPACING.md);
   })();
   const renderWebActionsBtn = (inNav: boolean) => (
     <Pressable
