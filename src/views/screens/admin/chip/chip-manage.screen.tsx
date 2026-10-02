@@ -5483,7 +5483,7 @@ ${partner} will become the team captain. The team stays registered and will need
                 </>
               )}
             </View>
-            <View testID="chip-dash-side" style={[styles.dashSide, { width: dashSideW }, WEB_STICKY_SIDE]}>
+            <View style={[styles.dashSide, { width: dashSideW }, WEB_STICKY_SIDE]}>
               {/* Chip Leader card removed on desktop — Standings / Chip Leaders below is the
                   source. chipLeaderEl stays defined for the native single-column layout. */}
               {championEl}
