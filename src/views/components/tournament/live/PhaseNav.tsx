@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
@@ -21,6 +22,14 @@ import { webMs, webSc } from "../../../../utils/scaling";
 
 const CARET = "▾"; // ▾
 const isWeb = Platform.OS === "web";
+
+// Web-only focus-visible: show the focus ring only for keyboard navigation, not after a
+// mouse click (RN-web's Pressable `focused` fires for both). Tracks the last input modality.
+let keyboardModality = false;
+if (isWeb && typeof document !== "undefined") {
+  document.addEventListener("keydown", () => { keyboardModality = true; }, true);
+  document.addEventListener("pointerdown", () => { keyboardModality = false; }, true);
+}
 
 export interface PhaseNavPage {
   key: string;
@@ -88,7 +97,57 @@ export const PhaseNav = ({
 
   return (
     <View style={[styles.row, isWeb && styles.rowWeb]}>
-      {phases.map((p) => {
+      {isWeb && phases.map((p, i) => {
+        // Web/desktop: a segmented navigation control. The whole segment is the dropdown
+        // trigger; no status glyphs; a real chevron (hidden while the phase is locked).
+        const selected = p.key === selectedKey;
+        const prevSelected = i > 0 && phases[i - 1].key === selectedKey;
+        return (
+          <View key={p.key} style={styles.segmentWrap}>
+            {i > 0 && (
+              <View style={[styles.segDivider, (selected || prevSelected) && styles.segDividerHidden]} />
+            )}
+            <Pressable
+              ref={(r) => {
+                refs.current[p.key] = r as unknown as View | null;
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${p.label} menu`}
+              accessibilityState={{ selected, disabled: p.locked, expanded: openKey === p.key }}
+              onPress={() => open(p)}
+              style={(state) => {
+                const { hovered, focused, pressed } = state as typeof state & { hovered?: boolean; focused?: boolean };
+                return [
+                  styles.segment,
+                  !selected && !p.locked && hovered && styles.segmentHover,
+                  !selected && !p.locked && pressed && styles.segmentPressed,
+                  selected && styles.segmentActive,
+                  selected && hovered && styles.segmentActiveHover,
+                  p.locked && styles.segmentLocked,
+                  focused && keyboardModality && styles.segmentFocus,
+                ];
+              }}
+            >
+              <Text
+                allowFontScaling={false}
+                style={[styles.segLabel, selected && styles.onPrimary]}
+                numberOfLines={1}
+              >
+                {p.label}
+              </Text>
+              {!p.locked && (
+                <Ionicons
+                  name="chevron-down"
+                  size={18}
+                  color={selected ? COLORS.white : COLORS.textSecondary}
+                  style={styles.segChevron}
+                />
+              )}
+            </Pressable>
+          </View>
+        );
+      })}
+      {!isWeb && phases.map((p) => {
         const selected = p.key === selectedKey;
         return (
           <TouchableOpacity
@@ -99,8 +158,6 @@ export const PhaseNav = ({
             style={[
               styles.pill,
               selected && styles.pillActive,
-              isWeb && styles.pillWeb,
-              isWeb && selected && styles.pillActiveWeb,
               p.locked && styles.pillLocked,
             ]}
             activeOpacity={0.85}
@@ -118,7 +175,7 @@ export const PhaseNav = ({
             </Text>
             <Text
               allowFontScaling={false}
-              style={[styles.caret, isWeb && styles.caretWeb, selected && styles.onPrimary, p.locked && styles.caretHidden]}
+              style={[styles.caret, selected && styles.onPrimary, p.locked && styles.caretHidden]}
             >
               {CARET}
             </Text>
@@ -142,6 +199,8 @@ export const PhaseNav = ({
                   left: anchor.x,
                   minWidth: Math.max(anchor.width, webSc(190)),
                 },
+                isWeb && styles.menuWeb,
+                isWeb && { minWidth: Math.max(anchor.width, 220) },
               ]}
             >
               {openPhase.pages.map((pg) => {
@@ -150,11 +209,18 @@ export const PhaseNav = ({
                   <View key={pg.key}>
                     {pg.divider && <View style={styles.menuDivider} />}
                     <Pressable
-                      style={({ pressed }) => [
-                        styles.menuItem,
-                        current && styles.menuItemActive,
-                        pressed && styles.menuItemPressed,
-                      ]}
+                      style={(state) => {
+                        const { pressed, hovered, focused } = state as typeof state & { hovered?: boolean; focused?: boolean };
+                        return [
+                          styles.menuItem,
+                          isWeb && styles.menuItemWeb,
+                          isWeb && !current && hovered && styles.menuItemHoverWeb,
+                          current && styles.menuItemActive,
+                          isWeb && current && styles.menuItemActiveWeb,
+                          pressed && styles.menuItemPressed,
+                          isWeb && focused && keyboardModality && styles.menuItemFocusWeb,
+                        ];
+                      }}
                       onPress={() => {
                         setOpenKey(null);
                         onSelectPage(openPhase.key, pg.key);
@@ -167,7 +233,7 @@ export const PhaseNav = ({
                       )}
                       <Text
                         allowFontScaling={false}
-                        style={[styles.menuLabel, current && styles.menuLabelActive]}
+                        style={[styles.menuLabel, isWeb && styles.menuLabelWeb, current && styles.menuLabelActive]}
                         numberOfLines={1}
                       >
                         {pg.label}
@@ -195,33 +261,60 @@ const styles = StyleSheet.create({
     // Match the black page body on web; keep the subtle surface bar on mobile.
     backgroundColor: Platform.OS === "web" ? COLORS.background : COLORS.surface,
   },
-  // Web-only: present the three phases as one segmented control — a rounded track with
-  // inset segments, only the active one filled. Native keeps the individual bordered pills.
+  // Web-only: a desktop segmented navigation control — a dark rectangular track with
+  // three equal segments, subtle dividers, and the active segment filled Compete blue.
+  // Native keeps the individual bordered pills below (styles.pill etc.).
   rowWeb: {
-    alignSelf: "flex-start",
-    // Inset the track's LEFT edge to SPACING.md so it lines up with the header title and
-    // the dashboard content (which both inset md within the same WEB_MAXW shell). The md
-    // must be an outer margin — not inner padding — or the track background would sit
-    // flush-left of the title. Internal pad stays 4 so segments hug the track.
+    // Stretch to the content column but cap the width so it reads as a control, not a
+    // full-width bar. Left edge insets SPACING.md (outer margin) so the track lines up
+    // with the header title and the dashboard content in the same WEB_MAXW shell.
+    alignSelf: "stretch",
+    maxWidth: 540,
     marginHorizontal: SPACING.md,
+    marginVertical: SPACING.xs,
+    height: 46,
+    alignItems: "stretch",
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    gap: 4,
+    borderRadius: 10,
+    paddingHorizontal: 3,
+    paddingTop: 3,
+    paddingBottom: 3,
+    gap: 0,
   },
-  pillWeb: {
-    flex: 0,
-    minWidth: 132,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    paddingVertical: SPACING.sm,
+  segmentWrap: { flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 },
+  segDivider: { width: 1, height: 20, backgroundColor: COLORS.border },
+  segDividerHidden: { backgroundColor: "transparent" },
+  segment: {
+    flex: 1,
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
-    borderRadius: RADIUS.md,
+    borderRadius: 7,
+    cursor: "pointer",
+    transitionProperty: "background-color, box-shadow",
+    transitionDuration: "120ms",
+  } as any,
+  segmentHover: { backgroundColor: COLORS.backgroundCard },
+  segmentPressed: { backgroundColor: COLORS.background },
+  segmentActive: { backgroundColor: COLORS.primary },
+  segmentActiveHover: { backgroundColor: COLORS.primaryDark },
+  segmentLocked: { opacity: 0.45, cursor: "not-allowed" } as any,
+  segmentFocus: {
+    outlineStyle: "none",
+    boxShadow: `0 0 0 2px ${COLORS.primaryLight}`,
+  } as any,
+  segLabel: {
+    fontSize: FONT_SIZES.lg - 1,
+    fontWeight: "700",
+    color: COLORS.text,
+    letterSpacing: 0.2,
   },
-  pillActiveWeb: { backgroundColor: COLORS.primary },
+  segChevron: { marginTop: 1 },
   pill: {
     flex: 1,
     flexDirection: "row",
@@ -245,9 +338,6 @@ const styles = StyleSheet.create({
   onPrimary: { color: COLORS.white },
   label: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
   caret: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "900" },
-  // Web-only: slightly larger caret, vertically centered with the label (lineHeight matches
-  // fontSize so the ▾ glyph doesn't sit high/low). Native caret unchanged.
-  caretWeb: { fontSize: webMs(FONT_SIZES.md), lineHeight: webMs(FONT_SIZES.md), textAlignVertical: "center" as any },
   caretHidden: { opacity: 0 },
 
   backdrop: {
@@ -268,6 +358,26 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
+  // Web-only dropdown polish: squarer card, comfortable 42px rows, hover + focus states.
+  menuWeb: {
+    borderRadius: 10,
+    paddingVertical: SPACING.xs + 2,
+    maxWidth: 300,
+    backgroundColor: COLORS.backgroundCard,
+    borderColor: COLORS.borderLight,
+  },
+  menuItemWeb: {
+    minHeight: 42,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md - 2,
+    marginHorizontal: SPACING.xs + 2,
+    borderRadius: 6,
+    cursor: "pointer",
+  } as any,
+  menuItemHoverWeb: { backgroundColor: COLORS.surface },
+  menuItemActiveWeb: { backgroundColor: COLORS.primary + "26" },
+  menuItemFocusWeb: { outlineStyle: "none", boxShadow: `inset 0 0 0 2px ${COLORS.primaryLight}` } as any,
+  menuLabelWeb: { fontSize: FONT_SIZES.md + 1 },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
