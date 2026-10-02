@@ -3831,6 +3831,53 @@ function ManageTournamentScreen() {
   // that matches the PhaseNav design language. Same onActionsPress handler as native. On
   // wide web it sits at the right end of the Setup / Live / Results row (inNav).
   const actionsInNavRow = isWeb && isChip && !isExternal && winW >= 768;
+  // Wide web: line the Actions button's right edge up with the chip dashboard's right column
+  // (Alerts / Queue) by measuring the rendered layout — the dashboard's shell/padding chain
+  // differs from the header's, so no fixed offset matches every width. Falls back to the
+  // header inset (SPACING.md) when there is no dashboard side column on screen.
+  const phaseNavRowRef = useRef<View | null>(null);
+  const [actionsRightInset, setActionsRightInset] = useState<number | null>(null);
+  useEffect(() => {
+    if (!actionsInNavRow || typeof document === "undefined") {
+      setActionsRightInset(null);
+      return;
+    }
+    let tick: ReturnType<typeof setTimeout> | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let tries = 0;
+    let observed: Element | null = null;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => schedule()) : null;
+    const measure = () => {
+      const row = phaseNavRowRef.current as unknown as HTMLElement | null;
+      const side = document.querySelector('[data-testid="chip-dash-side"]');
+      if (!row || !side) {
+        setActionsRightInset(null);
+        // The embedded dashboard mounts after its data loads — keep looking briefly.
+        if (tries++ < 20) retry = setTimeout(schedule, 250);
+        return;
+      }
+      if (ro && observed !== side) {
+        ro.disconnect();
+        ro.observe(side);
+        ro.observe(row);
+        observed = side;
+      }
+      const inset = Math.round(row.getBoundingClientRect().right - side.getBoundingClientRect().right);
+      setActionsRightInset(inset);
+    };
+    const schedule = () => {
+      if (tick) clearTimeout(tick);
+      tick = setTimeout(measure, 0);
+    };
+    schedule();
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (tick) clearTimeout(tick);
+      if (retry) clearTimeout(retry);
+      window.removeEventListener("resize", schedule);
+      ro?.disconnect();
+    };
+  }, [actionsInNavRow, selectedPhase, activeTab]);
   const renderWebActionsBtn = (inNav: boolean) => (
     <Pressable
       accessibilityRole="button"
@@ -3841,6 +3888,7 @@ function ManageTournamentScreen() {
         return [
           styles.headerActionBtnWeb,
           inNav && styles.headerActionBtnWebInNav,
+          inNav && actionsRightInset != null && { marginRight: actionsRightInset },
           hovered && styles.headerActionBtnWebHover,
           pressed && styles.headerActionBtnWebPressed,
           focused && isKeyboardModality() && styles.headerActionBtnWebFocus,
@@ -9427,7 +9475,7 @@ function ManageTournamentScreen() {
       {!isExternal && (
         actionsInNavRow ? (
           // Wide web: Setup / Live / Results on the left, Actions at the right end of the row.
-          <View style={[styles.webShellCenter, styles.phaseNavRowWeb]}>
+          <View ref={phaseNavRowRef} style={[styles.webShellCenter, styles.phaseNavRowWeb]}>
             <View style={styles.phaseNavRowNavWeb}>
               <PhaseNav
                 phases={navPhases}
