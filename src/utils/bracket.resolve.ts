@@ -169,7 +169,8 @@ export const resolveBracket = (
     .map((n) => resolve(n.id))
     .filter((m): m is ResolvedMatch => !!m);
 
-  // Champion: GF2 winner if a reset happened, otherwise the GF winner.
+  // Champion: GF2 winner if a reset happened, otherwise the GF winner. Single elim has no
+  // grand final — the champion is the winner of the top winners-round match (the final).
   let champion: DrawPlayer | null = null;
   const gf2 = cache.get("GF2");
   const gf = cache.get("GF");
@@ -179,6 +180,12 @@ export const resolveBracket = (
   } else if (gf) {
     const w = winnerOf(gf);
     if (w.decided) champion = w.player;
+  } else if (!hasLosers) {
+    const final = matches.find((m) => m.side === "winners" && m.round === maxWinnersRound);
+    if (final) {
+      const w = winnerOf(final);
+      if (w.decided) champion = w.player;
+    }
   }
 
   return { byId: cache, matches, champion };

@@ -166,6 +166,12 @@ var resolveBracket = (graph, seededPlayers, results, cfg) => {
   } else if (gf) {
     const w = winnerOf(gf);
     if (w.decided) champion = w.player;
+  } else if (!hasLosers) {
+    const final = matches.find((m) => m.side === "winners" && m.round === maxWinnersRound);
+    if (final) {
+      const w = winnerOf(final);
+      if (w.decided) champion = w.player;
+    }
   }
   return { byId: cache, matches, champion };
 };

@@ -351,9 +351,13 @@ export const computeStandings = (matches: LiveMatch[]): StandingEntry[] => {
   // 1) Champion + runner-up from the deciding final.
   let finalMatch: LiveMatch | undefined;
   if (hasGrand) {
-    finalMatch = real
-      .filter((m) => m.side === "grand" && decided(m))
-      .sort((a, b) => b.round - a.round)[0];
+    // The deciding final is the reset (GF2) whenever it is still in the list — buildLiveMatches
+    // drops it only once it is skipped (winners finalist won GF). So while a needed reset is
+    // unplayed nobody is 1st/2nd yet; the GF winner must not be crowned early.
+    const reset = real.find((m) => m.side === "grand" && m.round === 2);
+    const gf = real.find((m) => m.side === "grand" && m.round === 1);
+    const deciding = reset ?? gf;
+    finalMatch = deciding && decided(deciding) ? deciding : undefined;
   } else {
     const winners = real.filter((m) => m.side === "winners");
     const maxR = winners.reduce((a, m) => Math.max(a, m.round), 0);
@@ -389,12 +393,23 @@ export const computeStandings = (matches: LiveMatch[]): StandingEntry[] => {
   // Double elim: the LB final (top round) is 3rd. Single elim: the top winners
   // round is the final (1st/2nd), so blocks start one round below it.
   const topBlockRound = hasLosers ? maxElimRound : maxElimRound - 1;
+  // Entrants = everyone who appears in round 1 of the winners side (a bye shows its player as
+  // p1). Blocks count bye matches, so with byes the last block can run past the field ("17-32nd"
+  // in a 17-player draw); the label is capped at the field size. `place` (lo) is unchanged.
+  const entrants = new Set<string>();
+  for (const m of real) {
+    if (m.side !== "winners" || m.round !== 1) continue;
+    if (m.p1Name) entrants.add(keyOf(m.p1RegId, m.p1Name));
+    if (m.p2Name) entrants.add(keyOf(m.p2RegId, m.p2Name));
+  }
+  const fieldSize = entrants.size;
   const block = new Map<number, { lo: number; label: string }>();
   let place = 3;
   for (let r = topBlockRound; r >= 1; r--) {
     const count = roundCount.get(r) ?? 0;
     if (count <= 0) continue;
-    block.set(r, { lo: place, label: placeRangeLabel(place, place + count - 1) });
+    const hi = fieldSize > 0 ? Math.max(place, Math.min(place + count - 1, fieldSize)) : place + count - 1;
+    block.set(r, { lo: place, label: placeRangeLabel(place, hi) });
     place += count;
   }
 

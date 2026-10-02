@@ -353,12 +353,16 @@ export const buildLiveMatches = (
 // winners-bracket loss routes to the losers bracket and keeps loserToLabel set) as well as
 // grand finals — the resolver decides, not the caller. The champion is never a loser, so they
 // are never in this set (they get their review opportunity at completion instead).
+// A WITHDRAWAL is the exception: the resolver never drops a withdrawn loser (they leave the
+// event), so a winners-side withdrawal in double elim is out even though the static routing
+// still names a losers-bracket slot.
 export const computeEliminatedRegIds = (matches: LiveMatch[]): number[] => {
   const out = new Set<number>();
   for (const m of matches) {
     if (m.empty || m.bye) continue;
     if (m.status !== "completed" || m.winner == null) continue;
-    if (m.loserToLabel != null) continue; // loser still has a path → not eliminated
+    // loser still has a path → not eliminated (unless they withdrew: no drop happens)
+    if (m.loserToLabel != null && m.result !== "withdraw") continue;
     const loserReg = m.winner === 1 ? m.p2RegId : m.p1RegId;
     if (loserReg != null) out.add(loserReg);
   }
