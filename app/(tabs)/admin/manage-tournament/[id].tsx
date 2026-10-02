@@ -175,6 +175,7 @@ import { tournamentService } from "../../../../src/models/services/tournament.se
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
 import { teamService } from "../../../../src/models/services/team.service";
+import { showActionAlert } from "../../../../src/views/components/common/action-alert";
 import { chipService } from "../../../../src/models/services/chip.service";
 import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-lifecycle";
 import { buildReadinessSummary, needsReadinessWarning, blocksLeavingPlayers, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
@@ -1711,7 +1712,8 @@ const RegistrationRow = ({
       opts.push({ text: "Remove Player", style: "destructive", onPress: () => confirmOff("Remove player?", "This removes the player from the tournament registration.", onRemove) });
     }
     opts.push({ text: "Cancel", style: "cancel" });
-    Alert.alert("Actions", getDisplayName(registration, pendingNames), opts);
+    // Up to 5 buttons: Android would drop "Remove Player" / "Cancel" — page them there.
+    showActionAlert("Actions", getDisplayName(registration, pendingNames), opts);
   };
 
   // "Group A · Race to 5" line derived from a Fargo rating (groups mode).

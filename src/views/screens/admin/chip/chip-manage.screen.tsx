@@ -6,6 +6,7 @@
 // timers), Queue, Players (chips/records + buy-back). Results = Standings.
 // Rules in chip.engine.ts; persistence (real tables) in chip.service.ts.
 
+import { showActionAlert } from "../../../components/common/action-alert";
 import { chipEntryValidMatches, chipValidMatches } from "../../../../utils/chip-valid-matches";
 import { naturalCompare } from "../../../../utils/natural-sort";
 import { teamMemberRemovalKind } from "../../../../models/services/chip.team-identity";
@@ -2971,7 +2972,8 @@ ${partner} will become the team captain. The team stays registered and will need
     }
     const link = teamInviteLink(vm.tournament.id, token);
     const msg = teamInviteMessage(e.p1Name, vm.tournament.name, link);
-    Alert.alert("Invite Partner", "Send Player 2 the invite link to join this team.", [
+    // 4 buttons: Android would drop Cancel (and the dialog then can't be dismissed) — paged there.
+    showActionAlert("Invite Partner", "Send Player 2 the invite link to join this team.", [
       {
         text: "Text Invite",
         onPress: () => {
