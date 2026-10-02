@@ -76,6 +76,17 @@ interface RunResult {
 
 const unfinished = (m: LiveMatch) => m.status !== "completed" && !m.bye && !m.empty;
 
+// The draw shuffles with Math.random — seed it so every run (and its failure seed) is reproducible.
+const seededDraw = (players: DrawPlayer[], size: number, seed: number) => {
+  const real = Math.random;
+  Math.random = rng(seed ^ 0x5eed);
+  try {
+    return seedPlayers(players, size);
+  } finally {
+    Math.random = real;
+  }
+};
+
 const runTournament = (o: RunOpts): RunResult => {
   const rand = rng(o.seed);
   const players = playersOf(o.n, rand);
@@ -83,7 +94,7 @@ const runTournament = (o: RunOpts): RunResult => {
   const bracket: any = {
     generatedAt: "2026-09-01T10:00:00.000Z",
     graph: buildBracketGraph(size, o.dbl),
-    seeds: seedPlayers(players, size),
+    seeds: seededDraw(players, size, o.seed),
     doubleElim: o.dbl,
   };
   const tables = tablesOf(o.tables, 1, o.unavailable ?? []);

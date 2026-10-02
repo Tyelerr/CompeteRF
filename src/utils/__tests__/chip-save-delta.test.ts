@@ -214,6 +214,10 @@ test("measure: requests and bytes per common action — full vs delta (report)",
       const deltaBytes = deltaCloud.bytes - b0.b;
       assertCloudIs(deltaCloud, next, `${name} n=${n}`);
       assert.ok(deltaBytes <= fullBytes && deltaReq <= fullReq);
+      // Performance budgets (deterministic: request counts + history cap, never timings).
+      const BUDGET: Record<string, number> = { "move queue item": 6, "record winner": 9, "lock table": 7 };
+      assert.ok(deltaReq <= BUDGET[name], `budget: ${name} n=${n} used ${deltaReq} requests (max ${BUDGET[name]})`);
+      assert.ok((next.restorePoints?.length ?? 0) <= 60, "restore history stays capped");
       void d0;
       const rp = JSON.stringify(next.restorePoints ?? []).length;
       console.log(`SAVE n=${n} ${name}: full ${fullReq} req / ${(fullBytes / 1024).toFixed(0)} KB → delta ${deltaReq} req / ${(deltaBytes / 1024).toFixed(0)} KB (restore points ${(rp / 1024).toFixed(0)} KB, ${next.restorePoints?.length ?? 0} pts, events ${next.events.length})`);
