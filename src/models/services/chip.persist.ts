@@ -16,7 +16,8 @@
 // version CLAIM (UPDATE chip_config SET version = v+1 WHERE tournament_id = X AND version = v).
 // Exactly one of two devices that loaded the same version can win it; the other writes NOTHING
 // and gets a conflict. The old read-then-bump let both pass the pre-check and interleave their
-// writes (one match result lost in 200/200 overlapping trials). With a claim, step 4 is skipped.
+// writes (one match result lost in 200/200 overlapping trials). With a claim, step 4 becomes a
+// second atomic step (finalize) so a board loaded mid-write can never be committed back.
 // Every step is an idempotent snapshot write, so retrying the SAME plan is safe: it never
 // replays a tournament action.
 
@@ -221,7 +222,22 @@ export const executeChipSave = async (
   // nothing else wrote in between). Legacy path: soft-CAS bump after the snapshot.
   if (claimed != null) {
     if (plan.claimKey != null) ownClaims.delete(plan.claimKey);
-    return { version: claimed, conflict: false };
+    // FINALIZE: one more atomic step (claimed -> claimed+1) once the whole snapshot is written.
+    // A device that loaded WHILE this save was mid-write read a half-written board at version
+    // `claimed`; finalizing moves the cloud past it, so that device's next claim fails and it
+    // reloads instead of committing stale rows. If someone claimed our in-progress version first
+    // (they loaded mid-write AND saved before we finished), the writes interleaved: report it.
+    let fin: "claimed" | "changed" | "unsupported";
+    try {
+      fin = await backend.claimVersion!(claimed);
+    } catch {
+      return { version: claimed, conflict: false }; // persisted; a reader may see one stale step
+    }
+    if (fin === "changed") {
+      const live = backend.readVersion ? await backend.readVersion() : null;
+      return { version: live ?? claimed, conflict: true };
+    }
+    return { version: claimed + 1, conflict: false };
   }
   return backend.bumpVersion(plan.expectedVersion);
 };

@@ -199,9 +199,9 @@ for (const m of MUTATIONS) {
       const loser = winner === "A" ? "B" : "A";
       assert.equal(cloud.writesBy[loser] ?? 0, 0, `${ctx}: the rejected device wrote nothing (no partial save)`);
       assert.equal(cloudSnapshot(cloud), snapshotOf(winner === "A" ? A : B), `${ctx}: cloud == winner's snapshot exactly`);
-      assert.equal(cloud.version, 6, `${ctx}: one version step`);
+      assert.equal(cloud.version, 7, `${ctx}: claim + finalize`);
       const ok = winner === "A" ? ra : rb;
-      assert.equal(ok.version, 6);
+      assert.equal(ok.version, 7);
       assert.equal(ok.conflict, false);
     }
   });
@@ -215,9 +215,9 @@ test("the rejected device reloads, redoes its action on the fresh state, and bot
   // Loser reloads (the cloud == winner's state, version 6) and redoes the SAME intent.
   const winnerState = loserIsB ? m.a(board()) : m.b(board());
   const redo = loserIsB ? m.b(winnerState) : m.a(winnerState);
-  const r = await executeChipSave(makeBackend(cloud, "B2", rng(9), { claim: true }), planOf(redo, 6));
+  const r = await executeChipSave(makeBackend(cloud, "B2", rng(9), { claim: true }), planOf(redo, 7));
   assert.equal(r.conflict, false);
-  assert.equal(cloud.version, 7);
+  assert.equal(cloud.version, 9);
   const finished = [...cloud.rows.chip_matches.values()].filter((x) => x.status === "finished").length;
   assert.equal(finished, 2, "both match results are in the cloud — nothing lost, nothing duplicated");
   const chipsLost = [...cloud.rows.chip_entries.values()].reduce((a, e) => a + (3 - Number(e.chips)), 0);
@@ -230,12 +230,12 @@ test("a stale device (loaded before another device advanced) is rejected before 
   const cloud = newCloud();
   seedCloud(cloud, s0);
   const A = MUTATIONS[0].a(s0);
-  assert.equal((await executeChipSave(makeBackend(cloud, "A", rng(1), { claim: true }), planOf(A, 5))).version, 6);
+  assert.equal((await executeChipSave(makeBackend(cloud, "A", rng(1), { claim: true }), planOf(A, 5))).version, 7);
   const staleB = MUTATIONS[1].b(s0); // still thinks version 5
   const r = await executeChipSave(makeBackend(cloud, "B", rng(2), { claim: true }), planOf(staleB, 5));
   assert.equal(r.aborted, true);
   assert.equal(r.conflict, true);
-  assert.equal(r.version, 6, "reports the cloud version to reload");
+  assert.equal(r.version, 7, "reports the cloud version to reload");
   assert.equal(cloud.writesBy.B ?? 0, 0);
   assert.equal(cloudSnapshot(cloud), snapshotOf(A));
 });
@@ -251,7 +251,7 @@ test("a retry after a failed write keeps this device's own claim (no false confl
   assert.equal(cloud.version, 6, "claimed before the failure");
   const retry = await executeChipSave(be, planOf(A, 5)); // the VM rebuilds with the SAME baseline
   assert.equal(retry.conflict, false, "own retry is not a conflict");
-  assert.equal(retry.version, 7);
+  assert.equal(retry.version, 8);
   assert.equal(cloudSnapshot(cloud), snapshotOf(A));
   // (2) another device claimed in between → the retry's conflict is real
   resetOwnChipClaimsForTests();
@@ -276,7 +276,7 @@ test("a claim that errors (network) writes nothing and is retried, never silentl
   const A = MUTATIONS[0].a(s0);
   await assert.rejects(executeChipSave(be, planOf(A, 5)), (e: any) => e.stage === "version_claim");
   assert.equal(cloud.writesBy.A ?? 0, 0);
-  assert.equal((await executeChipSave(be, planOf(A, 5))).version, 6);
+  assert.equal((await executeChipSave(be, planOf(A, 5))).version, 7);
 });
 
 test("same-device rapid double tap: the serialized save queue lands both, in order, no conflict", async () => {
@@ -298,7 +298,35 @@ test("same-device rapid double tap: the serialized save queue lands both, in ord
   assert.equal(await q.flush(), true);
   assert.ok(conflicts.every((c) => c === false), `no self-conflict: ${conflicts}`);
   assert.equal(cloudSnapshot(cloud), snapshotOf(s2), "newest state persisted");
-  assert.ok(version >= 6);
+  assert.ok(version >= 7);
+});
+
+test("a device that LOADED while another device's save was mid-write can never commit that half-written board", async () => {
+  for (let trial = 0; trial < 40; trial++) {
+    const s0 = board();
+    const cloud = newCloud();
+    seedCloud(cloud, s0);
+    const A = MUTATIONS[0].a(s0);
+    // B loads (version + rows) at a seeded point DURING A's save.
+    let loadedVersion: number | null = null;
+    let loadedRows = "";
+    const be = makeBackend(cloud, "A", rng(500 + trial), { claim: true });
+    const realSync = be.syncRows.bind(be);
+    let n = 0;
+    const loadAt = trial % 2; // after the entries / matches section (tables not yet written)
+    be.syncRows = async (tb, rows, ids) => {
+      await realSync(tb, rows, ids);
+      if (n++ === loadAt) { loadedVersion = cloud.version; loadedRows = cloudSnapshot(cloud); }
+    };
+    await executeChipSave(be, planOf(A, 5));
+    assert.notEqual(loadedVersion, null);
+    assert.notEqual(loadedRows, snapshotOf(A), `trial ${trial}: B really saw a half-written board`);
+    // B acts on what it loaded (a queue move) and saves with that baseline → must be refused.
+    const staleB = reorderQueue(s0, s0.queue[0], "bottom");
+    const r = await executeChipSave(makeBackend(cloud, "B", rng(900 + trial), { claim: true }), planOf(staleB, loadedVersion!));
+    assert.equal(r.aborted, true, `trial ${trial} (seed ${500 + trial}): mid-write load rejected`);
+    assert.equal(cloudSnapshot(cloud), snapshotOf(A), "A's save stays intact");
+  }
 });
 
 test("reconnect then mutate: after reloading the newer cloud version the next save succeeds", async () => {
@@ -311,5 +339,6 @@ test("reconnect then mutate: after reloading the newer cloud version the next sa
   const B = MUTATIONS[1].b(A);
   const r = await executeChipSave(makeBackend(cloud, "B", rng(8), { claim: true }), planOf(B, cloud.version));
   assert.equal(r.conflict, false);
+  assert.equal(cloud.version, 9);
   assert.equal(cloudSnapshot(cloud), snapshotOf(B));
 });
