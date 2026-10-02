@@ -248,11 +248,20 @@ export interface QueuePin {
 // Typed operations for the elim_live_apply RPC (supabase/migrations/
 // 20260922120000_elim_live_apply.sql). The server validates every op under a row
 // lock and changes only the targeted match / queue keys — never the whole blob.
+// The match state a device ACTED ON (stale-write precondition). The server refuses the op with
+// 'stale_state' if the authoritative match moved since (supabase/pending/20261017120000_elim_
+// server_guards.sql); servers without that guard ignore it.
+export interface MatchExpect {
+  status?: MatchStatus;
+  winner?: 1 | 2 | null;
+  tableId?: number | null;
+}
+
 export type ElimLiveOp =
   | { op: "assign"; matchId: string; tableId: number; start?: boolean; ifUnassigned?: boolean }
   | { op: "start"; matchId: string }
-  | { op: "unassign"; matchId: string }
-  | { op: "patch_match"; matchId: string; set: Partial<MatchLiveState> }
+  | { op: "unassign"; matchId: string; expect?: MatchExpect }
+  | { op: "patch_match"; matchId: string; set: Partial<MatchLiveState>; expect?: MatchExpect }
   | {
       op: "set_queue";
       queueOrder?: string[];
@@ -275,6 +284,10 @@ export type ElimLiveOpError =
   | "invalid_field"
   | "invalid_value"
   | "invalid_transition"
+  | "stale_state"
+  | "match_not_ready"
+  | "player_busy"
+  | "tournament_finished"
   | "invalid_queue_order"
   | "invalid_queue_pins"
   | "invalid_mode"

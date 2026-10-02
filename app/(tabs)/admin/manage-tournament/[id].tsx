@@ -165,7 +165,7 @@ import {
   bracketLocation,
   AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
-import { buildAssignOps, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { buildAssignOps, expectOf, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
 import { matchNotificationService } from "../../../../src/models/services/match-notification.service";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
@@ -4277,7 +4277,9 @@ function ManageTournamentScreen() {
   const runMatchPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
     const prev = liveMatches.find((m) => m.id === matchId) ?? null;
     const prevLiveState = hub.tournament?.live_state;
-    await hub.setMatchState({ matchId, patch });
+    // Stale-write precondition: the state this screen showed when the TD acted. A co-TD's newer
+    // result/reset makes the server refuse instead of silently overwriting it.
+    await hub.setMatchState({ matchId, patch, ...(prev ? { expect: expectOf(prev) } : {}) });
     logMatchDerivedEvent(prev, patch, prevLiveState);
     refreshEvents();
     // Table set/changed from the sheet → assignment notification (server dedupes; a no-op
@@ -4621,11 +4623,15 @@ function ManageTournamentScreen() {
   // at the front of the queue ("next available"). The server stamps clearedAt so a server-side
   // Auto Assign run doesn't hand the same table straight back (src/utils/clear-table.ts).
   const handleClearTable = async (matchId: string) => {
+    const shown = liveMatches.find((m) => m.id === matchId);
     const ops = buildClearTableOps({
       matchId,
       mode: hub.autoAssignMode as AutoAssignMode,
       queueOrder: hub.queueOrder,
-    });
+    }).map((op) =>
+      // Clear Table only applies to the not-started match this screen showed on that table.
+      op.op === "unassign" && shown ? { ...op, expect: { status: shown.status, tableId: shown.tableId } } : op,
+    );
     try {
       const results = await runLiveOps(
         ops.map((op) => ({

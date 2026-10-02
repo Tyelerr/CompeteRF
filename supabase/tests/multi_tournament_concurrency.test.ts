@@ -118,6 +118,8 @@ before(async () => {
   await db.exec(M2);
   await db.exec(M3);
   await db.exec(M4);
+  // MTC_GUARDS=1: also load the pending elimination server guards (stale-write, playability, finished).
+  if (process.env.MTC_GUARDS) await db.exec(readFileSync(join(ROOT, "supabase/pending/20261017120000_elim_server_guards.sql"), "utf8"));
   await db.exec(SUBMIT);
   await db.exec(`
     insert into vault.decrypted_secrets values

@@ -21,6 +21,7 @@ import {
   ElimLiveApplyResponse,
   ElimLiveOp,
   GeneratedBracket,
+  MatchExpect,
   MatchLiveState,
   PrizePoolConfig,
   QueuePin,
@@ -363,8 +364,13 @@ export const useManageTournament = (tournamentId?: number) => {
   // flips live_state → in_progress on the first real start and stamps a first start with
   // server time (never the device clock). Rejections throw with the server's reason.
   const setMatchStateMutation = useMutation({
-    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState> }) =>
-      applyOneLiveOp({ op: "patch_match", matchId: vars.matchId, set: vars.patch }),
+    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState>; expect?: MatchExpect }) =>
+      applyOneLiveOp({
+        op: "patch_match",
+        matchId: vars.matchId,
+        set: vars.patch,
+        ...(vars.expect ? { expect: vars.expect } : {}),
+      }),
     onSettled: invalidateTournament,
   });
 

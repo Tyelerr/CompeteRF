@@ -8,6 +8,7 @@
 import {
   ElimLiveOp,
   ElimLiveOpResult,
+  MatchExpect,
   MatchLiveState,
   TournamentLiveSettings,
 } from "../models/types/tournament-settings.types";
@@ -65,7 +66,19 @@ const ERROR_TEXT: Record<string, string> = {
   no_table: "no table assigned",
   unknown_match: "match not in this bracket",
   invalid_transition: "not a valid result",
+  stale_state: "this match changed on another device — the screen has refreshed; check it and try again",
+  match_not_ready: "both players aren't known yet",
+  player_busy: "a player is already playing another match",
+  tournament_finished: "the tournament is finished",
 };
+
+// The precondition a TD action carries: exactly what this device showed for the match when the
+// TD acted (status / winner / table). See MatchExpect.
+export const expectOf = (m: {
+  status: MatchLiveState["status"];
+  winner: 1 | 2 | null;
+  tableId: number | null;
+}): MatchExpect => ({ status: m.status, winner: m.winner ?? null, tableId: m.tableId ?? null });
 
 export const liveOpErrorText = (code: string | undefined): string =>
   (code && ERROR_TEXT[code]) || "could not be saved";

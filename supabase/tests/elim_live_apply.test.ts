@@ -828,3 +828,12 @@ test("Reopen: a finished match's table given to another match → reopen carryin
   assert.equal((await ms(T)).W1M1.status, "in_progress");
   assert.equal((await ms(T)).W1M1.tableId, 71);
 });
+
+// ── Forward compatibility: the app now sends a stale-write precondition ('expect') ──────────
+test("ops carrying 'expect' are accepted (ignored) by the CURRENT server — the client can ship first", async () => {
+  await as(U.td);
+  await reset(T, { W1M1: { status: "in_progress", tableId: 71, startedAt: "2026-09-01T10:00:00.000Z" } });
+  const r = await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { status: "completed", winner: 1 }, expect: { status: "in_progress", winner: null, tableId: 71 } }]);
+  assert.equal(r.results[0].ok, true);
+  assert.equal((await ms(T)).W1M1.winner, 1);
+});
