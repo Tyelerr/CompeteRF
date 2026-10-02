@@ -3,10 +3,11 @@
 // holds the working ChipState locally, auto-saves changes (debounced), and exposes
 // Setup actions. Rules live in chip.engine.ts; persistence in chip.service.ts.
 
-import { trackChipSave, waitForChipSaves } from "../models/services/chip.save-tracker";
+import { chipSavesInFlight, trackChipSave, waitForChipSaves } from "../models/services/chip.save-tracker";
+import { canProbeChipVersion, chipVersionAction, CHIP_TD_VERSION_POLL_MS } from "../utils/chip-version-sync";
 import { chipAutoSaveNeeded, healLoadedChip, loadRepairChanged } from "../models/services/chip.load-heal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { chipService, ChipResultRow, ChipTournamentBundle, CHIP_APPLY_ENABLED } from "../models/services/chip.service";
 import { analyticsService } from "../models/services/analytics.service";
 import { buildSaveFailureLog } from "../models/services/chip.persist";
@@ -944,6 +945,61 @@ export const useChipTournament = (
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+
+  // Multi-TD freshness (src/utils/chip-version-sync.ts): probe chip_config.version every few
+  // seconds and on return to the foreground / visible tab; when ANOTHER device has saved, run the
+  // existing guarded silent load. No probe while this device saves or holds unsaved edits.
+  useEffect(() => {
+    if (!id || recoveryOnly) return;
+    let stopped = false;
+    let inFlight = false;
+    const probe = async () => {
+      if (stopped || inFlight) return;
+      const c = chipRef.current;
+      const q = saveQueueRef.current?.tid === id ? saveQueueRef.current.queue : null;
+      const appActive =
+        Platform.OS === "web"
+          ? typeof document === "undefined" || document.visibilityState !== "hidden"
+          : AppState.currentState === "active";
+      const gate = {
+        loaded: loadedRef.current,
+        started: !!c?.startedAt,
+        finished: !!c?.finishedAt,
+        online: offlineModeRef.current === "online",
+        cloudChanged: cloudChangedRef.current,
+        recoveryActive: recoveryLockRef.current.isActive(),
+        queuePaused: !!q?.isPaused(),
+        saving: !!q?.isSaving() || chipSavesInFlight(id) > 0,
+        hasUnsaved: !!q?.hasUnsaved(),
+        pendingDebounce: !!saveTimer.current || !!pendingSaveRef.current,
+        appActive,
+      };
+      if (!canProbeChipVersion(gate)) return;
+      inFlight = true;
+      try {
+        const live = await chipService.readChipVersion(id);
+        if (!stopped && chipVersionAction(live, versionRef.current) === "reload") {
+          await loadRef.current?.({ silent: true });
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(() => void probe(), CHIP_TD_VERSION_POLL_MS);
+    const appSub = AppState.addEventListener("change", (s) => {
+      if (s === "active") void probe();
+    });
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") void probe();
+    };
+    if (Platform.OS === "web" && typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      appSub.remove();
+      if (Platform.OS === "web" && typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [id, recoveryOnly]);
 
   // Debounced auto-save whenever the chip blob changes (after the initial load). The
   // latest state is stashed in pendingSaveRef so flushSave() (before a silent reload) can
