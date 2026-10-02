@@ -154,7 +154,7 @@ import {
   queueModePayload,
 } from "../../../../src/utils/queue-settings";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
-import { buildLiveMatches, computeEliminatedRegIds, formatClock, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
+import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, formatClock, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
   buildQueueEntries,
   computeReadyAtMap,
@@ -8456,7 +8456,8 @@ function ManageTournamentScreen() {
       .map((m) => (new Date(m.completedAt as string).getTime() - new Date(m.startedAt as string).getTime()) / 60000)
       .filter((d) => d >= 0);
     const kpis: DashboardKpis = {
-      playersRemaining: Math.max(0, readyPlayers.length - eliminated),
+      // Drawn field minus eliminated (shared with the spectator KPIs); pre-draw: Ready count.
+      playersRemaining: elimPlayersRemaining(hub.bracket, liveMatches) ?? Math.max(0, readyPlayers.length - eliminated),
       activeMatches: liveMatches.filter((m) => m.status === "in_progress").length,
       waiting: entries.length,
       tablesInUse: hub.tables.filter((t) => tableOccupancy[t.id]).length,
@@ -8646,8 +8647,8 @@ function ManageTournamentScreen() {
               onViewMessage={(m, slot) => setIssueSheet({ match: m, slot })}
               timerFor={timerFor}
               onTimerPress={openReview}
-              playersTotal={readyPlayers.length}
-              playersRemaining={readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
+              playersTotal={hub.bracket?.players ?? readyPlayers.length}
+              playersRemaining={elimPlayersRemaining(hub.bracket, liveMatches) ?? readyPlayers.length - computeEliminatedRegIds(liveMatches).length}
             />
             {dashboardSheet && (
               <MatchActionsModal

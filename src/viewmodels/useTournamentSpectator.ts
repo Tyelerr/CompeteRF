@@ -24,6 +24,7 @@ import { applyPinsToTier } from "../utils/queue-pins";
 import {
   buildLiveMatches,
   computeEliminatedRegIds,
+  elimPlayersRemaining,
   LiveMatch,
 } from "../utils/match.utils";
 import {
@@ -261,7 +262,11 @@ export const useTournamentSpectator = (tournamentId?: number) => {
         .map((m) => m.tableId as number),
     );
     return {
-      playersRemaining: players.filter((p) => !p.eliminated).length,
+      // Drawn field minus eliminated — the SAME definition as the TD dashboard (registrations
+      // that never made the draw are not "remaining"); pre-draw: registered and not out.
+      playersRemaining:
+        elimPlayersRemaining(tournament?.live_settings?.bracket ?? null, matches) ??
+        players.filter((p) => !p.eliminated).length,
       activeMatches: matches.filter(
         (m) => m.status === "in_progress" && !m.bye && !m.empty,
       ).length,
@@ -269,7 +274,7 @@ export const useTournamentSpectator = (tournamentId?: number) => {
       waiting: upNext.length,
       matchesPlayed: stats.matchesCompleted,
     };
-  }, [matches, players, upNext, stats]);
+  }, [matches, players, upNext, stats, tournament?.live_settings?.bracket]);
 
   // ── Payouts (authoritative — replicates the admin PrizePoolView inputs) ──────
   // The saved prize-pool config + derived pools, computed with the SAME shared

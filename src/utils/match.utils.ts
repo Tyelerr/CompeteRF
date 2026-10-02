@@ -412,3 +412,17 @@ export const formatClock = (totalSeconds: number): string => {
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 };
+
+// "Players remaining" for an elimination event — ONE definition for the TD dashboard and the
+// spectator KPIs: the drawn field (bracket seeds) minus everyone the engine has eliminated.
+// Registrations that never made the draw (approved but not checked in, later no-shows) are not
+// part of the field. Before a draw there is no field yet → null (callers keep their own count).
+export const elimPlayersRemaining = (
+  bracket: { seeds?: ({ registrationId: number } | null)[] | null } | null | undefined,
+  matches: LiveMatch[],
+): number | null => {
+  const seeds = bracket?.seeds;
+  if (!seeds || !seeds.some(Boolean)) return null;
+  const elim = new Set(computeEliminatedRegIds(matches));
+  return seeds.filter((p): p is { registrationId: number } => !!p && !elim.has(p.registrationId)).length;
+};

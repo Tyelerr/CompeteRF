@@ -120,6 +120,12 @@ const check = (s: ChipState, o: Opts, step: number, chipsConserved: boolean) => 
   if (!s.winnerId) {
     const where = new Set([...s.queue, ...seated]);
     for (const e of field) if (e.status !== "eliminated") assert.ok(where.has(e.id), `alive entry ${e.id} lost (not queued, not seated) ${ctx}`);
+    // Dashboard counts reconcile with the records ("9 Remaining · 2 Active Tables · 7 Waiting").
+    const d = dashboard(s);
+    assert.equal(d.playersRemaining, where.size, `Remaining ${d.playersRemaining} != queued+seated ${where.size} ${ctx}`);
+    assert.equal(d.playersRemaining + d.eliminated, field.length, `Remaining+Eliminated != field ${ctx}`);
+    assert.equal(d.queueCount, s.queue.length);
+    assert.equal(d.activeTables, live.length, `Active Tables ${d.activeTables} != live matches ${live.length} ${ctx}`);
   }
   if (chipsConserved) {
     const lost = field.reduce((a, e) => a + (e.startChips - e.chips), 0);

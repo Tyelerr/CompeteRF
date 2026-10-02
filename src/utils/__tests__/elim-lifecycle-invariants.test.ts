@@ -22,7 +22,7 @@ import { AutoAssignMode, MatchLiveState } from "../../models/types/tournament-se
 import { buildBracketGraph } from "../bracket.double";
 import { resolveBracket, MatchResult } from "../bracket.resolve";
 import { DrawPlayer, RaceConfig, recommendedBracketSize, seedPlayers } from "../bracket.utils";
-import { buildLiveMatches, computeEliminatedRegIds, LiveMatch } from "../match.utils";
+import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch } from "../match.utils";
 import { planAutoAssignFromState } from "../auto-assign";
 import { computeStandings } from "../tournament.stats";
 
@@ -304,4 +304,14 @@ test("standings place labels never run past the field size when byes pad the bra
         assert.ok(e.place <= n);
       }
     }
+});
+
+test("Players Remaining = drawn field minus eliminated (TD dashboard + spectator share it)", () => {
+  const seeds = Array.from({ length: 8 }, (_, i) => (i < 6 ? { registrationId: i + 1, name: `P${i + 1}`, fargo: 500 } : null));
+  const bracket: any = { graph: buildBracketGraph(8, true), seeds };
+  assert.equal(elimPlayersRemaining(null, []), null, "no draw → caller keeps its own count");
+  assert.equal(elimPlayersRemaining(bracket, buildLiveMatches(bracket, {}, [], "9-ball", CFG)), 6);
+  const r = runTournament({ n: 13, dbl: true, tables: 3, mode: "balanced", seed: 4711 });
+  const drawn: any = { seeds: Array.from(new Set(r.matches.flatMap((m) => [m.p1RegId, m.p2RegId]).filter((x): x is number => x != null))).map((id) => ({ registrationId: id })) };
+  assert.equal(elimPlayersRemaining(drawn, r.matches), 1, "only the champion remains at the end");
 });
