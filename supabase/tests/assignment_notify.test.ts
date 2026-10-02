@@ -276,3 +276,33 @@ test("the deep-link builder and the app parser agree (one format)", () => {
     tournamentId: 42, matchId: "GF2", assignedAt: "2026-09-22T15:00:00.000Z", action: "check_in",
   });
 });
+
+// ── KNOWN GAP (documented, 2026-10 hardening): delivery is AT-MOST-ONCE ─────────────────────
+// The dedupe claim is written BEFORE the in-app row and the push. If the invocation dies in
+// between (Edge Function timeout / crash), the claim stays with notification_id = NULL and every
+// later invocation for the same assignment reports "duplicate" — the notification is never sent.
+// Proposed fix (needs a migration + redeploying notify-match-assigned AND auto-assign-run): treat
+// a claim with notification_id NULL older than ~60s as reclaimable (atomic UPDATE … RETURNING),
+// key the in-app row by the claim id (unique) so a retry can't duplicate it, and let the existing
+// per-minute sweep re-drive such claims. When that ships, this test must flip to "sent on retry".
+test("KNOWN GAP: a crash after the dedupe claim loses that player's notification for good", async () => {
+  seed("Test 2 elim 1", { [MATCH_A]: assign(38, "2026-09-22T15:00:00.000Z") });
+  const admin = fakeAdmin(db) as any;
+  const realFrom = admin.from;
+  let crashed = false;
+  admin.from = (t: string) => {
+    if (t === "notifications" && !crashed) {
+      crashed = true;
+      throw new Error("edge function killed (timeout)"); // dies right after claiming
+    }
+    return realFrom(t);
+  };
+  await assert.rejects(notifyMatchAssignment(admin, TID, MATCH_A));
+  assert.equal(db.match_assignment_notifications.length, 1, "claim written");
+  assert.equal(db.match_assignment_notifications[0].notification_id ?? null, null, "…but nothing delivered");
+  const retry = await notifyMatchAssignment(fakeAdmin(db) as any, TID, MATCH_A);
+  const firstPlayer = db.match_assignment_notifications[0].recipient_id_auto;
+  const r = retry.results.find((x) => 500 + (firstPlayer - 100) === x.registrationId);
+  assert.equal(r?.status, "duplicate", "the retry treats the dead claim as already handled");
+  assert.equal(db.notifications.some((n) => n.user_id === firstPlayer), false, "that player never gets it");
+});
