@@ -3827,6 +3827,30 @@ function ManageTournamentScreen() {
   // Actions modal from anywhere in the manager. The modal lives inside the embedded
   // chip screen, so on pages that don't render it (Settings / Prize Pool) we hop to
   // the live/results view first — the modal then appears when that page mounts.
+  // Web/desktop Actions trigger: a dark secondary command button (no glyph, real chevron)
+  // that matches the PhaseNav design language. Same onActionsPress handler as native. On
+  // wide web it sits at the right end of the Setup / Live / Results row (inNav).
+  const actionsInNavRow = isWeb && isChip && !isExternal && winW >= 768;
+  const renderWebActionsBtn = (inNav: boolean) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Tournament actions"
+      onPress={onActionsPress}
+      style={(state) => {
+        const { hovered, focused, pressed } = state as typeof state & { hovered?: boolean; focused?: boolean };
+        return [
+          styles.headerActionBtnWeb,
+          inNav && styles.headerActionBtnWebInNav,
+          hovered && styles.headerActionBtnWebHover,
+          pressed && styles.headerActionBtnWebPressed,
+          focused && isKeyboardModality() && styles.headerActionBtnWebFocus,
+        ];
+      }}
+    >
+      <Text allowFontScaling={false} style={styles.headerActionTextWeb}>Actions</Text>
+      <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
+    </Pressable>
+  );
   const onActionsPress = () => {
     if (!isChip) {
       setActionsOpen(true);
@@ -9370,25 +9394,9 @@ function ManageTournamentScreen() {
           </View>
         </View>
         {isChip && isWeb ? (
-          // Web/desktop: a dark secondary command button (no glyph, real chevron) that
-          // matches the PhaseNav design language. Same onActionsPress handler as native.
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Tournament actions"
-            onPress={onActionsPress}
-            style={(state) => {
-              const { hovered, focused, pressed } = state as typeof state & { hovered?: boolean; focused?: boolean };
-              return [
-                styles.headerActionBtnWeb,
-                hovered && styles.headerActionBtnWebHover,
-                pressed && styles.headerActionBtnWebPressed,
-                focused && isKeyboardModality() && styles.headerActionBtnWebFocus,
-              ];
-            }}
-          >
-            <Text allowFontScaling={false} style={styles.headerActionTextWeb}>Actions</Text>
-            <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
-          </Pressable>
+          // Web: on wide screens the Actions button lives in the phase-nav row (below);
+          // narrow web keeps it here in the header row.
+          actionsInNavRow ? null : renderWebActionsBtn(false)
         ) : isChip ? (
           // Native: compact dark secondary command button (no glyph) — same family as the
           // web button; same onActionsPress handler / Tournament Actions modal.
@@ -9417,15 +9425,31 @@ function ManageTournamentScreen() {
       {/* Lifecycle navigation — Setup / Live / Results phase dropdowns. External
           tournaments have only the details page, so no phase nav is shown. */}
       {!isExternal && (
-        <View style={isWeb ? styles.webShellCenter : undefined}>
-          <PhaseNav
-            phases={navPhases}
-            selectedKey={selectedPhase}
-            activePageKey={activeTab}
-            onSelectPage={handleSelectPage}
-            onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
-          />
-        </View>
+        actionsInNavRow ? (
+          // Wide web: Setup / Live / Results on the left, Actions at the right end of the row.
+          <View style={[styles.webShellCenter, styles.phaseNavRowWeb]}>
+            <View style={styles.phaseNavRowNavWeb}>
+              <PhaseNav
+                phases={navPhases}
+                selectedKey={selectedPhase}
+                activePageKey={activeTab}
+                onSelectPage={handleSelectPage}
+                onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
+              />
+            </View>
+            {renderWebActionsBtn(true)}
+          </View>
+        ) : (
+          <View style={isWeb ? styles.webShellCenter : undefined}>
+            <PhaseNav
+              phases={navPhases}
+              selectedKey={selectedPhase}
+              activePageKey={activeTab}
+              onSelectPage={handleSelectPage}
+              onLockedPress={(p) => handlePhasePress(p as PhaseKey)}
+            />
+          </View>
+        )
       )}
 
       {(!isChip &&
@@ -9920,6 +9944,11 @@ const styles = StyleSheet.create({
     transitionProperty: "background-color, border-color, box-shadow",
     transitionDuration: "120ms",
   } as any,
+  // Wide web: Actions at the right end of the phase-nav row, right edge aligned with the
+  // header's SPACING.md inset; no negative header margins there.
+  headerActionBtnWebInNav: { marginVertical: 0, marginRight: SPACING.md },
+  phaseNavRowWeb: { flexDirection: "row", alignItems: "center" },
+  phaseNavRowNavWeb: { flex: 1, minWidth: 0 },
   headerActionBtnWebHover: { backgroundColor: COLORS.backgroundCard, borderColor: COLORS.primary },
   headerActionBtnWebPressed: { backgroundColor: COLORS.background },
   headerActionBtnWebFocus: { outlineStyle: "none", boxShadow: `0 0 0 2px ${COLORS.primaryLight}` } as any,

@@ -5363,7 +5363,7 @@ ${partner} will become the team captain. The team stays registered and will need
 
     const chipLeadersEl = (
       <View onLayout={(e) => { leadersYRef.current = e.nativeEvent.layout.y; }}>
-        <DashSection tightGap icon="trophy-outline" title="Chip Leaders" collapsible open={standingsOpen} onToggle={() => setStandingsOpen((v) => !v)} action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => { if (!isWeb && !standingsOpen) { setStandingsOpen(true); setShowFullStandings(true); } else setShowFullStandings((v) => !v); }} />}>
+        <DashSection tightGap icon="trophy-outline" title="Chip Leaders" collapsible open={standingsOpen} onToggle={() => setStandingsOpen((v) => !v)} action={isWeb ? undefined : <HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => { if (!standingsOpen) { setStandingsOpen(true); setShowFullStandings(true); } else setShowFullStandings((v) => !v); }} />}>
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
               <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
