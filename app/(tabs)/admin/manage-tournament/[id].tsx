@@ -136,6 +136,8 @@ import { PayoutsView } from "../../../../src/views/components/tournament/live/Pa
 import { SettingsTemplates } from "../../../../src/views/components/tournament/SettingsTemplates";
 import { useSettingsTemplates } from "../../../../src/viewmodels/hooks/use.settings.templates";
 import { PhaseNav } from "../../../../src/views/components/tournament/live/PhaseNav";
+import { Ionicons } from "@expo/vector-icons";
+import { isKeyboardModality } from "../../../../src/utils/keyboard-modality";
 import { ChipManageScreen, ChipBodyPage } from "../../../../src/views/screens/admin/chip/chip-manage.screen";
 import { useChipLocalBackupExists } from "../../../../src/viewmodels/hooks/use.chip.local.backup";
 import { buildClearTableOps } from "../../../../src/utils/clear-table";
@@ -9367,7 +9369,27 @@ function ManageTournamentScreen() {
             </Text>
           </View>
         </View>
-        {isChip ? (
+        {isChip && isWeb ? (
+          // Web/desktop: a dark secondary command button (no glyph, real chevron) that
+          // matches the PhaseNav design language. Same onActionsPress handler as native.
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tournament actions"
+            onPress={onActionsPress}
+            style={(state) => {
+              const { hovered, focused, pressed } = state as typeof state & { hovered?: boolean; focused?: boolean };
+              return [
+                styles.headerActionBtnWeb,
+                hovered && styles.headerActionBtnWebHover,
+                pressed && styles.headerActionBtnWebPressed,
+                focused && isKeyboardModality() && styles.headerActionBtnWebFocus,
+              ];
+            }}
+          >
+            <Text allowFontScaling={false} style={styles.headerActionTextWeb}>Actions</Text>
+            <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
+          </Pressable>
+        ) : isChip ? (
           <TouchableOpacity style={styles.headerActionBtn} onPress={onActionsPress}>
             <Text allowFontScaling={false} style={styles.headerActionText}>⚡ Actions</Text>
           </TouchableOpacity>
@@ -9858,6 +9880,29 @@ const styles = StyleSheet.create({
   placeholderSpace: { width: webSc(50) },
   headerActionBtn: { backgroundColor: COLORS.primary, borderRadius: webSc(RADIUS.md), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
   headerActionText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  // Web-only Actions command button — same surface/border/radius family as the web PhaseNav
+  // track, but a standalone bordered button (not a segment). Negative vertical margin keeps
+  // the header row at the title's height so the 40px button doesn't push the page down.
+  headerActionBtnWeb: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    height: 40,
+    marginVertical: -6,
+    paddingLeft: SPACING.md,
+    paddingRight: SPACING.sm + 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface,
+    cursor: "pointer",
+    transitionProperty: "background-color, border-color, box-shadow",
+    transitionDuration: "120ms",
+  } as any,
+  headerActionBtnWebHover: { backgroundColor: COLORS.backgroundCard, borderColor: COLORS.primary },
+  headerActionBtnWebPressed: { backgroundColor: COLORS.background },
+  headerActionBtnWebFocus: { outlineStyle: "none", boxShadow: `0 0 0 2px ${COLORS.primaryLight}` } as any,
+  headerActionTextWeb: { color: COLORS.text, fontSize: FONT_SIZES.lg - 1, fontWeight: "700", letterSpacing: 0.2 },
   actionsBtn: {
     width: webSc(50),
     alignItems: "center",

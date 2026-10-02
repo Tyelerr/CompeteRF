@@ -18,18 +18,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { COLORS } from "../../../../theme/colors";
 import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
+import { isKeyboardModality } from "../../../../utils/keyboard-modality";
 import { webMs, webSc } from "../../../../utils/scaling";
 
 const CARET = "▾"; // ▾
 const isWeb = Platform.OS === "web";
 
-// Web-only focus-visible: show the focus ring only for keyboard navigation, not after a
-// mouse click (RN-web's Pressable `focused` fires for both). Tracks the last input modality.
-let keyboardModality = false;
-if (isWeb && typeof document !== "undefined") {
-  document.addEventListener("keydown", () => { keyboardModality = true; }, true);
-  document.addEventListener("pointerdown", () => { keyboardModality = false; }, true);
-}
 
 export interface PhaseNavPage {
   key: string;
@@ -124,7 +118,7 @@ export const PhaseNav = ({
                   selected && styles.segmentActive,
                   selected && hovered && styles.segmentActiveHover,
                   p.locked && styles.segmentLocked,
-                  focused && keyboardModality && styles.segmentFocus,
+                  focused && isKeyboardModality() && styles.segmentFocus,
                 ];
               }}
             >
@@ -218,7 +212,7 @@ export const PhaseNav = ({
                           current && styles.menuItemActive,
                           isWeb && current && styles.menuItemActiveWeb,
                           pressed && styles.menuItemPressed,
-                          isWeb && focused && keyboardModality && styles.menuItemFocusWeb,
+                          isWeb && focused && isKeyboardModality() && styles.menuItemFocusWeb,
                         ];
                       }}
                       onPress={() => {
