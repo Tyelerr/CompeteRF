@@ -2012,6 +2012,18 @@ export const setShuffleMode = (
     s.shuffleRound = false;
     s.roundRemaining = [];
     s.reshuffleTableCount = null;
+    // Disabling abandons an in-flight cycle exactly like Cancel Shuffle: undo THIS shuffle's
+    // table removals (same rule as cancelReshuffle). Web offers "Disable Shuffle" where native
+    // offers "Cancel Shuffle" in the Ready state; without this the web path silently left the
+    // shuffle-closed tables inactive.
+    if (wasActive) {
+      const shuffleOwned = new Set(s.reshuffleRemovingIds ?? []);
+      for (const t of s.tables) {
+        if (!shuffleOwned.has(t.id)) continue;
+        if (t.closing) t.closing = false;
+        if (t.inactive) { t.inactive = false; t.status = "open"; }
+      }
+    }
     s.reshuffleRemovingIds = [];
     pushEvent(s, "manual", "Shuffle Mode disabled", by);
     if (wasActive && s.startedAt && !s.finishedAt) seatAllTables(s);

@@ -23,6 +23,7 @@ import {
   addTables,
   assignNextTeam,
   beginShuffle,
+  cancelReshuffle,
   clearTable,
   chipFinalsState,
   dashboard,
@@ -40,6 +41,7 @@ import {
   startChipTournament,
   startPendingMatch,
   startShuffle,
+  startShuffleCycle,
   undoLastActions,
   withRestorePoint,
 } from "../../models/services/chip.engine";
@@ -288,4 +290,35 @@ test("chip: a larger field (48 entrants, 10 tables, 5 chips) finishes in bounded
   assert.ok(r.steps > 0);
   // Engine cost guard (pure, local): a whole 48-entry event incl. invariant checks.
   assert.ok(Date.now() - t0 < 60000, `took ${Date.now() - t0}ms`);
+});
+
+test("chip parity: web 'Disable Shuffle' and native 'Cancel Shuffle' leave the same tables active", () => {
+  for (const format of FORMATS) {
+    Math.random = seeded(99);
+    try {
+      let s = emptyChipState(format);
+      s = { ...s, settings: { ...s.settings, tiers: [{ id: "t1", minFargo: 0, maxFargo: null, chips: 3 }] } };
+      s = { ...s, entries: Array.from({ length: 12 }, (_, i) => entry(i, format === "scotch_doubles", 500)) };
+      s = addTables(s, 4);
+      s = act(settleChipState(startChipTournament(s)), startAllMatches);
+      // Shuffle that removes two of the four tables, then drain to Ready.
+      const remove = s.tables.slice(2).map((t) => t.id);
+      s = act(s, (c) => startShuffleCycle(c, remove));
+      for (let k = 0; k < 50 && !s.shuffleReady; k++) {
+        for (const t of s.tables) if (t.holderId && t.pendingChallengerId && !t.matchId) s = act(s, (c) => startPendingMatch(c, t.id));
+        const m = s.matches.find((x) => x.status === "in_progress");
+        if (m) s = act(s, (c) => recordWinner(c, m.id, m.aId));
+      }
+      assert.equal(s.shuffleReady, true, "reached Ready to Shuffle");
+      const active = (x: ChipState) => x.tables.filter((t) => !t.inactive && !t.closing).map((t) => t.id).sort();
+      const viaCancel = act(s, (c) => cancelReshuffle(c));
+      const viaDisable = act(s, (c) => setShuffleMode(c, false));
+      assert.deepEqual(active(viaDisable), active(viaCancel), `${format}: same active tables either way`);
+      assert.equal(active(viaDisable).length, 4, "the shuffle-closed tables are back");
+      assert.equal(viaDisable.shuffleMode, false);
+      assert.equal(viaCancel.shuffleMode, true, "Cancel keeps the mode on (unchanged)");
+    } finally {
+      Math.random = realRandom;
+    }
+  }
 });
