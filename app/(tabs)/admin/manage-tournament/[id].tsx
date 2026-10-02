@@ -110,6 +110,7 @@ import {
   STANDARD_SIZES,
   averageRace,
   computeBracketStats,
+  effectiveBracketSize,
   estimateTournamentDuration,
   minutesPerGameForType,
   recommendedBracketSize,
@@ -4720,7 +4721,8 @@ function ManageTournamentScreen() {
       );
       return;
     }
-    const size = bracketSizeSel ?? recommendedBracketSize(readyPlayers.length);
+    // Never smaller than the field: a stale pick (players added after choosing) expands.
+    const size = effectiveBracketSize(bracketSizeSel, readyPlayers.length);
     const format = hub.tournament?.tournament_format ?? "single-elimination";
     const doubleElim = format.toLowerCase().includes("double");
     const seeds = seedPlayers(readyPlayers, size);
@@ -8075,7 +8077,7 @@ function ManageTournamentScreen() {
       );
     }
     const recommended = recommendedBracketSize(ready.length);
-    const size = bracketSizeSel ?? hub.bracket?.bracketSize ?? recommended;
+    const size = settingsLocked && hub.bracket ? hub.bracket.bracketSize ?? recommended : effectiveBracketSize(bracketSizeSel, ready.length);
     const format = hub.tournament?.tournament_format ?? "single-elimination";
     const tablesAvail = Math.max(
       1,

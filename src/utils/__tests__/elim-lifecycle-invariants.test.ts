@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { AutoAssignMode, MatchLiveState } from "../../models/types/tournament-settings.types";
 import { buildBracketGraph } from "../bracket.double";
 import { resolveBracket, MatchResult } from "../bracket.resolve";
-import { DrawPlayer, RaceConfig, recommendedBracketSize, seedPlayers } from "../bracket.utils";
+import { DrawPlayer, effectiveBracketSize, RaceConfig, recommendedBracketSize, seedPlayers } from "../bracket.utils";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch } from "../match.utils";
 import { planAutoAssignFromState } from "../auto-assign";
 import { computeStandings } from "../tournament.stats";
@@ -314,4 +314,17 @@ test("Players Remaining = drawn field minus eliminated (TD dashboard + spectator
   const r = runTournament({ n: 13, dbl: true, tables: 3, mode: "balanced", seed: 4711 });
   const drawn: any = { seeds: Array.from(new Set(r.matches.flatMap((m) => [m.p1RegId, m.p2RegId]).filter((x): x is number => x != null))).map((id) => ({ registrationId: id })) };
   assert.equal(elimPlayersRemaining(drawn, r.matches), 1, "only the champion remains at the end");
+});
+
+test("bracket size: a stale smaller pick never silently drops a Ready player (late 17th player)", () => {
+  const field = (n: number) => playersOf(n, rng(17));
+  // The bug: TD picked 16 with 14 Ready; a 17th becomes Ready; the old draw used the pick as-is.
+  const old = seedPlayers(field(17), 16).filter(Boolean).length;
+  assert.equal(old, 16, "reproduced: seedPlayers keeps only 16 of 17");
+  for (const [pick, ready, want] of [[16, 17, 32], [16, 16, 16], [32, 17, 32], [null, 17, 32], [8, 9, 16], [64, 33, 64], [null, 3, 8]] as const) {
+    const size = effectiveBracketSize(pick, ready);
+    assert.equal(size, want, `pick=${pick} ready=${ready}`);
+    const seeded = seedPlayers(field(ready), size).filter(Boolean).length;
+    assert.equal(seeded, ready, `pick=${pick} ready=${ready}: every Ready player is drawn`);
+  }
 });

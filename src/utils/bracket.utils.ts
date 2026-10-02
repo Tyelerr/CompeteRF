@@ -569,3 +569,10 @@ export const computeBracketStats = (
     byTable: [4, 6, 8, 10].map((t) => ({ tables: t, hours: hoursFor(t) })),
   };
 };
+
+// The bracket size a draw will actually use. A TD's earlier pick is honoured only while it still
+// fits the field; once more players are Ready than the picked size holds (a late check-in after
+// choosing 16 → 17 Ready), the draw expands to the recommended size instead of seedPlayers
+// silently dropping the extras. The size picker shows the same value, so the TD sees it first.
+export const effectiveBracketSize = (selected: number | null | undefined, readyCount: number): number =>
+  selected != null && selected >= readyCount ? selected : recommendedBracketSize(readyCount);
