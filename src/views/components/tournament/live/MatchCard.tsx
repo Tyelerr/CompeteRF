@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
   // Top-right elapsed clock chip.
   headerTimer: {
     fontSize: webMs(FONT_SIZES.sm),
-    fontWeight: "900",
+    fontWeight: "600",
     color: COLORS.textSecondary,
     fontVariant: ["tabular-nums"],
   },
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
   liveBadgeText: {
     color: COLORS.error,
     fontSize: webMs(FONT_SIZES.xs),
-    fontWeight: "900",
+    fontWeight: "700",
     letterSpacing: 0.5,
   },
   bye: {
@@ -434,11 +434,12 @@ const styles = StyleSheet.create({
   },
   checkGlyph: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.textMuted, marginHorizontal: webSc(4) },
   checkGlyphOn: { color: COLORS.success },
-  checkTimer: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700", marginTop: webSc(2) },
+  // Check-in / Forfeit Review line: status metadata — medium weight, a little air above.
+  checkTimer: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "500", letterSpacing: 0.2, marginTop: webSc(4) },
   checkTimerWarn: { color: COLORS.warning },
-  checkTimerReview: { color: COLORS.error, fontWeight: "800" },
+  checkTimerReview: { color: COLORS.error, fontWeight: "600" },
   // Unresolved player message — red, compact, on the same line as the name.
-  viewMessage: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", color: COLORS.error, marginRight: webSc(4) },
+  viewMessage: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", color: COLORS.error, marginRight: webSc(4) },
   playerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: webMs(FONT_SIZES.lg),
-    fontWeight: "800",
+    fontWeight: "600",
     color: COLORS.text,
     flex: 1,
   },
@@ -484,13 +485,13 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontVariant: ["tabular-nums"],
   },
-  timerIdle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "600" },
+  timerIdle: { fontSize: webMs(FONT_SIZES.sm), color: COLORS.textMuted, fontWeight: "500" },
   timerLive: { color: COLORS.success },
   timerDone: { fontSize: webMs(FONT_SIZES.md), color: COLORS.success },
   resultTag: {
     fontSize: webMs(FONT_SIZES.xs),
     color: COLORS.warning,
-    fontWeight: "700",
+    fontWeight: "600",
     textTransform: "uppercase",
   },
   actions: {

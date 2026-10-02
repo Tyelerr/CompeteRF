@@ -9837,10 +9837,10 @@ const styles = StyleSheet.create({
   atStreamIcon: { marginLeft: 4 },
   atHeader: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   atHeaderMain: { flex: 1 },
-  atTableName: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "800" },
+  atTableName: { color: COLORS.primary, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
   atBadge: { flexDirection: "row", alignItems: "center", gap: 5 },
   atDot: { width: 8, height: 8, borderRadius: 4 },
-  atBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "800", fontVariant: ["tabular-nums"] },
+  atBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "600", fontVariant: ["tabular-nums"] },
   atMatch: { alignItems: "center", marginTop: webSc(SPACING.sm) },
   // Web: the match/player area grows to fill the card so header stays top, the action
   // zone stays bottom, and players/"No team assigned" sit vertically centered.
@@ -9848,11 +9848,11 @@ const styles = StyleSheet.create({
   // Web: reserved action area — a fixed min-height keeps Available cards (no button)
   // the same height as Live/Waiting cards; the button (when present) sits at the bottom.
   atActionZone: { minHeight: isWeb ? 34 : 40, justifyContent: "flex-end" },
-  atMatchTeam: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "700", textAlign: "center", lineHeight: webMs(FONT_SIZES.sm) * 1.3 },
-  atVs: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "800", letterSpacing: 0.5, marginVertical: 2 },
-  atMatchWaiting: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", textAlign: "center" },
+  atMatchTeam: { color: COLORS.text, fontSize: webMs(FONT_SIZES.sm), fontWeight: "600", textAlign: "center", lineHeight: webMs(FONT_SIZES.sm) * 1.3 },
+  atVs: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.xs - 1), fontWeight: "600", letterSpacing: 0.5, marginVertical: 2 },
+  atMatchWaiting: { color: COLORS.textMuted, fontSize: webMs(FONT_SIZES.sm), fontWeight: "500", textAlign: "center" },
   // Pending future table-state note under the match (Removal/Locks after match).
-  atPendingNote: { marginTop: webSc(SPACING.sm), alignSelf: "center", color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
+  atPendingNote: { marginTop: webSc(SPACING.sm), alignSelf: "center", color: COLORS.warning, fontSize: webMs(FONT_SIZES.xs), fontWeight: "600" },
   atStartBtn: { marginTop: webSc(SPACING.sm), backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: webSc(SPACING.sm), alignItems: "center" },
   atStartBtnText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.sm), fontWeight: "800" },
   // Item 6A: subtler than solid green — neutral surface bg + a subtle green border/accent,
