@@ -1,6 +1,6 @@
 // supabase/tests/elim_server_guards.test.ts
-// Server-contract tests for supabase/pending/20261017120000_elim_server_guards.sql (NOT yet
-// applied in prod): stale-write preconditions, server-side playability, and the finished-event
+// Server-contract tests for supabase/migrations/20261017120000_elim_server_guards.sql (applied
+// in prod 2026-10-02): stale-write preconditions, server-side playability, and the finished-event
 // rule — on a real Postgres (PGlite) with the live migrations loaded first, then the guards.
 //
 // Run:
@@ -57,7 +57,7 @@ before(async () => {
   await db.exec(read("supabase/migrations/20260922120000_elim_live_apply.sql"));
   await db.exec(read("supabase/migrations/20260923120000_elim_assign_notify.sql"));
   await db.exec(read("supabase/migrations/20260926120000_elim_clear_table.sql"));
-  await db.exec(read("supabase/pending/20261017120000_elim_server_guards.sql"));
+  await db.exec(read("supabase/migrations/20261017120000_elim_server_guards.sql"));
   await q(`insert into public.profiles values ('${TD}', 1, 'tournament_director')`);
   await q("insert into public.tournaments (id, venue_id, director_id, tournament_format) values ($1, 5, 1, 'double_elimination')", [T]);
   await q("insert into public.tournament_tables values (71,$1,1,'available'),(72,$1,2,'available'),(73,$1,3,'available')", [T]);

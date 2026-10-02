@@ -1,27 +1,7 @@
--- supabase/pending/20261017120000_elim_server_guards.sql
---
--- PENDING (not applied). Elimination server-side guards from the 2026-10 hardening pass.
--- Generated from the CURRENT live definitions (_elim_apply_one @ 20260926, elim_live_apply @
--- 20260922) with only these additions:
---
---   1. Stale-write precondition: match ops may carry {"expect":{status?,winner?,tableId?}}.
---      If the authoritative match moved since the device read it, the op is refused
---      'stale_state' (no silent overwrite of a co-TD's newer result / reset / reopen). An exact
---      replay of an already-applied change (double tap, lost reply) is accepted. Ops WITHOUT
---      expect behave exactly as today (older app builds, Auto Assign, player start).
---   2. Server-side playability: assign / start / in_progress / setting a winner or a table
---      require a REAL match (both players known; not a bye/empty/pending/skipped reset) —
---      'match_not_ready'; starting requires neither player already live elsewhere —
---      'player_busy'. Previously only the client prevented these.
---   3. Finished events: assign / start / unassign / set_queue / reopen / reset are refused
---      'tournament_finished'. Correcting a completed match's winner/score/result is still
---      allowed (elimination has no Reopen Tournament UI; this is how a TD fixes a final).
---
--- The current app already sends 'expect' (ignored by the live server until this is applied).
--- Tests: supabase/tests/elim_server_guards.test.ts (PGlite) loads this file.
--- Apply: move into supabase/migrations/ (keep the timestamp) and db push; verify with the test
--- matrix in the hardening report. Rollback: re-run the 20260926 _elim_apply_one and 20260922
--- elim_live_apply definitions.
+-- supabase/rollback/20261017120000_elim_server_guards_rollback.sql
+-- Restores the exact pre-guard definitions (prod md5-verified 2026-10-02): _elim_apply_one from
+-- 20260926120000_elim_clear_table.sql and elim_live_apply from 20260922120000_elim_live_apply.sql.
+-- Safe at any time: the guards add no columns/data; ops carrying "expect" are simply ignored again.
 
 create or replace function public._elim_apply_one(
   p_tournament_id bigint,
@@ -132,28 +112,6 @@ begin
   end if;
   v_cur := case when jsonb_typeof(p_ms -> v_mid) = 'object' then p_ms -> v_mid else '{}'::jsonb end;
   v_status := coalesce(v_cur ->> 'status', 'scheduled');
-
-  -- ── Stale-write precondition (2026-10 hardening) ──────────────────────────────────────
-  -- A device may send the match state it ACTED ON: {"expect":{"status":..,"winner":..,
-  -- "tableId":..}} (any subset). If the authoritative match moved since, the op is refused
-  -- ('stale_state') instead of silently overwriting another device's newer result/reset.
-  -- An exact replay of a change that already landed (double tap, lost reply) is NOT stale.
-  if p_op ? 'expect' then
-    if jsonb_typeof(p_op -> 'expect') <> 'object' then
-      raise exception 'invalid_op' using errcode = 'P0001';
-    end if;
-    if (p_op -> 'expect' ? 'status' and (p_op -> 'expect' ->> 'status') is distinct from v_status)
-       or (p_op -> 'expect' ? 'winner'
-           and coalesce(v_cur -> 'winner', 'null'::jsonb) is distinct from (p_op -> 'expect' -> 'winner'))
-       or (p_op -> 'expect' ? 'tableId'
-           and coalesce(v_cur -> 'tableId', 'null'::jsonb) is distinct from (p_op -> 'expect' -> 'tableId'))
-    then
-      if not (v_kind = 'patch_match' and jsonb_typeof(p_op -> 'set') = 'object'
-              and (v_cur || (p_op -> 'set')) = v_cur) then
-        raise exception 'stale_state' using errcode = 'P0001';
-      end if;
-    end if;
-  end if;
 
   if v_kind = 'assign' then
     if v_status in ('in_progress', 'completed') then
@@ -322,6 +280,8 @@ begin
 end;
 $$;
 
+revoke all on function public._elim_apply_one(bigint, text[], jsonb, jsonb) from public, anon, authenticated;
+
 create or replace function public.elim_live_apply(
   p_tournament_id bigint,
   p_ops jsonb,
@@ -344,13 +304,6 @@ declare
   v_ok      int := 0;
   v_started boolean := false;
   v_state   text;
-  v_done    boolean;
-  v_res     jsonb := null;    -- server resolver output, lazily (re)computed
-  v_kind    text;
-  v_mid     text;
-  v_nst     text;
-  v_who     jsonb;
-  v_needs_real boolean;
 begin
   if auth.uid() is null then
     raise exception 'Not authenticated' using errcode = '28000';
@@ -374,10 +327,6 @@ begin
   if v_row.tournament_format = 'chip-tournament' then
     raise exception 'Not an elimination tournament' using errcode = '22023';
   end if;
-  -- A finished event is no longer operated live: assign / start / unassign / queue changes and
-  -- reopening or resetting a match are refused. Correcting a recorded RESULT (winner / score /
-  -- result on a match that stays completed) remains allowed so a TD can fix a final score.
-  v_done := coalesce(v_row.status, '') in ('completed', 'archived') or v_row.live_state = 'finished';
   v_ls := coalesce(v_row.live_settings, '{}'::jsonb);
   if jsonb_typeof(v_ls #> '{bracket,graph}') is distinct from 'array' then
     raise exception 'No elimination bracket' using errcode = '22023';
@@ -389,53 +338,7 @@ begin
 
   for v_op in select value from jsonb_array_elements(p_ops) loop
     begin
-      v_kind := v_op ->> 'op';
-      v_mid := v_op ->> 'matchId';
-      v_nst := case when v_kind = 'patch_match' then v_op -> 'set' ->> 'status' end;
-      if v_done and not (
-           v_kind = 'patch_match'
-           and coalesce(v_nst, coalesce(v_ms -> v_mid ->> 'status', 'scheduled')) = 'completed'
-           and coalesce(v_ms -> v_mid ->> 'status', 'scheduled') = 'completed'
-           and not (v_op -> 'set' ? 'tableId' and jsonb_typeof(v_op -> 'set' -> 'tableId') = 'number')
-         ) then
-        raise exception 'tournament_finished' using errcode = 'P0001';
-      end if;
-      -- The server, not the client, guarantees a match is playable: both players known (not a
-      -- bye / empty / pending / skipped reset) before it is assigned, started, put in progress,
-      -- or given a winner; and neither player is already live in another match when it starts.
-      -- Forfeit / withdraw without a winner (e.g. forfeiting a bye) and resets stay allowed.
-      v_needs_real := v_kind in ('assign', 'start')
-        or (v_kind = 'patch_match' and (v_nst = 'in_progress'
-            or (jsonb_typeof(v_op -> 'set' -> 'winner') = 'number')
-            or (jsonb_typeof(v_op -> 'set' -> 'tableId') = 'number')));
-      if v_needs_real and v_mid is not null then
-        if v_res is null then
-          v_res := public._elim_resolve(v_ls || jsonb_build_object('matchState', v_ms));
-        end if;
-        v_who := v_res -> v_mid;
-        if v_who is not null and not coalesce((v_who ->> 'real')::boolean, false) then
-          raise exception 'match_not_ready' using errcode = 'P0001';
-        end if;
-        if v_who is not null
-           and coalesce(v_ms -> v_mid ->> 'status', 'scheduled') = 'scheduled'  -- a not-yet-started match
-           and (v_kind = 'start' or (v_kind = 'assign' and coalesce((v_op ->> 'start')::boolean, false))
-                or v_nst = 'in_progress')
-           and exists (
-             select 1 from jsonb_each(v_ms) e
-             where e.key <> v_mid
-               and jsonb_typeof(e.value) = 'object'
-               and (e.value ->> 'status') = 'in_progress'
-               and (v_res -> e.key ->> 'p1' in (v_who ->> 'p1', v_who ->> 'p2')
-                    or v_res -> e.key ->> 'p2' in (v_who ->> 'p1', v_who ->> 'p2'))
-           ) then
-          raise exception 'player_busy' using errcode = 'P0001';
-        end if;
-      end if;
       v_step := public._elim_apply_one(p_tournament_id, v_ids, v_ms, v_op);
-      -- A result / reset can change who is in later matches: recompute lazily next time.
-      if v_kind = 'patch_match' and (v_op -> 'set' ?| array['status', 'winner', 'result']) then
-        v_res := null;
-      end if;
       -- Adopt the result only on success: a failed op never partially mutates anything.
       v_ms := v_step -> 'ms';
       v_ls := v_ls || (v_step -> 'top');
@@ -471,3 +374,6 @@ begin
   return jsonb_build_object('live_settings', v_ls, 'live_state', v_state, 'results', v_results);
 end;
 $$;
+
+revoke all on function public.elim_live_apply(bigint, jsonb, boolean) from public, anon;
+grant execute on function public.elim_live_apply(bigint, jsonb, boolean) to authenticated;

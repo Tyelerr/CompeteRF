@@ -249,7 +249,7 @@ export interface QueuePin {
 // 20260922120000_elim_live_apply.sql). The server validates every op under a row
 // lock and changes only the targeted match / queue keys — never the whole blob.
 // The match state a device ACTED ON (stale-write precondition). The server refuses the op with
-// 'stale_state' if the authoritative match moved since (supabase/pending/20261017120000_elim_
+// 'stale_state' if the authoritative match moved since (supabase/migrations/20261017120000_elim_
 // server_guards.sql); servers without that guard ignore it.
 export interface MatchExpect {
   status?: MatchStatus;
