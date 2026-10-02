@@ -313,10 +313,11 @@ test("a device that LOADED while another device's save was mid-write can never c
     const be = makeBackend(cloud, "A", rng(500 + trial), { claim: true });
     const realSync = be.syncRows.bind(be);
     let n = 0;
-    const loadAt = trial % 2; // after the entries / matches section (tables not yet written)
-    be.syncRows = async (tb, rows, ids) => {
-      await realSync(tb, rows, ids);
+    const loadAt = trial % 2; // as the 1st / 2nd row section starts writing
+    be.syncRows = async (tb, rows, ids, o) => {
+      // capture while the save is in flight: version already claimed, rows (partly) old
       if (n++ === loadAt) { loadedVersion = cloud.version; loadedRows = cloudSnapshot(cloud); }
+      await realSync(tb, rows, ids, o);
     };
     await executeChipSave(be, planOf(A, 5));
     assert.notEqual(loadedVersion, null);

@@ -81,8 +81,14 @@ export interface ChipPersistBackend {
   upsertConfig(patch: Record<string, unknown>): Promise<void>;
   // Best-effort config write whose failure is ignored (column may be pending migration).
   upsertConfigSoft(patch: Record<string, unknown>): Promise<void>;
-  // Upsert `rows` and prune this tournament's rows whose id is not in `ids`. Throws on error.
-  syncRows(table: ChipRowTable, rows: Record<string, unknown>[], ids: string[]): Promise<void>;
+  // Upsert `rows` and prune this tournament's rows whose id is not in `ids` (unless
+  // opts.prune === false: a delta save that removed nothing). Throws on error.
+  syncRows(
+    table: ChipRowTable,
+    rows: Record<string, unknown>[],
+    ids: string[],
+    opts?: { prune?: boolean },
+  ): Promise<void>;
   // Append events (insert, ignore ids that already exist). Throws on error.
   insertEvents(rows: Record<string, unknown>[]): Promise<void>;
   // Flip superseded=true on these event ids. Throws on error.
@@ -104,7 +110,29 @@ export interface ChipPersistBackend {
 // false "changed on another device". Keyed by tournament; cleared on success. If another device
 // claimed in between, the retry's claim fails and the conflict is real.
 const ownClaims = new Map<number, { from: number; to: number }>();
-export const resetOwnChipClaimsForTests = () => ownClaims.clear();
+export const resetOwnChipClaimsForTests = () => {
+  ownClaims.clear();
+  persisted.clear();
+};
+
+// DELTA SAVES (2026-10 hardening). What THIS device last persisted for a tournament, and the
+// cloud version that write ended at. When the next save's expectedVersion still equals that
+// version, the cloud provably holds exactly our last write for every versioned section (the
+// claim/finalize CAS means no other director wrote in between), so unchanged rows, unchanged
+// config sections, already-inserted events and already-superseded ids are not re-sent. Any
+// other version (a reload, another device's save, a first save) → a full save, as before.
+// Only claimed (CAS) saves populate it. Rows written out-of-band (e.g. a side-pot toggle) are
+// no longer clobbered by unchanged snapshot rows; changed rows are still sent whole.
+interface PersistedSnapshot {
+  version: number;
+  config: Record<"extended" | "restore" | "soft", string>;
+  rows: Record<ChipRowTable, Map<string, string>>;
+  events: Set<string>;
+  superseded: Set<string>;
+}
+const persisted = new Map<number, PersistedSnapshot>();
+const rowKey = (r: Record<string, unknown>) => String(r.id);
+const sig = (v: unknown) => JSON.stringify(v);
 
 // Result of a legacy (soft-CAS) save. `aborted` = the pre-write check found the cloud already
 // at a NEWER version than this device loaded: NOTHING was written (another device saved first).
@@ -165,6 +193,20 @@ export const executeChipSave = async (
     }
   }
 
+  // Delta baseline: only when the cloud is exactly our last persisted write (same version).
+  const prior =
+    plan.claimKey != null && plan.expectedVersion != null ? persisted.get(plan.claimKey) : undefined;
+  const delta = prior && prior.version === plan.expectedVersion && claimed != null ? prior : undefined;
+  const sectionChanged = (k: keyof PersistedSnapshot["config"], v: unknown) => !delta || delta.config[k] !== sig(v);
+  const rowDelta = (table: ChipRowTable, sec: { rows: Record<string, unknown>[]; ids: string[] }) => {
+    if (!delta) return { rows: sec.rows, prune: true };
+    const was = delta.rows[table];
+    const rows = sec.rows.filter((r) => was.get(rowKey(r)) !== sig(r));
+    const now = new Set(sec.ids);
+    const removed = [...was.keys()].some((k) => !now.has(k));
+    return { rows, prune: removed };
+  };
+
   const failures: { stage: ChipSaveStage; table: string; error: unknown }[] = [];
   const run = async (stage: ChipSaveStage, table: string, fn: () => Promise<void>) => {
     try {
@@ -174,27 +216,41 @@ export const executeChipSave = async (
     }
   };
 
-  // 1. MAIN STATE. CORE config (queue etc.) first; the newer column groups are separate
-  // writes so a pending migration can never take the queue down with it.
-  await run("config_core", "chip_config", () => backend.upsertConfig(plan.configCore));
-  await run("config_extended", "chip_config", () => backend.upsertConfig(plan.configExtended));
-  await run("config_restore_points", "chip_config", () =>
-    backend.upsertConfig(plan.configRestorePoints),
-  );
-  try {
-    await backend.upsertConfigSoft(plan.configSoft);
-  } catch {
-    /* non-critical column — never a save failure */
+  // 1. MAIN STATE. The column groups are separate writes so a pending migration can never take
+  // the queue down with it. They are independent (different columns / tables, and with a claim no
+  // other director writes concurrently), so they run in PARALLEL: same requests, ~1 round trip of
+  // wall time instead of ~7. Core config (queue) is always sent; with a delta baseline, unchanged
+  // sections / rows are skipped and a table with no removed rows skips its prune.
+  const tasks: Promise<void>[] = [run("config_core", "chip_config", () => backend.upsertConfig(plan.configCore))];
+  if (sectionChanged("extended", plan.configExtended))
+    tasks.push(run("config_extended", "chip_config", () => backend.upsertConfig(plan.configExtended)));
+  if (sectionChanged("restore", plan.configRestorePoints))
+    tasks.push(run("config_restore_points", "chip_config", () => backend.upsertConfig(plan.configRestorePoints)));
+  if (sectionChanged("soft", plan.configSoft))
+    tasks.push(
+      (async () => {
+        try {
+          await backend.upsertConfigSoft(plan.configSoft);
+        } catch {
+          /* non-critical column — never a save failure */
+        }
+      })(),
+    );
+  const sections: [ChipSaveStage, ChipRowTable, { rows: Record<string, unknown>[]; ids: string[] }][] = [
+    ["entries", "chip_entries", plan.entries],
+    ["matches", "chip_matches", plan.matches],
+    ["tables", "chip_tables", plan.tables],
+  ];
+  for (const [stage, table, sec] of sections) {
+    const d = rowDelta(table, sec);
+    if (!d.rows.length && !d.prune) continue; // nothing changed in this table
+    tasks.push(
+      run(stage, table, () =>
+        d.prune ? backend.syncRows(table, d.rows, sec.ids) : backend.syncRows(table, d.rows, sec.ids, { prune: false }),
+      ),
+    );
   }
-  await run("entries", "chip_entries", () =>
-    backend.syncRows("chip_entries", plan.entries.rows, plan.entries.ids),
-  );
-  await run("matches", "chip_matches", () =>
-    backend.syncRows("chip_matches", plan.matches.rows, plan.matches.ids),
-  );
-  await run("tables", "chip_tables", () =>
-    backend.syncRows("chip_tables", plan.tables.rows, plan.tables.ids),
-  );
+  await Promise.all(tasks);
 
   // 2. Main state incomplete → stop BEFORE history. No events for a snapshot that didn't land.
   if (failures.length) {
@@ -202,21 +258,35 @@ export const executeChipSave = async (
     throw new ChipSaveError(first.stage, first.table, first.error, rest.map((f) => f.stage));
   }
 
-  // 3. Activity history, only once the state it describes has persisted.
-  if (plan.events.length) {
+  // 3. Activity history, only once the state it describes has persisted (delta: only events /
+  // superseded flags this device has not already persisted).
+  const newEvents = delta ? plan.events.filter((r) => !delta.events.has(rowKey(r))) : plan.events;
+  const newSuperseded = delta ? plan.supersededEventIds.filter((id) => !delta.superseded.has(id)) : plan.supersededEventIds;
+  if (newEvents.length) {
     try {
-      await backend.insertEvents(plan.events);
+      await backend.insertEvents(newEvents);
     } catch (e) {
       throw new ChipSaveError("events", "chip_events", e);
     }
   }
-  if (plan.supersededEventIds.length) {
+  if (newSuperseded.length) {
     try {
-      await backend.markSuperseded(plan.supersededEventIds);
+      await backend.markSuperseded(newSuperseded);
     } catch (e) {
       throw new ChipSaveError("events_superseded", "chip_events", e);
     }
   }
+  const remember = (version: number) => {
+    if (plan.claimKey == null) return;
+    const rowsOf = (sec: { rows: Record<string, unknown>[] }) => new Map(sec.rows.map((r) => [rowKey(r), sig(r)]));
+    persisted.set(plan.claimKey, {
+      version,
+      config: { extended: sig(plan.configExtended), restore: sig(plan.configRestorePoints), soft: sig(plan.configSoft) },
+      rows: { chip_entries: rowsOf(plan.entries), chip_matches: rowsOf(plan.matches), chip_tables: rowsOf(plan.tables) },
+      events: new Set(plan.events.map(rowKey)),
+      superseded: new Set(plan.supersededEventIds),
+    });
+  };
 
   // 4. Version: already advanced atomically by the claim (any other device's claim failed, so
   // nothing else wrote in between). Legacy path: soft-CAS bump after the snapshot.
@@ -234,9 +304,11 @@ export const executeChipSave = async (
       return { version: claimed, conflict: false }; // persisted; a reader may see one stale step
     }
     if (fin === "changed") {
+      if (plan.claimKey != null) persisted.delete(plan.claimKey);
       const live = backend.readVersion ? await backend.readVersion() : null;
       return { version: live ?? claimed, conflict: true };
     }
+    remember(claimed + 1);
     return { version: claimed + 1, conflict: false };
   }
   return backend.bumpVersion(plan.expectedVersion);

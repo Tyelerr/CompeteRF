@@ -7,8 +7,8 @@
 
 import { entryRegInactive, teamIdFromEntryId, withTeamIdentity } from "./chip.team-identity";
 import { supabase } from "../../lib/supabase";
-import { ChipPersistBackend, ChipSavePlan, ChipSaveResult, executeChipSave } from "./chip.persist";
-import { entryToRow, eventToRow, matchToRow, overrideFromRow, rowToEntry, tableToRow } from "./chip.rows";
+import { ChipPersistBackend, ChipSaveResult, executeChipSave } from "./chip.persist";
+import { buildChipSavePlan, entryToRow, eventToRow, matchToRow, overrideFromRow, rowToEntry, tableToRow } from "./chip.rows";
 import {
   ChipEntry,
   ChipEvent,
@@ -215,11 +215,13 @@ const syncTable = async (
   tid: number,
   rows: any[],
   ids: string[],
+  prune = true,
 ): Promise<void> => {
   if (rows.length) {
     const { error, status } = await supabase.from(table).upsert(rows);
     if (error) throw withStatus(error, status);
   }
+  if (!prune) return;
   let del = supabase.from(table).delete().eq("tournament_id", tid);
   if (ids.length) {
     del = del.not("id", "in", `(${ids.map((i) => `"${i}"`).join(",")})`);
@@ -263,7 +265,7 @@ const supabasePersistBackend = (tid: number): ChipPersistBackend => ({
   async upsertConfigSoft(patch) {
     await supabase.from("chip_config").upsert(patch);
   },
-  syncRows: (table, rows, ids) => syncTable(table, tid, rows, ids),
+  syncRows: (table, rows, ids, opts) => syncTable(table, tid, rows, ids, opts?.prune ?? true),
   async insertEvents(rows) {
     const { error, status } = await supabase
       .from("chip_events")
@@ -603,50 +605,7 @@ export const chipService = {
     chip: ChipState,
     opts?: { expectedVersion?: number | null },
   ): Promise<ChipSaveResult> {
-    // Registration-backed entries live in tournament_players and are re-projected
-    // on every load — never write (or prune against) them here, otherwise they'd
-    // be duplicated/absorbed and lose their approval lifecycle. They materialize
-    // into real chip_entries only when the tournament starts (flag cleared).
-    const ownedEntries = chip.entries.filter((e) => !e.fromRegistration);
-    const plan: ChipSavePlan = {
-      // CORE config (long-standing columns) — must always persist, especially the queue.
-      // tiers (chip_ranges) + buy-backs (live_settings) live on the Compete Settings form.
-      configCore: {
-        tournament_id: id,
-        format: chip.settings.format,
-        queue: chip.queue,
-        started_at: chip.startedAt ?? null,
-        finished_at: chip.finishedAt ?? null,
-        winner_entry_id: chip.winnerId ?? null,
-        reshuffle_count: chip.reshuffleCount ?? 0,
-        updated_at: new Date().toISOString(),
-      },
-      // EXTENDED config (newer shuffle columns) — separate write, same row.
-      configExtended: {
-        tournament_id: id,
-        reshuffle_pending: !!chip.reshufflePending,
-        reshuffle_table_count: chip.reshuffleTableCount ?? null,
-        shuffle_mode: !!chip.shuffleMode,
-        shuffle_ready: !!chip.shuffleReady,
-        shuffle_round: !!chip.shuffleRound,
-        round_remaining: chip.roundRemaining ?? [],
-      },
-      // Restore points (persisted history) — own section, same row.
-      configRestorePoints: { tournament_id: id, restore_points: chip.restorePoints ?? [] },
-      // Shuffle-owned closing table ids — best-effort, never a save failure (Cancel
-      // Shuffle then reopens nothing after a reload, the safe fallback).
-      configSoft: { tournament_id: id, reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [] },
-      entries: { rows: ownedEntries.map((e) => entryToRow(id, e)), ids: ownedEntries.map((e) => e.id) },
-      matches: { rows: chip.matches.map((m) => matchToRow(id, m)), ids: chip.matches.map((m) => m.id) },
-      tables: { rows: chip.tables.map((tb, i) => tableToRow(id, tb, i)), ids: chip.tables.map((tb) => tb.id) },
-      // Events are append-only — insert new ones, never rewrite or delete. A Tournament
-      // Restore flips existing events to superseded (one-way flag, applied separately).
-      events: chip.events.map((ev) => eventToRow(id, ev)),
-      supersededEventIds: chip.events.filter((ev) => ev.superseded).map((ev) => ev.id),
-      expectedVersion: opts?.expectedVersion,
-      claimKey: id,
-    };
-    return executeChipSave(supabasePersistBackend(id), plan);
+    return executeChipSave(supabasePersistBackend(id), buildChipSavePlan(id, chip, opts));
   },
 
   // Targeted write of ONE singles entry's side-pot membership to chip_entries — the

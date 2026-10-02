@@ -6,6 +6,7 @@
 
 import { safePaidSidePots } from "../../utils/side-pots";
 import { ChipEntry, ChipEvent, ChipMatch, ChipState, ChipTable } from "../types/chip.types";
+import type { ChipSavePlan } from "./chip.persist";
 
 export const overrideToRow = (e: ChipEntry) => ({
   fargo_cap_override: !!e.fargoCapOverride,
@@ -163,3 +164,54 @@ export const rowToEntry = (r: any): ChipEntry => ({
   createdAt: r.created_at,
 });
 
+
+// The whole-state save plan for one chip board (executed by chip.persist.executeChipSave).
+// Pure — moved out of chipService.save so the payload can be measured and tested.
+// Registration-backed entries live in tournament_players and are re-projected on every load —
+// never written (or pruned against) here; they materialize into chip_entries only when the
+// tournament starts (flag cleared).
+export const buildChipSavePlan = (
+  id: number,
+  chip: ChipState,
+  opts?: { expectedVersion?: number | null },
+): ChipSavePlan => {
+  const ownedEntries = chip.entries.filter((e) => !e.fromRegistration);
+  return {
+    // CORE config (long-standing columns) — must always persist, especially the queue.
+    // tiers (chip_ranges) + buy-backs (live_settings) live on the Compete Settings form.
+    configCore: {
+      tournament_id: id,
+      format: chip.settings.format,
+      queue: chip.queue,
+      started_at: chip.startedAt ?? null,
+      finished_at: chip.finishedAt ?? null,
+      winner_entry_id: chip.winnerId ?? null,
+      reshuffle_count: chip.reshuffleCount ?? 0,
+      updated_at: new Date().toISOString(),
+    },
+    // EXTENDED config (newer shuffle columns) — separate write, same row.
+    configExtended: {
+      tournament_id: id,
+      reshuffle_pending: !!chip.reshufflePending,
+      reshuffle_table_count: chip.reshuffleTableCount ?? null,
+      shuffle_mode: !!chip.shuffleMode,
+      shuffle_ready: !!chip.shuffleReady,
+      shuffle_round: !!chip.shuffleRound,
+      round_remaining: chip.roundRemaining ?? [],
+    },
+    // Restore points (persisted history) — own section, same row.
+    configRestorePoints: { tournament_id: id, restore_points: chip.restorePoints ?? [] },
+    // Shuffle-owned closing table ids — best-effort, never a save failure (Cancel Shuffle then
+    // reopens nothing after a reload, the safe fallback).
+    configSoft: { tournament_id: id, reshuffle_removing_ids: chip.reshuffleRemovingIds ?? [] },
+    entries: { rows: ownedEntries.map((e) => entryToRow(id, e)), ids: ownedEntries.map((e) => e.id) },
+    matches: { rows: chip.matches.map((m) => matchToRow(id, m)), ids: chip.matches.map((m) => m.id) },
+    tables: { rows: chip.tables.map((tb, i) => tableToRow(id, tb, i)), ids: chip.tables.map((tb) => tb.id) },
+    // Events are append-only — insert new ones, never rewrite or delete. A Tournament Restore
+    // flips existing events to superseded (one-way flag, applied separately).
+    events: chip.events.map((ev) => eventToRow(id, ev)),
+    supersededEventIds: chip.events.filter((ev) => ev.superseded).map((ev) => ev.id),
+    expectedVersion: opts?.expectedVersion,
+    claimKey: id,
+  };
+};
