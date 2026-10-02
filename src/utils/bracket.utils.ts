@@ -576,3 +576,19 @@ export const computeBracketStats = (
 // silently dropping the extras. The size picker shows the same value, so the TD sees it first.
 export const effectiveBracketSize = (selected: number | null | undefined, readyCount: number): number =>
   selected != null && selected >= readyCount ? selected : recommendedBracketSize(readyCount);
+
+// Scotch Doubles elimination isn't team-aware yet: the draw reads individual registrations
+// (tournament_players), while the app registers Scotch Doubles TEAMS in tournament_teams. Drawing
+// would silently leave every registered team out, so refuse with an explanation instead.
+// Returns the reason, or null when the draw may proceed. Pure.
+export const scotchElimDrawBlock = (
+  gameType: string | null | undefined,
+  format: string | null | undefined,
+  teams: { status?: string | null }[],
+): string | null => {
+  if (!String(gameType ?? "").includes("scotch-doubles")) return null;
+  if (String(format ?? "").toLowerCase().includes("chip")) return null;
+  const n = teams.filter((t) => t.status !== "cancelled").length;
+  if (n === 0) return null;
+  return `${n} Scotch Doubles team${n === 1 ? " is" : "s are"} registered, but elimination brackets can't draw teams yet — they would be left out of the bracket. Run this event as a Chip tournament, or contact support.`;
+};

@@ -111,6 +111,7 @@ import {
   averageRace,
   computeBracketStats,
   effectiveBracketSize,
+  scotchElimDrawBlock,
   estimateTournamentDuration,
   minutesPerGameForType,
   recommendedBracketSize,
@@ -2680,6 +2681,12 @@ function ManageTournamentScreen() {
     queryFn: () => teamService.getTeams(tournamentId),
     enabled: !!tournamentId && isChipTournament,
   });
+  // Scotch Doubles ELIMINATION: registered teams can't be drawn yet (see scotchElimDrawBlock).
+  const elimScotchTeamsQuery = useQuery({
+    queryKey: ["tournament-teams", tournamentId],
+    queryFn: () => teamService.getTeams(tournamentId),
+    enabled: !!tournamentId && !isChipTournament && String(hub.tournament?.game_type ?? "").includes("scotch-doubles"),
+  });
   const chipTeams = useMemo(
     () => (chipTeamsQuery.data ?? []).filter((t) => t.status !== "pending_partner"),
     [chipTeamsQuery.data],
@@ -4720,6 +4727,11 @@ function ManageTournamentScreen() {
   }, [tournamentGroup]);
 
   const handleDrawBracket = (reason: string) => {
+    const teamBlock = scotchElimDrawBlock(hub.tournament?.game_type, hub.tournament?.tournament_format, elimScotchTeamsQuery.data ?? []);
+    if (teamBlock) {
+      Alert.alert("Teams can't be drawn yet", teamBlock);
+      return;
+    }
     if (readyPlayers.length < 2) {
       Alert.alert(
         "Not Enough Players",

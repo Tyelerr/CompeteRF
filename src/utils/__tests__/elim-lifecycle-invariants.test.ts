@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { AutoAssignMode, MatchLiveState } from "../../models/types/tournament-settings.types";
 import { buildBracketGraph } from "../bracket.double";
 import { resolveBracket, MatchResult } from "../bracket.resolve";
-import { DrawPlayer, effectiveBracketSize, RaceConfig, recommendedBracketSize, seedPlayers } from "../bracket.utils";
+import { DrawPlayer, effectiveBracketSize, RaceConfig, recommendedBracketSize, scotchElimDrawBlock, seedPlayers } from "../bracket.utils";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch } from "../match.utils";
 import { planAutoAssignFromState } from "../auto-assign";
 import { computeStandings } from "../tournament.stats";
@@ -327,4 +327,12 @@ test("bracket size: a stale smaller pick never silently drops a Ready player (la
     const seeded = seedPlayers(field(ready), size).filter(Boolean).length;
     assert.equal(seeded, ready, `pick=${pick} ready=${ready}: every Ready player is drawn`);
   }
+});
+
+test("scotch doubles elimination: a draw that would silently drop registered teams is refused", () => {
+  const teams = [{ status: "registered" }, { status: "pending_partner" }, { status: "cancelled" }];
+  assert.match(scotchElimDrawBlock("9-ball-scotch-doubles", "double-elim", teams) ?? "", /^2 Scotch Doubles teams are registered/);
+  assert.equal(scotchElimDrawBlock("9-ball-scotch-doubles", "single-elimination", []), null, "no teams → nothing dropped");
+  assert.equal(scotchElimDrawBlock("9-ball", "double-elim", teams), null, "singles unaffected");
+  assert.equal(scotchElimDrawBlock("9-ball-scotch-doubles", "chip-tournament", teams), null, "chip draws teams itself");
 });
