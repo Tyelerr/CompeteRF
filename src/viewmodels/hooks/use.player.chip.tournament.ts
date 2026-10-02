@@ -6,6 +6,7 @@
 // leaderboard, recent history and live matches. For scotch doubles everything is
 // team-level (one entry = the team; combined Fargo; team record).
 
+import { PlayerPollOptions, playerPollInterval } from "../../utils/player-poll";
 import { naturalCompare } from "../../utils/natural-sort";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -440,8 +441,11 @@ const buildChipHub = (
 export const usePlayerChipTournament = (
   playerId?: number,
   preferredTournamentId?: number | null,
+  pollOpts?: PlayerPollOptions,
 ) => {
-  const { live } = useProfileTournaments(playerId);
+  // Reads the live list from the shared cache; the Profile screen's own useProfileTournaments
+  // (focus-gated) owns that poll, so this observer never adds a second timer.
+  const { live } = useProfileTournaments(playerId, { focused: false });
 
   // The live chip tournament to surface. When the caller has explicitly selected a live
   // tournament (multiple-live switcher), only resolve it if THAT tournament is a chip event —
@@ -463,8 +467,9 @@ export const usePlayerChipTournament = (
     queryKey: ["player-chip-hub", tournamentId, playerId],
     queryFn: () => chipService.load(tournamentId!, { publicRead: true }),
     enabled: !!tournamentId && !!playerId,
-    // Poll while live so the player's status/queue stays fresh (no realtime yet).
-    refetchInterval: tournamentId ? 8000 : false,
+    // Poll while live so the player's status/queue stays fresh (no realtime yet) — only while
+    // the Profile tab is focused (src/utils/player-poll.ts).
+    refetchInterval: playerPollInterval(8000, tournamentId, pollOpts),
     refetchOnWindowFocus: true,
   });
 

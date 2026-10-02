@@ -7,6 +7,7 @@
 // table, opponent and race stay in lock-step with the live bracket.
 import { useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PlayerPollOptions } from "../../utils/player-poll";
 import { Platform } from "react-native";
 import { matchCheckInService } from "../../models/services/match-checkin.service";
 import { MatchIssueReason } from "../../models/types/match-checkin.types";
@@ -36,9 +37,13 @@ export interface PlayerMatchContext {
   registrationId: number | null;
 }
 
-export const usePlayerMatchActions = (idAuto?: number, tournamentId?: number | null) => {
+export const usePlayerMatchActions = (
+  idAuto?: number,
+  tournamentId?: number | null,
+  pollOpts?: PlayerPollOptions,
+) => {
   const queryClient = useQueryClient();
-  const { hub, myRegId, isLoading } = usePlayerLiveMatch(idAuto, tournamentId ?? undefined);
+  const { hub, myRegId, isLoading } = usePlayerLiveMatch(idAuto, tournamentId ?? undefined, pollOpts);
   const current = hub?.current ?? null;
 
   const context = useMemo<PlayerMatchContext | null>(() => {

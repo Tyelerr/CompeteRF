@@ -6,7 +6,7 @@
 // Reuses the same bracket resolver the TD Manage hub uses (buildLiveMatches), so
 // the player view stays in lock-step with the live bracket. Read-only.
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Platform } from "react-native";
 import { onlineOnlyWrite } from "../../utils/connection-required";
@@ -22,6 +22,7 @@ import { buildLiveMatches, LiveMatch } from "../../utils/match.utils";
 import { useProfileTournaments } from "./use.profile.tournaments";
 import { registrationIdOf } from "../../utils/live-entries";
 import { buildPlayerScorePatch } from "../../utils/player-score";
+import { PlayerPollOptions, playerPollActive, playerPollInterval } from "../../utils/player-poll";
 
 export interface PlayerLiveMatch {
   tournamentId: number;
@@ -97,8 +98,11 @@ const pickMatch = (matches: LiveMatch[], myRegId: number): LiveMatch | null => {
 export const usePlayerLiveMatch = (
   playerId?: number,
   preferredTournamentId?: number | null,
+  pollOpts?: PlayerPollOptions,
 ) => {
-  const { live } = useProfileTournaments(playerId);
+  // Reads the live list from the shared cache; the Profile screen's own useProfileTournaments
+  // (focus-gated) owns that poll, so this observer never adds a second timer.
+  const { live } = useProfileTournaments(playerId, { focused: false });
 
   // The live tournament to surface: the caller's chosen one (multiple-live switcher) if it's
   // present, otherwise the first (most-recently-registered) live tournament.
@@ -118,10 +122,17 @@ export const usePlayerLiveMatch = (
     queryFn: () => tournamentService.getTournament(tournamentId!),
     enabled: !!tournamentId,
     // Poll while live so both players' Tournament Views stay in sync when either
-    // side scores (no realtime subscription wired yet).
-    refetchInterval: tournamentId ? 5000 : false,
+    // side scores (no realtime subscription wired yet) — only while this screen is focused
+    // and this observer is the designated poller (src/utils/player-poll.ts).
+    refetchInterval: playerPollInterval(5000, tournamentId, pollOpts),
     refetchOnWindowFocus: true,
   });
+  // Returning to the tab: refresh once immediately instead of waiting for the next interval.
+  const pollActive = playerPollActive(pollOpts);
+  const refetchTournament = tournamentQuery.refetch;
+  useEffect(() => {
+    if (pollActive && tournamentId) void refetchTournament();
+  }, [pollActive, tournamentId, refetchTournament]);
 
   const tablesQuery = useQuery({
     queryKey: ["tournament-tables", tournamentId],

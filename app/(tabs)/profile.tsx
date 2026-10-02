@@ -255,10 +255,15 @@ export default function ProfileScreen() {
       ? selectedLiveId
       : live[0]?.tournament?.id) ??
     null;
-  const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto, effectiveLiveId);
+  // ONE designated poller per resource, and only while Profile is the active tab: this hook
+  // polls the tournament row; matchActions below reads the same cached query without its own
+  // timer (poll: false); the chip hub polls its own state (src/utils/player-poll.ts).
+  const { hub, adjustScore, isScoring, myRegId } = usePlayerLiveMatch(storeProfile?.id_auto, effectiveLiveId, {
+    focused: profileFocused,
+  });
   // Per-assignment check-in / Contact TD — the SAME hook Home uses, so there is one source of
   // match + race + check-in state.
-  const matchActions = usePlayerMatchActions(storeProfile?.id_auto, effectiveLiveId);
+  const matchActions = usePlayerMatchActions(storeProfile?.id_auto, effectiveLiveId, { focused: profileFocused, poll: false });
   const [manualCheckInOpen, setManualCheckInOpen] = useState(false);
   const linkTarget =
     linkLive && !matchActions.isLoading && effectiveLiveId === assignmentLink.tournamentId
@@ -273,7 +278,7 @@ export default function ProfileScreen() {
     setManualCheckInOpen(false);
     setDismissedLinkKey(linkKey);
   };
-  const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto, effectiveLiveId);
+  const { hub: chipHub } = usePlayerChipTournament(storeProfile?.id_auto, effectiveLiveId, { focused: profileFocused });
   const performance = usePlayerPerformance(storeProfile?.id_auto);
   const inLiveTournament = live.length > 0;
   // Live tournaments where the player's participation has AUTHORITATIVELY ended: chip → engine
