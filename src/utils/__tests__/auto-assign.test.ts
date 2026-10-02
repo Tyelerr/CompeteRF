@@ -11,7 +11,7 @@ import { raceConfigFromLiveSettings } from "../bracket.utils";
 import { buildLiveMatches } from "../match.utils";
 import { freeTables, planAutoAssign } from "../queue.utils";
 import { projectSchedule } from "../schedule.projection";
-import { autoAssignActive, computeTableOccupancy, planAutoAssignFromState } from "../auto-assign";
+import { autoAssignActive, computeTableOccupancy, manageHubPollMs, MANAGE_AUTO_ASSIGN_POLL_MS, MANAGE_LIVE_POLL_MS, planAutoAssignFromState } from "../auto-assign";
 
 const DRAWN = "2026-09-01T10:00:00.000Z";
 const at = (m: number) => new Date(Date.parse(DRAWN) + m * 60000).toISOString();
@@ -89,4 +89,17 @@ test("Play Next contested: earlier in queue order wins; no preferences → origi
   assert.deepEqual(plan(ms, {}, 2).find((p) => p.tableId === 2), { matchId: firstPref, tableId: 2 });
   const plainQ = projectSchedule({ bracket, matches: buildLiveMatches(bracket, W1_DONE, tables(3), "9-ball", raceConfigFromLiveSettings({})), matchState: W1_DONE, mode: "balanced", queueOrder: [], now: NOW }).readyQueue;
   assert.deepEqual(plan(W1_DONE, {}, 3), plainQ.slice(0, 3).map((e, i) => ({ matchId: e.match.id, tableId: i + 1 })));
+});
+
+// ── Manage-screen poll policy ─────────────────────────────────────────────────────────────
+test("manageHubPollMs: 5s with Auto Assign, 10s while a drawn elim bracket is live, otherwise off", () => {
+  const live = { tournament_format: "double_elimination", live_state: "in_progress", live_settings: { bracket: {} } };
+  assert.equal(manageHubPollMs({ ...live, live_settings: { bracket: {}, autoAssignEnabled: true } }), MANAGE_AUTO_ASSIGN_POLL_MS);
+  assert.equal(manageHubPollMs(live), MANAGE_LIVE_POLL_MS, "players' scores / starts must reach the TD without AA");
+  assert.equal(manageHubPollMs({ ...live, live_state: "registration_closed" }), MANAGE_LIVE_POLL_MS, "drawn, a player may start a match");
+  assert.equal(manageHubPollMs({ ...live, live_settings: {} }), false, "no bracket yet");
+  assert.equal(manageHubPollMs({ ...live, live_state: "finished" }), false);
+  assert.equal(manageHubPollMs({ ...live, status: "completed" }), false);
+  assert.equal(manageHubPollMs({ ...live, tournament_format: "chip-tournament" }), false, "chip state is not on this row");
+  assert.equal(manageHubPollMs(null), false);
 });

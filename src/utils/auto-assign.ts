@@ -73,3 +73,31 @@ export const planAutoAssignFromState = (args: {
   const ready = held.size ? schedule.readyQueue.filter((e) => !held.has(e.match.id)) : schedule.readyQueue;
   return planAutoAssign(ready, freeTables(args.tables, computeTableOccupancy(matches)));
 };
+
+// How often the TD's Manage screen re-reads the elimination tournament row. Auto Assign on →
+// 5s (server assignments appear promptly). Otherwise, while a drawn bracket is being played,
+// 10s: players score (submit_match_state) and start matches (match_player_start) from their
+// phones, and a second TD device writes too — without a poll the TD saw none of it until their
+// own next action (staleTime is 5 min). Chip, undrawn and finished events don't poll. Pure.
+export const MANAGE_AUTO_ASSIGN_POLL_MS = 5000;
+export const MANAGE_LIVE_POLL_MS = 10000;
+export const manageHubPollMs = (
+  t:
+    | {
+        live_settings?: { autoAssignEnabled?: boolean | null; bracket?: unknown } | null;
+        live_state?: string | null;
+        is_paused?: boolean | null;
+        status?: string | null;
+        tournament_format?: string | null;
+      }
+    | null
+    | undefined,
+): number | false => {
+  if (!t || t.tournament_format === "chip-tournament") return false;
+  if (autoAssignActive(t)) return MANAGE_AUTO_ASSIGN_POLL_MS;
+  const drawn = !!t.live_settings?.bracket;
+  const over = t.live_state === "finished" || t.status === "completed" || t.status === "archived";
+  return drawn && !over && (t.live_state === "in_progress" || t.live_state === "registration_closed")
+    ? MANAGE_LIVE_POLL_MS
+    : false;
+};

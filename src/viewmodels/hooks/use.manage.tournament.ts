@@ -27,7 +27,7 @@ import {
   TournamentLiveSettings,
 } from "../../models/types/tournament-settings.types";
 import { sanitizePins } from "../../utils/queue-pins";
-import { autoAssignActive } from "../../utils/auto-assign";
+import { autoAssignActive, manageHubPollMs } from "../../utils/auto-assign";
 import { applyOpsLocally, liveOpErrorText } from "../../utils/elim-live-ops";
 import {
   TournamentLiveState,
@@ -56,8 +56,9 @@ export const useManageTournament = (tournamentId?: number) => {
     queryKey: ["tournament", tournamentId],
     queryFn: () => tournamentService.getTournament(tournamentId!),
     enabled: !!tournamentId,
-    refetchInterval: (query) =>
-      autoAssignPolling(query.state.data as Tournament | undefined) ? AUTO_ASSIGN_POLL_MS : false,
+    // Live freshness (see manageHubPollMs): 5s with Auto Assign, 10s while a drawn elimination
+    // bracket is being played (players score / start from their phones; a co-TD may write too).
+    refetchInterval: (query) => manageHubPollMs(query.state.data as Tournament | undefined),
   });
 
   // Error-tolerant: tournament_tables may not exist until the migration is
