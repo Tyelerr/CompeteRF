@@ -129,7 +129,14 @@ export const MatchActionsModal = ({
   const m = match;
 
   const apply = async (patch: Partial<MatchLiveState>) => {
-    await onPatch(m.id, patch);
+    try {
+      await onPatch(m.id, patch);
+    } catch (e) {
+      // The server refused the change (e.g. another device changed this match first —
+      // 'stale_state'). Say why; the hub has already refreshed, so the sheet closes onto the
+      // authoritative state and the TD retries deliberately.
+      Alert.alert("Couldn't update match", e instanceof Error && e.message ? e.message : "Please try again.");
+    }
     onClose();
   };
 
