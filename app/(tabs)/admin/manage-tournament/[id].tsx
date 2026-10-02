@@ -9390,8 +9390,17 @@ function ManageTournamentScreen() {
             <Ionicons name="chevron-down" size={18} color={COLORS.textSecondary} />
           </Pressable>
         ) : isChip ? (
-          <TouchableOpacity style={styles.headerActionBtn} onPress={onActionsPress}>
-            <Text allowFontScaling={false} style={styles.headerActionText}>⚡ Actions</Text>
+          // Native: compact dark secondary command button (no glyph) — same family as the
+          // web button; same onActionsPress handler / Tournament Actions modal.
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={onActionsPress}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Tournament actions"
+          >
+            <Text allowFontScaling={false} style={styles.headerActionText}>Actions</Text>
+            <Ionicons name="chevron-down" size={webMs(15)} color={COLORS.textSecondary} />
           </TouchableOpacity>
         ) : (
           <View style={styles.placeholderSpace} />
@@ -9878,8 +9887,20 @@ const styles = StyleSheet.create({
   },
   phaseBadgeText: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "700" },
   placeholderSpace: { width: webSc(50) },
-  headerActionBtn: { backgroundColor: COLORS.primary, borderRadius: webSc(RADIUS.md), paddingHorizontal: webSc(SPACING.sm), paddingVertical: webSc(SPACING.xs) },
-  headerActionText: { color: COLORS.white, fontSize: webMs(FONT_SIZES.xs), fontWeight: "800" },
+  // Native-only Actions trigger (web renders headerActionBtnWeb* instead).
+  headerActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: webSc(4),
+    height: webSc(40),
+    paddingLeft: webSc(12),
+    paddingRight: webSc(9),
+    borderRadius: webSc(8),
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.background,
+  },
+  headerActionText: { color: COLORS.text, fontSize: webMs(FONT_SIZES.md), fontWeight: "700" },
   // Web-only Actions command button — same surface/border/radius family as the web PhaseNav
   // track, but a standalone bordered button (not a segment). Negative vertical margin keeps
   // the header row at the title's height so the 40px button doesn't push the page down.

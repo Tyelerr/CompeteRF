@@ -21,7 +21,6 @@ import { FONT_SIZES } from "../../../../theme/typography";
 import { isKeyboardModality } from "../../../../utils/keyboard-modality";
 import { webMs, webSc } from "../../../../utils/scaling";
 
-const CARET = "▾"; // ▾
 const isWeb = Platform.OS === "web";
 
 
@@ -81,13 +80,6 @@ export const PhaseNav = ({
 
   const openPhase = phases.find((p) => p.key === openKey) ?? null;
 
-  const glyphColor = (state: PhaseNavPhase["state"], selected: boolean) => {
-    if (selected) return styles.onPrimary;
-    if (state === "done") return styles.glyphDone;
-    if (state === "live") return styles.glyphLive;
-    if (state === "locked") return styles.glyphLocked;
-    return styles.glyphCurrent;
-  };
 
   return (
     <View style={[styles.row, isWeb && styles.rowWeb]}>
@@ -141,41 +133,50 @@ export const PhaseNav = ({
           </View>
         );
       })}
-      {!isWeb && phases.map((p) => {
-        const selected = p.key === selectedKey;
-        return (
-          <TouchableOpacity
-            key={p.key}
-            ref={(r) => {
-              refs.current[p.key] = r;
-            }}
-            style={[
-              styles.pill,
-              selected && styles.pillActive,
-              p.locked && styles.pillLocked,
-            ]}
-            activeOpacity={0.85}
-            onPress={() => open(p)}
-          >
-            <Text allowFontScaling={false} style={[styles.glyph, glyphColor(p.state, selected)]}>
-              {p.glyph}
-            </Text>
-            <Text
-              allowFontScaling={false}
-              style={[styles.label, selected && styles.onPrimary]}
-              numberOfLines={1}
-            >
-              {p.label}
-            </Text>
-            <Text
-              allowFontScaling={false}
-              style={[styles.caret, selected && styles.onPrimary, p.locked && styles.caretHidden]}
-            >
-              {CARET}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+      {!isWeb && (
+        // Native: a compact 3-segment bar in the same family as the web control — recessed
+        // track, equal segments, subtle dividers, Compete-blue active segment, no status
+        // glyphs, Ionicons chevron (hidden while locked). Same open() handler as before.
+        <View style={styles.nTrack}>
+          {phases.map((p, i) => {
+            const selected = p.key === selectedKey;
+            const prevSelected = i > 0 && phases[i - 1].key === selectedKey;
+            return (
+              <View key={p.key} style={styles.nSegmentWrap}>
+                {i > 0 && (
+                  <View style={[styles.nDivider, (selected || prevSelected) && styles.nDividerHidden]} />
+                )}
+                <TouchableOpacity
+                  ref={(r) => {
+                    refs.current[p.key] = r;
+                  }}
+                  style={[styles.nSegment, selected && styles.nSegmentActive, p.locked && styles.nSegmentLocked]}
+                  activeOpacity={0.75}
+                  onPress={() => open(p)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${p.label} menu`}
+                  accessibilityState={{ selected, disabled: p.locked }}
+                >
+                  <Text
+                    allowFontScaling={false}
+                    style={[styles.nLabel, selected && styles.onPrimary, p.locked && !selected && styles.nLabelLocked]}
+                    numberOfLines={1}
+                  >
+                    {p.label}
+                  </Text>
+                  {!p.locked && (
+                    <Ionicons
+                      name="chevron-down"
+                      size={webMs(16)}
+                      color={selected ? COLORS.white : COLORS.textSecondary}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <Modal
         transparent
@@ -309,30 +310,36 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   segChevron: { marginTop: 1 },
-  pill: {
+  // Native segmented bar (see render). Recessed black track on the surface header bar.
+  nTrack: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "stretch",
+    height: webSc(48),
+    padding: webSc(3),
+    borderRadius: webSc(10),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  nSegmentWrap: { flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 },
+  nDivider: { width: 1, height: webSc(18), backgroundColor: COLORS.border },
+  nDividerHidden: { backgroundColor: "transparent" },
+  nSegment: {
+    flex: 1,
+    alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: webSc(SPACING.xs),
-    paddingVertical: webSc(SPACING.sm),
+    gap: webSc(SPACING.xs + 2),
     paddingHorizontal: webSc(SPACING.sm),
-    borderRadius: webSc(RADIUS.md),
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: webSc(7),
   },
-  pillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  pillLocked: { opacity: 0.55 },
-  glyph: { fontSize: webMs(FONT_SIZES.xs), fontWeight: "900" },
-  glyphDone: { color: COLORS.success },
-  glyphLive: { color: COLORS.error },
-  glyphLocked: { color: COLORS.textMuted },
-  glyphCurrent: { color: COLORS.primary },
+  nSegmentActive: { backgroundColor: COLORS.primary },
+  nSegmentLocked: { opacity: 0.5 },
+  nLabel: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
+  nLabelLocked: { color: COLORS.textMuted },
   onPrimary: { color: COLORS.white },
-  label: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.text },
-  caret: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "900" },
-  caretHidden: { opacity: 0 },
 
   backdrop: {
     flex: 1,
