@@ -8439,6 +8439,64 @@ function ManageTournamentScreen() {
   };
 
   // ── Elimination Live Dashboard (web/desktop control center) ──────────────────
+  // Match-level sheets (Forfeit Review, Contact-TD message, and the action sheet they hand off
+  // to). Rendered ONCE for every elimination Live tab — not only inside the Dashboard — so a
+  // notification deep link (?issueMatch / ?reviewMatch) and the Queue cards' ✉ / timer buttons
+  // open them wherever the TD is (native lands on Matches, web on Dashboard).
+  const renderMatchSheets = () => (
+      <>
+        <MatchReviewModal
+          visible={!!reviewView && (reviewMatchId != null || typeof params.reviewMatch === "string")}
+          review={reviewView}
+          busy={reviewBusy}
+          onMarkCheckedIn={(registrationId, checkedIn) =>
+            runReviewAction(
+              () => matchCheckInService.markCheckedIn(tournamentId!, reviewView!.matchId, registrationId, checkedIn),
+              "Check In",
+            )
+          }
+          onExtend={(minutes) =>
+            runReviewAction(() => matchCheckInService.extendDeadline(tournamentId!, reviewView!.matchId, minutes), "Extend Time")
+          }
+          onStartMatch={() => {
+            const id = reviewView!.matchId;
+            setReviewMatchId(null);
+            handleQueueStart(id);
+          }}
+          onForfeitPlayer={(slot) => {
+            const m = liveMatches.find((x) => x.id === reviewView!.matchId);
+            setReviewMatchId(null);
+            // The existing, unchanged forfeit flow — this sheet never forfeits anyone itself.
+            if (m) setDashboardSheet({ match: m, step: "forfeit" });
+            void slot;
+          }}
+          onClose={() => setReviewMatchId(null)}
+        />
+
+        <MatchIssueModal
+          visible={!!issueView}
+          issue={issueView}
+          busy={issueBusy}
+          onResolve={resolveIssue}
+          onMessagePlayer={issueView ? () => openPlayerDm(issueView) : undefined}
+          onClose={() => { setIssueSheet(null); setIssueDismissed(true); }}
+        />
+        {dashboardSheet && (
+          <MatchActionsModal
+            match={dashboardSheet.match}
+            initialStep={dashboardSheet.step}
+            tables={hub.tables}
+            occupancy={tableOccupancy}
+            onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
+            onClearTable={handleClearTable}
+            autoAssignEnabled={hub.autoAssignEnabled}
+            onClose={() => setDashboardSheet(null)}
+            busy={dashBusy}
+          />
+        )}
+      </>
+  );
+
   const renderEliminationDashboard = () => {
     const now = nowMs();
     const readyAtMap = computeReadyAtMap(hub.bracket, hub.matchState);
@@ -8490,55 +8548,6 @@ function ManageTournamentScreen() {
           onAction={(m, step) => setDashboardSheet({ match: m, step })}
           onOpenPage={(tab) => setActiveTab(tab)}
         />
-        <MatchReviewModal
-          visible={!!reviewView && (reviewMatchId != null || typeof params.reviewMatch === "string")}
-          review={reviewView}
-          busy={reviewBusy}
-          onMarkCheckedIn={(registrationId, checkedIn) =>
-            runReviewAction(
-              () => matchCheckInService.markCheckedIn(tournamentId!, reviewView!.matchId, registrationId, checkedIn),
-              "Check In",
-            )
-          }
-          onExtend={(minutes) =>
-            runReviewAction(() => matchCheckInService.extendDeadline(tournamentId!, reviewView!.matchId, minutes), "Extend Time")
-          }
-          onStartMatch={() => {
-            const id = reviewView!.matchId;
-            setReviewMatchId(null);
-            handleQueueStart(id);
-          }}
-          onForfeitPlayer={(slot) => {
-            const m = liveMatches.find((x) => x.id === reviewView!.matchId);
-            setReviewMatchId(null);
-            // The existing, unchanged forfeit flow — this sheet never forfeits anyone itself.
-            if (m) setDashboardSheet({ match: m, step: "forfeit" });
-            void slot;
-          }}
-          onClose={() => setReviewMatchId(null)}
-        />
-
-        <MatchIssueModal
-          visible={!!issueView}
-          issue={issueView}
-          busy={issueBusy}
-          onResolve={resolveIssue}
-          onMessagePlayer={issueView ? () => openPlayerDm(issueView) : undefined}
-          onClose={() => { setIssueSheet(null); setIssueDismissed(true); }}
-        />
-        {dashboardSheet && (
-          <MatchActionsModal
-            match={dashboardSheet.match}
-            initialStep={dashboardSheet.step}
-            tables={hub.tables}
-            occupancy={tableOccupancy}
-            onPatch={(matchId, patch) => runMatchPatch(matchId, patch)}
-            onClearTable={handleClearTable}
-            autoAssignEnabled={hub.autoAssignEnabled}
-            onClose={() => setDashboardSheet(null)}
-            busy={dashBusy}
-          />
-        )}
       </>
     );
   };
@@ -9565,6 +9574,7 @@ function ManageTournamentScreen() {
           {renderTab()}
         </KeyboardAwareScroll>
       )}
+      {!isChip && renderMatchSheets()}
 
       {/* Guided flow — Players step. Both formats advance to Tables once the field
           is valid (≥2 Ready/checked-in); disabled until then so the sequence stays
