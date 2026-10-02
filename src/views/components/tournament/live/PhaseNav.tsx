@@ -134,18 +134,14 @@ export const PhaseNav = ({
         );
       })}
       {!isWeb && (
-        // Native: a compact 3-segment bar in the same family as the web control — recessed
-        // track, equal segments, subtle dividers, Compete-blue active segment, no status
-        // glyphs, Ionicons chevron (hidden while locked). Same open() handler as before.
-        <View style={styles.nTrack}>
-          {phases.map((p, i) => {
+        // Native: three separate equal-width buttons on one row with a gap between them —
+        // Compete-blue active button, no status glyphs, Ionicons chevron (hidden while
+        // locked). Same open() handler as before.
+        <View style={styles.nRow}>
+          {phases.map((p) => {
             const selected = p.key === selectedKey;
-            const prevSelected = i > 0 && phases[i - 1].key === selectedKey;
             return (
               <View key={p.key} style={styles.nSegmentWrap}>
-                {i > 0 && (
-                  <View style={[styles.nDivider, (selected || prevSelected) && styles.nDividerHidden]} />
-                )}
                 <TouchableOpacity
                   ref={(r) => {
                     refs.current[p.key] = r;
@@ -310,32 +306,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   segChevron: { marginTop: 1 },
-  // Native segmented bar (see render). Recessed black track on the surface header bar.
-  nTrack: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "stretch",
-    height: webSc(48),
-    padding: webSc(3),
-    borderRadius: webSc(10),
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-  },
-  nSegmentWrap: { flex: 1, flexDirection: "row", alignItems: "center", minWidth: 0 },
-  nDivider: { width: 1, height: webSc(18), backgroundColor: COLORS.border },
-  nDividerHidden: { backgroundColor: "transparent" },
+  // Native phase buttons (see render): three separate dark buttons on the surface header
+  // bar, ~10px apart (scales down to ~8px on narrow phones).
+  nRow: { flex: 1, flexDirection: "row", gap: webSc(10) },
+  nSegmentWrap: { flex: 1, minWidth: 0 },
   nSegment: {
-    flex: 1,
-    alignSelf: "stretch",
+    height: webSc(48),
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: webSc(SPACING.xs + 2),
     paddingHorizontal: webSc(SPACING.sm),
-    borderRadius: webSc(7),
+    borderRadius: webSc(8),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
   },
-  nSegmentActive: { backgroundColor: COLORS.primary },
+  nSegmentActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   nSegmentLocked: { opacity: 0.5 },
   nLabel: { fontSize: webMs(FONT_SIZES.md), fontWeight: "700", color: COLORS.text },
   nLabelLocked: { color: COLORS.textMuted },
