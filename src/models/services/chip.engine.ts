@@ -1983,10 +1983,77 @@ export const assignFinals = (input: ChipState): ChipState => {
 // after Undo / Restore, so every path obeys the same invariants:
 //   drain readiness → 0-chip eliminations → champion → finals supersede Shuffle →
 //   owed-turn self-heal → round completion → finals seating.
+// ── Stranded waiting winners (2026-10 hardening) ─────────────────────────────────
+// Winner-stays can strand itself: every surviving team is a lone waiting winner on its own
+// table, nobody seatable is queued, and nothing is live or announced — so no result will ever
+// arrive to re-run seating (seatAllTables only runs inside recordWinner). Before this the event
+// sat still until the TD noticed and did Clear Table + Assign Next Team (60% of simulated events
+// at the recommended table count, ~2.6 interventions each). Rule (deterministic, documented):
+//   • only in normal play — not before the first match, not in a Shuffle drain/ready/round,
+//     not in the finals (2 alive: the TD picks the finals table), not after a champion;
+//   • only lone holders on USABLE tables count (active, not closing, not locked);
+//   • play consolidates onto the LOWEST tables: the holder of the last such table rejoins the
+//     queue and is ANNOUNCED as the challenger on the first holder table (normal takeChallenger,
+//     so the rematch rule is honoured whenever an alternative exists). Repeats while ≥ 2 lone
+//     holders remain unpaired. Nothing starts automatically — the TD taps Start Match as for
+//     every winner-stays matchup — and one audit event per pairing gives it its own Undo step.
+export const pairStrandedHolders = (input: ChipState, by?: number | null): ChipState => {
+  const stranded = (s: ChipState): ChipTable[] =>
+    s.tables.filter((t) => !t.inactive && !t.closing && !t.locked && !!t.holderId && !t.matchId && !t.pendingChallengerId);
+  const eligible = (s: ChipState): boolean =>
+    !!s.startedAt &&
+    !s.finishedAt &&
+    !s.winnerId &&
+    s.matches.length > 0 &&
+    !s.reshufflePending &&
+    !s.shuffleReady &&
+    !s.shuffleRound &&
+    aliveEntries(s).length >= 3 &&
+    !s.matches.some((m) => m.status === "in_progress") &&
+    !s.tables.some((t) => !t.inactive && !!t.pendingChallengerId) &&
+    !s.queue.some((id) => roundSeatable(s, id)) &&
+    stranded(s).length >= 2;
+  if (!eligible(input)) return input;
+  const s = clone(input);
+  let guard = s.tables.length;
+  while (guard-- > 0 && eligible(s)) {
+    const lone = stranded(s);
+    const mover = lone[lone.length - 1];
+    const host = lone[0];
+    const moverId = mover.holderId!;
+    const e = entryById(s, moverId);
+    if (!e || e.status === "eliminated") break;
+    mover.holderId = null;
+    mover.lastLoserId = null;
+    mover.status = "open";
+    e.status = "queued";
+    e.tableId = null;
+    s.queue = [moverId, ...s.queue.filter((id) => id !== moverId)];
+    const challenger = takeChallenger(s, host, by);
+    if (!challenger) break; // cannot happen (the mover is seatable) — never loop
+    host.pendingChallengerId = challenger;
+    const ce = entryById(s, challenger);
+    if (ce) {
+      ce.status = "playing";
+      ce.tableId = host.id;
+    }
+    const he = entryById(s, host.holderId);
+    pushEvent(
+      s,
+      "manual",
+      `Waiting winners paired — ${ce ? teamName(ce) : "a team"} moves from ${mover.label} to challenge ${he ? teamName(he) : "the holder"} (${host.label})`,
+      by,
+    );
+  }
+  return s;
+};
+
 export const settleChipState = (input: ChipState): ChipState =>
-  assignFinals(
-    settleShuffleRound(
-      reconcileShuffleRound(reconcileFinalsPhase(reconcileChampion(reconcileEliminations(settleShuffleDrain(input))))),
+  pairStrandedHolders(
+    assignFinals(
+      settleShuffleRound(
+        reconcileShuffleRound(reconcileFinalsPhase(reconcileChampion(reconcileEliminations(settleShuffleDrain(input))))),
+      ),
     ),
   );
 

@@ -31,9 +31,10 @@ import {
   finalPlacements,
   finishTournament,
   newId,
+  seatFinals,
+  pairStrandedHolders,
   recordWinner,
   reorderQueue,
-  seatFinals,
   setShuffleMode,
   setTableLocked,
   settleChipState,
@@ -252,7 +253,8 @@ test("chip: plain winner-stays runs complete for every size / table count / chip
     for (const n of [2, 3, 4, 5, 8, 13, 16, 32])
       for (const tables of [1, 2, 4, 8])
         for (const chips of [1, 2, 3, 5, "tiers"] as const) {
-          runChip({ format, n, tables, chips, seed: n * 97 + tables * 13 + (typeof chips === "number" ? chips : 9) + (format === "singles" ? 0 : 5000) });
+          const r = runChip({ format, n, tables, chips, seed: n * 97 + tables * 13 + (typeof chips === "number" ? chips : 9) + (format === "singles" ? 0 : 5000) });
+          assert.equal(r.strandedHolders, 0, `${format} n=${n} tables=${tables} chips=${chips}: the engine never strands waiting winners`);
           runs++;
         }
   assert.ok(runs >= 300, `runs=${runs}`);
@@ -321,4 +323,71 @@ test("chip parity: web 'Disable Shuffle' and native 'Cancel Shuffle' leave the s
       Math.random = realRandom;
     }
   }
+});
+
+// ── Stranded waiting winners (pairStrandedHolders, in settleChipState) ──────────────────────
+const strandedBoard = (n: number, tables: number): ChipState => {
+  Math.random = seeded(4);
+  try {
+    let s = emptyChipState("singles");
+    s = { ...s, settings: { ...s.settings, tiers: [{ id: "t1", minFargo: 0, maxFargo: null, chips: 1 }] } };
+    s = { ...s, entries: Array.from({ length: n }, (_, i) => entry(i, false, 500)) };
+    return act(settleChipState(startChipTournament(addTables(s, tables))), startAllMatches);
+  } finally {
+    Math.random = realRandom;
+  }
+};
+const playOut = (s: ChipState, stopWhen: (x: ChipState) => boolean) => {
+  for (let k = 0; k < 200 && !stopWhen(s); k++) {
+    const fin = chipFinalsState(s);
+    if (fin.kind === "select") s = act(s, (c) => seatFinals(c, fin.tableIds[0]));
+    for (const t of s.tables) if (t.holderId && t.pendingChallengerId && !t.matchId) s = act(s, (c) => startPendingMatch(c, t.id));
+    const m = s.matches.find((x) => x.status === "in_progress");
+    if (!m) break;
+    s = act(s, (c) => recordWinner(c, m.id, m.aId));
+  }
+  return s;
+};
+// The same play WITHOUT the pairing step (raw engine + every other settle) → a truly stranded board.
+const strandedRaw = (): ChipState => {
+  let s = strandedBoard(6, 3);
+  for (let k = 0; k < 50; k++) {
+    for (const t of s.tables) if (t.holderId && t.pendingChallengerId && !t.matchId) s = startPendingMatch(s, t.id);
+    const m = s.matches.find((x) => x.status === "in_progress");
+    if (!m) break;
+    s = recordWinner(s, m.id, m.aId);
+  }
+  return s;
+};
+
+test("stranded winners: 3 alive lone holders on 3 tables are paired onto the lowest tables (announced, not started)", () => {
+  const raw = strandedRaw();
+  const lone0 = raw.tables.filter((t) => t.holderId && !t.pendingChallengerId && !t.matchId);
+  assert.equal(raw.entries.filter((e) => e.status !== "eliminated").length, 3, "reproduced: 3 alive");
+  assert.equal(lone0.length, 3, "reproduced: every survivor is a lone waiting winner");
+  assert.equal(raw.queue.length, 0);
+  const s = settleChipState(raw);
+  const pending = s.tables.filter((t) => t.holderId && t.pendingChallengerId && !t.matchId);
+  const lone = s.tables.filter((t) => t.holderId && !t.pendingChallengerId && !t.matchId);
+  assert.equal(pending.length, 1, "one announced matchup");
+  assert.equal(lone.length, 1, "one winner still waits (odd count)");
+  assert.equal(pending[0].id, raw.tables[0].id, "hosted on the lowest table");
+  assert.equal(pending[0].pendingChallengerId, lone0[2].holderId, "the last table's winner moves");
+  assert.equal(s.matches.filter((m) => m.status === "in_progress").length, 0, "nothing auto-started");
+  assert.ok(s.events.some((e) => e.text.startsWith("Waiting winners paired")), "audited (own Undo step)");
+  const end = playOut(s, (x) => !!x.winnerId);
+  assert.ok(end.winnerId, "champion without manual Clear Table / Assign");
+});
+
+test("stranded winners: never paired in a Shuffle round/drain, on locked tables, or while a match is live", () => {
+  const raw = strandedRaw();
+  assert.notEqual(pairStrandedHolders(raw), raw, "control: the raw board IS paired");
+  const locked = { ...raw, tables: raw.tables.map((t) => ({ ...t, locked: true })) };
+  assert.equal(pairStrandedHolders(locked), locked, "locked tables");
+  for (const flag of ["reshufflePending", "shuffleReady", "shuffleRound"] as const) {
+    const x = { ...raw, [flag]: true } as ChipState;
+    assert.equal(pairStrandedHolders(x), x, flag);
+  }
+  const liveElsewhere = { ...raw, matches: [...raw.matches, { id: "mx", tableId: "tx", aId: "a", bId: "b", startedAt: "x", status: "in_progress" as const }] };
+  assert.equal(pairStrandedHolders(liveElsewhere), liveElsewhere, "a live match will feed a challenger");
 });
