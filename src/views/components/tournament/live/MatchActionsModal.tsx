@@ -295,7 +295,18 @@ export const MatchActionsModal = ({
     items.push({ label: "Set Winner", onPress: () => setStep("winner") });
     items.push({
       label: "Reopen Match",
-      onPress: () =>
+      onPress: () => {
+        // A finished match keeps its tableId, and that table may since have been given to
+        // another match. Reopening would then put two live matches on one table, so refuse it
+        // here (same guard as Assign Table) and send the tableId so the server re-checks it.
+        const taken = m.tableId != null ? busyByOther(m.tableId) : null;
+        if (taken) {
+          Alert.alert(
+            "Table in use",
+            `${tableName(m.tableId)} is now in use by ${taken}. Free it before reopening ${m.label}.`,
+          );
+          return;
+        }
         Alert.alert("Reopen Match", `Reopen ${m.label}? It returns to in-progress.`, [
           { text: "Cancel", style: "cancel" },
           {
@@ -307,9 +318,15 @@ export const MatchActionsModal = ({
                 completedAt: null,
                 result: null,
                 startedAt: m.startedAt ?? now(),
+                // Server re-check (table_occupied) — only for a still-usable table, so reopening
+                // on a table since marked unavailable behaves exactly as before.
+                ...(m.tableId != null && tables.some((t) => t.id === m.tableId && t.status !== "unavailable")
+                  ? { tableId: m.tableId }
+                  : {}),
               }),
           },
-        ]),
+        ]);
+      },
     });
   }
   if (!m.bye && !notReady)

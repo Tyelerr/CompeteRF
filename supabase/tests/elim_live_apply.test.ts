@@ -810,3 +810,21 @@ test("Clear Table in Manual order: unassign + set_queue land atomically in one c
   assert.equal(l.autoAssignMode, "manual", "mode unchanged");
   assert.equal(l.autoAssignEnabled, true, "Auto Assign stays ON");
 });
+
+// ── Reopen Match must not double-book a table (MatchActionsModal sends the kept tableId) ─────
+test("Reopen: a finished match's table given to another match → reopen carrying tableId is refused", async () => {
+  await as(U.td);
+  await reset(T, { W1M1: { ...done(1), tableId: 71 }, W1M3: { status: "in_progress", tableId: 71, startedAt: "2026-09-01T10:40:00.000Z" } });
+  const reopen = { status: "in_progress", winner: null, completedAt: null, result: null, startedAt: "2026-09-01T10:00:00.000Z" };
+  // With the tableId (the client's payload now) the server's table rule refuses it…
+  const r = await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { ...reopen, tableId: 71 } }]);
+  assert.equal(r.results[0].ok, false);
+  assert.equal(r.results[0].error, "table_occupied");
+  assert.equal((await ms(T)).W1M1.status, "completed", "nothing written");
+  // …and when the table is free again the same reopen goes through on it.
+  await reset(T, { W1M1: { ...done(1), tableId: 71 } });
+  const ok = await apply(T, [{ op: "patch_match", matchId: "W1M1", set: { ...reopen, tableId: 71 } }]);
+  assert.equal(ok.results[0].ok, true);
+  assert.equal((await ms(T)).W1M1.status, "in_progress");
+  assert.equal((await ms(T)).W1M1.tableId, 71);
+});
