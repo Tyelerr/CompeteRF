@@ -971,12 +971,13 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   };
   // Dashboard expand toggles.
   const [showFullStandings, setShowFullStandings] = useState(false);
-  // Web-only accordion state for the live dashboard (in-memory, per session — no
-  // persistence). Sidebar Alerts/Queue default open (urgent ops stay visible); the two
-  // lower sections default collapsed to match the target. Native ignores these (DashSection
-  // only collapses when isWeb && collapsible).
+  // Accordion state for the live dashboard (in-memory, per session — no persistence), on
+  // web and native. Alerts/Queue/Active Tables default open (urgent ops stay visible); the
+  // two lower sections (Chip Leaders, Tournament Activity) default collapsed.
   const [sideAlertsOpen, setSideAlertsOpen] = useState(true);
   const [sideQueueOpen, setSideQueueOpen] = useState(true);
+  // Native-only: Active Tables collapse (web keeps Active Tables always expanded).
+  const [tablesOpen, setTablesOpen] = useState(true);
   const [actOpen, setActOpen] = useState(false);
   const [standingsOpen, setStandingsOpen] = useState(false);
   // Restore-chip (eliminated team) reason prompt.
@@ -1473,6 +1474,7 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
   // Chip Leader card's "View Standings" CTA can scroll to it instead of no-op (item 24).
   const leadersYRef = useRef(0);
   const scrollToLeaders = useCallback(() => {
+    setStandingsOpen(true); // Chip Leaders may be collapsed (SHOW/HIDE) — expand before scrolling
     setShowFullStandings(true);
     liveScrollRef.current?.scrollTo({ y: Math.max(0, leadersYRef.current), animated: true });
   }, []);
@@ -5328,7 +5330,7 @@ ${partner} will become the team captain. The team stays registered and will need
     // untouched.
     const activeTablesEl = (
       <>
-        <DashSection tightGap bare={!isWeb} icon="grid-outline" title={isWeb ? `Active Tables (${activeCount})` : "Active Tables"} subtitle={undefined} action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
+        <DashSection tightGap bare={!isWeb} icon="grid-outline" title={isWeb ? `Active Tables (${activeCount})` : "Active Tables"} subtitle={undefined} collapsible={!isWeb} open={tablesOpen} onToggle={() => setTablesOpen((v) => !v)} action={vm.startAllMode ? <HeaderBtn label={vm.startAllMode === "all" ? "Start All" : "Start Remaining"} onPress={() => vm.startAllMatches()} /> : !shuffleActive && !chip.shuffleMode ? <HeaderBtn label="Shuffle" onPress={openShuffleModal} /> : undefined}>
           {activeTables.length === 0 && <Text style={styles.hint}>No active tables.</Text>}
           {(() => {
             // Web desktop: render EVERY active table in the compact grid (each live card
@@ -5361,7 +5363,7 @@ ${partner} will become the team captain. The team stays registered and will need
 
     const chipLeadersEl = (
       <View onLayout={(e) => { leadersYRef.current = e.nativeEvent.layout.y; }}>
-        <DashSection tightGap icon="trophy-outline" title="Chip Leaders" collapsible open={standingsOpen} onToggle={() => setStandingsOpen((v) => !v)} action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => setShowFullStandings((v) => !v)} />}>
+        <DashSection tightGap icon="trophy-outline" title="Chip Leaders" collapsible open={standingsOpen} onToggle={() => setStandingsOpen((v) => !v)} action={<HeaderBtn label={showFullStandings ? "Show less" : "View Standings"} onPress={() => { if (!isWeb && !standingsOpen) { setStandingsOpen(true); setShowFullStandings(true); } else setShowFullStandings((v) => !v); }} />}>
           {leaderList.map((e, i) => (
             <TouchableOpacity key={e.id} style={[styles.clRow, i === 0 && styles.clRowTop]} onPress={() => setProfileId(e.id)} activeOpacity={0.7}>
               <Text style={styles.clRank} numberOfLines={1}>{i + 1}.</Text>
@@ -5500,8 +5502,8 @@ ${partner} will become the team captain. The team stays registered and will need
         {chipLeaderEl}
         {championEl}
         {alertsEl}
-        {queueEl}
         {activeTablesEl}
+        {queueEl}
         {chipLeadersEl}
         {activityEl}
       </View>
@@ -9374,14 +9376,19 @@ const HeaderBtn = ({ label, onPress }: { label: string; onPress: () => void }) =
 // visually distinct at a glance.
 // Consistent neutral section: [small icon] Title  …  optional action. Same card
 // style for every section (subtle 1px border, no colored side bar / tint).
-// `collapsible`/`open`/`onToggle` add a WEB-ONLY accordion styled like a standard dropdown
+// `collapsible`/`open`/`onToggle` add an accordion (web + native) styled like a standard dropdown
 // header: [icon] [title] on the LEFT, and on the RIGHT an optional (independent) action
-// button followed by a far-right chevron (▾ open / › collapsed). The title area AND the
-// chevron toggle; the action keeps its own handler and never toggles. On native (or when
-// `collapsible` is unset) behavior is unchanged — body always renders, title is a plain View.
+// button followed by a far-right SHOW/HIDE + chevron (web: ▾ open / › collapsed; native: the
+// Profile hub's ⌃ open / ⌄ collapsed). The title area AND the toggle toggle; the action keeps
+// its own handler and never toggles. When `collapsible` is unset the body always renders.
 const DashSection = ({ icon, iconColor, title, subtitle, action, children, bare, collapsible, open, onToggle, tightGap }: { icon: React.ComponentProps<typeof Ionicons>["name"]; iconColor?: string; title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode; bare?: boolean; collapsible?: boolean; open?: boolean; onToggle?: () => void; tightGap?: boolean }) => {
-  const canCollapse = isWeb && !!collapsible;
+  const canCollapse = !!collapsible;
   const showBody = canCollapse ? !!open : true;
+  // Native narrow phones (< 380pt): a header holding title + action + SHOW/HIDE doesn't fit
+  // on one line, so the action drops to its own right-aligned line under the header (always
+  // visible, open or collapsed). Wider phones and web keep the single-line header.
+  const { width: dashWinW } = useWindowDimensions();
+  const stackAction = canCollapse && !isWeb && !!action && dashWinW < 380;
   const titleInner = (
     <>
       <Ionicons name={icon} size={webMs(15)} color={iconColor ?? COLORS.textSecondary} />
@@ -9403,18 +9410,21 @@ const DashSection = ({ icon, iconColor, title, subtitle, action, children, bare,
         )}
         {canCollapse ? (
           <View style={styles.dashSectionHeadRight}>
-            {action}
+            {stackAction ? null : action}
             {/* Show/Hide + chevron toggle — mirrors the Profile page accordion pattern
                 (ChipTournamentHubView collapseLabel/chevron). Independent of `action`. */}
             <TouchableOpacity onPress={onToggle} activeOpacity={0.7} style={styles.dashSectionToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.dashSectionToggleLabel}>{open ? "Hide" : "Show"}</Text>
-              <Ionicons name={open ? "chevron-down" : "chevron-forward"} size={webMs(16)} color={COLORS.primarySoft} />
+              {/* Native uses the Profile hub's chevron (down = collapsed, up = expanded); web keeps
+                  its existing forward/down chevron. */}
+              <Ionicons name={isWeb ? (open ? "chevron-down" : "chevron-forward") : (open ? "chevron-up" : "chevron-down")} size={webMs(16)} color={COLORS.primarySoft} />
             </TouchableOpacity>
           </View>
         ) : (
           action
         )}
       </View>
+      {stackAction ? <View style={styles.dashSectionActionRow}>{action}</View> : null}
       {showBody ? children : null}
     </View>
   );
@@ -9624,6 +9634,8 @@ const styles = StyleSheet.create({
   // Web: fixed header-row height so a section WITH an action button (e.g. Chip Leaders'
   // "View Standings") collapses to the same height as one without (Tournament Activity).
   dashSectionHeadWeb: { minHeight: 44 },
+  // Native narrow phones: the header action on its own right-aligned line (see DashSection).
+  dashSectionActionRow: { flexDirection: "row", justifyContent: "flex-end", paddingBottom: webSc(SPACING.sm) },
   // Web accordion header right cluster: optional action button + far-right Show/Hide toggle.
   dashSectionHeadRight: { flexDirection: "row", alignItems: "center", gap: webSc(SPACING.sm) },
   // Show/Hide + chevron toggle, styled after the Profile accordion (blue accent, uppercase).
