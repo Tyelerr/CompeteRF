@@ -20,13 +20,14 @@ test("poll only when focused AND the designated poller; nothing without a resour
 // Each entry: an observer's interval (ms) in a given state. Before = what profile.tsx mounted.
 const rate = (timers: (number | false)[]) => timers.reduce<number>((a, t) => a + (t ? 1000 / t : 0), 0);
 test("Profile tab, live elimination event: request rate before → after (focused and off-tab)", () => {
-  const before = {
+  type Timers = { focused: (number | false)[]; offTab: (number | false)[] };
+  const before: Timers = {
     // tournament row: usePlayerLiveMatch + usePlayerMatchActions' nested usePlayerLiveMatch
     // live RPC: Profile's own (focus-gated) + 2 nested useProfileTournaments that ignored focus
     focused: [5000, 5000, 30000, 30000, 30000],
     offTab: [5000, 5000, false, 30000, 30000],
   };
-  const after = {
+  const after: Timers = {
     focused: [playerPollInterval(5000, 1, { focused: true }), playerPollInterval(5000, 1, { focused: true, poll: false }), 30000, false, false],
     offTab: [playerPollInterval(5000, 1, { focused: false }), playerPollInterval(5000, 1, { focused: false, poll: false }), false, false, false],
   };
