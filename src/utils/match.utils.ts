@@ -359,7 +359,18 @@ export const buildLiveMatches = (
 export const computeEliminatedRegIds = (matches: LiveMatch[]): number[] => {
   const out = new Set<number>();
   for (const m of matches) {
-    if (m.empty || m.bye) continue;
+    if (m.empty) continue;
+    if (m.bye) {
+      // A bye's one player can still be forfeited / withdrawn by the TD (MatchActionsModal).
+      // Same rule as the resolver's winnerOf: a completed forfeit / withdraw bye advances nobody
+      // and drops nobody (a bye has no loser), so that player is OUT. Without this they stayed
+      // "In Field" and Players Remaining never reached 1.
+      if (m.status === "completed" && (m.result === "forfeit" || m.result === "withdraw")) {
+        const reg = m.p1RegId ?? m.p2RegId;
+        if (reg != null) out.add(reg);
+      }
+      continue;
+    }
     if (m.status !== "completed" || m.winner == null) continue;
     // loser still has a path → not eliminated (unless they withdrew: no drop happens)
     if (m.loserToLabel != null && m.result !== "withdraw") continue;

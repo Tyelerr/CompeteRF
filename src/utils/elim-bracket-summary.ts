@@ -14,7 +14,7 @@ import {
   sidePotPayoutViews,
   sidePotTotal,
 } from "./prize-pool";
-import { safePaidSidePots } from "./side-pots";
+import { parseAmount, safePaidSidePots } from "./side-pots";
 import { computeStandings } from "./tournament.stats";
 
 // A registration reduced to what the backup prints (also what the offline copy keeps).
@@ -84,7 +84,7 @@ export const buildBackupPayouts = (
   for (const p of t.side_pots ?? []) {
     const name = (p.name ?? "").trim();
     if (!name) continue;
-    pools[name] = sidePotTotal(active.filter((r) => r.paid_side_pots.includes(name)).length, Number(p.amount) || 0);
+    pools[name] = sidePotTotal(active.filter((r) => r.paid_side_pots.includes(name)).length, parseAmount(p.amount));
   }
   const standings = computeStandings(matches);
   const finished = standings.some((s) => s.place === 1);

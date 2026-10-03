@@ -153,8 +153,12 @@ export const useManageTournament = (tournamentId?: number) => {
   // a server-side jsonb merge (RPC), tracked as the multi-director concurrency item.
   const currentTournament = () =>
     queryClient.getQueryData<Tournament>(["tournament", tournamentId]);
+  // opts.casRevision: write only if the row is still at the live_revision this device loaded
+  // (tournamentService.updateTournamentIfRevision). Whole-blob writes that REPLACE the bracket
+  // (draw / redraw) use it so a stale second device can't wipe the newer draw + its results.
   const writeLiveSettings = async (
     build: (prevLS: TournamentLiveSettings) => Partial<Tournament>,
+    opts?: { casRevision?: boolean },
   ): Promise<Tournament> => {
     await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
     const prev = currentTournament();
@@ -170,6 +174,10 @@ export const useManageTournament = (tournamentId?: number) => {
       });
     }
     try {
+      const expectRevision = prev?.live_revision;
+      if (opts?.casRevision && typeof expectRevision === "number") {
+        return await tournamentService.updateTournamentIfRevision(tournamentId!, nextPatch, expectRevision);
+      }
       return await tournamentService.updateTournament(tournamentId!, nextPatch);
     } catch (e) {
       if (prev) queryClient.setQueryData(["tournament", tournamentId], prev);
@@ -352,9 +360,11 @@ export const useManageTournament = (tournamentId?: number) => {
     networkMode: elimNetworkMode,
     mutationFn: async () => {
       guardLiveWrite();
-      return tournamentService.finishLiveTournament(tournamentId!);
+      // Finish only the state this TD is looking at: if a correction on another device has
+      // since re-opened the final, the revision moved and the finish is refused.
+      return tournamentService.finishLiveTournament(tournamentId!, currentTournament()?.live_revision);
     },
-    onSuccess: invalidateTournament,
+    onSettled: invalidateTournament,
   });
 
   // Draw the bracket: store it + append a draw-log entry (merging into the
@@ -377,7 +387,7 @@ export const useManageTournament = (tournamentId?: number) => {
           // old results stick to the new bracket.
           matchState: {},
         },
-      }));
+      }), { casRevision: true });
     },
     onSettled: invalidateTournament,
   });

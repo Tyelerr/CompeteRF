@@ -177,7 +177,7 @@ import { matchNotificationService } from "../../../../src/models/services/match-
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
 import { tournamentEventService, TournamentEvent } from "../../../../src/models/services/tournament-event.service";
-import { tournamentService } from "../../../../src/models/services/tournament.service";
+import { StaleTournamentError, tournamentService } from "../../../../src/models/services/tournament.service";
 import { usePlayerSearch } from "../../../../src/viewmodels/hooks/use.player.search";
 import { smsNotificationService } from "../../../../src/models/services/sms-notification.service";
 import { teamService } from "../../../../src/models/services/team.service";
@@ -202,6 +202,11 @@ import {
 } from "../../../../src/viewmodels/hooks/use.manage.tournament";
 import { useProjectedSchedule } from "../../../../src/viewmodels/hooks/use.projected.schedule";
 import { useHydrated } from "../../../../src/viewmodels/hooks/use.hydrated";
+
+// A revision-checked write (draw / redraw / Finish) found newer state from another device —
+// show that explanation instead of the generic failure text.
+const staleOr = (e: unknown, fallback: string): string =>
+  e instanceof StaleTournamentError ? e.message : fallback;
 
 const isWeb = Platform.OS === "web";
 
@@ -2977,7 +2982,7 @@ function ManageTournamentScreen() {
     if (isChipTournament) {
       return pots.map((p) => ({
         name: p.name.trim(),
-        amount: Number(p.amount) || 0,
+        amount: parseAmount(p.amount),
         players: chipActive.filter((e) =>
           (e.paidSidePots ?? []).includes(p.name.trim()),
         ).length,
@@ -2988,7 +2993,7 @@ function ManageTournamentScreen() {
     );
     return pots.map((p) => ({
       name: p.name.trim(),
-      amount: Number(p.amount) || 0,
+      amount: parseAmount(p.amount),
       players: active.filter((r) =>
         safePaidSidePots(r.paid_side_pots).includes(p.name.trim()),
       ).length,
@@ -3627,7 +3632,7 @@ function ManageTournamentScreen() {
             hub
               .start()
               .then(() => setStartBackupPrompt("elim"))
-              .catch(() => Alert.alert("Error", "Failed to start the tournament.")),
+              .catch((e) => Alert.alert("Error", staleOr(e, "Failed to start the tournament."))),
         },
       ],
     );
@@ -4203,8 +4208,8 @@ function ManageTournamentScreen() {
           onPress: () =>
             hub
               .complete()
-              .catch(() =>
-                Alert.alert("Error", "Failed to finish the tournament."),
+              .catch((e) =>
+                Alert.alert("Error", staleOr(e, "Failed to finish the tournament.")),
               ),
         },
       ],
@@ -4694,8 +4699,8 @@ function ManageTournamentScreen() {
             hub
               .complete()
               .then(() => setActionsOpen(false))
-              .catch(() =>
-                Alert.alert("Error", "Failed to finish the tournament."),
+              .catch((e) =>
+                Alert.alert("Error", staleOr(e, "Failed to finish the tournament.")),
               );
           },
         },
@@ -4834,7 +4839,7 @@ The tournament has started. You can try again anytime from Actions.`);
           refreshEvents();
         }
       })
-      .catch(() => Alert.alert("Error", "Failed to draw the bracket."));
+      .catch((e) => Alert.alert("Error", staleOr(e, "Failed to draw the bracket.")));
   };
 
   const handleDrawPress = () => {
@@ -6822,7 +6827,7 @@ The tournament has started. You can try again anytime from Actions.`);
   const renderPlayers = () => {
     const sidePots = (hub.tournament?.side_pots ?? []).map((p) => ({
       name: p.name,
-      amount: Number(p.amount) || 0,
+      amount: parseAmount(p.amount),
     }));
     const entryFee = Number(hub.tournament?.entry_fee) || 0;
     const raceMode = hub.tournament?.live_settings?.raceMode ?? "fixed";
@@ -7352,9 +7357,14 @@ The tournament has started. You can try again anytime from Actions.`);
                 </View>
 
                 <View style={styles.tableInfoBtns}>
+                  {/* Same rule as the list ✕ and the web Actions menu: a table with a live match
+                      on it can't be removed (the match would keep a dangling tableId). */}
                   <TouchableOpacity
-                    style={[styles.tableInfoBtn, styles.editRemoveBtn]}
+                    style={[styles.tableInfoBtn, styles.editRemoveBtn, !!editOcc && styles.tableRemoveOff]}
+                    disabled={!!editOcc}
+                    accessibilityState={{ disabled: !!editOcc }}
                     onPress={() => {
+                      if (editOcc) return;
                       const id = editingTable.id;
                       setEditingTableId(null);
                       handleDeleteTable(id);

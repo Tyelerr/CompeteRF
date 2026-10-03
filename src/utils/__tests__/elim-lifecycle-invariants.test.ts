@@ -349,3 +349,20 @@ test("scotch doubles elimination: a draw that would silently drop registered tea
   assert.equal(scotchElimDrawBlock("9-ball", "double-elim", teams), null, "singles unaffected");
   assert.equal(scotchElimDrawBlock("9-ball-scotch-doubles", "chip-tournament", teams), null, "chip draws teams itself");
 });
+
+test("a forfeited / withdrawn BYE eliminates its player (In Field, Players Remaining, sync)", () => {
+  const seeds = Array.from({ length: 4 }, (_, i) => ({ registrationId: i + 1, name: `P${i + 1}`, fargo: 500 }));
+  for (const dbl of [false, true]) {
+    // 4 players spread over an 8-slot bracket → every W1 match is a bye.
+    const bracket: any = { graph: buildBracketGraph(8, dbl), seeds: [seeds[0], null, seeds[1], null, seeds[2], null, seeds[3], null] };
+    const live = (ms: Record<string, MatchLiveState>) => buildLiveMatches(bracket, ms, [], "9-ball", CFG);
+    const w1m1 = live({}).find((m) => m.id === "W1M1")!;
+    assert.equal(w1m1.bye, true);
+    assert.deepEqual(computeEliminatedRegIds(live({})), [], `dbl=${dbl}: an untouched bye eliminates nobody`);
+    for (const result of ["forfeit", "withdraw"] as const) {
+      const ms = { W1M1: { status: "completed", winner: null, result } as any };
+      assert.deepEqual(computeEliminatedRegIds(live(ms)), [1], `dbl=${dbl} ${result}`);
+      assert.equal(elimPlayersRemaining(bracket, live(ms)), 3, `dbl=${dbl} ${result}`);
+    }
+  }
+});

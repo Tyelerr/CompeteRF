@@ -544,7 +544,12 @@ export const MatchActionsModal = ({
                     p1Score: p1Score === "" ? 0 : Number(p1Score),
                     p2Score: p2Score === "" ? 0 : Number(p2Score),
                     completedAt: m.completedAt ?? now(),
-                    result: m.result ?? "normal",
+                    // A match that is still being played ends as a PLAYED result. Never carry over
+                    // a result a participant's device wrote mid-match (the player score RPC accepts
+                    // `result`): a stray "withdraw" would knock the loser out of a double-elim
+                    // bracket after one loss. Corrections of an already-completed match keep
+                    // its recorded result type.
+                    result: m.status === "completed" ? (m.result ?? "normal") : "normal",
                   })
                 }
               />

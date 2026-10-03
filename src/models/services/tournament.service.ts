@@ -65,6 +65,17 @@ const applyPublicDiscovery = <Q>(query: Q, mode: "default" | "completed" = "defa
 
 export { normalizeGameType };
 
+// A revision-checked write found the tournament already changed (another TD / device / Auto
+// Assign moved it on). Nothing was written; the caller should reload and let the TD re-check.
+export class StaleTournamentError extends Error {
+  constructor() {
+    super(
+      "This tournament was changed on another device. Nothing was saved — refresh, check the latest bracket, then try again.",
+    );
+    this.name = "StaleTournamentError";
+  }
+}
+
 export const tournamentService = {
   async getTournaments(
     filters: TournamentFilters,
@@ -162,6 +173,27 @@ export const tournamentService = {
     return normalizeTournament(data);
   },
 
+  // Compare-and-set on the server-owned live_revision (bumped by tg_tournaments_live_revision on
+  // every live_settings / live_state / status change). Used by whole-row elimination writes that
+  // must not land on top of another device's newer state (draw / redraw, Finish): 0 rows → the
+  // row moved since this device loaded it → StaleTournamentError, nothing written.
+  async updateTournamentIfRevision(
+    id: number,
+    updates: Partial<Tournament>,
+    expectRevision: number,
+  ): Promise<Tournament> {
+    const { data, error } = await supabase
+      .from("tournaments")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("live_revision", expectRevision)
+      .select("*, venues(*)")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new StaleTournamentError();
+    return normalizeTournament(data);
+  },
+
   async updateTournament(id: number, updates: Partial<Tournament>): Promise<Tournament> {
     const { data, error } = await supabase
       .from("tournaments")
@@ -231,15 +263,22 @@ export const tournamentService = {
   // the 30-day archive clock) and only stamps it the first time. It touches none
   // of the finalization data (bracket, live_settings, matchState, chip_results),
   // so calling it again after finalization is safe and non-destructive.
-  async completeTournament(id: number): Promise<Tournament> {
+  // opts.expectRevision (elimination Finish): only complete if live_revision is still the one
+  // the TD was looking at — a correction on another device that re-opened the final must not be
+  // finished over (→ StaleTournamentError, nothing written).
+  async completeTournament(id: number, opts?: { expectRevision?: number | null }): Promise<Tournament> {
     const { data: cur } = await supabase
       .from("tournaments")
       .select("completed_at")
       .eq("id", id).maybeSingle();
     const completedAt = cur?.completed_at ?? new Date().toISOString();
+    const patch = { status: "completed", live_state: "finished", completed_at: completedAt } as Partial<Tournament>;
+    if (typeof opts?.expectRevision === "number") {
+      return tournamentService.updateTournamentIfRevision(id, patch, opts.expectRevision);
+    }
     const { data, error } = await supabase
       .from("tournaments")
-      .update({ status: "completed", live_state: "finished", completed_at: completedAt, updated_at: new Date().toISOString() })
+      .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", id).select("*, venues(*)").single();
     if (error) throw error;
     if (!data) throw new Error("Complete failed - no rows modified (possible RLS block).");
@@ -378,12 +417,19 @@ export const tournamentService = {
     id: number,
     liveState: TournamentLiveState,
   ): Promise<Tournament> {
-    const { data, error } = await supabase
+    let query = supabase
       .from("tournaments")
       .update({ live_state: liveState, updated_at: new Date().toISOString() })
-      .eq("id", id).select("*, venues(*)").single();
+      .eq("id", id);
+    // A stale device tapping Start must never put a finished event back to in_progress while it
+    // stays status=completed (reopen is its own explicit path).
+    if (liveState === "in_progress") query = query.neq("status", "completed");
+    const { data, error } = await query.select("*, venues(*)").maybeSingle();
     if (error) throw error;
-    if (!data) throw new Error("Live-state update failed - no rows modified (possible RLS block).");
+    if (!data) {
+      if (liveState === "in_progress") throw new StaleTournamentError();
+      throw new Error("Live-state update failed - no rows modified (possible RLS block).");
+    }
     return normalizeTournament(data);
   },
 
@@ -402,8 +448,8 @@ export const tournamentService = {
   // Bracket "Finish" routes through the canonical finalizer (NOT a bare live_state
   // flip) so a finished bracket tournament gets status="completed" + completed_at
   // exactly like a chip one — they can't drift.
-  finishLiveTournament(id: number): Promise<Tournament> {
-    return tournamentService.completeTournament(id);
+  finishLiveTournament(id: number, expectRevision?: number | null): Promise<Tournament> {
+    return tournamentService.completeTournament(id, { expectRevision });
   },
 
   // Pause/resume drive a boolean, NOT a live_state value (the engine stays
