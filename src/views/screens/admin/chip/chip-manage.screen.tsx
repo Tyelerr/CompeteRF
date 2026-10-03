@@ -54,6 +54,8 @@ import {
   PhaseNavPhase,
 } from "../../../components/tournament/live/PhaseNav";
 import { useChipTournament } from "../../../../viewmodels/use.chip.tournament";
+import { useChipBackup } from "../../../../viewmodels/hooks/use.chip.backup";
+import { BackupPromptModal } from "../../../components/tournament/live/BackupPromptModal";
 import { chipService } from "../../../../models/services/chip.service";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { teamInviteLink, teamInviteMessage } from "../../../../utils/team.invite";
@@ -649,6 +651,30 @@ export const ChipManageScreen = ({ id, embedded, embeddedPage, onGoLive, actions
     recoveryOnly,
     onCloudRecovered,
   });
+  // Actions → Download Tournament Backup (printable operating packet; read / export only).
+  // Offline (or the offline recovery viewer) → this browser's last synced local copy.
+  const chipBackup = useChipBackup(id, { offline: !!recoveryOnly || vm.offlineMode !== "online", ownerUserId: user?.id ?? null });
+  const runChipBackup = async (afterStart = false) => {
+    if (chipBackup.availability.kind === "unavailable") {
+      Alert.alert("No offline copy", chipBackup.availability.reason);
+      return;
+    }
+    const r = await chipBackup.download();
+    if (!r.ok) {
+      if (!r.canceled)
+        Alert.alert(
+          "Couldn't create the backup",
+          afterStart ? `${r.message}
+
+The tournament has started. You can try again anytime from Actions.` : r.message,
+        );
+      return;
+    }
+    if (r.message) Alert.alert("Backup saved", r.message);
+  };
+  // Standalone (not embedded in the Manage hub) start → the same one-time backup prompt the hub
+  // shows for embedded starts. Set only by a confirmed start, never by a load.
+  const [startPrompt, setStartPrompt] = useState(false);
   // Auto-save failure notice (shared Web/iOS/Android). Shown only after the VM's bounded
   // retries all failed. The TD's changes are still on screen (NOT reloaded away) and are
   // re-saved on the next action or via Retry; Reload discards them for the server's state.
@@ -3868,6 +3894,7 @@ ${partner} will become the team captain. The team stays registered and will need
         // badge flips to Running immediately (this VM persisted the start, not the
         // host's mutation). Only on a CONFIRMED start.
         onStarted?.();
+        if (!embedded) setStartPrompt(true);
         goLiveAfterStart();
       } // else stay on Review & Start (error shown)
     };
@@ -7819,6 +7846,16 @@ ${partner} will become the team captain. The team stays registered and will need
       </Modal>
 
       {/* ⚡ Tournament Actions — compact command center (fixed header + footer) */}
+      <BackupPromptModal
+        visible={startPrompt}
+        format="chip"
+        busy={chipBackup.busy}
+        onDownload={async () => {
+          await runChipBackup(true);
+          setStartPrompt(false);
+        }}
+        onDismiss={() => setStartPrompt(false)}
+      />
       <Modal visible={actionsOpen} transparent animationType="fade" onRequestClose={() => setActionsOpen(false)}>
         <View style={styles.centerRoot}>
           <Pressable style={styles.centerDim} onPress={() => setActionsOpen(false)} />
@@ -7895,6 +7932,14 @@ ${partner} will become the team captain. The team stays registered and will need
                   {
                     title: "Utilities",
                     items: [
+                      {
+                        icon: "download-outline",
+                        label: chipBackup.availability.label,
+                        full: true,
+                        disabled: chipBackup.busy,
+                        badge: chipBackup.busy ? "…" : chipBackup.lastBackupText ? `Last ${chipBackup.lastBackupText}` : undefined,
+                        onPress: () => runChipBackup(),
+                      },
                       { icon: "share-outline", label: "Export", onPress: () => soon("Export Tournament", "Exporting the full tournament report is coming soon.") },
                       { icon: "print-outline", label: "Print Summary", disabled: printDisabled, onPress: () => soon("Print Summary", "Printing the official tournament summary is coming soon.") },
                     ],

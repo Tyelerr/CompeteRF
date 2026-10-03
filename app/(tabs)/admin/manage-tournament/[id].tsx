@@ -159,6 +159,8 @@ import { TournamentActionsModal } from "../../../../src/views/components/tournam
 import { ElimRecoveryModal } from "../../../../src/views/components/tournament/live/ElimRecoveryModal";
 import { ElimOfflineBanner } from "../../../../src/views/components/tournament/live/ElimOfflineBanner";
 import { useElimBracketBackup } from "../../../../src/viewmodels/hooks/use.elim.bracket.backup";
+import { useChipBackup } from "../../../../src/viewmodels/hooks/use.chip.backup";
+import { BackupPromptModal } from "../../../../src/views/components/tournament/live/BackupPromptModal";
 import { ELIM_OFFLINE_WRITE_TEXT } from "../../../../src/utils/elim-local-recovery";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
@@ -3624,6 +3626,7 @@ function ManageTournamentScreen() {
           onPress: () =>
             hub
               .start()
+              .then(() => setStartBackupPrompt("elim"))
               .catch(() => Alert.alert("Error", "Failed to start the tournament.")),
         },
       ],
@@ -4710,6 +4713,27 @@ function ManageTournamentScreen() {
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   // Elimination Actions → Download Latest Bracket (printable PDF backup; read-only export).
   const bracketBackup = useElimBracketBackup(tournamentId, hub.elimOffline);
+  // Chip's packet (the hub only uses it for the post-start prompt; Chip's own Actions modal
+  // has the same download).
+  const chipBackup = useChipBackup(isChip ? tournamentId : null);
+  // Post-start backup prompt — set ONLY by a successful Start Tournament action on this device
+  // (Single / Double: hub.start() resolved; Chip: the VM's confirmed start → onStarted). Never
+  // from a page load / refresh / reopen, so it appears once per start and never nags.
+  const [startBackupPrompt, setStartBackupPrompt] = useState<"elim" | "chip" | null>(null);
+  const handleStartBackupDownload = async () => {
+    const fmt = startBackupPrompt;
+    const r = fmt === "chip" ? await chipBackup.download() : await bracketBackup.download();
+    setStartBackupPrompt(null);
+    if (!r.ok) {
+      // The backup is safety tooling — the tournament stays started either way.
+      if (!r.canceled)
+        Alert.alert("Couldn't create the backup", `${r.message}
+
+The tournament has started. You can try again anytime from Actions.`);
+      return;
+    }
+    if (r.message) Alert.alert("Backup saved", r.message);
+  };
   const handleDownloadBracket = async () => {
     const r = await bracketBackup.download();
     if (!r.ok) {
@@ -8613,7 +8637,10 @@ function ManageTournamentScreen() {
             reviewPrize={chipReviewPrize}
             onReadyCountChange={setEmbeddedChipReady}
             onReadinessChange={setEmbeddedChipReadiness}
-            onStarted={() => hub.setLiveStateLocal("in_progress")}
+            onStarted={() => {
+              hub.setLiveStateLocal("in_progress");
+              setStartBackupPrompt("chip");
+            }}
             onFinished={() => hub.setLiveStateLocal("finished")}
             onReopened={() => hub.setLiveStateLocal("in_progress")}
             onTableCountChange={setEmbeddedChipTables}
@@ -9488,7 +9515,11 @@ function ManageTournamentScreen() {
             ? undefined
             : {
                 label: bracketBackup.availability.label,
-                detail: !hub.bracket ? "Printable PDF of the current bracket — a manual backup" : bracketBackup.availability.detail,
+                detail: !hub.bracket
+                  ? "Printable PDF of the current bracket — a manual backup"
+                  : [bracketBackup.availability.detail, bracketBackup.lastBackupText ? `Last backup: ${bracketBackup.lastBackupText}` : null]
+                      .filter(Boolean)
+                      .join(" · "),
                 busy: bracketBackup.busy,
                 onPress: hub.bracket && bracketBackup.availability.kind !== "unavailable" ? handleDownloadBracket : undefined,
                 disabledTag: !hub.bracket ? "No bracket yet" : "No offline copy",
@@ -9498,6 +9529,13 @@ function ManageTournamentScreen() {
           setActionsOpen(false);
           setRecoveryOpen(true);
         }}
+      />
+      <BackupPromptModal
+        visible={startBackupPrompt !== null}
+        format={startBackupPrompt ?? "elim"}
+        busy={startBackupPrompt === "chip" ? chipBackup.busy : bracketBackup.busy}
+        onDownload={handleStartBackupDownload}
+        onDismiss={() => setStartBackupPrompt(null)}
       />
       {!isChip && (
         <ElimRecoveryModal

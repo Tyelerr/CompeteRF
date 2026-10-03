@@ -10,7 +10,8 @@
 //     no activity, nothing uploaded or stored server-side. Generated client-side (src/utils/
 //     elim-bracket-pdf.ts) and handed to the platform's save / share (src/utils/save-pdf-file).
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { backupAgeText, backupHistoryService } from "../../models/services/backup-history.service";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
 import { registrationService } from "../../models/services/registration.service";
@@ -53,7 +54,15 @@ export function useElimBracketBackup(
 ) {
   const ownerId = useAuthStore((s) => s.profile?.id ?? null);
   const [busy, setBusy] = useState(false);
+  const [lastAt, setLastAt] = useState<Date | null>(null);
   const availability = bracketBackupAvailability(conn);
+  useEffect(() => {
+    let alive = true;
+    if (tournamentId) backupHistoryService.get("elim", tournamentId).then((d) => alive && setLastAt(d));
+    return () => {
+      alive = false;
+    };
+  }, [tournamentId]);
 
   const readLocal = useCallback(async (): Promise<Source | null> => {
     if (!tournamentId || !ownerId) return null;
@@ -123,7 +132,14 @@ export function useElimBracketBackup(
         payouts: buildBackupPayouts(t, src.registrations ?? [], matches),
         roster: src.registrations ? buildBackupRoster(src.registrations, matches, bracket) : null,
       });
-      return await savePdfFile(pdf.bytes, pdf.fileName);
+      const saved = await savePdfFile(pdf.bytes, pdf.fileName);
+      if (saved.ok) {
+        // This device only — "Last backup: 12 min ago" in Actions. Never a tournament write.
+        const now = new Date();
+        setLastAt(now);
+        backupHistoryService.mark("elim", tournamentId, now);
+      }
+      return saved;
     } catch (e) {
       if (toConnectionAwareError(e) instanceof ConnectionRequiredError)
         return { ok: false, message: "The connection dropped while loading the bracket. Try again." };
@@ -133,5 +149,5 @@ export function useElimBracketBackup(
     }
   }, [tournamentId, availability.kind, readLocal]);
 
-  return { availability, busy, download };
+  return { availability, busy, download, lastBackupText: backupAgeText(lastAt) };
 }
