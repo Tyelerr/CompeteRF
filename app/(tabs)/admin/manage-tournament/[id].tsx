@@ -158,6 +158,7 @@ import { computeStandings } from "../../../../src/utils/tournament.stats";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { ElimRecoveryModal } from "../../../../src/views/components/tournament/live/ElimRecoveryModal";
 import { ElimOfflineBanner } from "../../../../src/views/components/tournament/live/ElimOfflineBanner";
+import { useElimBracketBackup } from "../../../../src/viewmodels/hooks/use.elim.bracket.backup";
 import { ELIM_OFFLINE_WRITE_TEXT } from "../../../../src/utils/elim-local-recovery";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
@@ -4706,6 +4707,16 @@ function ManageTournamentScreen() {
   const [actionsOpen, setActionsOpen] = useState(false);
   // Elimination Actions → Recovery & History (Undo / History / Restore Points).
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  // Elimination Actions → Download Latest Bracket (printable PDF backup; read-only export).
+  const bracketBackup = useElimBracketBackup(tournamentId, hub.elimOffline);
+  const handleDownloadBracket = async () => {
+    const r = await bracketBackup.download();
+    if (!r.ok) {
+      if (!r.canceled) Alert.alert("Couldn't create the bracket PDF", r.message);
+      return;
+    }
+    if (r.message) Alert.alert("Bracket saved", r.message);
+  };
 
   // Auto-collapse "Add Tables" once the tournament leaves Setup (re-expandable).
   useEffect(() => {
@@ -9471,6 +9482,17 @@ function ManageTournamentScreen() {
         canFinish={liveUnlocked}
         finished={hub.phase === "completed" || hub.phase === "archived" || hub.tournament?.live_state === "finished"}
         recoveryAvailable={!!hub.bracket}
+        backup={
+          isChip
+            ? undefined
+            : {
+                label: bracketBackup.availability.label,
+                detail: !hub.bracket ? "Printable PDF of the current bracket — a manual backup" : bracketBackup.availability.detail,
+                busy: bracketBackup.busy,
+                onPress: hub.bracket && bracketBackup.availability.kind !== "unavailable" ? handleDownloadBracket : undefined,
+                disabledTag: !hub.bracket ? "No bracket yet" : "No offline copy",
+              }
+        }
         onRecovery={() => {
           setActionsOpen(false);
           setRecoveryOpen(true);

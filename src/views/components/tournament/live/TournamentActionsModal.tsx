@@ -39,6 +39,7 @@ export const TournamentActionsModal = ({
   finished,
   onRecovery,
   recoveryAvailable,
+  backup,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -52,6 +53,9 @@ export const TournamentActionsModal = ({
   // Opens Recovery & History (Undo / History / Restore Points). Available once a bracket exists.
   onRecovery?: () => void;
   recoveryAvailable?: boolean;
+  // Download Latest Bracket (printable PDF backup). Label / detail change when offline
+  // ("Download Last Synced Bracket"); no onPress = disabled with `disabledTag`.
+  backup?: { label: string; detail: string; onPress?: () => void; disabledTag?: string; busy?: boolean };
 }) => {
   const sections: { title: string; rows: ActionRow[] }[] = [
     {
@@ -64,6 +68,17 @@ export const TournamentActionsModal = ({
           onPress: onRecovery && recoveryAvailable ? onRecovery : undefined,
           disabledTag: !onRecovery ? "Coming soon" : !recoveryAvailable ? "No bracket yet" : undefined,
         },
+        ...(backup
+          ? [
+              {
+                key: "backup",
+                label: backup.label,
+                detail: backup.detail,
+                onPress: backup.onPress,
+                disabledTag: backup.onPress ? undefined : backup.disabledTag,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -111,7 +126,8 @@ export const TournamentActionsModal = ({
                 </Text>
                 <View style={styles.card}>
                   {section.rows.map((row, i) => {
-                    const enabled = !!row.onPress && !(row.key === "finish" && finishing);
+                    const busyRow = (row.key === "finish" && finishing) || (row.key === "backup" && !!backup?.busy);
+                    const enabled = !!row.onPress && !busyRow;
                     return (
                       <View key={row.key}>
                         {i > 0 && <View style={styles.divider} />}
@@ -137,9 +153,9 @@ export const TournamentActionsModal = ({
                               </Text>
                             )}
                           </View>
-                          {enabled ? (
+                          {enabled || (busyRow && row.onPress) ? (
                             <Text allowFontScaling={false} style={[styles.rowChevron, row.danger && styles.rowChevronDanger]}>
-                              {row.key === "finish" && finishing ? "…" : "›"}
+                              {busyRow ? "…" : "›"}
                             </Text>
                           ) : row.disabledTag ? (
                             <View style={styles.soonTag}>
