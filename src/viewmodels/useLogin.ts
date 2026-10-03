@@ -19,6 +19,20 @@ import { usePendingConfirmationStore } from "./stores/pending-confirmation.store
 
 const INVALID_CREDENTIALS = "Incorrect credentials. Please try again.";
 
+// Only a real credential rejection reads as "incorrect credentials". Offline / server / rate-limit
+// failures say what happened — otherwise the user keeps retyping a correct password.
+const loginFailureMessage = (err: unknown): string => {
+  const e = err as { name?: string; status?: number } | null | undefined;
+  if (!e) return INVALID_CREDENTIALS;
+  if (e.status === 429) return "Too many sign-in attempts. Wait a minute and try again.";
+  if (
+    e.name === "AuthRetryableFetchError" ||
+    (typeof e.status === "number" && (e.status === 0 || e.status >= 500))
+  )
+    return "Couldn't reach Compete. Check your connection and try again.";
+  return INVALID_CREDENTIALS;
+};
+
 export function useLogin() {
   const router = useRouter();
   const { completeSignIn } = usePostAuthNavigation();
@@ -36,11 +50,13 @@ export function useLogin() {
     try {
       const { kind, value } = parseLoginIdentifier(identifier);
       let userId: string | null = null;
+      let signInError: unknown = null;
       if (kind === "email") {
         let notConfirmed = false;
         const data = await authService.signIn(value, password).catch((err) => {
           // Supabase reports this only after the password check passed — no account oracle.
           notConfirmed = isEmailNotConfirmedError(err);
+          signInError = err;
           return null;
         });
         if (notConfirmed) {
@@ -53,12 +69,12 @@ export function useLogin() {
         const res = await authService.signInWithUsername(value, password);
         userId = res.error ? null : res.userId;
       }
-      if (!userId) { setError(INVALID_CREDENTIALS); return; }
+      if (!userId) { setError(loginFailureMessage(signInError)); return; }
       const status = await completeSignIn(userId);
       const message = postAuthErrorMessage(status);
       if (message) setError(message);
-    } catch {
-      setError(INVALID_CREDENTIALS);
+    } catch (err) {
+      setError(loginFailureMessage(err));
     } finally {
       setLoading(false);
     }
