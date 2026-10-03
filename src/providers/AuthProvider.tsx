@@ -25,7 +25,9 @@ import { Profile, ProfileInsert } from '../models/types/profile.types';
 import { deriveAuthStatus } from '../utils/auth-routing';
 import { useNotifications } from '../viewmodels/hooks/use.notifications';
 import { useOnboarding } from '../viewmodels/hooks/useOnboarding';
+import { clearNavCache } from '../viewmodels/nav-cache';
 import { useAuthStore } from '../viewmodels/stores/auth.store';
+import { queryClient } from './QueryProvider';
 import { OnboardingModal } from '../views/components/onboarding/OnboardingModal';
 
 // ── Context type ───────────────────────────────────────────
@@ -113,7 +115,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const userIdRef = useRef<string | null>(null);
   useEffect(() => {
+    const prevUserId = userIdRef.current;
     userIdRef.current = user?.id ?? null;
+    // Account changed on this device (sign-out, session expiry, or another account signing in
+    // — e.g. from another web tab): drop the previous account's cached data. Several React
+    // Query keys (reviews, elim recovery, rosters, registrations…) are scoped by role/RLS, not
+    // by user, so they would otherwise render the previous account's data as fresh.
+    if (prevUserId && prevUserId !== (user?.id ?? null)) {
+      queryClient.clear();
+      clearNavCache();
+    }
   }, [user?.id]);
 
   // Check onboarding once when profile is first available after login
@@ -373,9 +384,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         console.error('Error deactivating push token on sign out:', err);
       }
     }
+    // scope 'local' ends THIS device's session only. The default ('global') revokes every
+    // refresh token for the account — signing out on a phone would kick the same TD off the
+    // tablet running a live event within the hour.
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      // The logout request failed (usually offline). auth-js keeps the stored session in that
+      // case, so resetting the UI here would only LOOK signed out while every request — and the
+      // next app launch — still used this account. Say so instead.
+      console.error('Sign out failed:', error);
+      Alert.alert(
+        "Couldn't Sign Out",
+        'Check your internet connection and try again. You are still signed in on this device.',
+      );
+      return;
+    }
     onboardingCheckedRef.current = false;
     setShowOnboarding(false);
-    await supabase.auth.signOut();
     setSession(null);
     setUser(null);
     resetStore();

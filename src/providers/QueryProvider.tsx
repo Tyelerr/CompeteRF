@@ -6,7 +6,9 @@ import {
 import { ReactNode, useEffect } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 
-const queryClient = new QueryClient({
+// Exported so AuthProvider can drop every cached query when the signed-in account changes
+// (several keys are role/RLS-scoped rather than keyed by user).
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
