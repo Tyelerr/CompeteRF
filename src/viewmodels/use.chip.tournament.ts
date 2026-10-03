@@ -1512,6 +1512,12 @@ export const useChipTournament = (
     return changed ? { ...c, entries } : c;
   };
 
+  // A finished / completed tournament is read-only (Reopen is the explicit way back).
+  const finishedLocked = (): boolean => {
+    const t = tournamentRef.current;
+    return t?.live_state === "finished" || t?.status === "completed";
+  };
+
   const update = useCallback((fn: (c: ChipState) => ChipState) => {
     // Viewing a local backup (web recovery): read-only, every live mutation is refused.
     if (recoveryLockRef.current.blocks("change the tournament")) return;
@@ -1585,6 +1591,9 @@ export const useChipTournament = (
   const restoreToEvent = useCallback(
     (eventId: string, meta: { reason: string; actorId?: number | null; actorName?: string | null }) => {
       if (recoveryLockRef.current.blocks("restore the tournament") || cloudChangedBlocks("restore the tournament") || notAuthorized("restore the tournament")) return false;
+      // Same completed-tournament lock as update(): Undo / Restore on a finished board would clear
+      // finishedAt / winner and autosave a live board over a completed event (Reopen is the path).
+      if (finishedLocked()) return false;
       const c = chipRef.current;
       if (!c) return false;
       const restored = engineRestoreToPoint(c, eventId, meta);
@@ -1599,6 +1608,7 @@ export const useChipTournament = (
   const undoLast = useCallback(
     (n: number, meta: { reason: string; actorId?: number | null; actorName?: string | null }) => {
       if (recoveryLockRef.current.blocks("undo") || cloudChangedBlocks("undo") || notAuthorized("undo")) return false;
+      if (finishedLocked()) return false;
       const c = chipRef.current;
       if (!c || !(c.restorePoints ?? []).length) return false;
       const restored = engineUndoLastActions(c, n, meta);

@@ -1056,6 +1056,15 @@ export const restoreToPoint = (
     e.eliminatedAt = l.eliminatedAt;
   }
   s.tables = clone(snap.tables);
+  // A match that went LIVE after this point (e.g. Start All, or the next match after a wrong
+  // result) is part of what's being reverted. Drop it here: left in the log, reconcileMatches
+  // treats it as a ghost and requeues its players — even when the snapshot re-seats those same
+  // players — leaving seated "queued" entries (a 1-chip pending challenger could then be
+  // eliminated while still seated, and the next load voided the restored match).
+  const liveAtPoint = new Set(
+    snap.tables.filter((t) => !t.inactive && t.matchId).map((t) => t.matchId as string),
+  );
+  s.matches = s.matches.filter((m) => m.status !== "in_progress" || liveAtPoint.has(m.id));
   s.queue = [...snap.queue];
   s.startedAt = snap.startedAt;
   s.finishedAt = snap.finishedAt;
