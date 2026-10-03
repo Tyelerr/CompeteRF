@@ -38,6 +38,8 @@ import {
 } from "../../models/types/common.types";
 import { useRegistrations } from "./use.registrations";
 import { matchCheckInService } from "../../models/services/match-checkin.service";
+import { useElimOffline } from "./use.elim.offline";
+import { isBracketEngine } from "../../utils/tournament-formats";
 
 // Lifecycle phase (derivePhase) + the ManagePhase type now live in the shared
 // utils/tournament-phase module so the Manage hub, the Tournament Manager list
@@ -92,6 +94,33 @@ export const useManageTournament = (tournamentId?: number) => {
     retry: false,
     refetchInterval: autoAssignPolling(tournamentQuery.data) ? AUTO_ASSIGN_POLL_MS : 30000,
   });
+
+  // Elimination offline local recovery: hold the last synced state read-only while offline,
+  // compare revisions on reconnect, refuse live writes meanwhile (nothing queued).
+  const elimOffline = useElimOffline({
+    tournamentId,
+    cloud: tournamentQuery.data as unknown as Record<string, unknown> | undefined,
+    cloudUpdatedAt: tournamentQuery.dataUpdatedAt,
+    cloudError: tournamentQuery.error,
+    cloudErrorUpdatedAt: tournamentQuery.errorUpdatedAt,
+    tables: tablesQuery.data as unknown[] | undefined,
+    refetchAll: () => {
+      tournamentQuery.refetch();
+      tablesQuery.refetch();
+      playerStatusQuery.refetch();
+      assignmentStatusQuery.refetch();
+    },
+  });
+  // An elimination live write is refused up front while offline / held (mutation options are
+  // re-read every render, so this sees the current status at mutate time).
+  const writeBlockedText = elimOffline.writeBlockedText;
+  const guardLiveWrite = () => {
+    if (writeBlockedText) throw new Error(writeBlockedText);
+  };
+  // Elimination writes never pause-and-replay (React Query's default while offline); Chip's
+  // shared mutations keep their existing behavior.
+  const isElimEvent = isBracketEngine(((elimOffline.display ?? tournamentQuery.data) as Tournament | undefined)?.tournament_format);
+  const elimNetworkMode = isElimEvent ? ("always" as const) : ("online" as const);
 
   const registrationsApi = useRegistrations(tournamentId);
 
@@ -195,8 +224,10 @@ export const useManageTournament = (tournamentId?: number) => {
     }
   };
   // Impact preview (dry run) for a correction: what the server WOULD clear + its revision.
-  const previewLiveOps = (ops: ElimLiveOp[]): Promise<ElimLivePreview> =>
-    tournamentService.previewElimLiveOps(tournamentId!, ops);
+  const previewLiveOps = async (ops: ElimLiveOp[]): Promise<ElimLivePreview> => {
+    guardLiveWrite();
+    return tournamentService.previewElimLiveOps(tournamentId!, ops);
+  };
   // Single-op convenience: throws (with the server's reason) when the op was rejected, so
   // existing callers keep their error alerts.
   const applyOneLiveOp = async (op: ElimLiveOp, expectedRevision?: number | null): Promise<ElimLiveApplyResponse> => {
@@ -209,8 +240,10 @@ export const useManageTournament = (tournamentId?: number) => {
     // Never pause-and-replay a live write while offline (React Query's default) — it either goes
     // now or fails visibly; the cloud stays authoritative.
     networkMode: "always",
-    mutationFn: (vars: { ops: ElimLiveOp[]; atomic?: boolean }) =>
-      applyLiveOps(vars.ops, { atomic: vars.atomic }),
+    mutationFn: async (vars: { ops: ElimLiveOp[]; atomic?: boolean }) => {
+      guardLiveWrite();
+      return applyLiveOps(vars.ops, { atomic: vars.atomic });
+    },
     onSettled: invalidateTournament,
   });
 
@@ -279,8 +312,11 @@ export const useManageTournament = (tournamentId?: number) => {
   });
 
   const liveStateMutation = useMutation({
-    mutationFn: (state: TournamentLiveState) =>
-      tournamentService.setLiveState(tournamentId!, state),
+    networkMode: elimNetworkMode,
+    mutationFn: async (state: TournamentLiveState) => {
+      guardLiveWrite();
+      return tournamentService.setLiveState(tournamentId!, state);
+    },
     // Optimistically flip the cached live_state so the header badge (e.g. Setup
     // Incomplete → Registration Open) updates IMMEDIATELY, before the refetch. On
     // error, roll back; always revalidate afterward.
@@ -303,24 +339,34 @@ export const useManageTournament = (tournamentId?: number) => {
   });
 
   const pauseMutation = useMutation({
-    mutationFn: (paused: boolean) =>
-      tournamentService.setPaused(tournamentId!, paused),
+    networkMode: elimNetworkMode,
+    mutationFn: async (paused: boolean) => {
+      guardLiveWrite();
+      return tournamentService.setPaused(tournamentId!, paused);
+    },
     onSuccess: invalidateTournament,
   });
 
   const completeMutation = useMutation({
-    mutationFn: () => tournamentService.finishLiveTournament(tournamentId!),
+    networkMode: elimNetworkMode,
+    mutationFn: async () => {
+      guardLiveWrite();
+      return tournamentService.finishLiveTournament(tournamentId!);
+    },
     onSuccess: invalidateTournament,
   });
 
   // Draw the bracket: store it + append a draw-log entry (merging into the
   // existing live_settings) and close registration. This is the lock point.
   const drawBracketMutation = useMutation({
-    mutationFn: (vars: {
+    // A draw / redraw is never queued: it goes now or fails visibly.
+    networkMode: "always",
+    mutationFn: async (vars: {
       bracket: GeneratedBracket;
       logEntry: DrawLogEntry;
-    }) =>
-      writeLiveSettings((prevLS) => ({
+    }) => {
+      guardLiveWrite();
+      return writeLiveSettings((prevLS) => ({
         live_state: "registration_closed",
         live_settings: {
           bracket: vars.bracket,
@@ -330,34 +376,41 @@ export const useManageTournament = (tournamentId?: number) => {
           // old results stick to the new bracket.
           matchState: {},
         },
-      })),
+      }));
+    },
     onSettled: invalidateTournament,
   });
 
   // DEV/test: replace the whole matchState at once (used by the bracket
   // simulator), optionally moving the tournament to in_progress.
   const bulkSetMatchStateMutation = useMutation({
-    mutationFn: (vars: {
+    networkMode: "always",
+    mutationFn: async (vars: {
       matchState: Record<string, MatchLiveState>;
       start?: boolean;
-    }) =>
-      writeLiveSettings(() => ({
+    }) => {
+      guardLiveWrite();
+      return writeLiveSettings(() => ({
         ...(vars.start ? { live_state: "in_progress" as TournamentLiveState } : {}),
         live_settings: { matchState: vars.matchState },
-      })),
+      }));
+    },
     onSettled: invalidateTournament,
   });
 
   // Persist Queue settings (Match Order mode, Manual order, Keep-mode pins, Auto Assign On/Off).
   // Server-side set_queue op: writes ONLY the keys present (payloads: src/utils/queue-settings.ts).
   const saveQueueSettingsMutation = useMutation({
-    mutationFn: (vars: {
+    networkMode: "always",
+    mutationFn: async (vars: {
       autoAssignMode?: AutoAssignMode;
       queueOrder?: string[];
       autoAssignEnabled?: boolean;
       queuePins?: QueuePin[];
-    }) =>
-      applyOneLiveOp({ op: "set_queue", ...vars }),
+    }) => {
+      guardLiveWrite();
+      return applyOneLiveOp({ op: "set_queue", ...vars });
+    },
     // Optimistic: the Dashboard and Queue both read these keys from the SAME cached tournament,
     // so an Auto Assign On/Off (or mode / order) change shows on both immediately. Only the keys
     // actually sent are touched — a mode or order change never alters autoAssignEnabled.
@@ -385,8 +438,9 @@ export const useManageTournament = (tournamentId?: number) => {
   // server time (never the device clock). Rejections throw with the server's reason.
   const setMatchStateMutation = useMutation({
     networkMode: "always",
-    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState>; expect?: MatchExpect; expectedRevision?: number | null }) =>
-      applyOneLiveOp(
+    mutationFn: async (vars: { matchId: string; patch: Partial<MatchLiveState>; expect?: MatchExpect; expectedRevision?: number | null }) => {
+      guardLiveWrite();
+      return applyOneLiveOp(
         {
           op: "patch_match",
           matchId: vars.matchId,
@@ -394,7 +448,8 @@ export const useManageTournament = (tournamentId?: number) => {
           ...(vars.expect ? { expect: vars.expect } : {}),
         },
         vars.expectedRevision,
-      ),
+      );
+    },
     onSettled: invalidateTournament,
   });
 
@@ -454,11 +509,13 @@ export const useManageTournament = (tournamentId?: number) => {
 
   // ---- Derived state ------------------------------------------------------
 
-  const tournament = tournamentQuery.data ?? null;
+  // Offline hold (elimination): the last synced state, read-only, until the cloud is reachable.
+  const tournament = ((elimOffline.display as unknown as Tournament | null) ?? tournamentQuery.data) ?? null;
   const phase = useMemo(() => derivePhase(tournament), [tournament]);
 
-  const tablesReady = !tablesQuery.isError && tablesQuery.data !== undefined;
-  const tables = useMemo(() => tablesQuery.data ?? [], [tablesQuery.data]);
+  const heldTables = elimOffline.displayTables as typeof tablesQuery.data | null;
+  const tablesReady = heldTables != null || (!tablesQuery.isError && tablesQuery.data !== undefined);
+  const tables = useMemo(() => heldTables ?? tablesQuery.data ?? [], [heldTables, tablesQuery.data]);
 
   const isMutatingLive =
     liveStateMutation.isPending ||
@@ -467,8 +524,10 @@ export const useManageTournament = (tournamentId?: number) => {
 
   return {
     tournament,
-    isLoading: tournamentQuery.isLoading,
-    error: tournamentQuery.error,
+    isLoading: tournamentQuery.isLoading && !elimOffline.display,
+    error: elimOffline.display ? null : tournamentQuery.error,
+    // Elimination offline status (banner, write gating, Recovery & History status).
+    elimOffline,
     refetch: () =>
       Promise.all([
         tournamentQuery.refetch(),

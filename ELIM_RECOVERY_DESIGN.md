@@ -2,7 +2,9 @@
 
 Status (2026-10-02): Phase 1 (format gating), Phase 2 (revision + server audit) and Phase 3a (correction
 cascade + checkpoint foundation) are implemented — migration `20261018120000_elim_recovery_foundation.sql`,
-rollback in `supabase/rollback/`. Phase 3b (Undo + Restore + Recovery & History UI) is implemented too (`20261019120000_elim_undo_restore.sql`). Remaining: offline/local recovery (§3.6).
+rollback in `supabase/rollback/`. Phase 3b (Undo + Restore + Recovery & History UI) is implemented too (`20261019120000_elim_undo_restore.sql`).
+Audit gaps (Auto Assign + Bracket Draw/Redraw, `20261020120000_elim_audit_autoassign_draw.sql`) and the smaller-scope offline
+local recovery (§3.6 "Implemented") are implemented too.
 
 ---
 
@@ -145,6 +147,26 @@ For a changed match M:
 - **On reconnect:** fetch `live_revision`.
   - Equal to the base: replay `pendingOps` with `expected_revision` + `expect`.
   - Newer: **conflict flow** "Another device changed this tournament while you were offline." with **Load Latest** / **Review Local Changes** / **Retry compatible actions**. Retry re-submits each op with `expect`; the server accepts only ops whose preconditions still hold. Never a blind overwrite, never a merge of bracket results.
+
+**Implemented (2026-10-02) — smaller, safer scope than the long-term model above:** nothing is queued.
+- **Store:** one record per tournament + account (`compete.elim-local.v1:<owner>:<tournament>`): the last
+  *cloud* row + tables, `live_revision`, `savedAt`, schema 1. AsyncStorage on both platforms (localStorage on
+  web; persistent on native; already in the binary). Bounds: 20 tournaments per device (oldest evicted),
+  14 days (3 days once finished), 750 KB per record. Validated on read (schema, kind, tournament, account,
+  revision = its own row, timestamp not future / expired); anything else is deleted.
+  `src/utils/elim-local-recovery.ts`, `src/models/services/elim-local-recovery.service.ts`.
+- **Offline:** web = browser offline events; native = the tournament fetch fails with a network error. The hub
+  holds the last synced state read-only with "Offline — showing last synced tournament state" and refuses
+  every live write up front (results, corrections, reset/reopen, forfeit/withdraw, assign/start, queue
+  settings, draw/redraw, finish, Undo/Restore). Elimination mutations no longer pause-and-replay.
+  `src/viewmodels/hooks/use.elim.offline.ts`.
+- **Reconnect:** same revision → "Back online · synced"; different → "This tournament changed while you were
+  offline." + Load Latest (the held copy is dropped; nothing local is ever pushed); fetch still failing → stays
+  offline with the copy (retry every 15 s).
+- **Restart while offline:** not reachable today — the admin route needs a hydrated profile (server RPC) and
+  web has no service worker, so the app does not open the Manage screen offline and nothing bypasses auth.
+  The local copy is used when the screen is reopened later in the same session (React Query cache gone) and
+  is ready for an offline-capable auth/shell later.
 
 ---
 

@@ -76,7 +76,9 @@ test("wiring: one match-mutation path — offline block, preview, revision; serv
   const hub = read("app/(tabs)/admin/manage-tournament/[id].tsx");
   const start = hub.indexOf("const runMatchPatch = async");
   const body = hub.slice(start, hub.indexOf("const runLiveOps = async", start));
-  assert.match(body, /isOutcomeChange\(prev, patch\) && isWeb && typeof navigator !== "undefined" && navigator\.onLine === false/);
+  // Offline local recovery: no live write at all while offline / held (superset of the old
+  // web-only outcome block) — see elim-local-recovery.test.ts.
+  assert.match(body, /if \(liveWriteBlocked\(\)\) return;/);
   assert.match(body, /isCorrection\(prev, patch\)/);
   assert.match(body, /correctionImpact\(graph, hub\.matchState, matchId\)\.affected\.length > 0/);
   assert.match(body, /hub\.previewLiveOps\(\[op\]\)/);

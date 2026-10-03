@@ -12,6 +12,8 @@ export interface ElimAuditRow {
   match_id: string | null;
   table_id: number | null;
   actor_id: string | null;
+  // td | auto_assign | system — who made the change when there is no actor (never a fake TD).
+  source?: string | null;
   before: Partial<MatchLiveState> | null;
   after: Record<string, unknown> | null;
   detail: {
@@ -24,6 +26,9 @@ export interface ElimAuditRow {
     restoredLabel?: string | null;
     reopened?: boolean;
     checkpoint?: number;
+    tableLabel?: string;
+    reason?: string;
+    previousDrawNumber?: number;
     [k: string]: unknown;
   } | null;
   created_at: string;

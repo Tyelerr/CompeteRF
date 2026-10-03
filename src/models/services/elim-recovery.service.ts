@@ -26,7 +26,7 @@ export const elimRecoveryService = {
   async listAudit(tournamentId: number, beforeId?: number | null, limit = ELIM_HISTORY_PAGE): Promise<ElimAuditRow[]> {
     let q = supabase
       .from("tournament_audit")
-      .select("id, revision, op, match_id, table_id, actor_id, before, after, detail, created_at")
+      .select("id, revision, op, match_id, table_id, actor_id, source, before, after, detail, created_at")
       .eq("tournament_id", tournamentId)
       .order("id", { ascending: false })
       .limit(limit);

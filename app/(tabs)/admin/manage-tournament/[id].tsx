@@ -157,6 +157,8 @@ import {
 import { computeStandings } from "../../../../src/utils/tournament.stats";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
 import { ElimRecoveryModal } from "../../../../src/views/components/tournament/live/ElimRecoveryModal";
+import { ElimOfflineBanner } from "../../../../src/views/components/tournament/live/ElimOfflineBanner";
+import { ELIM_OFFLINE_WRITE_TEXT } from "../../../../src/utils/elim-local-recovery";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
   buildQueueEntries,
@@ -166,9 +168,8 @@ import {
   isStartable,
   AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
-import { buildAssignOps, correctionImpactText, expectOf, isCorrection, isOutcomeChange, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { buildAssignOps, correctionImpactText, expectOf, isCorrection, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
 import { correctionImpact } from "../../../../src/utils/bracket.correction";
-import { CONNECTION_REQUIRED_MESSAGE } from "../../../../src/utils/connection-required";
 import { matchNotificationService } from "../../../../src/models/services/match-notification.service";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
@@ -4248,14 +4249,20 @@ function ManageTournamentScreen() {
   // One authoritative match-mutation path for the Live screen (web + native): persist via the
   // hub (which also flips live_state → Running on the first start), then write the durable
   // event(s) and refresh the feed. Every Live match action routes through this.
+  // Offline local recovery: while offline (or showing a held copy the cloud has since replaced)
+  // NO live write is attempted — results, corrections, resets, reopens, assignments, draws,
+  // Finish. The cloud stays authoritative and nothing is queued for later.
+  const liveWriteBlocked = (): boolean => {
+    if (isChip) return false;
+    const text = hub.elimOffline.writeBlockedText ?? (hub.elimOffline.offline ? ELIM_OFFLINE_WRITE_TEXT : null);
+    if (!text) return false;
+    Alert.alert(hub.elimOffline.status === "changed" ? "Tournament changed" : "You're offline", text);
+    return true;
+  };
+
   const runMatchPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
     const prev = liveMatches.find((m) => m.id === matchId) ?? null;
-    // Results (Set Winner / forfeit / withdraw / change / Reset / Reopen) are never changed while
-    // offline — the cloud stays authoritative and nothing is queued for later.
-    if (isOutcomeChange(prev, patch) && isWeb && typeof navigator !== "undefined" && navigator.onLine === false) {
-      Alert.alert("You're offline", CONNECTION_REQUIRED_MESSAGE);
-      return;
-    }
+    if (liveWriteBlocked()) return;
     // Corrections carry the revision the TD acted on, and — when later matches already have
     // progress — show the server-computed impact first (the same pipeline the real call runs).
     let expectedRevision: number | null = null;
@@ -4291,6 +4298,7 @@ function ManageTournamentScreen() {
     items: { op: ElimLiveOp; eventPatch: Partial<MatchLiveState> }[],
     opts: { atomic?: boolean } = {},
   ): Promise<ElimLiveOpResult[]> => {
+    if (!isChip && hub.elimOffline.writeBlockedText) throw new Error(hub.elimOffline.writeBlockedText);
     const res = await hub.applyLiveOps(items.map((x) => x.op), opts);
     res.results.forEach((r) => {
       if (!r.ok) return;
@@ -4668,6 +4676,7 @@ function ManageTournamentScreen() {
   // Finish the event: marks it completed (live_state finished) which unlocks the
   // Results phase. Confirmed first since it stops live editing.
   const handleFinishTournament = () => {
+    if (liveWriteBlocked()) return;
     Alert.alert(
       "Finish Tournament",
       "Mark this tournament completed? This unlocks the Results phase and stops live editing.",
@@ -4709,6 +4718,7 @@ function ManageTournamentScreen() {
   }, [tournamentGroup]);
 
   const handleDrawBracket = (reason: string) => {
+    if (liveWriteBlocked()) return;
     const teamBlock = scotchElimDrawBlock(hub.tournament?.game_type, hub.tournament?.tournament_format, elimScotchTeamsQuery.data ?? []);
     if (teamBlock) {
       Alert.alert("Teams can't be drawn yet", teamBlock);
@@ -9472,6 +9482,12 @@ function ManageTournamentScreen() {
           onClose={() => setRecoveryOpen(false)}
           tournamentId={tournamentId ?? null}
           revision={hub.liveRevision}
+          connection={{
+            status: hub.elimOffline.status,
+            offline: hub.elimOffline.offline,
+            cloudRevision: hub.elimOffline.cloudRevision,
+            local: hub.elimOffline.local,
+          }}
           standingsChanged={standingsChangedFor}
           onChanged={() => {
             hub.refetch();
@@ -9508,6 +9524,17 @@ function ManageTournamentScreen() {
             />
           </View>
         )
+      )}
+
+      {!isChip && !isExternal && (
+        <View style={isWeb ? styles.webShellCenter : undefined}>
+          <ElimOfflineBanner
+            status={hub.elimOffline.status}
+            justSynced={hub.elimOffline.justSynced}
+            revision={hub.elimOffline.shownRevision}
+            onLoadLatest={hub.elimOffline.loadLatest}
+          />
+        </View>
       )}
 
       {(!isChip &&

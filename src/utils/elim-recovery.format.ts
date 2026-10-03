@@ -18,6 +18,9 @@ const OP_TITLES: Record<string, string> = {
   unassign: "Table cleared",
   start: "Match started",
   set_queue: "Queue settings changed",
+  auto_assign: "Match assigned automatically",
+  draw: "Bracket drawn",
+  redraw: "Bracket redrawn",
   patch_match: "Match updated",
   undo: "Undo",
   restore: "Restored to an earlier point",
@@ -29,9 +32,27 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 export const matchLabel = (id: string | null | undefined): string | null => (id ? `Match ${id}` : null);
 
+const AUTO_MODE_LABEL: Record<string, string> = {
+  balanced: "Balanced", winnersFirst: "Winners first", losersFirst: "Losers first", longestWait: "Longest wait", manual: "Manual",
+};
+
+// set_queue rows: the audit's `after` holds exactly the keys the TD changed.
+const queueTitle = (after: Record<string, unknown>): { title: string; line: string | null } => {
+  if (typeof after.autoAssignEnabled === "boolean")
+    return { title: after.autoAssignEnabled ? "Auto Assign enabled" : "Auto Assign disabled", line: null };
+  if (typeof after.autoAssignMode === "string")
+    return { title: "Auto Assign mode changed", line: AUTO_MODE_LABEL[after.autoAssignMode] ?? null };
+  if ("queueOrder" in after) return { title: "Match order changed", line: null };
+  if ("queuePins" in after) return { title: "Play Next updated", line: null };
+  return { title: OP_TITLES.set_queue, line: null };
+};
+
+// Who, when there is no TD behind the row: Auto Assign / the system — never a guessed person.
+const SOURCE_BY: Record<string, string> = { auto_assign: "Auto Assign", system: "System" };
+
 // One audit row → {title, line, meta}. `actor` is the display name (or null).
 export const describeAudit = (
-  row: Pick<ElimAuditRow, "op" | "match_id" | "after" | "before" | "detail">,
+  row: Pick<ElimAuditRow, "op" | "match_id" | "after" | "before" | "detail"> & { source?: string | null },
   actor?: string | null,
 ): { title: string; line: string | null; match: string | null; by: string | null } => {
   const d = row.detail ?? {};
@@ -51,11 +72,20 @@ export const describeAudit = (
     line = d.restoredLabel ? `To: ${d.restoredLabel}` : null;
     if (d.reopened) line = [line, "tournament reopened"].filter(Boolean).join(" · ");
   } else if (row.op === "set_queue") {
-    line = null;
+    ({ title, line } = queueTitle((row.after ?? {}) as Record<string, unknown>));
+  } else if (row.op === "auto_assign") {
+    line = [d.tableLabel ?? null, vs].filter(Boolean).join(" · ") || null;
+  } else if (row.op === "draw" || row.op === "redraw") {
+    const a = (row.after ?? {}) as { players?: unknown; bracketSize?: unknown };
+    line = [
+      typeof a.players === "number" ? plural(a.players, "player", "players") : null,
+      typeof a.bracketSize === "number" ? `${a.bracketSize}-slot bracket` : null,
+      row.op === "redraw" && d.reason ? `Reason: ${d.reason}` : null,
+    ].filter(Boolean).join(" · ") || null;
   }
   const reset = d.cascade?.reset?.length ?? 0;
   if (reset > 0) line = [line, `${plural(reset, "later match", "later matches")} reset`].filter(Boolean).join(" · ");
-  return { title, line, match: matchLabel(row.match_id), by: actor ?? null };
+  return { title, line, match: matchLabel(row.match_id), by: actor ?? SOURCE_BY[row.source ?? ""] ?? null };
 };
 
 // Before → after pairs for the detail view (only fields that changed; readable values).
@@ -66,6 +96,7 @@ export const auditFieldChanges = (row: Pick<ElimAuditRow, "before" | "after" | "
   const fmt = (k: string, v: unknown): string => {
     if (v == null || v === "") return "—";
     if (k === "winner") return v === 1 ? row.detail?.p1Name ?? "Player 1" : v === 2 ? row.detail?.p2Name ?? "Player 2" : String(v);
+    if (k === "tableId" && row.detail?.tableLabel && v === (row.after as Record<string, unknown> | null)?.tableId) return String(row.detail.tableLabel);
     if (k === "status") return v === "in_progress" ? "Live" : v === "completed" ? "Completed" : v === "scheduled" ? "Waiting" : String(v);
     if (k === "startedAt" && typeof v === "string") {
       const t = Date.parse(v);

@@ -32,6 +32,7 @@ import {
 } from "../../../../utils/elim-recovery.format";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { recoveryOffline, useElimRecovery } from "../../../../viewmodels/hooks/use.elim.recovery";
+import { ElimOfflineStatus } from "../../../../viewmodels/hooks/use.elim.offline";
 
 const confirmRecovery = (title: string, message: string, okText: string): Promise<boolean> =>
   new Promise((resolve) =>
@@ -56,6 +57,7 @@ export const ElimRecoveryModal = ({
   onClose,
   tournamentId,
   revision,
+  connection,
   standingsChanged,
   onChanged,
 }: {
@@ -63,6 +65,13 @@ export const ElimRecoveryModal = ({
   onClose: () => void;
   tournamentId: number | null;
   revision: number | null;
+  // Offline local recovery (use.elim.offline): cloud status + this device's last synced copy.
+  connection?: {
+    status: ElimOfflineStatus;
+    offline: boolean;
+    cloudRevision: number | null;
+    local: { revision: number; savedAt: string } | null;
+  };
   // Would replacing matchState with this one change the standings? (computed with the app's
   // own resolver by the caller) — adds "change the current standings" to confirmations.
   standingsChanged?: (ms: Record<string, MatchLiveState>) => boolean;
@@ -72,7 +81,10 @@ export const ElimRecoveryModal = ({
   const [tab, setTab] = useState<"history" | "restore">("history");
   const [openId, setOpenId] = useState<number | null>(null);
   const [restoringId, setRestoringId] = useState<number | null>(null);
-  const offline = recoveryOffline();
+  // Offline, or showing a held copy the cloud has replaced → recovery actions are unavailable.
+  const offline = recoveryOffline() || !!connection?.offline || (connection?.status ?? "cloud") !== "cloud";
+  const cloudLabel = connection?.status === "changed" ? "Changed" : offline ? "Offline" : "Synced";
+  const cloudRev = connection ? connection.cloudRevision : revision;
 
   const undoP = rec.undoPreview;
   const undoTitle = undoP?.undoing ? auditOpTitle(undoP.undoing.op) : null;
@@ -124,10 +136,20 @@ export const ElimRecoveryModal = ({
 
           {/* Status summary — confidence, not diagnostics */}
           <View style={styles.statusRow}>
-            <Stat label="Cloud" value={offline ? "Offline" : "Synced"} tone={offline ? "warn" : "ok"} />
-            <Stat label="Revision" value={revision != null ? `#${revision}` : "—"} />
-            <Stat label="Last checkpoint" value={lastCk ? clock(lastCk.created_at) : "None yet"} />
-            <Stat label="Restore points" value={String(rec.checkpoints.length)} />
+            <Stat label="Cloud" value={cloudLabel} tone={offline ? "warn" : "ok"} />
+            <Stat label="Cloud revision" value={cloudRev != null ? `#${cloudRev}` : offline ? "Unknown" : "—"} />
+            <Stat label="Last restore point" value={offline ? "—" : lastCk ? clock(lastCk.created_at) : "None yet"} />
+            <Stat label="Restore points" value={offline ? "—" : String(rec.checkpoints.length)} />
+          </View>
+          {/* This device's copy — separate from the server's Restore Points. Never restored or
+              uploaded; it only keeps the tournament visible while offline. */}
+          <View style={styles.localRow}>
+            <Text allowFontScaling={false} style={styles.localLabel}>Local recovery (this device)</Text>
+            <Text allowFontScaling={false} style={styles.localValue} numberOfLines={2}>
+              {connection?.local
+                ? `Available · last synced copy #${connection.local.revision} · ${clock(connection.local.savedAt)}`
+                : "None"}
+            </Text>
           </View>
 
           {/* Undo */}
@@ -284,6 +306,21 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
   closeX: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.textSecondary },
+  localRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: webSc(SPACING.sm),
+    paddingHorizontal: webSc(SPACING.sm),
+    paddingVertical: webSc(SPACING.xs),
+    marginTop: webSc(SPACING.xs),
+    borderRadius: webSc(RADIUS.md),
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
+  },
+  localLabel: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textSecondary, fontWeight: "600" },
+  localValue: { flexShrink: 1, textAlign: "right", fontSize: webMs(FONT_SIZES.xs), color: COLORS.text },
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: webSc(SPACING.xs), marginTop: webSc(SPACING.md) },
   stat: {
     flexGrow: 1,
