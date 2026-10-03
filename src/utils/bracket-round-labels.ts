@@ -7,10 +7,12 @@
 //                       Losers Round N … Losers Final · Finals · Finals (2nd Set)
 // Names (single elim):  Round N … Quarterfinal · Semifinal · Final
 // Places: single elim — the final is 1st / 2nd and each earlier round eliminates a block below
-// it (3-4th, 5-8th …). Double elim — winners-side losses don't eliminate, so only the Hotseat
-// (winners final) carries a placement (1st / 2nd: its winner reaches Finals); the losers-final
-// loser is 3rd and each earlier losers round eliminates a block (4th, 5-6th, 7-8th, 9-12th …);
-// Finals is 1st / 2nd.
+// it (3-4th, 5-8th …). Double elim — the losers-final loser is 3rd and each earlier losers
+// round eliminates a block (4th, 5-6th, 7-8th, 9-12th …); Finals is 1st / 2nd; the Hotseat is
+// 1st / 2nd (its winner reaches Finals). A winners-side loss doesn't eliminate — the loser drops
+// into a losers round (losersDropRound) — so a player who REACHES a winners round is guaranteed
+// that losers round's block "or better" (e.g. Winners Semifinal in 16: "5-6th or better").
+// Winners Round 1 stays unlabeled: reaching it guarantees nothing beyond the field's last block.
 
 const ordSuffix = (n: number): string => {
   const t = n % 100;
@@ -47,12 +49,30 @@ export const losersRoundName = (r: number, maxR: number): string => (r === maxR 
 export const finalsRoundName = (round: number): string => (round === 1 ? "Finals" : "Finals (2nd Set)");
 export const finalsPlace = (round: number): string | undefined => (round === 1 ? FINALS_PLACE : undefined);
 
-/** Placement each winners round plays for (round → label), from the per-round match counts. */
-export const winnersRoundPlaces = (countByRound: Map<number, number>, doubleElim: boolean): Map<number, string> => {
+/**
+ * The losers round a winners-round loser drops into (double elim, matches buildLosersGraph):
+ * Round 1 losers pair up in L1; Round r ≥ 2 losers enter the major round L(2(r−1)).
+ */
+export const losersDropRound = (winnersRound: number): number => (winnersRound <= 1 ? 1 : 2 * (winnersRound - 1));
+
+/**
+ * Placement each winners round plays for (round → label), from the per-round match counts.
+ * Double elim needs the losers-side counts to state each round's guaranteed finish.
+ */
+export const winnersRoundPlaces = (
+  countByRound: Map<number, number>,
+  doubleElim: boolean,
+  losersCountByRound?: Map<number, number>,
+): Map<number, string> => {
   const out = new Map<number, string>();
   const maxR = Math.max(0, ...countByRound.keys());
   if (maxR <= 0) return out;
   if (doubleElim) {
+    const losPlaces = losersRoundPlaces(losersCountByRound ?? new Map());
+    for (let r = 2; r < maxR; r++) {
+      const block = losPlaces.get(losersDropRound(r));
+      if (block) out.set(r, `${block} or better`);
+    }
     out.set(maxR, FINALS_PLACE);
     return out;
   }

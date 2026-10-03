@@ -171,10 +171,11 @@ const blockHeight = (b: BracketBlock) => COL_LABEL_H + b.rows * PITCH;
 const matchIndex = (id: string): number => Number(/M(\d+)$/.exec(id)?.[1] ?? 0);
 
 // Round header for one side (name + place), shared with the live bracket.
-const sideColumns = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean) => {
+const sideColumns = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean, graph: BracketGraphNode[]) => {
   const counts = roundCounts(nodes, side);
   const maxR = Math.max(0, ...counts.keys());
-  const places = side === "winners" ? winnersRoundPlaces(counts, doubleElim) : losersRoundPlaces(counts);
+  const places =
+    side === "winners" ? winnersRoundPlaces(counts, doubleElim, roundCounts(graph, "losers")) : losersRoundPlaces(counts);
   return (r: number) => ({
     name: side === "winners" ? winnersRoundName(r, maxR, doubleElim) : losersRoundName(r, maxR),
     place: places.get(r),
@@ -184,10 +185,10 @@ const sideColumns = (side: "winners" | "losers", nodes: BracketGraphNode[], doub
 // One side → blocks: bands of ≤4 rounds (never ending on a lone round: 5 → 3 + 2); first
 // column evenly spaced, later columns centered on their same-side feeders (losers drop-in
 // rounds sit level with their one feeder).
-const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean): BracketBlock[] => {
+const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean, graph: BracketGraphNode[]): BracketBlock[] => {
   const rounds = [...new Set(nodes.map((n) => n.round))].sort((a, b) => a - b);
   if (!rounds.length) return [];
-  const header = sideColumns(side, nodes, doubleElim);
+  const header = sideColumns(side, nodes, doubleElim, graph);
   const byRound = new Map<number, BracketGraphNode[]>();
   for (const r of rounds) byRound.set(r, nodes.filter((n) => n.round === r).sort((a, b) => matchIndex(a.id) - matchIndex(b.id)));
   const label = side === "winners" ? (doubleElim ? "WINNERS BRACKET" : "BRACKET") : "LOSERS BRACKET";
@@ -241,8 +242,8 @@ const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubl
 export const elimBracketBlocks = (graph: BracketGraphNode[], doubleElim: boolean): BracketBlock[] => {
   const grand = graph.filter((n) => n.side === "grand").sort((a, b) => a.round - b.round);
   const blocks = [
-    ...sideBlocks("winners", graph.filter((n) => n.side === "winners"), doubleElim),
-    ...sideBlocks("losers", graph.filter((n) => n.side === "losers"), doubleElim),
+    ...sideBlocks("winners", graph.filter((n) => n.side === "winners"), doubleElim, graph),
+    ...sideBlocks("losers", graph.filter((n) => n.side === "losers"), doubleElim, graph),
   ];
   if (grand.length) {
     blocks.push({
@@ -705,9 +706,14 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
           page.text(x, by, name, 8, { font: "bold", gray: 0.3 });
           let px = x + textWidth(name, 8, "bold") + 6;
           if (c.place) {
-            const place = c.place.toUpperCase();
-            page.text(px, by, place, 7.5, { font: "bold", gray: PLACE_BLUE });
-            px += textWidth(place, 7.5, "bold") + 6;
+            // Long headers ("WINNERS QUARTERFINAL  9-12TH OR BETTER") step the place down a size so
+            // the header stays inside its column; shortened only as a last resort.
+            const room = x + COL_W - 10 - px;
+            let place = c.place.toUpperCase();
+            const size = textWidth(place, 7.5, "bold") <= room ? 7.5 : 6.5;
+            place = fitText(place, size, room, "bold");
+            page.text(px, by, place, size, { font: "bold", gray: PLACE_BLUE });
+            px += textWidth(place, size, "bold") + 6;
           }
           if (c.name === "Hotseat") page.text(px, by, "2nd place guaranteed", 6.5, { gray: 0.45 });
         });

@@ -31,7 +31,7 @@ import {
   layoutElimBracket,
 } from "../elim-bracket-pdf";
 import { BackupRegistration, buildBackupPayouts, buildBackupRoster } from "../elim-bracket-summary";
-import { finalsPlace, finalsRoundName, losersRoundPlaces, roundCounts, winnersRoundName, winnersRoundPlaces } from "../bracket-round-labels";
+import { finalsPlace, finalsRoundName, losersDropRound, losersRoundPlaces, roundCounts, winnersRoundName, winnersRoundPlaces } from "../bracket-round-labels";
 import { buildElimLocalRecord, validateElimLocalRecord } from "../elim-local-recovery";
 import { bytesToBase64, fitText, textWidth, toWinAnsi } from "../pdf-writer";
 
@@ -620,7 +620,7 @@ test("live + PDF labels: double 16 (Hotseat 1st/2nd, losers 13-16th … 3rd, Fin
   const w = roundCounts(graph, "winners");
   const l = roundCounts(graph, "losers");
   assert.deepEqual([1, 2, 3, 4].map((r) => winnersRoundName(r, 4, true)), ["Winners Round 1", "Winners Quarterfinal", "Winners Semifinal", "Hotseat"]);
-  assert.deepEqual([...winnersRoundPlaces(w, true)], [[4, "1st / 2nd"]], "only the Hotseat carries a place in double elim");
+  assert.deepEqual([...winnersRoundPlaces(w, true, l)].sort(), [[2, "9-12th or better"], [3, "5-6th or better"], [4, "1st / 2nd"]]);
   assert.deepEqual([1, 2, 3, 4, 5, 6].map((r) => losersRoundPlaces(l).get(r)), ["13-16th", "9-12th", "7-8th", "5-6th", "4th", "3rd"]);
   assert.deepEqual([finalsRoundName(1), finalsRoundName(2), finalsPlace(1), finalsPlace(2)], ["Finals", "Finals (2nd Set)", "1st / 2nd", undefined]);
   const strings = pdfStrings(buildElimBracketPdf(input(16, 9, true)).bytes);
@@ -651,4 +651,61 @@ test("summary placements use the same place blocks as the bracket headers", () =
   // The list shows the top 12 finishers; everyone's place is also in the player list's Status column.
   for (const label of ["1st", "2nd", "3rd", "4th", "5-6th", "7-8th", "9-12th"])
     assert.ok(text.some((t) => t.startsWith(`${label}   `)), `placement ${label}`);
+});
+
+// ══ Winners-side guaranteed finish (double elim) — same helper as the live bracket ═════════
+test("winners drop rounds match the bracket graph: Round r losers enter L(1) / L(2(r−1))", () => {
+  for (const size of [8, 16, 32, 64]) {
+    const graph = buildBracketGraph(size, true);
+    for (const n of graph.filter((g) => g.side === "losers")) {
+      for (const ref of [n.slot1, n.slot2]) {
+        if (ref.kind !== "loser" || !ref.matchId.startsWith("W")) continue;
+        const wRound = Number(/^W(\d+)M/.exec(ref.matchId)![1]);
+        assert.equal(losersDropRound(wRound), n.round, `${size}: ${ref.matchId} → L${n.round}`);
+      }
+    }
+  }
+});
+
+test("double elim winners labels: reaching a round guarantees its drop block or better; Round 1 unlabeled", () => {
+  const labels = (size: number) => {
+    const g = buildBracketGraph(size, true);
+    const w = roundCounts(g, "winners");
+    const max = Math.max(...w.keys());
+    const p = winnersRoundPlaces(w, true, roundCounts(g, "losers"));
+    return [...w.keys()].sort((a, b) => a - b).map((r) => `${winnersRoundName(r, max, true)}: ${p.get(r) ?? "—"}`);
+  };
+  assert.deepEqual(labels(8), ["Winners Quarterfinal: —", "Winners Semifinal: 5-6th or better", "Hotseat: 1st / 2nd"]);
+  assert.deepEqual(labels(16), ["Winners Round 1: —", "Winners Quarterfinal: 9-12th or better", "Winners Semifinal: 5-6th or better", "Hotseat: 1st / 2nd"]);
+  assert.deepEqual(labels(32), [
+    "Winners Round 1: —",
+    "Winners Round 2: 17-24th or better",
+    "Winners Quarterfinal: 9-12th or better",
+    "Winners Semifinal: 5-6th or better",
+    "Hotseat: 1st / 2nd",
+  ]);
+  assert.deepEqual(labels(64), [
+    "Winners Round 1: —",
+    "Winners Round 2: 33-48th or better",
+    "Winners Round 3: 17-24th or better",
+    "Winners Quarterfinal: 9-12th or better",
+    "Winners Semifinal: 5-6th or better",
+    "Hotseat: 1st / 2nd",
+  ]);
+  // Single elimination unchanged: each round is the block its losers finish in.
+  assert.deepEqual([...winnersRoundPlaces(roundCounts(buildBracketGraph(8, false), "winners"), false)].sort(), [[1, "5-8th"], [2, "3-4th"], [3, "1st / 2nd"]]);
+});
+
+test("live bracket + PDF both pass the losers counts; the PDF prints the winners labels", () => {
+  const canvas = read("src/views/components/tournament/live/BracketCanvas.tsx");
+  const call = canvas.slice(canvas.indexOf("const winPlace = winnersRoundPlaces("), canvas.indexOf("const winPlace = winnersRoundPlaces(") + 220);
+  assert.ok(call.includes("hasLosers,") && call.includes("[...losRounds]"), "live bracket passes the losers counts");
+  assert.match(read("src/utils/elim-bracket-pdf.ts"), /winnersRoundPlaces\(counts, doubleElim, roundCounts\(graph, "losers"\)\)/);
+  const p1 = pdfStrings(buildElimBracketPdf(input(16, 9, true)).bytes)[0];
+  const t = p1.map((s) => s.text);
+  assert.ok(t.includes("9-12TH OR BETTER") && t.includes("5-6TH OR BETTER") && t.includes("1ST / 2ND"));
+  const r1 = t.indexOf("WINNERS ROUND 1");
+  assert.equal(t[r1 + 1], "WINNERS QUARTERFINAL", "Round 1 header has no placement");
+  const p64 = allText(buildElimBracketPdf(input(64, 64, true)).bytes);
+  for (const l of ["33-48TH OR BETTER", "17-24TH OR BETTER", "9-12TH OR BETTER", "5-6TH OR BETTER"]) assert.ok(p64.includes(l), l);
 });

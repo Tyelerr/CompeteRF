@@ -111,10 +111,13 @@ const layout = (matches: LiveMatch[]) => {
 
   // What place each winners round plays for. Single elimination: the final is
   // 1st/2nd and each earlier round eliminates a block below it (3-4th, 5-8th …).
-  // Double elimination: winners-side losses don't eliminate, so only the winners
-  // final (Hotseat) carries a fixed placement — its winner is guaranteed a finals
-  // berth (1st/2nd).
-  const winPlace = winnersRoundPlaces(new Map([...winRounds].map(([r, a]) => [r, a.length])), hasLosers);
+  // Double elimination: a winners-side loss drops into a losers round, so reaching a
+  // winners round guarantees that round's block "or better"; the Hotseat is 1st / 2nd.
+  const winPlace = winnersRoundPlaces(
+    new Map([...winRounds].map(([r, a]) => [r, a.length])),
+    hasLosers,
+    new Map([...losRounds].map(([r, a]) => [r, a.length])),
+  );
 
   // Winners — tree centering.
   let prevY = new Map<number, number>();
