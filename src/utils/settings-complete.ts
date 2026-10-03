@@ -12,6 +12,9 @@
 //   (Maximum Fargo OR Open Tournament) · Race Type* · Date · Time · Venue · Table Size · Equipment
 //   *Race Type is required ONLY for bracket formats. Chip tournaments configure their
 //    race via the chip race-to stepper (not the Race Type selector), so it is exempt.
+//   Format must also have a live engine — Coming Soon formats never pass.
+
+import { isFormatComingSoon } from "./tournament-formats";
 
 // Stable, UI-facing key for each requirement (drives `*` markers, red field errors, and
 // scroll-to-first-missing). Distinct from the human label so UI mapping never parses text.
@@ -91,6 +94,9 @@ export const missingSettingsItems = (
   if (!has(s.name)) missing.push({ key: "name", label: "Tournament Name" });
   if (!has(s.gameType)) missing.push({ key: "gameType", label: "Game Type" });
   if (!has(s.format)) missing.push({ key: "format", label: "Format" });
+  // A Coming Soon format (no live engine) can never start registration — no silent fallback.
+  else if (isFormatComingSoon(s.format))
+    missing.push({ key: "format", label: "Format (coming soon — choose Single, Double or Chip)" });
   if (!feeOk(s)) missing.push({ key: "entryFee", label: "Entry Fee" });
   if (!fargoOk(s))
     missing.push({ key: "fargo", label: "Maximum Fargo or Open Tournament" });

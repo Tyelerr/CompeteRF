@@ -10,7 +10,9 @@ const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
 const wxSc = (v: number) => isWeb ? v : scale(v);
 
-interface DropdownOption { label: string; value: string; }
+// `disabled` options stay visible but can't be chosen (e.g. "COMING SOON" formats); `badge` is a
+// small trailing label. Both optional — existing callers are unchanged.
+interface DropdownOption { label: string; value: string; disabled?: boolean; badge?: string; }
 interface DropdownProps {
   label?: string; placeholder?: string; options: DropdownOption[]; value?: string;
   onSelect: (value: string) => void; error?: string; disabled?: boolean;
@@ -49,7 +51,8 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
   const hoverBg = selectedBlueText ? COLORS.surface : COLORS.background;
   const popoverStyle: React.CSSProperties = { position: "fixed", top: rect.top, left: rect.left, width: Math.max(rect.width, compact ? 180 : 220), backgroundColor: menuBg, border: `1px solid ${COLORS.primary}`, borderRadius: 6, zIndex: 999999, maxHeight: 280, overflowY: "auto", boxShadow: `0 4px 16px rgba(0,0,0,0.4), 0 0 0 3px ${COLORS.primary}33` };
   const overlayStyle: React.CSSProperties = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999998 };
-  const optionStyle = (isSelected: boolean): React.CSSProperties => ({ padding: compact ? "6px 10px" : "8px 12px", fontSize: compact ? 12 : 13, fontFamily: MENU_FONT, fontWeight: isSelected && selectedBlueText ? 700 : 400, color: isSelected ? (selectedBlueText ? COLORS.primary : "#fff") : COLORS.text, backgroundColor: isSelected && !selectedBlueText ? COLORS.primary : "transparent", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, transition: "background-color 0.12s ease" });
+  const optionStyle = (isSelected: boolean, isDisabled?: boolean): React.CSSProperties => ({ padding: compact ? "6px 10px" : "8px 12px", fontSize: compact ? 12 : 13, fontFamily: MENU_FONT, fontWeight: isSelected && selectedBlueText ? 700 : 400, color: isDisabled ? COLORS.textMuted : isSelected ? (selectedBlueText ? COLORS.primary : "#fff") : COLORS.text, backgroundColor: isSelected && !selectedBlueText && !isDisabled ? COLORS.primary : "transparent", cursor: isDisabled ? "not-allowed" : "pointer", opacity: isDisabled ? 0.55 : 1, borderBottom: `1px solid ${COLORS.border}`, transition: "background-color 0.12s ease", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 });
+  const badgeStyle: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: 0.6, color: COLORS.textMuted, border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: "1px 5px", whiteSpace: "nowrap" };
 
   if (typeof document === "undefined") return null;
   const content = (
@@ -58,7 +61,7 @@ const WebPopover = ({ anchorRef, options, value, searchable, searchPlaceholder, 
       <div style={popoverStyle}>
         {searchable && <input autoFocus type="text" placeholder={searchPlaceholder || "Search..."} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: "7px 10px", backgroundColor: COLORS.background, border: "none", borderBottom: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 12, fontFamily: MENU_FONT, outline: "none" }} />}
         {filtered.map((item) => (
-          <div key={item.value} style={optionStyle(item.value === value)} onMouseEnter={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = hoverBg; }} onMouseLeave={(e) => { if (item.value !== value) (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }} onClick={() => { onSelect(item.value); onClose(); }}>{item.label}</div>
+          <div key={item.value} aria-disabled={item.disabled || undefined} style={optionStyle(item.value === value, item.disabled)} onMouseEnter={(e) => { if (item.value !== value && !item.disabled) (e.currentTarget as HTMLDivElement).style.backgroundColor = hoverBg; }} onMouseLeave={(e) => { if (item.value !== value && !item.disabled) (e.currentTarget as HTMLDivElement).style.backgroundColor = "transparent"; }} onClick={() => { if (item.disabled) return; onSelect(item.value); onClose(); }}><span>{item.label}</span>{!!item.badge && <span style={badgeStyle}>{item.badge}</span>}</div>
         ))}
         {filtered.length === 0 && <div style={{ padding: "10px", color: COLORS.textMuted, fontSize: 12 }}>No results</div>}
       </div>
@@ -127,8 +130,14 @@ export const Dropdown = ({ label, placeholder = "Select...", options, value, onS
               <FlatList data={filteredOptions} keyExtractor={(item) => item.value} keyboardShouldPersistTaps="handled"
                 ListEmptyComponent={<View style={styles.emptyContainer}><Text allowFontScaling={false} style={styles.emptyText}>No results found</Text></View>}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={[styles.option, item.value === value && styles.optionSelected]} onPress={() => { onSelect(item.value); setIsOpen(false); }}>
-                    <Text allowFontScaling={false} style={[styles.optionText, item.value === value && styles.optionTextSelected]}>{item.label}</Text>
+                  <TouchableOpacity
+                    style={[styles.option, item.badge ? styles.optionRow : null, item.value === value && !item.disabled && styles.optionSelected, item.disabled && styles.optionDisabled]}
+                    disabled={item.disabled}
+                    accessibilityState={{ disabled: !!item.disabled, selected: item.value === value }}
+                    onPress={() => { onSelect(item.value); setIsOpen(false); }}
+                  >
+                    <Text allowFontScaling={false} style={[styles.optionText, item.value === value && !item.disabled && styles.optionTextSelected, item.disabled && styles.optionTextDisabled]}>{item.label}</Text>
+                    {!!item.badge && <Text allowFontScaling={false} style={styles.optionBadge}>{item.badge}</Text>}
                   </TouchableOpacity>
                 )}
               />
@@ -162,6 +171,10 @@ const styles = StyleSheet.create({
   optionSelected: { backgroundColor: COLORS.primaryDark },
   optionText: { fontSize: wxMs(FONT_SIZES.md), color: COLORS.text },
   optionTextSelected: { color: COLORS.white, fontWeight: "600" },
+  optionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: wxSc(SPACING.sm) },
+  optionDisabled: { opacity: 0.55 },
+  optionTextDisabled: { color: COLORS.textMuted },
+  optionBadge: { fontSize: wxMs(9), fontWeight: "700", letterSpacing: 0.6, color: COLORS.textMuted, borderWidth: 1, borderColor: COLORS.border, borderRadius: 4, paddingHorizontal: wxSc(5), paddingVertical: 1, overflow: "hidden" },
 });
 
 const wStyles = StyleSheet.create({

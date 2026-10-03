@@ -1,4 +1,6 @@
 ﻿// Chip Tournament: rating range to chip count mapping
+import { withFormatAvailability } from "./tournament-formats";
+
 export interface ChipRange {
   label: string;
   minRating: number;
@@ -103,7 +105,9 @@ export const GAME_TYPES = [
   { label: "Banks", value: "banks" },
 ];
 
-export const TOURNAMENT_FORMATS = [
+// Formats without a live engine stay listed but are disabled + "COMING SOON" (see
+// tournament-formats.ts) — they can't be selected, start registration or draw a bracket.
+export const TOURNAMENT_FORMATS = withFormatAvailability([
   { label: "Select The Format", value: "" },
   { label: "Single Elimination", value: "single-elimination" },
   { label: "Double Elimination", value: "double-elimination" },
@@ -112,7 +116,7 @@ export const TOURNAMENT_FORMATS = [
   { label: "Swiss", value: "swiss" },
   { label: "Modified Double Elimination", value: "modified-double" },
   { label: "Split Bracket", value: "split-bracket" },
-];
+]);
 
 export const START_TIMES = [
   { label: "Select Start Time", value: "" },

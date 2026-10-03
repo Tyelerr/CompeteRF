@@ -19,6 +19,7 @@ import { moderateScale, scale } from "../../../../src/utils/scaling";
 import { Dropdown } from "../../../../src/views/components/common/dropdown";
 import { TournamentManageGuard } from "../../../../src/views/components/common/AccessGate";
 import { useVenueScope } from "../../../../src/viewmodels/hooks/use.venue.scope";
+import { withFormatAvailability } from "../../../../src/utils/tournament-formats";
 
 const isWeb = Platform.OS === "web";
 
@@ -70,11 +71,11 @@ function EditTournamentTDScreen() {
     { label: "Straight Pool", value: "Straight Pool" },
   ];
 
-  const formatTypes = [
+  const formatTypes = withFormatAvailability([
     { label: "Single Elimination", value: "single_elimination" },
     { label: "Double Elimination", value: "double_elimination" },
     { label: "Round Robin", value: "round_robin" },
-  ];
+  ]);
 
   useEffect(() => {
     if (id && profile?.id_auto) {

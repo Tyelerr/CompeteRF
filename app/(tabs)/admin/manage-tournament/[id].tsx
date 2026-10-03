@@ -180,6 +180,7 @@ import { chipService } from "../../../../src/models/services/chip.service";
 import { chipReadyEntries, chipActiveEntries } from "../../../../src/utils/chip-lifecycle";
 import { buildReadinessSummary, needsReadinessWarning, blocksLeavingPlayers, ReadinessRow, PlayerReadinessSummary } from "../../../../src/utils/player-readiness";
 import { missingSettingsItems, settingsComplete, isSettingsFieldRequired, SettingsCompleteInput, SettingsFieldKey } from "../../../../src/utils/settings-complete";
+import { COMING_SOON_FORMAT_MESSAGE, liveEngineFor } from "../../../../src/utils/tournament-formats";
 import { isScheduleStale, scheduleStaleError, SCHEDULE_STALE_MESSAGE } from "../../../../src/utils/schedule";
 import { LifecyclePhase, deriveLifecycle, paymentSatisfied, isFargoVerified } from "../../../../src/utils/registration-lifecycle";
 import { useQuery } from "@tanstack/react-query";
@@ -4743,8 +4744,15 @@ function ManageTournamentScreen() {
     }
     // Never smaller than the field: a stale pick (players added after choosing) expands.
     const size = effectiveBracketSize(bracketSizeSel, readyPlayers.length);
-    const format = hub.tournament?.tournament_format ?? "single-elimination";
-    const doubleElim = format.toLowerCase().includes("double");
+    // Only real bracket engines draw. Unsupported/blank formats used to fall back silently
+    // (anything containing "double" → double, everything else → single); now they're refused.
+    const format = hub.tournament?.tournament_format ?? "";
+    const engine = liveEngineFor(format);
+    if (engine !== "single" && engine !== "double") {
+      Alert.alert("Format not available", COMING_SOON_FORMAT_MESSAGE);
+      return;
+    }
+    const doubleElim = engine === "double";
     const seeds = seedPlayers(readyPlayers, size);
     const round1 = round1FromSeeds(seeds, raceConfig);
     const graph = buildBracketGraph(size, doubleElim);
