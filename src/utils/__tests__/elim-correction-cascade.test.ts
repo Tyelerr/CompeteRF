@@ -1,6 +1,10 @@
 // src/utils/__tests__/elim-correction-cascade.test.ts
 // Run: npx tsx --test src/utils/__tests__/elim-correction-cascade.test.ts
 //
+// NOTE (2026-10-02): the SERVER now clears downstream results whose players changed
+// (elim_live_apply correction cascade, 20261018120000 — supabase/tests/elim_recovery_foundation.test.ts).
+// These tests pin the raw client RESOLVER only (what an un-cascaded matchState would display).
+//
 // CHARACTERIZATION of result corrections (no new cascade rule): winners are stored as SLOTS,
 // so changing an earlier result re-seats players downstream and any downstream result follows
 // its slot. These tests pin today's behavior for each scenario and the invariants that must

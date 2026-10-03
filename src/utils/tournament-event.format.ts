@@ -97,6 +97,15 @@ export const formatTournamentEvent = (e: TournamentEvent): FormattedEvent => {
     }
     case "bracket_redrawn":
       return { title: "Bracket redrawn", detail: null, tone: "neutral" };
+    case "bracket_corrected": {
+      // A result correction re-seated later matches (server cascade). Public count only.
+      const n = typeof p.resetCount === "number" ? p.resetCount : 0;
+      return {
+        title: "Bracket corrected",
+        detail: n > 0 ? `${n} later ${n === 1 ? "match" : "matches"} reset after a result change` : vsLine(p),
+        tone: "neutral",
+      };
+    }
 
     default:
       return { title: e.type, detail: vsLine(p), tone: "neutral" };

@@ -1,7 +1,8 @@
 # Tournament Recovery Design — Chip (as-is) and Elimination (proposed)
 
-Status: **design for approval (2026-10-02).** Phase 1 (format gating) is implemented. Phases 2–4
-need production migrations and are **not applied**. Their open decisions are listed at the end.
+Status (2026-10-02): Phase 1 (format gating), Phase 2 (revision + server audit) and Phase 3a (correction
+cascade + checkpoint foundation) are implemented — migration `20261018120000_elim_recovery_foundation.sql`,
+rollback in `supabase/rollback/`. Remaining: Undo, Restore UI/RPC, offline/local recovery (§3.4, §3.6).
 
 ---
 
@@ -163,8 +164,8 @@ For a changed match M:
 | Phase | Scope | Needs | Status |
 |---|---|---|---|
 | 1 | Chip architecture documented; this design; Setup format gating | client only | **Done** (commit 8831b72) |
-| 2 | `live_revision` + server-written audit in `elim_live_apply` / Auto Assign / new `elim_draw`; idempotent `tx_id`; remove client double-logging | **migration** + client | Proposed |
-| 3a | **Cascade fix**: apply §3.5 inside `_elim_apply_one` for reset/reopen/winner change | **migration** | Proposed (highest correctness value) |
+| 2 | `live_revision` (trigger-owned, covers every writer) + server-written audit in `elim_live_apply`; idempotent op id; sanitized public activity; client no longer logs match events | migration `20261018120000` + client | **Implemented** (Auto Assign / draw still write no audit rows — they bump the revision and produce milestones) |
+| 3a | **Cascade fix** (§3.5) inside `elim_live_apply` for every outcome-changing op; dry-run impact preview; checkpoints (30 rolling + milestones) | migration `20261018120000` + client | **Implemented** |
 | 3b | `elim_checkpoints` + `elim_restore_preview` / `elim_restore` + Undo-by-audit; Recovery & History UI | **migration** + client | Proposed |
 | 4 | Local last-known-good + offline banner + safe-op queue + conflict flow (web + native) | client | Proposed |
 

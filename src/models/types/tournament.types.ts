@@ -52,6 +52,8 @@ export interface Tournament {
   external_bracket_url?: string;
   // Live-engine runtime state (Phase 0 columns; separate from `status`).
   live_state?: TournamentLiveState;
+  // Server-owned elimination revision (bumped on every live change; see elim recovery foundation).
+  live_revision?: number;
   is_paused?: boolean;
   paused_at?: string | null;
   current_round?: number;

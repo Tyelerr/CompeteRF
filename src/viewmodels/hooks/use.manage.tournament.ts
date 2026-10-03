@@ -8,6 +8,7 @@
 // goes through services; the screen never touches Supabase.
 
 import { useMemo } from "react";
+import * as Crypto from "expo-crypto";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
@@ -20,6 +21,7 @@ import {
   DrawLogEntry,
   ElimLiveApplyResponse,
   ElimLiveOp,
+  ElimLivePreview,
   GeneratedBracket,
   MatchExpect,
   MatchLiveState,
@@ -29,7 +31,7 @@ import {
 } from "../../models/types/tournament-settings.types";
 import { sanitizePins } from "../../utils/queue-pins";
 import { autoAssignActive, manageHubPollMs } from "../../utils/auto-assign";
-import { applyOpsLocally, liveOpErrorText } from "../../utils/elim-live-ops";
+import { applyOpsLocally, liveCallErrorText, liveOpErrorText } from "../../utils/elim-live-ops";
 import {
   TournamentLiveState,
   TableStatus,
@@ -152,9 +154,12 @@ export const useManageTournament = (tournamentId?: number) => {
   // whole-live_settings write could). No fallback to the old path — that would bring the
   // race back. The cache is updated optimistically, then replaced by the server's
   // authoritative live_settings. Per-op results are returned for partial-success UI.
+  // Recovery foundation: every call carries a fresh op id (idempotent; the server writes the
+  // audit + spectator activity in the same transaction). Corrections also carry the revision the
+  // TD acted on — a newer cloud revision is refused ('stale_revision') and the screen refetches.
   const applyLiveOps = async (
     ops: ElimLiveOp[],
-    opts: { atomic?: boolean } = {},
+    opts: { atomic?: boolean; expectedRevision?: number | null } = {},
   ): Promise<ElimLiveApplyResponse> => {
     await queryClient.cancelQueries({ queryKey: ["tournament", tournamentId] });
     const prev = currentTournament();
@@ -165,30 +170,45 @@ export const useManageTournament = (tournamentId?: number) => {
       });
     }
     try {
-      const res = await tournamentService.applyElimLiveOps(tournamentId!, ops, opts.atomic ?? false);
+      const res = await tournamentService.applyElimLiveOps(tournamentId!, ops, opts.atomic ?? false, {
+        opId: Crypto.randomUUID(),
+        expectedRevision: opts.expectedRevision ?? null,
+      });
       const latest = currentTournament() ?? prev;
       if (latest) {
         queryClient.setQueryData<Tournament>(["tournament", tournamentId], {
           ...latest,
           live_settings: res.live_settings,
           live_state: res.live_state as TournamentLiveState,
+          ...(typeof res.revision === "number" ? { live_revision: res.revision } : {}),
         });
       }
       return res;
     } catch (e) {
       if (prev) queryClient.setQueryData(["tournament", tournamentId], prev);
+      const known = liveCallErrorText(e);
+      if (known) {
+        invalidateTournament();
+        throw new Error(known);
+      }
       throw e;
     }
   };
+  // Impact preview (dry run) for a correction: what the server WOULD clear + its revision.
+  const previewLiveOps = (ops: ElimLiveOp[]): Promise<ElimLivePreview> =>
+    tournamentService.previewElimLiveOps(tournamentId!, ops);
   // Single-op convenience: throws (with the server's reason) when the op was rejected, so
   // existing callers keep their error alerts.
-  const applyOneLiveOp = async (op: ElimLiveOp): Promise<ElimLiveApplyResponse> => {
-    const res = await applyLiveOps([op]);
+  const applyOneLiveOp = async (op: ElimLiveOp, expectedRevision?: number | null): Promise<ElimLiveApplyResponse> => {
+    const res = await applyLiveOps([op], { expectedRevision });
     const r = res.results[0];
     if (!r?.ok) throw new Error(liveOpErrorText(r?.error));
     return res;
   };
   const liveOpsMutation = useMutation({
+    // Never pause-and-replay a live write while offline (React Query's default) — it either goes
+    // now or fails visibly; the cloud stays authoritative.
+    networkMode: "always",
     mutationFn: (vars: { ops: ElimLiveOp[]; atomic?: boolean }) =>
       applyLiveOps(vars.ops, { atomic: vars.atomic }),
     onSettled: invalidateTournament,
@@ -364,13 +384,17 @@ export const useManageTournament = (tournamentId?: number) => {
   // flips live_state → in_progress on the first real start and stamps a first start with
   // server time (never the device clock). Rejections throw with the server's reason.
   const setMatchStateMutation = useMutation({
-    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState>; expect?: MatchExpect }) =>
-      applyOneLiveOp({
-        op: "patch_match",
-        matchId: vars.matchId,
-        set: vars.patch,
-        ...(vars.expect ? { expect: vars.expect } : {}),
-      }),
+    networkMode: "always",
+    mutationFn: (vars: { matchId: string; patch: Partial<MatchLiveState>; expect?: MatchExpect; expectedRevision?: number | null }) =>
+      applyOneLiveOp(
+        {
+          op: "patch_match",
+          matchId: vars.matchId,
+          set: vars.patch,
+          ...(vars.expect ? { expect: vars.expect } : {}),
+        },
+        vars.expectedRevision,
+      ),
     onSettled: invalidateTournament,
   });
 
@@ -502,6 +526,9 @@ export const useManageTournament = (tournamentId?: number) => {
     applyLiveOps: (ops: ElimLiveOp[], opts?: { atomic?: boolean }) =>
       liveOpsMutation.mutateAsync({ ops, atomic: opts?.atomic }),
     bulkSetMatchState: bulkSetMatchStateMutation.mutateAsync,
+    // Recovery foundation: correction impact preview (dry run) + the server-owned revision.
+    previewLiveOps,
+    liveRevision: tournament?.live_revision ?? null,
 
     // Queue Manager
     autoAssignMode: tournament?.live_settings?.autoAssignMode ?? "balanced",

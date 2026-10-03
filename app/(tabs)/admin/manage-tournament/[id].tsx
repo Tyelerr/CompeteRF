@@ -66,7 +66,6 @@ import {
   TableSize,
   TableStatus,
   TournamentFormat,
-  TournamentLiveState,
 } from "../../../../src/models/types/common.types";
 import { PublicProfile } from "../../../../src/models/types/profile.types";
 import { Registration } from "../../../../src/models/types/registration.types";
@@ -156,17 +155,18 @@ import {
   queueModePayload,
 } from "../../../../src/utils/queue-settings";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
-import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, formatClock, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
+import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
   buildQueueEntries,
   computeReadyAtMap,
   planAutoAssign,
   freeTables,
   isStartable,
-  bracketLocation,
   AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
-import { buildAssignOps, expectOf, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { buildAssignOps, correctionImpactText, expectOf, isCorrection, isOutcomeChange, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { correctionImpact } from "../../../../src/utils/bracket.correction";
+import { CONNECTION_REQUIRED_MESSAGE } from "../../../../src/utils/connection-required";
 import { matchNotificationService } from "../../../../src/models/services/match-notification.service";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
 import { MatchActionsModal } from "../../../../src/views/components/tournament/live/MatchActionsModal";
@@ -198,6 +198,15 @@ import { useProjectedSchedule } from "../../../../src/viewmodels/hooks/use.proje
 import { useHydrated } from "../../../../src/viewmodels/hooks/use.hydrated";
 
 const isWeb = Platform.OS === "web";
+
+// Promise-based confirmation (native Alert / web Alert host). Resolves true only on confirm.
+const confirmAsync = (title: string, message: string, okText: string): Promise<boolean> =>
+  new Promise((resolve) =>
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: okText, style: "destructive", onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) }),
+  );
 // Web desktop shell: the centered content column width shared by every tournament-admin
 // screen (header/breadcrumb/phase-nav AND the scrolled body). The OUTER container is now
 // full-viewport-width so the page's vertical scroll surface spans the whole width — wheel
@@ -4223,74 +4232,35 @@ function ManageTournamentScreen() {
     if (activeTab === "dashboard") refreshEvents();
   }, [activeTab, refreshEvents]);
 
-  // Derive + write the durable activity event(s) for a match mutation, from the resolved
-  // LiveMatch (names/round/side/table) + the patch. Structured payload; fire-and-forget so an
-  // audit-log failure never affects the real mutation. tournament_started is emitted here when
-  // the live_state was not yet Running (matches the Phase 1 atomic flip in setMatchState).
-  const logMatchDerivedEvent = (
-    prev: LiveMatch | null,
-    patch: Partial<MatchLiveState>,
-    prevLiveState: TournamentLiveState | undefined,
-  ) => {
-    if (!tournamentId || isChipTournament) return;
-    const actor = tdProfile?.id_auto ?? null;
-    const tableId = "tableId" in patch ? patch.tableId ?? null : prev?.tableId ?? null;
-    const tbl = tableId != null ? hub.tables.find((t) => t.id === tableId) : undefined;
-    const tableLabel = tbl ? tbl.label?.trim() || `Table ${tbl.table_number}` : null;
-    const base: Record<string, unknown> = prev
-      ? {
-          matchId: prev.id,
-          label: prev.label,
-          side: prev.side,
-          round: prev.round,
-          location: bracketLocation(prev),
-          p1Name: prev.p1Name,
-          p2Name: prev.p2Name,
-        }
-      : {};
-    const emit = (type: Parameters<typeof tournamentEventService.log>[1], extra: Record<string, unknown>) =>
-      tournamentEventService.log(tournamentId, type, { ...base, ...extra }, "", actor).catch(() => {});
-    if (patch.status === "in_progress") {
-      if (prevLiveState && prevLiveState !== "in_progress" && prevLiveState !== "finished")
-        emit("tournament_started", {});
-      emit("match_started", { tableId, tableLabel });
-    } else if (patch.status === "completed") {
-      const winner = patch.winner ?? prev?.winner ?? null;
-      const winnerName = winner === 1 ? prev?.p1Name : winner === 2 ? prev?.p2Name : null;
-      const loserName = winner === 1 ? prev?.p2Name : winner === 2 ? prev?.p1Name : null;
-      emit("match_completed", { winner, winnerName, loserName, tableLabel });
-    } else if (patch.status === "scheduled") {
-      if (prev?.status === "completed") emit("match_reopened", {});
-      else if ("tableId" in patch) {
-        if (patch.tableId == null) emit("table_unassigned", {});
-        else if (prev?.tableId == null) emit("table_assigned", { tableId, tableLabel });
-        else if (prev?.tableId !== patch.tableId) emit("table_changed", { tableId, tableLabel });
-      }
-    } else if (patch.status === undefined && "startedAt" in patch && prev?.status === "in_progress") {
-      // Elapsed-timer correction/reset (startedAt-only patch on a live match).
-      const nowT = nowMs();
-      const prevEl = prev?.startedAt ? Math.max(0, (nowT - Date.parse(prev.startedAt)) / 1000) : 0;
-      const newEl = patch.startedAt ? Math.max(0, (nowT - Date.parse(patch.startedAt)) / 1000) : 0;
-      emit("match_timer_adjusted", {
-        reset: newEl < 2,
-        prevElapsed: formatClock(prevEl),
-        newElapsed: formatClock(newEl),
-        prevStartedAt: prev?.startedAt ?? null,
-        newStartedAt: patch.startedAt ?? null,
-      });
-    }
-  };
-
   // One authoritative match-mutation path for the Live screen (web + native): persist via the
   // hub (which also flips live_state → Running on the first start), then write the durable
   // event(s) and refresh the feed. Every Live match action routes through this.
   const runMatchPatch = async (matchId: string, patch: Partial<MatchLiveState>) => {
     const prev = liveMatches.find((m) => m.id === matchId) ?? null;
-    const prevLiveState = hub.tournament?.live_state;
+    // Results (Set Winner / forfeit / withdraw / change / Reset / Reopen) are never changed while
+    // offline — the cloud stays authoritative and nothing is queued for later.
+    if (isOutcomeChange(prev, patch) && isWeb && typeof navigator !== "undefined" && navigator.onLine === false) {
+      Alert.alert("You're offline", CONNECTION_REQUIRED_MESSAGE);
+      return;
+    }
+    // Corrections carry the revision the TD acted on, and — when later matches already have
+    // progress — show the server-computed impact first (the same pipeline the real call runs).
+    let expectedRevision: number | null = null;
+    if (isCorrection(prev, patch)) {
+      expectedRevision = hub.liveRevision;
+      const graph = hub.bracket?.graph ?? [];
+      if (correctionImpact(graph, hub.matchState, matchId).affected.length > 0) {
+        const op: ElimLiveOp = { op: "patch_match", matchId, set: patch, ...(prev ? { expect: expectOf(prev) } : {}) };
+        const preview = await hub.previewLiveOps([op]);
+        expectedRevision = preview.revision;
+        const text = correctionImpactText(preview.cascade);
+        if (text && !(await confirmAsync("Confirm correction", text, "Apply change"))) return;
+      }
+    }
     // Stale-write precondition: the state this screen showed when the TD acted. A co-TD's newer
-    // result/reset makes the server refuse instead of silently overwriting it.
-    await hub.setMatchState({ matchId, patch, ...(prev ? { expect: expectOf(prev) } : {}) });
-    logMatchDerivedEvent(prev, patch, prevLiveState);
+    // result/reset makes the server refuse instead of silently overwriting it. The server writes
+    // the audit + spectator activity in the same transaction (the app no longer logs it).
+    await hub.setMatchState({ matchId, patch, ...(prev ? { expect: expectOf(prev) } : {}), expectedRevision });
     refreshEvents();
     // Table set/changed from the sheet → assignment notification (server dedupes; a no-op
     // re-save of the same table is not a new assignment and sends nothing).
@@ -4308,19 +4278,13 @@ function ManageTournamentScreen() {
     items: { op: ElimLiveOp; eventPatch: Partial<MatchLiveState> }[],
     opts: { atomic?: boolean } = {},
   ): Promise<ElimLiveOpResult[]> => {
-    const prevById = new Map(liveMatches.map((m) => [m.id, m]));
-    const prevLiveState = hub.tournament?.live_state;
     const res = await hub.applyLiveOps(items.map((x) => x.op), opts);
-    let firstStart = true;
     res.results.forEach((r) => {
       if (!r.ok) return;
       const it = items[r.i];
       const mid = "matchId" in it.op ? it.op.matchId : null;
       if (!mid) return;
-      // Only the first successful start may emit "tournament_started".
-      const lsForEvent = it.eventPatch.status === "in_progress" && !firstStart ? "in_progress" : prevLiveState;
-      if (it.eventPatch.status === "in_progress") firstStart = false;
-      logMatchDerivedEvent(prevById.get(mid) ?? null, it.eventPatch, lsForEvent);
+      // Activity (incl. tournament_started) is written by the server in the same transaction.
       // Persisted first, THEN notify both players (in-app + push). Only for ops the server
       // accepted; the Edge Function dedupes per assignment instance (server assignedAt).
       const assignsTable =

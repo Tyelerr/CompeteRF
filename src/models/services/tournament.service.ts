@@ -8,6 +8,7 @@ import {
 import { TournamentLiveState } from "../types/common.types";
 import {
   ElimLiveApplyResponse,
+  ElimLivePreview,
   ElimLiveOp,
   TournamentLiveSettings,
 } from "../types/tournament-settings.types";
@@ -307,18 +308,38 @@ export const tournamentService = {
   // whole live_settings. Best-effort by default: each op reports ok/error on its own and a
   // failed op changes nothing; atomic=true makes the whole call all-or-nothing.
   // See supabase/migrations/20260922120000_elim_live_apply.sql.
+  //
+  // Recovery foundation (20261018120000): `opId` makes the call idempotent and lets the server
+  // write the spectator activity (the app no longer does); `expectedRevision` is refused with
+  // 'stale_revision' if the tournament changed since this device loaded it.
   async applyElimLiveOps(
     tournamentId: number,
     ops: ElimLiveOp[],
     atomic = false,
+    opts: { opId?: string; expectedRevision?: number | null } = {},
   ): Promise<ElimLiveApplyResponse> {
     const { data, error } = await supabase.rpc("elim_live_apply", {
       p_tournament_id: tournamentId,
       p_ops: ops,
       p_atomic: atomic,
+      ...(opts.opId ? { p_op_id: opts.opId } : {}),
+      ...(opts.expectedRevision != null ? { p_expected_revision: opts.expectedRevision } : {}),
     });
     if (error) throw error;
     return data as unknown as ElimLiveApplyResponse;
+  },
+
+  // Impact preview: runs the exact elim_live_apply pipeline (incl. the correction cascade) and
+  // returns what WOULD change plus the current revision — nothing is written.
+  async previewElimLiveOps(tournamentId: number, ops: ElimLiveOp[]): Promise<ElimLivePreview> {
+    const { data, error } = await supabase.rpc("elim_live_apply", {
+      p_tournament_id: tournamentId,
+      p_ops: ops,
+      p_atomic: false,
+      p_dry_run: true,
+    });
+    if (error) throw error;
+    return data as unknown as ElimLivePreview;
   },
 
   // Elimination Settings / Prize Pool save: merges TOP-LEVEL live_settings keys (and removes

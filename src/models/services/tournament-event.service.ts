@@ -15,7 +15,9 @@ export type TournamentEventType =
   | "table_unassigned"
   | "match_reopened"
   | "match_timer_adjusted"
-  | "bracket_redrawn";
+  | "bracket_redrawn"
+  // Server-written (elim_live_apply correction cascade): later results cleared by a correction.
+  | "bracket_corrected";
 
 export interface TournamentEvent {
   id: string;

@@ -300,8 +300,29 @@ export interface ElimLiveOpResult {
   error?: ElimLiveOpError | string;
 }
 
+// What a correction cleared downstream (20261018120000 correction cascade): matches returned to
+// Waiting, of which had a recorded result / were live, and the tables freed.
+export interface ElimCascade {
+  reset: string[];
+  cleared: string[];
+  stopped: string[];
+  released: number[];
+}
+
 export interface ElimLiveApplyResponse {
   live_settings: TournamentLiveSettings;
   live_state: string;
   results: ElimLiveOpResult[];
+  // Recovery foundation (20261018120000). Absent from servers before that migration.
+  revision?: number;
+  cascade?: ElimCascade;
+  replayed?: boolean;
+}
+
+// Dry-run (impact preview) response: same pipeline, nothing written.
+export interface ElimLivePreview {
+  dry_run: true;
+  revision: number;
+  results: ElimLiveOpResult[];
+  cascade: ElimCascade;
 }

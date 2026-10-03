@@ -6,6 +6,7 @@
 // into TD-facing text.
 
 import {
+  ElimCascade,
   ElimLiveOp,
   ElimLiveOpResult,
   MatchExpect,
@@ -70,6 +71,7 @@ const ERROR_TEXT: Record<string, string> = {
   match_not_ready: "both players aren't known yet",
   player_busy: "a player is already playing another match",
   tournament_finished: "the tournament is finished",
+  stale_revision: "This tournament changed on another device. Reload the latest version.",
 };
 
 // The precondition a TD action carries: exactly what this device showed for the match when the
@@ -82,6 +84,60 @@ export const expectOf = (m: {
 
 export const liveOpErrorText = (code: string | undefined): string =>
   (code && ERROR_TEXT[code]) || "could not be saved";
+
+// ── Recovery foundation (20261018120000) ──────────────────────────────────────────────────
+// A match patch that decides, changes or clears a RESULT (Set Winner, forfeit / withdraw,
+// change a recorded result, Reset, Reopen). These are never sent while offline.
+type PrevMatch = { status: MatchLiveState["status"]; winner: 1 | 2 | null; result?: MatchLiveState["result"] | null };
+export const isOutcomeChange = (prev: PrevMatch | null, patch: Partial<MatchLiveState>): boolean => {
+  if (!prev) return false;
+  const next = patch.status ?? prev.status;
+  return (
+    next === "completed" ||
+    "winner" in patch ||
+    "result" in patch ||
+    prev.status === "completed" || // (next is not "completed" here) → a reopen / reset
+    (prev.status === "in_progress" && next === "scheduled")
+  );
+};
+
+// A CORRECTION: undoes or changes something already decided / started — changing or clearing a
+// recorded result, Reopen, or Reset of a live match. These carry the tournament revision (refused
+// 'stale_revision' if anything changed since the TD loaded it) and get an impact preview.
+// A first Set Winner on a live match is NOT a correction: the per-match `expect` already guards
+// it, and requiring the revision there would falsely refuse TDs whenever Auto Assign seats
+// another match.
+export const isCorrection = (prev: PrevMatch | null, patch: Partial<MatchLiveState>): boolean => {
+  if (!prev) return false;
+  const next = patch.status ?? prev.status;
+  if (prev.status === "completed")
+    return (
+      next !== "completed" ||
+      ("winner" in patch && (patch.winner ?? null) !== (prev.winner ?? null)) ||
+      ("result" in patch && (patch.result ?? null) !== (prev.result ?? null))
+    );
+  return prev.status === "in_progress" && next === "scheduled";
+};
+
+// "This change will clear 3 downstream results and return 4 matches to Waiting." (null = nothing
+// downstream changes → the action's own simple confirmation is enough).
+export const correctionImpactText = (c: ElimCascade | null | undefined): string | null => {
+  if (!c || c.reset.length === 0) return null;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const parts = [
+    c.cleared.length > 0 ? `clear ${plural(c.cleared.length, "downstream result", "downstream results")}` : null,
+    `return ${plural(c.reset.length, "match", "matches")} to Waiting`,
+  ].filter(Boolean);
+  const live = c.stopped.length > 0 ? ` ${plural(c.stopped.length, "match in progress is", "matches in progress are")} stopped.` : "";
+  const tables = c.released.length > 0 ? ` ${plural(c.released.length, "table is", "tables are")} freed.` : "";
+  return `This change will ${parts.join(" and ")}.${live}${tables} Players will be re-seated from the corrected result.`;
+};
+
+// Map a thrown RPC error (PostgREST message = the SQL exception text) to TD-facing text.
+export const liveCallErrorText = (e: unknown): string | null => {
+  const msg = e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : "";
+  return msg.includes("stale_revision") ? ERROR_TEXT.stale_revision : null;
+};
 
 // "3 assigned · 1 skipped — table occupied" (verb = assigned / started / sent back)
 export const summarizeOpResults = (results: ElimLiveOpResult[], verb: string): string => {
