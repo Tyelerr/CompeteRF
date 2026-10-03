@@ -186,7 +186,8 @@ export const MatchCard = ({
             ]}
             numberOfLines={1}
           >
-            {timer.label}
+            {/* The red text already signals Forfeit Review — drop the leading 🔴 dot here only. */}
+            {timer.label.replace(/^🔴\s*/u, "")}
             {timer.extendedMinutes ? `  ·  Extended +${timer.extendedMinutes} min` : ""}
           </Text>
         </TouchableOpacity>
