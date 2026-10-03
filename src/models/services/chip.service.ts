@@ -383,6 +383,12 @@ export const chipService = {
       }
       return supabase.from("chip_config").select("*").eq("tournament_id", id).maybeSingle();
     })();
+    // Manager loads seed this device's save baseline from `version`, so read the version BEFORE
+    // the rows: read in parallel, a load that lands mid-save can pair the FINAL version with a
+    // stale rows section (2/1,342 torn reads in the audit's PGlite trials slipped past the claim
+    // check that way). Version-first, any concurrent save makes the rows NEWER than the version,
+    // which the claim/finalize CAS then refuses safely. Spectators keep the parallel read.
+    if (!opts?.publicRead) await configQuery;
     const eventsQuery = (async () => {
       if (opts?.publicRead) {
         const r = await supabase
