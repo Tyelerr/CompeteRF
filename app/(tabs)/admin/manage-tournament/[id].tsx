@@ -172,6 +172,7 @@ import {
   AssignmentPlan,
 } from "../../../../src/utils/queue.utils";
 import { buildAssignOps, correctionImpactText, expectOf, isCorrection, liveOpErrorText, summarizeOpResults } from "../../../../src/utils/elim-live-ops";
+import { CORRECTION_REOPENED_TEXT, CORRECTION_REOPENED_TITLE, CORRECTION_WILL_REOPEN_TEXT } from "../../../../src/utils/elim-recovery.format";
 import { correctionImpact } from "../../../../src/utils/bracket.correction";
 import { matchNotificationService } from "../../../../src/models/services/match-notification.service";
 import { EliminationDashboard, DashboardKpis } from "../../../../src/views/components/tournament/live/EliminationDashboard";
@@ -4283,14 +4284,19 @@ function ManageTournamentScreen() {
         const op: ElimLiveOp = { op: "patch_match", matchId, set: patch, ...(prev ? { expect: expectOf(prev) } : {}) };
         const preview = await hub.previewLiveOps([op]);
         expectedRevision = preview.revision;
-        const text = correctionImpactText(preview.cascade);
+        const impactText = correctionImpactText(preview.cascade);
+        const text = preview.reopens_tournament
+          ? [impactText, CORRECTION_WILL_REOPEN_TEXT].filter(Boolean).join("\n\n")
+          : impactText;
         if (text && !(await confirmAsync("Confirm correction", text, "Apply change"))) return;
       }
     }
     // Stale-write precondition: the state this screen showed when the TD acted. A co-TD's newer
     // result/reset makes the server refuse instead of silently overwriting it. The server writes
     // the audit + spectator activity in the same transaction (the app no longer logs it).
-    await hub.setMatchState({ matchId, patch, ...(prev ? { expect: expectOf(prev) } : {}), expectedRevision });
+    const res = await hub.setMatchState({ matchId, patch, ...(prev ? { expect: expectOf(prev) } : {}), expectedRevision });
+    // The server reopened a finished event (this correction left required matches unplayed).
+    if (res?.reopened) Alert.alert(CORRECTION_REOPENED_TITLE, CORRECTION_REOPENED_TEXT);
     refreshEvents();
     // Table set/changed from the sheet → assignment notification (server dedupes; a no-op
     // re-save of the same table is not a new assignment and sends nothing).

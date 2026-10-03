@@ -85,6 +85,8 @@ export const describeAudit = (
   }
   const reset = d.cascade?.reset?.length ?? 0;
   if (reset > 0) line = [line, `${plural(reset, "later match", "later matches")} reset`].filter(Boolean).join(" · ");
+  // A correction on a finished event that left required matches unplayed reopened it (server).
+  if (d.reopened && row.op !== "restore") line = [line, "tournament reopened"].filter(Boolean).join(" · ");
   return { title, line, match: matchLabel(row.match_id), by: actor ?? SOURCE_BY[row.source ?? ""] ?? null };
 };
 
@@ -116,6 +118,10 @@ export const auditFieldChanges = (row: Pick<ElimAuditRow, "before" | "after" | "
 export const undoUnavailableText = (reason: string | null | undefined): string => {
   const r = reason ?? "";
   if (r === "nothing_to_undo") return "Nothing to undo yet.";
+  if (r === "draw_boundary")
+    return "Undo can't cross a bracket redraw. Use Restore to return to an earlier draw.";
+  if (r === "before_update")
+    return "Earlier actions were recorded before Undo could track bracket draws, so they can't be undone. Use Restore instead.";
   if (r === "tournament_finished")
     return "This tournament is finished. Use a restore point to return to an earlier state (it will reopen the tournament).";
   if (r.startsWith("blocked:table_occupied"))
@@ -173,3 +179,11 @@ export const checkpointTitle = (c: Pick<ElimCheckpointRow, "reason" | "label" | 
 
 export const RECOVERY_OFFLINE_TEXT = "Recovery actions require an internet connection.";
 export const RECOVERY_STALE_TEXT = "This tournament changed on another device. Reload the latest version.";
+
+// Shown after a correction on a FINISHED event reopened it (the server did it in the same write).
+export const CORRECTION_REOPENED_TITLE = "Tournament Reopened";
+export const CORRECTION_REOPENED_TEXT =
+  "This correction affected completed matches, so the tournament is live again. Replay the affected matches, then finish the tournament again.";
+// Added to the correction confirmation when the dry run says it would reopen.
+export const CORRECTION_WILL_REOPEN_TEXT =
+  "The tournament is finished — this correction will reopen it so the affected matches can be replayed.";

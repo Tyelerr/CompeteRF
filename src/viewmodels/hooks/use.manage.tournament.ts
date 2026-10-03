@@ -219,8 +219,12 @@ export const useManageTournament = (tournamentId?: number) => {
           live_settings: res.live_settings,
           live_state: res.live_state as TournamentLiveState,
           ...(typeof res.revision === "number" ? { live_revision: res.revision } : {}),
-        });
+          // The server reopened a finished event because this correction left required matches
+          // unplayed — reflect it at once (phase / header leave Results) and reconcile.
+          ...(res.reopened ? { status: "active", completed_at: null } : {}),
+        } as Tournament);
       }
+      if (res.reopened) invalidateTournament();
       return res;
     } catch (e) {
       if (prev) queryClient.setQueryData(["tournament", tournamentId], prev);

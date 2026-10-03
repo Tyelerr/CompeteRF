@@ -317,6 +317,10 @@ export interface ElimLiveApplyResponse {
   revision?: number;
   cascade?: ElimCascade;
   replayed?: boolean;
+  // 20261021130000: a correction on a finished event that left required matches unplayed
+  // reopened it in the same write (status → active, live_state → in_progress).
+  reopened?: boolean;
+  status?: string;
 }
 
 // Dry-run (impact preview) response: same pipeline, nothing written.
@@ -325,4 +329,5 @@ export interface ElimLivePreview {
   revision: number;
   results: ElimLiveOpResult[];
   cascade: ElimCascade;
+  reopens_tournament?: boolean; // 20261021130000: the correction would reopen a finished event
 }
