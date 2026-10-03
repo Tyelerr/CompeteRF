@@ -37,6 +37,8 @@ export const TournamentActionsModal = ({
   finishing,
   canFinish,
   finished,
+  onRecovery,
+  recoveryAvailable,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -47,6 +49,9 @@ export const TournamentActionsModal = ({
   // The bracket is live (drawn / running) and not yet finished.
   canFinish?: boolean;
   finished?: boolean;
+  // Opens Recovery & History (Undo / History / Restore Points). Available once a bracket exists.
+  onRecovery?: () => void;
+  recoveryAvailable?: boolean;
 }) => {
   const sections: { title: string; rows: ActionRow[] }[] = [
     {
@@ -55,8 +60,9 @@ export const TournamentActionsModal = ({
         {
           key: "recovery",
           label: "Recovery & History",
-          detail: "Audit log, undo, restore points and revision info",
-          disabledTag: "Coming soon",
+          detail: "Undo, history, restore points and revision info",
+          onPress: onRecovery && recoveryAvailable ? onRecovery : undefined,
+          disabledTag: !onRecovery ? "Coming soon" : !recoveryAvailable ? "No bracket yet" : undefined,
         },
       ],
     },

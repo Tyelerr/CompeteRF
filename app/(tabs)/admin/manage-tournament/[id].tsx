@@ -154,7 +154,9 @@ import {
   manualReorderPayload,
   queueModePayload,
 } from "../../../../src/utils/queue-settings";
+import { computeStandings } from "../../../../src/utils/tournament.stats";
 import { TournamentActionsModal } from "../../../../src/views/components/tournament/live/TournamentActionsModal";
+import { ElimRecoveryModal } from "../../../../src/views/components/tournament/live/ElimRecoveryModal";
 import { buildLiveMatches, computeEliminatedRegIds, elimPlayersRemaining, LiveMatch, MatchActionStep } from "../../../../src/utils/match.utils";
 import {
   buildQueueEntries,
@@ -4097,6 +4099,15 @@ function ManageTournamentScreen() {
       ),
     [hub.bracket, hub.matchState, hub.tables, hub.tournament?.game_type, raceConfig],
   );
+  // Recovery & History confirmations: would this matchState change the standings? (Same resolver
+  // + standings the Results pages use.)
+  const standingsChangedFor = useCallback(
+    (ms: Record<string, MatchLiveState>) => {
+      const key = (list: LiveMatch[]) => JSON.stringify(computeStandings(list).map((e) => [e.key, e.placeLabel]));
+      return key(liveMatches) !== key(buildLiveMatches(hub.bracket, ms, hub.tables, hub.tournament?.game_type ?? "", raceConfig));
+    },
+    [liveMatches, hub.bracket, hub.tables, hub.tournament?.game_type, raceConfig],
+  );
 
   // Shared projected elimination schedule (Phase 1): Queue → On Tables / Scheduled
   // Matches and the Dashboard's Match Schedule all read this one derivation.
@@ -4684,6 +4695,8 @@ function ManageTournamentScreen() {
   const tablesAutoCollapsedRef = useRef(false);
   // ⚡ Tournament Actions modal (Live phase). Placeholder UI for now.
   const [actionsOpen, setActionsOpen] = useState(false);
+  // Elimination Actions → Recovery & History (Undo / History / Restore Points).
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   // Auto-collapse "Add Tables" once the tournament leaves Setup (re-expandable).
   useEffect(() => {
@@ -9447,7 +9460,25 @@ function ManageTournamentScreen() {
         finishing={hub.isMutatingLive}
         canFinish={liveUnlocked}
         finished={hub.phase === "completed" || hub.phase === "archived" || hub.tournament?.live_state === "finished"}
+        recoveryAvailable={!!hub.bracket}
+        onRecovery={() => {
+          setActionsOpen(false);
+          setRecoveryOpen(true);
+        }}
       />
+      {!isChip && (
+        <ElimRecoveryModal
+          visible={recoveryOpen}
+          onClose={() => setRecoveryOpen(false)}
+          tournamentId={tournamentId ?? null}
+          revision={hub.liveRevision}
+          standingsChanged={standingsChangedFor}
+          onChanged={() => {
+            hub.refetch();
+            refreshEvents();
+          }}
+        />
+      )}
 
       {/* Lifecycle navigation — Setup / Live / Results phase dropdowns. External
           tournaments have only the details page, so no phase nav is shown. */}
