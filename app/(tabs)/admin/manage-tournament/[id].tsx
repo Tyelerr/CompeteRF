@@ -313,7 +313,7 @@ const PHASE_DEFS: Record<PhaseKey, { label: string; tabs: PhasePage[] }> = {
       { tab: "tables", label: "Tables" },
       { tab: "queue", label: "Queue" },
       { tab: "stats", label: "Stats" },
-      { tab: "actions", label: "Actions", lead: "⚡", divider: true },
+      // (Tournament Actions now opens from the header Actions button, same as Chip.)
     ],
   },
   results: {
@@ -3850,7 +3850,9 @@ function ManageTournamentScreen() {
   // Web/desktop Actions trigger: a dark secondary command button (no glyph, real chevron)
   // that matches the PhaseNav design language. Same onActionsPress handler as native. On
   // wide web it sits at the right end of the Setup / Live / Results row (inNav).
-  const actionsInNavRow = isWeb && isChip && !isExternal && winW >= 768;
+  // Chip AND elimination (Single / Double) share this header Actions button; external-bracket
+  // listings have no live controls, so no button.
+  const actionsInNavRow = isWeb && !isExternal && winW >= 768;
   // Chip Live dashboard: end Actions on the MAIN dashboard column's right edge (above the
   // stats row's Avg Match card), derived from the dashboard's own layout constants — shell
   // width, 16px padding, side column (320/360/400 at 980/1320/1440px) + 16px gap. The
@@ -9415,11 +9417,11 @@ function ManageTournamentScreen() {
             </Text>
           </View>
         </View>
-        {isChip && isWeb ? (
+        {!isExternal && isWeb ? (
           // Web: on wide screens the Actions button lives in the phase-nav row (below);
-          // narrow web keeps it here in the header row.
+          // narrow web keeps it here in the header row. Chip + Single/Double Elimination.
           actionsInNavRow ? null : renderWebActionsBtn(false)
-        ) : isChip ? (
+        ) : !isExternal ? (
           // Native: compact dark secondary command button (no glyph) — same family as the
           // web button; same onActionsPress handler / Tournament Actions modal.
           <TouchableOpacity
@@ -9437,11 +9439,14 @@ function ManageTournamentScreen() {
         )}
       </View>
 
+      {/* Elimination Tournament Actions (Chip opens its own modal inside the chip screen). */}
       <TournamentActionsModal
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
         onFinish={handleFinishTournament}
         finishing={hub.isMutatingLive}
+        canFinish={liveUnlocked}
+        finished={hub.phase === "completed" || hub.phase === "archived" || hub.tournament?.live_state === "finished"}
       />
 
       {/* Lifecycle navigation — Setup / Live / Results phase dropdowns. External

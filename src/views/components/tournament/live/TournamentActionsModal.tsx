@@ -1,10 +1,10 @@
 // src/views/components/tournament/live/TournamentActionsModal.tsx
-// "Tournament Actions" — the Live-phase control center. PLACEHOLDER ONLY: this is
-// the reserved, permanent home for future TD power commands (start all ready
-// matches, auto-assign tables, pause/resume, etc.). No logic yet — every action
-// shows "Coming soon" when tapped. Wiring lands in a later phase.
+// Elimination (Single + Double) "Tournament Actions" — the tournament-level command modal opened
+// from the header Actions button (same placement / button family as Chip's). Tournament-wide
+// actions only: match-level actions (Set Winner, Reset, Reopen, Start, tables, scoring) stay on
+// the match cards / match sheet. Only REAL actions are enabled; anything not built yet is shown
+// disabled with a "Coming soon" tag — never a fake button.
 
-import { useState } from "react";
 import {
   Modal,
   Pressable,
@@ -19,146 +19,139 @@ import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 
-// Built at runtime so no raw emoji lives in source (toolchain-safe).
-const BOLT = String.fromCodePoint(0x26a1);
-
-interface ActionItem {
+interface ActionRow {
+  key: string;
   label: string;
+  detail?: string;
   danger?: boolean;
-  action?: "finish"; // wired actions; the rest are still placeholders
+  // Enabled only when a handler is wired AND the action applies right now.
+  onPress?: () => void;
+  // Why it's disabled (shown as the tag): "Coming soon", "Not live yet", "Finished".
+  disabledTag?: string;
 }
-
-const SECTIONS: { title: string; items: ActionItem[] }[] = [
-  {
-    title: "RUN",
-    items: [
-      { label: "Start All Ready Matches" },
-      { label: "Auto Run Tournament" },
-    ],
-  },
-  {
-    title: "TABLES",
-    items: [{ label: "Assign Ready Matches" }, { label: "Clear Table Assignments" }],
-  },
-  {
-    title: "PLAYERS",
-    items: [{ label: "Call Next Matches" }, { label: "Send Tournament Announcement" }],
-  },
-  {
-    title: "CONTROL",
-    items: [{ label: "Pause Tournament" }, { label: "Resume Tournament" }],
-  },
-  {
-    title: "TOURNAMENT",
-    items: [
-      { label: "Export Results" },
-      { label: "Finish Tournament", danger: true, action: "finish" },
-    ],
-  },
-];
 
 export const TournamentActionsModal = ({
   visible,
   onClose,
   onFinish,
   finishing,
+  canFinish,
+  finished,
 }: {
   visible: boolean;
   onClose: () => void;
-  // Marks the tournament completed (unlocks the Results phase). When absent, the
-  // Finish action falls back to the "coming soon" placeholder.
+  // Marks the tournament completed (unlocks Results, stops live editing) — confirmation lives in
+  // the caller (handleFinishTournament).
   onFinish?: () => void;
   finishing?: boolean;
+  // The bracket is live (drawn / running) and not yet finished.
+  canFinish?: boolean;
+  finished?: boolean;
 }) => {
-  const [comingSoon, setComingSoon] = useState<string | null>(null);
-
-  const close = () => {
-    setComingSoon(null);
-    onClose();
-  };
-
-  const onItemPress = (item: ActionItem) => {
-    if (item.action === "finish" && onFinish) {
-      onFinish();
-      return;
-    }
-    setComingSoon(item.label);
-  };
+  const sections: { title: string; rows: ActionRow[] }[] = [
+    {
+      title: "RECOVERY",
+      rows: [
+        {
+          key: "recovery",
+          label: "Recovery & History",
+          detail: "Audit log, undo, restore points and revision info",
+          disabledTag: "Coming soon",
+        },
+      ],
+    },
+    {
+      title: "TOURNAMENT",
+      rows: [
+        {
+          key: "finish",
+          label: "Finish Tournament",
+          detail: "Mark the event completed — unlocks Results and stops live editing",
+          danger: true,
+          onPress: onFinish && canFinish && !finished ? onFinish : undefined,
+          disabledTag: finished ? "Finished" : !canFinish ? "Not live yet" : undefined,
+        },
+      ],
+    },
+  ];
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={close}>
-      <Pressable style={styles.backdrop} onPress={close}>
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
             <Text allowFontScaling={false} style={styles.title}>
-              {BOLT} Tournament Actions
+              Tournament Actions
             </Text>
-            <TouchableOpacity onPress={close} hitSlop={10}>
+            <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Close">
               <Text allowFontScaling={false} style={styles.closeX}>
                 ✕
               </Text>
             </TouchableOpacity>
           </View>
-
-          {comingSoon ? (
-            <View style={styles.banner}>
-              <Text allowFontScaling={false} style={styles.bannerText} numberOfLines={1}>
-                {comingSoon} · Coming soon
-              </Text>
-            </View>
-          ) : (
-            <Text allowFontScaling={false} style={styles.subtitle}>
-              Operational commands for running the event. Coming soon.
-            </Text>
-          )}
+          <Text allowFontScaling={false} style={styles.subtitle}>
+            Tournament-wide controls. Match actions stay on each match.
+          </Text>
 
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {SECTIONS.map((section) => (
+            {sections.map((section) => (
               <View key={section.title} style={styles.section}>
                 <Text allowFontScaling={false} style={styles.sectionTitle}>
                   {section.title}
                 </Text>
                 <View style={styles.card}>
-                  {section.items.map((item, i) => (
-                    <View key={item.label}>
-                      {i > 0 && <View style={styles.divider} />}
-                      <TouchableOpacity
-                        style={styles.row}
-                        activeOpacity={0.7}
-                        disabled={item.action === "finish" && finishing}
-                        onPress={() => onItemPress(item)}
-                      >
-                        <Text
-                          allowFontScaling={false}
-                          style={[styles.rowLabel, item.danger && styles.rowLabelDanger]}
-                          numberOfLines={1}
+                  {section.rows.map((row, i) => {
+                    const enabled = !!row.onPress && !(row.key === "finish" && finishing);
+                    return (
+                      <View key={row.key}>
+                        {i > 0 && <View style={styles.divider} />}
+                        <TouchableOpacity
+                          style={[styles.row, !enabled && styles.rowDisabled]}
+                          activeOpacity={0.7}
+                          disabled={!enabled}
+                          onPress={row.onPress}
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled: !enabled }}
                         >
-                          {item.label}
-                        </Text>
-                        {item.action === "finish" && onFinish ? (
-                          <Text allowFontScaling={false} style={styles.rowChevron}>
-                            {finishing ? "…" : "›"}
-                          </Text>
-                        ) : (
-                          <View style={styles.soonTag}>
-                            <Text allowFontScaling={false} style={styles.soonText}>
-                              Soon
+                          <View style={styles.rowText}>
+                            <Text
+                              allowFontScaling={false}
+                              style={[styles.rowLabel, row.danger && enabled && styles.rowLabelDanger, !enabled && styles.rowLabelDisabled]}
+                              numberOfLines={1}
+                            >
+                              {row.label}
                             </Text>
+                            {!!row.detail && (
+                              <Text allowFontScaling={false} style={styles.rowDetail} numberOfLines={2}>
+                                {row.detail}
+                              </Text>
+                            )}
                           </View>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                          {enabled ? (
+                            <Text allowFontScaling={false} style={[styles.rowChevron, row.danger && styles.rowChevronDanger]}>
+                              {row.key === "finish" && finishing ? "…" : "›"}
+                            </Text>
+                          ) : row.disabledTag ? (
+                            <View style={styles.soonTag}>
+                              <Text allowFontScaling={false} style={styles.soonText}>
+                                {row.disabledTag}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
             ))}
           </ScrollView>
 
-          <TouchableOpacity style={styles.closeBtn} onPress={close}>
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Text allowFontScaling={false} style={styles.closeBtnText}>
               Close
             </Text>
@@ -192,7 +185,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  title: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "900", color: COLORS.text },
+  title: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "800", color: COLORS.text },
   closeX: { fontSize: webMs(FONT_SIZES.lg), fontWeight: "700", color: COLORS.textSecondary },
   subtitle: {
     fontSize: webMs(FONT_SIZES.sm),
@@ -200,23 +193,12 @@ const styles = StyleSheet.create({
     marginTop: webSc(SPACING.xs),
     marginBottom: webSc(SPACING.sm),
   },
-  banner: {
-    marginTop: webSc(SPACING.sm),
-    marginBottom: webSc(SPACING.sm),
-    backgroundColor: COLORS.primary + "22",
-    borderColor: COLORS.primary,
-    borderWidth: 1,
-    borderRadius: webSc(RADIUS.md),
-    paddingVertical: webSc(SPACING.sm),
-    paddingHorizontal: webSc(SPACING.md),
-  },
-  bannerText: { fontSize: webMs(FONT_SIZES.sm), fontWeight: "800", color: COLORS.primary },
   scroll: { flexGrow: 0 },
   scrollContent: { paddingBottom: webSc(SPACING.xs) },
   section: { marginTop: webSc(SPACING.md) },
   sectionTitle: {
     fontSize: webMs(FONT_SIZES.xs),
-    fontWeight: "900",
+    fontWeight: "800",
     color: COLORS.textSecondary,
     letterSpacing: 1,
     marginBottom: webSc(SPACING.xs),
@@ -236,8 +218,12 @@ const styles = StyleSheet.create({
     paddingVertical: webSc(SPACING.md),
     gap: webSc(SPACING.sm),
   },
-  rowLabel: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "600", flex: 1 },
+  rowDisabled: { opacity: 0.6 },
+  rowText: { flex: 1, minWidth: 0 },
+  rowLabel: { fontSize: webMs(FONT_SIZES.md), color: COLORS.text, fontWeight: "600" },
   rowLabelDanger: { color: COLORS.error },
+  rowLabelDisabled: { color: COLORS.textSecondary },
+  rowDetail: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, marginTop: webSc(2) },
   soonTag: {
     backgroundColor: COLORS.surface,
     borderRadius: webSc(RADIUS.full),
@@ -247,7 +233,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   soonText: { fontSize: webMs(FONT_SIZES.xs), color: COLORS.textMuted, fontWeight: "700" },
-  rowChevron: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.error, fontWeight: "800" },
+  rowChevron: { fontSize: webMs(FONT_SIZES.lg), color: COLORS.textSecondary, fontWeight: "800" },
+  rowChevronDanger: { color: COLORS.error },
   closeBtn: {
     marginTop: webSc(SPACING.md),
     paddingVertical: webSc(SPACING.md),
