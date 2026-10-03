@@ -26,6 +26,10 @@ export const savePdfFile = async (bytes: Uint8Array, fileName: string): Promise<
   if (!dir) return { ok: false, message: "This device has no place to save the file." };
   const uri = `${dir}${fileName}`;
   await LegacyFS.writeAsStringAsync(uri, base64, { encoding: LegacyFS.EncodingType.Base64 });
-  await Share.share({ url: uri, title: fileName });
+  const shared = await Share.share({ url: uri, title: fileName });
+  // Closing the share sheet without choosing anything saved nothing — don't let the caller record
+  // "Last backup: just now" for it (callers skip the error alert for `canceled`).
+  if (shared.action === Share.dismissedAction)
+    return { ok: false, canceled: true, message: "The share sheet was closed, so nothing was saved." };
   return { ok: true };
 };
