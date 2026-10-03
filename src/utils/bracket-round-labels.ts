@@ -11,7 +11,8 @@
 // round eliminates a block (4th, 5-6th, 7-8th, 9-12th …); Finals is 1st / 2nd; the Hotseat is
 // 1st / 2nd (its winner reaches Finals). A winners-side loss doesn't eliminate — the loser drops
 // into a losers round (losersDropRound) — so a player who REACHES a winners round is guaranteed
-// that losers round's block "or better" (e.g. Winners Semifinal in 16: "5-6th or better").
+// that losers round's block — shown as the range itself (e.g. Winners Semifinal in 16: "5th–6th").
+// Every header uses one style: a single place ("3rd") or a full range ("9th–12th").
 // Winners Round 1 stays unlabeled: reaching it guarantees nothing beyond the field's last block.
 
 const ordSuffix = (n: number): string => {
@@ -29,11 +30,11 @@ const ordSuffix = (n: number): string => {
   }
 };
 
-/** "3rd" for a single place, "5-6th" / "13-16th" for a range. */
+/** "3rd" for a single place, "5th–6th" / "13th–16th" for a range (headers upper-case it). */
 export const placeLabel = (lo: number, hi: number): string =>
-  lo === hi ? `${lo}${ordSuffix(lo)}` : `${lo}-${hi}${ordSuffix(hi)}`;
+  lo === hi ? `${lo}${ordSuffix(lo)}` : `${lo}${ordSuffix(lo)}–${hi}${ordSuffix(hi)}`;
 
-export const FINALS_PLACE = "1st / 2nd";
+export const FINALS_PLACE = placeLabel(1, 2); // "1st–2nd"
 
 /** Winners-side round name. `doubleElim`: the winners final is the Hotseat. */
 export const winnersRoundName = (r: number, maxR: number, doubleElim: boolean): string => {
@@ -47,7 +48,8 @@ export const losersRoundName = (r: number, maxR: number): string => (r === maxR 
 
 /** Grand-final rounds: 1 = Finals, 2 = the conditional reset. */
 export const finalsRoundName = (round: number): string => (round === 1 ? "Finals" : "Finals (2nd Set)");
-export const finalsPlace = (round: number): string | undefined => (round === 1 ? FINALS_PLACE : undefined);
+/** Finals and Finals (2nd Set) both decide 1st–2nd. */
+export const finalsPlace = (_round: number): string => FINALS_PLACE;
 
 /**
  * The losers round a winners-round loser drops into (double elim, matches buildLosersGraph):
@@ -71,7 +73,7 @@ export const winnersRoundPlaces = (
     const losPlaces = losersRoundPlaces(losersCountByRound ?? new Map());
     for (let r = 2; r < maxR; r++) {
       const block = losPlaces.get(losersDropRound(r));
-      if (block) out.set(r, `${block} or better`);
+      if (block) out.set(r, block);
     }
     out.set(maxR, FINALS_PLACE);
     return out;
