@@ -102,3 +102,13 @@ for (const format of ["singles", "scotch_doubles"] as ChipFormat[]) {
     assertSeatingConsistent(reloaded, "after reload");
   });
 }
+
+test("addTable never reuses a label that's still on the board", () => {
+  let s = addTables(emptyChipState("singles"), 4);
+  s = { ...s, tables: s.tables.filter((t) => t.label !== "Table 2") }; // TD removed Table 2
+  s = addTables(s, 2);
+  const labels = s.tables.map((t) => t.label);
+  assert.equal(new Set(labels).size, labels.length, `duplicate labels: ${labels.join(", ")}`);
+  assert.deepEqual(labels, ["Table 1", "Table 3", "Table 4", "Table 5", "Table 6"]);
+  assert.deepEqual(addTables(emptyChipState("singles"), 3).tables.map((t) => t.label), ["Table 1", "Table 2", "Table 3"]);
+});

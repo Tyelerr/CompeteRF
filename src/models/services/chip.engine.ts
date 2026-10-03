@@ -2209,7 +2209,12 @@ export const reshuffle = (input: ChipState, by?: number | null): ChipState =>
 // ── tables ────────────────────────────────────────────────────────────────────
 export const addTable = (input: ChipState, by?: number | null): ChipState => {
   const s = clone(input);
-  const label = `Table ${s.tables.length + 1}`;
+  // "Table N" by count, skipping labels already in use: after removing Table 2 of 4, the next
+  // add used to be a second "Table 4" (ambiguous on the board, spectator view and backup PDF).
+  const taken = new Set(s.tables.map((t) => (t.label ?? "").trim().toLowerCase()));
+  let n = s.tables.length + 1;
+  while (taken.has(`table ${n}`)) n++;
+  const label = `Table ${n}`;
   s.tables.push({ id: newId("t"), label, isStream: false, status: "open", matchId: null });
   pushEvent(s, "table_added", `Added ${label}`, by);
   if (s.startedAt && !s.finishedAt) seatAllTables(s);
