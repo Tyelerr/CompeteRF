@@ -90,6 +90,7 @@ before(async () => {
   await db.exec(read("supabase/migrations/20261017120000_elim_server_guards.sql"));
   await db.exec(read("supabase/migrations/20261018120000_elim_recovery_foundation.sql"));
   await db.exec(read("supabase/migrations/20261019120000_elim_undo_restore.sql"));
+  await db.exec(readFileSync(join(ROOT, "supabase/migrations/20261021130000_elim_finish_redraw_recovery.sql"), "utf8")); // + latest recovery rules (20261021130000)
   await q(`insert into public.profiles values ('${TD}', 1, 'tournament_director'), ('${TD2}', 2, 'tournament_director')`);
   await q("insert into public.tournaments (id, venue_id, director_id, tournament_format) values ($1, 5, 1, 'double-elimination')", [T]);
   await q("insert into public.venue_directors values (5, 2, null)");

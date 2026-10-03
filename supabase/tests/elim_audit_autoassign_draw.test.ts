@@ -114,6 +114,7 @@ before(async () => {
   await db.exec(mig("20261018120000_elim_recovery_foundation.sql"));
   await db.exec(mig("20261019120000_elim_undo_restore.sql"));
   await db.exec(mig("20261020120000_elim_audit_autoassign_draw.sql"));
+  await db.exec(mig("20261021130000_elim_finish_redraw_recovery.sql")); // + latest recovery rules (20261021130000)
   await q(`insert into public.profiles values ('${TD}', 1, 'tournament_director')`);
   await q(`insert into public.tournaments (id, venue_id, director_id, tournament_format) values
     (${T}, 5, 1, 'double-elimination'), (${TS}, 5, 1, 'round-robin'), (${TC}, 5, 1, 'chip-tournament')`);

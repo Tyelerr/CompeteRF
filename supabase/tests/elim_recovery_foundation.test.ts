@@ -89,7 +89,7 @@ before(async () => {
     create function auth.uid() returns uuid language sql stable as $$ select coalesce(nullif(current_setting('test.uid', true), ''), '${TD}')::uuid $$;
     create table public.profiles (id uuid primary key, id_auto bigint unique, role text default 'basic_user');
     create table public.tournaments (id bigint primary key, venue_id int, director_id int, tournament_format text not null,
-      status text default 'active', live_state text default 'in_progress' not null, live_settings jsonb default '{}'::jsonb not null, updated_at timestamptz);
+      status text default 'active', live_state text default 'in_progress' not null, live_settings jsonb default '{}'::jsonb not null, updated_at timestamptz, completed_at timestamptz);
     create table public.tournament_players (id int primary key, tournament_id int, player_id int, player_uuid uuid, status text default 'checked_in');
     create table public.tournament_tables (id bigint primary key, tournament_id int, table_number int, status text default 'available' not null, label text not null default '');
     create table public.venue_owners (venue_id int, owner_id int, archived_at timestamptz);
@@ -104,6 +104,7 @@ before(async () => {
   await db.exec(read("supabase/migrations/20260926120000_elim_clear_table.sql"));
   await db.exec(read("supabase/migrations/20261017120000_elim_server_guards.sql"));
   await db.exec(read("supabase/migrations/20261018120000_elim_recovery_foundation.sql"));
+  await db.exec(readFileSync(join(ROOT, "supabase/migrations/20261021130000_elim_finish_redraw_recovery.sql"), "utf8")); // + latest recovery rules (20261021130000)
   await q(`insert into public.profiles values ('${TD}', 1, 'tournament_director'), ('${TD2}', 2, 'tournament_director')`);
   await q("insert into public.tournaments (id, venue_id, director_id, tournament_format) values ($1, 5, 1, 'double-elimination')", [T]);
   await q("insert into public.venue_directors values (5, 2, null)");
