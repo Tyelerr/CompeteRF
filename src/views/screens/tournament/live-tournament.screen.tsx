@@ -6,6 +6,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useEffect, useState } from "react";
 import {
   Platform,
@@ -80,7 +81,9 @@ export const LiveTournamentScreen = ({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tournamentId = id ? Number(id) : undefined;
-  const sp = useTournamentSpectator(tournamentId);
+  // Tab route: stays mounted after the viewer leaves — poll only while it is on screen.
+  const isFocused = useIsFocused();
+  const sp = useTournamentSpectator(tournamentId, { focused: isFocused });
   const goBack = () => {
     if (from === "profile") router.navigate("/profile" as any);
     else router.back();

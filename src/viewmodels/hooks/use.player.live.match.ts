@@ -124,7 +124,12 @@ export const usePlayerLiveMatch = (
     // Poll while live so both players' Tournament Views stay in sync when either
     // side scores (no realtime subscription wired yet) — only while this screen is focused
     // and this observer is the designated poller (src/utils/player-poll.ts).
-    refetchInterval: playerPollInterval(5000, tournamentId, pollOpts),
+    // A chip event has no bracket for this hook to read — the chip hub polls its own state —
+    // so once the row shows it's a chip tournament, stop re-reading it every 5s.
+    refetchInterval: (q) =>
+      q.state.data?.tournament_format === "chip-tournament"
+        ? false
+        : playerPollInterval(5000, tournamentId, pollOpts),
     refetchOnWindowFocus: true,
   });
   // Returning to the tab: refresh once immediately instead of waiting for the next interval.

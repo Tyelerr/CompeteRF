@@ -33,7 +33,8 @@ import {
   feesPerPlayer,
   sidePotTotal,
 } from "../utils/prize-pool";
-import { safePaidSidePots } from "../utils/side-pots";
+import { parseAmount, safePaidSidePots } from "../utils/side-pots";
+import { spectatedEventFinished, spectatorPollInterval } from "../utils/player-poll";
 import {
   buildQueueEntries,
   computeReadyAtMap,
@@ -79,12 +80,19 @@ const playerName = (r: {
   r.guest_name ||
   "Player";
 
-export const useTournamentSpectator = (tournamentId?: number) => {
+// opts.focused: the hosting tab route is active (it stays mounted when the viewer moves on).
+export const useTournamentSpectator = (tournamentId?: number, opts?: { focused?: boolean }) => {
+  const focused = opts?.focused ?? true;
   const tournamentQuery = useQuery({
     queryKey: ["tournament", tournamentId],
     queryFn: () => tournamentService.getTournament(tournamentId!),
     enabled: !!tournamentId,
-    refetchInterval: tournamentId ? 5000 : false, // live score sync
+    // live score sync — only while this screen is open; slow once the event is over
+    refetchInterval: (q) =>
+      spectatorPollInterval(5000, tournamentId, {
+        focused,
+        finished: spectatedEventFinished(q.state.data),
+      }),
     refetchOnWindowFocus: true,
   });
 
@@ -325,7 +333,7 @@ export const useTournamentSpectator = (tournamentId?: number) => {
       const entrants = activeRegs.filter((r) =>
         safePaidSidePots(r.paid_side_pots).includes(name),
       );
-      const pool = sidePotTotal(entrants.length, Number(p.amount) || 0);
+      const pool = sidePotTotal(entrants.length, parseAmount(p.amount));
       sidePotPools[name] = pool;
       sidePotEntrants[name] = entrants.map((r) => `r${r.id}`);
       sidePotsSummary.push({ name, entrants: entrants.length, pool });
@@ -360,7 +368,10 @@ export const useTournamentSpectator = (tournamentId?: number) => {
     queryKey: ["tournament-events", tournamentId],
     queryFn: () => tournamentEventService.list(tournamentId!, 50),
     enabled: !!tournamentId,
-    refetchInterval: tournamentId ? 20000 : false,
+    refetchInterval: spectatorPollInterval(20000, tournamentId, {
+      focused,
+      finished: spectatedEventFinished(tournamentQuery.data),
+    }),
     refetchOnWindowFocus: true,
   });
   const events: TournamentEvent[] = eventsQuery.data ?? [];

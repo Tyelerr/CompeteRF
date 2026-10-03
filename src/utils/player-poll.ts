@@ -19,3 +19,23 @@ export const playerPollInterval = (
   resourceId: number | null | undefined,
   opts?: PlayerPollOptions,
 ): number | false => (resourceId != null && playerPollActive(opts) ? ms : false);
+
+// SPECTATOR screens (elimination live view, chip-live) are tab routes too: they stayed mounted
+// and kept re-reading the whole tournament every 5–6s after the viewer moved on, and forever
+// once the event finished. Rule: poll at `ms` only while the screen is focused; once the event
+// is finished, slow to a 60s safety refresh (a Reopen still shows up, and focus refetches).
+export const SPECTATOR_FINISHED_POLL_MS = 60_000;
+
+export const spectatorPollInterval = (
+  ms: number,
+  resourceId: number | null | undefined,
+  opts?: { focused?: boolean; finished?: boolean },
+): number | false => {
+  if (resourceId == null || !(opts?.focused ?? true)) return false;
+  return opts?.finished ? Math.max(ms, SPECTATOR_FINISHED_POLL_MS) : ms;
+};
+
+// A tournament row the spectator has already loaded is over (completed / finished).
+export const spectatedEventFinished = (
+  t: { status?: string | null; live_state?: string | null } | null | undefined,
+): boolean => !!t && (t.status === "completed" || t.live_state === "finished");

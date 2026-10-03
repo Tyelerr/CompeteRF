@@ -34,6 +34,7 @@ import { computePerformance, PerfGame } from "../../utils/performance";
 import { ChipMatchNumbering, chipHistoryMatches, numberChipMatches } from "../../utils/chip-match-numbers";
 import { chipCurrentStreak, chipEntryValidMatches, chipValidMatches } from "../../utils/chip-valid-matches";
 import { chipRoundPlayedIds, chipRoundStatusFor } from "../../utils/chip-round-participation";
+import { spectatedEventFinished, spectatorPollInterval } from "../../utils/player-poll";
 
 // Display names follow the shared chip rule (singles full, doubles "First L. / First L.").
 // `fullName` (engine teamName) is kept only for stable sort tie-breaks, never for display.
@@ -861,14 +862,25 @@ export const specMatchElapsedMs = (
   return Math.max(0, nowMs - new Date(startedAt).getTime());
 };
 
-export const useChipSpectator = (tournamentId?: number, viewerProfileId?: number | null) => {
+// opts.focused: the chip-live tab route is active (it stays mounted when the viewer moves on).
+export const useChipSpectator = (
+  tournamentId?: number,
+  viewerProfileId?: number | null,
+  opts?: { focused?: boolean },
+) => {
+  const focused = opts?.focused ?? true;
   const query = useQuery({
     queryKey: ["chip-spectator", tournamentId],
     queryFn: () => chipService.load(tournamentId!, { publicRead: true }),
     enabled: !!tournamentId,
     // Poll while open so queue/chips/tables/standings stay live — no realtime
     // channel exists, and the spectator makes no writes, so polling is enough.
-    refetchInterval: tournamentId ? 6000 : false,
+    // Only while this screen is focused; slow to a safety refresh once finished.
+    refetchInterval: (q) =>
+      spectatorPollInterval(6000, tournamentId, {
+        focused,
+        finished: spectatedEventFinished(q.state.data?.tournament),
+      }),
     refetchOnWindowFocus: true,
   });
 

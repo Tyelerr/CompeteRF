@@ -8,6 +8,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -309,7 +310,11 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
   // Viewer's own profile id (id_auto) so their entry can be marked "(You)". null for
   // spectators/admins who aren't entered.
   const viewerProfileId = useAuthStore((st) => st.profile?.id_auto ?? null);
-  const { view, isLoading, refetch } = useChipSpectator(tournamentId, viewerProfileId);
+  // Tab route: stays mounted after the viewer leaves — poll (and tick) only while on screen.
+  const isFocused = useIsFocused();
+  const { view, isLoading, refetch } = useChipSpectator(tournamentId, viewerProfileId, {
+    focused: isFocused,
+  });
   // Pull-to-refresh for every spectator tab (item 23): one RefreshControl on the shared
   // body ScrollView targets the live tournament query only (background polling stays on).
   const [refreshing, setRefreshing] = useState(false);
@@ -346,11 +351,12 @@ export const ChipLiveScreen = ({ id, from }: { id: string; from?: string }) => {
 
   // Tick every second for the live match timers (cheap; only affects timers).
   useEffect(() => {
+    if (!isFocused) return;
     const set = () => setNow(Date.now());
     set();
     const iv = setInterval(set, 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [isFocused]);
 
   // This screen stays mounted (it's a tab route), so re-opening it from "View
   // Tournament" would otherwise keep the old tab + scroll offset. On every focus,
