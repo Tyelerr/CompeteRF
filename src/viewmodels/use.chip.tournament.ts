@@ -230,6 +230,14 @@ const blankEntry = (): ChipEntry => ({
   createdAt: new Date().toISOString(),
 });
 
+// Optimistic roster writes (approve, paid, side pots, Fargo) revert to server truth on failure —
+// the row just flips back, which a busy TD easily misses (they'd believe a player is approved /
+// paid). Say it out loud.
+const alertRosterWriteFailed = (err: unknown): void => {
+  const detail = err instanceof Error && err.message ? `\n\n${err.message}` : "";
+  Alert.alert("Change Not Saved", `That roster change didn't save and was undone. Try again.${detail}`);
+};
+
 export const useChipTournament = (
   id: number,
   actorId?: number | null,
@@ -2015,8 +2023,9 @@ export const useChipTournament = (
       }));
       try {
         await registrationService.approveWithFargo(registrationId, fargo);
-      } catch {
+      } catch (err) {
         await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
@@ -2040,8 +2049,9 @@ export const useChipTournament = (
       }));
       try {
         await teamService.confirmMemberFargo(memberId, fargo);
-      } catch {
+      } catch (err) {
         await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
@@ -2070,8 +2080,9 @@ export const useChipTournament = (
       }));
       try {
         await teamService.setTeamApproved(teamId, approved);
-      } catch {
+      } catch (err) {
         await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
@@ -2101,8 +2112,9 @@ export const useChipTournament = (
       }));
       try {
         await teamService.setTeamSidePots(teamId, pots);
-      } catch {
-        await load({ silent: true });
+      } catch (err) {
+        await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
@@ -2125,8 +2137,9 @@ export const useChipTournament = (
       }));
       try {
         await chipService.setEntrySidePots(id, entryId, pots);
-      } catch {
-        await load({ silent: true });
+      } catch (err) {
+        await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, id, rosterLocked],
@@ -2234,8 +2247,9 @@ export const useChipTournament = (
       }));
       try {
         await teamService.setTeamPaid(teamId, paid);
-      } catch {
-        await load({ silent: true });
+      } catch (err) {
+        await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
@@ -2249,8 +2263,9 @@ export const useChipTournament = (
       update((c) => ({ ...c, entries: c.entries.map((e) => (e.teamId === teamId ? { ...e, ...overrideFields(on, snap) } : e)) }));
       try {
         await teamService.setTeamFargoOverride(teamId, on, { cap: snap.cap, rating: snap.rating, reason: snap.reason, notes: snap.notes });
-      } catch {
-        await load({ silent: true });
+      } catch (err) {
+        await load({ silent: true }); // revert to server truth on failure
+        alertRosterWriteFailed(err);
       }
     },
     [update, load, rosterLocked],
