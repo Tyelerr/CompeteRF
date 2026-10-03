@@ -66,7 +66,7 @@ export async function submitReport(payload: CreateReportPayload): Promise<Pick<R
         report_id: data.id,
         content_type: payload.content_type,
         content_id: payload.content_id,
-        deep_link: '/admin/reports',
+        deep_link: '/admin/report-management',
         type: 'admin_report',
       },
     )
