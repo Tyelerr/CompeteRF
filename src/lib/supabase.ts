@@ -47,7 +47,18 @@ const authStorage = isNative
 // off only during the windowless Node render.
 const canPersist = isNative || hasWindow;
 
+// App generation marker. The server refuses Chip writes from OLDER app builds once a current build
+// has written that tournament (they save without any version check and would overwrite newer
+// state) — see supabase/migrations/20261021150000_chip_client_protocol_guard.sql. X-Client-Info is
+// the header supabase-js already sends on every request (REST, Functions, Storage) and every Edge
+// Function allows in CORS, so overriding it adds no new header. Bump the number only together with
+// a server change that relies on it.
+export const CHIP_CLIENT_PROTOCOL = 2;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    headers: { "X-Client-Info": `compete-chip/${CHIP_CLIENT_PROTOCOL} supabase-js-${Platform.OS}` },
+  },
   auth: {
     storage: authStorage,
     autoRefreshToken: canPersist,
