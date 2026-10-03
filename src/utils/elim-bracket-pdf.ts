@@ -19,6 +19,7 @@
 
 import { BracketGraphNode, BracketSide } from "../models/types/tournament-settings.types";
 import { LiveMatch } from "./match.utils";
+import { computeStandings } from "./tournament.stats";
 import { PdfColor, PdfDocument, PdfPage, fitText, textWidth } from "./pdf-writer";
 import type { BackupPayouts, BackupRosterRow } from "./elim-bracket-summary";
 import type { ElimOfflineStatus } from "../viewmodels/hooks/use.elim.offline";
@@ -60,7 +61,6 @@ const TOP_H = 12;
 const ROW_H = 15;
 const BOX_H = TOP_H + 2 * ROW_H; // 42
 const NAME_SIZE = 9;
-const FINALS_ROWS = 3; // the finals mini-bracket uses rows 0–2; the summary flows below it
 
 // Colors: soft dark-grey text; winner / loser score hues that stay distinct in grayscale.
 const INK: PdfColor = 0.18;
@@ -118,18 +118,43 @@ export const bracketBackupFileName = (name: string, doubleElim: boolean, revisio
 };
 
 // ── layout model (exported for tests) ─────────────────────────────────────────────────────
+// The bracket is a fixed sequence of SECTIONS that follows the tournament:
+//   Winners (rounds 1 … Winners Final) → Losers (rounds 1 … Losers Final) → Championship
+//   (Grand Final → Reset). Single elimination: the bracket (rounds 1 … Final).
+// Each section is cut into BLOCKS of up to 4 rounds (8 first-column matches tall; a taller
+// first round becomes several parts — sub-trees never straddle a part because brackets are
+// powers of two). Blocks are then packed top-to-bottom onto pages strictly in that order: a
+// block joins the current page when it fits, otherwise it starts the next page. Small events
+// share pages; large ones split — but the order never changes. The tournament summary always
+// starts on its own page after the bracket.
+export type BracketSection = "winners" | "losers" | "championship";
+
 export interface PlacedMatch {
   id: string;
   col: number; // column on the page
-  y: number; // row units within the page (0 = first row)
-  label?: string; // finals page: per-box round label ("Winners Final", "Grand Final", …)
+  y: number; // row units within its block (0 = first row)
+  top: number; // box top on the page (points)
+}
+export interface BracketBlock {
+  section: BracketSection;
+  title: string; // "WINNERS BRACKET · Rounds 1–3 · Part 1 of 2"
+  range: string; // "Rounds 1–3 · Part 1 of 2" ("" for the championship)
+  fromRound: number;
+  toRound: number;
+  columns: string[]; // round labels, left → right
+  rows: number; // first-column rows (height)
+  placed: Omit<PlacedMatch, "top">[];
 }
 export interface BracketPageLayout {
-  section: "winners" | "losers" | "finals" | "summary";
-  title: string; // "WINNERS BRACKET · Rounds 1–4 · Part 1 of 2"
-  columns: string[]; // round labels (bracket pages)
+  section: BracketSection | "summary";
+  title: string;
+  blocks: { block: BracketBlock; top: number }[];
   placed: PlacedMatch[];
 }
+
+const CONTENT_TOP = MARGIN + HEADER_H; // first block's column labels start here
+const BLOCK_GAP = 10;
+const blockHeight = (b: BracketBlock) => COL_LABEL_H + b.rows * PITCH;
 
 const matchIndex = (id: string): number => Number(/M(\d+)$/.exec(id)?.[1] ?? 0);
 
@@ -147,29 +172,22 @@ const roundName = (side: BracketSide, round: number, maxRound: number, doubleEli
   return `Winners Round ${round}`;
 };
 
-// One side → pages: bands of ≤4 rounds; first column evenly spaced, later columns centered on
-// their same-side feeders (losers drop-in rounds sit level with their one feeder).
-const layoutSide = (
-  side: "winners" | "losers",
-  nodes: BracketGraphNode[],
-  doubleElim: boolean,
-  maxRound: number,
-): BracketPageLayout[] => {
+// One side → blocks: bands of ≤4 rounds (never ending on a lone round: 5 → 3 + 2); first
+// column evenly spaced, later columns centered on their same-side feeders (losers drop-in
+// rounds sit level with their one feeder).
+const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean): BracketBlock[] => {
   const rounds = [...new Set(nodes.map((n) => n.round))].sort((a, b) => a - b);
   if (!rounds.length) return [];
+  const maxRound = rounds[rounds.length - 1];
   const byRound = new Map<number, BracketGraphNode[]>();
   for (const r of rounds) byRound.set(r, nodes.filter((n) => n.round === r).sort((a, b) => matchIndex(a.id) - matchIndex(b.id)));
   const label = side === "winners" ? (doubleElim ? "WINNERS BRACKET" : "BRACKET") : "LOSERS BRACKET";
 
-  // Bands of up to 4 rounds — never ending on a lone round (5 rounds → 3 + 2, not 4 + 1), so the
-  // last bracket page keeps its connectors instead of a single orphaned column.
   const bands: number[][] = [];
   for (let b = 0; b < rounds.length; b += BRACKET_COLS_PER_PAGE) bands.push(rounds.slice(b, b + BRACKET_COLS_PER_PAGE));
-  if (bands.length > 1 && bands[bands.length - 1].length === 1) {
-    const prev = bands[bands.length - 2];
-    bands[bands.length - 1].unshift(prev.pop()!);
-  }
-  const pages: BracketPageLayout[] = [];
+  if (bands.length > 1 && bands[bands.length - 1].length === 1) bands[bands.length - 1].unshift(bands[bands.length - 2].pop()!);
+
+  const blocks: BracketBlock[] = [];
   for (const band of bands) {
     const y = new Map<string, number>();
     const first = byRound.get(band[0])!;
@@ -184,85 +202,95 @@ const layoutSide = (
     }
     const rows = first.length;
     const parts = Math.max(1, Math.ceil(rows / BRACKET_ROWS_PER_PAGE));
-    const pad = rows < BRACKET_ROWS_PER_PAGE ? (BRACKET_ROWS_PER_PAGE - rows) / 2 : 0;
     const rangeText = band.length > 1 ? `Rounds ${band[0]}–${band[band.length - 1]}` : `Round ${band[0]}`;
     for (let p = 0; p < parts; p++) {
-      const placed: PlacedMatch[] = [];
+      const placed: Omit<PlacedMatch, "top">[] = [];
       band.forEach((r, col) => {
         for (const n of byRound.get(r)!) {
           const yy = y.get(n.id)!;
           if (Math.min(parts - 1, Math.floor(yy / BRACKET_ROWS_PER_PAGE)) !== p) continue;
-          placed.push({ id: n.id, col, y: yy - p * BRACKET_ROWS_PER_PAGE + pad });
+          placed.push({ id: n.id, col, y: yy - p * BRACKET_ROWS_PER_PAGE });
         }
       });
-      pages.push({
+      const range = `${rangeText}${parts > 1 ? ` · Part ${p + 1} of ${parts}` : ""}`;
+      blocks.push({
         section: side,
-        title: `${label} · ${rangeText}${parts > 1 ? ` · Part ${p + 1} of ${parts}` : ""}`,
+        title: `${label} · ${range}`,
+        range,
+        fromRound: band[0],
+        toRound: band[band.length - 1],
         columns: band.map((r) => roundName(side, r, maxRound, doubleElim)),
+        rows: Math.min(BRACKET_ROWS_PER_PAGE, rows - p * BRACKET_ROWS_PER_PAGE),
         placed,
       });
     }
   }
-  return pages;
+  return blocks;
 };
 
-const maxOf = (nodes: BracketGraphNode[]) => nodes.reduce((a, n) => Math.max(a, n.round), 0);
+/** The bracket's blocks in tournament order (Winners → Losers → Championship). */
+export const elimBracketBlocks = (graph: BracketGraphNode[], doubleElim: boolean): BracketBlock[] => {
+  const grand = graph.filter((n) => n.side === "grand").sort((a, b) => a.round - b.round);
+  const blocks = [
+    ...sideBlocks("winners", graph.filter((n) => n.side === "winners"), doubleElim),
+    ...sideBlocks("losers", graph.filter((n) => n.side === "losers"), doubleElim),
+  ];
+  if (grand.length) {
+    blocks.push({
+      section: "championship",
+      title: "CHAMPIONSHIP · Grand Final",
+      range: "",
+      fromRound: 1,
+      toRound: grand.length,
+      columns: grand.map((n) => roundName("grand", n.round, 2, doubleElim)),
+      rows: 1,
+      placed: grand.map((n, i) => ({ id: n.id, col: i, y: 0 })),
+    });
+  }
+  return blocks;
+};
 
-/**
- * Bracket + finals pages. The finals page (when there is one) holds the deciding matches as one
- * mini-bracket in rows 0–2; the tournament summary is laid out below it by the PDF builder.
- */
+const SECTION_NAME: Record<BracketSection, string> = {
+  winners: "WINNERS BRACKET",
+  losers: "LOSERS BRACKET",
+  championship: "CHAMPIONSHIP",
+};
+
+/** Pack the ordered blocks onto pages (top-to-bottom, never reordered). */
 export const layoutElimBracket = (graph: BracketGraphNode[], doubleElim: boolean): BracketPageLayout[] => {
-  const winners = graph.filter((n) => n.side === "winners");
-  const losers = graph.filter((n) => n.side === "losers");
-  const grand = graph.filter((n) => n.side === "grand");
-  const wMax = maxOf(winners);
-  const lMax = maxOf(losers);
-
-  if (doubleElim && grand.length) {
-    const wf = winners.find((n) => n.round === wMax);
-    const lf = losers.find((n) => n.round === lMax);
-    const ls = lMax >= 2 ? losers.find((n) => n.round === lMax - 1 && losers.filter((x) => x.round === lMax - 1).length === 1) : undefined;
-    const gf = grand.find((n) => n.round === 1);
-    const reset = grand.find((n) => n.round === 2);
-    const finalsIds = new Set([wf, lf, ls, gf, reset].filter(Boolean).map((n) => n!.id));
-    const finals: PlacedMatch[] = [];
-    if (ls) finals.push({ id: ls.id, col: 0, y: 2, label: roundName("losers", ls.round, lMax, true) });
-    if (wf) finals.push({ id: wf.id, col: 1, y: 0, label: "Winners Final" });
-    if (lf) finals.push({ id: lf.id, col: 1, y: 2, label: "Losers Final" });
-    if (gf) finals.push({ id: gf.id, col: 2, y: 1, label: "Grand Final" });
-    if (reset) finals.push({ id: reset.id, col: 3, y: 1, label: "Grand Final Reset" });
-    return [
-      ...layoutSide("winners", winners.filter((n) => !finalsIds.has(n.id)), true, wMax),
-      ...layoutSide("losers", losers.filter((n) => !finalsIds.has(n.id)), true, lMax),
-      { section: "finals", title: "FINALS & SUMMARY", columns: [], placed: finals },
-    ];
+  const pages: BracketPageLayout[] = [];
+  let cur: BracketPageLayout | null = null;
+  let y = CONTENT_TOP;
+  for (const block of elimBracketBlocks(graph, doubleElim)) {
+    const h = blockHeight(block);
+    const top = cur && cur.blocks.length ? y + BLOCK_GAP : y;
+    if (!cur || top + h > AREA_BOTTOM) {
+      cur = { section: block.section, title: "", blocks: [], placed: [] };
+      pages.push(cur);
+      y = CONTENT_TOP;
+    }
+    const blockTop = cur.blocks.length ? y + BLOCK_GAP : y;
+    cur.blocks.push({ block, top: blockTop });
+    for (const p of block.placed) cur.placed.push({ ...p, top: blockTop + COL_LABEL_H + p.y * PITCH + (PITCH - BOX_H - 8) / 2 });
+    y = blockTop + h;
   }
-
-  // Single: up to 16 players the whole bracket fits one page; from 32 the semifinals + final
-  // move to the finals page so the deciding matches sit with the summary.
-  if (wMax >= 5) {
-    const semis = winners.filter((n) => n.round === wMax - 1).sort((a, b) => matchIndex(a.id) - matchIndex(b.id));
-    const fin = winners.find((n) => n.round === wMax)!;
-    return [
-      ...layoutSide("winners", winners.filter((n) => n.round < wMax - 1), false, wMax),
-      {
-        section: "finals",
-        title: "FINALS & SUMMARY",
-        columns: [],
-        placed: [
-          ...semis.map((n, i) => ({ id: n.id, col: 0, y: i * 2, label: "Semifinal" })),
-          { id: fin.id, col: 1, y: 1, label: "Final" },
-        ],
-      },
-    ];
+  // Page title = what's on it, in order ("LOSERS BRACKET · Rounds 1–6 · CHAMPIONSHIP").
+  for (const p of pages) {
+    const groups: string[] = [];
+    for (const s of [...new Set(p.blocks.map((b) => b.block.section))]) {
+      const bs = p.blocks.filter((b) => b.block.section === s).map((b) => b.block);
+      const name = s === "winners" && !doubleElim ? "BRACKET" : SECTION_NAME[s];
+      // One block: its own range ("Rounds 1–3 · Part 1 of 2"); several: the span they cover.
+      const range = s === "championship" ? "" : bs.length === 1 ? bs[0].range : `Rounds ${bs[0].fromRound}–${bs[bs.length - 1].toRound}`;
+      groups.push(range ? `${name} · ${range}` : name);
+    }
+    p.title = groups.join(" · ");
   }
-  return layoutSide("winners", winners, false, wMax);
+  return pages;
 };
 
 // ── drawing ───────────────────────────────────────────────────────────────────────────────
 const boxX = (col: number) => MARGIN + col * COL_W;
-const boxTop = (y: number) => AREA_TOP + y * PITCH + (PITCH - BOX_H - 8) / 2;
 
 const isPlayable = (m: LiveMatch) => !m.empty && !m.bye && m.number > 0;
 
@@ -516,6 +544,13 @@ const summaryRows = (input: ElimBracketPdfInput): FlowRow[] => {
   const labels = (m: LiveMatch) => (m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id);
   list("Live now", live);
   list("On a table, not started", onTable);
+  // Placements decided so far (best first).
+  const placed = computeStandings(input.matches).slice(0, 12);
+  if (placed.length) {
+    rows.push(spacer(4));
+    rows.push(textRow("Placements", 9.5, { font: "bold", gray: INK_STRONG, keepWithNext: 1 }));
+    for (const st of placed) rows.push(textRow(`${st.placeLabel}   ${st.name}   (${st.wins}–${st.losses})`, 8.5, { indent: 8, h: 12 }));
+  }
 
   // Payouts
   rows.push(spacer(10));
@@ -586,26 +621,19 @@ const summaryRows = (input: ElimBracketPdfInput): FlowRow[] => {
   return rows;
 };
 
-// Flow rows into columns: first the region below the finals (if any), then whole extra pages.
+// Flow summary rows into two columns on pages that follow the bracket.
 type FlowPlacement = { page: number; x: number; y: number; row: FlowRow };
-const flowSummary = (
-  rows: FlowRow[],
-  firstRegion: { top: number } | null,
-): { placements: FlowPlacement[]; extraPages: number } => {
+const flowSummary = (rows: FlowRow[]): { placements: FlowPlacement[]; pages: number } => {
   const placements: FlowPlacement[] = [];
-  const fullTop = AREA_TOP - COL_LABEL_H + 4;
-  // Region list: [pageOffset, top] per column; page 0 = the finals page (when given).
-  let pageOffset = firstRegion ? 0 : 1;
-  let top = firstRegion ? firstRegion.top : fullTop;
+  const top = CONTENT_TOP + 4;
+  let page = 0;
   let col = 0;
   let y = top;
   const nextColumn = () => {
-    if (col === 0) {
-      col = 1;
-    } else {
+    if (col === 0) col = 1;
+    else {
       col = 0;
-      pageOffset += 1;
-      top = fullTop;
+      page += 1;
     }
     y = top;
   };
@@ -617,22 +645,21 @@ const flowSummary = (
       nextColumn();
       if (row.repeatHeader) {
         const hdr = row.repeatHeader();
-        placements.push({ page: pageOffset, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row: hdr });
+        placements.push({ page, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row: hdr });
         y += hdr.h;
       }
     }
     if (row.spacer && y === top) continue;
-    placements.push({ page: pageOffset, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row });
+    placements.push({ page, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row });
     y += row.h;
   }
-  // Pages needed after the bracket pages (the finals page itself is page 0 when given).
-  const extraPages = placements.reduce((a, p) => Math.max(a, p.page), firstRegion ? 0 : 1);
-  return { placements, extraPages };
+  return { placements, pages: placements.reduce((a, p) => Math.max(a, p.page), 0) + 1 };
 };
 
 export interface BuiltPage {
   section: BracketPageLayout["section"];
   title: string;
+  sections: BracketSection[]; // bracket sections on this page, in order
   placed: PlacedMatch[];
 }
 
@@ -643,29 +670,26 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
   const labels = new Map(input.matches.map((m) => [m.id, m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id]));
   const doc = new PdfDocument({ title: `${input.tournamentName} — bracket backup`, author: "Compete" });
 
-  const finalsLayout = layouts.find((l) => l.section === "finals") ?? null;
-  const finalsBottom = AREA_TOP + FINALS_ROWS * PITCH + 4;
-  const flow = flowSummary(summaryRows(input), finalsLayout ? { top: finalsBottom + 6 } : null);
-  // Summary pages after the bracket: finals page = page 0 of the flow; extra pages follow.
-  const summaryPageCount = flow.extraPages;
+  const flow = flowSummary(summaryRows(input));
   const pages: BuiltPage[] = [
-    ...layouts.map((l) => ({ section: l.section, title: l.title, placed: l.placed })),
-    ...Array.from({ length: summaryPageCount }, (_, i) => ({
+    ...layouts.map((l) => ({ section: l.section, title: l.title, sections: l.blocks.map((b) => b.block.section), placed: l.placed })),
+    ...Array.from({ length: flow.pages }, (_, i) => ({
       section: "summary" as const,
-      title: i === 0 && !finalsLayout ? "TOURNAMENT SUMMARY" : "TOURNAMENT SUMMARY (CONTINUED)",
+      title: i === 0 ? "TOURNAMENT SUMMARY" : "TOURNAMENT SUMMARY (CONTINUED)",
+      sections: [] as BracketSection[],
       placed: [] as PlacedMatch[],
     })),
   ];
-  const finalsIndex = finalsLayout ? layouts.indexOf(finalsLayout) : -1;
-  const flowPageIndex = (p: number) => (finalsLayout ? (p === 0 ? finalsIndex : layouts.length + p - 1) : layouts.length + p - 1);
 
   pages.forEach((spec, i) => {
     const page = doc.addPage(PAGE_W, PAGE_H);
     drawHeader(page, input, spec.title);
     const layout = layouts[i];
     if (layout) {
-      const finals = layout.section === "finals";
-      if (!finals) layout.columns.forEach((c, col) => page.text(boxX(col) + 2, AREA_TOP - 5, c.toUpperCase(), 8, { font: "bold", gray: 0.3 }));
+      layout.blocks.forEach(({ block, top }, bi) => {
+        if (bi > 0) page.line(MARGIN, top - BLOCK_GAP / 2, PAGE_W - MARGIN, top - BLOCK_GAP / 2, { gray: 0.8, width: 0.5 });
+        block.columns.forEach((c, col) => page.text(boxX(col) + 2, top + COL_LABEL_H - 5, c.toUpperCase(), 8, { font: "bold", gray: 0.3 }));
+      });
       const pos = new Map(layout.placed.map((p) => [p.id, p]));
       // Connectors first (under the boxes): feeder's right edge → this match's player row.
       for (const p of layout.placed) {
@@ -676,34 +700,34 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
           const src = pos.get(ref.matchId);
           if (!src || src.col !== p.col - 1) return;
           const sx = boxX(src.col) + BOX_W;
-          const sy = boxTop(src.y) + TOP_H + ROW_H;
+          const sy = src.top + TOP_H + ROW_H;
           const tx = boxX(p.col);
-          const ty = boxTop(p.y) + TOP_H + ROW_H * (k + 0.5);
+          const ty = p.top + TOP_H + ROW_H * (k + 0.5);
           const mid = sx + (tx - sx) / 2;
           page.path([[sx, sy], [mid, sy], [mid, ty], [tx, ty]], { gray: 0.4, width: 0.8 });
         });
       }
       for (const p of layout.placed) {
         const m = byId.get(p.id);
-        if (p.label) page.text(boxX(p.col) + 1, boxTop(p.y) - 3.5, p.label.toUpperCase(), 7.5, { font: "bold", gray: 0.3 });
-        if (m) drawMatch(page, m, nodeById.get(p.id), boxX(p.col), boxTop(p.y), labels, byId);
+        if (m) drawMatch(page, m, nodeById.get(p.id), boxX(p.col), p.top, labels, byId);
         else if (p.id === "GF2") {
           // buildLiveMatches drops the reset once it is not needed.
-          page.rect(boxX(p.col), boxTop(p.y), BOX_W, BOX_H, { stroke: 0.8, width: 0.5 });
-          page.text(boxX(p.col) + 6, boxTop(p.y) + BOX_H / 2 + 3, "Not needed", 8, { gray: 0.5 });
+          page.rect(boxX(p.col), p.top, BOX_W, BOX_H, { stroke: 0.8, width: 0.5 });
+          page.text(boxX(p.col) + 6, p.top + BOX_H / 2 + 3, "Not needed", 8, { gray: 0.5 });
         }
       }
-      if (finals && input.doubleElim) {
+      const gfPos = pos.get("GF");
+      if (gfPos && input.doubleElim) {
         const gf = byId.get("GF");
         const note =
           gf && gf.status === "completed" && gf.winner === 1
             ? "Reset not needed — winners-side finalist won the Grand Final."
             : "Reset is played only if the losers-side finalist wins the Grand Final.";
-        page.text(boxX(2), boxTop(1) + BOX_H + 10, fitText(note, 7.5, 2 * COL_W - 8), 7.5, { gray: 0.4 });
+        // Beside the reset box (the championship uses two columns; the rest of the row is free).
+        page.text(boxX(gfPos.col + 2) + 4, gfPos.top + BOX_H / 2 + 3, fitText(note, 7.5, 2 * COL_W - 12), 7.5, { gray: 0.4 });
       }
-      if (finals) page.line(MARGIN, finalsBottom, PAGE_W - MARGIN, finalsBottom, { gray: 0.75, width: 0.5 });
     }
-    for (const fp of flow.placements) if (flowPageIndex(fp.page) === i) fp.row.draw(page, fp.x, fp.y, SUM_COL_W);
+    for (const fp of flow.placements) if (layouts.length + fp.page === i) fp.row.draw(page, fp.x, fp.y, SUM_COL_W);
     drawFooter(page, input, i + 1, pages.length);
   });
 

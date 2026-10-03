@@ -26,6 +26,7 @@ import {
   ElimBracketPdfInput,
   formatBackupTime,
   formatEventDate,
+  elimBracketBlocks,
   formatMoney,
   layoutElimBracket,
 } from "../elim-bracket-pdf";
@@ -88,20 +89,38 @@ const pdfStrings = (bytes: Uint8Array) => {
 };
 const allText = (bytes: Uint8Array) => pdfStrings(bytes).flat().map((s) => s.text);
 const realMatches = (ms: LiveMatch[]) => ms.filter((m) => !m.empty);
+// The PDF's reading order: every placed match in page order, tagged by bracket section, then the
+// summary pages — consecutive repeats collapsed.
+const readingOrder = (pdf: { pages: { section: string; placed: { id: string }[] }[] }, graph: { id: string; side: string; round: number }[]) => {
+  const wMax = Math.max(...graph.filter((n) => n.side === "winners").map((n) => n.round));
+  const lMax = Math.max(0, ...graph.filter((n) => n.side === "losers").map((n) => n.round));
+  const tag = (id: string) => {
+    const n = graph.find((g) => g.id === id)!;
+    if (n.side === "winners") return n.round === wMax ? "WINNERS FINAL" : "WINNERS";
+    if (n.side === "losers") return n.round === lMax ? "LOSERS FINAL" : "LOSERS";
+    return n.round === 1 ? "GRAND FINAL" : "RESET";
+  };
+  const seq: string[] = [];
+  for (const p of pdf.pages) {
+    const tags = p.section === "summary" ? ["SUMMARY"] : p.placed.map((x) => tag(x.id));
+    for (const t of tags) if (seq[seq.length - 1] !== t) seq.push(t);
+  }
+  return seq;
+};
 
 // ══ SINGLE ELIMINATION ═══════════════════════════════════════════════════════════════════
-// Pages: bracket pages (+ a finals page from 32 players) + the tournament summary.
-for (const [size, players, pages] of [[4, 4, 2], [8, 8, 2], [16, 16, 2], [32, 32, 3], [64, 64, 5]] as const) {
+// Pages: bracket pages, then the tournament summary.
+for (const [size, players, pages] of [[4, 4, 2], [8, 8, 2], [16, 16, 2], [32, 32, 4], [64, 64, 6]] as const) {
   test(`single ${players} players: every match exactly once, readable pagination (${pages} pages)`, () => {
     const inp = input(size, players, false);
     const pdf = buildElimBracketPdf(inp);
     assert.equal(pdf.pages.length, pages);
     const placed = pdf.pages.flatMap((p) => p.placed.map((x) => x.id)).sort();
     assert.deepEqual(placed, inp.graph.map((n) => n.id).sort(), "every bracket match, once");
-    for (const l of layoutElimBracket(inp.graph, false)) assert.ok(l.columns.length <= BRACKET_COLS_PER_PAGE);
-    for (const p of pdf.pages) {
-      for (const x of p.placed) assert.ok(x.y >= 0 && x.y < BRACKET_ROWS_PER_PAGE, `${x.id} on the page`);
-    }
+    for (const l of layoutElimBracket(inp.graph, false)) for (const b of l.blocks) assert.ok(b.block.columns.length <= BRACKET_COLS_PER_PAGE);
+    for (const p of pdf.pages) for (const x of p.placed) assert.ok(x.y >= 0 && x.y < BRACKET_ROWS_PER_PAGE && x.top + 42 <= 562, `${x.id} on the page`);
+    // Reads in tournament order: bracket (final last), then the summary.
+    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "WINNERS FINAL", "SUMMARY"]);
     const text = allText(pdf.bytes);
     for (const m of inp.matches) assert.ok(text.includes(m.numberLabel), `match number ${m.numberLabel}`);
     assert.ok(text.includes("FINAL"), "final round labelled");
@@ -161,24 +180,17 @@ test("single completed: champion + every result", () => {
 });
 
 // ══ DOUBLE ELIMINATION ═══════════════════════════════════════════════════════════════════
-for (const [size, players, sections] of [[8, 8, 3], [32, 27, 5], [64, 64, 9]] as const) {
+for (const [size, players, sections] of [[8, 8, 2], [16, 9, 3], [16, 16, 3], [32, 27, 6], [32, 32, 6], [64, 64, 9]] as const) {
   test(`double ${players} players: winners, losers, Grand Final + reset, every match once (${sections} pages)`, () => {
     const inp = input(size, players, true);
     const pdf = buildElimBracketPdf(inp);
     assert.equal(pdf.pages.length, sections);
     assert.deepEqual(pdf.pages.flatMap((p) => p.placed.map((x) => x.id)).sort(), inp.graph.map((n) => n.id).sort());
-    assert.ok(pdf.pages.some((p) => p.section === "winners"));
-    assert.ok(pdf.pages.some((p) => p.section === "losers"));
-    const last = pdf.pages[pdf.pages.length - 1];
-    assert.equal(last.section, "finals");
-    // The deciding matches sit together on the finals page — never split across pages.
-    const wMax = Math.max(...inp.graph.filter((n) => n.side === "winners").map((n) => n.round));
-    const lMax = Math.max(...inp.graph.filter((n) => n.side === "losers").map((n) => n.round));
-    assert.deepEqual(
-      last.placed.map((p) => `${p.label}:${p.id}`).sort(),
-      [`Losers Round ${lMax - 1}:L${lMax - 1}M1`, `Winners Final:W${wMax}M1`, `Losers Final:L${lMax}M1`, "Grand Final:GF", "Grand Final Reset:GF2"].sort(),
-    );
-    for (const p of pdf.pages.slice(0, -1)) for (const x of p.placed) assert.ok(!last.placed.some((f) => f.id === x.id), `${x.id} only on the finals page`);
+    assert.ok(pdf.pages.some((p) => p.sections.includes("winners")));
+    assert.ok(pdf.pages.some((p) => p.sections.includes("losers")));
+    // Winners → Winners Final → Losers → Losers Final → Grand Final → Reset → Summary — never interleaved.
+    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "WINNERS FINAL", "LOSERS", "LOSERS FINAL", "GRAND FINAL", "RESET", "SUMMARY"]);
+    assert.equal(pdf.pages[pdf.pages.length - 1].section, "summary");
     const text = allText(pdf.bytes);
     assert.ok(text.includes("WINNERS FINAL") && text.includes("LOSERS FINAL") && text.includes("GRAND FINAL"));
     assert.ok(text.includes("Finals Reset"), "reset box tagged distinctly");
@@ -394,21 +406,51 @@ const T_PRIZE: any = {
   },
 };
 
-test("finals grouping (single 32+): semifinals + final on the finals page, with the summary", () => {
-  const pages = layoutElimBracket(buildBracketGraph(32, false), false);
-  const fin = pages[pages.length - 1];
-  assert.equal(fin.section, "finals");
-  assert.deepEqual(fin.placed.map((p) => `${p.label}:${p.id}`), ["Semifinal:W4M1", "Semifinal:W4M2", "Final:W5M1"]);
-  assert.ok(pages.slice(0, -1).every((p) => p.placed.every((x) => !/^W[45]M/.test(x.id))));
-  // ≤16 players: the whole bracket stays on one page; the summary follows on its own page.
-  const small = buildElimBracketPdf(input(16, 16, false));
-  assert.deepEqual(small.pages.map((p) => p.section), ["winners", "summary"]);
-  assert.equal(small.pages[1].title, "TOURNAMENT SUMMARY");
+test("page packing: small events share pages in order; the summary always starts on its own page", () => {
+  // 8-player double: Winners + Losers + Championship all on page 1, then the summary.
+  const d8 = layoutElimBracket(buildBracketGraph(8, true), true);
+  assert.equal(d8.length, 1);
+  assert.deepEqual(d8[0].blocks.map((b) => b.block.section), ["winners", "losers", "championship"]);
+  // 16-slot double (the 9-player example): page 1 Winners through the Winners Final; page 2 Losers
+  // through the Losers Final + Grand Final / Reset.
+  const d16 = layoutElimBracket(buildBracketGraph(16, true), true);
+  assert.deepEqual(d16.map((p) => p.blocks.map((b) => b.block.section)), [["winners"], ["losers", "losers", "championship"]]);
+  assert.deepEqual(d16[0].blocks[0].block.columns, ["Winners Round 1", "Winners Round 2", "Winners Semifinals", "Winners Final"]);
+  assert.equal(d16[1].title, "LOSERS BRACKET · Rounds 1–6 · CHAMPIONSHIP");
+  // Blocks never overlap and stay inside the page.
+  for (const l of [...d8, ...d16, ...layoutElimBracket(buildBracketGraph(64, true), true)]) {
+    for (const p of l.placed) assert.ok(p.top >= 98 && p.top + 42 <= 562, p.id);
+    l.blocks.forEach((b, i) => i > 0 && assert.ok(b.top > l.blocks[i - 1].top));
+  }
+  const s16 = buildElimBracketPdf(input(16, 16, false));
+  assert.deepEqual(s16.pages.map((p) => p.section), ["winners", "summary"]);
+  assert.equal(s16.pages[1].title, "TOURNAMENT SUMMARY");
 });
 
-test("no lone trailing round: 5 rounds band as 3 + 2 (64-player double winners side)", () => {
-  const pages = layoutElimBracket(buildBracketGraph(64, true), true).filter((p) => p.section === "winners");
-  assert.deepEqual([...new Set(pages.map((p) => p.columns.length))].sort(), [2, 3]);
+test("large brackets: 32 / 64 double paginate by section, Winners Final with the winners side", () => {
+  const t = (n: number) => layoutElimBracket(buildBracketGraph(n, true), true).map((p) => p.title);
+  assert.deepEqual(t(32), [
+    "WINNERS BRACKET · Rounds 1–3 · Part 1 of 2",
+    "WINNERS BRACKET · Rounds 1–3 · Part 2 of 2",
+    "WINNERS BRACKET · Rounds 4–5",
+    "LOSERS BRACKET · Rounds 1–4",
+    "LOSERS BRACKET · Rounds 5–8 · CHAMPIONSHIP",
+  ]);
+  assert.deepEqual(t(64), [
+    "WINNERS BRACKET · Rounds 1–4 · Part 1 of 4",
+    "WINNERS BRACKET · Rounds 1–4 · Part 2 of 4",
+    "WINNERS BRACKET · Rounds 1–4 · Part 3 of 4",
+    "WINNERS BRACKET · Rounds 1–4 · Part 4 of 4",
+    "WINNERS BRACKET · Rounds 5–6",
+    "LOSERS BRACKET · Rounds 1–4 · Part 1 of 2",
+    "LOSERS BRACKET · Rounds 1–4 · Part 2 of 2",
+    "LOSERS BRACKET · Rounds 5–10 · CHAMPIONSHIP",
+  ]);
+});
+
+test("no lone trailing round: 5 rounds band as 3 + 2 (32-player double winners side)", () => {
+  const blocks = elimBracketBlocks(buildBracketGraph(32, true), true).filter((b) => b.section === "winners");
+  assert.deepEqual([...new Set(blocks.map((b) => b.columns.length))].sort(), [2, 3]);
 });
 
 test("race beside player names: 'Name (race)'; BYE shows only BYE", () => {
@@ -503,8 +545,9 @@ test("large field: the summary flows onto continuation pages with the table head
   const pdf = buildElimBracketPdf({ ...inp, roster, payouts: buildBackupPayouts(T_PRIZE, regsFor(64), inp.matches) });
   assert.equal(pdf.pages[pdf.pages.length - 1].title, "TOURNAMENT SUMMARY (CONTINUED)");
   const perPage = pdfStrings(pdf.bytes);
-  const finalsIdx = pdf.pages.findIndex((p) => p.section === "finals");
-  assert.ok(perPage[finalsIdx].some((s) => s.text === "Summary"), "summary starts on the finals page");
+  const firstSummary = pdf.pages.findIndex((p) => p.section === "summary");
+  assert.ok(perPage[firstSummary].some((s) => s.text === "Summary"), "summary starts on its own page after the bracket");
+  assert.ok(pdf.pages.slice(0, firstSummary).every((p) => p.section !== "summary"));
   const names = perPage.flat().map((s) => s.text).filter((t) => /^P\d+$/.test(t));
   for (let i = 1; i <= 64; i++) assert.ok(names.includes(`P${i}`), `P${i} listed`);
   assert.ok(perPage[perPage.length - 1].some((s) => s.text === "Fargo"), "header repeated on the continuation page");
