@@ -13,6 +13,7 @@
 import { useCallback, useState } from "react";
 import { tournamentService } from "../../models/services/tournament.service";
 import { tournamentTableService } from "../../models/services/tournament-table.service";
+import { registrationService } from "../../models/services/registration.service";
 import { elimLocalRecoveryService } from "../../models/services/elim-local-recovery.service";
 import { Tournament } from "../../models/types/tournament.types";
 import { GeneratedBracket, MatchLiveState } from "../../models/types/tournament-settings.types";
@@ -29,10 +30,22 @@ import {
 import { buildLiveMatches } from "../../utils/match.utils";
 import { savePdfFile, SavePdfResult } from "../../utils/save-pdf-file";
 import { liveEngineFor } from "../../utils/tournament-formats";
+import {
+  BackupRegistration,
+  buildBackupPayouts,
+  buildBackupRoster,
+  compactRegistrations,
+} from "../../utils/elim-bracket-summary";
 import { useAuthStore } from "../stores/auth.store";
 import type { ElimOfflineStatus } from "./use.elim.offline";
 
-type Source = { tournament: Tournament; tables: TournamentTable[]; mode: BracketBackupMode; syncedAt: Date | null };
+type Source = {
+  tournament: Tournament;
+  tables: TournamentTable[];
+  registrations: BackupRegistration[] | null; // null = not available (older offline copy)
+  mode: BracketBackupMode;
+  syncedAt: Date | null;
+};
 
 export function useElimBracketBackup(
   tournamentId: number | null | undefined,
@@ -49,6 +62,7 @@ export function useElimBracketBackup(
     return {
       tournament: rec.tournament as unknown as Tournament,
       tables: (rec.tables ?? []) as TournamentTable[],
+      registrations: rec.registrations ?? null,
       mode: "offline",
       syncedAt: new Date(rec.savedAt),
     };
@@ -62,11 +76,12 @@ export function useElimBracketBackup(
       let src: Source | null = null;
       if (availability.kind === "latest") {
         try {
-          const [t, tables] = await Promise.all([
+          const [t, tables, regs] = await Promise.all([
             tournamentService.getTournament(tournamentId),
             tournamentTableService.getTables(tournamentId).catch(() => [] as TournamentTable[]),
+            registrationService.getRegistrations(tournamentId).catch(() => null),
           ]);
-          if (t) src = { tournament: t, tables, mode: "latest", syncedAt: null };
+          if (t) src = { tournament: t, tables, registrations: regs ? compactRegistrations(regs) : null, mode: "latest", syncedAt: null };
         } catch (e) {
           // The connection dropped since the button was shown → the last synced copy, labelled so.
           if (!(toConnectionAwareError(e) instanceof ConnectionRequiredError)) throw e;
@@ -103,6 +118,10 @@ export function useElimBracketBackup(
         mode: src.mode,
         generatedAt: new Date(),
         lastSyncedAt: src.syncedAt,
+        bracketSize: bracket.bracketSize ?? bracket.seeds.length,
+        sidePotNames: (t.side_pots ?? []).map((p) => (p.name ?? "").trim()).filter(Boolean),
+        payouts: buildBackupPayouts(t, src.registrations ?? [], matches),
+        roster: src.registrations ? buildBackupRoster(src.registrations, matches, bracket) : null,
       });
       return await savePdfFile(pdf.bytes, pdf.fileName);
     } catch (e) {

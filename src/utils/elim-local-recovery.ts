@@ -10,6 +10,7 @@
 // persistent app storage on native — already in the binary, no build needed).
 
 import { isBracketEngine } from "./tournament-formats";
+import type { BackupRegistration } from "./elim-bracket-summary";
 
 export const ELIM_LOCAL_SCHEMA = 1;
 export const ELIM_LOCAL_KEY_PREFIX = "compete.elim-local.v1:";
@@ -42,6 +43,9 @@ export interface ElimLocalRecord {
   finished: boolean;
   tournament: Row; // the tournaments row exactly as the cloud returned it
   tables: unknown[] | null; // tournament_tables (labels for the read-only view)
+  // Compact roster (name / entry / side pots / Fargo / status) for the offline bracket backup's
+  // player list + side-pot payouts. Optional: copies saved before it existed stay valid.
+  registrations?: BackupRegistration[] | null;
 }
 
 export interface ElimLocalIndexEntry {
@@ -68,6 +72,7 @@ export const buildElimLocalRecord = (
   tables: unknown[] | null | undefined,
   ownerId: string | null | undefined,
   now: Date = new Date(),
+  registrations?: BackupRegistration[] | null,
 ): ElimLocalRecord | null => {
   if (!ownerId || !isElimLocalEligible(tournament)) return null;
   const tournamentId = Number(tournament.id);
@@ -82,6 +87,7 @@ export const buildElimLocalRecord = (
     finished: isFinished(tournament),
     tournament,
     tables: Array.isArray(tables) ? tables : null,
+    registrations: Array.isArray(registrations) ? registrations : null,
   };
 };
 
@@ -109,7 +115,9 @@ export const validateElimLocalRecord = (
   if (Number.isNaN(t) || t > now.getTime() + CLOCK_SKEW_MS) return { ok: false, reason: "timestamp" };
   if (now.getTime() - t > maxAge(!!r.finished)) return { ok: false, reason: "expired" };
   if (!isElimLocalEligible(r.tournament)) return { ok: false, reason: "kind" };
-  return { ok: true, record: r as ElimLocalRecord };
+  // Optional roster: anything but an array is ignored (never trusted), not a reason to drop the copy.
+  const registrations = Array.isArray(r.registrations) ? r.registrations : null;
+  return { ok: true, record: { ...(r as ElimLocalRecord), registrations } };
 };
 
 export const indexEntryOf = (r: ElimLocalRecord): ElimLocalIndexEntry => ({

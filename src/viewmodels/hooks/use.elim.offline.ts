@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { elimLocalRecoveryService } from "../../models/services/elim-local-recovery.service";
 import { useAuthStore } from "../stores/auth.store";
+import { compactRegistrations } from "../../utils/elim-bracket-summary";
 import { ConnectionRequiredError, toConnectionAwareError } from "../../utils/connection-required";
 import {
   ELIM_HELD_WRITE_TEXT,
@@ -49,9 +50,11 @@ export function useElimOffline(args: {
   cloudError: unknown;
   cloudErrorUpdatedAt: number;
   tables: unknown[] | null | undefined;
+  // Roster for the offline bracket backup's player list (compacted before storing).
+  registrations?: readonly Record<string, unknown>[] | null;
   refetchAll: () => void;
 }) {
-  const { tournamentId, cloud, cloudUpdatedAt, cloudError, cloudErrorUpdatedAt, tables, refetchAll } = args;
+  const { tournamentId, cloud, cloudUpdatedAt, cloudError, cloudErrorUpdatedAt, tables, registrations, refetchAll } = args;
   const ownerId = useAuthStore((s) => s.profile?.id ?? null);
 
   // ── connectivity ──────────────────────────────────────────────────────────────────────
@@ -100,17 +103,22 @@ export function useElimOffline(args: {
     () => (Array.isArray(tables) ? tables.map((t) => JSON.stringify(t)).join("|").length + ":" + tables.length : "-"),
     [tables],
   );
+  const roster = useMemo(
+    () => (Array.isArray(registrations) ? compactRegistrations(registrations as never) : null),
+    [registrations],
+  );
+  const rosterSig = useMemo(() => (roster ? JSON.stringify(roster).length + ":" + roster.length : "-"), [roster]);
   useEffect(() => {
     if (held || offline || !ownerId || !isElimLocalEligible(cloud)) return;
-    const sig = `${ownerId}:${cloud.id}:${cloud.live_revision}:${cloud.status}:${cloud.live_state}:${tablesSig}`;
+    const sig = `${ownerId}:${cloud.id}:${cloud.live_revision}:${cloud.status}:${cloud.live_state}:${tablesSig}:${rosterSig}`;
     if (savedRef.current === sig) return;
     savedRef.current = sig;
-    const rec = buildElimLocalRecord(cloud, tables ?? null, ownerId);
+    const rec = buildElimLocalRecord(cloud, tables ?? null, ownerId, new Date(), roster);
     if (!rec) return;
     elimLocalRecoveryService.save(rec).then((ok) => {
       if (ok) setLocalState({ key: `${ownerId}:${rec.tournamentId}`, rec });
     });
-  }, [cloud, tables, tablesSig, held, offline, ownerId]);
+  }, [cloud, tables, tablesSig, roster, rosterSig, held, offline, ownerId]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- the hold follows EXTERNAL state (browser
      connectivity, fetch results, device storage); these transitions can only be observed here. */

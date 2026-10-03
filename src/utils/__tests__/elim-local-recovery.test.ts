@@ -192,7 +192,7 @@ test("native: offline = the tournament fetch failed with a network error; no new
 test("shared: only cloud data is stored; the hold is read-only; Load Latest never pushes local state", () => {
   const hook = read("src/viewmodels/hooks/use.elim.offline.ts");
   assert.match(hook, /if \(held \|\| offline \|\| !ownerId \|\| !isElimLocalEligible\(cloud\)\) return;/, "save only fresh cloud copies");
-  assert.match(hook, /buildElimLocalRecord\(cloud, tables \?\? null, ownerId\)/);
+  assert.match(hook, /buildElimLocalRecord\(cloud, tables \?\? null, ownerId, new Date\(\), roster\)/);
   assert.equal((hook.match(/elimLocalRecoveryService\.save\(/g) ?? []).length, 1);
   assert.doesNotMatch(hook, /rpc\(|supabase|applyLiveOps|setMatchState|elim_live_apply/, "nothing local is ever sent");
   assert.match(hook, /const loadLatest = useCallback\(\(\) => \{\s*setHeld\(null\);\s*refetchRef\.current\(\);/);

@@ -97,6 +97,7 @@ export const useManageTournament = (tournamentId?: number) => {
 
   // Elimination offline local recovery: hold the last synced state read-only while offline,
   // compare revisions on reconnect, refuse live writes meanwhile (nothing queued).
+  const registrationsApi = useRegistrations(tournamentId);
   const elimOffline = useElimOffline({
     tournamentId,
     cloud: tournamentQuery.data as unknown as Record<string, unknown> | undefined,
@@ -104,6 +105,7 @@ export const useManageTournament = (tournamentId?: number) => {
     cloudError: tournamentQuery.error,
     cloudErrorUpdatedAt: tournamentQuery.errorUpdatedAt,
     tables: tablesQuery.data as unknown[] | undefined,
+    registrations: registrationsApi.registrations as unknown as Record<string, unknown>[] | undefined,
     refetchAll: () => {
       tournamentQuery.refetch();
       tablesQuery.refetch();
@@ -122,7 +124,6 @@ export const useManageTournament = (tournamentId?: number) => {
   const isElimEvent = isBracketEngine(((elimOffline.display ?? tournamentQuery.data) as Tournament | undefined)?.tournament_format);
   const elimNetworkMode = isElimEvent ? ("always" as const) : ("online" as const);
 
-  const registrationsApi = useRegistrations(tournamentId);
 
   const invalidateTournament = () =>
     queryClient.invalidateQueries({ queryKey: ["tournament", tournamentId] });

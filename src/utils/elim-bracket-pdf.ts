@@ -1,20 +1,26 @@
 // src/utils/elim-bracket-pdf.ts
 // "Download Latest Bracket" — a printable PDF backup of an elimination bracket's CURRENT state
 // (Single + Double). Pure: input is the bracket graph + the app's own resolved LiveMatch list
-// (buildLiveMatches — the same names / winners / scores / tables / W- and L-numbers the TD sees),
-// output is PDF bytes. Never touches the network or tournament state.
+// (buildLiveMatches — the same names / races / winners / scores / tables / W- and L-numbers the
+// TD sees) + the payouts and roster summaries, output is PDF bytes. Never touches the network
+// or tournament state.
 //
-// Layout (US Letter landscape, readable at print size — never shrunk to fit):
-//   • One section per side: Winners (Single: the whole bracket), Losers, then Finals & Summary.
-//   • Each section is split into bands of up to 4 rounds (columns); within a band, 8 first-column
-//     matches per page (sub-trees never straddle a page because brackets are powers of two).
-//   • Every box shows its match number, status / table, both players (winner bold, loser grey),
-//     scores — or empty score boxes to fill in by pen — and where the winner / loser goes next, so
-//     progression can be traced even across pages.
+// Pages (US Letter landscape, readable at print size — never shrunk to fit):
+//   1. Bracket pages per side (Winners, then Losers): bands of up to 4 rounds; 8 first-column
+//      matches per page (sub-trees never straddle a page because brackets are powers of two).
+//   2. FINALS page — the deciding matches kept together as one mini-bracket:
+//        Double: Losers semifinal → Losers Final, Winners Final → Grand Final → Reset.
+//        Single (32+ players): Semifinals → Final. (≤16 players: the whole bracket is one page.)
+//   3. Tournament summary flowing in two columns (below the finals, then onto extra pages as
+//      needed): Summary (champion, field, live / on-table matches) → Payouts → Player list.
+//   Every box shows its match number, status / table, both players with their race "(5)"
+//   (winner bold, loser muted; winner score green / loser score red — still distinct in
+//   grayscale), or empty score boxes to fill in by pen, and where the winner / loser goes next.
 
 import { BracketGraphNode, BracketSide } from "../models/types/tournament-settings.types";
 import { LiveMatch } from "./match.utils";
-import { PdfDocument, PdfPage, fitText, textWidth } from "./pdf-writer";
+import { PdfColor, PdfDocument, PdfPage, fitText, textWidth } from "./pdf-writer";
+import type { BackupPayouts, BackupRosterRow } from "./elim-bracket-summary";
 import type { ElimOfflineStatus } from "../viewmodels/hooks/use.elim.offline";
 
 export type BracketBackupMode = "latest" | "offline";
@@ -30,6 +36,10 @@ export interface ElimBracketPdfInput {
   mode: BracketBackupMode;
   generatedAt: Date;
   lastSyncedAt?: Date | null; // offline: when the local copy was synced
+  payouts?: BackupPayouts | null;
+  roster?: BackupRosterRow[] | null;
+  sidePotNames?: string[]; // configured side pots (player list column)
+  bracketSize?: number | null;
 }
 
 // ── page geometry (points) ────────────────────────────────────────────────────────────────
@@ -50,6 +60,14 @@ const TOP_H = 12;
 const ROW_H = 15;
 const BOX_H = TOP_H + 2 * ROW_H; // 42
 const NAME_SIZE = 9;
+const FINALS_ROWS = 3; // the finals mini-bracket uses rows 0–2; the summary flows below it
+
+// Colors: soft dark-grey text; winner / loser score hues that stay distinct in grayscale.
+const INK: PdfColor = 0.18;
+const INK_STRONG: PdfColor = 0.08;
+const MUTED: PdfColor = 0.5;
+const WIN_GREEN: PdfColor = [0.09, 0.47, 0.24];
+const LOSS_RED: PdfColor = [0.72, 0.27, 0.27];
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -72,6 +90,20 @@ export const formatEventDate = (ymd: string | null | undefined): string | null =
   return `${DAYS[dow]}, ${MONTHS[mo]} ${d}, ${y}`;
 };
 
+/** "$1,234" / "$12.50" — locale-independent. */
+export const formatMoney = (n: number): string => {
+  const cents = Math.round((Number(n) || 0) * 100);
+  const whole = Math.trunc(Math.abs(cents) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const frac = Math.abs(cents) % 100;
+  return `${cents < 0 ? "-" : ""}$${whole}${frac ? `.${String(frac).padStart(2, "0")}` : ""}`;
+};
+
+const ordinal = (n: number): string => {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? "th" : n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th";
+  return `${n}${s}`;
+};
+
 /** Compete-Friday-Night-9-Ball-Double-Elim-R146.pdf (offline: …-Last-Synced-R140.pdf). */
 export const bracketBackupFileName = (name: string, doubleElim: boolean, revision: number | null, mode: BracketBackupMode): string => {
   const slug =
@@ -90,13 +122,13 @@ export interface PlacedMatch {
   id: string;
   col: number; // column on the page
   y: number; // row units within the page (0 = first row)
+  label?: string; // finals page: per-box round label ("Winners Final", "Grand Final", …)
 }
 export interface BracketPageLayout {
   section: "winners" | "losers" | "finals" | "summary";
   title: string; // "WINNERS BRACKET · Rounds 1–4 · Part 1 of 2"
-  columns: string[]; // round labels
+  columns: string[]; // round labels (bracket pages)
   placed: PlacedMatch[];
-  summaryCol?: number; // Single: summary drawn in this page's free columns (from this column)
 }
 
 const matchIndex = (id: string): number => Number(/M(\d+)$/.exec(id)?.[1] ?? 0);
@@ -117,17 +149,28 @@ const roundName = (side: BracketSide, round: number, maxRound: number, doubleEli
 
 // One side → pages: bands of ≤4 rounds; first column evenly spaced, later columns centered on
 // their same-side feeders (losers drop-in rounds sit level with their one feeder).
-const layoutSide = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean): BracketPageLayout[] => {
+const layoutSide = (
+  side: "winners" | "losers",
+  nodes: BracketGraphNode[],
+  doubleElim: boolean,
+  maxRound: number,
+): BracketPageLayout[] => {
   const rounds = [...new Set(nodes.map((n) => n.round))].sort((a, b) => a - b);
   if (!rounds.length) return [];
-  const maxRound = rounds[rounds.length - 1];
   const byRound = new Map<number, BracketGraphNode[]>();
   for (const r of rounds) byRound.set(r, nodes.filter((n) => n.round === r).sort((a, b) => matchIndex(a.id) - matchIndex(b.id)));
   const label = side === "winners" ? (doubleElim ? "WINNERS BRACKET" : "BRACKET") : "LOSERS BRACKET";
 
+  // Bands of up to 4 rounds — never ending on a lone round (5 rounds → 3 + 2, not 4 + 1), so the
+  // last bracket page keeps its connectors instead of a single orphaned column.
+  const bands: number[][] = [];
+  for (let b = 0; b < rounds.length; b += BRACKET_COLS_PER_PAGE) bands.push(rounds.slice(b, b + BRACKET_COLS_PER_PAGE));
+  if (bands.length > 1 && bands[bands.length - 1].length === 1) {
+    const prev = bands[bands.length - 2];
+    bands[bands.length - 1].unshift(prev.pop()!);
+  }
   const pages: BracketPageLayout[] = [];
-  for (let b = 0; b < rounds.length; b += BRACKET_COLS_PER_PAGE) {
-    const band = rounds.slice(b, b + BRACKET_COLS_PER_PAGE);
+  for (const band of bands) {
     const y = new Map<string, number>();
     const first = byRound.get(band[0])!;
     first.forEach((n, i) => y.set(n.id, i));
@@ -163,24 +206,58 @@ const layoutSide = (side: "winners" | "losers", nodes: BracketGraphNode[], doubl
   return pages;
 };
 
+const maxOf = (nodes: BracketGraphNode[]) => nodes.reduce((a, n) => Math.max(a, n.round), 0);
+
+/**
+ * Bracket + finals pages. The finals page (when there is one) holds the deciding matches as one
+ * mini-bracket in rows 0–2; the tournament summary is laid out below it by the PDF builder.
+ */
 export const layoutElimBracket = (graph: BracketGraphNode[], doubleElim: boolean): BracketPageLayout[] => {
-  const pages = [
-    ...layoutSide("winners", graph.filter((n) => n.side === "winners"), doubleElim),
-    ...layoutSide("losers", graph.filter((n) => n.side === "losers"), doubleElim),
-  ];
-  const grand = graph.filter((n) => n.side === "grand").sort((a, b) => a.round - b.round);
-  const last = pages[pages.length - 1];
-  if (!grand.length && last && last.columns.length < BRACKET_COLS_PER_PAGE) {
-    last.summaryCol = last.columns.length; // room beside the final — no near-empty summary page
-    return pages;
+  const winners = graph.filter((n) => n.side === "winners");
+  const losers = graph.filter((n) => n.side === "losers");
+  const grand = graph.filter((n) => n.side === "grand");
+  const wMax = maxOf(winners);
+  const lMax = maxOf(losers);
+
+  if (doubleElim && grand.length) {
+    const wf = winners.find((n) => n.round === wMax);
+    const lf = losers.find((n) => n.round === lMax);
+    const ls = lMax >= 2 ? losers.find((n) => n.round === lMax - 1 && losers.filter((x) => x.round === lMax - 1).length === 1) : undefined;
+    const gf = grand.find((n) => n.round === 1);
+    const reset = grand.find((n) => n.round === 2);
+    const finalsIds = new Set([wf, lf, ls, gf, reset].filter(Boolean).map((n) => n!.id));
+    const finals: PlacedMatch[] = [];
+    if (ls) finals.push({ id: ls.id, col: 0, y: 2, label: roundName("losers", ls.round, lMax, true) });
+    if (wf) finals.push({ id: wf.id, col: 1, y: 0, label: "Winners Final" });
+    if (lf) finals.push({ id: lf.id, col: 1, y: 2, label: "Losers Final" });
+    if (gf) finals.push({ id: gf.id, col: 2, y: 1, label: "Grand Final" });
+    if (reset) finals.push({ id: reset.id, col: 3, y: 1, label: "Grand Final Reset" });
+    return [
+      ...layoutSide("winners", winners.filter((n) => !finalsIds.has(n.id)), true, wMax),
+      ...layoutSide("losers", losers.filter((n) => !finalsIds.has(n.id)), true, lMax),
+      { section: "finals", title: "FINALS & SUMMARY", columns: [], placed: finals },
+    ];
   }
-  pages.push({
-    section: grand.length ? "finals" : "summary",
-    title: grand.length ? "GRAND FINAL & SUMMARY" : "SUMMARY",
-    columns: grand.map((n) => roundName("grand", n.round, 2, doubleElim)),
-    placed: grand.map((n, i) => ({ id: n.id, col: i, y: 1 })),
-  });
-  return pages;
+
+  // Single: up to 16 players the whole bracket fits one page; from 32 the semifinals + final
+  // move to the finals page so the deciding matches sit with the summary.
+  if (wMax >= 5) {
+    const semis = winners.filter((n) => n.round === wMax - 1).sort((a, b) => matchIndex(a.id) - matchIndex(b.id));
+    const fin = winners.find((n) => n.round === wMax)!;
+    return [
+      ...layoutSide("winners", winners.filter((n) => n.round < wMax - 1), false, wMax),
+      {
+        section: "finals",
+        title: "FINALS & SUMMARY",
+        columns: [],
+        placed: [
+          ...semis.map((n, i) => ({ id: n.id, col: 0, y: i * 2, label: "Semifinal" })),
+          { id: fin.id, col: 1, y: 1, label: "Final" },
+        ],
+      },
+    ];
+  }
+  return layoutSide("winners", winners, false, wMax);
 };
 
 // ── drawing ───────────────────────────────────────────────────────────────────────────────
@@ -202,6 +279,10 @@ export const statusText = (m: LiveMatch): string => {
   if (table) return `${table} · not started`;
   return m.pending ? "Waiting for players" : "Waiting";
 };
+
+/** "Tyelerr (5)" — the player's race beside their name; never for a BYE or an unknown slot. */
+export const nameWithRace = (name: string | null, race: number | null | undefined): string | null =>
+  name ? (race != null && Number.isFinite(race) ? `${name} (${race})` : name) : null;
 
 const slotPlaceholder = (
   node: BracketGraphNode | undefined,
@@ -236,65 +317,81 @@ const drawMatch = (
     return;
   }
   const live = m.status === "in_progress";
-  page.rect(x, top, BOX_W, BOX_H, { stroke: m.bye ? 0.7 : 0.15, fill: live ? 0.92 : null, width: live ? 1.6 : 0.8 });
-  page.line(x, top + TOP_H, x + BOX_W, top + TOP_H, { gray: 0.7, width: 0.4 });
-  page.line(x, top + TOP_H + ROW_H, x + BOX_W, top + TOP_H + ROW_H, { gray: 0.82, width: 0.4 });
-  // Top line: match number (+ race) left, status / table right.
+  page.rect(x, top, BOX_W, BOX_H, { stroke: m.bye ? 0.7 : 0.25, fill: live ? 0.93 : null, width: live ? 1.6 : 0.8 });
+  page.line(x, top + TOP_H, x + BOX_W, top + TOP_H, { gray: 0.72, width: 0.4 });
+  page.line(x, top + TOP_H + ROW_H, x + BOX_W, top + TOP_H + ROW_H, { gray: 0.84, width: 0.4 });
+  // Top line: match number left, status / table right.
   const tag = labels.get(m.id) ?? m.id;
-  page.text(x + 4, top + 8.6, tag, 7.5, { font: "bold" });
-  const status = statusText(m);
+  page.text(x + 4, top + 8.6, tag, 7.5, { font: "bold", gray: INK });
   const left = textWidth(tag, 7.5, "bold") + 10;
-  const race = m.raceLabel && isPlayable(m) && !m.pending && m.p1Name && m.p2Name ? m.raceLabel : "";
-  const statusFit = fitText(status, 7, BOX_W - left - 8 - (race ? textWidth(race, 6.5) + 6 : 0), live ? "bold" : "regular");
-  if (race) page.text(x + left, top + 8.6, race, 6.5, { gray: 0.45 });
-  page.text(x + BOX_W - 4, top + 8.6, statusFit, 7, { align: "right", font: live ? "bold" : "regular", gray: live ? 0 : 0.3 });
+  page.text(x + BOX_W - 4, top + 8.6, fitText(statusText(m), 7, BOX_W - left - 8, live ? "bold" : "regular"), 7, {
+    align: "right",
+    font: live ? "bold" : "regular",
+    gray: live ? INK_STRONG : 0.38,
+  });
 
   const canMark = isPlayable(m) && m.status !== "completed";
+  const decided = m.status === "completed" && (m.winner === 1 || m.winner === 2);
   ([1, 2] as const).forEach((slot) => {
     const name = slot === 1 ? m.p1Name : m.p2Name;
+    const race = slot === 1 ? m.p1Race : m.p2Race;
     const score = slot === 1 ? m.p1Score : m.p2Score;
     const rowTop = top + TOP_H + (slot - 1) * ROW_H;
     const baseline = rowTop + 10.6;
-    const won = m.status === "completed" && m.winner === slot;
-    const lost = m.status === "completed" && m.winner != null && m.winner !== slot;
+    const won = decided && m.winner === slot;
+    const lost = decided && m.winner !== slot;
     const scoreW = 18;
-    if (won) page.rect(x + 3, rowTop + 4.5, 4, 6, { stroke: null, fill: 0 });
-    const text = name ?? slotPlaceholder(node, slot, m, labels, byId);
+    if (won && !m.bye) page.rect(x + 3, rowTop + 4.5, 4, 6, { stroke: null, fill: INK_STRONG });
+    const font = won ? "bold" : "regular";
     const placeholder = !name;
-    page.text(x + 10, baseline, fitText(text, placeholder ? 7.5 : NAME_SIZE, BOX_W - 16 - scoreW, won ? "bold" : "regular"), placeholder ? 7.5 : NAME_SIZE, {
-      font: won ? "bold" : "regular",
-      gray: placeholder ? 0.5 : lost ? 0.45 : 0,
-    });
+    if (placeholder) {
+      page.text(x + 10, baseline, fitText(slotPlaceholder(node, slot, m, labels, byId), 7.5, BOX_W - 16 - scoreW), 7.5, { gray: 0.55 });
+    } else {
+      // Race stays whole; the name shortens if needed.
+      const raceText = !m.bye && race != null ? ` (${race})` : "";
+      const raceW = raceText ? textWidth(raceText, 8, "regular") : 0;
+      const nameFit = fitText(name, NAME_SIZE, BOX_W - 16 - scoreW - raceW, font);
+      const nameColor = won ? INK_STRONG : lost ? MUTED : INK;
+      page.text(x + 10, baseline, nameFit, NAME_SIZE, { font, gray: nameColor });
+      if (raceText) page.text(x + 10 + textWidth(nameFit, NAME_SIZE, font), baseline, raceText, 8, { gray: lost ? 0.6 : 0.42 });
+    }
     if (score != null && !m.bye) {
-      page.text(x + BOX_W - 5, baseline, String(score), NAME_SIZE, { align: "right", font: won ? "bold" : "regular", gray: lost ? 0.45 : 0 });
+      page.text(x + BOX_W - 5, baseline, String(score), NAME_SIZE, {
+        align: "right",
+        font: won ? "bold" : "regular",
+        gray: won ? WIN_GREEN : lost ? LOSS_RED : INK,
+      });
     } else if (canMark) {
       page.rect(x + BOX_W - scoreW - 1, rowTop + 2.5, scoreW - 3, ROW_H - 5, { stroke: 0.6, width: 0.5 }); // pen box
     }
   });
   // Where players go next (traceable across pages). Grand-final routing is explained in a note.
-  const route = m.side === "grand" ? "" : [
-    m.winnerToLabel ? `W to ${m.winnerToLabel}` : null,
-    m.loserToLabel ? `L to ${m.loserToLabel}` : null,
-    m.loserFromLabels?.length ? `drop-in from ${m.loserFromLabels.join(", ")}` : null,
-  ]
-    .filter(Boolean)
-    .join("  ·  ");
+  const route =
+    m.side === "grand"
+      ? ""
+      : [
+          m.winnerToLabel ? `W to ${m.winnerToLabel}` : null,
+          m.loserToLabel ? `L to ${m.loserToLabel}` : null,
+          m.loserFromLabels?.length ? `drop-in from ${m.loserFromLabels.join(", ")}` : null,
+        ]
+          .filter(Boolean)
+          .join("  ·  ");
   if (route) page.text(x + 2, top + BOX_H + 7.5, fitText(route, 6.5, BOX_W + 20), 6.5, { gray: 0.45 });
 };
 
 const drawHeader = (page: PdfPage, input: ElimBracketPdfInput, sectionTitle: string) => {
   const right = PAGE_W - MARGIN;
   page.text(MARGIN, MARGIN + 8, "COMPETE", 8, { font: "bold", gray: 0.4 });
-  page.text(MARGIN, MARGIN + 26, fitText(input.tournamentName || "Tournament", 16, PAGE_W * 0.55, "bold"), 16, { font: "bold" });
+  page.text(MARGIN, MARGIN + 26, fitText(input.tournamentName || "Tournament", 16, PAGE_W * 0.55, "bold"), 16, { font: "bold", gray: INK_STRONG });
   const facts = [
     input.doubleElim ? "Double Elimination" : "Single Elimination",
     `${input.players} Players`,
     formatEventDate(input.tournamentDate),
   ].filter(Boolean).join(" · ");
-  page.text(MARGIN, MARGIN + 40, facts, 9.5);
+  page.text(MARGIN, MARGIN + 40, facts, 9.5, { gray: INK });
   const offline = input.mode === "offline";
-  page.text(right, MARGIN + 9, offline ? "OFFLINE BACKUP" : "BRACKET BACKUP", 11, { font: "bold", align: "right" });
-  page.text(right, MARGIN + 23, `Generated: ${formatBackupTime(input.generatedAt)}`, 8.5, { align: "right" });
+  page.text(right, MARGIN + 9, offline ? "OFFLINE BACKUP" : "BRACKET BACKUP", 11, { font: "bold", align: "right", gray: INK_STRONG });
+  page.text(right, MARGIN + 23, `Generated: ${formatBackupTime(input.generatedAt)}`, 8.5, { align: "right", gray: INK });
   page.text(
     right,
     MARGIN + 35,
@@ -302,7 +399,7 @@ const drawHeader = (page: PdfPage, input: ElimBracketPdfInput, sectionTitle: str
       ? `Last synced: ${input.lastSyncedAt ? formatBackupTime(input.lastSyncedAt) : "unknown"} · Revision ${input.revision ?? "—"}`
       : `Revision ${input.revision ?? "—"}`,
     8.5,
-    { align: "right", font: offline ? "bold" : "regular" },
+    { align: "right", font: offline ? "bold" : "regular", gray: INK },
   );
   page.line(MARGIN, MARGIN + 47, right, MARGIN + 47, { gray: 0.6, width: 0.6 });
   page.text(
@@ -314,7 +411,7 @@ const drawHeader = (page: PdfPage, input: ElimBracketPdfInput, sectionTitle: str
     7.5,
     { gray: 0.35 },
   );
-  page.text(right, MARGIN + 58, sectionTitle, 8.5, { font: "bold", align: "right" });
+  page.text(right, MARGIN + 58, sectionTitle, 8.5, { font: "bold", align: "right", gray: INK_STRONG });
 };
 
 const drawFooter = (page: PdfPage, input: ElimBracketPdfInput, n: number, total: number) => {
@@ -337,95 +434,276 @@ export const bracketChampion = (matches: LiveMatch[], doubleElim: boolean): stri
   return null;
 };
 
-const drawSummary = (page: PdfPage, input: ElimBracketPdfInput, x: number, top: number, width: number) => {
+// ── tournament summary: a two-column flow of rows (keeps headings with their first lines) ─────
+const SUM_GAP = 24;
+const SUM_COL_W = (PAGE_W - 2 * MARGIN - SUM_GAP) / 2;
+
+type FlowRow = {
+  h: number;
+  spacer?: boolean; // dropped at the top of a column
+  keepWithNext?: number; // rows that must follow on the same column (headings)
+  repeatHeader?: () => FlowRow; // table header to repeat at the top of a new column
+  draw: (page: PdfPage, x: number, y: number, w: number) => void;
+};
+
+const textRow = (text: string, size: number, opts: { font?: "regular" | "bold"; gray?: PdfColor; h?: number; indent?: number; keepWithNext?: number } = {}): FlowRow => ({
+  h: opts.h ?? size + 5,
+  keepWithNext: opts.keepWithNext,
+  draw: (page, x, y, w) =>
+    page.text(x + (opts.indent ?? 0), y + size, fitText(text, size, w - (opts.indent ?? 0), opts.font ?? "regular"), size, {
+      font: opts.font,
+      gray: opts.gray ?? INK,
+    }),
+});
+
+const amountRow = (left: string, amount: string, opts: { bold?: boolean; indent?: number; gray?: PdfColor } = {}): FlowRow => ({
+  h: 13,
+  draw: (page, x, y, w) => {
+    const font = opts.bold ? "bold" : "regular";
+    const aw = textWidth(amount, 9, font);
+    page.text(x + (opts.indent ?? 0), y + 9, fitText(left, 9, w - aw - 12 - (opts.indent ?? 0), font), 9, { font, gray: opts.gray ?? INK });
+    page.text(x + w, y + 9, amount, 9, { font, align: "right", gray: opts.gray ?? INK });
+  },
+});
+
+const spacer = (h: number): FlowRow => ({ h, spacer: true, draw: () => {} });
+
+const checkbox = (page: PdfPage, cx: number, y: number, checked: boolean) => {
+  const s = 7.5;
+  const bx = cx - s / 2;
+  const by = y + 1.5;
+  page.rect(bx, by, s, s, { stroke: 0.35, width: 0.6 });
+  if (checked) {
+    page.line(bx + 1.5, by + 1.5, bx + s - 1.5, by + s - 1.5, { gray: INK_STRONG, width: 1 });
+    page.line(bx + s - 1.5, by + 1.5, bx + 1.5, by + s - 1.5, { gray: INK_STRONG, width: 1 });
+  }
+};
+
+// Player list columns (within one summary column).
+const PL = { name: 0, entry: 150, pot: 188, fargo: 262, status: 270 };
+
+const summaryRows = (input: ElimBracketPdfInput): FlowRow[] => {
+  const rows: FlowRow[] = [];
   const real = input.matches.filter(isPlayable);
   const done = real.filter((m) => m.status === "completed");
   const live = real.filter((m) => m.status === "in_progress");
   const onTable = real.filter((m) => m.status === "scheduled" && m.tableId != null);
   const waiting = real.filter((m) => m.status === "scheduled" && m.tableId == null);
-  let y = top;
-  page.text(x, y, "Summary", 12, { font: "bold" });
-  y += 18;
   const champion = bracketChampion(input.matches, input.doubleElim);
-  page.text(x, y, fitText(`Champion: ${champion ?? "not decided yet"}`, 10, width, champion ? "bold" : "regular"), 10, { font: champion ? "bold" : "regular" });
-  y += 16;
-  for (const [label, n] of [["Completed", done.length], ["Live", live.length], ["On a table, not started", onTable.length], ["Waiting", waiting.length]] as const) {
-    page.text(x, y, `${label}: ${n}`, 9);
-    y += 12;
-  }
-  y += 8;
+
+  // Summary
+  rows.push(textRow("Summary", 12, { font: "bold", gray: INK_STRONG, h: 18, keepWithNext: 2 }));
+  rows.push(textRow(`Champion: ${champion ?? "not decided yet"}`, 10, { font: champion ? "bold" : "regular", gray: INK_STRONG, h: 16 }));
+  const byes = input.bracketSize ? Math.max(0, input.bracketSize - input.players) : null;
+  rows.push(textRow(`Field: ${input.players} players${input.bracketSize ? ` · ${input.bracketSize}-slot bracket` : ""}${byes ? ` · ${byes} byes` : ""}`, 9));
+  rows.push(textRow(`Matches: ${done.length} completed · ${live.length} live · ${onTable.length} on a table · ${waiting.length} waiting`, 9));
   const list = (title: string, items: LiveMatch[]) => {
     if (!items.length) return;
-    page.text(x, y, title, 9.5, { font: "bold" });
-    y += 13;
-    const maxLines = Math.max(0, Math.floor((AREA_BOTTOM - y - 10) / 12));
-    items.slice(0, maxLines).forEach((m) => {
-      const line = [m.numberLabel || m.id, m.tableLabel, `${m.p1Name ?? "TBD"} vs ${m.p2Name ?? "TBD"}`].filter(Boolean).join(" · ");
-      page.text(x + 8, y, fitText(line, 8.5, width - 8), 8.5);
-      y += 12;
-    });
-    if (items.length > maxLines) {
-      page.text(x + 8, y, `+${items.length - maxLines} more`, 8, { gray: 0.45 });
-      y += 12;
+    rows.push(spacer(4));
+    rows.push(textRow(title, 9.5, { font: "bold", gray: INK_STRONG, keepWithNext: 1 }));
+    for (const m of items) {
+      rows.push(
+        textRow(
+          [labels(m), m.tableLabel, `${nameWithRace(m.p1Name, m.p1Race) ?? "TBD"} vs ${nameWithRace(m.p2Name, m.p2Race) ?? "TBD"}`]
+            .filter(Boolean)
+            .join(" · "),
+          8.5,
+          { indent: 8, h: 12 },
+        ),
+      );
     }
-    y += 6;
   };
+  const labels = (m: LiveMatch) => (m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id);
   list("Live now", live);
   list("On a table, not started", onTable);
+
+  // Payouts
+  rows.push(spacer(10));
+  rows.push(textRow("Payouts", 12, { font: "bold", gray: INK_STRONG, h: 18, keepWithNext: 2 }));
+  const pay = input.payouts;
+  if (!pay || !pay.configured || !pay.entry) {
+    rows.push(textRow("No prize pool configured for this tournament.", 9, { gray: MUTED }));
+  } else {
+    rows.push(amountRow("Prize Pool", formatMoney(pay.entry.pool), { bold: true }));
+    for (const p of pay.entry.places) rows.push(amountRow(`${ordinal(p.place)}   ${p.name ?? "—"}`, formatMoney(p.amount), { indent: 8 }));
+    for (const sp of pay.sidePots) {
+      rows.push(spacer(4));
+      rows.push({ ...amountRow(`Side pot · ${sp.name}`, formatMoney(sp.pool), { bold: true }), keepWithNext: 1 });
+      for (const p of sp.places) rows.push(amountRow(`${ordinal(p.place)}   ${p.name ?? "—"}`, formatMoney(p.amount), { indent: 8 }));
+    }
+    if (pay.entry.places.some((p) => !p.name)) rows.push(textRow("Names fill in as places are decided.", 7.5, { gray: MUTED, h: 11 }));
+  }
+
+  // Player list
+  if (input.roster == null && input.mode === "offline") {
+    rows.push(spacer(10));
+    rows.push(textRow("Player list isn't included in this offline copy — it's added the next time this device syncs.", 8, { gray: MUTED }));
+  }
+  const roster = input.roster ?? [];
+  if (roster.length) {
+    const pots = input.sidePotNames ?? [];
+    const header = (): FlowRow => ({
+      h: 15,
+      draw: (page, x, y, w) => {
+        const hy = y + 8;
+        page.text(x + PL.name, hy, "Name", 7.5, { font: "bold", gray: 0.35 });
+        page.text(x + PL.entry + 10, hy, "Entry", 7.5, { font: "bold", gray: 0.35, align: "center" });
+        page.text(x + PL.pot + 22, hy, pots.length === 1 ? "Side Pot" : "Side Pots", 7.5, { font: "bold", gray: 0.35, align: "center" });
+        page.text(x + PL.fargo, hy, "Fargo", 7.5, { font: "bold", gray: 0.35, align: "right" });
+        page.text(x + PL.status, hy, "Status", 7.5, { font: "bold", gray: 0.35 });
+        page.line(x, y + 11.5, x + w, y + 11.5, { gray: 0.7, width: 0.5 });
+      },
+    });
+    rows.push(spacer(10));
+    rows.push(textRow(`Players (${roster.length})`, 12, { font: "bold", gray: INK_STRONG, h: 18, keepWithNext: 2 }));
+    rows.push({ ...header(), keepWithNext: 1 });
+    roster.forEach((r, i) => {
+      rows.push({
+        h: 13,
+        repeatHeader: header,
+        draw: (page, x, y, w) => {
+          if (i % 2 === 1) page.rect(x - 2, y - 0.5, w + 4, 13, { stroke: null, fill: 0.96 });
+          const by = y + 9.2;
+          const outOrGone = r.status.startsWith("Out") || r.status === "No Show";
+          page.text(x + PL.name, by, fitText(r.name, 8.5, PL.entry - 8, r.status === "Champion" ? "bold" : "regular"), 8.5, {
+            font: r.status === "Champion" ? "bold" : "regular",
+            gray: outOrGone ? MUTED : INK,
+          });
+          checkbox(page, x + PL.entry + 10, y, r.entryPaid);
+          if (pots.length === 1) checkbox(page, x + PL.pot + 22, y, r.sidePots.includes(pots[0]));
+          else if (pots.length > 1)
+            page.text(x + PL.pot + 22, by, fitText(r.sidePots.length ? r.sidePots.join(", ") : "—", 7.5, 66), 7.5, { gray: INK, align: "center" });
+          else page.text(x + PL.pot + 22, by, "—", 8, { gray: MUTED, align: "center" });
+          page.text(x + PL.fargo, by, r.fargo != null ? String(r.fargo) : "—", 8.5, { gray: INK, align: "right" });
+          page.text(x + PL.status, by, fitText(r.status, 8.5, w - PL.status), 8.5, {
+            font: r.status === "In Field" || r.status === "Champion" ? "bold" : "regular",
+            gray: r.status === "In Field" || r.status === "Champion" ? INK_STRONG : MUTED,
+          });
+        },
+      });
+    });
+  }
+  return rows;
 };
 
-export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8Array; fileName: string; pages: BracketPageLayout[] } => {
-  const pages = layoutElimBracket(input.graph, input.doubleElim);
+// Flow rows into columns: first the region below the finals (if any), then whole extra pages.
+type FlowPlacement = { page: number; x: number; y: number; row: FlowRow };
+const flowSummary = (
+  rows: FlowRow[],
+  firstRegion: { top: number } | null,
+): { placements: FlowPlacement[]; extraPages: number } => {
+  const placements: FlowPlacement[] = [];
+  const fullTop = AREA_TOP - COL_LABEL_H + 4;
+  // Region list: [pageOffset, top] per column; page 0 = the finals page (when given).
+  let pageOffset = firstRegion ? 0 : 1;
+  let top = firstRegion ? firstRegion.top : fullTop;
+  let col = 0;
+  let y = top;
+  const nextColumn = () => {
+    if (col === 0) {
+      col = 1;
+    } else {
+      col = 0;
+      pageOffset += 1;
+      top = fullTop;
+    }
+    y = top;
+  };
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    let need = row.h;
+    for (let k = 1; k <= (row.keepWithNext ?? 0) && i + k < rows.length; k++) need += rows[i + k].h;
+    if (y + need > AREA_BOTTOM && y > top) {
+      nextColumn();
+      if (row.repeatHeader) {
+        const hdr = row.repeatHeader();
+        placements.push({ page: pageOffset, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row: hdr });
+        y += hdr.h;
+      }
+    }
+    if (row.spacer && y === top) continue;
+    placements.push({ page: pageOffset, x: MARGIN + col * (SUM_COL_W + SUM_GAP), y, row });
+    y += row.h;
+  }
+  // Pages needed after the bracket pages (the finals page itself is page 0 when given).
+  const extraPages = placements.reduce((a, p) => Math.max(a, p.page), firstRegion ? 0 : 1);
+  return { placements, extraPages };
+};
+
+export interface BuiltPage {
+  section: BracketPageLayout["section"];
+  title: string;
+  placed: PlacedMatch[];
+}
+
+export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8Array; fileName: string; pages: BuiltPage[] } => {
+  const layouts = layoutElimBracket(input.graph, input.doubleElim);
   const byId = new Map(input.matches.map((m) => [m.id, m]));
   const nodeById = new Map(input.graph.map((n) => [n.id, n]));
   const labels = new Map(input.matches.map((m) => [m.id, m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id]));
   const doc = new PdfDocument({ title: `${input.tournamentName} — bracket backup`, author: "Compete" });
 
-  pages.forEach((layout, i) => {
+  const finalsLayout = layouts.find((l) => l.section === "finals") ?? null;
+  const finalsBottom = AREA_TOP + FINALS_ROWS * PITCH + 4;
+  const flow = flowSummary(summaryRows(input), finalsLayout ? { top: finalsBottom + 6 } : null);
+  // Summary pages after the bracket: finals page = page 0 of the flow; extra pages follow.
+  const summaryPageCount = flow.extraPages;
+  const pages: BuiltPage[] = [
+    ...layouts.map((l) => ({ section: l.section, title: l.title, placed: l.placed })),
+    ...Array.from({ length: summaryPageCount }, (_, i) => ({
+      section: "summary" as const,
+      title: i === 0 && !finalsLayout ? "TOURNAMENT SUMMARY" : "TOURNAMENT SUMMARY (CONTINUED)",
+      placed: [] as PlacedMatch[],
+    })),
+  ];
+  const finalsIndex = finalsLayout ? layouts.indexOf(finalsLayout) : -1;
+  const flowPageIndex = (p: number) => (finalsLayout ? (p === 0 ? finalsIndex : layouts.length + p - 1) : layouts.length + p - 1);
+
+  pages.forEach((spec, i) => {
     const page = doc.addPage(PAGE_W, PAGE_H);
-    drawHeader(page, input, layout.title);
-    layout.columns.forEach((c, col) =>
-      page.text(boxX(col) + 2, AREA_TOP - 5, c.toUpperCase(), 8, { font: "bold", gray: 0.3 }),
-    );
-    const pos = new Map(layout.placed.map((p) => [p.id, p]));
-    // Connectors first (under the boxes): feeder's right edge → this match's player row.
-    for (const p of layout.placed) {
-      const node = nodeById.get(p.id);
-      if (!node || layout.section === "finals") continue;
-      ([node.slot1, node.slot2] as const).forEach((ref, k) => {
-        if (ref.kind !== "winner") return;
-        const src = pos.get(ref.matchId);
-        if (!src || src.col !== p.col - 1) return;
-        const sx = boxX(src.col) + BOX_W;
-        const sy = boxTop(src.y) + TOP_H + ROW_H;
-        const tx = boxX(p.col);
-        const ty = boxTop(p.y) + TOP_H + ROW_H * (k + 0.5);
-        const mid = sx + (tx - sx) / 2;
-        page.path([[sx, sy], [mid, sy], [mid, ty], [tx, ty]], { gray: 0.35, width: 0.8 });
-      });
-    }
-    for (const p of layout.placed) {
-      const m = byId.get(p.id);
-      if (m) drawMatch(page, m, nodeById.get(p.id), boxX(p.col), layout.section === "finals" ? AREA_TOP + 8 : boxTop(p.y), labels, byId);
-    }
-    if (layout.section === "finals") {
-      const gf = byId.get("GF");
-      const reset = layout.placed.some((p) => p.id === "GF2");
-      if (reset) {
-        const x2 = boxX(1);
+    drawHeader(page, input, spec.title);
+    const layout = layouts[i];
+    if (layout) {
+      const finals = layout.section === "finals";
+      if (!finals) layout.columns.forEach((c, col) => page.text(boxX(col) + 2, AREA_TOP - 5, c.toUpperCase(), 8, { font: "bold", gray: 0.3 }));
+      const pos = new Map(layout.placed.map((p) => [p.id, p]));
+      // Connectors first (under the boxes): feeder's right edge → this match's player row.
+      for (const p of layout.placed) {
+        const node = nodeById.get(p.id);
+        if (!node) continue;
+        ([node.slot1, node.slot2] as const).forEach((ref, k) => {
+          if (ref.kind !== "winner") return;
+          const src = pos.get(ref.matchId);
+          if (!src || src.col !== p.col - 1) return;
+          const sx = boxX(src.col) + BOX_W;
+          const sy = boxTop(src.y) + TOP_H + ROW_H;
+          const tx = boxX(p.col);
+          const ty = boxTop(p.y) + TOP_H + ROW_H * (k + 0.5);
+          const mid = sx + (tx - sx) / 2;
+          page.path([[sx, sy], [mid, sy], [mid, ty], [tx, ty]], { gray: 0.4, width: 0.8 });
+        });
+      }
+      for (const p of layout.placed) {
+        const m = byId.get(p.id);
+        if (p.label) page.text(boxX(p.col) + 1, boxTop(p.y) - 3.5, p.label.toUpperCase(), 7.5, { font: "bold", gray: 0.3 });
+        if (m) drawMatch(page, m, nodeById.get(p.id), boxX(p.col), boxTop(p.y), labels, byId);
+        else if (p.id === "GF2") {
+          // buildLiveMatches drops the reset once it is not needed.
+          page.rect(boxX(p.col), boxTop(p.y), BOX_W, BOX_H, { stroke: 0.8, width: 0.5 });
+          page.text(boxX(p.col) + 6, boxTop(p.y) + BOX_H / 2 + 3, "Not needed", 8, { gray: 0.5 });
+        }
+      }
+      if (finals && input.doubleElim) {
+        const gf = byId.get("GF");
         const note =
           gf && gf.status === "completed" && gf.winner === 1
             ? "Reset not needed — winners-side finalist won the Grand Final."
-            : "Played only if the losers-side finalist wins the Grand Final.";
-        page.text(x2, AREA_TOP + 8 + BOX_H + 18, fitText(note, 7.5, COL_W * 2 - 10), 7.5, { gray: 0.4 });
+            : "Reset is played only if the losers-side finalist wins the Grand Final.";
+        page.text(boxX(2), boxTop(1) + BOX_H + 10, fitText(note, 7.5, 2 * COL_W - 8), 7.5, { gray: 0.4 });
       }
-      drawSummary(page, input, MARGIN, AREA_TOP + 8 + BOX_H + 44, PAGE_W - 2 * MARGIN);
-    } else if (layout.summaryCol != null) {
-      const sx = boxX(layout.summaryCol) + 24;
-      drawSummary(page, input, sx, AREA_TOP + 8, PAGE_W - MARGIN - sx);
-    } else if (layout.section === "summary") {
-      drawSummary(page, input, MARGIN, AREA_TOP + 8, PAGE_W - 2 * MARGIN);
+      if (finals) page.line(MARGIN, finalsBottom, PAGE_W - MARGIN, finalsBottom, { gray: 0.75, width: 0.5 });
     }
+    for (const fp of flow.placements) if (flowPageIndex(fp.page) === i) fp.row.draw(page, fp.x, fp.y, SUM_COL_W);
     drawFooter(page, input, i + 1, pages.length);
   });
 

@@ -80,6 +80,11 @@ export const fitText = (text: string, size: number, maxWidth: number, font: PdfF
 
 const num = (n: number) => (Math.round(n * 100) / 100).toString();
 
+/** A grey level (0 = black … 1 = white) or an RGB triple (0–1 each). */
+export type PdfColor = number | readonly [number, number, number];
+const fillOp = (c: PdfColor) => (typeof c === "number" ? `${num(c)} g` : `${num(c[0])} ${num(c[1])} ${num(c[2])} rg`);
+const strokeOp = (c: PdfColor) => (typeof c === "number" ? `${num(c)} G` : `${num(c[0])} ${num(c[1])} ${num(c[2])} RG`);
+
 const pdfString = (text: string): string => {
   let s = "(";
   for (const b of toWinAnsi(text)) {
@@ -95,38 +100,38 @@ export class PdfPage {
   readonly ops: string[] = [];
   constructor(readonly width: number, readonly height: number) {}
 
-  text(x: number, y: number, text: string, size: number, opts: { font?: PdfFont; gray?: number; align?: "left" | "right" | "center" } = {}) {
+  text(x: number, y: number, text: string, size: number, opts: { font?: PdfFont; gray?: PdfColor; align?: "left" | "right" | "center" } = {}) {
     const font = opts.font ?? "regular";
     const w = opts.align && opts.align !== "left" ? textWidth(text, size, font) : 0;
     const dx = opts.align === "right" ? -w : opts.align === "center" ? -w / 2 : 0;
     this.ops.push(
-      `BT /${font === "bold" ? "F2" : "F1"} ${num(size)} Tf ${num(opts.gray ?? 0)} g ${num(x + dx)} ${num(this.height - y)} Td ${pdfString(text)} Tj ET`,
+      `BT /${font === "bold" ? "F2" : "F1"} ${num(size)} Tf ${fillOp(opts.gray ?? 0)} ${num(x + dx)} ${num(this.height - y)} Td ${pdfString(text)} Tj ET`,
     );
   }
 
-  line(x1: number, y1: number, x2: number, y2: number, opts: { width?: number; gray?: number } = {}) {
+  line(x1: number, y1: number, x2: number, y2: number, opts: { width?: number; gray?: PdfColor } = {}) {
     this.ops.push(
-      `${num(opts.width ?? 0.75)} w ${num(opts.gray ?? 0)} G ${num(x1)} ${num(this.height - y1)} m ${num(x2)} ${num(this.height - y2)} l S`,
+      `${num(opts.width ?? 0.75)} w ${strokeOp(opts.gray ?? 0)} ${num(x1)} ${num(this.height - y1)} m ${num(x2)} ${num(this.height - y2)} l S`,
     );
   }
 
   /** Polyline (connectors). */
-  path(points: [number, number][], opts: { width?: number; gray?: number } = {}) {
+  path(points: [number, number][], opts: { width?: number; gray?: PdfColor } = {}) {
     if (points.length < 2) return;
     const [first, ...rest] = points;
     this.ops.push(
-      `${num(opts.width ?? 0.75)} w ${num(opts.gray ?? 0)} G ${num(first[0])} ${num(this.height - first[1])} m ` +
+      `${num(opts.width ?? 0.75)} w ${strokeOp(opts.gray ?? 0)} ${num(first[0])} ${num(this.height - first[1])} m ` +
         rest.map(([x, y]) => `${num(x)} ${num(this.height - y)} l`).join(" ") +
         " S",
     );
   }
 
-  rect(x: number, y: number, w: number, h: number, opts: { stroke?: number | null; fill?: number | null; width?: number } = {}) {
+  rect(x: number, y: number, w: number, h: number, opts: { stroke?: PdfColor | null; fill?: PdfColor | null; width?: number } = {}) {
     const stroke = opts.stroke === undefined ? 0 : opts.stroke;
     const fill = opts.fill ?? null;
     const paint = fill != null && stroke != null ? "B" : fill != null ? "f" : "S";
     this.ops.push(
-      `${num(opts.width ?? 0.75)} w ${stroke != null ? `${num(stroke)} G ` : ""}${fill != null ? `${num(fill)} g ` : ""}` +
+      `${num(opts.width ?? 0.75)} w ${stroke != null ? `${strokeOp(stroke)} ` : ""}${fill != null ? `${fillOp(fill)} ` : ""}` +
         `${num(x)} ${num(this.height - y - h)} ${num(w)} ${num(h)} re ${paint}`,
     );
   }

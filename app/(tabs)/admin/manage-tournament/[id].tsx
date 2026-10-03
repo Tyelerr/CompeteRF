@@ -409,7 +409,8 @@ const tableStatusColor = (s: TableStatus): string =>
 
 // ── Registration presentation ────────────────────────────────────────────────
 // The DB has six raw statuses; the Players tab collapses them to four display
-// states. "Ready" = checked_in (confirmed + paid -> eligible for the bracket).
+// states. "In Field" (status key "ready") = checked_in (confirmed + paid -> in the bracket field).
+// The ACTIONS keep their names ("Mark Ready" / "Undo Ready"), matching Chip's roster.
 type DisplayStatus = "prereg" | "registered" | "ready" | "no_show" | "removed";
 
 const displayStatusOf = (s: RegistrationStatus): DisplayStatus => {
@@ -425,7 +426,7 @@ const displayStatusOf = (s: RegistrationStatus): DisplayStatus => {
 const DISPLAY_META: Record<DisplayStatus, { label: string; color: string }> = {
   prereg: { label: "Pre-Registered", color: "#EAB308" }, // yellow — untouched self-signup
   registered: { label: "Registered", color: COLORS.primary }, // blue — TD-processed, not Ready
-  ready: { label: "Ready", color: COLORS.success }, // green
+  ready: { label: "In Field", color: COLORS.success }, // green
   no_show: { label: "No Show", color: COLORS.error }, // red
   removed: { label: "Removed", color: COLORS.textMuted }, // gray
 };
@@ -444,7 +445,7 @@ const PLAYER_FILTERS = [
   { label: "All", value: "all" },
   { label: "Registered", value: "registered" },
   { label: "Pre-Registered", value: "prereg" },
-  { label: "Ready", value: "ready" },
+  { label: "In Field", value: "ready" },
   { label: "No Show", value: "no_show" },
   { label: "Removed", value: "removed" },
 ];
@@ -2450,7 +2451,7 @@ const EliminationPlayerCard = ({
         </TouchableOpacity>
         {d === "ready" ? (
           <TouchableOpacity style={[styles.epStateBtn, styles.epStateReady]} onPress={onUndo} disabled={isProcessing} activeOpacity={0.7}>
-            <Text allowFontScaling={false} style={styles.epStateReadyText}>✓ Ready</Text>
+            <Text allowFontScaling={false} style={styles.epStateReadyText}>✓ In Field</Text>
           </TouchableOpacity>
         ) : d === "no_show" || d === "removed" ? (
           <TouchableOpacity style={styles.epStateBtn} onPress={() => onActions(actionsAnchor)} disabled={isProcessing} activeOpacity={0.7}>
@@ -6731,7 +6732,7 @@ function ManageTournamentScreen() {
     const venue = t?.venues;
     const venueSub = venue ? [venue.city, venue.state].filter(Boolean).join(", ") : "";
     const breakdown = [
-      { label: "Ready", n: statusCounts.ready, color: DISPLAY_META.ready.color },
+      { label: "In Field", n: statusCounts.ready, color: DISPLAY_META.ready.color },
       { label: "Registered", n: statusCounts.registered, color: DISPLAY_META.registered.color },
       { label: "Pre-Registered", n: statusCounts.prereg, color: DISPLAY_META.prereg.color },
       { label: "No Show", n: statusCounts.no_show, color: DISPLAY_META.no_show.color },
@@ -6812,7 +6813,7 @@ function ManageTournamentScreen() {
     const summary = [
       { key: "prereg" as DisplayStatus, short: "Pre-Reg", n: statusCounts.prereg },
       { key: "registered" as DisplayStatus, short: "Registered", n: statusCounts.registered },
-      { key: "ready" as DisplayStatus, short: "Ready", n: statusCounts.ready },
+      { key: "ready" as DisplayStatus, short: "In Field", n: statusCounts.ready },
       { key: "no_show" as DisplayStatus, short: "No Show", n: statusCounts.no_show },
     ];
     const chipsNode = (

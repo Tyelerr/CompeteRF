@@ -26,8 +26,11 @@ import {
   ElimBracketPdfInput,
   formatBackupTime,
   formatEventDate,
+  formatMoney,
   layoutElimBracket,
 } from "../elim-bracket-pdf";
+import { BackupRegistration, buildBackupPayouts, buildBackupRoster } from "../elim-bracket-summary";
+import { buildElimLocalRecord, validateElimLocalRecord } from "../elim-local-recovery";
 import { bytesToBase64, fitText, textWidth, toWinAnsi } from "../pdf-writer";
 
 const ROOT = join(__dirname, "..", "..", "..");
@@ -76,22 +79,27 @@ const pdfStrings = (bytes: Uint8Array) => {
       return WIN[c] ?? String.fromCharCode(c);
     });
   return pages.map((p) =>
-    [...p.matchAll(/\/(F[12]) [\d.]+ Tf [\d.]+ g [\d.-]+ [\d.-]+ Td \(((?:\\.|[^\\)])*)\) Tj/g)].map((m) => ({ font: m[1], text: unescape(m[2]) })),
+    [...p.matchAll(/\/(F[12]) [\d.]+ Tf ([\d.]+ g|[\d.]+ [\d.]+ [\d.]+ rg) [\d.-]+ [\d.-]+ Td \(((?:\\.|[^\\)])*)\) Tj/g)].map((m) => ({
+      font: m[1],
+      color: m[2],
+      text: unescape(m[3]),
+    })),
   );
 };
 const allText = (bytes: Uint8Array) => pdfStrings(bytes).flat().map((s) => s.text);
 const realMatches = (ms: LiveMatch[]) => ms.filter((m) => !m.empty);
 
 // ══ SINGLE ELIMINATION ═══════════════════════════════════════════════════════════════════
-for (const [size, players, pages] of [[4, 4, 1], [8, 8, 1], [16, 16, 2], [32, 32, 3], [64, 64, 5]] as const) {
+// Pages: bracket pages (+ a finals page from 32 players) + the tournament summary.
+for (const [size, players, pages] of [[4, 4, 2], [8, 8, 2], [16, 16, 2], [32, 32, 3], [64, 64, 5]] as const) {
   test(`single ${players} players: every match exactly once, readable pagination (${pages} pages)`, () => {
     const inp = input(size, players, false);
     const pdf = buildElimBracketPdf(inp);
     assert.equal(pdf.pages.length, pages);
     const placed = pdf.pages.flatMap((p) => p.placed.map((x) => x.id)).sort();
     assert.deepEqual(placed, inp.graph.map((n) => n.id).sort(), "every bracket match, once");
+    for (const l of layoutElimBracket(inp.graph, false)) assert.ok(l.columns.length <= BRACKET_COLS_PER_PAGE);
     for (const p of pdf.pages) {
-      assert.ok(p.columns.length <= BRACKET_COLS_PER_PAGE);
       for (const x of p.placed) assert.ok(x.y >= 0 && x.y < BRACKET_ROWS_PER_PAGE, `${x.id} on the page`);
     }
     const text = allText(pdf.bytes);
@@ -149,11 +157,11 @@ test("single completed: champion + every result", () => {
   const champ = bracketChampion(inp.matches, false);
   assert.ok(champ);
   assert.ok(text.includes(`Champion: ${champ}`));
-  assert.ok(text.includes("Waiting: 0"));
+  assert.ok(text.some((t) => /· 0 live · 0 on a table · 0 waiting$/.test(t)));
 });
 
 // ══ DOUBLE ELIMINATION ═══════════════════════════════════════════════════════════════════
-for (const [size, players, sections] of [[8, 8, 3], [32, 27, 6], [64, 64, 10]] as const) {
+for (const [size, players, sections] of [[8, 8, 3], [32, 27, 5], [64, 64, 9]] as const) {
   test(`double ${players} players: winners, losers, Grand Final + reset, every match once (${sections} pages)`, () => {
     const inp = input(size, players, true);
     const pdf = buildElimBracketPdf(inp);
@@ -163,11 +171,18 @@ for (const [size, players, sections] of [[8, 8, 3], [32, 27, 6], [64, 64, 10]] a
     assert.ok(pdf.pages.some((p) => p.section === "losers"));
     const last = pdf.pages[pdf.pages.length - 1];
     assert.equal(last.section, "finals");
-    assert.deepEqual(last.columns, ["Grand Final", "Grand Final Reset"]);
+    // The deciding matches sit together on the finals page — never split across pages.
+    const wMax = Math.max(...inp.graph.filter((n) => n.side === "winners").map((n) => n.round));
+    const lMax = Math.max(...inp.graph.filter((n) => n.side === "losers").map((n) => n.round));
+    assert.deepEqual(
+      last.placed.map((p) => `${p.label}:${p.id}`).sort(),
+      [`Losers Round ${lMax - 1}:L${lMax - 1}M1`, `Winners Final:W${wMax}M1`, `Losers Final:L${lMax}M1`, "Grand Final:GF", "Grand Final Reset:GF2"].sort(),
+    );
+    for (const p of pdf.pages.slice(0, -1)) for (const x of p.placed) assert.ok(!last.placed.some((f) => f.id === x.id), `${x.id} only on the finals page`);
     const text = allText(pdf.bytes);
     assert.ok(text.includes("WINNERS FINAL") && text.includes("LOSERS FINAL") && text.includes("GRAND FINAL"));
     assert.ok(text.includes("Finals Reset"), "reset box tagged distinctly");
-    assert.ok(text.includes("Played only if the losers-side finalist wins the Grand Final."));
+    assert.ok(text.includes("Reset is played only if the losers-side finalist wins the Grand Final."));
     for (const m of realMatches(inp.matches)) assert.ok(text.includes(m.id === "GF2" ? "Finals Reset" : m.numberLabel), m.id);
     // 64 players stays readable: 8 first-column matches per page, never shrunk.
     for (const p of pdf.pages) for (const x of p.placed) assert.ok(x.y < BRACKET_ROWS_PER_PAGE);
@@ -354,4 +369,190 @@ test("layout: sub-trees never straddle pages; later columns centered on their fe
       }
     }
   }
+});
+
+// ══ Refinement: finals grouping, races, styling, payouts, player list, In Field ══════════
+const regsFor = (players: number, extra: BackupRegistration[] = []): BackupRegistration[] => [
+  ...Array.from({ length: players }, (_, i) => ({
+    id: i + 1,
+    status: "checked_in",
+    paid_entry: i % 4 !== 3,
+    paid_side_pots: i % 2 ? ["Calcutta"] : [],
+    fargo_rating: 500 + i,
+    name: `P${i + 1}`,
+  })),
+  ...extra,
+];
+const T_PRIZE: any = {
+  entry_fee: 20,
+  added_money: 50,
+  side_pots: [{ name: "Calcutta", amount: 10 }],
+  live_settings: {
+    bracket: { players: 9 },
+    prizePool: { entryPlaces: [{ percent: 60 }, { percent: 30 }, { percent: 10 }], sidePots: [{ name: "Calcutta", places: [{ percent: 70 }, { percent: 30 }] }], includeAddedMoney: true },
+    fees: [{ name: "Green", amount: 5, enabled: true }, { name: "Off", amount: 3, enabled: false }],
+  },
+};
+
+test("finals grouping (single 32+): semifinals + final on the finals page, with the summary", () => {
+  const pages = layoutElimBracket(buildBracketGraph(32, false), false);
+  const fin = pages[pages.length - 1];
+  assert.equal(fin.section, "finals");
+  assert.deepEqual(fin.placed.map((p) => `${p.label}:${p.id}`), ["Semifinal:W4M1", "Semifinal:W4M2", "Final:W5M1"]);
+  assert.ok(pages.slice(0, -1).every((p) => p.placed.every((x) => !/^W[45]M/.test(x.id))));
+  // ≤16 players: the whole bracket stays on one page; the summary follows on its own page.
+  const small = buildElimBracketPdf(input(16, 16, false));
+  assert.deepEqual(small.pages.map((p) => p.section), ["winners", "summary"]);
+  assert.equal(small.pages[1].title, "TOURNAMENT SUMMARY");
+});
+
+test("no lone trailing round: 5 rounds band as 3 + 2 (64-player double winners side)", () => {
+  const pages = layoutElimBracket(buildBracketGraph(64, true), true).filter((p) => p.section === "winners");
+  assert.deepEqual([...new Set(pages.map((p) => p.columns.length))].sort(), [2, 3]);
+});
+
+test("race beside player names: 'Name (race)'; BYE shows only BYE", () => {
+  const graph = buildBracketGraph(8, false);
+  const seeds = [
+    { registrationId: 1, name: "Tyelerr", fargo: 560, raceOverride: 5 },
+    { registrationId: 2, name: "Player", fargo: 500, raceOverride: 4 },
+    { registrationId: 3, name: "Solo", fargo: 520 },
+    null,
+    ...Array.from({ length: 4 }, (_, i) => ({ registrationId: 10 + i, name: `Q${i}`, fargo: 500 })),
+  ];
+  const matches = buildLiveMatches({ graph, seeds, players: 7, bracketSize: 8 } as any, {}, [], "9-ball", { ...CFG, fixedWinners: 6 } as any);
+  const t = pdfStrings(buildElimBracketPdf({ ...input(8, 7, false), graph, matches }).bytes)[0].map((s) => s.text);
+  const w1 = matches.find((m) => m.id === "W1M1")!;
+  assert.ok(w1.p1Race != null && w1.p2Race != null);
+  const i1 = t.indexOf("Tyelerr");
+  assert.equal(t[i1 + 1], ` (${w1.p1Race})`, "race right after the name");
+  const i2 = t.indexOf("Player");
+  assert.equal(t[i2 + 1], ` (${w1.p2Race})`);
+  assert.ok(matches.find((m) => m.bye));
+  assert.ok(t.includes("BYE"));
+  const iSolo = t.indexOf("Solo");
+  assert.ok(iSolo >= 0);
+  assert.equal(String(t[iSolo + 1]).startsWith(" ("), false, "no race printed in a bye match");
+  assert.equal(t.some((s) => /^BYE \(/.test(s)), false, "never a race for BYE");
+});
+
+test("played matches: winner bold + green score, loser muted + red score; readable in grayscale", () => {
+  const inp = input(8, 8, false, { W1M1: { status: "completed", winner: 1, p1Score: 7, p2Score: 3, result: "normal" } });
+  const s = pdfStrings(buildElimBracketPdf(inp).bytes)[0];
+  const win = s.find((x) => x.text === "P1")!;
+  const lose = s.find((x) => x.text === "P2")!;
+  assert.equal(win.font, "F2", "winner bold");
+  assert.equal(lose.font, "F1");
+  assert.equal(win.color, "0.08 g", "winner near-black");
+  assert.equal(lose.color, "0.5 g", "loser muted grey");
+  const sw = s.find((x) => x.text === "7")!;
+  const sl = s.find((x) => x.text === "3")!;
+  assert.match(sw.color, / rg$/);
+  assert.match(sl.color, / rg$/);
+  assert.notEqual(sw.color, sl.color);
+  assert.equal(sw.font, "F2", "winner score bold (still distinct without color)");
+  const unplayed = s.find((x) => x.text === "P5")!;
+  assert.equal(unplayed.color, "0.18 g", "names soft dark grey, not pure black");
+});
+
+test("payouts: same math as the Payouts tab (fees, added money, side pot entrants, places)", () => {
+  const { matches } = setup(16, 9, true);
+  const regs = regsFor(9, [{ id: 99, status: "no_show", paid_entry: true, paid_side_pots: ["Calcutta"], fargo_rating: null, name: "NS" }]);
+  const pay = buildBackupPayouts(T_PRIZE, regs, matches);
+  assert.equal(pay.configured, true);
+  assert.equal(pay.entry!.pool, 9 * (20 - 5) + 50, "entry − enabled fees, plus added money");
+  assert.deepEqual(pay.entry!.places.map((p) => p.amount), [115, 55, 15]);
+  assert.equal(pay.sidePots[0].pool, 4 * 10, "only active entrants who bought in (no-show excluded)");
+  assert.deepEqual(pay.sidePots[0].places.map((p) => p.name), [null, null], "side pots stay blank until the event is decided");
+  assert.equal(buildBackupPayouts({ ...T_PRIZE, live_settings: { ...T_PRIZE.live_settings, prizePool: undefined } }, [], matches).configured, false);
+  const text = allText(buildElimBracketPdf({ ...input(16, 9, true), payouts: pay }).bytes);
+  for (const s of ["Payouts", "Prize Pool", "$185", "$115", "$55", "$15", "Side pot · Calcutta", "$40"]) assert.ok(text.some((t) => t.includes(s)), s);
+  assert.equal(formatMoney(1234.5), "$1,234.50");
+  assert.equal(formatMoney(15), "$15");
+});
+
+test("player list: entry / side pot checkboxes, Fargo, participation status; Champion + Out places", () => {
+  const ms = playAll(8, 8, true);
+  delete ms.GF2;
+  const inp = input(8, 8, true, ms);
+  const roster = buildBackupRoster(
+    regsFor(8, [
+      { id: 50, status: "approved", paid_entry: false, paid_side_pots: [], fargo_rating: 610, name: "Late Larry" },
+      { id: 51, status: "no_show", paid_entry: false, paid_side_pots: [], fargo_rating: null, name: "Nora" },
+      { id: 52, status: "cancelled", paid_entry: false, paid_side_pots: [], fargo_rating: null, name: "Gone" },
+    ]),
+    inp.matches,
+    { seeds: Array.from({ length: 8 }, (_, i) => ({ registrationId: i + 1, name: `P${i + 1}`, fargo: 500 })) },
+  );
+  assert.equal(roster[0].status, "Champion");
+  assert.equal(roster[0].name, bracketChampion(inp.matches, true));
+  assert.ok(roster.some((r) => r.status === "Out · 2nd"));
+  assert.ok(roster.some((r) => r.status === "Out · 3rd"));
+  assert.deepEqual(roster.slice(-2).map((r) => r.status), ["Registered", "No Show"]);
+  assert.equal(roster.some((r) => r.name === "Gone"), false, "removed entries are not listed");
+  const text = allText(buildElimBracketPdf({ ...inp, roster, sidePotNames: ["Calcutta"] }).bytes);
+  for (const s of ["Players (10)", "Name", "Entry", "Side Pot", "Fargo", "Status", "Champion", "Late Larry", "610"]) assert.ok(text.includes(s), s);
+  const live = buildBackupRoster(regsFor(8), input(8, 8, false).matches, { seeds: [] });
+  assert.ok(live.every((r) => r.status === "In Field"));
+  assert.ok(allText(buildElimBracketPdf({ ...input(8, 8, false), roster: live }).bytes).includes("In Field"));
+});
+
+test("large field: the summary flows onto continuation pages with the table header repeated", () => {
+  const inp = input(64, 64, true);
+  const roster = buildBackupRoster(regsFor(64), inp.matches, { seeds: [] });
+  const pdf = buildElimBracketPdf({ ...inp, roster, payouts: buildBackupPayouts(T_PRIZE, regsFor(64), inp.matches) });
+  assert.equal(pdf.pages[pdf.pages.length - 1].title, "TOURNAMENT SUMMARY (CONTINUED)");
+  const perPage = pdfStrings(pdf.bytes);
+  const finalsIdx = pdf.pages.findIndex((p) => p.section === "finals");
+  assert.ok(perPage[finalsIdx].some((s) => s.text === "Summary"), "summary starts on the finals page");
+  const names = perPage.flat().map((s) => s.text).filter((t) => /^P\d+$/.test(t));
+  for (let i = 1; i <= 64; i++) assert.ok(names.includes(`P${i}`), `P${i} listed`);
+  assert.ok(perPage[perPage.length - 1].some((s) => s.text === "Fargo"), "header repeated on the continuation page");
+});
+
+test("offline: roster travels in the local copy (optional field; older copies stay valid)", () => {
+  const row: any = { id: 7, tournament_format: "double-elimination", status: "active", live_state: "in_progress", live_revision: 3, live_settings: { bracket: { graph: [{ id: "W1M1" }] } } };
+  const now = new Date("2026-10-02T18:00:00.000Z");
+  const owner = "00000000-0000-0000-0000-0000000000aa";
+  const rec = buildElimLocalRecord(row, [], owner, now, regsFor(2))!;
+  assert.equal(rec.registrations!.length, 2);
+  const v = validateElimLocalRecord(JSON.parse(JSON.stringify(rec)), { tournamentId: 7, ownerId: owner }, now);
+  assert.equal(v.ok && v.record.registrations!.length, 2);
+  const old = { ...rec } as any;
+  delete old.registrations;
+  const v2 = validateElimLocalRecord(old, { tournamentId: 7, ownerId: owner }, now);
+  assert.equal(v2.ok, true);
+  assert.equal(v2.ok && v2.record.registrations, null);
+  const v3 = validateElimLocalRecord({ ...rec, registrations: "junk" }, { tournamentId: 7, ownerId: owner }, now);
+  assert.equal(v3.ok && v3.record.registrations, null, "a malformed roster is ignored, never trusted");
+  const text = allText(buildElimBracketPdf({ ...input(8, 8, false), mode: "offline", roster: null }).bytes);
+  assert.ok(text.some((t) => t.startsWith("Player list isn't included in this offline copy")));
+  assert.match(read("src/viewmodels/hooks/use.elim.offline.ts"), /buildElimLocalRecord\(cloud, tables \?\? null, ownerId, new Date\(\), roster\)/);
+});
+
+test("download still reads only: registrations via a SELECT; payouts / roster are pure", () => {
+  const hook = read("src/viewmodels/hooks/use.elim.bracket.backup.ts");
+  assert.match(hook, /registrationService\.getRegistrations\(tournamentId\)/);
+  const svc = read("src/models/services/registration.service.ts");
+  const get = svc.slice(svc.indexOf("async getRegistrations("), svc.indexOf("async getRegistrationCounts("));
+  assert.match(get, /\.select\(/);
+  assert.doesNotMatch(get, /update|insert|rpc|delete/);
+  assert.doesNotMatch(read("src/utils/elim-bracket-summary.ts"), /supabase|services\/|fetch\(/);
+});
+
+test("'Ready' → 'In Field' only where it means 'in the tournament field' (elimination roster)", () => {
+  const hub = read("app/(tabs)/admin/manage-tournament/[id].tsx");
+  assert.match(hub, /ready: \{ label: "In Field", color: COLORS\.success \}/, "roster status pill + roster export");
+  assert.match(hub, /\{ label: "In Field", value: "ready" \}/, "roster filter");
+  assert.match(hub, /\{ label: "In Field", n: statusCounts\.ready, color: DISPLAY_META\.ready\.color \}/, "summary breakdown");
+  assert.match(hub, /short: "In Field", n: statusCounts\.ready/, "count chips");
+  assert.match(hub, /✓ In Field<\/Text>/, "player card state");
+  // Unchanged: actions and match-level readiness.
+  assert.match(hub, /"Undo Ready"/);
+  assert.match(hub, /Assign Ready Matches/);
+  assert.match(hub, /You need at least 2 Ready players/);
+  assert.match(read("src/views/components/tournament/live/QueueView.tsx"), /Ready \/ Waiting/);
+  assert.match(read("src/views/components/tournament/live/EliminationDashboard.tsx"), /Waiting \/ Ready/);
+  // Chip unchanged (its roster already shows "In Field").
+  assert.match(read("src/utils/registration-lifecycle.ts"), /ready: \{ label: "Ready", color: COLORS\.success \}/);
 });
