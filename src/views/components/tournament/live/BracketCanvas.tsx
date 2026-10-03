@@ -29,6 +29,14 @@ import { RADIUS, SPACING } from "../../../../theme/spacing";
 import { FONT_SIZES } from "../../../../theme/typography";
 import { webMs, webSc } from "../../../../utils/scaling";
 import { formatClock, LiveMatch } from "../../../../utils/match.utils";
+import {
+  finalsPlace,
+  finalsRoundName,
+  losersRoundName,
+  losersRoundPlaces,
+  winnersRoundName,
+  winnersRoundPlaces,
+} from "../../../../utils/bracket-round-labels";
 import { useLiveNow } from "../../../../viewmodels/hooks/use.live.now";
 import { MatchNode, NODE_HEIGHT, NODE_WIDTH } from "./MatchNode";
 
@@ -72,31 +80,8 @@ interface Label {
   sub?: string; // placement subtitle, e.g. "13-16TH" (what losers here play for)
 }
 
-const ordSuffix = (n: number): string => {
-  const t = n % 100;
-  if (t >= 11 && t <= 13) return "th";
-  switch (n % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
-  }
-};
-// "3rd" for a single place, "5-6th" / "13-16th" for a range (style upcases it).
-const placeLabel = (lo: number, hi: number): string =>
-  lo === hi ? `${lo}${ordSuffix(lo)}` : `${lo}-${hi}${ordSuffix(hi)}`;
-
-const winnersRoundName = (r: number, maxR: number, prefix: boolean): string => {
-  const fromEnd = maxR - r;
-  // prefix = double elim: the winners final is the Hotseat round.
-  if (fromEnd === 0) return prefix ? "Hotseat" : "Final";
-  const base = fromEnd === 1 ? "Semifinal" : fromEnd === 2 ? "Quarterfinal" : `Round ${r}`;
-  return prefix ? `Winners ${base}` : base;
-};
+// Round names + the placement each round plays for: shared with the bracket backup PDF
+// (src/utils/bracket-round-labels.ts) so both always agree.
 
 const layout = (matches: LiveMatch[]) => {
   const colStride = NODE_WIDTH + GAP_X;
@@ -129,25 +114,7 @@ const layout = (matches: LiveMatch[]) => {
   // Double elimination: winners-side losses don't eliminate, so only the winners
   // final (Hotseat) carries a fixed placement — its winner is guaranteed a finals
   // berth (1st/2nd).
-  const winPlace = new Map<number, string>();
-  if (winMaxR > 0) {
-    if (hasLosers) {
-      winPlace.set(winMaxR, "1st / 2nd");
-    } else {
-      let place = 3;
-      for (let r = winMaxR; r >= 1; r--) {
-        const count = (winRounds.get(r) || []).length;
-        if (count <= 0) continue;
-        if (r === winMaxR) {
-          winPlace.set(r, "1st / 2nd");
-          continue;
-        }
-        const hi = place + count - 1;
-        winPlace.set(r, placeLabel(place, hi));
-        place = hi + 1;
-      }
-    }
-  }
+  const winPlace = winnersRoundPlaces(new Map([...winRounds].map(([r, a]) => [r, a.length])), hasLosers);
 
   // Winners — tree centering.
   let prevY = new Map<number, number>();
@@ -227,17 +194,7 @@ const layout = (matches: LiveMatch[]) => {
   // Placement each losers round plays for: the losers-final loser is 3rd, and each
   // earlier round eliminates a (bracket-position) block below that. Counting from
   // the final back assigns 3rd, 4th, 5-6th, 7-8th, 9-12th, … to the rounds.
-  const losPlace = new Map<number, string>();
-  {
-    let place = 3;
-    for (let r = losMaxR; r >= 1; r--) {
-      const count = (losRounds.get(r) || []).length;
-      if (count <= 0) continue;
-      const hi = place + count - 1;
-      losPlace.set(r, placeLabel(place, hi));
-      place = hi + 1;
-    }
-  }
+  const losPlace = losersRoundPlaces(new Map([...losRounds].map(([r, a]) => [r, a.length])));
   let prevLY = new Map<number, number>();
   for (let r = 1; r <= losMaxR; r++) {
     const arr = losRounds.get(r) || [];
@@ -247,7 +204,7 @@ const layout = (matches: LiveMatch[]) => {
     labels.push({
       x,
       y: losBaseY + 4,
-      text: r === losMaxR ? "Losers Final" : `Losers Round ${r}`,
+      text: losersRoundName(r, losMaxR),
       sub: losPlace.get(r),
     });
     const curLY = new Map<number, number>();
@@ -296,8 +253,8 @@ const layout = (matches: LiveMatch[]) => {
     labels.push({
       x,
       y: 4,
-      text: m.round === 1 ? "Finals" : "Finals (2nd Set)",
-      sub: m.round === 1 ? "1st / 2nd" : undefined,
+      text: finalsRoundName(m.round),
+      sub: finalsPlace(m.round),
     });
     if (gfPrev)
       hLine(

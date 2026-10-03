@@ -9,7 +9,7 @@
 //   1. Bracket pages per side (Winners, then Losers): bands of up to 4 rounds; 8 first-column
 //      matches per page (sub-trees never straddle a page because brackets are powers of two).
 //   2. FINALS page — the deciding matches kept together as one mini-bracket:
-//        Double: Losers semifinal → Losers Final, Winners Final → Grand Final → Reset.
+//        Double: Losers semifinal → Losers Final, Hotseat → Finals → Finals (2nd Set).
 //        Single (32+ players): Semifinals → Final. (≤16 players: the whole bracket is one page.)
 //   3. Tournament summary flowing in two columns (below the finals, then onto extra pages as
 //      needed): Summary (champion, field, live / on-table matches) → Payouts → Player list.
@@ -17,9 +17,18 @@
 //   (winner bold, loser muted; winner score green / loser score red — still distinct in
 //   grayscale), or empty score boxes to fill in by pen, and where the winner / loser goes next.
 
-import { BracketGraphNode, BracketSide } from "../models/types/tournament-settings.types";
+import { BracketGraphNode } from "../models/types/tournament-settings.types";
 import { LiveMatch } from "./match.utils";
 import { computeStandings } from "./tournament.stats";
+import {
+  finalsPlace,
+  finalsRoundName,
+  losersRoundName,
+  losersRoundPlaces,
+  roundCounts,
+  winnersRoundName,
+  winnersRoundPlaces,
+} from "./bracket-round-labels";
 import { PdfColor, PdfDocument, PdfPage, fitText, textWidth } from "./pdf-writer";
 import type { BackupPayouts, BackupRosterRow } from "./elim-bracket-summary";
 import type { ElimOfflineStatus } from "../viewmodels/hooks/use.elim.offline";
@@ -68,6 +77,7 @@ const INK_STRONG: PdfColor = 0.08;
 const MUTED: PdfColor = 0.5;
 const WIN_GREEN: PdfColor = [0.09, 0.47, 0.24];
 const LOSS_RED: PdfColor = [0.72, 0.27, 0.27];
+const PLACE_BLUE: PdfColor = [0.15, 0.36, 0.72]; // subtle Compete blue — still dark in grayscale
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -120,7 +130,9 @@ export const bracketBackupFileName = (name: string, doubleElim: boolean, revisio
 // ── layout model (exported for tests) ─────────────────────────────────────────────────────
 // The bracket is a fixed sequence of SECTIONS that follows the tournament:
 //   Winners (rounds 1 … Winners Final) → Losers (rounds 1 … Losers Final) → Championship
-//   (Grand Final → Reset). Single elimination: the bracket (rounds 1 … Final).
+//   (Finals → Finals (2nd Set)). Single elimination: the bracket (rounds 1 … Final).
+// Round names and the placement each round plays for come from src/utils/bracket-round-labels.ts
+// — the same source as the live bracket's column headers — so the PDF and the app agree.
 // Each section is cut into BLOCKS of up to 4 rounds (8 first-column matches tall; a taller
 // first round becomes several parts — sub-trees never straddle a part because brackets are
 // powers of two). Blocks are then packed top-to-bottom onto pages strictly in that order: a
@@ -141,7 +153,7 @@ export interface BracketBlock {
   range: string; // "Rounds 1–3 · Part 1 of 2" ("" for the championship)
   fromRound: number;
   toRound: number;
-  columns: string[]; // round labels, left → right
+  columns: { name: string; place?: string }[]; // round headers + the placement each plays for
   rows: number; // first-column rows (height)
   placed: Omit<PlacedMatch, "top">[];
 }
@@ -158,18 +170,15 @@ const blockHeight = (b: BracketBlock) => COL_LABEL_H + b.rows * PITCH;
 
 const matchIndex = (id: string): number => Number(/M(\d+)$/.exec(id)?.[1] ?? 0);
 
-const roundName = (side: BracketSide, round: number, maxRound: number, doubleElim: boolean): string => {
-  if (side === "losers") return round === maxRound ? "Losers Final" : `Losers Round ${round}`;
-  if (side === "grand") return round === 1 ? "Grand Final" : "Grand Final Reset";
-  if (!doubleElim) {
-    if (round === maxRound) return "Final";
-    if (round === maxRound - 1 && maxRound >= 2) return "Semifinals";
-    if (round === maxRound - 2 && maxRound >= 3) return "Quarterfinals";
-    return `Round ${round}`;
-  }
-  if (round === maxRound) return "Winners Final";
-  if (round === maxRound - 1 && maxRound >= 3) return "Winners Semifinals";
-  return `Winners Round ${round}`;
+// Round header for one side (name + place), shared with the live bracket.
+const sideColumns = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean) => {
+  const counts = roundCounts(nodes, side);
+  const maxR = Math.max(0, ...counts.keys());
+  const places = side === "winners" ? winnersRoundPlaces(counts, doubleElim) : losersRoundPlaces(counts);
+  return (r: number) => ({
+    name: side === "winners" ? winnersRoundName(r, maxR, doubleElim) : losersRoundName(r, maxR),
+    place: places.get(r),
+  });
 };
 
 // One side → blocks: bands of ≤4 rounds (never ending on a lone round: 5 → 3 + 2); first
@@ -178,7 +187,7 @@ const roundName = (side: BracketSide, round: number, maxRound: number, doubleEli
 const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubleElim: boolean): BracketBlock[] => {
   const rounds = [...new Set(nodes.map((n) => n.round))].sort((a, b) => a - b);
   if (!rounds.length) return [];
-  const maxRound = rounds[rounds.length - 1];
+  const header = sideColumns(side, nodes, doubleElim);
   const byRound = new Map<number, BracketGraphNode[]>();
   for (const r of rounds) byRound.set(r, nodes.filter((n) => n.round === r).sort((a, b) => matchIndex(a.id) - matchIndex(b.id)));
   const label = side === "winners" ? (doubleElim ? "WINNERS BRACKET" : "BRACKET") : "LOSERS BRACKET";
@@ -219,7 +228,7 @@ const sideBlocks = (side: "winners" | "losers", nodes: BracketGraphNode[], doubl
         range,
         fromRound: band[0],
         toRound: band[band.length - 1],
-        columns: band.map((r) => roundName(side, r, maxRound, doubleElim)),
+        columns: band.map(header),
         rows: Math.min(BRACKET_ROWS_PER_PAGE, rows - p * BRACKET_ROWS_PER_PAGE),
         placed,
       });
@@ -238,11 +247,11 @@ export const elimBracketBlocks = (graph: BracketGraphNode[], doubleElim: boolean
   if (grand.length) {
     blocks.push({
       section: "championship",
-      title: "CHAMPIONSHIP · Grand Final",
+      title: "FINALS",
       range: "",
       fromRound: 1,
       toRound: grand.length,
-      columns: grand.map((n) => roundName("grand", n.round, 2, doubleElim)),
+      columns: grand.map((n) => ({ name: finalsRoundName(n.round), place: finalsPlace(n.round) })),
       rows: 1,
       placed: grand.map((n, i) => ({ id: n.id, col: i, y: 0 })),
     });
@@ -253,7 +262,7 @@ export const elimBracketBlocks = (graph: BracketGraphNode[], doubleElim: boolean
 const SECTION_NAME: Record<BracketSection, string> = {
   winners: "WINNERS BRACKET",
   losers: "LOSERS BRACKET",
-  championship: "CHAMPIONSHIP",
+  championship: "FINALS",
 };
 
 /** Pack the ordered blocks onto pages (top-to-bottom, never reordered). */
@@ -274,7 +283,7 @@ export const layoutElimBracket = (graph: BracketGraphNode[], doubleElim: boolean
     for (const p of block.placed) cur.placed.push({ ...p, top: blockTop + COL_LABEL_H + p.y * PITCH + (PITCH - BOX_H - 8) / 2 });
     y = blockTop + h;
   }
-  // Page title = what's on it, in order ("LOSERS BRACKET · Rounds 1–6 · CHAMPIONSHIP").
+  // Page title = what's on it, in order ("LOSERS BRACKET · Rounds 1–6 · FINALS").
   for (const p of pages) {
     const groups: string[] = [];
     for (const s of [...new Set(p.blocks.map((b) => b.block.section))]) {
@@ -541,7 +550,7 @@ const summaryRows = (input: ElimBracketPdfInput): FlowRow[] => {
       );
     }
   };
-  const labels = (m: LiveMatch) => (m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id);
+  const labels = (m: LiveMatch) => (m.id === "GF2" ? finalsRoundName(2) : m.numberLabel || m.id);
   list("Live now", live);
   list("On a table, not started", onTable);
   // Placements decided so far (best first).
@@ -667,7 +676,7 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
   const layouts = layoutElimBracket(input.graph, input.doubleElim);
   const byId = new Map(input.matches.map((m) => [m.id, m]));
   const nodeById = new Map(input.graph.map((n) => [n.id, n]));
-  const labels = new Map(input.matches.map((m) => [m.id, m.id === "GF2" ? "Finals Reset" : m.numberLabel || m.id]));
+  const labels = new Map(input.matches.map((m) => [m.id, m.id === "GF2" ? finalsRoundName(2) : m.numberLabel || m.id]));
   const doc = new PdfDocument({ title: `${input.tournamentName} — bracket backup`, author: "Compete" });
 
   const flow = flowSummary(summaryRows(input));
@@ -688,7 +697,20 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
     if (layout) {
       layout.blocks.forEach(({ block, top }, bi) => {
         if (bi > 0) page.line(MARGIN, top - BLOCK_GAP / 2, PAGE_W - MARGIN, top - BLOCK_GAP / 2, { gray: 0.8, width: 0.5 });
-        block.columns.forEach((c, col) => page.text(boxX(col) + 2, top + COL_LABEL_H - 5, c.toUpperCase(), 8, { font: "bold", gray: 0.3 }));
+        block.columns.forEach((c, col) => {
+          // "HOTSEAT  1ST / 2ND" — the round, then (in subtle blue) the place it plays for.
+          const x = boxX(col) + 2;
+          const by = top + COL_LABEL_H - 5;
+          const name = c.name.toUpperCase();
+          page.text(x, by, name, 8, { font: "bold", gray: 0.3 });
+          let px = x + textWidth(name, 8, "bold") + 6;
+          if (c.place) {
+            const place = c.place.toUpperCase();
+            page.text(px, by, place, 7.5, { font: "bold", gray: PLACE_BLUE });
+            px += textWidth(place, 7.5, "bold") + 6;
+          }
+          if (c.name === "Hotseat") page.text(px, by, "2nd place guaranteed", 6.5, { gray: 0.45 });
+        });
       });
       const pos = new Map(layout.placed.map((p) => [p.id, p]));
       // Connectors first (under the boxes): feeder's right edge → this match's player row.
@@ -721,8 +743,8 @@ export const buildElimBracketPdf = (input: ElimBracketPdfInput): { bytes: Uint8A
         const gf = byId.get("GF");
         const note =
           gf && gf.status === "completed" && gf.winner === 1
-            ? "Reset not needed — winners-side finalist won the Grand Final."
-            : "Reset is played only if the losers-side finalist wins the Grand Final.";
+            ? "Finals (2nd Set) not needed — the Hotseat winner won Finals."
+            : "Finals (2nd Set) is played only if the losers-side finalist wins Finals.";
         // Beside the reset box (the championship uses two columns; the rest of the row is free).
         page.text(boxX(gfPos.col + 2) + 4, gfPos.top + BOX_H / 2 + 3, fitText(note, 7.5, 2 * COL_W - 12), 7.5, { gray: 0.4 });
       }

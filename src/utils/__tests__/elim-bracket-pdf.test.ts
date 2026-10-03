@@ -31,6 +31,7 @@ import {
   layoutElimBracket,
 } from "../elim-bracket-pdf";
 import { BackupRegistration, buildBackupPayouts, buildBackupRoster } from "../elim-bracket-summary";
+import { finalsPlace, finalsRoundName, losersRoundPlaces, roundCounts, winnersRoundName, winnersRoundPlaces } from "../bracket-round-labels";
 import { buildElimLocalRecord, validateElimLocalRecord } from "../elim-local-recovery";
 import { bytesToBase64, fitText, textWidth, toWinAnsi } from "../pdf-writer";
 
@@ -96,9 +97,9 @@ const readingOrder = (pdf: { pages: { section: string; placed: { id: string }[] 
   const lMax = Math.max(0, ...graph.filter((n) => n.side === "losers").map((n) => n.round));
   const tag = (id: string) => {
     const n = graph.find((g) => g.id === id)!;
-    if (n.side === "winners") return n.round === wMax ? "WINNERS FINAL" : "WINNERS";
+    if (n.side === "winners") return n.round === wMax ? (graph.some((g) => g.side === "grand") ? "HOTSEAT" : "FINAL") : "WINNERS";
     if (n.side === "losers") return n.round === lMax ? "LOSERS FINAL" : "LOSERS";
-    return n.round === 1 ? "GRAND FINAL" : "RESET";
+    return n.round === 1 ? "FINALS" : "FINALS (2ND SET)";
   };
   const seq: string[] = [];
   for (const p of pdf.pages) {
@@ -120,7 +121,7 @@ for (const [size, players, pages] of [[4, 4, 2], [8, 8, 2], [16, 16, 2], [32, 32
     for (const l of layoutElimBracket(inp.graph, false)) for (const b of l.blocks) assert.ok(b.block.columns.length <= BRACKET_COLS_PER_PAGE);
     for (const p of pdf.pages) for (const x of p.placed) assert.ok(x.y >= 0 && x.y < BRACKET_ROWS_PER_PAGE && x.top + 42 <= 562, `${x.id} on the page`);
     // Reads in tournament order: bracket (final last), then the summary.
-    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "WINNERS FINAL", "SUMMARY"]);
+    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "FINAL", "SUMMARY"]);
     const text = allText(pdf.bytes);
     for (const m of inp.matches) assert.ok(text.includes(m.numberLabel), `match number ${m.numberLabel}`);
     assert.ok(text.includes("FINAL"), "final round labelled");
@@ -181,21 +182,23 @@ test("single completed: champion + every result", () => {
 
 // ══ DOUBLE ELIMINATION ═══════════════════════════════════════════════════════════════════
 for (const [size, players, sections] of [[8, 8, 2], [16, 9, 3], [16, 16, 3], [32, 27, 6], [32, 32, 6], [64, 64, 9]] as const) {
-  test(`double ${players} players: winners, losers, Grand Final + reset, every match once (${sections} pages)`, () => {
+  test(`double ${players} players: winners, losers, Finals + Finals (2nd Set), every match once (${sections} pages)`, () => {
     const inp = input(size, players, true);
     const pdf = buildElimBracketPdf(inp);
     assert.equal(pdf.pages.length, sections);
     assert.deepEqual(pdf.pages.flatMap((p) => p.placed.map((x) => x.id)).sort(), inp.graph.map((n) => n.id).sort());
     assert.ok(pdf.pages.some((p) => p.sections.includes("winners")));
     assert.ok(pdf.pages.some((p) => p.sections.includes("losers")));
-    // Winners → Winners Final → Losers → Losers Final → Grand Final → Reset → Summary — never interleaved.
-    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "WINNERS FINAL", "LOSERS", "LOSERS FINAL", "GRAND FINAL", "RESET", "SUMMARY"]);
+    // Winners → Hotseat → Losers → Losers Final → Finals → Finals (2nd Set) → Summary — never interleaved.
+    assert.deepEqual(readingOrder(pdf, inp.graph), ["WINNERS", "HOTSEAT", "LOSERS", "LOSERS FINAL", "FINALS", "FINALS (2ND SET)", "SUMMARY"]);
     assert.equal(pdf.pages[pdf.pages.length - 1].section, "summary");
     const text = allText(pdf.bytes);
-    assert.ok(text.includes("WINNERS FINAL") && text.includes("LOSERS FINAL") && text.includes("GRAND FINAL"));
-    assert.ok(text.includes("Finals Reset"), "reset box tagged distinctly");
-    assert.ok(text.includes("Reset is played only if the losers-side finalist wins the Grand Final."));
-    for (const m of realMatches(inp.matches)) assert.ok(text.includes(m.id === "GF2" ? "Finals Reset" : m.numberLabel), m.id);
+    assert.ok(text.includes("HOTSEAT") && text.includes("LOSERS FINAL") && text.includes("FINALS") && text.includes("FINALS (2ND SET)"));
+    assert.ok(text.includes("Finals (2nd Set)"), "2nd-set box tagged distinctly");
+    assert.ok(text.includes("Finals (2nd Set) is played only if the losers-side finalist wins Finals."));
+    // Old wording is gone everywhere (headers, boxes, titles, notes).
+    assert.equal(text.some((t) => /grand final|winners final|reset|championship/i.test(t)), false);
+    for (const m of realMatches(inp.matches)) assert.ok(text.includes(m.id === "GF2" ? "Finals (2nd Set)" : m.numberLabel), m.id);
     // 64 players stays readable: 8 first-column matches per page, never shrunk.
     for (const p of pdf.pages) for (const x of p.placed) assert.ok(x.y < BRACKET_ROWS_PER_PAGE);
   });
@@ -214,12 +217,12 @@ test("double with byes: a feeder that can never produce a player shows BYE (no r
   assert.equal(text.some((t) => /\b[WL]\d+M\d+\b/.test(t)), false, "never an internal id like L1M8");
 });
 
-test("double completed without reset: GF won by the winners-side finalist → reset not needed, champion", () => {
+test("double completed without reset: Finals won by the Hotseat winner → 2nd set not needed, champion", () => {
   const ms = playAll(8, 8, true);
   delete ms.GF2;
   const inp = input(8, 8, true, ms);
   const text = allText(buildElimBracketPdf(inp).bytes);
-  assert.ok(text.includes("Reset not needed — winners-side finalist won the Grand Final."));
+  assert.ok(text.includes("Finals (2nd Set) not needed — the Hotseat winner won Finals."));
   assert.ok(text.includes(`Champion: ${bracketChampion(inp.matches, true)}`));
 });
 
@@ -415,8 +418,8 @@ test("page packing: small events share pages in order; the summary always starts
   // through the Losers Final + Grand Final / Reset.
   const d16 = layoutElimBracket(buildBracketGraph(16, true), true);
   assert.deepEqual(d16.map((p) => p.blocks.map((b) => b.block.section)), [["winners"], ["losers", "losers", "championship"]]);
-  assert.deepEqual(d16[0].blocks[0].block.columns, ["Winners Round 1", "Winners Round 2", "Winners Semifinals", "Winners Final"]);
-  assert.equal(d16[1].title, "LOSERS BRACKET · Rounds 1–6 · CHAMPIONSHIP");
+  assert.deepEqual(d16[0].blocks[0].block.columns.map((c) => c.name), ["Winners Round 1", "Winners Quarterfinal", "Winners Semifinal", "Hotseat"]);
+  assert.equal(d16[1].title, "LOSERS BRACKET · Rounds 1–6 · FINALS");
   // Blocks never overlap and stay inside the page.
   for (const l of [...d8, ...d16, ...layoutElimBracket(buildBracketGraph(64, true), true)]) {
     for (const p of l.placed) assert.ok(p.top >= 98 && p.top + 42 <= 562, p.id);
@@ -427,14 +430,14 @@ test("page packing: small events share pages in order; the summary always starts
   assert.equal(s16.pages[1].title, "TOURNAMENT SUMMARY");
 });
 
-test("large brackets: 32 / 64 double paginate by section, Winners Final with the winners side", () => {
+test("large brackets: 32 / 64 double paginate by section, Hotseat with the winners side", () => {
   const t = (n: number) => layoutElimBracket(buildBracketGraph(n, true), true).map((p) => p.title);
   assert.deepEqual(t(32), [
     "WINNERS BRACKET · Rounds 1–3 · Part 1 of 2",
     "WINNERS BRACKET · Rounds 1–3 · Part 2 of 2",
     "WINNERS BRACKET · Rounds 4–5",
     "LOSERS BRACKET · Rounds 1–4",
-    "LOSERS BRACKET · Rounds 5–8 · CHAMPIONSHIP",
+    "LOSERS BRACKET · Rounds 5–8 · FINALS",
   ]);
   assert.deepEqual(t(64), [
     "WINNERS BRACKET · Rounds 1–4 · Part 1 of 4",
@@ -444,7 +447,7 @@ test("large brackets: 32 / 64 double paginate by section, Winners Final with the
     "WINNERS BRACKET · Rounds 5–6",
     "LOSERS BRACKET · Rounds 1–4 · Part 1 of 2",
     "LOSERS BRACKET · Rounds 1–4 · Part 2 of 2",
-    "LOSERS BRACKET · Rounds 5–10 · CHAMPIONSHIP",
+    "LOSERS BRACKET · Rounds 5–10 · FINALS",
   ]);
 });
 
@@ -598,4 +601,54 @@ test("'Ready' → 'In Field' only where it means 'in the tournament field' (elim
   assert.match(read("src/views/components/tournament/live/EliminationDashboard.tsx"), /Waiting \/ Ready/);
   // Chip unchanged (its roster already shows "In Field").
   assert.match(read("src/utils/registration-lifecycle.ts"), /ready: \{ label: "Ready", color: COLORS\.success \}/);
+});
+
+// ══ Terminology + placement labels shared with the live bracket ═════════════════════════
+test("round names + placements come from the same helper the live bracket uses", () => {
+  const canvas = read("src/views/components/tournament/live/BracketCanvas.tsx");
+  for (const fn of ["winnersRoundName", "winnersRoundPlaces", "losersRoundName", "losersRoundPlaces", "finalsRoundName", "finalsPlace"])
+    assert.ok(canvas.includes(fn), `BracketCanvas uses ${fn}`);
+  assert.ok(canvas.includes('from "../../../../utils/bracket-round-labels"'));
+  assert.doesNotMatch(canvas, /const placeLabel =|const winnersRoundName =|"1st \/ 2nd"/, "no second copy in the component");
+  const pdfSrc = read("src/utils/elim-bracket-pdf.ts");
+  assert.ok(pdfSrc.includes('from "./bracket-round-labels"'));
+  assert.doesNotMatch(pdfSrc, /"Grand Final"|"Winners Final"|"Grand Final Reset"/, "no PDF-only round names");
+});
+
+test("live + PDF labels: double 16 (Hotseat 1st/2nd, losers 13-16th … 3rd, Finals 1st/2nd)", () => {
+  const graph = buildBracketGraph(16, true);
+  const w = roundCounts(graph, "winners");
+  const l = roundCounts(graph, "losers");
+  assert.deepEqual([1, 2, 3, 4].map((r) => winnersRoundName(r, 4, true)), ["Winners Round 1", "Winners Quarterfinal", "Winners Semifinal", "Hotseat"]);
+  assert.deepEqual([...winnersRoundPlaces(w, true)], [[4, "1st / 2nd"]], "only the Hotseat carries a place in double elim");
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map((r) => losersRoundPlaces(l).get(r)), ["13-16th", "9-12th", "7-8th", "5-6th", "4th", "3rd"]);
+  assert.deepEqual([finalsRoundName(1), finalsRoundName(2), finalsPlace(1), finalsPlace(2)], ["Finals", "Finals (2nd Set)", "1st / 2nd", undefined]);
+  const strings = pdfStrings(buildElimBracketPdf(input(16, 9, true)).bytes);
+  const p1 = strings[0].map((s) => s.text);
+  assert.ok(p1.includes("HOTSEAT") && p1.includes("1ST / 2ND") && p1.includes("2nd place guaranteed"));
+  assert.ok(p1.includes("WINNERS QUARTERFINAL") && p1.includes("WINNERS SEMIFINAL"));
+  const p2 = strings[1];
+  for (const t of ["LOSERS ROUND 1", "13-16TH", "9-12TH", "7-8TH", "5-6TH", "4TH", "LOSERS FINAL", "3RD", "FINALS", "FINALS (2ND SET)"])
+    assert.ok(p2.some((s) => s.text === t), t);
+  const blue = p2.find((s) => s.text === "13-16TH")!;
+  assert.match(blue.color, / rg$/, "place labels in subtle blue");
+});
+
+test("single elimination keeps single-elim wording (no Hotseat / 2nd set); places 1st/2nd, 3-4th, 5-8th …", () => {
+  const graph = buildBracketGraph(16, false);
+  assert.deepEqual([1, 2, 3, 4].map((r) => winnersRoundName(r, 4, false)), ["Round 1", "Quarterfinal", "Semifinal", "Final"]);
+  assert.deepEqual([...winnersRoundPlaces(roundCounts(graph, "winners"), false)].sort(), [[1, "9-16th"], [2, "5-8th"], [3, "3-4th"], [4, "1st / 2nd"]]);
+  for (const size of [8, 16, 32, 64]) {
+    const text = allText(buildElimBracketPdf(input(size, size, false)).bytes);
+    assert.ok(text.includes("FINAL") && text.includes("SEMIFINAL") && text.includes("1ST / 2ND") && text.includes("3-4TH"), `${size}`);
+    assert.equal(text.some((t) => /hotseat|2nd set|losers|grand final/i.test(t)), false, `${size}: no double-elim wording`);
+  }
+});
+
+test("summary placements use the same place blocks as the bracket headers", () => {
+  const ms = playAll(16, 16, true);
+  const text = allText(buildElimBracketPdf(input(16, 16, true, ms)).bytes);
+  // The list shows the top 12 finishers; everyone's place is also in the player list's Status column.
+  for (const label of ["1st", "2nd", "3rd", "4th", "5-6th", "7-8th", "9-12th"])
+    assert.ok(text.some((t) => t.startsWith(`${label}   `)), `placement ${label}`);
 });
