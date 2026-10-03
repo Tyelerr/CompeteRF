@@ -7,7 +7,7 @@ import { chipSavesInFlight, trackChipSave, waitForChipSaves } from "../models/se
 import { canProbeChipVersion, chipVersionAction, CHIP_TD_VERSION_POLL_MS } from "../utils/chip-version-sync";
 import { chipAutoSaveNeeded, healLoadedChip, loadRepairChanged } from "../models/services/chip.load-heal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import { chipService, ChipResultRow, ChipTournamentBundle, CHIP_APPLY_ENABLED } from "../models/services/chip.service";
 import { analyticsService } from "../models/services/analytics.service";
 import { buildSaveFailureLog } from "../models/services/chip.persist";
@@ -2341,6 +2341,21 @@ export const useChipTournament = (
     // screen's full-screen vm.error takeover, which is reserved for load failures.
     if (scheduleStaleError(tournament)) return false;
     setStarting(true);
+    // Retry after a half-finished start: the started board was saved but marking the
+    // tournament live failed. Re-running startChipTournament would reshuffle the queue and
+    // re-seat every table, so only finish the live_state flip.
+    if (chip.startedAt && tournament?.live_state !== "in_progress") {
+      try {
+        await chipService.markStarted(id);
+        await load({ silent: true });
+        return true;
+      } catch (e: any) {
+        Alert.alert("Couldn't Start Tournament", e?.message ?? "Failed to start tournament. Try again.");
+        return false;
+      } finally {
+        setStarting(false);
+      }
+    }
     try {
       // SINGLE explicit normalization point (setup → live only): reconcile checkedIn to
       // the derived Ready set (Entry Fee satisfied + no hard blocker) BEFORE the engine
@@ -2394,7 +2409,11 @@ export const useChipTournament = (
       await load({ silent: true });
       return true;
     } catch (e: any) {
-      setError(e?.message ?? "Failed to start tournament.");
+      // Not setError: that is the screen's full-screen load-failure takeover (no Retry), which
+      // blanked the whole manage screen. Tell the TD, then resync with the cloud so the board
+      // shows what actually saved (a retry of a half-finished start only marks it live, above).
+      Alert.alert("Couldn't Start Tournament", e?.message ?? "Failed to start tournament. Try again.");
+      void load({ silent: true }).catch(() => {});
       return false;
     } finally {
       setStarting(false);
