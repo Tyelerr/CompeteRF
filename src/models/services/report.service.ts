@@ -2,7 +2,6 @@
 // Follows same pattern as giveaway.service.ts
 
 import { supabase } from '@/src/lib/supabase';
-import { notificationDispatcher } from '@/src/models/services/notification-dispatcher.service';
 import {
   CreateReportPayload,
   isRpcReportType,
@@ -54,25 +53,8 @@ export async function submitReport(payload: CreateReportPayload): Promise<Pick<R
     data = row as Pick<Report, 'id'>;
   }
 
-  // ══════════════════════════════════════════════════════════
-  // 🔔 Phase 4: Notify admins about new report
-  // ══════════════════════════════════════════════════════════
-  const contentLabel = payload.content_type.replace('_', ' ');
-  notificationDispatcher
-    .sendToAdmins(
-      '🚩 New Report Submitted',
-      `A ${contentLabel} has been reported for: ${payload.reason}`,
-      {
-        report_id: data.id,
-        content_type: payload.content_type,
-        content_id: payload.content_id,
-        deep_link: '/admin/report-management',
-        type: 'admin_report',
-      },
-    )
-    .catch((err) =>
-      console.error('⚠️ Error sending report notification to admins:', err),
-    );
+  // Admins are alerted by the SERVER (reports_notify_admins trigger, 20261021140000): in-app rows +
+  // one push to their devices. The app no longer reads admin push tokens or writes their inbox.
 
   return data;
 }

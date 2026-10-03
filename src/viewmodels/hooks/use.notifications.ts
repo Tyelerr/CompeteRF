@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { notificationService } from "../../models/services/notification.service";
+import { safeNotificationLink } from "../../utils/notification-link";
 
 type PermissionStatus = "granted" | "denied" | "undetermined";
 
@@ -117,7 +118,8 @@ export function useNotifications(userId?: string): UseNotificationsReturn {
         // then the tournament, then the inbox.
         const routeFor = (data: Record<string, unknown> | null | undefined) => {
           try {
-            if (data?.deep_link) router.push(data.deep_link as string as any);
+            const link = safeNotificationLink(data?.deep_link); // in-app destinations only
+            if (link) router.push(link as any);
             else if (data?.tournament_id) router.push(`/tournament-detail?id=${data.tournament_id}` as any);
             else router.push("/notifications" as any);
           } catch (err) {

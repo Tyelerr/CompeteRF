@@ -82,9 +82,11 @@ test("native table edit sheet can't remove a table with a live match on it", () 
 });
 
 test("admin report push opens the real report-management route", () => {
-  const src = read("src/models/services/report.service.ts");
-  assert.ok(src.includes("deep_link: '/admin/report-management'"));
-  assert.ok(!src.includes("'/admin/reports'"));
+  // Since 20261021140000 the alert is sent by the server (reports_notify_admins), not the reporter's app.
+  const mig = read("supabase/migrations/20261021140000_security_cleanup.sql");
+  assert.ok(mig.includes("'deep_link', '/admin/report-management'"));
+  assert.ok(!mig.includes("'/admin/reports'"));
+  assert.ok(!read("src/models/services/report.service.ts").includes("sendToAdmins("), "the app no longer reads admin tokens");
 });
 
 test("TD Set Winner on a live match records a PLAYED result (never a participant-written one)", () => {

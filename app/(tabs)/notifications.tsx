@@ -22,6 +22,7 @@ import { COLORS } from "../../src/theme/colors";
 import { RADIUS, SPACING } from "../../src/theme/spacing";
 import { FONT_SIZES } from "../../src/theme/typography";
 import { moderateScale, scale } from "../../src/utils/scaling";
+import { safeNotificationLink } from "../../src/utils/notification-link";
 
 const isWeb = Platform.OS === "web";
 
@@ -313,7 +314,7 @@ export default function NotificationsScreen() {
         created_at: notif.created_at,
         badge: getPushBadge(notif.category),
         tournament_id: (notif.data?.tournament_id as number) || null,
-        deep_link: (notif.data?.deep_link as string) || null,
+        deep_link: safeNotificationLink(notif.data?.deep_link), // in-app destinations only
         pushNotificationId: notif.id,
       }));
     } catch (err) {

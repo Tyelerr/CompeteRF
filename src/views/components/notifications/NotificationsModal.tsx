@@ -11,6 +11,7 @@ import { BLOCKED_MESSAGING_TEXT, isBlockedMessagingError } from "../../../models
 import { RADIUS, SPACING } from "../../../theme/spacing";
 import { FONT_SIZES } from "../../../theme/typography";
 import { moderateScale, scale } from "../../../utils/scaling";
+import { safeNotificationLink } from "../../../utils/notification-link";
 
 const isWeb = Platform.OS === "web";
 const wxMs = (v: number) => isWeb ? v : moderateScale(v);
@@ -400,7 +401,7 @@ export function NotificationsModal({ visible, onClose, userId, userIdAuto, onVie
         deep_link:
           notif.data?.type === "match_issue" && notif.data?.tournament_id
             ? `/(tabs)/admin/manage-tournament/${notif.data.tournament_id}?issueMatch=${encodeURIComponent(String(notif.data.match_id ?? ""))}&issueReg=${encodeURIComponent(String(notif.data.registration_id ?? ""))}`
-            : (notif.data?.deep_link as string) || null, pushNotificationId: notif.id }));
+            : safeNotificationLink(notif.data?.deep_link), pushNotificationId: notif.id })); // in-app destinations only
     } catch { return []; }
   }, [userIdAuto]);
 
